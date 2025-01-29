@@ -3,7 +3,7 @@
   "profiles": {
     "DebugRoslynSourceGenerator": {
       "commandName": "DebugRoslynComponent",
-      "targetProject": "../../internalUsages/Pure.Domain/Pure.Domain.csproj"
+      "targetProject": "../AspireEventSample.ApiService/AspireEventSample.ApiService.csproj"
     }
   }
 }

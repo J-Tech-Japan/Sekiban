@@ -146,3 +146,4 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         public string Generic3Name { get; set; } = string.Empty;
     }
 }
+

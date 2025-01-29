@@ -72,7 +72,7 @@ public class CommandExecutor : ICommandExecutor
         PartitionKeys partitionKeys,
         object? inject,
         Delegate handler,
-        OptionalValue<Type> aggregatePayloadType)
+        OptionalValue<Type> aggregatePayloadType,Func<PartitionKeys, IAggregateProjector,Task<ResultBox<Aggregate>>> loader, Func<string, List<IEvent>,Task<ResultBox<List<IEvent>>>> saver)
     {
         var commandType = command.GetType();
         var injectType = inject is not null ? inject.GetType() : typeof(NoInjection);
@@ -90,7 +90,7 @@ public class CommandExecutor : ICommandExecutor
             .GetMethod(nameof(ExecuteGeneralWithPartitionKeys), BindingFlags.Public | BindingFlags.Instance);
         if (method is null) { return new SekibanCommandHandlerNotMatchException("Method not found"); }
         var genericMethod = method.MakeGenericMethod(commandType, injectType, aggregatePayloadTypeValue);
-        var result = genericMethod.Invoke(this, new[] { command, projector, partitionKeys, injectValue, handler });
+        var result = genericMethod.Invoke(this, new[] { command, projector, partitionKeys, injectValue, handler, loader, saver });
         if (result is Task<ResultBox<CommandResponse>> task) { return await task; }
         return new SekibanCommandHandlerNotMatchException("Result is not Task<ResultBox<CommandResponse>>");
     }
@@ -111,7 +111,7 @@ public class CommandExecutor : ICommandExecutor
                     projector,
                     partitionKeys,
                     inject,
-                    handler));
+                    handler, (pk, pj) => Repository.Load(pk, pj).ToTask(), (_, events) => Repository.Save(events).ToTask()));
 
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
     public Task<ResultBox<CommandResponse>> ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(
@@ -119,7 +119,7 @@ public class CommandExecutor : ICommandExecutor
         IAggregateProjector projector,
         PartitionKeys partitionKeys,
         OptionalValue<TInject> inject,
-        Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
+        Delegate handler,Func<PartitionKeys, IAggregateProjector,Task<ResultBox<Aggregate>>> loader, Func<string, List<IEvent>,Task<ResultBox<List<IEvent>>>> saver) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
         ResultBox
             .Start
             .Conveyor(
@@ -127,44 +127,46 @@ public class CommandExecutor : ICommandExecutor
                     command,
                     partitionKeys,
                     projector,
-                    handler))
+                    handler, loader))
             .Combine(
                 context => RunHandler<TCommand, TInject, TAggregatePayload>(command, context, inject, handler)
                     .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
-            .Conveyor(values => Repository.Save(values.Value2.ProducedEvents).Remap(_ => values))
+            .Conveyor(values => saver(values.Value1.OriginalSortableUniqueId, values.Value2.ProducedEvents).Remap(savedEvent =>TwoValues.FromValues(values.Value1, savedEvent)))
             .Conveyor(
-                (context, executed) => ResultBox.FromValue(
+                (context, savedEvents) => ResultBox.FromValue(
                     new CommandResponse(
                         partitionKeys,
-                        executed.ProducedEvents,
-                        executed.ProducedEvents.Count > 0
-                            ? executed.ProducedEvents.Last().Version
+                        savedEvents,
+                        savedEvents.Count > 0
+                            ? savedEvents.Last().Version
                             : context.GetCurrentVersion())));
 
 
-    private ResultBox<ICommandContextWithoutState>
+    private Task<ResultBox<ICommandContextWithoutState>>
         CreateCommandContextWithoutState<TCommand, TAggregatePayload, TInject>(
             TCommand command,
             PartitionKeys partitionKeys,
             IAggregateProjector projector,
-            Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
+            Delegate handler,
+            Func<PartitionKeys, IAggregateProjector,Task<ResultBox<Aggregate>>> loader
+            ) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
         handler switch
         {
             Func<TCommand, ICommandContextWithoutState, ResultBox<EventOrNone>> handler1 =>
                 ResultBox<ICommandContextWithoutState>.FromValue(
-                    new CommandContextWithoutState(partitionKeys, EventTypes)),
+                    new CommandContextWithoutState(partitionKeys, EventTypes)).ToTask(),
             Func<TCommand, ICommandContextWithoutState, Task<ResultBox<EventOrNone>>> handler1 =>
                 ResultBox<ICommandContextWithoutState>.FromValue(
-                    new CommandContextWithoutState(partitionKeys, EventTypes)),
+                    new CommandContextWithoutState(partitionKeys, EventTypes)).ToTask(),
             Func<TCommand, TInject, ICommandContextWithoutState, ResultBox<EventOrNone>> handler1 =>
                 ResultBox<ICommandContextWithoutState>.FromValue(
-                    new CommandContextWithoutState(partitionKeys, EventTypes)),
+                    new CommandContextWithoutState(partitionKeys, EventTypes)).ToTask(),
             Func<TCommand, TInject, ICommandContextWithoutState, Task<ResultBox<EventOrNone>>> handler1 =>
                 ResultBox<ICommandContextWithoutState>.FromValue(
-                    new CommandContextWithoutState(partitionKeys, EventTypes)),
+                    new CommandContextWithoutState(partitionKeys, EventTypes)).ToTask(),
             _ => ResultBox
                 .Start
-                .Conveyor(keys => Repository.Load(partitionKeys, projector))
+                .Conveyor(keys => loader(partitionKeys, projector))
                 .Verify(aggregate => VerifyAggregateType<TCommand, TAggregatePayload>(command, aggregate))
                 .Conveyor(
                     aggregate => ResultBox<ICommandContextWithoutState>.FromValue(
