@@ -6,6 +6,7 @@ namespace Sekiban.Pure.Command.Handlers;
 
 public interface ICommandContextWithoutState
 {
+    public string OriginalSortableUniqueId { get; }
     public List<IEvent> Events { get; }
     public PartitionKeys GetPartitionKeys();
     public int GetNextVersion();

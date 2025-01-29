@@ -2,7 +2,6 @@ using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics.CodeAnalysis;
 using ResultBoxes;
-using Sekiban.Pure.Exception;
 
 namespace Sekiban.Pure.Command.Handlers;
 
@@ -25,11 +24,4 @@ public interface
     Delegate ICommandWithHandlerSerializable.GetHandler() => Handle;
     Delegate ICommandWithHandlerSerializable.GetPartitionKeysSpecifier() => SpecifyPartitionKeys;
     OptionalValue<Type> ICommandWithHandlerSerializable.GetAggregatePayloadType() => typeof(TAggregatePayload).Name == nameof(IAggregatePayload) ? OptionalValue<Type>.Empty : new OptionalValue<Type>(typeof(TAggregatePayload));
-}
-
-public interface ICommandWithHandlerSerializable: ICommandGetProjector,ICommand
-{
-    public Delegate GetHandler();
-    public Delegate GetPartitionKeysSpecifier();
-    public OptionalValue<Type> GetAggregatePayloadType();
 }

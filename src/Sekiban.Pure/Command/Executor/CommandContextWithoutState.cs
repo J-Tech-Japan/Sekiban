@@ -8,6 +8,7 @@ namespace Sekiban.Pure.Command.Executor;
 public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventTypes EventTypes)
     : ICommandContextWithoutState
 {
+    public string OriginalSortableUniqueId => String.Empty;
     public List<IEvent> Events { get; } = new();
     public PartitionKeys GetPartitionKeys() => PartitionKeys;
     public int GetNextVersion() => 0;

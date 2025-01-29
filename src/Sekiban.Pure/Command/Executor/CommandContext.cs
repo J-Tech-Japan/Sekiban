@@ -14,6 +14,7 @@ public class CommandContext<TAggregatePayload>(
     public Aggregate Aggregate { get; set; } = aggregate;
     public IAggregateProjector Projector { get; } = projector;
     public IEventTypes EventTypes { get; } = eventTypes;
+    public string OriginalSortableUniqueId { get; init; } = aggregate.LastSortableUniqueId; 
     public List<IEvent> Events { get; } = new();
     public int GetNextVersion() => Aggregate.Version + 1;
     public int GetCurrentVersion() => Aggregate.Version;
