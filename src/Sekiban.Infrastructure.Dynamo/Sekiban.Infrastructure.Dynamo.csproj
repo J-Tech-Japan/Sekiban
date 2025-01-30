@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.23.0-preview2</Version>
+        <Version>0.23.0-preview3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.0-preview2</PackageVersion>
+        <PackageVersion>0.23.0-preview3</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -21,15 +21,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.403" />
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
-          <PrivateAssets>all</PrivateAssets>
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.405.12"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.0-preview2"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.23.0-preview2"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.0-preview3"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.23.0-preview3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.1"/>
     </ItemGroup>
 
     <ItemGroup>

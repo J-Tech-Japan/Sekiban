@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Aws.S3</PackageId>
-        <Version>0.23.0-preview2</Version>
+        <Version>0.23.0-preview3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework AWS S3 Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.0-preview2</PackageVersion>
+        <PackageVersion>0.23.0-preview3</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -21,15 +21,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.405.14" />
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
-          <PrivateAssets>all</PrivateAssets>
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        <PackageReference Include="AWSSDK.S3" Version="3.7.413"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.0-preview2"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.0-preview3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.1"/>
     </ItemGroup>
 
     <ItemGroup>

@@ -9,13 +9,13 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0"/>
-        <PackageReference Include="Scalar.AspNetCore" Version="1.2.37" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.0.7"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
-      <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj" />
-      <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj"/>
+        <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
     </ItemGroup>
 
 </Project>

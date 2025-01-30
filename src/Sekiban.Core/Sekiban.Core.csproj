@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.23.0-preview2</Version>
+        <Version>0.23.0-preview3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.0-preview2</PackageVersion>
+        <PackageVersion>0.23.0-preview3</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
@@ -27,11 +27,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.0-preview3"/>
     </ItemGroup>
 
     <ItemGroup>
