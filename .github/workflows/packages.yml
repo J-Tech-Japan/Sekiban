@@ -29,7 +29,7 @@ jobs:
         dotnet build Sekiban.sln -c Release
     - name: Pack Core DotNet
       run: |
-        dotnet nuget push "src/Sekiban.Core/bin/Release/Sekiban.Core.DotNet.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json  
+        dotnet nuget push "src/Sekiban.Core.DotNet/bin/Release/Sekiban.Core.DotNet.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json  
     - name: Pack Core
       run: |
         dotnet nuget push "src/Sekiban.Core/bin/Release/Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
