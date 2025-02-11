@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using ResultBoxes;
-using Sekiban.Pure.Exception;
+using Sekiban.Pure.Exceptions;
 using Sekiban.Pure.Extensions;
 using Sekiban.Pure.Projectors;
 namespace Sekiban.Pure.Documents;
@@ -42,6 +42,7 @@ public record PartitionKeys(Guid AggregateId, [property:RegularExpression("^[a-z
     }
     public string ToPrimaryKeysString() => $"{RootPartitionKey}@{Group}@{AggregateId}";
 }
+
 public static class PartitionKeys<TAggregateProjector> where TAggregateProjector : IAggregateProjector, new()
 {
     public static PartitionKeys Generate(string rootPartitionKey = PartitionKeys.DefaultRootPartitionKey) =>

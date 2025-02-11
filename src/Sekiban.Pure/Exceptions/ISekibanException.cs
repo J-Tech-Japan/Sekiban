@@ -1,4 +1,4 @@
-﻿namespace Sekiban.Pure.Exception;
+﻿namespace Sekiban.Pure.Exceptions;
 
 /// <summary>
 ///     BaseType for the Sekiban Exception

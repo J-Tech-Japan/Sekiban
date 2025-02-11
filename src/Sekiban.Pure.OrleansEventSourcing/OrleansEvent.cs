@@ -9,7 +9,7 @@ public record OrleansEvent(
     [property:Id(2)]OrleansPartitionKeys PartitionKeys,
     [property:Id(3)]string SortableUniqueId,
     [property:Id(4)]int Version,
-    [property:Id(5)]string EventPayloadTypeName)
+    [property:Id(5)]OrleansEventMetadata Metadata)
 {
     public static OrleansEvent FromEvent(IEvent ev)
     {
@@ -20,7 +20,7 @@ public record OrleansEvent(
             ev.PartitionKeys.ToOrleansPartitionKeys(),
             ev.SortableUniqueId,
             ev.Version,
-            payload.GetType().Name); 
+            OrleansEventMetadata.FromEventMetadata(ev.Metadata)); 
     }
 
 }
