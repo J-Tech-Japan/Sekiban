@@ -3,7 +3,6 @@ using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
-
 namespace Sekiban.Pure.Repositories;
 
 public class Repository
@@ -19,14 +18,16 @@ public class Repository
                 Events.Where(e => e.PartitionKeys.Equals(partitionKeys)).OrderBy(e => e.SortableUniqueId).ToList())
             .Conveyor(events => Aggregate.EmptyFromPartitionKeys(partitionKeys).Project(events, projector));
 
-    public static ResultBox<List<IEvent>> Save(List<IEvent> events) => ResultBox.FromValue(events).Do(() => Events.AddRange(events));
+    public static ResultBox<List<IEvent>> Save(List<IEvent> events) =>
+        ResultBox.FromValue(events).Do(() => Events.AddRange(events));
 
-    public static ResultBox<MultiProjectionState<TMultiProjection>> LoadMultiProjection<TMultiProjection>(
+    public static Task<ResultBox<MultiProjectionState<TMultiProjection>>> LoadMultiProjection<TMultiProjection>(
         IMultiProjectionEventSelector eventSelector) where TMultiProjection : IMultiProjector<TMultiProjection> =>
         ResultBox
             .FromValue(Events.Where(eventSelector.GetEventSelector).OrderBy(e => e.SortableUniqueId).ToList())
             .Conveyor(
                 events => events
                     .ToResultBox()
-                    .ReduceEach(new MultiProjectionState<TMultiProjection>(), (ev, state) => state.ApplyEvent(ev)));
+                    .ReduceEach(new MultiProjectionState<TMultiProjection>(), (ev, state) => state.ApplyEvent(ev)))
+            .ToTask();
 }

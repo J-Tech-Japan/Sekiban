@@ -1,7 +1,7 @@
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Exception;
+using Sekiban.Pure.Exceptions;
 using Sekiban.Pure.Projectors;
 namespace Sekiban.Pure.Aggregates;
 

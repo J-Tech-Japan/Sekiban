@@ -74,14 +74,14 @@ public class AggregateProjectorGrain(
         return read;
     }
 
-    public async Task<OrleansCommandResponse> ExecuteCommandAsync(ICommandWithHandlerSerializable orleansCommand)
+    public async Task<OrleansCommandResponse> ExecuteCommandAsync(ICommandWithHandlerSerializable orleansCommand, OrleansCommandMetadata metadata)
     {
         var eventGrain = GrainFactory.GetGrain<IAggregateEventHandlerGrain>(GetPartitionKeysAndProjector().ToEventHandlerGrainKey());
         var orleansRepository = new OrleansRepository(eventGrain, GetPartitionKeysAndProjector().PartitionKeys, GetPartitionKeysAndProjector().Projector, typeConverters.EventTypes, await GetStateInternalAsync(eventGrain));
         var commandExecutor = new CommandExecutor() {EventTypes = typeConverters.EventTypes };
         var result = await commandExecutor.ExecuteGeneralNonGeneric(orleansCommand, 
             GetPartitionKeysAndProjector().Projector, GetPartitionKeysAndProjector().PartitionKeys, NoInjection.Empty, 
-            orleansCommand.GetHandler(), orleansCommand.GetAggregatePayloadType(),(_, _) => orleansRepository.Load(), orleansRepository.Save ).UnwrapBox();
+            orleansCommand.GetHandler(), orleansCommand.GetAggregatePayloadType(), metadata.ToCommandMetadata(),(_, _) => orleansRepository.GetAggregate(), orleansRepository.Save ).UnwrapBox();
         state.State = orleansRepository.GetProjectedAggregate(result.Events).UnwrapBox();
         UpdatedAfterWrite = true;
         return result.ToOrleansCommandResponse();

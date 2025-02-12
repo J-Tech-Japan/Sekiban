@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Sekiban.Pure.Documents;
+
 namespace Sekiban.Pure.Events;
 
 public record Event<TEventPayload>(
@@ -7,7 +9,10 @@ public record Event<TEventPayload>(
     PartitionKeys PartitionKeys,
     string SortableUniqueId,
     int Version,
-    string EventPayloadTypeName) : IEvent where TEventPayload : IEventPayload
+    EventMetadata Metadata) : IEvent where TEventPayload : IEventPayload
 {
-    public IEventPayload GetPayload() => Payload;
+    public IEventPayload GetPayload()
+    {
+        return Payload;
+    }
 }

@@ -1,5 +1,5 @@
 using ResultBoxes;
-using Sekiban.Pure.Exception;
+using Sekiban.Pure.Exceptions;
 
 namespace Sekiban.Pure.Aggregates;
 

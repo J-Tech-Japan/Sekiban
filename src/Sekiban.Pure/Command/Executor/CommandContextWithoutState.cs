@@ -5,7 +5,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Command.Executor;
 
-public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventTypes EventTypes)
+public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventTypes EventTypes, CommandMetadata CommandMetadata)
     : ICommandContextWithoutState
 {
     public string OriginalSortableUniqueId => String.Empty;
@@ -13,6 +13,8 @@ public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventType
     public PartitionKeys GetPartitionKeys() => PartitionKeys;
     public int GetNextVersion() => 0;
     public int GetCurrentVersion() => 0;
+    public EventMetadata EventMetadata { get; init; } = EventMetadata.FromCommandMetadata(CommandMetadata);
+
     public CommandExecuted GetCommandExecuted(List<IEvent> producedEvents) => new(
         PartitionKeys,
         SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.NewGuid()),
@@ -22,7 +24,7 @@ public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventType
             eventPayload,
             PartitionKeys,
             SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.NewGuid()),
-            0)
+            0, EventMetadata)
         .Do(ev => Events.Add(ev))
         .Remap(_ => EventOrNone.Empty);
 }

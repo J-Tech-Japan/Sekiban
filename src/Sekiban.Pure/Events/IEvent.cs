@@ -1,4 +1,5 @@
 using Sekiban.Pure.Documents;
+
 namespace Sekiban.Pure.Events;
 
 public interface IEvent
@@ -7,6 +8,12 @@ public interface IEvent
     public int Version { get; }
     public string SortableUniqueId { get; }
     public PartitionKeys PartitionKeys { get; }
-    public SortableUniqueIdValue GetSortableUniqueId() => new(SortableUniqueId);
+
+    public SortableUniqueIdValue GetSortableUniqueId()
+    {
+        return new SortableUniqueIdValue(SortableUniqueId);
+    }
+
     public IEventPayload GetPayload();
+   public EventMetadata Metadata { get; }
 }

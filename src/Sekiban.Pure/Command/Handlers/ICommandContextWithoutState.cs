@@ -13,4 +13,6 @@ public interface ICommandContextWithoutState
     public int GetCurrentVersion();
     internal CommandExecuted GetCommandExecuted(List<IEvent> producedEvents);
     public ResultBox<EventOrNone> AppendEvent(IEventPayload eventPayload);
+    public EventMetadata EventMetadata { get; }
+    public CommandMetadata CommandMetadata { get; }
 }

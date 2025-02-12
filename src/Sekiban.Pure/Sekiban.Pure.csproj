@@ -13,4 +13,8 @@
         <PackageReference Include="ResultBoxes" Version="0.3.29"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Cache\" />
+    </ItemGroup>
+
 </Project>

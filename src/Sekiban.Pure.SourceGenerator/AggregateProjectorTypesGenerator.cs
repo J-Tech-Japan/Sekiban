@@ -79,7 +79,7 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using ResultBoxes;");
         sb.AppendLine("using Sekiban.Pure;");
         sb.AppendLine("using Sekiban.Pure.Aggregates;");
-        sb.AppendLine("using Sekiban.Pure.Exception;");
+        sb.AppendLine("using Sekiban.Pure.Exceptions;");
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Documents;");
         sb.AppendLine("using Sekiban.Pure.Projectors;");
