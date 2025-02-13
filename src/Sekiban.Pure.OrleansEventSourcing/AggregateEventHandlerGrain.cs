@@ -1,15 +1,14 @@
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Types;
-
 namespace Sekiban.Pure.OrleansEventSourcing;
 
 public class AggregateEventHandlerGrain(
     [PersistentState("aggregate", "Default")]
     IPersistentState<AggregateEventHandlerGrain.ToPersist> state,
-    SekibanTypeConverters typeConverters,
-    IEventWriter eventWriter, IEventReader eventReader) : Grain, IAggregateEventHandlerGrain
+    SekibanDomainTypes sekibanDomainTypes,
+    IEventWriter eventWriter,
+    IEventReader eventReader) : Grain, IAggregateEventHandlerGrain
 {
     private readonly List<IEvent> _events = new();
 
@@ -19,7 +18,7 @@ public class AggregateEventHandlerGrain(
     )
     {
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
-        var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(typeConverters.EventTypes);
+        var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(sekibanDomainTypes.EventTypes);
         if (string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) &&
             _events.Count > 0 &&
             _events.Last().SortableUniqueId != expectedLastSortableUniqueId)
@@ -27,8 +26,11 @@ public class AggregateEventHandlerGrain(
         // if last sortable unique id is not empty and it is later than newEvents, throw exception
         if (_events.Any() &&
             toStoreEvents.Any() &&
-            string.Compare(_events.Last().SortableUniqueId, toStoreEvents.First().SortableUniqueId,
-                StringComparison.Ordinal) > 0)
+            string.Compare(
+                _events.Last().SortableUniqueId,
+                toStoreEvents.First().SortableUniqueId,
+                StringComparison.Ordinal) >
+            0)
             throw new InvalidCastException("Expected last event ID is later than new events");
 
         var persist = ToPersist.FromEvents(toStoreEvents);
@@ -54,7 +56,8 @@ public class AggregateEventHandlerGrain(
             return Task.FromResult<IReadOnlyList<OrleansEvent>>(new List<OrleansEvent>());
 
         return Task.FromResult<IReadOnlyList<OrleansEvent>>(
-            _events.Skip(index + 1)
+            _events
+                .Skip(index + 1)
                 .Take(limit ?? int.MaxValue)
                 .ToList()
                 .ToOrleansEvents()
@@ -63,23 +66,20 @@ public class AggregateEventHandlerGrain(
 
     public async Task<IReadOnlyList<OrleansEvent>> GetAllEventsAsync()
     {
-        var retrievalInfo = PartitionKeys.FromPrimaryKeysString(this.GetPrimaryKeyString())
-            .Remap(EventRetrievalInfo.FromPartitionKeys).UnwrapBox();
+        var retrievalInfo = PartitionKeys
+            .FromPrimaryKeysString(this.GetPrimaryKeyString())
+            .Remap(EventRetrievalInfo.FromPartitionKeys)
+            .UnwrapBox();
 
         var events = await eventReader.GetEvents(retrievalInfo).UnwrapBox();
         return events.ToList().ToOrleansEvents();
     }
 
-    public Task<string> GetLastSortableUniqueIdAsync()
-    {
-        return Task.FromResult(state.State.LastSortableUniqueId);
-    }
+    public Task<string> GetLastSortableUniqueIdAsync() => Task.FromResult(state.State.LastSortableUniqueId);
 
-    public Task RegisterProjectorAsync(string projectorKey)
-    {
+    public Task RegisterProjectorAsync(string projectorKey) =>
         // No-op for in-memory implementation
-        return Task.CompletedTask;
-    }
+        Task.CompletedTask;
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {

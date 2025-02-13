@@ -80,6 +80,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Documents;");
         sb.AppendLine("using Sekiban.Pure.Extensions;");
+        sb.AppendLine("using Sekiban.Pure.Serialize;");
         sb.AppendLine("using System.Text.Json;");
         sb.AppendLine("using System.Text.Json.Serialization;");
 
@@ -127,21 +128,24 @@ public class EventTypesGenerator : IIncrementalGenerator
             switch (type.InterfaceName, type.TypeCount)
             {
                 case ("IEventPayload", 0):
-                    sb.AppendLine($"            Event<{type.RecordName}> {type.RecordName.Split('.').Last()}Event => EventDocument<{type.RecordName}>.FromEvent(");
+                    sb.AppendLine(
+                        $"            Event<{type.RecordName}> {type.RecordName.Split('.').Last()}Event => EventDocument<{type.RecordName}>.FromEvent(");
                     sb.AppendLine($"                {type.RecordName.Split('.').Last()}Event),");
                     break;
             }
         }
 
         sb.AppendLine("            _ => ResultBox<IEventDocument>.FromException(");
-        sb.AppendLine("                new SekibanEventTypeNotFoundException($\"Event Type {ev.GetPayload().GetType().Name} Not Found\"))");
+        sb.AppendLine(
+            "                new SekibanEventTypeNotFoundException($\"Event Type {ev.GetPayload().GetType().Name} Not Found\"))");
         sb.AppendLine("        };");
-        
 
-        
-        
+
+
+
         sb.AppendLine("        public ResultBox<IEvent> DeserializeToTyped(");
-        sb.AppendLine("            EventDocumentCommon common, JsonSerializerOptions serializeOptions) => common.PayloadTypeName switch");
+        sb.AppendLine(
+            "            EventDocumentCommon common, JsonSerializerOptions serializeOptions) => common.PayloadTypeName switch");
         sb.AppendLine("        {");
 
         foreach (var type in eventTypes)
@@ -149,44 +153,78 @@ public class EventTypesGenerator : IIncrementalGenerator
             switch (type.InterfaceName, type.TypeCount)
             {
                 case ("IEventPayload", 0):
-                    sb.AppendLine($"            nameof({type.RecordName}) => common.ToEvent<{type.RecordName}>(serializeOptions),");
+                    sb.AppendLine(
+                        $"            nameof({type.RecordName}) => common.ToEvent<{type.RecordName}>(serializeOptions),");
                     break;
             }
         }
 
         sb.AppendLine("            _ => ResultBox<IEvent>.FromException(");
-        sb.AppendLine("                new SekibanEventTypeNotFoundException($\"Event Type {common.PayloadTypeName} Not Found\"))");
+        sb.AppendLine(
+            "                new SekibanEventTypeNotFoundException($\"Event Type {common.PayloadTypeName} Not Found\"))");
         sb.AppendLine("        };");
 
         sb.AppendLine();
         sb.AppendLine("        public void CheckEventJsonContextOption(JsonSerializerOptions options)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocumentCommon), options) == null)");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocumentCommon), options) == null)");
         sb.AppendLine("            {");
-        sb.AppendLine("                throw new SekibanEventTypeNotFoundException($\"EventDocumentCommon not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EventDocumentCommon))] \");");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"EventDocumentCommon not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EventDocumentCommon))] \");");
         sb.AppendLine("            }");
-        sb.AppendLine("            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocumentCommon[]), options) == null)");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocumentCommon[]), options) == null)");
         sb.AppendLine("            {");
-        sb.AppendLine("                throw new SekibanEventTypeNotFoundException($\"EventDocumentCommon[] not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EventDocumentCommon[]))] \");");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"EventDocumentCommon[] not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EventDocumentCommon[]))] \");");
         sb.AppendLine("            }");
         foreach (var type in eventTypes)
         {
             switch (type.InterfaceName, type.TypeCount)
             {
                 case ("IEventPayload", 0):
-                    sb.AppendLine($"            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocument<{type.RecordName}>), options) == null)");
-                    sb.AppendLine($"            {{");
-                    sb.AppendLine($"                throw new SekibanEventTypeNotFoundException($\"EventDocument<{type.RecordName}> not found in {{options?.TypeInfoResolver?.GetType().Name ?? string.Empty}}, put attribute [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]\");");
-                    sb.AppendLine($"            }}");
-                    sb.AppendLine($"            if (options?.TypeInfoResolver?.GetTypeInfo(typeof({type.RecordName}), options) == null)");
-                    sb.AppendLine($"            {{");
-                    sb.AppendLine($"                throw new SekibanEventTypeNotFoundException($\"{type.RecordName} not found in {{options?.TypeInfoResolver?.GetType().Name ?? string.Empty}}, put attribute [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]\");");
-                    sb.AppendLine($"            }}");
+                    sb.AppendLine(
+                        $"            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(EventDocument<{type.RecordName}>), options) == null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine(
+                        $"                throw new SekibanEventTypeNotFoundException($\"EventDocument<{type.RecordName}> not found in {{options?.TypeInfoResolver?.GetType().Name ?? string.Empty}}, put attribute [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]\");");
+                    sb.AppendLine("            }");
+                    sb.AppendLine(
+                        $"            if (options?.TypeInfoResolver?.GetTypeInfo(typeof({type.RecordName}), options) == null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine(
+                        $"                throw new SekibanEventTypeNotFoundException($\"{type.RecordName} not found in {{options?.TypeInfoResolver?.GetType().Name ?? string.Empty}}, put attribute [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]\");");
+                    sb.AppendLine("            }");
                     break;
             }
         }
         sb.AppendLine("        }");
-        
+
+        sb.AppendLine();
+        sb.AppendLine(
+            "        public ResultBox<string> SerializePayloadToJson(ISekibanSerializer serializer, IEvent ev) =>");
+        sb.AppendLine("            ev.GetPayload() switch");
+        sb.AppendLine("        {");
+
+        foreach (var type in eventTypes)
+        {
+            switch (type.InterfaceName, type.TypeCount)
+            {
+                case ("IEventPayload", 0):
+                    var typeName = type.RecordName.Split('.').Last();
+                    sb.AppendLine($"            {type.RecordName} {typeName.ToLower()} =>");
+                    sb.AppendLine(
+                        $"                ResultBox.CheckNullWrapTry(() => serializer.Serialize({typeName.ToLower()})),");
+                    break;
+            }
+        }
+
+        sb.AppendLine("            _ => ResultBox<string>.FromException(");
+        sb.AppendLine(
+            "                new SekibanEventTypeNotFoundException($\"Event Type {ev.GetPayload().GetType().Name} Not Found\"))");
+        sb.AppendLine("        };");
+
         sb.AppendLine("    }");
         sb.AppendLine("/***");
         sb.AppendLine("    [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]");
@@ -197,7 +235,8 @@ public class EventTypesGenerator : IIncrementalGenerator
             sb.AppendLine($"    [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]");
             sb.AppendLine($"    [JsonSerializable(typeof({type.RecordName}))]");
         }
-        sb.AppendLine($"    public partial class {rootNamespace.Replace(".", "")}EventsJsonContext : JsonSerializerContext");
+        sb.AppendLine(
+            $"    public partial class {rootNamespace.Replace(".", "")}EventsJsonContext : JsonSerializerContext");
         sb.AppendLine("    {");
         sb.AppendLine("    }");
         sb.AppendLine("*****/");

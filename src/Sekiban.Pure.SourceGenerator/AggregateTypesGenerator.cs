@@ -1,11 +1,10 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
 namespace Sekiban.Pure.SourceGenerator;
 
 [Generator]
@@ -54,7 +53,7 @@ public class AggregateTypesGenerator : IIncrementalGenerator
         {
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
-                             throw new ApplicationException("TypeSymbol is null");
+                throw new ApplicationException("TypeSymbol is null");
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
@@ -93,17 +92,18 @@ public class AggregateTypesGenerator : IIncrementalGenerator
         sb.AppendLine("            => aggregate.Payload switch");
         sb.AppendLine("            {");
 
-        
-        
-            
-            
-        
+
+
+
+
+
         foreach (var type in eventTypes)
         {
             switch (type.InterfaceName, type.TypeCount)
             {
                 case ("IAggregatePayload", 0):
-                    sb.AppendLine($"                {type.RecordName} => aggregate.ToTypedPayload<{type.RecordName}>().Match(ResultBox<IAggregate>.FromValue, ResultBox<IAggregate>.FromException),");
+                    sb.AppendLine(
+                        $"                {type.RecordName} => aggregate.ToTypedPayload<{type.RecordName}>().Match(ResultBox<IAggregate>.FromValue, ResultBox<IAggregate>.FromException),");
                     break;
             }
         }

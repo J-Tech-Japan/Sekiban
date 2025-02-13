@@ -1,5 +1,4 @@
 using Sekiban.Pure.Documents;
-
 namespace Sekiban.Pure.OrleansEventSourcing;
 
 public static class PartitionKeysExtensions

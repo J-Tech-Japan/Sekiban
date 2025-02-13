@@ -131,6 +131,28 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
             "                _ => throw new SekibanQueryTypeException($\"Unknown query type {general.Query.GetType().Name}\")");
         sb.AppendLine("            };");
 
+        // Add GetMultiProjector for IQueryCommon
+        sb.AppendLine();
+        sb.AppendLine("        public ResultBox<IMultiProjectorCommon> GetMultiProjector(IQueryCommon query)");
+        sb.AppendLine("            => query switch");
+        sb.AppendLine("            {");
+        foreach (var type in queryTypes.Where(t => t.InterfaceName == "IMultiProjectionQuery"))
+            sb.AppendLine($"                {type.RecordName} => {type.Generic1Name}.GenerateInitialPayload(),");
+        sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.FromException(");
+        sb.AppendLine("                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
+        sb.AppendLine("            };");
+
+        // Add GetMultiProjector for IListQueryCommon
+        sb.AppendLine();
+        sb.AppendLine("        public ResultBox<IMultiProjectorCommon> GetMultiProjector(IListQueryCommon query)");
+        sb.AppendLine("            => query switch");
+        sb.AppendLine("            {");
+        foreach (var type in queryTypes.Where(t => t.InterfaceName == "IMultiProjectionListQuery"))
+            sb.AppendLine($"                {type.RecordName} => {type.Generic1Name}.GenerateInitialPayload(),");
+        sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.FromException(");
+        sb.AppendLine("                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
+        sb.AppendLine("            };");
+
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
