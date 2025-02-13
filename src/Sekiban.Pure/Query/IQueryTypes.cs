@@ -1,6 +1,5 @@
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
-
 namespace Sekiban.Pure.Query;
 
 public interface IQueryTypes
@@ -17,4 +16,6 @@ public interface IQueryTypes
 
     public ResultBox<IQueryResult> ToTypedQueryResult(QueryResultGeneral general);
     public ResultBox<IListQueryResult> ToTypedListQueryResult(ListQueryResultGeneral general);
+    public ResultBox<IMultiProjectorCommon> GetMultiProjector(IQueryCommon query);
+    public ResultBox<IMultiProjectorCommon> GetMultiProjector(IListQueryCommon query);
 }

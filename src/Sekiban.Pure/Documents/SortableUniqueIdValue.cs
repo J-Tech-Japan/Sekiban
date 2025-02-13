@@ -25,7 +25,7 @@ public record SortableUniqueIdValue(string Value)
     {
         var ticksString = Value[..TickNumberOfLength];
         var ticks = long.Parse(ticksString);
-        return new DateTime(ticks);
+        return new DateTime(ticks, DateTimeKind.Utc);
     }
 
     /// <summary>

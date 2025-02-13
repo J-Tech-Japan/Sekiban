@@ -2,12 +2,12 @@ using Sekiban.Pure.Events;
 using Sekiban.Pure.Extensions;
 namespace Sekiban.Pure.Command.Handlers;
 
-public class CommandMetadataProvider(IExecutingUserProvider executingUserProvider) : ICommandMetadataProvider
+public record FunctionCommandMetadataProvider(Func<string> GetExecutingUser) : ICommandMetadataProvider
 {
     public CommandMetadata GetMetadata()
     {
         var commandId = GuidExtensions.CreateVersion7();
-        return new CommandMetadata(commandId, "", commandId.ToString(), executingUserProvider.GetExecutingUser());
+        return new CommandMetadata(commandId, "", commandId.ToString(), GetExecutingUser());
     }
 
     public CommandMetadata GetMetadataWithSubscribedEvent(IEvent ev) => new(

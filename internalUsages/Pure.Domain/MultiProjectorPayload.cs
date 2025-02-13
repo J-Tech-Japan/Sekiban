@@ -69,6 +69,7 @@ public record MultiProjectorPayload(
     public static MultiProjectorPayload GenerateInitialPayload()
         // ここで初期値を ImmutableDictionary にする
         => new(ImmutableDictionary<Guid, User>.Empty, ImmutableDictionary<Guid, Cart>.Empty);
+    public static string GetMultiProjectorName() => throw new NotImplementedException();
     public record User(Guid UserId, string Name, string Email, bool IsConfirmed);
     public record Cart(Guid CartId, Guid UserId, ImmutableList<Item> Items, string PaymentMethod);
     public record Item(Guid ItemId, string Name, int Quantity, decimal Price);

@@ -105,6 +105,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.IndexedDb", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Pure.CosmosDb", "src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj", "{B0823EC8-E8DF-4ECB-9FC7-2E06461788DC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Pure.AspNetCore", "src\Sekiban.Pure.AspNetCore\Sekiban.Pure.AspNetCore.csproj", "{E21D74E3-0DD4-4076-928C-F62D7C2106E6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Pure.Postgres", "src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj", "{C633BE14-618A-4502-A764-E43783ACD225}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Pure.Postgres.MigrationHost", "src\Sekiban.Pure.Postgres.MigrationHost\Sekiban.Pure.Postgres.MigrationHost.csproj", "{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -299,6 +305,18 @@ Global
 		{B0823EC8-E8DF-4ECB-9FC7-2E06461788DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B0823EC8-E8DF-4ECB-9FC7-2E06461788DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B0823EC8-E8DF-4ECB-9FC7-2E06461788DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E21D74E3-0DD4-4076-928C-F62D7C2106E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E21D74E3-0DD4-4076-928C-F62D7C2106E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E21D74E3-0DD4-4076-928C-F62D7C2106E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E21D74E3-0DD4-4076-928C-F62D7C2106E6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C633BE14-618A-4502-A764-E43783ACD225}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C633BE14-618A-4502-A764-E43783ACD225}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C633BE14-618A-4502-A764-E43783ACD225}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C633BE14-618A-4502-A764-E43783ACD225}.Release|Any CPU.Build.0 = Release|Any CPU
+		{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -351,6 +369,9 @@ Global
 		{DF857388-7C42-42B7-AA13-6CCE11BB91FF} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 		{783ED104-CFEE-4D47-9D12-24D0E56E7D94} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 		{B0823EC8-E8DF-4ECB-9FC7-2E06461788DC} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
+		{E21D74E3-0DD4-4076-928C-F62D7C2106E6} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
+		{C633BE14-618A-4502-A764-E43783ACD225} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
+		{030DE84D-E550-4D6A-AAA4-6B52BB97CEEF} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}
