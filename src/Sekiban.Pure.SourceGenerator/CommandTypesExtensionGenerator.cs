@@ -34,8 +34,6 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
 
                 commandTypes.AddRange(GetCommandWithHandlerValues(compilation, types));
                 commandTypes.AddRange(GetCommandWithHandlerAsyncValues(compilation, types));
-                commandTypes.AddRange(GetICommandWithHandlerInjectionValues(compilation, types));
-                commandTypes.AddRange(GetICommandWithHandlerInjectionAsyncValues(compilation, types));
                 commandTypes.AddRange(GetCommandValues(compilation, types, commandTypes.ToImmutable()));
 
                 // Generate source code
@@ -116,80 +114,6 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         }
         return eventTypes.ToImmutable();
     }
-
-    public ImmutableArray<CommandWithHandlerValues> GetICommandWithHandlerInjectionValues(
-        Compilation compilation,
-        ImmutableArray<SyntaxNode> types)
-    {
-        var iCommandWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandlerInjection`3");
-        if (iCommandWithHandlerSymbol == null)
-            return new ImmutableArray<CommandWithHandlerValues>();
-        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
-        foreach (var typeSyntax in types)
-        {
-            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
-            var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name))
-            {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name);
-                var toadd = new CommandWithHandlerValues
-                {
-                    InterfaceName = interfaceImplementation.Name,
-                    RecordName = typeSymbol.ToDisplayString(),
-                    TypeCount = interfaceImplementation.TypeArguments.Length,
-                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
-                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
-                    InjectTypeName = interfaceImplementation.TypeArguments[2].ToDisplayString(),
-                    AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 3
-                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
-                        : string.Empty
-                };
-                eventTypes.Add(toadd);
-            }
-        }
-        return eventTypes.ToImmutable();
-    }
-    public ImmutableArray<CommandWithHandlerValues> GetICommandWithHandlerInjectionAsyncValues(
-        Compilation compilation,
-        ImmutableArray<SyntaxNode> types)
-    {
-        var iCommandWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandlerInjectionAsync`3");
-        if (iCommandWithHandlerSymbol == null)
-            return new ImmutableArray<CommandWithHandlerValues>();
-        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
-        foreach (var typeSyntax in types)
-        {
-            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
-            var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name))
-            {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name);
-                var toadd = new CommandWithHandlerValues
-                {
-                    InterfaceName = interfaceImplementation.Name,
-                    RecordName = typeSymbol.ToDisplayString(),
-                    TypeCount = interfaceImplementation.TypeArguments.Length,
-                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
-                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
-                    InjectTypeName = interfaceImplementation.TypeArguments[2].ToDisplayString(),
-                    AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 3
-                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
-                        : string.Empty
-                };
-                eventTypes.Add(toadd);
-            }
-        }
-        return eventTypes.ToImmutable();
-    }
-
     public ImmutableArray<CommandWithHandlerValues> GetCommandValues(
         Compilation compilation,
         ImmutableArray<SyntaxNode> types,
@@ -274,16 +198,14 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         foreach (var type in commandTypes)
         {
             var shortCommandName = type.RecordName.Split('.').Last();
-            sb.Append($"                {type.RecordName} {shortCommandName} => ");
             switch (type.InterfaceName)
             {
                 case "ICommandWithHandler" when type.TypeCount == 2:
-                    sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, NoInjection, IAggregatePayload>(");
+                    sb.AppendLine($"                {type.RecordName} {shortCommandName} => ");
+                    sb.AppendLine($"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, IAggregatePayload>(");
                     sb.AppendLine($"                    {shortCommandName},");
                     sb.AppendLine("                    command.GetProjector(),");
                     sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine("                    NoInjection.Empty,");
                     sb.AppendLine($"                    {shortCommandName}.Handle,");
                     sb.AppendLine("                    commandMetadata,");
                     sb.AppendLine("                    loader,");
@@ -291,12 +213,12 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
                     break;
 
                 case "ICommandWithHandler" when type.TypeCount == 3:
+                    sb.AppendLine($"                {type.RecordName} {shortCommandName} => ");
                     sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, NoInjection, {type.AggregatePayloadTypeName}>(");
+                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, {type.AggregatePayloadTypeName}>(");
                     sb.AppendLine($"                    {shortCommandName},");
                     sb.AppendLine("                    command.GetProjector(),");
                     sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine("                    NoInjection.Empty,");
                     sb.AppendLine($"                    {shortCommandName}.Handle,");
                     sb.AppendLine("                    commandMetadata,");
                     sb.AppendLine("                    loader,");
@@ -304,12 +226,11 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
                     break;
 
                 case "ICommandWithHandlerAsync" when type.TypeCount == 2:
-                    sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, NoInjection, IAggregatePayload>(");
+                    sb.AppendLine($"                {type.RecordName} {shortCommandName} => ");
+                    sb.AppendLine($"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, IAggregatePayload>(");
                     sb.AppendLine($"                    {shortCommandName},");
                     sb.AppendLine("                    command.GetProjector(),");
                     sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine("                    NoInjection.Empty,");
                     sb.AppendLine($"                    {shortCommandName}.HandleAsync,");
                     sb.AppendLine("                    commandMetadata,");
                     sb.AppendLine("                    loader,");
@@ -317,39 +238,13 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
                     break;
 
                 case "ICommandWithHandlerAsync" when type.TypeCount == 3:
+                    sb.AppendLine($"                {type.RecordName} {shortCommandName} => ");
                     sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, NoInjection, {type.AggregatePayloadTypeName}>(");
+                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, {type.AggregatePayloadTypeName}>(");
                     sb.AppendLine($"                    {shortCommandName},");
                     sb.AppendLine("                    command.GetProjector(),");
                     sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine("                    NoInjection.Empty,");
                     sb.AppendLine($"                    {shortCommandName}.HandleAsync,");
-                    sb.AppendLine("                    commandMetadata,");
-                    sb.AppendLine("                    loader,");
-                    sb.AppendLine("                    saver),");
-                    break;
-
-                case "ICommandWithHandlerInjection" when type.TypeCount == 3:
-                    sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, {type.InjectTypeName}, IAggregatePayload>(");
-                    sb.AppendLine($"                    {shortCommandName},");
-                    sb.AppendLine("                   command.GetProjector(),");
-                    sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine($"                    {shortCommandName}.GetInjection(),");
-                    sb.AppendLine($"                    {shortCommandName}.Handle,");
-                    sb.AppendLine("                    commandMetadata,");
-                    sb.AppendLine("                    loader,");
-                    sb.AppendLine("                    saver),");
-                    break;
-
-                case "ICommandWithHandlerInjection" when type.TypeCount == 4:
-                    sb.AppendLine(
-                        $"executor.ExecuteGeneralWithPartitionKeys<{type.RecordName}, {type.InjectTypeName}, {type.AggregatePayloadTypeName}>(");
-                    sb.AppendLine($"                    {shortCommandName},");
-                    sb.AppendLine("                    command.GetProjector(),");
-                    sb.AppendLine("                    partitionKeys,");
-                    sb.AppendLine($"                    {shortCommandName}.GetInjection(),");
-                    sb.AppendLine($"                    {shortCommandName}.Handle,");
                     sb.AppendLine("                    commandMetadata,");
                     sb.AppendLine("                    loader,");
                     sb.AppendLine("                    saver),");
@@ -373,7 +268,6 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         public int TypeCount { get; set; }
         public string Type1Name { get; set; } = string.Empty;
         public string Type2Name { get; set; } = string.Empty;
-        public string InjectTypeName { get; set; } = string.Empty;
         public string AggregatePayloadTypeName { get; set; } = string.Empty;
     }
 }

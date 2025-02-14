@@ -1,7 +1,7 @@
 using Pure.Domain.Generated;
 using ResultBoxes;
-using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Executors;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
@@ -12,42 +12,27 @@ public class MultiProjectionSpec
     [Fact]
     public async Task TestSimple()
     {
-        Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        InMemorySekibanExecutor executor = new(
+            PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
+            new FunctionCommandMetadataProvider(() => "test"),
+            new Repository());
         var result = await executor
-            .Execute(
-                new RegisterUser("Tomohisa", "tomo@example.com"),
-                new RegisterUser.Injection(email => false),
-                CommandMetadata.Create("test"))
-            .Conveyor(
-                response => executor.Execute(
-                    new ConfirmUser(response.PartitionKeys.AggregateId),
-                    CommandMetadata.Create("test")))
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("John", "john@example.com"),
-                    new RegisterUser.Injection(_ => false),
-                    CommandMetadata.Create("test")))
-            .Conveyor(
-                response => executor.Execute(
-                    new ConfirmUser(response.PartitionKeys.AggregateId),
-                    CommandMetadata.Create("test")))
-            .Conveyor(
-                response => executor.Execute(
-                    new RevokeUser(response.PartitionKeys.AggregateId),
-                    new RevokeUser.Injection(_ => true),
-                    CommandMetadata.Create("test")))
-            .Conveyor(_ => executor.Execute(new RegisterBranch("japan"), CommandMetadata.Create("test")));
+            .ExecuteCommandAsync(new RegisterUser("Tomohisa", "tomo@example.com"))
+            .Conveyor(response => executor.ExecuteCommandAsync(new ConfirmUser(response.PartitionKeys.AggregateId)))
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterUser("John", "john@example.com")))
+            .Conveyor(response => executor.ExecuteCommandAsync(new ConfirmUser(response.PartitionKeys.AggregateId)))
+            .Conveyor(response => executor.ExecuteCommandAsync(new RevokeUser(response.PartitionKeys.AggregateId)))
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterBranch("japan")));
         Assert.True(result.IsSuccess);
         var projectionResult
-            = await Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
+            = await executor.Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
         Assert.True(projectionResult.IsSuccess);
         var projection = projectionResult.GetValue();
         Assert.Equal(2, projection.Payload.Users.Count);
         Assert.Equal(1, projection.Payload.Users.Values.Count(m => m.IsConfirmed));
 
         var projectionFromAggregateList
-            = await Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(
+            = await executor.Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(
                 MultiProjectionEventSelector.FromProjectorGroup<UserProjector>());
         // var projectionFromAggregateList
         //     = Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(MultiProjectionEventSelector.All);
@@ -58,64 +43,41 @@ public class MultiProjectionSpec
             1,
             projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
         var queryExecutor = new QueryExecutor();
-        var queryResult = await queryExecutor.Execute(
-            new UserQueryFromMultiProjection(),
-            Repository.LoadMultiProjection<MultiProjectorPayload>);
+        var queryResult = await executor.ExecuteQueryAsync(new UserQueryFromMultiProjection());
         // var queryResult
         //     = await queryExecutor
         //         .ExecuteListWithMultiProjectionFunction<MultiProjectorPayload, UserQueryFromMultiProjection, string>(
         //             new UserQueryFromMultiProjection(),
         //             UserQueryFromMultiProjection.HandleFilter,
         //             UserQueryFromMultiProjection.HandleSort);
-
-
         Assert.True(queryResult.IsSuccess);
         var queryResultValue = queryResult.GetValue().Items.ToList();
         Assert.Equal(2, queryResultValue.Count);
-
     }
 
     [Fact]
     public async Task TestUserQueryFromAggregateProjection()
     {
-        // Setup test data
-        Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        InMemorySekibanExecutor executor = new(
+            PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
+            new FunctionCommandMetadataProvider(() => "test"),
+            new Repository());
         var result = await executor
             // Register and confirm first user "Alice"
-            .Execute(
-                new RegisterUser("Alice", "alice@example.com"),
-                new RegisterUser.Injection(email => false),
-                CommandMetadata.Create("test"))
-            .Conveyor(
-                response => executor.Execute(
-                    new ConfirmUser(response.PartitionKeys.AggregateId),
-                    CommandMetadata.Create("test")))
+            .ExecuteCommandAsync(new RegisterUser("Alice", "alice@example.com"))
+            .Conveyor(response => executor.ExecuteCommandAsync(new ConfirmUser(response.PartitionKeys.AggregateId)))
             // Register and confirm second user "Bob"
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("Bob", "bob@example.com"),
-                    new RegisterUser.Injection(_ => false),
-                    CommandMetadata.Create("test")))
-            .Conveyor(
-                response => executor.Execute(
-                    new ConfirmUser(response.PartitionKeys.AggregateId),
-                    CommandMetadata.Create("test")))
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterUser("Bob", "bob@example.com")))
+            .Conveyor(response => executor.ExecuteCommandAsync(new ConfirmUser(response.PartitionKeys.AggregateId)))
             // Register third user "Charlie" but don't confirm
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("Charlie", "charlie@example.com"),
-                    new RegisterUser.Injection(_ => false),
-                    CommandMetadata.Create("test")));
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterUser("Charlie", "charlie@example.com")));
 
         Assert.True(result.IsSuccess);
 
         var queryExecutor = new QueryExecutor();
 
         // Test 1: Query with empty filter (should return all confirmed users)
-        var allUsersQuery = await queryExecutor.Execute(
-            new UserQueryFromAggregateProjection(""),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>);
+        var allUsersQuery = await executor.ExecuteQueryAsync(new UserQueryFromAggregateProjection(""));
         Assert.True(allUsersQuery.IsSuccess);
         var allUsers = allUsersQuery.GetValue().Items.ToList();
         Assert.Equal(2, allUsers.Count); // Only confirmed users (Alice and Bob)
@@ -123,18 +85,15 @@ public class MultiProjectionSpec
         Assert.Equal("Bob", allUsers[1]);
 
         // Test 2: Query with name filter
-        var filteredQuery = await queryExecutor.Execute(
-            new UserQueryFromAggregateProjection("ob"),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>); // Should match "Bob"
+        var filteredQuery = await executor.ExecuteQueryAsync(
+            new UserQueryFromAggregateProjection("ob")); // Should match "Bob"
         Assert.True(filteredQuery.IsSuccess);
         var filteredUsers = filteredQuery.GetValue().Items.ToList();
         Assert.Single(filteredUsers);
         Assert.Equal("Bob", filteredUsers[0]);
 
         // Test 3: Query with non-matching filter
-        var noMatchQuery = await queryExecutor.Execute(
-            new UserQueryFromAggregateProjection("xyz"),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>);
+        var noMatchQuery = await executor.ExecuteQueryAsync(new UserQueryFromAggregateProjection("xyz"));
         Assert.True(noMatchQuery.IsSuccess);
         var noMatchUsers = noMatchQuery.GetValue().Items.ToList();
         Assert.Empty(noMatchUsers);
@@ -143,44 +102,35 @@ public class MultiProjectionSpec
     [Fact]
     public async Task TestUserExistsQuery()
     {
-        // Setup test data
-        Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        InMemorySekibanExecutor executor = new(
+            PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
+            new FunctionCommandMetadataProvider(() => "test"),
+            new Repository());
         var result = await executor
             // Register first user
-            .Execute(
-                new RegisterUser("Alice", "alice@example.com"),
-                new RegisterUser.Injection(email => false),
-                CommandMetadata.Create("test"))
+            .ExecuteCommandAsync(new RegisterUser("Alice", "alice@example.com"))
             // Register second user
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("Bob", "bob@example.com"),
-                    new RegisterUser.Injection(_ => false),
-                    CommandMetadata.Create("test")));
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterUser("Bob", "bob@example.com")));
 
         Assert.True(result.IsSuccess);
 
         var queryExecutor = new QueryExecutor();
 
         // Test 1: Query with existing email
-        var existingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromMultiProjection("alice@example.com"),
-            Repository.LoadMultiProjection<MultiProjectorPayload>);
+        var existingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromMultiProjection("alice@example.com"));
         Assert.True(existingEmailQuery.IsSuccess);
         Assert.True(existingEmailQuery.GetValue());
 
         // Test 2: Query with another existing email
-        var anotherExistingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromMultiProjection("bob@example.com"),
-            Repository.LoadMultiProjection<MultiProjectorPayload>);
+        var anotherExistingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromMultiProjection("bob@example.com"));
         Assert.True(anotherExistingEmailQuery.IsSuccess);
         Assert.True(anotherExistingEmailQuery.GetValue());
 
         // Test 3: Query with non-existing email
-        var nonExistingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromMultiProjection("nonexistent@example.com"),
-            Repository.LoadMultiProjection<MultiProjectorPayload>);
+        var nonExistingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromMultiProjection("nonexistent@example.com"));
         Assert.True(nonExistingEmailQuery.IsSuccess);
         Assert.False(nonExistingEmailQuery.GetValue());
     }
@@ -188,44 +138,35 @@ public class MultiProjectionSpec
     [Fact]
     public async Task TestUserExistsQueryFromAggregateListProjection()
     {
-        // Setup test data
-        Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        InMemorySekibanExecutor executor = new(
+            PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
+            new FunctionCommandMetadataProvider(() => "test"),
+            new Repository());
         var result = await executor
             // Register first user
-            .Execute(
-                new RegisterUser("Alice", "alice@example.com"),
-                new RegisterUser.Injection(email => false),
-                CommandMetadata.Create("test"))
+            .ExecuteCommandAsync(new RegisterUser("Alice", "alice@example.com"))
             // Register second user
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("Bob", "bob@example.com"),
-                    new RegisterUser.Injection(_ => false),
-                    CommandMetadata.Create("test")));
+            .Conveyor(_ => executor.ExecuteCommandAsync(new RegisterUser("Bob", "bob@example.com")));
 
         Assert.True(result.IsSuccess);
 
         var queryExecutor = new QueryExecutor();
 
         // Test 1: Query with existing email
-        var existingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromAggregateListProjection("alice@example.com"),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>);
+        var existingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromAggregateListProjection("alice@example.com"));
         Assert.True(existingEmailQuery.IsSuccess);
         Assert.True(existingEmailQuery.GetValue());
 
         // Test 2: Query with another existing email
-        var anotherExistingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromAggregateListProjection("bob@example.com"),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>);
+        var anotherExistingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromAggregateListProjection("bob@example.com"));
         Assert.True(anotherExistingEmailQuery.IsSuccess);
         Assert.True(anotherExistingEmailQuery.GetValue());
 
         // Test 3: Query with non-existing email
-        var nonExistingEmailQuery = await queryExecutor.Execute(
-            new UserExistsQueryFromAggregateListProjection("nonexistent@example.com"),
-            Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>);
+        var nonExistingEmailQuery = await executor.ExecuteQueryAsync(
+            new UserExistsQueryFromAggregateListProjection("nonexistent@example.com"));
         Assert.True(nonExistingEmailQuery.IsSuccess);
         Assert.False(nonExistingEmailQuery.GetValue());
     }

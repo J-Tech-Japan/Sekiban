@@ -1,11 +1,10 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
 namespace Sekiban.Pure.SourceGenerator;
 
 [Generator]
@@ -139,7 +138,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         foreach (var type in queryTypes.Where(t => t.InterfaceName == "IMultiProjectionQuery"))
             sb.AppendLine($"                {type.RecordName} => {type.Generic1Name}.GenerateInitialPayload(),");
         sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.FromException(");
-        sb.AppendLine("                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
+        sb.AppendLine(
+            "                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
         sb.AppendLine("            };");
 
         // Add GetMultiProjector for IListQueryCommon
@@ -150,7 +150,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         foreach (var type in queryTypes.Where(t => t.InterfaceName == "IMultiProjectionListQuery"))
             sb.AppendLine($"                {type.RecordName} => {type.Generic1Name}.GenerateInitialPayload(),");
         sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.FromException(");
-        sb.AppendLine("                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
+        sb.AppendLine(
+            "                    new SekibanQueryTypeException($\"Unknown query type {query.GetType().Name}\"))");
         sb.AppendLine("            };");
 
         sb.AppendLine("    }");
@@ -165,8 +166,7 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
     {
         var iListQueryWithHandlerSymbol
             = compilation.GetTypeByMetadataName("Sekiban.Pure.Query.IMultiProjectionListQuery`3");
-        var iQueryWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.Query.IMultiProjectionQuery`3");
+        var iQueryWithHandlerSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.Query.IMultiProjectionQuery`3");
         if (iListQueryWithHandlerSymbol == null && iQueryWithHandlerSymbol == null)
             return new ImmutableArray<QueryWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<QueryWithHandlerValues>();
@@ -177,8 +177,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             var matchingInterface = typeSymbol.AllInterfaces.FirstOrDefault(
                 m => m.OriginalDefinition is not null &&
-                     (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
-                      m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
+                    (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
+                        m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
 
             if (matchingInterface != null)
                 eventTypes.Add(
@@ -210,7 +210,6 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("using Sekiban.Pure.Exceptions;");
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Command.Handlers;");
-        sb.AppendLine("using Sekiban.Pure.Command.Resources;");
         sb.AppendLine("using Sekiban.Pure.Command.Executor;");
         sb.AppendLine("using Sekiban.Pure.Aggregates;");
         sb.AppendLine("using Sekiban.Pure.Documents;");
