@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Pure.Domain.Generated;
 using ResultBoxes;
 using Sekiban.Pure.Command.Handlers;
@@ -15,7 +16,7 @@ public class SimpleEventSourcingTests
         InMemorySekibanExecutor executor = new(
             PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
             new FunctionCommandMetadataProvider(() => "test"),
-            new Repository());
+            new Repository(),new ServiceCollection().BuildServiceProvider());
         Assert.Empty(executor.Repository.Events);
         await executor.ExecuteCommandAsync(new RegisterBranch("branch1"));
 

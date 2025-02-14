@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Pure.Domain.Generated;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Executors;
@@ -12,7 +13,7 @@ public class ShoppingCartTests
         var executor = new InMemorySekibanExecutor(
             PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
             new FunctionCommandMetadataProvider(() => "test"),
-            new Repository());
+            new Repository(),new ServiceCollection().BuildServiceProvider());
         var userId = Guid.NewGuid();
         var createCommand = new CreateShoppingCart(userId);
         var result = await executor.ExecuteCommandAsync(createCommand);

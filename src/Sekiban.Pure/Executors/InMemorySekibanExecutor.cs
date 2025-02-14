@@ -12,10 +12,12 @@ namespace Sekiban.Pure.Executors;
 public class InMemorySekibanExecutor(
     SekibanDomainTypes sekibanDomainTypes,
     ICommandMetadataProvider metadataProvider,
-    Repository repository) : ISekibanExecutor
+    Repository repository,
+    IServiceProvider serviceProvider) : ISekibanExecutor
 {
     public Repository Repository { get; set; } = repository;
-    private readonly CommandExecutor _commandExecutor = new() { EventTypes = sekibanDomainTypes.EventTypes };
+    private readonly CommandExecutor _commandExecutor = new(serviceProvider)
+        { EventTypes = sekibanDomainTypes.EventTypes };
 
     public SekibanDomainTypes GetDomainTypes() => sekibanDomainTypes;
     public async Task<ResultBox<CommandResponse>> ExecuteCommandAsync(
@@ -61,10 +63,10 @@ public class InMemorySekibanExecutor(
                     lastEvent?.PartitionKeys.RootPartitionKey ?? "default");
                 var typedMultiProjectionState
                     = sekibanDomainTypes.MultiProjectorsType.ToTypedState(multiProjectionState);
-                var queryExecutor = new QueryExecutor();
                 var queryResult = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(
                     queryCommon,
-                    selector => typedMultiProjectionState.ToResultBox().ConveyorWrapTry(state => state).ToTask());
+                    selector => typedMultiProjectionState.ToResultBox().ConveyorWrapTry(state => state).ToTask(),
+                    serviceProvider);
                 return queryResult.ConveyorWrapTry(val => (TResult)val.GetValue());
             }
             return ResultBox<TResult>.Error(new ApplicationException("Projection failed"));
@@ -95,10 +97,10 @@ public class InMemorySekibanExecutor(
                     lastEvent?.PartitionKeys.RootPartitionKey ?? "default");
                 var typedMultiProjectionState
                     = sekibanDomainTypes.MultiProjectorsType.ToTypedState(multiProjectionState);
-                var queryExecutor = new QueryExecutor();
                 var queryResult = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(
                     queryCommon,
-                    selector => typedMultiProjectionState.ToResultBox().ConveyorWrapTry(state => state).ToTask());
+                    selector => typedMultiProjectionState.ToResultBox().ConveyorWrapTry(state => state).ToTask(),
+                    serviceProvider);
                 return queryResult.ConveyorWrapTry(val => (ListQueryResult<TResult>)val);
             }
             return ResultBox<ListQueryResult<TResult>>.Error(new ApplicationException("Projection failed"));
