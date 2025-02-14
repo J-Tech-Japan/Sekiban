@@ -1,9 +1,8 @@
-using System.Collections.Immutable;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-
+using System.Collections.Immutable;
 namespace Sekiban.Pure.Projectors;
 
 public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<PartitionKeys, Aggregate> Aggregates)
@@ -29,6 +28,8 @@ public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<Pa
                     new AggregateListProjector<TAggregateProjector>(
                         payload.Aggregates.SetItem(partitionKeys, success))),
             ResultBox<AggregateListProjector<TAggregateProjector>>.Error);
-
     }
+    public static string GetMultiProjectorName() => typeof(AggregateListProjector<TAggregateProjector>).Name +
+        "+" +
+        typeof(TAggregateProjector).Name;
 }

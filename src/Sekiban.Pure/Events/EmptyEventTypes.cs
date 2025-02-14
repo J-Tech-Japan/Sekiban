@@ -1,8 +1,8 @@
-using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Exceptions;
-
+using Sekiban.Pure.Serialize;
+using System.Text.Json;
 namespace Sekiban.Pure.Events;
 
 public class EmptyEventTypes : IEventTypes
@@ -11,20 +11,17 @@ public class EmptyEventTypes : IEventTypes
         IEventPayload payload,
         PartitionKeys partitionKeys,
         string sortableUniqueId,
-        int version, EventMetadata metadata)
-    {
-        return ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
-    }
+        int version,
+        EventMetadata metadata) =>
+        ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
 
-    public ResultBox<IEventDocument> ConvertToEventDocument(IEvent ev)
-    {
-        return ResultBox<IEventDocument>.FromException(new SekibanEventTypeNotFoundException(""));
-    }
+    public ResultBox<IEventDocument> ConvertToEventDocument(IEvent ev) =>
+        ResultBox<IEventDocument>.FromException(new SekibanEventTypeNotFoundException(""));
 
-    public ResultBox<IEvent> DeserializeToTyped(EventDocumentCommon common, JsonSerializerOptions serializeOptions)
-    {
-        return ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
-    }
+    public ResultBox<IEvent> DeserializeToTyped(EventDocumentCommon common, JsonSerializerOptions serializeOptions) =>
+        ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
+    public ResultBox<string> SerializePayloadToJson(ISekibanSerializer serializer, IEvent ev) =>
+        throw new NotImplementedException();
 
     public void CheckEventJsonContextOption(JsonSerializerOptions options)
     {

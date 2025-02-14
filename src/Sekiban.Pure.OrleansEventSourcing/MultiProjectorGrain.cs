@@ -2,29 +2,27 @@ using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-
 namespace Sekiban.Pure.OrleansEventSourcing;
 
 public class MultiProjectorGrain(
-    IMultiProjectorsType multiProjectorsType,
     [PersistentState("multiProjector", "Default")]
     IPersistentState<OrleansMultiProjectorState> safeState,
     IEventReader eventReader,
-    IQueryTypes queryTypes) : Grain, IMultiProjectorGrain
+    SekibanDomainTypes sekibanDomainTypes) : Grain, IMultiProjectorGrain
 {
     private static readonly TimeSpan SafeStateTime = TimeSpan.FromSeconds(10);
     private OrleansMultiProjectorState? UnsafeState { get; set; }
 
     public async Task RebuildStateAsync()
     {
-        var projector = GetProjectorFromGrainName();
+        var projector = GetProjectorFromMultiProjectorName();
         var info = EventRetrievalInfo.All;
         var events = (await eventReader.GetEvents(info)).UnwrapBox();
         var currentTime = DateTime.UtcNow;
         var safeTimeThreshold = currentTime.Subtract(SafeStateTime);
 
         if (events.Count == 0) return;
-        var projectedState = multiProjectorsType.Project(projector, events).UnwrapBox();
+        var projectedState = sekibanDomainTypes.MultiProjectorsType.Project(projector, events).UnwrapBox();
 
         // Split events into safe and unsafe based on time
         var lastEvent = events[^1];
@@ -43,18 +41,21 @@ public class MultiProjectorGrain(
                 safeState.State?.RootPartitionKey ?? "default");
             await safeState.WriteStateAsync();
             UnsafeState = null;
-        }
-        else
+        } else
         {
             // Find split point between safe and unsafe events
-            var splitIndex = events.ToList().FindLastIndex(e =>
-                new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeTimeIdValue));
+            var splitIndex = events
+                .ToList()
+                .FindLastIndex(
+                    e =>
+                        new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeTimeIdValue));
 
             if (splitIndex >= 0)
             {
                 var safeEvents = events.Take(splitIndex + 1).ToList();
                 var lastSafeEvent = safeEvents[^1];
-                var safeProjectedState = multiProjectorsType.Project(projector, safeEvents).UnwrapBox();
+                var safeProjectedState
+                    = sekibanDomainTypes.MultiProjectorsType.Project(projector, safeEvents).UnwrapBox();
                 safeState.State = new OrleansMultiProjectorState(
                     safeProjectedState,
                     lastSafeEvent.Id,
@@ -84,7 +85,6 @@ public class MultiProjectorGrain(
             return;
         }
 
-        var projector = GetProjectorFromGrainName();
         var info = EventRetrievalInfo.All with
         {
             SortableIdCondition =
@@ -96,7 +96,10 @@ public class MultiProjectorGrain(
         var currentTime = DateTime.UtcNow;
         var safeTimeThreshold = currentTime.Subtract(SafeStateTime);
 
-        var projectedState = multiProjectorsType.Project(safeState.State.ProjectorCommon, events).UnwrapBox();
+        var projectedState = sekibanDomainTypes
+            .MultiProjectorsType
+            .Project(safeState.State.ProjectorCommon, events)
+            .UnwrapBox();
 
         var lastEvent = events[^1];
         var lastEventSortableId = new SortableUniqueIdValue(lastEvent.SortableUniqueId);
@@ -114,19 +117,24 @@ public class MultiProjectorGrain(
                 safeState.State.RootPartitionKey);
             await safeState.WriteStateAsync();
             UnsafeState = null;
-        }
-        else
+        } else
         {
             // Find split point between safe and unsafe events
-            var splitIndex = events.ToList().FindLastIndex(e =>
-                new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeTimeIdValue));
+            var splitIndex = events
+                .ToList()
+                .FindLastIndex(
+                    e =>
+                        new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeTimeIdValue));
 
             if (splitIndex >= 0)
             {
                 var safeEvents = events.Take(splitIndex + 1).ToList();
                 var lastSafeEvent = safeEvents[^1];
                 var safeProjectedState =
-                    multiProjectorsType.Project(safeState.State.ProjectorCommon, safeEvents).UnwrapBox();
+                    sekibanDomainTypes
+                        .MultiProjectorsType
+                        .Project(safeState.State.ProjectorCommon, safeEvents)
+                        .UnwrapBox();
                 safeState.State = new OrleansMultiProjectorState(
                     safeProjectedState,
                     lastSafeEvent.Id,
@@ -156,18 +164,22 @@ public class MultiProjectorGrain(
 
     public async Task<OrleansQueryResultGeneral> QueryAsync(IQueryCommon query)
     {
-        var result = await queryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
-                     throw new ApplicationException("Query not found");
-        return result.Remap(value => value.ToGeneral(query)).Remap(OrleansQueryResultGeneral.FromQueryResultGeneral)
+        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
+            throw new ApplicationException("Query not found");
+        return result
+            .Remap(value => value.ToGeneral(query))
+            .Remap(OrleansQueryResultGeneral.FromQueryResultGeneral)
             .UnwrapBox();
     }
 
     public async Task<OrleansListQueryResultGeneral> QueryAsync(IListQueryCommon query)
     {
-        var result = await queryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
-                     throw new ApplicationException("Query not found");
-        return result.Remap(value => value.ToGeneral(query))
-            .Remap(OrleansListQueryResultGeneral.FromListQueryResultGeneral).UnwrapBox();
+        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
+            throw new ApplicationException("Query not found");
+        return result
+            .Remap(value => value.ToGeneral(query))
+            .Remap(OrleansListQueryResultGeneral.FromListQueryResultGeneral)
+            .UnwrapBox();
     }
 
     public async Task<ResultBox<IMultiProjectorStateCommon>> GetProjectorForQuery(
@@ -175,15 +187,15 @@ public class MultiProjectorGrain(
     {
         await BuildStateAsync();
         return UnsafeState?.ToMultiProjectorState().ToResultBox<IMultiProjectorStateCommon>() ??
-               safeState?.State.ToMultiProjectorState().ToResultBox<IMultiProjectorStateCommon>() ??
-               new ApplicationException("No state found");
+            safeState?.State.ToMultiProjectorState().ToResultBox<IMultiProjectorStateCommon>() ??
+            new ApplicationException("No state found");
     }
 
 
-    public IMultiProjectorCommon GetProjectorFromGrainName()
+    public IMultiProjectorCommon GetProjectorFromMultiProjectorName()
     {
         var grainName = this.GetPrimaryKeyString();
-        return multiProjectorsType.GetProjectorFromGrainName(grainName);
+        return sekibanDomainTypes.MultiProjectorsType.GetProjectorFromMultiProjectorName(grainName);
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)

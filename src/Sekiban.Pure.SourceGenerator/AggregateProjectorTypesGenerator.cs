@@ -1,11 +1,10 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
 namespace Sekiban.Pure.SourceGenerator;
 
 [Generator]
@@ -33,7 +32,7 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
                 var (compilation, types) = source;
                 var commandTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
 
-                commandTypes.AddRange(GetEventValues(compilation, types));
+                commandTypes.AddRange(GetAggregateProjectorValues(compilation, types));
 
                 // Generate source code
                 var rootNamespace = compilation.AssemblyName ?? throw new ApplicationException("AssemblyName is null");
@@ -42,7 +41,7 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
             });
 
     }
-    public ImmutableArray<CommandWithHandlerValues> GetEventValues(
+    public ImmutableArray<CommandWithHandlerValues> GetAggregateProjectorValues(
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
@@ -54,7 +53,7 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
         {
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
-                             throw new ApplicationException("TypeSymbol is null");
+                throw new ApplicationException("TypeSymbol is null");
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
@@ -87,17 +86,18 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
-        sb.AppendLine($"    public class {rootNamespace.Replace(".", "")}AggregateProjectorSpecifier : IAggregateProjectorSpecifier");
+        sb.AppendLine(
+            $"    public class {rootNamespace.Replace(".", "")}AggregateProjectorSpecifier : IAggregateProjectorSpecifier");
         sb.AppendLine("    {");
         sb.AppendLine("        public ResultBox<IAggregateProjector> GetProjector(string projectorName)");
         sb.AppendLine("            => projectorName switch");
         sb.AppendLine("            {");
 
-        
-        
-            
-            
-        
+
+
+
+
+
         foreach (var type in eventTypes)
         {
             switch (type.InterfaceName, type.TypeCount)
