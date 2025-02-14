@@ -58,7 +58,7 @@ public class DomainTypesGenerator : IIncrementalGenerator
         sb.AppendLine(
             "        public static SekibanDomainTypes Generate(JsonSerializerOptions jsonSerializerOptions = null)");
         sb.AppendLine(
-            $"            => new(new {baseName}EventTypes(), new {baseName}AggregateTypes(), new {baseName}AggregateProjectorSpecifier(), new {baseName}QueryTypes(), new {baseName}MultiProjectorTypes(), jsonSerializerOptions);");
+            $"            => new(new {baseName}EventTypes(), new {baseName}AggregateTypes(), new {baseName}CommandTypes(), new {baseName}AggregateProjectorSpecifier(), new {baseName}QueryTypes(), new {baseName}MultiProjectorTypes(), jsonSerializerOptions);");
         sb.AppendLine("    };");
         sb.AppendLine("}");
 

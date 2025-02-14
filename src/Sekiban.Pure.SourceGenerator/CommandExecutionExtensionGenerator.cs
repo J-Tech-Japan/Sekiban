@@ -40,8 +40,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
 
                 // Generate source code
                 var rootNamespace = compilation.AssemblyName ?? throw new Exception();
-                var sourceCode = GenerateSourceCode(commandTypes.ToImmutable(), rootNamespace);
-                ctx.AddSource("CommandExecutorExtension.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
+                var executorExtensionsSource = GenerateSourceCode(commandTypes.ToImmutable(), rootNamespace);
+
+                ctx.AddSource(
+                    "CommandExecutorExtension.g.cs",
+                    SourceText.From(executorExtensionsSource, Encoding.UTF8));
             });
 
     }
@@ -238,7 +241,6 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
 
 
 
-
     private string GenerateSourceCode(ImmutableArray<CommandWithHandlerValues> eventTypes, string rootNamespace)
     {
         var sb = new StringBuilder();
@@ -257,7 +259,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
-        sb.AppendLine("    public static class CommandExecutorExtensions");
+        sb.AppendLine($"    public static class {rootNamespace.Replace(".", "")}CommandExecutorExtensions");
         sb.AppendLine("    {");
 
         foreach (var type in eventTypes)

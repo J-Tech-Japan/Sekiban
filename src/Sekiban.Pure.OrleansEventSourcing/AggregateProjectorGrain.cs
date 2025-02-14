@@ -103,14 +103,12 @@ public class AggregateProjectorGrain(
             sekibanDomainTypes.EventTypes,
             await GetStateInternalAsync(eventGrain));
         var commandExecutor = new CommandExecutor { EventTypes = sekibanDomainTypes.EventTypes };
-        var result = await commandExecutor
-            .ExecuteGeneralNonGeneric(
+        var result = await sekibanDomainTypes
+            .CommandTypes
+            .ExecuteGeneral(
+                commandExecutor,
                 orleansCommand,
-                GetPartitionKeysAndProjector().Projector,
                 GetPartitionKeysAndProjector().PartitionKeys,
-                NoInjection.Empty,
-                orleansCommand.GetHandler(),
-                orleansCommand.GetAggregatePayloadType(),
                 metadata.ToCommandMetadata(),
                 (_, _) => orleansRepository.GetAggregate(),
                 orleansRepository.Save)
