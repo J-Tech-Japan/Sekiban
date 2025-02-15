@@ -16,9 +16,10 @@ public class SimpleEventSourcingTests
         InMemorySekibanExecutor executor = new(
             PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
             new FunctionCommandMetadataProvider(() => "test"),
-            new Repository(),new ServiceCollection().BuildServiceProvider());
+            new Repository(),
+            new ServiceCollection().BuildServiceProvider());
         Assert.Empty(executor.Repository.Events);
-        await executor.ExecuteCommandAsync(new RegisterBranch("branch1"));
+        await executor.CommandAsync(new RegisterBranch("branch1"));
 
         Assert.Single(executor.Repository.Events);
         var last = executor.Repository.Events.Last();
@@ -28,28 +29,27 @@ public class SimpleEventSourcingTests
         var payload = aggregate.GetPayload();
         Assert.IsType<Branch>(payload);
 
-        var userExecuted = await executor.ExecuteCommandAsync(new RegisterUser("tomo", "tomo@example.com")).UnwrapBox();
+        var userExecuted = await executor.CommandAsync(new RegisterUser("tomo", "tomo@example.com")).UnwrapBox();
         Assert.NotNull(userExecuted);
-        var confirmResult = await executor.ExecuteCommandAsync(new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
+        var confirmResult = await executor.CommandAsync(new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
         Assert.NotNull(confirmResult);
         Assert.True(confirmResult.IsSuccess);
-        var confirmResult2 = await executor.ExecuteCommandAsync(
-            new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
+        var confirmResult2 = await executor.CommandAsync(new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
         Assert.NotNull(confirmResult2);
         Assert.False(confirmResult2.IsSuccess); // already confirmed, it should fail
         Assert.IsType<SekibanAggregateTypeRestrictionException>(confirmResult2.GetException());
 
-        // var revokeResultFail = await executor.ExecuteCommandAsync(
+        // var revokeResultFail = await executor.CommandAsync(
         //     new RevokeUser(userExecuted.PartitionKeys.AggregateId));
         // Assert.NotNull(revokeResultFail);
         // Assert.False(revokeResultFail.IsSuccess); // when use not exists, it should fail
         // Assert.IsType<ApplicationException>(revokeResultFail.GetException());
 
-        var revokeResult = await executor.ExecuteCommandAsync(new RevokeUser(userExecuted.PartitionKeys.AggregateId));
+        var revokeResult = await executor.CommandAsync(new RevokeUser(userExecuted.PartitionKeys.AggregateId));
         Assert.NotNull(revokeResult);
         Assert.True(revokeResult.IsSuccess);
 
-        var revokeResult2 = await executor.ExecuteCommandAsync(new RevokeUser(userExecuted.PartitionKeys.AggregateId));
+        var revokeResult2 = await executor.CommandAsync(new RevokeUser(userExecuted.PartitionKeys.AggregateId));
         Assert.NotNull(revokeResult2);
         Assert.False(revokeResult2.IsSuccess); // already revoked, it should fail
         Assert.IsType<SekibanAggregateTypeRestrictionException>(revokeResult2.GetException());

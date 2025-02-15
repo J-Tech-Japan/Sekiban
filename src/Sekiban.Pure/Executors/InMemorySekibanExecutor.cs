@@ -20,7 +20,7 @@ public class InMemorySekibanExecutor(
         { EventTypes = sekibanDomainTypes.EventTypes };
 
     public SekibanDomainTypes GetDomainTypes() => sekibanDomainTypes;
-    public async Task<ResultBox<CommandResponse>> ExecuteCommandAsync(
+    public async Task<ResultBox<CommandResponse>> CommandAsync(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null)
     {
@@ -39,7 +39,7 @@ public class InMemorySekibanExecutor(
             (pk, pj) => Repository.Load(pk, pj).ToTask(),
             (_, events) => Repository.Save(events).ToTask());
     }
-    public async Task<ResultBox<TResult>> ExecuteQueryAsync<TResult>(IQueryCommon<TResult> queryCommon)
+    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
         var projectorResult = sekibanDomainTypes.QueryTypes.GetMultiProjector(queryCommon);
@@ -73,7 +73,7 @@ public class InMemorySekibanExecutor(
         }
         return ResultBox<TResult>.Error(new ApplicationException("Projector not found"));
     }
-    public async Task<ResultBox<ListQueryResult<TResult>>> ExecuteQueryAsync<TResult>(
+    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(
         IListQueryCommon<TResult> queryCommon) where TResult : notnull
     {
         var projectorResult = sekibanDomainTypes.QueryTypes.GetMultiProjector(queryCommon);

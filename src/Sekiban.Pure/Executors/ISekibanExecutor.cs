@@ -11,12 +11,12 @@ namespace Sekiban.Pure.Executors;
 public interface ISekibanExecutor
 {
     public SekibanDomainTypes GetDomainTypes();
-    public Task<ResultBox<CommandResponse>> ExecuteCommandAsync(
+    public Task<ResultBox<CommandResponse>> CommandAsync(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null);
-    public Task<ResultBox<TResult>> ExecuteQueryAsync<TResult>(IQueryCommon<TResult> queryCommon)
+    public Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon)
         where TResult : notnull;
-    public Task<ResultBox<ListQueryResult<TResult>>> ExecuteQueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
+    public Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull;
     public Task<ResultBox<Aggregate>> LoadAggregateAsync<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new();

@@ -17,7 +17,7 @@ public class CommandExecutionTests
             new Repository(),
             new ServiceCollection().BuildServiceProvider());
         var createCommand = new RegisterBranch("a");
-        var result = await executor.ExecuteCommandAsync(createCommand);
+        var result = await executor.CommandAsync(createCommand);
         Assert.True(result.IsSuccess);
     }
 
