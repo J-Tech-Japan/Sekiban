@@ -65,7 +65,7 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("        public Task<ResultBox<IQueryResult>> ExecuteAsQueryResult(");
         sb.AppendLine("            IQueryCommon query,");
         sb.AppendLine(
-            "            Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader)");
+            "            Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader, IServiceProvider serviceProvider)");
         sb.AppendLine("        => (query, repositoryLoader) switch");
         sb.AppendLine("        {");
 
@@ -73,7 +73,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         {
             sb.AppendLine(
                 $"            ({type.RecordName} q, Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> loader) =>");
-            sb.AppendLine("                new QueryExecutor().ExecuteAsQueryResult(q, selector => loader(selector)");
+            sb.AppendLine(
+                "                new QueryExecutor(serviceProvider).ExecuteAsQueryResult(q, selector => loader(selector)");
             sb.AppendLine($"                        .Conveyor(MultiProjectionState<{type.Generic1Name}>.FromCommon)),");
         }
 
@@ -88,7 +89,7 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("        public Task<ResultBox<IListQueryResult>> ExecuteAsQueryResult(");
         sb.AppendLine("            IListQueryCommon query,");
         sb.AppendLine(
-            "            Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader)");
+            "            Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader, IServiceProvider serviceProvider)");
         sb.AppendLine("        => (query, repositoryLoader) switch");
         sb.AppendLine("        {");
 
@@ -96,7 +97,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         {
             sb.AppendLine(
                 $"            ({type.RecordName} q, Func<IMultiProjectionEventSelector, Task<ResultBox<IMultiProjectorStateCommon>>> loader) =>");
-            sb.AppendLine("                new QueryExecutor().ExecuteAsQueryResult(q, selector => loader(selector)");
+            sb.AppendLine(
+                "                new QueryExecutor(serviceProvider).ExecuteAsQueryResult(q, selector => loader(selector)");
             sb.AppendLine($"                        .Conveyor(MultiProjectionState<{type.Generic1Name}>.FromCommon)),");
         }
 

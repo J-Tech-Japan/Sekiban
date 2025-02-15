@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Projectors;
@@ -164,7 +165,10 @@ public class MultiProjectorGrain(
 
     public async Task<OrleansQueryResultGeneral> QueryAsync(IQueryCommon query)
     {
-        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
+        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(
+                query,
+                GetProjectorForQuery,
+                new ServiceCollection().BuildServiceProvider()) ??
             throw new ApplicationException("Query not found");
         return result
             .Remap(value => value.ToGeneral(query))
@@ -174,7 +178,8 @@ public class MultiProjectorGrain(
 
     public async Task<OrleansListQueryResultGeneral> QueryAsync(IListQueryCommon query)
     {
-        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery) ??
+        var result = await sekibanDomainTypes.QueryTypes.ExecuteAsQueryResult(query, GetProjectorForQuery,
+                new ServiceCollection().BuildServiceProvider()) ??
             throw new ApplicationException("Query not found");
         return result
             .Remap(value => value.ToGeneral(query))

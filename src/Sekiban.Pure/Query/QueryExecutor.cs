@@ -1,9 +1,8 @@
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
-
 namespace Sekiban.Pure.Query;
 
-public class QueryExecutor
+public class QueryExecutor(IServiceProvider serviceProvider)
 {
     public Task<ResultBox<ListQueryResult<TOutput>>>
         ExecuteListWithMultiProjectionFunction<TMultiProjector, TQuery, TOutput>(
@@ -17,7 +16,7 @@ public class QueryExecutor
         where TMultiProjector : IMultiProjector<TMultiProjector>
     {
         return repositoryLoader(MultiProjectionEventSelector.All)
-            .Combine(_ => new QueryContext().ToResultBox())
+            .Combine(_ => new QueryContext(serviceProvider).ToResultBox())
             .Combine((projection, context) => filter(projection, query, context))
             .Conveyor((_, context, filtered) => SortAndReturnQuery(query, sort, filtered, context));
     }
@@ -31,18 +30,16 @@ public class QueryExecutor
         where TMultiProjector : IMultiProjector<TMultiProjector>
     {
         return repositoryLoader(MultiProjectionEventSelector.All)
-            .Combine(_ => new QueryContext().ToResultBox())
+            .Combine(_ => new QueryContext(serviceProvider).ToResultBox())
             .Conveyor((projection, context) => handler(projection, query, context));
     }
 
     private static ListQueryResult<TOutput> CreateListQueryResult<TOutput>(
         IListQueryCommon<TOutput> query,
-        List<TOutput> sorted) where TOutput : notnull
-    {
-        return query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+        List<TOutput> sorted) where TOutput : notnull =>
+        query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
             ? ListQueryResult<TOutput>.MakeQueryListResult(pagingParam, sorted)
             : new ListQueryResult<TOutput>(sorted.Count, null, null, null, sorted);
-    }
 
     private Task<ResultBox<ListQueryResult<TOutput>>> SortAndReturnQuery<TQuery, TOutput>(
         TQuery query,

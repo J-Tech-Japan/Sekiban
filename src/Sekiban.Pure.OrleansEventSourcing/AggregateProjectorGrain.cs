@@ -7,7 +7,7 @@ namespace Sekiban.Pure.OrleansEventSourcing;
 public class AggregateProjectorGrain(
     [PersistentState("aggregate", "Default")]
     IPersistentState<Aggregate> state,
-    SekibanDomainTypes sekibanDomainTypes) : Grain, IAggregateProjectorGrain
+    SekibanDomainTypes sekibanDomainTypes, IServiceProvider serviceProvider) : Grain, IAggregateProjectorGrain
 {
     private OptionalValue<PartitionKeysAndProjector> _partitionKeysAndProjector
         = OptionalValue<PartitionKeysAndProjector>.Empty;
@@ -102,7 +102,7 @@ public class AggregateProjectorGrain(
             GetPartitionKeysAndProjector().Projector,
             sekibanDomainTypes.EventTypes,
             await GetStateInternalAsync(eventGrain));
-        var commandExecutor = new CommandExecutor { EventTypes = sekibanDomainTypes.EventTypes };
+        var commandExecutor = new CommandExecutor(serviceProvider) { EventTypes = sekibanDomainTypes.EventTypes };
         var result = await sekibanDomainTypes
             .CommandTypes
             .ExecuteGeneral(

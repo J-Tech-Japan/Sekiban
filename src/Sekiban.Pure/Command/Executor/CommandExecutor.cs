@@ -11,7 +11,7 @@ using Sekiban.Pure.Validations;
 using System.Diagnostics.CodeAnalysis;
 namespace Sekiban.Pure.Command.Executor;
 
-public class CommandExecutor
+public class CommandExecutor(IServiceProvider serviceProvider)
 {
     public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
     public Repository Repository { get; init; } = new();
@@ -82,11 +82,11 @@ public class CommandExecutor
         {
             Func<TCommand, ICommandContextWithoutState, ResultBox<EventOrNone>> handler1 => ResultBox<
                     ICommandContextWithoutState>
-                .FromValue(new CommandContextWithoutState(partitionKeys, EventTypes, commandMetadata))
+                .FromValue(new CommandContextWithoutState(partitionKeys, EventTypes, commandMetadata, serviceProvider))
                 .ToTask(),
             Func<TCommand, ICommandContextWithoutState, Task<ResultBox<EventOrNone>>> handler1 => ResultBox<
                     ICommandContextWithoutState>
-                .FromValue(new CommandContextWithoutState(partitionKeys, EventTypes, commandMetadata))
+                .FromValue(new CommandContextWithoutState(partitionKeys, EventTypes, commandMetadata, serviceProvider))
                 .ToTask(),
             _ => ResultBox
                 .Start
@@ -94,7 +94,12 @@ public class CommandExecutor
                 .Verify(aggregate => VerifyAggregateType<TCommand, TAggregatePayload>(command, aggregate))
                 .Conveyor(
                     aggregate => ResultBox<ICommandContextWithoutState>.FromValue(
-                        new CommandContext<TAggregatePayload>(aggregate, projector, EventTypes, commandMetadata)))
+                        new CommandContext<TAggregatePayload>(
+                            aggregate,
+                            projector,
+                            EventTypes,
+                            commandMetadata,
+                            serviceProvider)))
         };
 
     private ExceptionOrNone VerifyAggregateType<TCommand, TAggregatePayload>(TCommand command, Aggregate aggregate)
