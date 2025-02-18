@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.CosmosDb</PackageId>
-        <Version>1.0.0-preview1</Version>
+        <Version>1.0.0-preview2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview1</PackageVersion>
+        <PackageVersion>1.0.0-preview2</PackageVersion>
         <Description>Pure Event Sourcing Framework CosmosDB Integration</Description>
         <AssemblyName>Sekiban.Pure.CosmosDb</AssemblyName>
         <RootNamespace>Sekiban.Pure.CosmosDb</RootNamespace>
@@ -36,6 +36,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.0-preview2"/>
     </ItemGroup>
 
 </Project>
