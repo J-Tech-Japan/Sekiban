@@ -1,6 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
