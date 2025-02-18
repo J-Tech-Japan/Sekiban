@@ -1,4 +1,4 @@
-name: nuget package release
+name: nuget package release for Pure
 
 on:
   release:
