@@ -7,12 +7,14 @@ public interface IQueryTypes
     public Task<ResultBox<IQueryResult>> ExecuteAsQueryResult(
         IQueryCommon query,
         Func<IMultiProjectionEventSelector,
-            Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader);
+            Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader,
+        IServiceProvider serviceProvider);
 
     public Task<ResultBox<IListQueryResult>> ExecuteAsQueryResult(
         IListQueryCommon query,
         Func<IMultiProjectionEventSelector,
-            Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader);
+            Task<ResultBox<IMultiProjectorStateCommon>>> repositoryLoader,
+        IServiceProvider serviceProvider);
 
     public ResultBox<IQueryResult> ToTypedQueryResult(QueryResultGeneral general);
     public ResultBox<IListQueryResult> ToTypedListQueryResult(ListQueryResultGeneral general);

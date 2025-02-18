@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Pure.Domain.Generated;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
@@ -13,16 +14,18 @@ public class CommandExecutionTests
         var executor = new InMemorySekibanExecutor(
             PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options),
             new FunctionCommandMetadataProvider(() => "test"),
-            new Repository());
+            new Repository(),
+            new ServiceCollection().BuildServiceProvider());
         var createCommand = new RegisterBranch("a");
-        var result = await executor.ExecuteCommandAsync(createCommand);
+        var result = await executor.CommandAsync(createCommand);
         Assert.True(result.IsSuccess);
     }
 
     [Fact]
     public async Task ExecuteWithoutGeneric()
     {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor(new ServiceCollection().BuildServiceProvider())
+            { EventTypes = new PureDomainEventTypes() };
         var createCommand = new RegisterBranch("a");
         var result = await executor.Execute(createCommand, CommandMetadata.Create("test"));
         Assert.True(result.IsSuccess);

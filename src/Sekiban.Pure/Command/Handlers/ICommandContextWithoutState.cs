@@ -15,4 +15,5 @@ public interface ICommandContextWithoutState
     public ResultBox<EventOrNone> AppendEvent(IEventPayload eventPayload);
     public EventMetadata EventMetadata { get; }
     public CommandMetadata CommandMetadata { get; }
+    public ResultBox<T> GetService<T>() where T : notnull;
 }

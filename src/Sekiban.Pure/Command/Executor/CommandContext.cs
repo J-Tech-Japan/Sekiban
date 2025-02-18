@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
 using Sekiban.Core.Shared;
 using Sekiban.Pure.Aggregates;
@@ -10,14 +11,17 @@ namespace Sekiban.Pure.Command.Executor;
 public class CommandContext<TAggregatePayload>(
     Aggregate aggregate,
     IAggregateProjector projector,
-    IEventTypes eventTypes, CommandMetadata metadata) : ICommandContext<TAggregatePayload> where TAggregatePayload : IAggregatePayload
+    IEventTypes eventTypes,
+    CommandMetadata metadata,
+    IServiceProvider serviceProvider) : ICommandContext<TAggregatePayload> where TAggregatePayload : IAggregatePayload
 {
     public Aggregate Aggregate { get; set; } = aggregate;
     public IAggregateProjector Projector { get; } = projector;
     public IEventTypes EventTypes { get; } = eventTypes;
     public CommandMetadata CommandMetadata { get; } = metadata;
+    public ResultBox<T> GetService<T>() where T : notnull => ResultBox.CheckNull(serviceProvider.GetService<T>());
     public EventMetadata EventMetadata { get; init; } = EventMetadata.FromCommandMetadata(metadata);
-    public string OriginalSortableUniqueId { get; init; } = aggregate.LastSortableUniqueId; 
+    public string OriginalSortableUniqueId { get; init; } = aggregate.LastSortableUniqueId;
     public List<IEvent> Events { get; } = new();
     public int GetNextVersion() => Aggregate.Version + 1;
     public int GetCurrentVersion() => Aggregate.Version;
@@ -29,7 +33,8 @@ public class CommandContext<TAggregatePayload>(
             eventPayload,
             Aggregate.PartitionKeys,
             SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.NewGuid()),
-            Aggregate.Version + 1, EventMetadata);
+            Aggregate.Version + 1,
+            EventMetadata);
         if (!toAdd.IsSuccess) { return EventOrNone.Empty; }
         var ev = toAdd.GetValue();
         var aggregatePayload = Projector.Project(Aggregate.GetPayload(), toAdd.GetValue());
