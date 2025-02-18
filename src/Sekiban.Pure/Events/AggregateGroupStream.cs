@@ -1,4 +1,4 @@
-namespace Sekiban.Pure.OrleansEventSourcing;
+namespace Sekiban.Pure.Events;
 
 public record AggregateGroupStream(
     string AggregateGroup) : IAggregatesStream

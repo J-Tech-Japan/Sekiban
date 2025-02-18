@@ -1,0 +1,59 @@
+name: nuget package release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore dependencies
+      run: |
+        pushd ./
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
+        dotnet restore Sekiban.sln
+    - name: Build with dotnet
+      run: |
+        pushd ./
+        dotnet build Sekiban.sln -c Release
+    - name: Pack Pure
+      run: |
+        dotnet nuget push "src/Sekiban.Pure/bin/Release/Sekiban.Pure.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure AspNetCore
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.AspNetCore/bin/Release/Sekiban.Pure.AspNetCore.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure CosmosDb
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.CosmosDb/bin/Release/Sekiban.Pure.CosmosDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure NUnit
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.NUnit/bin/Release/Sekiban.Pure.NUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure Orleans
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.Orleans/bin/Release/Sekiban.Pure.Orleans.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure Orleans NUnit
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.Orleans.NUnit/bin/Release/Sekiban.Pure.Orleans.NUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure Orleans xUnit
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.Orleans.xUnit/bin/Release/Sekiban.Pure.Orleans.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure Postgres
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.Postgres/bin/Release/Sekiban.Pure.Postgres.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure SourceGenerator
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.SourceGenerator/bin/Release/Sekiban.Pure.SourceGenerator.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure xUnit
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.xUnit/bin/Release/Sekiban.Pure.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

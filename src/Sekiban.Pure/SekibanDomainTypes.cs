@@ -39,3 +39,7 @@ public record SekibanDomainTypes
     public JsonSerializerOptions JsonSerializerOptions { get; init; }
     public ISekibanSerializer Serializer { get; init; }
 }
+public interface SekibanDomainTypesProvider
+{
+    static abstract SekibanDomainTypes Generate(JsonSerializerOptions jsonSerializerOptions = null);
+}

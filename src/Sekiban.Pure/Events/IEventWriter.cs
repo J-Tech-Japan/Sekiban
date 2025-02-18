@@ -1,6 +1,4 @@
-using Sekiban.Pure.Events;
-
-namespace Sekiban.Pure.OrleansEventSourcing;
+namespace Sekiban.Pure.Events;
 
 public interface IEventWriter
 {

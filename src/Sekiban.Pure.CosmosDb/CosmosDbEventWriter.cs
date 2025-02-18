@@ -2,7 +2,6 @@ using Microsoft.Azure.Cosmos;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.OrleansEventSourcing;
 namespace Sekiban.Pure.CosmosDb;
 
 public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes sekibanDomainTypes) : IEventWriter

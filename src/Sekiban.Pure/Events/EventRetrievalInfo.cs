@@ -1,6 +1,6 @@
 using ResultBoxes;
 using Sekiban.Pure.Documents;
-namespace Sekiban.Pure.OrleansEventSourcing;
+namespace Sekiban.Pure.Events;
 
 public record EventRetrievalInfo(
     OptionalValue<string> RootPartitionKey,
