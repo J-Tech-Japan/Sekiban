@@ -1,5 +1,5 @@
 using ResultBoxes;
-namespace Sekiban.Pure.OrleansEventSourcing;
+namespace Sekiban.Pure.Events;
 
 public interface IAggregatesStream
 {

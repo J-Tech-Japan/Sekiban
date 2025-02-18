@@ -1,5 +1,5 @@
 using Sekiban.Pure.Documents;
-namespace Sekiban.Pure.OrleansEventSourcing;
+namespace Sekiban.Pure.Events;
 
 public record BetweenSortableIdCondition(SortableUniqueIdValue Start, SortableUniqueIdValue End) : ISortableIdCondition
 {

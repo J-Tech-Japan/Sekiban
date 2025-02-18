@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.OrleansEventSourcing;
 using Sekiban.Pure.Serialize;
 using System.Text.Json.Nodes;
 namespace Sekiban.Pure.Postgres;

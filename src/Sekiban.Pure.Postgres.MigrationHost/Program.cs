@@ -1,7 +1,6 @@
-﻿// See https://aka.ms/new-console-template for more information
+﻿﻿// See https://aka.ms/new-console-template for more information
 
 using Sekiban.Pure.Postgres;
-Console.WriteLine("Hello, World!");
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -3,7 +3,6 @@ using Microsoft.Azure.Cosmos.Linq;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.OrleansEventSourcing;
 namespace Sekiban.Pure.CosmosDb;
 
 public class CosmosDbEventReader(CosmosDbFactory dbFactory, SekibanDomainTypes sekibanDomainTypes) : IEventReader

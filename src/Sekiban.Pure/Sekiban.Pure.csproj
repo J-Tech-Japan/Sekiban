@@ -3,18 +3,12 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PublishAot>true</PublishAot>
-        <TrimMode>link</TrimMode>
         <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.0.1"/>
         <PackageReference Include="ResultBoxes" Version="0.3.30"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Folder Include="Cache\"/>
     </ItemGroup>
 
 </Project>

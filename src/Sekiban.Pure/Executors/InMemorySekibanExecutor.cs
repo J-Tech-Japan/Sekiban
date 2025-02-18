@@ -48,6 +48,7 @@ public class InMemorySekibanExecutor(
             var projector = projectorResult.GetValue();
             var events = Repository.Events;
             var projectionResult = events
+                .ToList()
                 .ToResultBox()
                 .ReduceEach(projector, (ev, proj) => sekibanDomainTypes.MultiProjectorsType.Project(proj, ev));
             if (projectionResult.IsSuccess)
@@ -82,6 +83,7 @@ public class InMemorySekibanExecutor(
             var projector = projectorResult.GetValue();
             var events = Repository.Events;
             var projectionResult = events
+                .ToList()
                 .ToResultBox()
                 .ReduceEach(projector, (ev, proj) => sekibanDomainTypes.MultiProjectorsType.Project(proj, ev));
             if (projectionResult.IsSuccess)

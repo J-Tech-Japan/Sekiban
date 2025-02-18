@@ -1,5 +1,4 @@
 using Sekiban.Pure.Events;
-using Sekiban.Pure.OrleansEventSourcing;
 using Sekiban.Pure.Serialize;
 namespace Sekiban.Pure.Postgres;
 

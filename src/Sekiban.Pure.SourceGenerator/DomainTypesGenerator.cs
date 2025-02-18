@@ -53,7 +53,7 @@ public class DomainTypesGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
-        sb.AppendLine($"    public static class {baseName}DomainTypes");
+        sb.AppendLine($"    public class {baseName}DomainTypes : SekibanDomainTypesProvider");
         sb.AppendLine("    {");
         sb.AppendLine(
             "        public static SekibanDomainTypes Generate(JsonSerializerOptions jsonSerializerOptions = null)");

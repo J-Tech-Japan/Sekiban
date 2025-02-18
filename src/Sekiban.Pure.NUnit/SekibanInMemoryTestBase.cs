@@ -39,36 +39,77 @@ public abstract class SekibanInMemoryTestBase
     }
 
     /// <summary>
-    ///     Execute command in Given phase
+    ///     Givenフェーズのコマンド実行
     /// </summary>
-    protected Task<ResultBox<CommandResponse>> GivenCommand(
+    protected ResultBox<CommandResponse> GivenCommandWithResult(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null) =>
-        _executor.CommandAsync(command, relatedEvent);
+        _executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Execute command in When phase
+    ///     Whenフェーズのコマンド実行
     /// </summary>
-    protected Task<ResultBox<CommandResponse>> WhenCommand(
+    protected ResultBox<CommandResponse> WhenCommandWithResult(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null) =>
-        _executor.CommandAsync(command, relatedEvent);
+        _executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Get aggregate in Then phase
+    ///     Thenフェーズの集約取得
     /// </summary>
-    protected Task<ResultBox<Aggregate>> ThenGetAggregate<TAggregateProjector>(PartitionKeys partitionKeys)
+    protected ResultBox<Aggregate> ThenGetAggregateWithResult<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new()
-        => _executor.LoadAggregateAsync<TAggregateProjector>(partitionKeys);
+        => _executor.LoadAggregateAsync<TAggregateProjector>(partitionKeys).Result.UnwrapBox().ToResultBox();
 
-    protected Task<ResultBox<TResult>> ThenQuery<TResult>(IQueryCommon<TResult> query) where TResult : notnull
-        => _executor.QueryAsync(query);
-
-    protected Task<ResultBox<ListQueryResult<TResult>>> ThenQuery<TResult>(IListQueryCommon<TResult> query)
+    protected ResultBox<TResult> ThenQueryWithResult<TResult>(IQueryCommon<TResult> query) where TResult : notnull
+        => _executor.QueryAsync(query).Result.UnwrapBox().ToResultBox();
+    protected ResultBox<ListQueryResult<TResult>> ThenQueryWithResult<TResult>(IListQueryCommon<TResult> query)
         where TResult : notnull
-        => _executor.QueryAsync(query);
+        => _executor.QueryAsync(query).Result.UnwrapBox().ToResultBox();
 
-    protected Task<ResultBox<TMultiProjector>> ThenGetMultiProjector<TMultiProjector>()
+    protected ResultBox<TMultiProjector> ThenGetMultiProjectorWithResult<TMultiProjector>()
         where TMultiProjector : IMultiProjector<TMultiProjector>, new()
-        => Repository.LoadMultiProjection<TMultiProjector>(MultiProjectionEventSelector.All).Remap(x => x.Payload);
+        => Repository
+            .LoadMultiProjection<TMultiProjector>(MultiProjectionEventSelector.All)
+            .Remap(x => x.Payload)
+            .Result
+            .UnwrapBox()
+            .ToResultBox();
+
+    /// <summary>
+    ///     Givenフェーズのコマンド実行
+    /// </summary>
+    protected CommandResponse GivenCommand(
+        ICommandWithHandlerSerializable command,
+        IEvent? relatedEvent = null) =>
+        _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
+
+    /// <summary>
+    ///     Whenフェーズのコマンド実行
+    /// </summary>
+    protected CommandResponse WhenCommand(
+        ICommandWithHandlerSerializable command,
+        IEvent? relatedEvent = null) =>
+        _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
+
+    /// <summary>
+    ///     Thenフェーズの集約取得
+    /// </summary>
+    protected Aggregate ThenGetAggregate<TAggregateProjector>(PartitionKeys partitionKeys)
+        where TAggregateProjector : IAggregateProjector, new()
+        => _executor.LoadAggregateAsync<TAggregateProjector>(partitionKeys).UnwrapBox().Result;
+
+    protected TResult ThenQuery<TResult>(IQueryCommon<TResult> query) where TResult : notnull
+        => _executor.QueryAsync(query).UnwrapBox().Result;
+    protected ListQueryResult<TResult> ThenQuery<TResult>(IListQueryCommon<TResult> query)
+        where TResult : notnull
+        => _executor.QueryAsync(query).UnwrapBox().Result;
+
+    protected TMultiProjector ThenGetMultiProjector<TMultiProjector>()
+        where TMultiProjector : IMultiProjector<TMultiProjector>, new()
+        => Repository
+            .LoadMultiProjection<TMultiProjector>(MultiProjectionEventSelector.All)
+            .Remap(x => x.Payload)
+            .UnwrapBox()
+            .Result;
 }
