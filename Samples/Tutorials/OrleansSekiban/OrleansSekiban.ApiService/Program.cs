@@ -32,7 +32,7 @@ builder.UseOrleans(
 builder.Services.AddSingleton(
     OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
 
-SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
+SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate());
 
 builder.Services.AddTransient<ICommandMetadataProvider, CommandMetadataProvider>();
 builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>();
