@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using ResultBoxes;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Projectors;
@@ -16,4 +18,5 @@ public interface IMultiProjectorTypes
     IMultiProjectorCommon GetProjectorFromMultiProjectorName(string grainName);
     ResultBox<string> GetMultiProjectorNameFromMultiProjector(IMultiProjectorCommon multiProjector);
     IMultiProjectorStateCommon ToTypedState(MultiProjectionState state);
+    List<Type> GetMultiProjectorTypes();
 }

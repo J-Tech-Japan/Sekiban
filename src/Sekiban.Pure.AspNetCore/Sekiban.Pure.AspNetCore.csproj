@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.AspNetCore</PackageId>
-        <Version>1.0.0-preview4</Version>
+        <Version>1.0.0-preview5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework AspNetCore Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview4</PackageVersion>
+        <PackageVersion>1.0.0-preview5</PackageVersion>
         <Description>Pure Event Sourcing Framework AspNetCore Integration</Description>
         <AssemblyName>Sekiban.Pure.AspNetCore</AssemblyName>
         <RootNamespace>Sekiban.Pure.AspNetCore</RootNamespace>
@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Pure" Version="1.0.0-preview4"/>
+        <PackageReference Include="Sekiban.Pure" Version="1.0.0-preview5"/>
         <ProjectReference Include="..\Sekiban.Pure\Sekiban.Pure.csproj"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
             <PrivateAssets>all</PrivateAssets>
