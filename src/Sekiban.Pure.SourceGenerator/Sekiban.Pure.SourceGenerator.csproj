@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Pure.SourceGenerator</PackageId>
-        <Version>1.0.0-preview3</Version>
+        <Version>1.0.0-preview4</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Source Generator</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview3</PackageVersion>
+        <PackageVersion>1.0.0-preview4</PackageVersion>
         <Description>Pure Event Sourcing Framework Source Generator</Description>
         <AssemblyName>Sekiban.Pure.SourceGenerator</AssemblyName>
         <RootNamespace>Sekiban.Pure.SourceGenerator</RootNamespace>
@@ -24,6 +24,8 @@
         <AnalyzerLanguage>cs</AnalyzerLanguage>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DebugType>portable</DebugType>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     </PropertyGroup>
 
     <ItemGroup>
@@ -33,6 +35,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
     </ItemGroup>
 
 </Project>
