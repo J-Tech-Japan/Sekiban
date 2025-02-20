@@ -1,8 +1,9 @@
-﻿@page "/weather"
+﻿﻿@page "/weather"
 @attribute [StreamRendering(true)]
 @attribute [OutputCache(Duration = 5)]
 
 @using OrleansSekiban.Domain
+@using System.ComponentModel.DataAnnotations
 
 @inject WeatherApiClient WeatherApi
 
@@ -14,29 +15,34 @@
     <h3>Add New Weather Forecast</h3>
     <div class="row">
         <div class="col-md-4">
-            <div class="mb-3">
-                <label for="location" class="form-label">Location</label>
-                <input type="text" class="form-control" id="location" @bind="newLocation" @bind:event="oninput" />
-            </div>
-            <div class="mb-3">
-                <label for="date" class="form-label">Date</label>
-                <input type="date" class="form-control" id="date" @bind="newDate" @bind:event="oninput" />
-            </div>
-            <div class="mb-3">
-                <label for="temperatureC" class="form-label">Temperature (°C)</label>
-                <input type="number" class="form-control" id="temperatureC" @bind="newTemperatureC" @bind:event="oninput" />
-            </div>
-            <div class="mb-3">
-                <label for="summary" class="form-label">Summary</label>
-                <select class="form-select" id="summary" @bind="newSummary" @bind:event="oninput">
-                    <option value="">Select a summary...</option>
-                    @foreach (var summary in summaries)
-                    {
-                        <option value="@summary">@summary</option>
-                    }
-                </select>
-            </div>
-            <button class="btn btn-primary" @onclick="SubmitForecast" disabled="@(!CanSubmit)">Add Forecast</button>
+            <EditForm FormName="weather-forecast" Model="@forecastModel" OnValidSubmit="SubmitForecast">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                
+                <div class="mb-3">
+                    <label for="location" class="form-label">Location</label>
+                    <InputText id="location" class="form-control" @bind-Value="forecastModel.Location" />
+                </div>
+                <div class="mb-3">
+                    <label for="date" class="form-label">Date</label>
+                    <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date" />
+                </div>
+                <div class="mb-3">
+                    <label for="temperatureC" class="form-label">Temperature (°C)</label>
+                    <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC" />
+                </div>
+                <div class="mb-3">
+                    <label for="summary" class="form-label">Summary</label>
+                    <InputSelect id="summary" class="form-select" @bind-Value="forecastModel.Summary">
+                        <option value="">Select a summary...</option>
+                        @foreach (var summary in summaries)
+                        {
+                            <option value="@summary">@summary</option>
+                        }
+                    </InputSelect>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Forecast</button>
+            </EditForm>
         </div>
     </div>
 </div>
@@ -74,15 +80,22 @@ else
 
 @code {
     private WeatherForecast[]? forecasts;
-    private string? newLocation;
-    private DateTime? newDate;
-    private int newTemperatureC;
-    private string? newSummary;
+    private WeatherForecastModel forecastModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
-    private bool CanSubmit => !string.IsNullOrEmpty(newLocation) && 
-                            newDate.HasValue && 
-                            !string.IsNullOrEmpty(newSummary);
+    private class WeatherForecastModel
+    {
+        [Required(ErrorMessage = "Location is required")]
+        public string? Location { get; set; }
+
+        [Required(ErrorMessage = "Date is required")]
+        public DateTime? Date { get; set; }
+
+        public int TemperatureC { get; set; }
+
+        [Required(ErrorMessage = "Summary is required")]
+        public string? Summary { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -91,21 +104,16 @@ else
 
     private async Task SubmitForecast()
     {
-        if (!CanSubmit) return;
-
         var command = new InputWeatherForecastCommand(
-            newLocation!,
-            DateOnly.FromDateTime(newDate!.Value),
-            newTemperatureC,
-            newSummary!);
+            forecastModel.Location!,
+            DateOnly.FromDateTime(forecastModel.Date!.Value),
+            forecastModel.TemperatureC,
+            forecastModel.Summary!);
 
         await WeatherApi.InputWeatherAsync(command);
         forecasts = await WeatherApi.GetWeatherAsync();
         
         // Reset form
-        newLocation = null;
-        newDate = null;
-        newTemperatureC = 0;
-        newSummary = null;
+        forecastModel = new WeatherForecastModel();
     }
 }
