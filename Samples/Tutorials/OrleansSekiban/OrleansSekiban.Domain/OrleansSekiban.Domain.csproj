@@ -8,8 +8,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Sekiban.Pure" Version="1.0.0-preview3" />
-      <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.0-preview3" />
+      <PackageReference Include="Sekiban.Pure" Version="1.0.0-preview4" />
+      <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.0-preview4" />
     </ItemGroup>
 
 </Project>
