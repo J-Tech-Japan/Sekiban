@@ -4,6 +4,7 @@ namespace Sekiban.Pure.Query;
 
 public interface IQueryTypes
 {
+    public IEnumerable<Type> GetQueryTypes();
     public Task<ResultBox<IQueryResult>> ExecuteAsQueryResult(
         IQueryCommon query,
         Func<IMultiProjectionEventSelector,

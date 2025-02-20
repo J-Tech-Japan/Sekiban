@@ -256,6 +256,17 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         sb.AppendLine(
             "                _ => Task.FromResult(ResultBox<CommandResponse>.Error(new ApplicationException(\"Unknown command type\")))");
         sb.AppendLine("            };");
+
+        sb.AppendLine("        public List<Type> GetCommandTypes()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return new List<Type>");
+        sb.AppendLine("            {");
+        foreach (var type in commandTypes)
+        {
+            sb.AppendLine($"                typeof({type.RecordName}),");
+        }
+        sb.AppendLine("            };");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
