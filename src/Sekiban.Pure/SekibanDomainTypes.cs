@@ -24,10 +24,8 @@ public record SekibanDomainTypes
         AggregateProjectorSpecifier = aggregateProjectorSpecifier;
         QueryTypes = queryTypes;
         MultiProjectorsType = multiProjectorsType;
-        JsonSerializerOptions = jsonSerializerOptions ??
-            new JsonSerializerOptions
-                { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        Serializer = SekibanSerializer.FromOptions(JsonSerializerOptions, eventTypes);
+        Serializer = SekibanSerializer.FromOptions(jsonSerializerOptions, eventTypes);
+        JsonSerializerOptions = Serializer.GetJsonSerializerOptions();
     }
 
     public IEventTypes EventTypes { get; init; }

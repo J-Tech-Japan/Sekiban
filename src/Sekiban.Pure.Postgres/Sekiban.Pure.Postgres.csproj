@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Postgres</PackageId>
-        <Version>1.0.0-preview4</Version>
+        <Version>1.0.0-preview5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework PostgreSQL Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview4</PackageVersion>
+        <PackageVersion>1.0.0-preview5</PackageVersion>
         <Description>Pure Event Sourcing Framework PostgreSQL Integration</Description>
         <AssemblyName>Sekiban.Pure.Postgres</AssemblyName>
         <RootNamespace>Sekiban.Pure.Postgres</RootNamespace>
@@ -33,7 +33,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.1"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.0-preview4"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.0-preview5"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
             <PrivateAssets>all</PrivateAssets>

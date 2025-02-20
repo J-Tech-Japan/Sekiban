@@ -28,7 +28,7 @@ public class SekibanSourceGenSerializer : ISekibanSerializer
 public class SekibanSerializer : ISekibanSerializer
 {
     private readonly JsonSerializerOptions _serializerOptions;
-    private SekibanSerializer(JsonSerializerOptions serializerOptions) =>
+    private SekibanSerializer(JsonSerializerOptions? serializerOptions) =>
         _serializerOptions = serializerOptions ??
             new JsonSerializerOptions
                 { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -36,7 +36,10 @@ public class SekibanSerializer : ISekibanSerializer
     public static SekibanSerializer FromOptions(JsonSerializerOptions? serializerOptions, IEventTypes eventTypes)
     {
         // check if all event types are registered
-        eventTypes.CheckEventJsonContextOption(serializerOptions);
+        if (serializerOptions is not null)
+        {
+            eventTypes.CheckEventJsonContextOption(serializerOptions);
+        }
         // ソースジェネレーターで生成されたオプションを利用できるようにする
         return new SekibanSerializer(serializerOptions);
     }
