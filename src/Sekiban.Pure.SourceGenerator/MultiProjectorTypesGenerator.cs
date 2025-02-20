@@ -207,6 +207,27 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         }
         sb.AppendLine("                _ => ResultBox<string>.Error(new ApplicationException(multiProjector.GetType().Name))");
         sb.AppendLine("            };");
+
+        sb.AppendLine();
+        sb.AppendLine("        public List<Type> GetMultiProjectorTypes()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var types = new List<Type>();");
+
+        sb.AppendLine("            // Add multi-projector types");
+        foreach (var type in multiProjectorTypes)
+        {
+            sb.AppendLine($"            types.Add(typeof({type.TypeName}));");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("            // Add aggregate projector types");
+        foreach (var type in aggregateProjectorTypes)
+        {
+            sb.AppendLine($"            types.Add(typeof({type.RecordName}));");
+        }
+
+        sb.AppendLine("            return types;");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
