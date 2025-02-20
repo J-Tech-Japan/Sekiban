@@ -1,7 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using System;
 using System.Text;
 namespace Sekiban.Pure.SourceGenerator;
 
@@ -43,7 +42,7 @@ public class DomainTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using ResultBoxes;");
         sb.AppendLine("using Sekiban.Pure;");
-        sb.AppendLine("using Sekiban.Pure.Orleans.Parts;");
+        // sb.AppendLine("using Sekiban.Pure.Orleans.Parts;");
         sb.AppendLine("using Sekiban.Pure.Aggregates;");
         sb.AppendLine("using Sekiban.Pure.Exceptions;");
         sb.AppendLine("using Sekiban.Pure.Events;");
@@ -61,7 +60,7 @@ public class DomainTypesGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine(
             $"            var domainTypes = new SekibanDomainTypes(new {baseName}EventTypes(), new {baseName}AggregateTypes(), new {baseName}CommandTypes(), new {baseName}AggregateProjectorSpecifier(), new {baseName}QueryTypes(), new {baseName}MultiProjectorTypes(), jsonSerializerOptions);");
-        sb.AppendLine("            SekibanSerializationTypesChecker.CheckDomainSerializability(domainTypes);");
+        // sb.AppendLine("            SekibanSerializationTypesChecker.CheckDomainSerializability(domainTypes);");
         sb.AppendLine("            return domainTypes;");
         sb.AppendLine("        }");
         sb.AppendLine("    };");
