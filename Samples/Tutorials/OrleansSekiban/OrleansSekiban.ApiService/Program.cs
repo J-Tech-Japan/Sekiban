@@ -82,7 +82,7 @@ apiRoute
         async (
             [FromBody] InputWeatherForecastCommand command,
             [FromServices] SekibanOrleansExecutor executor) => await executor.CommandAsync(command).UnwrapBox())
-    .WithName("RegisterBranch")
+    .WithName("InputWeatherForecast")
     .WithOpenApi();
 
 app.MapDefaultEndpoints();

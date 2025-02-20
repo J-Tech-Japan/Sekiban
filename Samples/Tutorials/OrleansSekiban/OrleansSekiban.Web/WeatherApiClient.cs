@@ -1,3 +1,5 @@
+using OrleansSekiban.Domain;
+
 namespace OrleansSekiban.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
@@ -21,9 +23,9 @@ public class WeatherApiClient(HttpClient httpClient)
 
         return forecasts?.ToArray() ?? [];
     }
-}
 
-public record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public async Task InputWeatherAsync(InputWeatherForecastCommand command, CancellationToken cancellationToken = default)
+    {
+        await httpClient.PostAsJsonAsync("/api/inputweatherforecast", command, cancellationToken);
+    }
 }
