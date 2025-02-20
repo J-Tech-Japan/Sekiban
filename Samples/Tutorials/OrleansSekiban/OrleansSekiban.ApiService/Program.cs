@@ -73,9 +73,17 @@ app.MapGet("/weatherforecast", async ([FromServices]SekibanOrleansExecutor execu
     {
         var list = await executor.QueryAsync(new WeatherForecastQuery("")).UnwrapBox();
         return list.Items;
-})
-    .WithOpenApi()
+}).WithOpenApi()
 .WithName("GetWeatherForecast");
+
+apiRoute
+    .MapPost(
+        "/inputweatherforecast",
+        async (
+            [FromBody] InputWeatherForecastCommand command,
+            [FromServices] SekibanOrleansExecutor executor) => await executor.CommandAsync(command).UnwrapBox())
+    .WithName("RegisterBranch")
+    .WithOpenApi();
 
 app.MapDefaultEndpoints();
 
