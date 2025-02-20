@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Orleans.Serialization;
 using Orleans.TestingHost;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
@@ -11,6 +12,7 @@ using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
+using System.Runtime.Serialization;
 using Xunit;
 namespace Sekiban.Pure.Orleans.xUnit;
 
@@ -97,6 +99,23 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         return ResultBox<TMultiProjector>.Error(new ApplicationException("Invalid state"));
     }
 
+    protected void CheckSerializability(dynamic obj)
+    {
+        CheckSerializabilityWithType(obj.GetType());
+    }
+    protected void CheckSerializabilityWithType(Type type)
+    {
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddSerializer();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        var orleansSerializer = serviceProvider.GetRequiredService<Serializer>();
+        if (!orleansSerializer.CanSerialize(type))
+        {
+            throw new SerializationException($"{type.FullName} is not serializable with Orleans Default Serializer.");
+        }
+    }
+
 
     /// <summary>
     ///     Execute command in Given phase.
@@ -139,6 +158,16 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
             return multiProjectionState.Payload;
         }
         throw new ApplicationException("Invalid state");
+    }
+
+    [Fact]
+    public void SerializeTest()
+    {
+        var domainTypes = GetDomainTypes();
+        foreach (var type in domainTypes.EventTypes.GetEventTypes())
+        {
+            CheckSerializabilityWithType(type);
+        }
     }
 
 

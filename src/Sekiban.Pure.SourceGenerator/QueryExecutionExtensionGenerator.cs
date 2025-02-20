@@ -60,6 +60,15 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine($"    public class {rootNamespace.Replace(".", "")}QueryTypes : IQueryTypes");
         sb.AppendLine("    {");
+        sb.AppendLine("        public IEnumerable<Type> GetQueryTypes()");
+        sb.AppendLine("            => new List<Type>");
+        sb.AppendLine("            {");
+        foreach (var type in queryTypes)
+        {
+            sb.AppendLine($"                typeof({type.RecordName}),");
+        }
+        sb.AppendLine("            };");
+        sb.AppendLine();
 
         // Implement ExecuteAsQueryResult for IQueryCommon
         sb.AppendLine("        public Task<ResultBox<IQueryResult>> ExecuteAsQueryResult(");

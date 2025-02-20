@@ -9,6 +9,7 @@ namespace Sekiban.Pure.Command;
 
 public interface ICommandTypes
 {
+    public List<Type> GetCommandTypes();
     public Task<ResultBox<CommandResponse>> ExecuteGeneral(
         CommandExecutor executor,
         ICommandWithHandlerSerializable command,

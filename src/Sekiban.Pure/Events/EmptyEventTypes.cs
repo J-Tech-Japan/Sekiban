@@ -27,4 +27,5 @@ public class EmptyEventTypes : IEventTypes
     {
         throw new NotImplementedException();
     }
+    public List<Type> GetEventTypes() => throw new NotImplementedException();
 }
