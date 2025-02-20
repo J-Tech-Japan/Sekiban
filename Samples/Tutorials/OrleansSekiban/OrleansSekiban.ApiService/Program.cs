@@ -32,7 +32,7 @@ builder.UseOrleans(
 builder.Services.AddSingleton(
     OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
 
-SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
+SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate());
 
 builder.Services.AddTransient<ICommandMetadataProvider, CommandMetadataProvider>();
 builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>();
@@ -73,9 +73,17 @@ app.MapGet("/weatherforecast", async ([FromServices]SekibanOrleansExecutor execu
     {
         var list = await executor.QueryAsync(new WeatherForecastQuery("")).UnwrapBox();
         return list.Items;
-})
-    .WithOpenApi()
+}).WithOpenApi()
 .WithName("GetWeatherForecast");
+
+apiRoute
+    .MapPost(
+        "/inputweatherforecast",
+        async (
+            [FromBody] InputWeatherForecastCommand command,
+            [FromServices] SekibanOrleansExecutor executor) => await executor.CommandAsync(command).UnwrapBox())
+    .WithName("RegisterBranch")
+    .WithOpenApi();
 
 app.MapDefaultEndpoints();
 

@@ -5,6 +5,7 @@ using Sekiban.Pure.Query;
 
 namespace OrleansSekiban.Domain;
 
+[GenerateSerializer]
 public record WeatherForecast(
     string Location,
     DateOnly Date,
