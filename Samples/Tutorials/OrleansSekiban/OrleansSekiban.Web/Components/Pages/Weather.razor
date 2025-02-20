@@ -98,6 +98,12 @@ else
     </div>
 </div>
 
+<script>
+    function DisplayAddModal(param) {
+        $('#addForecastModal').modal(param);
+    }
+</script>
+
 @code {
     private WeatherForecast[]? forecasts;
 
@@ -133,13 +139,13 @@ else
     private async Task CloseModal()
     {
         forecastModel = new();
-        await JsRuntime.InvokeVoidAsync("$", "#addForecastModal", "modal", "hide");
+        await JsRuntime.InvokeVoidAsync("DisplayAddModal", "hide");
     }
 
     private async Task OpenAddForecastModal()
     {
         forecastModel = new();
-        await JsRuntime.InvokeVoidAsync("$", "#addForecastModal", "modal", "show");
+        await JsRuntime.InvokeVoidAsync("DisplayAddModal", "show");
     }
 
     private async Task HandleAddForecastSubmit()
