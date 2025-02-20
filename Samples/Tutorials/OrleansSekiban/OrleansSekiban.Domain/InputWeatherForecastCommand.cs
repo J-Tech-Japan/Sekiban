@@ -6,10 +6,10 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 
 namespace OrleansSekiban.Domain;
-
+[GenerateSerializer]
 public record InputWeatherForecastCommand(
     string Location,
-    DateTime Date,
+    DateOnly Date,
     int TemperatureC,
     string Summary
 ) : ICommandWithHandler<InputWeatherForecastCommand, WeatherForecastProjector>
