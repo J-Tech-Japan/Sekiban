@@ -69,7 +69,7 @@ if (app.Environment.IsDevelopment())
 
 string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
-app.MapGet("/weatherforecast", async ([FromServices]SekibanOrleansExecutor executor) =>
+apiRoute.MapGet("/weatherforecast", async ([FromServices]SekibanOrleansExecutor executor) =>
     {
         var list = await executor.QueryAsync(new WeatherForecastQuery("")).UnwrapBox();
         return list.Items;

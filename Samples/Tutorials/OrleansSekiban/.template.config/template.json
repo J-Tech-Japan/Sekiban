@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schemastore.org/template",
+  "author": "J-Tech Japan",
+  "classifications": [
+    "Aspire", "Orleans", "Sekiban", "EventSourcing"
+  ],
+  "name": "Microsoft Orleans with Sekiban Event Sourcing Aspire Template",
+  "defaultName": "SekibanOrleans",
+  "description": "C# solution template for Microsoft Orleans with Sekiban Event Sourcing.",
+  "shortName": "sekiban-orleans",
+  "sourceName": "OrleansSekiban",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "identity": "Sekiban.Pure.Orleans.Aspire.Template",
+  "groupIdentity": "Sekiban.Pure.Orleans",
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**/*",
+        "OrleansSekiban.code-workspace",
+        "OrleansSekiban.sln.DotSettings.user",
+        "nupkg_output",
+        "OrleansSekibanTemplate.csproj",
+        ".idea",
+        "**/bin/**",
+        "**/obj/**"
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    {
+      "path": "OrleansSekiban.sln"
+    }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [
+        {
+          "text": "Run 'dotnet restore'"
+        }
+      ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}
