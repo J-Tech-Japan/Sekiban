@@ -4,11 +4,11 @@ namespace OrleansSekiban.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
 {
-    public async Task<WeatherForecast[]> GetWeatherAsync(int maxItems = 10, CancellationToken cancellationToken = default)
+    public async Task<WeatherForecastQuery.WeatherForecastRecord[]> GetWeatherAsync(int maxItems = 10, CancellationToken cancellationToken = default)
     {
-        List<WeatherForecast>? forecasts = null;
+        List<WeatherForecastQuery.WeatherForecastRecord>? forecasts = null;
 
-        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecast>("/weatherforecast", cancellationToken))
+        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastQuery.WeatherForecastRecord>("/weatherforecast", cancellationToken))
         {
             if (forecasts?.Count >= maxItems)
             {
@@ -27,5 +27,17 @@ public class WeatherApiClient(HttpClient httpClient)
     public async Task InputWeatherAsync(InputWeatherForecastCommand command, CancellationToken cancellationToken = default)
     {
         await httpClient.PostAsJsonAsync("/api/inputweatherforecast", command, cancellationToken);
+    }
+
+    public async Task RemoveWeatherAsync(Guid weatherForecastId, CancellationToken cancellationToken = default)
+    {
+        var command = new RemoveWeatherForecastCommand(weatherForecastId);
+        await httpClient.PostAsJsonAsync("/api/removeweatherforecast", command, cancellationToken);
+    }
+
+    public async Task UpdateLocationAsync(Guid weatherForecastId, string newLocation, CancellationToken cancellationToken = default)
+    {
+        var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, newLocation);
+        await httpClient.PostAsJsonAsync("/api/updateweatherforecastlocation", command, cancellationToken);
     }
 }
