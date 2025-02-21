@@ -3,7 +3,7 @@ using Sekiban.Pure.Aggregates;
 namespace OrleansSekiban.Domain;
 
 [GenerateSerializer]
-public record WeatherForecast(
+public record DeletedWeatherForecast(
     string Location,
     DateOnly Date,
     int TemperatureC,

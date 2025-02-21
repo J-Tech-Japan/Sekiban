@@ -10,6 +10,12 @@ public class WeatherForecastProjector : IAggregateProjector
         => (payload, ev.GetPayload()) switch
         {
             (EmptyAggregatePayload, WeatherForecastInputted inputted) => new WeatherForecast(inputted.Location, inputted.Date, inputted.TemperatureC, inputted.Summary),
+            (WeatherForecast forecast, WeatherForecastDeleted _) => new DeletedWeatherForecast(
+                forecast.Location,
+                forecast.Date,
+                forecast.TemperatureC,
+                forecast.Summary),
+            (WeatherForecast forecast, WeatherForecastLocationUpdated updated) => forecast with { Location = updated.NewLocation },
             _ => payload
         };
 }
