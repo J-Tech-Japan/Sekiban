@@ -27,23 +27,26 @@ else
 {
     <table class="table">
         <thead>
-            <tr>
-                <th>Date</th>
-                <th aria-label="Temperature in Celsius">Temp. (C)</th>
-                <th aria-label="Temperature in Farenheit">Temp. (F)</th>
-                <th>Summary</th>
-                <th>Actions</th>
-            </tr>
+        <tr>
+            <td>Location</td>
+            <th>Date</th>
+            <th aria-label="Temperature in Celsius">Temp. (C)</th>
+            <th aria-label="Temperature in Farenheit">Temp. (F)</th>
+            <th>Summary</th>
+            <th>Actions</th>
+        </tr>
         </thead>
         <tbody>
             @foreach (var forecast in forecasts)
             {
                 <tr>
+                    <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
                     <td>@forecast.TemperatureC</td>
                     <td>@forecast.TemperatureF</td>
                     <td>@forecast.Summary</td>
                     <td>
+                        <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
                         <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.WeatherForecastId)">Remove</button>
                     </td>
                 </tr>
@@ -103,15 +106,50 @@ else
     </div>
 </div>
 
+<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="editLocationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <EditForm FormName="edit-location" Model="@editLocationModel" OnValidSubmit="HandleEditLocationSubmit">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editLocationModalLabel">Edit Location</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditLocationModal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label for="newLocation" class="form-label">New Location</label>
+                        <InputText id="newLocation" class="form-control" @bind-Value="editLocationModel.NewLocation" />
+                        <ValidationMessage For="@(() => editLocationModel.NewLocation)" class="text-danger" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(editLocationModel.Error))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @editLocationModel.Error
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditLocationModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Location</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
 <script>
     function DisplayAddModal(param) {
         $('#addForecastModal').modal(param);
+    }
+    function DisplayEditLocationModal(param) {
+        $('#editLocationModal').modal(param);
     }
 </script>
 
 @code {
     private WeatherForecastQuery.WeatherForecastRecord[]? forecasts;
     private WeatherForecastModel forecastModel = new();
+    private EditLocationModel editLocationModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
     public class WeatherForecastModel
@@ -148,6 +186,14 @@ else
         }
     }
 
+    public class EditLocationModel
+    {
+        [Required(ErrorMessage = "New location is required")]
+        public string? NewLocation { get; set; }
+        public Guid WeatherForecastId { get; set; }
+        public string? Error { get; set; }
+    }
+
     private async Task CloseModal()
     {
         forecastModel = new();
@@ -158,6 +204,40 @@ else
     {
         forecastModel = new();
         await JsRuntime.InvokeVoidAsync("DisplayAddModal", "show");
+    }
+
+    private async Task OpenEditLocationModal(WeatherForecastQuery.WeatherForecastRecord forecast)
+    {
+        editLocationModel = new EditLocationModel
+        {
+            WeatherForecastId = forecast.WeatherForecastId,
+            NewLocation = forecast.Location
+        };
+        await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "show");
+    }
+
+    private async Task CloseEditLocationModal()
+    {
+        editLocationModel = new();
+        await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
+    }
+
+    private async Task HandleEditLocationSubmit()
+    {
+        try
+        {
+            await WeatherApi.UpdateLocationAsync(
+                editLocationModel.WeatherForecastId,
+                editLocationModel.NewLocation!);
+                
+            forecasts = await WeatherApi.GetWeatherAsync();
+            
+            await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
+        }
+        catch (Exception ex)
+        {
+            editLocationModel.Error = "Failed to update location. Please try again.";
+        }
     }
 
     private async Task HandleAddForecastSubmit()

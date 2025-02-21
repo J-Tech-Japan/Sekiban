@@ -34,4 +34,10 @@ public class WeatherApiClient(HttpClient httpClient)
         var command = new RemoveWeatherForecastCommand(weatherForecastId);
         await httpClient.PostAsJsonAsync("/api/removeweatherforecast", command, cancellationToken);
     }
+
+    public async Task UpdateLocationAsync(Guid weatherForecastId, string newLocation, CancellationToken cancellationToken = default)
+    {
+        var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, newLocation);
+        await httpClient.PostAsJsonAsync("/api/updateweatherforecastlocation", command, cancellationToken);
+    }
 }

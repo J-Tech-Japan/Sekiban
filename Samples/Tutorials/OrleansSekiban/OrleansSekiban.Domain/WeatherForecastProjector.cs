@@ -15,6 +15,7 @@ public class WeatherForecastProjector : IAggregateProjector
                 forecast.Date,
                 forecast.TemperatureC,
                 forecast.Summary),
+            (WeatherForecast forecast, WeatherForecastLocationUpdated updated) => forecast with { Location = updated.NewLocation },
             _ => payload
         };
 }
