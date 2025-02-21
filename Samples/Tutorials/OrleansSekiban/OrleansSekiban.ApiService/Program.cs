@@ -85,6 +85,15 @@ apiRoute
     .WithName("InputWeatherForecast")
     .WithOpenApi();
 
+apiRoute
+    .MapPost(
+        "/removeweatherforecast",
+        async (
+            [FromBody] RemoveWeatherForecastCommand command,
+            [FromServices] SekibanOrleansExecutor executor) => await executor.CommandAsync(command).UnwrapBox())
+    .WithName("RemoveWeatherForecast")
+    .WithOpenApi();
+
 app.MapDefaultEndpoints();
 
 app.Run();

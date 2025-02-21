@@ -4,6 +4,7 @@
 
 @using OrleansSekiban.Domain
 @using System.ComponentModel.DataAnnotations
+@using Sekiban.Pure.Aggregates
 
 @inject WeatherApiClient WeatherApi
 @inject IJSRuntime JsRuntime
@@ -31,6 +32,7 @@ else
                 <th aria-label="Temperature in Celsius">Temp. (C)</th>
                 <th aria-label="Temperature in Farenheit">Temp. (F)</th>
                 <th>Summary</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -39,8 +41,11 @@ else
                 <tr>
                     <td>@forecast.Date.ToShortDateString()</td>
                     <td>@forecast.TemperatureC</td>
-                    <td>@forecast.GetTemperatureF()</td>
+                    <td>@forecast.TemperatureF</td>
                     <td>@forecast.Summary</td>
+                    <td>
+                        <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.WeatherForecastId)">Remove</button>
+                    </td>
                 </tr>
             }
         </tbody>
@@ -105,18 +110,11 @@ else
 </script>
 
 @code {
-    private WeatherForecast[]? forecasts;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-        }
-    }
+    private WeatherForecastQuery.WeatherForecastRecord[]? forecasts;
     private WeatherForecastModel forecastModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
-    private class WeatherForecastModel
+    public class WeatherForecastModel
     {
         [Required(ErrorMessage = "Location is required")]
         public string? Location { get; set; }
@@ -134,6 +132,20 @@ else
     protected override async Task OnInitializedAsync()
     {
         forecasts = await WeatherApi.GetWeatherAsync();
+    }
+
+    private async Task HandleRemoveForecast(Guid weatherForecastId)
+    {
+        try
+        {
+            await WeatherApi.RemoveWeatherAsync(weatherForecastId);
+            forecasts = await WeatherApi.GetWeatherAsync();
+        }
+        catch (Exception ex)
+        {
+            // Handle error (could show an error message to the user)
+            Console.Error.WriteLine($"Error removing forecast: {ex.Message}");
+        }
     }
 
     private async Task CloseModal()

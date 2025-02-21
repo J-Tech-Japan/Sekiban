@@ -6,20 +6,30 @@ namespace OrleansSekiban.Domain;
 
 [GenerateSerializer]
 public record WeatherForecastQuery(string LocationContains)
-    : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecast>
+    : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastQuery.WeatherForecastRecord>
 {
-    public static ResultBox<IEnumerable<WeatherForecast>> HandleFilter(
-        MultiProjectionState<AggregateListProjector<WeatherForecastProjector>> projection, WeatherForecastQuery query,
-        IQueryContext context)
+    public static ResultBox<IEnumerable<WeatherForecastRecord>> HandleFilter(MultiProjectionState<AggregateListProjector<WeatherForecastProjector>> projection, WeatherForecastQuery query, IQueryContext context)
     {
-        return projection.Payload.Aggregates.Select(m => m.Value.Payload)
-            .Where(x => x.GetType().IsAssignableTo(typeof(WeatherForecast))).Cast<WeatherForecast>()
-            .Where(x => string.IsNullOrEmpty(query.LocationContains) || x.Location.Contains(query.LocationContains)).ToResultBox();
+        return projection.Payload.Aggregates.Where(m => m.Value.GetPayload() is WeatherForecast)
+            .Select(m => ((WeatherForecast)m.Value.GetPayload(), m.Value.PartitionKeys))
+            .Select((touple) => new WeatherForecastRecord(touple.PartitionKeys.AggregateId, touple.Item1.Location,
+                touple.Item1.Date, touple.Item1.TemperatureC, touple.Item1.Summary, touple.Item1.GetTemperatureF()))
+            .ToResultBox();
     }
 
-    public static ResultBox<IEnumerable<WeatherForecast>> HandleSort(IEnumerable<WeatherForecast> filteredList,
-        WeatherForecastQuery query, IQueryContext context)
+    public static ResultBox<IEnumerable<WeatherForecastRecord>> HandleSort(IEnumerable<WeatherForecastRecord> filteredList, WeatherForecastQuery query, IQueryContext context)
     {
-        return filteredList.OrderBy(m => m.Location).AsEnumerable().ToResultBox();
+        return filteredList.OrderBy(m => m.Date).AsEnumerable().ToResultBox();
     }
+
+    [GenerateSerializer]
+    public record WeatherForecastRecord(
+        Guid WeatherForecastId,
+        string Location,
+        DateOnly Date,
+        int TemperatureC,
+        string Summary,
+        int TemperatureF
+    );
+
 }
