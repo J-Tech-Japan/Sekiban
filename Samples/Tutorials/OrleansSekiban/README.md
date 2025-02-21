@@ -1,6 +1,2 @@
-# Tutorials and Real world samples.
-
-This folder contains project used for the tutorials, and will made some real world samples.
-Please see docunment to explain this tutorials.
-
-https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/sekiban-event-sourcing-basics.md
+<!-- Provide an overview of what your template package does and how to get started.
+Consider previewing the README before uploading (https://learn.microsoft.com/en-us/nuget/nuget-org/package-readme-on-nuget-org#preview-your-readme). -->

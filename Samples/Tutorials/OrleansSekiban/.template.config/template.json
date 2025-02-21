@@ -1,0 +1,61 @@
+{
+    "$schema": "https://json.schemastore.org/template",
+    "author": "J-Tech Japan",
+    "classifications": [
+      "Aspire", "Orleans", "Sekiban", "EventSourcing" 
+    ],
+    "name": "Microsoft Orleans with Sekiban Event Sourcing Aspire Template",
+    "defaultName": "SekibanOrleans",
+    "description": "C# solution template for Microsoft Orleans with Sekiban Event Sourcing.",
+    "shortName": "sekiban-orleans",
+    "sourceName": "OrleansSekiban",
+    "preferNameDirectory": true,
+    "tags": {
+      "language": "C#",
+      "type": "solution"
+    },
+    "identity": "Sekiban.Pure.Orleans.Aspire.Template",
+    "groupIdentity": "Sekiban.Pure.Orleans",
+    "sources": [
+      {
+        "source": "./",
+        "target": "./",
+        "exclude": [
+          ".template.config/**/*",
+          "OrleansSekiban.code-workspace",
+          "OrleansSekiban.sln.DotSettings.user",
+          "**/[Bb]in/**",
+          "**/[Oo]bj/**"
+        ]
+      }
+    ],
+    "primaryOutputs": [
+      {
+        "path": "OrleansSekiban.sln"
+      },
+      {
+        "path": "OrleansSekiban.ApiService/OrleansSekiban.ApiService.csproj"
+      },
+      {
+        "path": "OrleansSekiban.AppHost/OrleansSekiban.AppHost.csproj"
+      },
+      {
+        "path": "OrleansSekiban.Domain/OrleansSekiban.Domain.csproj"
+      },
+      {
+        "path": "OrleansSekiban.ServideDefaults/OrleansSekiban.ServiceDefaults.csproj"
+      },
+      {
+        "path": "OrleansSekiban.Web/OrleansSekiban.Web.csproj"
+      }
+    ],
+    "postActions": [
+      {
+        "id": "restore",
+        "description": "NuGet パッケージの復元を実行します。",
+        "actionId": "restore",
+        "continueOnError": true
+      }
+    ]
+  }
+  
