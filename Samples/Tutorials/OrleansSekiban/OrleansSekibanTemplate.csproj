@@ -7,18 +7,21 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>OrleansSekiban.Template</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.4</Version>
     <Authors>J-Tech Japan</Authors>
     <Description>Template for Microsoft Orleans with Sekiban Event Sourcing Aspire.</Description>
     <PackageType>Template</PackageType>
     <!-- ビルド成果物は不要なため、AssemblyInfo の生成を抑制 -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="./README.md" Pack="true" PackagePath="\"/>
     <!-- テンプレートとして配布したいファイルを全て含める -->
     <!-- bin, obj, .git 等不要なフォルダは除外 -->
-    <None Include="**\*.*" Pack="true" PackagePath="contentFiles/any/any" Exclude="**/bin/**;**/obj/**;.git/**;.idea/**;OrleansSekibanTemplate.csproj;**/.DS_Store;**/*.nupkg"/>
+    <None Include="**\*.*" Pack="true" PackagePath="contentFiles/any/any" Exclude="**/bin/**;**/obj/**;.git/**;.idea/**;OrleansSekibanTemplate.csproj;**/.DS_Store;**/*.nupkg;HowToRelease.md"/>
   </ItemGroup>
 </Project>

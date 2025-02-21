@@ -1,5 +1,11 @@
 # Orleans Sekiban Event Sourcing Sample Project.
 
+## how to install from nuget.
+dotnet new install OrleansSekiban.Template
+
+## how to make project
+
+dotnet new sekiban-orleans -n YourProjectName
 
 ## 1. App Host need to add app setting (secrets.json) postgres password.
 
