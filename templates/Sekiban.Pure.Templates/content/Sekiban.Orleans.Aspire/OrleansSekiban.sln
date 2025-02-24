@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.0.0
+MinimumVisualStudioVersion = 17.8.0.0
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OrleansSekiban.AppHost", "OrleansSekiban.AppHost\OrleansSekiban.AppHost.csproj", "{4556782E-BCF1-4475-B84D-EA7C91ADD21E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OrleansSekiban.ServiceDefaults", "OrleansSekiban.ServiceDefaults\OrleansSekiban.ServiceDefaults.csproj", "{3B50ACD3-ECC0-45A0-BCEA-53422E89F501}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OrleansSekiban.ApiService", "OrleansSekiban.ApiService\OrleansSekiban.ApiService.csproj", "{DC835FC5-6F36-45F7-AD78-73BE3269D379}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OrleansSekiban.Web", "OrleansSekiban.Web\OrleansSekiban.Web.csproj", "{4B5D14EF-2E76-4085-941B-9B56B2277291}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrleansSekiban.Domain", "OrleansSekiban.Domain\OrleansSekiban.Domain.csproj", "{70C7D134-CE96-4F2B-BBEC-BF473EEE9009}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4556782E-BCF1-4475-B84D-EA7C91ADD21E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4556782E-BCF1-4475-B84D-EA7C91ADD21E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4556782E-BCF1-4475-B84D-EA7C91ADD21E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4556782E-BCF1-4475-B84D-EA7C91ADD21E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B50ACD3-ECC0-45A0-BCEA-53422E89F501}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B50ACD3-ECC0-45A0-BCEA-53422E89F501}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B50ACD3-ECC0-45A0-BCEA-53422E89F501}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B50ACD3-ECC0-45A0-BCEA-53422E89F501}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC835FC5-6F36-45F7-AD78-73BE3269D379}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC835FC5-6F36-45F7-AD78-73BE3269D379}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC835FC5-6F36-45F7-AD78-73BE3269D379}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC835FC5-6F36-45F7-AD78-73BE3269D379}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B5D14EF-2E76-4085-941B-9B56B2277291}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B5D14EF-2E76-4085-941B-9B56B2277291}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B5D14EF-2E76-4085-941B-9B56B2277291}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B5D14EF-2E76-4085-941B-9B56B2277291}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70C7D134-CE96-4F2B-BBEC-BF473EEE9009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70C7D134-CE96-4F2B-BBEC-BF473EEE9009}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70C7D134-CE96-4F2B-BBEC-BF473EEE9009}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70C7D134-CE96-4F2B-BBEC-BF473EEE9009}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1FAF20D5-0F9E-4E3C-B547-6360C0A700BF}
+	EndGlobalSection
+EndGlobal
