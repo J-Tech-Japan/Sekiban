@@ -1,0 +1,24 @@
+name: nuget package memStat release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore dependencies
+      run: |
+        pushd ./templates/Sekiban.Pure.Templates
+        dotnet pack
+    - name: Pack Template
+      run: |
+        pushd ./templates/Sekiban.Pure.Templates
+        dotnet nuget push "./bin/Releasek/Sekiban.Pure.Templates.1.0.5.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+        

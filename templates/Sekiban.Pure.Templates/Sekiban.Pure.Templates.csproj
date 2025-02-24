@@ -3,13 +3,15 @@
   <PropertyGroup>
     <!-- The package metadata. Fill in the properties marked as TODO below -->
     <!-- Follow the instructions on https://learn.microsoft.com/en-us/nuget/create-packages/package-authoring-best-practices -->
-    <PackageId>OrleansAspire</PackageId>
-    <PackageVersion>1.0</PackageVersion>
-    <Title>TODO: fill the package name here</Title>
-    <Authors>TODO: fill the author name or organization here</Authors>
-    <Description>TODO: fill the package description here</Description>
-    <PackageTags>TODO: fill the tags here</PackageTags>
-    <PackageProjectUrl>TODO: include a link to an associated project, repository, or company website</PackageProjectUrl>
+    <PackageId>Sekiban.Pure.Templates</PackageId>
+    <PackageVersion>1.0.5</PackageVersion>
+    <Version>1.0.5</Version>
+    <Title>Sekiban Event Sourcing Templates</Title>
+    <Authors>J-Tech Japan</Authors>
+    <Description>Templates for starting Sekiban Projects</Description>
+    <PackageTags>Event Sourcing, CQRS, Orleans, Sekiban</PackageTags>
+    <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
 
     <!-- Keep package type as 'Template' to show the package as a template package on nuget.org and make your template available in dotnet new search.-->
     <PackageType>Template</PackageType>
