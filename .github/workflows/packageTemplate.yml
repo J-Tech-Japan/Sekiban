@@ -13,12 +13,12 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
-    - name: Restore dependencies
+    - name: pack Template
       run: |
         pushd ./templates/Sekiban.Pure.Templates
         dotnet pack
     - name: Pack Template
       run: |
         pushd ./templates/Sekiban.Pure.Templates
-        dotnet nuget push "./bin/Releasek/Sekiban.Pure.Templates.1.0.5.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+        dotnet nuget push "bin/Releasek/Sekiban.Pure.Templates.1.0.5.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
         
