@@ -1,4 +1,4 @@
-name: nuget package memStat release
+name: nuget package Template release
 
 on:
   workflow_dispatch:
