@@ -6,6 +6,13 @@ Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azu
   <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
 </p>
 
+## (NEW) Sekiban new version - Sekiban.Pure.Orleans
+
+**We are in development for new version of Sekiban.** It is more functional and work with Microsoft Orleans as well. You can see new sekiban information on [README_Pure.md](./README_Pure.md) for quick instruction for LLM, look at [README_Pure_For_LLM.md](./README_Pure_For_LLM.md).
+
+新しいOrleans 対応Sekibanに関しては[README_Pure_JP.md](./README_Pure_JP.md)をご覧ください。
+
+
 ## What is Sekiban?
 
 **Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C#
@@ -15,7 +22,6 @@ various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft
 
 ## Getting started
 
-**We are in development for new version of Sekiban.** It is more functional and work with Microsoft Orleans as well. You can see new sekiban information on [README_Pure.md](./README_Pure.md) for quick instruction for LLM, look at [README_Pure_For_LLM.md](./README_Pure_For_LLM.md)
 
 Do you want to start coding? If so, please see [Quick Start](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/quick-start.md)
 
