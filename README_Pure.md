@@ -321,15 +321,99 @@ When working with Sekiban event sourcing projects:
    - Validate commands before producing events
    - Handle edge cases in projectors
 
-## Creating a New Sekiban Project
+## Creating and Using a Sekiban Project
 
-1. Start with the appropriate project template
+### 1. Project Setup
+
+Start with the template:
+```bash
+dotnet new install Sekiban.Pure.Templates
+dotnet new sekiban-orleans-aspire -n MyProject
+```
+
+### 2. API Configuration
+
+The template generates a Program.cs with all necessary configurations. Here's how it works:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Add Aspire and Orleans integration
+builder.AddServiceDefaults();
+builder.UseOrleans(config =>
+{
+    config.UseDashboard(options => { });
+    config.AddMemoryStreams("EventStreamProvider")
+          .AddMemoryGrainStorage("EventStreamProvider");
+});
+
+// Register domain types and serialization
+builder.Services.AddSingleton(
+    OrleansSekibanDomainDomainTypes.Generate(
+        OrleansSekibanDomainEventsJsonContext.Default.Options));
+
+// Configure database (Cosmos DB or PostgreSQL)
+if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
+{
+    builder.AddSekibanCosmosDb();
+} else
+{
+    builder.AddSekibanPostgresDb();
+}
+```
+
+### 3. API Endpoints
+
+Map endpoints for commands and queries:
+
+```csharp
+// Query endpoint
+apiRoute.MapGet("/weatherforecast", 
+    async ([FromServices]SekibanOrleansExecutor executor) =>
+    {
+        var list = await executor.QueryAsync(new WeatherForecastQuery(""))
+                                .UnwrapBox();
+        return list.Items;
+    })
+    .WithOpenApi();
+
+// Command endpoint
+apiRoute.MapPost("/inputweatherforecast",
+    async (
+        [FromBody] InputWeatherForecastCommand command,
+        [FromServices] SekibanOrleansExecutor executor) => 
+            await executor.CommandAsync(command).UnwrapBox())
+    .WithOpenApi();
+```
+
+Key points:
+- Use `SekibanOrleansExecutor` for handling commands and queries
+- Commands are mapped to POST endpoints
+- Queries are typically mapped to GET endpoints
+- Results are unwrapped from `ResultBox` using `UnwrapBox()`
+- OpenAPI support is included by default
+
+### 4. Implementation Steps
+
+1. Start with the project template
 2. Define your domain model (aggregates)
 3. Create commands that represent user intentions
 4. Define events that represent state changes
 5. Implement projectors to apply events to aggregates
 6. Create queries to retrieve and filter data
 7. Set up the JSON serialization context
+8. Map your API endpoints using the `SekibanOrleansExecutor`
+
+### 5. Configuration Options
+
+The template supports two database options:
+```json
+{
+  "Sekiban": {
+    "Database": "Cosmos"  // or "Postgres"
+  }
+}
+```
 
 ## Conclusion
 

@@ -319,15 +319,99 @@ Sekibanイベントソーシングプロジェクトを扱う際：
    - イベントを生成する前にコマンドを検証
    - プロジェクターでエッジケースを処理
 
-## 新しいSekibanプロジェクトの作成
+## Sekibanプロジェクトの作成と使用
 
-1. 適切なプロジェクトテンプレートから始める
+### 1. プロジェクトのセットアップ
+
+テンプレートから始めます：
+```bash
+dotnet new install Sekiban.Pure.Templates
+dotnet new sekiban-orleans-aspire -n MyProject
+```
+
+### 2. API設定
+
+テンプレートは必要な設定がすべて含まれたProgram.csを生成します。以下がその仕組みです：
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// AspireとOrleansの統合を追加
+builder.AddServiceDefaults();
+builder.UseOrleans(config =>
+{
+    config.UseDashboard(options => { });
+    config.AddMemoryStreams("EventStreamProvider")
+          .AddMemoryGrainStorage("EventStreamProvider");
+});
+
+// ドメインタイプとシリアル化の登録
+builder.Services.AddSingleton(
+    OrleansSekibanDomainDomainTypes.Generate(
+        OrleansSekibanDomainEventsJsonContext.Default.Options));
+
+// データベースの設定（Cosmos DBまたはPostgreSQL）
+if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
+{
+    builder.AddSekibanCosmosDb();
+} else
+{
+    builder.AddSekibanPostgresDb();
+}
+```
+
+### 3. APIエンドポイント
+
+コマンドとクエリのエンドポイントをマッピング：
+
+```csharp
+// クエリエンドポイント
+apiRoute.MapGet("/weatherforecast", 
+    async ([FromServices]SekibanOrleansExecutor executor) =>
+    {
+        var list = await executor.QueryAsync(new WeatherForecastQuery(""))
+                                .UnwrapBox();
+        return list.Items;
+    })
+    .WithOpenApi();
+
+// コマンドエンドポイント
+apiRoute.MapPost("/inputweatherforecast",
+    async (
+        [FromBody] InputWeatherForecastCommand command,
+        [FromServices] SekibanOrleansExecutor executor) => 
+            await executor.CommandAsync(command).UnwrapBox())
+    .WithOpenApi();
+```
+
+ポイント：
+- コマンドとクエリの処理に`SekibanOrleansExecutor`を使用
+- コマンドはPOSTエンドポイントにマッピング
+- クエリは通常GETエンドポイントにマッピング
+- 結果は`UnwrapBox()`を使用して`ResultBox`からアンラップ
+- OpenAPIサポートがデフォルトで含まれる
+
+### 4. 実装手順
+
+1. プロジェクトテンプレートから始める
 2. ドメインモデル（アグリゲート）を定義
 3. ユーザーの意図を表すコマンドを作成
 4. 状態変更を表すイベントを定義
 5. イベントをアグリゲートに適用するプロジェクターを実装
 6. データを取得およびフィルタリングするクエリを作成
 7. JSONシリアル化コンテキストを設定
+8. `SekibanOrleansExecutor`を使用してAPIエンドポイントをマッピング
+
+### 5. 設定オプション
+
+テンプレートは2つのデータベースオプションをサポートします：
+```json
+{
+  "Sekiban": {
+    "Database": "Cosmos"  // または "Postgres"
+  }
+}
+```
 
 ## 結論
 
