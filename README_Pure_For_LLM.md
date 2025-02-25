@@ -203,14 +203,69 @@ public partial class YourDomainEventsJsonContext : JsonSerializerContext
 - Add `[JsonSourceGenerationOptions]` attribute
 - Define as partial class
 
-## Implementation Steps
+## API Implementation
 
-1. Define aggregate (domain entity) implementing `IAggregatePayload`
+### Basic Setup Pattern
+
+```csharp
+// Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+// 1. Configure Orleans
+builder.UseOrleans(config =>
+{
+    config.AddMemoryStreams("EventStreamProvider")
+          .AddMemoryGrainStorage("EventStreamProvider");
+});
+
+// 2. Register Domain
+builder.Services.AddSingleton(
+    OrleansSekibanDomainDomainTypes.Generate(
+        OrleansSekibanDomainEventsJsonContext.Default.Options));
+
+// 3. Configure Database
+builder.AddSekibanCosmosDb();  // or AddSekibanPostgresDb();
+
+// 4. Map Endpoints
+var app = builder.Build();
+var apiRoute = app.MapGroup("/api");
+
+// Command endpoint pattern
+apiRoute.MapPost("/command",
+    async ([FromBody] YourCommand command, 
+           [FromServices] SekibanOrleansExecutor executor) => 
+        await executor.CommandAsync(command).UnwrapBox());
+
+// Query endpoint pattern
+apiRoute.MapGet("/query",
+    async ([FromServices] SekibanOrleansExecutor executor) =>
+    {
+        var result = await executor.QueryAsync(new YourQuery(""))
+                                  .UnwrapBox();
+        return result.Items;
+    });
+```
+
+### Implementation Steps
+
+1. Define aggregate implementing `IAggregatePayload`
 2. Create events implementing `IEventPayload`
-3. Implement projector with `IAggregateProjector` interface
-4. Create commands implementing `ICommandWithHandler<TCommand, TProjector>`
-5. Define queries implementing appropriate query interface
+3. Implement projector with `IAggregateProjector`
+4. Create commands with `ICommandWithHandler<TCommand, TProjector>`
+5. Define queries with appropriate query interface
 6. Set up JSON serialization context
+7. Configure Program.cs using the pattern above
+8. Map endpoints for your commands and queries
+
+### Configuration
+
+```json
+{
+  "Sekiban": {
+    "Database": "Cosmos"  // or "Postgres"
+  }
+}
+```
 
 ## Naming Conventions
 
