@@ -162,32 +162,40 @@ When implementing commands, you use these partition keys in two ways:
 
 ### 4. Projectors
 
-Projectors apply events to aggregates to build the current state.
+Projectors apply events to aggregates to build the current state. A key feature of projectors is their ability to change the aggregate payload type to express state transitions, which enables state-dependent behavior in commands.
+
+Here's an example showing state transitions in a user registration flow:
 
 ```csharp
-public class WeatherForecastProjector : IAggregateProjector
+public class UserProjector : IAggregateProjector
 {
-    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)
-        => (payload, ev.GetPayload()) switch
-        {
-            (EmptyAggregatePayload, WeatherForecastInputted inputted) => new WeatherForecast(inputted.Location, inputted.Date, inputted.TemperatureC, inputted.Summary),
-            (WeatherForecast forecast, WeatherForecastDeleted _) => new DeletedWeatherForecast(
-                forecast.Location,
-                forecast.Date,
-                forecast.TemperatureC,
-                forecast.Summary),
-            (WeatherForecast forecast, WeatherForecastLocationUpdated updated) => forecast with { Location = updated.NewLocation },
-            _ => payload
-        };
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) => (payload, ev.GetPayload()) switch
+    {
+        // Initial registration creates an UnconfirmedUser
+        (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(registered.Name, registered.Email),
+        
+        // Confirmation changes UnconfirmedUser to ConfirmedUser
+        (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
+            unconfirmedUser.Name,
+            unconfirmedUser.Email),
+            
+        // Unconfirmation changes ConfirmedUser back to UnconfirmedUser
+        (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(confirmedUser.Name, confirmedUser.Email),
+        
+        _ => payload
+    };
 }
 ```
 
 Key points:
 - Implement `IAggregateProjector` interface
 - Use pattern matching to handle different event types
-- Return a new aggregate state for each event
+- Return different aggregate payload types based on state transitions:
+  - State changes can enforce business rules (e.g., only confirmed users can perform certain actions)
+  - Commands can check the current state type to determine valid operations
+  - The type system helps enforce business rules at compile time
 - Handle the initial state creation (from `EmptyAggregatePayload`)
-- Use C# record's `with` syntax for immutable updates
+- Maintain immutability by creating new instances for each state change
 
 ### 5. Queries
 

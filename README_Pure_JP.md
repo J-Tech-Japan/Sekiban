@@ -160,32 +160,40 @@ public record WeatherForecastInputted(
 
 ### 4. プロジェクター
 
-プロジェクターはイベントをアグリゲートに適用して現在の状態を構築します。
+プロジェクターはイベントをアグリゲートに適用して現在の状態を構築します。プロジェクターの重要な機能の1つは、状態遷移を表現するためにアグリゲートペイロードの型を変更できることです。これにより、コマンドで状態に依存した振る舞いが可能になります。
+
+以下は、ユーザー登録フローにおける状態遷移の例です：
 
 ```csharp
-public class WeatherForecastProjector : IAggregateProjector
+public class UserProjector : IAggregateProjector
 {
-    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)
-        => (payload, ev.GetPayload()) switch
-        {
-            (EmptyAggregatePayload, WeatherForecastInputted inputted) => new WeatherForecast(inputted.Location, inputted.Date, inputted.TemperatureC, inputted.Summary),
-            (WeatherForecast forecast, WeatherForecastDeleted _) => new DeletedWeatherForecast(
-                forecast.Location,
-                forecast.Date,
-                forecast.TemperatureC,
-                forecast.Summary),
-            (WeatherForecast forecast, WeatherForecastLocationUpdated updated) => forecast with { Location = updated.NewLocation },
-            _ => payload
-        };
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) => (payload, ev.GetPayload()) switch
+    {
+        // 初期登録で未確認ユーザーを作成
+        (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(registered.Name, registered.Email),
+        
+        // 確認により未確認ユーザーを確認済みユーザーに変更
+        (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
+            unconfirmedUser.Name,
+            unconfirmedUser.Email),
+            
+        // 確認解除により確認済みユーザーを未確認ユーザーに戻す
+        (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(confirmedUser.Name, confirmedUser.Email),
+        
+        _ => payload
+    };
 }
 ```
 
 ポイント：
 - `IAggregateProjector`インターフェースを実装
 - パターンマッチングを使用して異なるイベントタイプを処理
-- 各イベントに対して新しいアグリゲート状態を返す
+- 状態遷移に基づいて異なるアグリゲートペイロードの型を返す：
+  - 状態変更によってビジネスルールを強制できる（例：確認済みユーザーのみが特定の操作を実行可能）
+  - コマンドは現在の状態の型をチェックして有効な操作を判断
+  - 型システムがコンパイル時にビジネスルールを強制
 - 初期状態の作成を処理（`EmptyAggregatePayload`から）
-- 不変更新のためにC#レコードの`with`構文を使用
+- 各状態変更に対して新しいインスタンスを作成して不変性を維持
 
 ### 5. クエリ
 

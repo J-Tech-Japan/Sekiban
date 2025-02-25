@@ -113,24 +113,38 @@ public PartitionKeys SpecifyPartitionKeys(YourCommand command) =>
 ### 4. Projector (State Builder)
 
 ```csharp
-public class YourAggregateProjector : IAggregateProjector
+// Example of state transitions in projector
+public class UserProjector : IAggregateProjector
 {
     public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)
         => (payload, ev.GetPayload()) switch
         {
-            (EmptyAggregatePayload, YourCreatedEvent created) => new YourAggregate(...),
-            (YourAggregate aggregate, YourUpdatedEvent updated) => aggregate with { Property = updated.NewValue },
-            (YourAggregate aggregate, YourDeletedEvent _) => new DeletedYourAggregate(...),
+            // Each case can return a different payload type to represent state
+            (EmptyAggregatePayload, UserRegistered e) => new UnconfirmedUser(e.Name, e.Email),
+            (UnconfirmedUser user, UserConfirmed _) => new ConfirmedUser(user.Name, user.Email),
+            (ConfirmedUser user, UserUnconfirmed _) => new UnconfirmedUser(user.Name, user.Email),
             _ => payload
         };
 }
+
+// Different states enable different operations
+public record UnconfirmedUser(string Name, string Email) : IAggregatePayload;
+public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 ```
 
 **Required**:
 - Implement `IAggregateProjector` interface
-- Implement `Project` method using pattern matching
+- Use pattern matching to manage state transitions
+- Return different payload types to enforce business rules:
+  ```csharp
+  // Command handler can check state type
+  if (context.AggregatePayload is ConfirmedUser user)
+  {
+      // Only confirmed users can perform this action
+  }
+  ```
 - Handle initial state creation from `EmptyAggregatePayload`
-- Return new state for each event type
+- Maintain immutability in state changes
 
 ### 5. Query (Data Retrieval)
 
