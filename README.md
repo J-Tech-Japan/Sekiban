@@ -14,6 +14,9 @@ various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft
 , [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/) and Postgres, facilitating deployment on either Azure or AWS.
 
 ## Getting started
+
+**We are in development for new version of Sekiban.** It is more functional and work with Microsoft Orleans as well. You can see new sekiban information on [README_Pure.md](./README_Pure.md) for quick instruction for LLM, look at [README_Pure_For_LLM.md](./README_Pure_For_LLM.md)
+
 Do you want to start coding? If so, please see [Quick Start](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/quick-start.md)
 
 日本語の情報をお探しでしょうか？ [Sekiban - イベントソーシングとCQRSフレームワークの紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles_ja/intro.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
