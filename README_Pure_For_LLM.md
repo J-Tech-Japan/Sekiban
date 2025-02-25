@@ -64,16 +64,51 @@ public record YourCommand(...parameters...)
 
 ### 3. Events (Facts That Happened)
 
-```csharp
-[GenerateSerializer]
-public record YourEvent(...parameters...) : IEventPayload;
-```
+Events contain two parts:
+
+1. **Event Metadata** (handled by Sekiban):
+   ```csharp
+   // These are managed by the system
+   PartitionKeys partitionKeys;
+   DateTime timestamp;
+   Guid id;
+   int version;
+   // Other system metadata
+   ```
+
+2. **Event Payload** (defined by developers):
+   ```csharp
+   [GenerateSerializer]
+   public record YourEvent(...parameters...) : IEventPayload;
+   ```
 
 **Required**:
-- Implement `IEventPayload` interface
+- Implement `IEventPayload` interface for domain-specific data only
 - Use past tense naming (Created, Updated, Deleted)
 - Add `[GenerateSerializer]` attribute
-- Include all data needed for state reconstruction
+- Include all data needed to reconstruct domain state
+
+### PartitionKeys Structure
+
+```csharp
+public class PartitionKeys
+{
+    string RootPartitionKey;  // Optional tenant key for multi-tenancy
+    string AggregateGroup;    // Usually projector name
+    Guid AggregateId;        // Unique identifier
+}
+```
+
+**Usage in Commands**:
+```csharp
+// For new aggregates:
+public PartitionKeys SpecifyPartitionKeys(YourCommand command) => 
+    PartitionKeys.Generate<YourProjector>();
+
+// For existing aggregates:
+public PartitionKeys SpecifyPartitionKeys(YourCommand command) => 
+    PartitionKeys.Existing<YourProjector>(command.AggregateId);
+```
 
 ### 4. Projector (State Builder)
 

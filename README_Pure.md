@@ -42,7 +42,16 @@ Sekiban is a .NET event sourcing framework that:
 
 ### 1. Aggregate
 
-An aggregate is the domain entity that encapsulates state and business rules. In Sekiban, aggregates implement `IAggregatePayload`.
+An aggregate consists of two main parts:
+
+1. **Aggregate Payload**: Basic information that exists in every aggregate, such as:
+   - Current version
+   - Last event ID
+   - Other system-level metadata
+
+2. **Payload**: The domain-specific data defined by developers.
+
+In Sekiban, aggregates implement `IAggregatePayload`:
 
 ```csharp
 [GenerateSerializer]
@@ -62,9 +71,9 @@ public record WeatherForecast(
 
 Key points:
 - Use C# records for immutability
-- Implement `IAggregatePayload` interface
+- Implement `IAggregatePayload` interface for combining both aggregate payload and domain payload
 - Include the `[GenerateSerializer]` attribute for Orleans serialization
-- Define properties as constructor parameters
+- Define domain-specific properties as constructor parameters
 - Include domain logic methods within the record
 
 ### 2. Commands
@@ -100,7 +109,18 @@ Key points:
 
 ### 3. Events
 
-Events represent facts that have happened in the system. They are immutable and are the source of truth.
+Events consist of two main parts:
+
+1. **Event Metadata**: System-level information included in every event:
+   - PartitionKeys
+   - Timestamp
+   - Id
+   - Version
+   - Other system metadata
+
+2. **Event Payload**: The domain-specific data defined by developers.
+
+Events are immutable and represent facts that have happened in the system. Developers focus on defining the Event Payload by implementing `IEventPayload`:
 
 ```csharp
 [GenerateSerializer]
@@ -114,10 +134,31 @@ public record WeatherForecastInputted(
 
 Key points:
 - Use C# records for immutability
-- Implement `IEventPayload` interface
+- Implement `IEventPayload` interface for the domain-specific event data
 - Include the `[GenerateSerializer]` attribute
 - Name events in past tense (e.g., "Inputted", "Updated", "Deleted")
 - Include all data needed to reconstruct the state change
+
+### Partition Keys
+
+PartitionKeys define how data is organized in the database and consist of three components:
+
+1. **RootPartitionKey** (string):
+   - Can be used as a Tenant Key in multi-tenant applications
+   - Helps segregate data by tenant or other high-level divisions
+
+2. **AggregateGroup** (string):
+   - Defines a group of aggregates
+   - Usually matches the projector name
+   - Used to organize related aggregates together
+
+3. **AggregateId** (Guid):
+   - Unique identifier for each aggregate instance
+   - Used to locate specific aggregates within a group
+
+When implementing commands, you use these partition keys in two ways:
+- For new aggregates: `PartitionKeys.Generate<YourProjector>()` generates new partition keys
+- For existing aggregates: `PartitionKeys.Existing<YourProjector>(aggregateId)` uses existing keys
 
 ### 4. Projectors
 
