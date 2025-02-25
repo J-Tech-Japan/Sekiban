@@ -1,5 +1,17 @@
 # Sekiban Event Sourcing - LLM Implementation Guide
 
+## Getting Started
+
+```bash
+# Install the Sekiban templates
+dotnet new install Sekiban.Pure.Templates
+
+# Create a new project
+dotnet new sekiban-orleans-aspire -n MyProject
+```
+
+This template includes Aspire host for Orleans, Cluster Storage, Grain Persistent Storage, and Queue Storage.
+
 ## Core Concepts
 
 Event Sourcing: Store all state changes as immutable events. Current state is derived by replaying events.

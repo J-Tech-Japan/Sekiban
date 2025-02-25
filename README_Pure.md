@@ -1,6 +1,26 @@
 # Sekiban Event Sourcing Guide for LLM Programming Agents
 
+[日本語版はこちら (Japanese Version)](README_Pure_JP.md)
+
 This guide explains how to create and work with event sourcing projects using Sekiban, based on the template structure in `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.Domain`.
+
+## Getting Started with Sekiban
+
+To quickly create a new Sekiban project with Orleans and Aspire integration:
+
+```bash
+# Install the Sekiban templates
+dotnet new install Sekiban.Pure.Templates
+
+# Create a new project
+dotnet new sekiban-orleans-aspire -n MyProject
+```
+
+This template includes:
+- .NET Aspire host for Orleans
+- Cluster Storage
+- Grain Persistent Storage
+- Queue Storage
 
 ## What is Event Sourcing?
 
