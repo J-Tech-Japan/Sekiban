@@ -25,7 +25,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.0.1"/>
-        <PackageReference Include="ResultBoxes" Version="0.3.30"/>
+        <PackageReference Include="ResultBoxes" Version="0.3.31" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
