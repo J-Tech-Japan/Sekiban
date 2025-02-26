@@ -99,13 +99,36 @@ public record InputWeatherForecastCommand(
 
 Key points:
 - Use C# records for immutability
-- Implement `ICommandWithHandler<TCommand, TProjector>` interface
+- Implement `ICommandWithHandler<TCommand, TProjector>` interface or `ICommandWithHandler<TCommand, TProjector, TPayloadType>` interface when you need to enforce state-based constraints
 - Include the `[GenerateSerializer]` attribute
 - Define `SpecifyPartitionKeys` method to determine where the aggregate is stored:
   - For new aggregates: `PartitionKeys.Generate<YourProjector>()`
   - For existing aggregates: `PartitionKeys.Existing<YourProjector>(aggregateId)`
 - Implement `Handle` method that returns events or no events
 - Commands don't modify state directly; they produce events
+
+#### Using the Third Generic Parameter for State Constraints
+
+You can specify a third generic parameter to enforce state-based constraints at the type level:
+
+```csharp
+public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProjector, ConfirmedUser>
+{
+    public PartitionKeys SpecifyPartitionKeys(RevokeUser command) => PartitionKeys<UserProjector>.Existing(UserId);
+    
+    public ResultBox<EventOrNone> Handle(RevokeUser command, ICommandContext<ConfirmedUser> context) =>
+        context
+            .GetAggregate()
+            .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
+}
+```
+
+Key points:
+- The third generic parameter `ConfirmedUser` specifies that this command can only be executed when the current aggregate payload is of type `ConfirmedUser`
+- The command context is now strongly typed to `ICommandContext<ConfirmedUser>` instead of `ICommandContext<IAggregatePayload>`
+- This provides compile-time safety for state-dependent operations
+- The executor will automatically check if the current payload type matches the specified type before executing the command
+- This is particularly useful when using aggregate payload types to express different states of an entity
 
 ### 3. Events
 

@@ -97,13 +97,36 @@ public record InputWeatherForecastCommand(
 
 ポイント：
 - 不変性のためにC#レコードを使用
-- `ICommandWithHandler<TCommand, TProjector>`インターフェースを実装
+- `ICommandWithHandler<TCommand, TProjector>`インターフェースを実装、または状態ベースの制約を強制する必要がある場合は`ICommandWithHandler<TCommand, TProjector, TPayloadType>`インターフェースを実装
 - `[GenerateSerializer]`属性を含める
 - アグリゲートが保存される場所を決定する`SpecifyPartitionKeys`メソッドを定義：
   - 新しいアグリゲートの場合：`PartitionKeys.Generate<YourProjector>()`
   - 既存のアグリゲートの場合：`PartitionKeys.Existing<YourProjector>(aggregateId)`
 - イベントを返す`Handle`メソッドを実装
 - コマンドは直接状態を変更せず、イベントを生成する
+
+#### 状態制約のための第3ジェネリックパラメータの使用
+
+型レベルで状態ベースの制約を強制するために、第3のジェネリックパラメータを指定できます：
+
+```csharp
+public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProjector, ConfirmedUser>
+{
+    public PartitionKeys SpecifyPartitionKeys(RevokeUser command) => PartitionKeys<UserProjector>.Existing(UserId);
+    
+    public ResultBox<EventOrNone> Handle(RevokeUser command, ICommandContext<ConfirmedUser> context) =>
+        context
+            .GetAggregate()
+            .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
+}
+```
+
+ポイント：
+- 第3ジェネリックパラメータ`ConfirmedUser`は、現在のアグリゲートペイロードが`ConfirmedUser`型である場合にのみこのコマンドを実行できることを指定します
+- コマンドコンテキストは`ICommandContext<IAggregatePayload>`ではなく`ICommandContext<ConfirmedUser>`に強く型付けされています
+- これにより、状態依存の操作にコンパイル時の安全性が提供されます
+- エグゼキューターはコマンドを実行する前に、現在のペイロードタイプが指定されたタイプと一致するかどうかを自動的にチェックします
+- これは、エンティティの異なる状態を表現するためにアグリゲートペイロードタイプを使用する場合に特に有用です
 
 ### 3. イベント
 
