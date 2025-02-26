@@ -329,8 +329,7 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Configure Orleans
 builder.UseOrleans(config =>
 {
-    config.AddMemoryStreams("EventStreamProvider")
-          .AddMemoryGrainStorage("EventStreamProvider");
+    // set your own orleans settings
 });
 
 // 2. Register Domain
