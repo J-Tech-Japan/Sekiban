@@ -84,12 +84,38 @@ public record YourCommand(...parameters...)
 ```
 
 **Required**:
-- Implement `ICommandWithHandler<TCommand, TProjector>` interface
+- Implement `ICommandWithHandler<TCommand, TProjector>` interface or `ICommandWithHandler<TCommand, TProjector, TPayloadType>` when you need to enforce state-based constraints
 - Implement `SpecifyPartitionKeys` method:
   - For new aggregates: `PartitionKeys.Generate<YourProjector>()`
   - For existing aggregates: `PartitionKeys.Existing<YourProjector>(aggregateId)`
 - Implement `Handle` method that returns events
 - Add `[GenerateSerializer]` attribute
+
+#### Using the Third Generic Parameter for State Constraints
+
+You can specify a third generic parameter to enforce state-based constraints at the type level:
+
+```csharp
+[GenerateSerializer]
+public record RevokeUser(Guid UserId) 
+    : ICommandWithHandler<RevokeUser, UserProjector, ConfirmedUser>
+{
+    public PartitionKeys SpecifyPartitionKeys(RevokeUser command) => 
+        PartitionKeys<UserProjector>.Existing(UserId);
+    
+    public ResultBox<EventOrNone> Handle(RevokeUser command, ICommandContext<ConfirmedUser> context) =>
+        context
+            .GetAggregate()
+            .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
+}
+```
+
+**Benefits**:
+- The third generic parameter (`ConfirmedUser` in the example) specifies that this command can only be executed when the current aggregate payload is of that specific type
+- The command context becomes strongly typed to `ICommandContext<ConfirmedUser>` instead of `ICommandContext<IAggregatePayload>`
+- Provides compile-time safety for state-dependent operations
+- The executor automatically checks if the current payload type matches the specified type before executing the command
+- Particularly useful when using aggregate payload types to express different states of an entity (state machine pattern)
 
 ### 3. Events (Facts That Happened)
 
