@@ -25,8 +25,26 @@ builder.AddKeyedAzureBlobClient("orleans-sekiban-grain-state");
 builder.UseOrleans(
     config =>
     {
-        config.UseDashboard(options => { });
-        config.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+        // config.UseDashboard(options => { });
+        config.AddAzureQueueStreams("EventStreamProvider", (SiloAzureQueueStreamConfigurator configurator) =>
+        {
+            configurator.ConfigureAzureQueue(options =>
+            {
+                options.Configure<IServiceProvider>((queueOptions, sp) =>
+                {
+                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("orleans-sekiban-queue");
+                });
+            });
+        });
+        
+        // Add grain storage for the stream provider
+        config.AddAzureBlobGrainStorage("EventStreamProvider", options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("orleans-sekiban-grain-state");
+            });
+        });
     });
 
 builder.Services.AddSingleton(
@@ -51,6 +69,16 @@ if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.To
     // Postgres settings
     builder.AddSekibanPostgresDb();
 }
+// Add CORS services and configure a policy that allows all origins
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 var app = builder.Build();
 
@@ -66,6 +94,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference();
 }
+
+// Use CORS middleware (must be called before other middleware that sends responses)
+app.UseCors();
 
 string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
