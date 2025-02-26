@@ -12,6 +12,35 @@ dotnet new sekiban-orleans-aspire -n MyProject
 
 This template includes Aspire host for Orleans, Cluster Storage, Grain Persistent Storage, and Queue Storage.
 
+## Important Notes
+
+### Correct Namespaces
+The template uses the `Sekiban.Pure.*` namespace hierarchy, not `Sekiban.Core.*`. Always use the following namespaces:
+
+- `Sekiban.Pure.Aggregates` for aggregates and payload interfaces
+- `Sekiban.Pure.Events` for events
+- `Sekiban.Pure.Projectors` for projectors
+- `Sekiban.Pure.Command.Handlers` for command handlers
+- `Sekiban.Pure.Command.Executor` for command execution context
+- `Sekiban.Pure.Documents` for partition keys
+- `Sekiban.Pure.Query` for queries
+- `ResultBoxes` for result handling
+
+### Project Structure
+The template creates a solution with multiple projects:
+- `MyProject.Domain` - Contains domain models, events, commands, and queries
+- `MyProject.ApiService` - API endpoints for commands and queries
+- `MyProject.Web` - Web frontend with Blazor
+- `MyProject.AppHost` - Aspire host for orchestrating services
+- `MyProject.ServiceDefaults` - Common service configurations
+
+### Running the Application
+When running the application with the Aspire host, use the following command:
+
+```bash
+dotnet run --project MyProject.AppHost
+```
+
 ## Core Concepts
 
 Event Sourcing: Store all state changes as immutable events. Current state is derived by replaying events.
@@ -135,14 +164,7 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 **Required**:
 - Implement `IAggregateProjector` interface
 - Use pattern matching to manage state transitions
-- Return different payload types to enforce business rules:
-  ```csharp
-  // Command handler can check state type
-  if (context.AggregatePayload is ConfirmedUser user)
-  {
-      // Only confirmed users can perform this action
-  }
-  ```
+- Return different payload types to enforce business rules
 - Handle initial state creation from `EmptyAggregatePayload`
 - Maintain immutability in state changes
 
@@ -150,7 +172,7 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 
 ```csharp
 [GenerateSerializer]
-public record YourQuery(string FilterParameter)
+public record YourQuery(string FilterParameter = null)
     : IMultiProjectionListQuery<AggregateListProjector<YourAggregateProjector>, YourQuery, YourQuery.ResultRecord>
 {
     public static ResultBox<IEnumerable<ResultRecord>> HandleFilter(
@@ -220,8 +242,8 @@ builder.UseOrleans(config =>
 
 // 2. Register Domain
 builder.Services.AddSingleton(
-    OrleansSekibanDomainDomainTypes.Generate(
-        OrleansSekibanDomainEventsJsonContext.Default.Options));
+    BookManagementDomainDomainTypes.Generate(
+        BookManagementDomainEventsJsonContext.Default.Options));
 
 // 3. Configure Database
 builder.AddSekibanCosmosDb();  // or AddSekibanPostgresDb();
@@ -240,7 +262,7 @@ apiRoute.MapPost("/command",
 apiRoute.MapGet("/query",
     async ([FromServices] SekibanOrleansExecutor executor) =>
     {
-        var result = await executor.QueryAsync(new YourQuery(""))
+        var result = await executor.QueryAsync(new YourQuery())
                                   .UnwrapBox();
         return result.Items;
     });
@@ -267,6 +289,52 @@ apiRoute.MapGet("/query",
 }
 ```
 
+## Web Frontend Implementation
+
+To implement a web frontend for your domain:
+
+1. Create an API client in the Web project:
+```csharp
+public class YourApiClient(HttpClient httpClient)
+{
+    public async Task<YourQuery.ResultRecord[]> GetItemsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        List<YourQuery.ResultRecord>? items = null;
+
+        await foreach (var item in httpClient.GetFromJsonAsAsyncEnumerable<YourQuery.ResultRecord>("/api/items", cancellationToken))
+        {
+            if (item is not null)
+            {
+                items ??= [];
+                items.Add(item);
+            }
+        }
+
+        return items?.ToArray() ?? [];
+    }
+
+    public async Task CreateItemAsync(
+        string param1,
+        string param2,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new CreateYourItemCommand(param1, param2);
+        await httpClient.PostAsJsonAsync("/api/createitem", command, cancellationToken);
+    }
+}
+```
+
+2. Register the API client in Program.cs:
+```csharp
+builder.Services.AddHttpClient<YourApiClient>(client =>
+{
+    client.BaseAddress = new("https+http://apiservice");
+});
+```
+
+3. Create Razor pages to interact with your domain
+
 ## Naming Conventions
 
 - Commands: Imperative verbs (Create, Update, Delete)
@@ -288,3 +356,32 @@ YourProject.Domain/
 ├── YourAggregateDeleted.cs             // Event
 ├── YourAggregateQuery.cs               // Query
 └── YourDomainEventsJsonContext.cs      // JSON Context
+```
+
+## Common Issues and Solutions
+
+1. **Namespace Errors**: Make sure to use `Sekiban.Pure.*` namespaces, not `Sekiban.Core.*`.
+
+2. **Command Context**: The command context doesn't directly expose the aggregate payload. Use pattern matching in your command handlers if you need to check the aggregate state:
+   ```csharp
+   if (context.AggregatePayload is YourAggregate aggregate)
+   {
+       // Use aggregate properties
+   }
+   ```
+
+3. **Running the Application**: When running the application with the Aspire host, you can use the following command:
+
+```bash
+dotnet run --project MyProject.AppHost
+```
+
+To launch the AppHost with HTTPS profile, use:
+
+```bash
+dotnet run --project MyProject.AppHost --launch-profile https
+```
+
+This ensures that your application uses HTTPS for secure communication, which is especially important for production environments.
+
+4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
