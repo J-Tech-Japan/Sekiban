@@ -117,6 +117,73 @@ public record RevokeUser(Guid UserId)
 - The executor automatically checks if the current payload type matches the specified type before executing the command
 - Particularly useful when using aggregate payload types to express different states of an entity (state machine pattern)
 
+#### Accessing Aggregate Payload in Commands
+
+There are two ways to access the aggregate payload in command handlers, depending on whether you use the two or three generic parameter version:
+
+1. **With Type Constraint (Three Generic Parameters)**:
+   ```csharp
+   // Using ICommandWithHandler<TCommand, TProjector, TAggregatePayload>
+   public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<ConfirmedUser> context)
+   {
+       // Direct access to strongly-typed aggregate and payload
+       var aggregate = context.GetAggregate();
+       var payload = aggregate.Payload; // Already typed as ConfirmedUser
+       
+       // Use payload properties directly
+       var userName = payload.Name;
+       
+       return EventOrNone.Event(new YourEvent(...));
+   }
+   ```
+
+2. **Without Type Constraint (Two Generic Parameters)**:
+   ```csharp
+   // Using ICommandWithHandler<TCommand, TProjector>
+   public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
+   {
+       // Need to cast the payload to the expected type
+       if (context.GetAggregate().GetPayload() is ConfirmedUser payload)
+       {
+           // Now you can use the typed payload
+           var userName = payload.Name;
+           
+           return EventOrNone.Event(new YourEvent(...));
+       }
+       
+       // Handle case where payload is not of expected type
+       return new SomeException("Expected ConfirmedUser state");
+   }
+   ```
+
+The three-parameter version is preferred when you know the exact state the aggregate should be in, as it provides compile-time safety and cleaner code.
+
+#### Generating Multiple Events from a Command
+
+If a command needs to generate multiple events, you can use the `AppendEvent` method on the command context:
+
+```csharp
+public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAggregatePayload> context)
+{
+    // First, append events one by one
+    context.AppendEvent(new FirstEventHappened(command.SomeData));
+    context.AppendEvent(new SecondEventHappened(command.OtherData));
+    
+    // Then return EventOrNone.None to indicate that all events have been appended
+    return EventOrNone.None;
+    
+    // Alternatively, you can return the last event
+    // return EventOrNone.Event(new FinalEventHappened(command.FinalData));
+}
+```
+
+**Key points**:
+- Use `context.AppendEvent(eventPayload)` to add events to the event stream
+- You can append multiple events in sequence
+- Return `EventOrNone.None` if all events have been appended using `AppendEvent`
+- Or return the last event using `EventOrNone.Event` if you prefer that approach
+- All appended events will be applied to the aggregate in the order they were added
+
 ### 3. Events (Facts That Happened)
 
 Events contain two parts:
@@ -262,8 +329,7 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Configure Orleans
 builder.UseOrleans(config =>
 {
-    config.AddMemoryStreams("EventStreamProvider")
-          .AddMemoryGrainStorage("EventStreamProvider");
+    // set your own orleans settings
 });
 
 // 2. Register Domain

@@ -128,6 +128,73 @@ public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProj
 - エグゼキューターはコマンドを実行する前に、現在のペイロードタイプが指定されたタイプと一致するかどうかを自動的にチェックします
 - これは、エンティティの異なる状態を表現するためにアグリゲートペイロードタイプを使用する場合に特に有用です
 
+#### コマンドでのアグリゲートペイロードへのアクセス
+
+コマンドハンドラーでアグリゲートペイロードにアクセスする方法は、2つまたは3つのジェネリックパラメータバージョンを使用するかによって2つあります：
+
+1. **型制約あり（3つのジェネリックパラメータ）**：
+   ```csharp
+   // ICommandWithHandler<TCommand, TProjector, TAggregatePayload>を使用
+   public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<ConfirmedUser> context)
+   {
+       // 強く型付けされたアグリゲートとペイロードに直接アクセス
+       var aggregate = context.GetAggregate();
+       var payload = aggregate.Payload; // すでにConfirmedUserとして型付けされている
+       
+       // ペイロードのプロパティを直接使用
+       var userName = payload.Name;
+       
+       return EventOrNone.Event(new YourEvent(...));
+   }
+   ```
+
+2. **型制約なし（2つのジェネリックパラメータ）**：
+   ```csharp
+   // ICommandWithHandler<TCommand, TProjector>を使用
+   public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
+   {
+       // ペイロードを期待される型にキャストする必要がある
+       if (context.GetAggregate().GetPayload() is ConfirmedUser payload)
+       {
+           // これで型付けされたペイロードを使用できる
+           var userName = payload.Name;
+           
+           return EventOrNone.Event(new YourEvent(...));
+       }
+       
+       // ペイロードが期待される型でない場合を処理
+       return new SomeException("ConfirmedUser状態が必要です");
+   }
+   ```
+
+アグリゲートが特定の状態であることが分かっている場合は、コンパイル時の安全性とよりクリーンなコードを提供する3パラメータバージョンが推奨されます。
+
+#### コマンドから複数のイベントを生成する
+
+コマンドが複数のイベントを生成する必要がある場合は、コマンドコンテキストの`AppendEvent`メソッドを使用できます：
+
+```csharp
+public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAggregatePayload> context)
+{
+    // まず、イベントを1つずつ追加する
+    context.AppendEvent(new FirstEventHappened(command.SomeData));
+    context.AppendEvent(new SecondEventHappened(command.OtherData));
+    
+    // すべてのイベントが追加されたことを示すためにEventOrNone.Noneを返す
+    return EventOrNone.None;
+    
+    // または、最後のイベントを返すこともできる
+    // return EventOrNone.Event(new FinalEventHappened(command.FinalData));
+}
+```
+
+ポイント：
+- `context.AppendEvent(eventPayload)`を使用してイベントストリームにイベントを追加する
+- 複数のイベントを順番に追加できる
+- すべてのイベントが`AppendEvent`を使用して追加された場合は`EventOrNone.None`を返す
+- または、その方法を好む場合は`EventOrNone.Event`を使用して最後のイベントを返す
+- 追加されたすべてのイベントは、追加された順序でアグリゲートに適用される
+
 ### 3. イベント
 
 イベントは2つの主要な部分で構成されています：
