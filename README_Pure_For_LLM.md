@@ -370,9 +370,7 @@ YourProject.Domain/
    }
    ```
 
-3. **Running the Application**: Always provide the PostgreSQL password parameter when running the application:
-   ```bash
-   dotnet run --project MyProject.AppHost -- --Parameters:postgres-password=YourPassword
-   ```
+3. **Running the Application**: 
+
 
 4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
