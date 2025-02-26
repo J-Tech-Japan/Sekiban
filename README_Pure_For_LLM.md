@@ -35,10 +35,10 @@ The template creates a solution with multiple projects:
 - `MyProject.ServiceDefaults` - Common service configurations
 
 ### Running the Application
-When running the application with the Aspire host, you need to provide a PostgreSQL password parameter:
+When running the application with the Aspire host, use the following command:
 
 ```bash
-dotnet run --project MyProject.AppHost -- --Parameters:postgres-password=YourPassword
+dotnet run --project MyProject.AppHost
 ```
 
 ## Core Concepts
@@ -370,7 +370,18 @@ YourProject.Domain/
    }
    ```
 
-3. **Running the Application**: 
+3. **Running the Application**: When running the application with the Aspire host, you can use the following command:
 
+```bash
+dotnet run --project MyProject.AppHost
+```
+
+To launch the AppHost with HTTPS profile, use:
+
+```bash
+dotnet run --project MyProject.AppHost --launch-profile https
+```
+
+This ensures that your application uses HTTPS for secure communication, which is especially important for production environments.
 
 4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.

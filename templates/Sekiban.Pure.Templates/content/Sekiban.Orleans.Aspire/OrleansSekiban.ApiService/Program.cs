@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Azure.Storage.Queues;
 using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Generated;
 using ResultBoxes;
@@ -22,6 +23,7 @@ builder.Services.AddOpenApi();
 
 builder.AddKeyedAzureTableClient("orleans-sekiban-clustering");
 builder.AddKeyedAzureBlobClient("orleans-sekiban-grain-state");
+builder.AddKeyedAzureQueueClient("orleans-sekiban-queue");
 builder.UseOrleans(
     config =>
     {
