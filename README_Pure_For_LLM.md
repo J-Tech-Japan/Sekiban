@@ -263,14 +263,20 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 
 ### 5. Query (Data Retrieval)
 
+Sekiban supports two types of queries: List Queries and Non-List Queries.
+
+#### List Query
+
+List Queries return collections of items and support filtering and sorting operations.
+
 ```csharp
 [GenerateSerializer]
-public record YourQuery(string FilterParameter = null)
-    : IMultiProjectionListQuery<AggregateListProjector<YourAggregateProjector>, YourQuery, YourQuery.ResultRecord>
+public record YourListQuery(string FilterParameter = null)
+    : IMultiProjectionListQuery<AggregateListProjector<YourAggregateProjector>, YourListQuery, YourListQuery.ResultRecord>
 {
     public static ResultBox<IEnumerable<ResultRecord>> HandleFilter(
         MultiProjectionState<AggregateListProjector<YourAggregateProjector>> projection, 
-        YourQuery query, 
+        YourListQuery query, 
         IQueryContext context)
     {
         return projection.Payload.Aggregates
@@ -282,7 +288,7 @@ public record YourQuery(string FilterParameter = null)
 
     public static ResultBox<IEnumerable<ResultRecord>> HandleSort(
         IEnumerable<ResultRecord> filteredList, 
-        YourQuery query, 
+        YourListQuery query, 
         IQueryContext context)
     {
         return filteredList.OrderBy(m => m.SomeProperty).AsEnumerable().ToResultBox();
@@ -293,11 +299,43 @@ public record YourQuery(string FilterParameter = null)
 }
 ```
 
-**Required**:
-- Implement appropriate query interface (e.g., `IMultiProjectionListQuery`)
-- Implement static `HandleFilter` method
-- Implement static `HandleSort` method
+**Required for List Queries**:
+- Implement `IMultiProjectionListQuery<TProjection, TQuery, TResult>` interface
+- Implement static `HandleFilter` method to filter data based on query parameters
+- Implement static `HandleSort` method to sort the filtered results
 - Define nested result record with `[GenerateSerializer]` attribute
+
+#### Non-List Query
+
+Non-List Queries return a single result and are typically used for checking conditions or retrieving specific values.
+
+```csharp
+[GenerateSerializer]
+public record YourNonListQuery(string Parameter)
+    : IMultiProjectionQuery<AggregateListProjector<YourAggregateProjector>, YourNonListQuery, bool>
+{
+    public static ResultBox<bool> HandleQuery(
+        MultiProjectionState<AggregateListProjector<YourAggregateProjector>> projection,
+        YourNonListQuery query,
+        IQueryContext context)
+    {
+        return projection.Payload.Aggregates.Values
+            .Any(aggregate => SomeCondition(aggregate, query.Parameter));
+    }
+    
+    private static bool SomeCondition(Aggregate aggregate, string parameter)
+    {
+        // Your condition logic here
+        return aggregate.GetPayload() is YourAggregate payload && 
+               payload.SomeProperty == parameter;
+    }
+}
+```
+
+**Required for Non-List Queries**:
+- Implement `IMultiProjectionQuery<TProjection, TQuery, TResult>` interface
+- Implement static `HandleQuery` method that returns a single result
+- The result type can be any serializable type (bool, string, int, custom record, etc.)
 
 ### 6. JSON Context (For AOT Compilation)
 
