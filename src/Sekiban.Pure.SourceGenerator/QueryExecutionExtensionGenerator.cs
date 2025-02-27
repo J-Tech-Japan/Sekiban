@@ -1,9 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using System;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
 namespace Sekiban.Pure.SourceGenerator;
 
@@ -200,7 +198,14 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
                 m => m.OriginalDefinition is not null &&
                     (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
                         m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
-
+            var formatWithoutNullable = new SymbolDisplayFormat(
+                // 型の完全修飾名などの設定（必要に応じて調整）
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                miscellaneousOptions:
+                SymbolDisplayMiscellaneousOptions
+                    .EscapeKeywordIdentifiers // このオプションに IncludeNullableReferenceTypeModifier は含めない
+            );
             if (matchingInterface != null)
                 eventTypes.Add(
                     new QueryWithHandlerValues
@@ -208,10 +213,10 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
                         InterfaceName = matchingInterface.Name,
                         RecordName = typeSymbol.ToDisplayString(),
                         TypeCount = matchingInterface.TypeArguments.Length,
-                        Generic1Name = matchingInterface.TypeArguments[0].ToDisplayString(),
-                        Generic2Name = matchingInterface.TypeArguments[1].ToDisplayString(),
+                        Generic1Name = matchingInterface.TypeArguments[0].ToDisplayString(formatWithoutNullable),
+                        Generic2Name = matchingInterface.TypeArguments[1].ToDisplayString(formatWithoutNullable),
                         Generic3Name = matchingInterface.TypeArguments.Length > 2
-                            ? matchingInterface.TypeArguments[2].ToDisplayString()
+                            ? matchingInterface.TypeArguments[2].ToDisplayString(formatWithoutNullable)
                             : string.Empty
                     });
         }
