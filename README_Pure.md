@@ -1,5 +1,5 @@
-# Sekiban Event Sourcing Guide for LLM Programming Agents
-
+# Sekiban Event Sourcing Guide for Developer
+[For LLM](README_Pure_For_LLM.md)
 [日本語版はこちら (Japanese Version)](README_Pure_JP.md)
 
 This guide explains how to create and work with event sourcing projects using Sekiban, based on the template structure in `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.Domain`.
@@ -405,11 +405,163 @@ When working with Sekiban event sourcing projects:
    - Test commands by verifying the events they produce
    - Test projectors by applying events and checking the resulting state
    - Test queries by setting up test data and verifying the results
+   - Use the built-in testing frameworks for in-memory or Orleans-based testing
+   - Leverage method chaining with ResultBox for fluent test assertions
 
 6. **Error Handling**:
    - Use `ResultBox` to handle errors and return meaningful messages
    - Validate commands before producing events
    - Handle edge cases in projectors
+
+## Unit Testing in Sekiban
+
+Sekiban provides robust support for unit testing your event-sourced applications with both in-memory and Orleans-based testing frameworks.
+
+### In-Memory Testing
+
+For simple unit tests, you can use the `SekibanInMemoryTestBase` class from the `Sekiban.Pure.xUnit` namespace:
+
+```csharp
+public class YourTests : SekibanInMemoryTestBase
+{
+    // Override to provide your domain types
+    protected override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options);
+
+    [Fact]
+    public void SimpleTest()
+    {
+        // Given - Execute a command and get the response
+        var response1 = GivenCommand(new CreateYourEntity("Name", "Value"));
+        Assert.Equal(1, response1.Version);
+
+        // When - Execute another command on the same aggregate
+        var response2 = WhenCommand(new UpdateYourEntity(response1.PartitionKeys.AggregateId, "NewValue"));
+        Assert.Equal(2, response2.Version);
+
+        // Then - Get the aggregate and verify its state
+        var aggregate = ThenGetAggregate<YourEntityProjector>(response2.PartitionKeys);
+        var entity = (YourEntity)aggregate.Payload;
+        Assert.Equal("NewValue", entity.Value);
+        
+        // Then - Execute a query and verify the result
+        var queryResult = ThenQuery(new YourEntityExistsQuery("Name"));
+        Assert.True(queryResult);
+    }
+}
+```
+
+The base class provides methods that follow the Given-When-Then pattern:
+- `GivenCommand` - Sets up the initial state by executing a command
+- `WhenCommand` - Executes the command being tested
+- `ThenGetAggregate` - Retrieves an aggregate to verify its state
+- `ThenQuery` - Executes a query to verify the result
+
+### Method Chaining with ResultBox
+
+For more fluent and readable tests, you can use the ResultBox-based methods that support method chaining:
+
+```csharp
+[Fact]
+public void ChainedTest()
+    => GivenCommandWithResult(new CreateYourEntity("Name", "Value"))
+        .Do(response => Assert.Equal(1, response.Version))
+        .Conveyor(response => WhenCommandWithResult(new UpdateYourEntity(response.PartitionKeys.AggregateId, "NewValue")))
+        .Do(response => Assert.Equal(2, response.Version))
+        .Conveyor(response => ThenGetAggregateWithResult<YourEntityProjector>(response.PartitionKeys))
+        .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<YourEntity>())
+        .Do(payload => Assert.Equal("NewValue", payload.Value))
+        .Conveyor(_ => ThenQueryWithResult(new YourEntityExistsQuery("Name")))
+        .Do(Assert.True)
+        .UnwrapBox();
+```
+
+Key points:
+- `Conveyor` transforms the result of one operation into the input for the next
+- `Do` performs assertions or side effects without changing the result
+- `UnwrapBox` unwraps the final ResultBox, throwing an exception if any step failed
+
+### Orleans Testing
+
+For testing with Orleans integration, use the `SekibanOrleansTestBase` class from the `Sekiban.Pure.Orleans.xUnit` namespace:
+
+```csharp
+public class YourOrleansTests : SekibanOrleansTestBase<YourOrleansTests>
+{
+    public override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options);
+
+    [Fact]
+    public void OrleansTest() =>
+        GivenCommandWithResult(new CreateYourEntity("Name", "Value"))
+            .Do(response => Assert.Equal(1, response.Version))
+            .Conveyor(response => WhenCommandWithResult(new UpdateYourEntity(response.PartitionKeys.AggregateId, "NewValue")))
+            .Do(response => Assert.Equal(2, response.Version))
+            .Conveyor(response => ThenGetAggregateWithResult<YourEntityProjector>(response.PartitionKeys))
+            .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<YourEntity>())
+            .Do(payload => Assert.Equal("NewValue", payload.Value))
+            .Conveyor(_ => ThenGetMultiProjectorWithResult<AggregateListProjector<YourEntityProjector>>())
+            .Do(projector => 
+            {
+                Assert.Equal(1, projector.Aggregates.Values.Count());
+                var entity = (YourEntity)projector.Aggregates.Values.First().Payload;
+                Assert.Equal("NewValue", entity.Value);
+            })
+            .UnwrapBox();
+            
+    [Fact]
+    public void TestSerializable()
+    {
+        // Test that commands are serializable (important for Orleans)
+        CheckSerializability(new CreateYourEntity("Name", "Value"));
+    }
+}
+```
+
+The Orleans test base class provides similar methods to the in-memory test base class but sets up a complete Orleans test cluster for more realistic testing.
+
+### Manual Testing with InMemorySekibanExecutor
+
+For more complex scenarios or custom test setups, you can manually create an `InMemorySekibanExecutor`:
+
+```csharp
+[Fact]
+public async Task ManualExecutorTest()
+{
+    // Create an in-memory executor
+    var executor = new InMemorySekibanExecutor(
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options),
+        new FunctionCommandMetadataProvider(() => "test"),
+        new Repository(),
+        new ServiceCollection().BuildServiceProvider());
+
+    // Execute a command
+    var result = await executor.CommandAsync(new CreateYourEntity("Name", "Value"));
+    Assert.True(result.IsSuccess);
+    var value = result.GetValue();
+    Assert.NotNull(value);
+    Assert.Equal(1, value.Version);
+    var aggregateId = value.PartitionKeys.AggregateId;
+
+    // Load the aggregate
+    var aggregateResult = await executor.LoadAggregateAsync<YourEntityProjector>(
+        PartitionKeys.Existing<YourEntityProjector>(aggregateId));
+    Assert.True(aggregateResult.IsSuccess);
+    var aggregate = aggregateResult.GetValue();
+    var entity = (YourEntity)aggregate.Payload;
+    Assert.Equal("Name", entity.Name);
+    Assert.Equal("Value", entity.Value);
+}
+```
+
+### Testing Best Practices
+
+1. **Test Commands**: Verify that commands produce the expected events and state changes
+2. **Test Projectors**: Verify that projectors correctly apply events to build the aggregate state
+3. **Test Queries**: Verify that queries return the expected results based on the current state
+4. **Test State Transitions**: Verify that state transitions work correctly, especially when using different payload types
+5. **Test Error Cases**: Verify that commands fail appropriately when validation fails
+6. **Test Serialization**: For Orleans tests, verify that commands and events are serializable
 
 ## Creating and Using a Sekiban Project
 
