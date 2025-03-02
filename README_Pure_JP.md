@@ -403,106 +403,157 @@ Sekibanイベントソーシングプロジェクトを扱う際：
    - コマンドが生成するイベントを検証してテスト
    - イベントを適用して結果の状態をチェックしてプロジェクターをテスト
    - テストデータを設定して結果を検証してクエリをテスト
+   - インメモリまたはOrleansベースのテスト用の組み込みテストフレームワークを使用
+   - 流暢なテストアサーションのためにResultBoxを使用したメソッドチェーンを活用
 
 6. **エラー処理**：
    - `ResultBox`を使用してエラーを処理し、意味のあるメッセージを返す
    - イベントを生成する前にコマンドを検証
    - プロジェクターでエッジケースを処理
 
-## Sekibanプロジェクトの作成と使用
+## Sekibanにおけるユニットテスト
 
-### 1. プロジェクトのセットアップ
+Sekibanは、イベントソースアプリケーションのユニットテストをインメモリとOrleansベースの両方のテストフレームワークでサポートしています。
 
-テンプレートから始めます：
-```bash
-dotnet new install Sekiban.Pure.Templates
-dotnet new sekiban-orleans-aspire -n MyProject
-```
+### インメモリテスト
 
-### 2. API設定
-
-テンプレートは必要な設定がすべて含まれたProgram.csを生成します。以下がその仕組みです：
+シンプルなユニットテストには、`Sekiban.Pure.xUnit`名前空間の`SekibanInMemoryTestBase`クラスを使用できます：
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-// AspireとOrleansの統合を追加
-builder.AddServiceDefaults();
-builder.UseOrleans(config =>
+public class YourTests : SekibanInMemoryTestBase
 {
-    config.UseDashboard(options => { });
-    config.AddMemoryStreams("EventStreamProvider")
-          .AddMemoryGrainStorage("EventStreamProvider");
-});
+    // ドメインタイプを提供するためにオーバーライド
+    protected override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options);
 
-// ドメインタイプとシリアル化の登録
-builder.Services.AddSingleton(
-    OrleansSekibanDomainDomainTypes.Generate(
-        OrleansSekibanDomainEventsJsonContext.Default.Options));
+    [Fact]
+    public void SimpleTest()
+    {
+        // Given - コマンドを実行してレスポンスを取得
+        var response1 = GivenCommand(new CreateYourEntity("Name", "Value"));
+        Assert.Equal(1, response1.Version);
 
-// データベースの設定（Cosmos DBまたはPostgreSQL）
-if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
-{
-    builder.AddSekibanCosmosDb();
-} else
-{
-    builder.AddSekibanPostgresDb();
+        // When - 同じアグリゲートに対して別のコマンドを実行
+        var response2 = WhenCommand(new UpdateYourEntity(response1.PartitionKeys.AggregateId, "NewValue"));
+        Assert.Equal(2, response2.Version);
+
+        // Then - アグリゲートを取得して状態を検証
+        var aggregate = ThenGetAggregate<YourEntityProjector>(response2.PartitionKeys);
+        var entity = (YourEntity)aggregate.Payload;
+        Assert.Equal("NewValue", entity.Value);
+        
+        // Then - クエリを実行して結果を検証
+        var queryResult = ThenQuery(new YourEntityExistsQuery("Name"));
+        Assert.True(queryResult);
+    }
 }
 ```
 
-### 3. APIエンドポイント
+ベースクラスはGiven-When-Thenパターンに従うメソッドを提供します：
+- `GivenCommand` - コマンドを実行して初期状態を設定
+- `WhenCommand` - テスト対象のコマンドを実行
+- `ThenGetAggregate` - アグリゲートを取得して状態を検証
+- `ThenQuery` - クエリを実行して結果を検証
 
-コマンドとクエリのエンドポイントをマッピング：
+### ResultBoxを使用したメソッドチェーン
+
+より流暢で読みやすいテストのために、メソッドチェーンをサポートするResultBoxベースのメソッドを使用できます：
 
 ```csharp
-// クエリエンドポイント
-apiRoute.MapGet("/weatherforecast", 
-    async ([FromServices]SekibanOrleansExecutor executor) =>
-    {
-        var list = await executor.QueryAsync(new WeatherForecastQuery(""))
-                                .UnwrapBox();
-        return list.Items;
-    })
-    .WithOpenApi();
-
-// コマンドエンドポイント
-apiRoute.MapPost("/inputweatherforecast",
-    async (
-        [FromBody] InputWeatherForecastCommand command,
-        [FromServices] SekibanOrleansExecutor executor) => 
-            await executor.CommandAsync(command).UnwrapBox())
-    .WithOpenApi();
+[Fact]
+public void ChainedTest()
+    => GivenCommandWithResult(new CreateYourEntity("Name", "Value"))
+        .Do(response => Assert.Equal(1, response.Version))
+        .Conveyor(response => WhenCommandWithResult(new UpdateYourEntity(response.PartitionKeys.AggregateId, "NewValue")))
+        .Do(response => Assert.Equal(2, response.Version))
+        .Conveyor(response => ThenGetAggregateWithResult<YourEntityProjector>(response.PartitionKeys))
+        .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<YourEntity>())
+        .Do(payload => Assert.Equal("NewValue", payload.Value))
+        .Conveyor(_ => ThenQueryWithResult(new YourEntityExistsQuery("Name")))
+        .Do(Assert.True)
+        .UnwrapBox();
 ```
 
 ポイント：
-- コマンドとクエリの処理に`SekibanOrleansExecutor`を使用
-- コマンドはPOSTエンドポイントにマッピング
-- クエリは通常GETエンドポイントにマッピング
-- 結果は`UnwrapBox()`を使用して`ResultBox`からアンラップ
-- OpenAPIサポートがデフォルトで含まれる
+- `Conveyor`は一つの操作の結果を次の入力に変換
+- `Do`はアサーションやサイドエフェクトを実行し、結果を変更しない
+- `UnwrapBox`は最終的なResultBoxをアンラップし、いずれかのステップが失敗した場合は例外をスロー
 
-### 4. 実装手順
+### Orleansテスト
 
-1. プロジェクトテンプレートから始める
-2. ドメインモデル（アグリゲート）を定義
-3. ユーザーの意図を表すコマンドを作成
-4. 状態変更を表すイベントを定義
-5. イベントをアグリゲートに適用するプロジェクターを実装
-6. データを取得およびフィルタリングするクエリを作成
-7. JSONシリアル化コンテキストを設定
-8. `SekibanOrleansExecutor`を使用してAPIエンドポイントをマッピング
+Orleans統合のテストには、`Sekiban.Pure.Orleans.xUnit`名前空間の`SekibanOrleansTestBase`クラスを使用します：
 
-### 5. 設定オプション
-
-テンプレートは2つのデータベースオプションをサポートします：
-```json
+```csharp
+public class YourOrleansTests : SekibanOrleansTestBase<YourOrleansTests>
 {
-  "Sekiban": {
-    "Database": "Cosmos"  // または "Postgres"
-  }
+    public override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options);
+
+    [Fact]
+    public void OrleansTest() =>
+        GivenCommandWithResult(new CreateYourEntity("Name", "Value"))
+            .Do(response => Assert.Equal(1, response.Version))
+            .Conveyor(response => WhenCommandWithResult(new UpdateYourEntity(response.PartitionKeys.AggregateId, "NewValue")))
+            .Do(response => Assert.Equal(2, response.Version))
+            .Conveyor(response => ThenGetAggregateWithResult<YourEntityProjector>(response.PartitionKeys))
+            .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<YourEntity>())
+            .Do(payload => Assert.Equal("NewValue", payload.Value))
+            .Conveyor(_ => ThenGetMultiProjectorWithResult<AggregateListProjector<YourEntityProjector>>())
+            .Do(projector => 
+            {
+                Assert.Equal(1, projector.Aggregates.Values.Count());
+                var entity = (YourEntity)projector.Aggregates.Values.First().Payload;
+                Assert.Equal("NewValue", entity.Value);
+            })
+            .UnwrapBox();
+            
+    [Fact]
+    public void TestSerializable()
+    {
+        // コマンドがシリアル化可能であることをテスト（Orleansでは重要）
+        CheckSerializability(new CreateYourEntity("Name", "Value"));
+    }
 }
 ```
 
-## 結論
+Orleansテストベースクラスはインメモリテストベースクラスと同様のメソッドを提供しますが、より現実的なテストのために完全なOrleansテストクラスターをセットアップします。
 
-Sekibanは.NETアプリケーションでイベントソーシングを実装するための強力なフレームワークを提供します。このガイドで概説された主要コンポーネントとベストプラクティスを理解することで、LLMプログラミングエージェントはSekibanイベントソーシングプロジェクトを効果的に作成および維持できます。
+### InMemorySekibanExecutorを使用した手動テスト
+
+より複雑なシナリオやカスタムテストセットアップには、`InMemorySekibanExecutor`を手動で作成できます：
+
+```csharp
+[Fact]
+public async Task ManualExecutorTest()
+{
+    // インメモリエグゼキューターを作成
+    var executor = new InMemorySekibanExecutor(
+        YourDomainTypes.Generate(YourEventsJsonContext.Default.Options),
+        new FunctionCommandMetadataProvider(() => "test"),
+        new Repository(),
+        new ServiceCollection().BuildServiceProvider());
+
+    // コマンドを実行
+    var result = await executor.CommandAsync(new CreateYourEntity("Name", "Value"));
+    Assert.True(result.IsSuccess);
+    var value = result.GetValue();
+    Assert.NotNull(value);
+    Assert.Equal(1, value.Version);
+    var aggregateId = value.PartitionKeys.AggregateId;
+
+    // アグリゲートをロード
+    var aggregateResult = await executor.LoadAggregateAsync<YourEntityProjector>(
+        PartitionKeys.Existing<YourEntityProjector>(aggregateId));
+    Assert.True(aggregateResult.IsSuccess);
+    var aggregate = aggregateResult.GetValue();
+    var entity = (YourEntity)aggregate.Payload;
+    Assert.Equal("Name", entity.Name);
+    Assert.Equal("Value", entity.Value);
+}
+```
+
+### テストのベストプラクティス
+
+1. **コマンドのテスト**: コマンドが期待されるイベントと状態変更を生成することを検証
+2. **プロジェクターのテスト**: プロジェクターがイベントを正しく適用してアグリゲート状態を構築することを検証
+3. **クエリのテスト**: クエリが現在の状態に基づいて期待される結果を返すことを検証
