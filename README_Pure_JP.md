@@ -1,4 +1,4 @@
-# Sekiban イベントソーシング ガイド（LLMプログラミングエージェント向け）
+# Sekiban イベントソーシング ガイド 開発者向け
 
 このガイドでは、`templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.Domain`のテンプレート構造に基づいて、Sekibanを使用したイベントソーシングプロジェクトの作成と操作方法について説明します。
 

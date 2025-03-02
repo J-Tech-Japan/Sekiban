@@ -22,10 +22,10 @@
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.0.1"/>
         <PackageReference Include="OrleansDashboard" Version="8.2.0"/>
         <PackageReference Include="Scalar.AspNetCore" Version="2.0.1"/>
-        <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.0-preview7"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview7"/>
-        <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.0-preview7"/>
-        <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.0-preview7" />
+        <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.0-preview8" />
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview8" />
+        <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.0-preview8" />
+        <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.0-preview8" />
     </ItemGroup>
 
 </Project>
