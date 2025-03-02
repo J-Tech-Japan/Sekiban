@@ -7,12 +7,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Orleans.NUnit</PackageId>
-        <Version>1.0.0-preview7</Version>
+        <Version>1.0.0-preview8</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans NUnit Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview7</PackageVersion>
+        <PackageVersion>1.0.0-preview8</PackageVersion>
         <Description>Pure Event Sourcing Framework Orleans NUnit Integration</Description>
         <AssemblyName>Sekiban.Pure.Orleans.NUnit</AssemblyName>
         <RootNamespace>Sekiban.Pure.Orleans.NUnit</RootNamespace>
@@ -39,7 +39,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview7"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview8"/>
     </ItemGroup>
 
 </Project>
