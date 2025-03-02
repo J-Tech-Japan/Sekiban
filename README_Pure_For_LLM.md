@@ -712,6 +712,150 @@ public static class YourProjectDomainDomainTypes
 5. **Test Error Cases**: Verify that commands fail appropriately when validation fails
 6. **Test Serialization**: For Orleans tests, verify that commands and events are serializable
 
+## Workflows and Domain Services
+
+Sekiban supports implementing domain workflows and services that encapsulate business logic that spans multiple aggregates or requires specialized processing.
+
+### Domain Workflows
+
+Domain workflows are stateless services that implement business processes that may involve multiple aggregates or complex validation logic. They are particularly useful for:
+
+1. **Cross-Aggregate Operations**: When a business process spans multiple aggregates
+2. **Complex Validation**: When validation requires checking against multiple aggregates or external systems
+3. **Reusable Business Logic**: When the same logic is used in multiple places
+
+```csharp
+// Example of a domain workflow for duplicate checking
+namespace YourProject.Domain.Workflows;
+
+public static class DuplicateCheckWorkflows
+{
+    // Result type for duplicate check operations
+    public class DuplicateCheckResult
+    {
+        public bool IsDuplicate { get; }
+        public string? ErrorMessage { get; }
+        public object? CommandResult { get; }
+
+        private DuplicateCheckResult(bool isDuplicate, string? errorMessage, object? commandResult)
+        {
+            IsDuplicate = isDuplicate;
+            ErrorMessage = errorMessage;
+            CommandResult = commandResult;
+        }
+
+        public static DuplicateCheckResult Duplicate(string errorMessage) => 
+            new(true, errorMessage, null);
+
+        public static DuplicateCheckResult Success(object commandResult) => 
+            new(false, null, commandResult);
+    }
+
+    // Workflow method that checks for duplicate IDs before registering
+    public static async Task<DuplicateCheckResult> CheckUserIdDuplicate(
+        RegisterUserCommand command,
+        ISekibanExecutor executor)
+    {
+        // Check if userId already exists
+        var userIdExists = await executor.QueryAsync(new UserIdExistsQuery(command.UserId)).UnwrapBox();
+        if (userIdExists)
+        {
+            return DuplicateCheckResult.Duplicate($"User with ID '{command.UserId}' already exists");
+        }
+        
+        // If no duplicate, proceed with the command
+        var result = await executor.CommandAsync(command).UnwrapBox();
+        return DuplicateCheckResult.Success(result);
+    }
+}
+```
+
+**Key Points**:
+- Workflows are typically implemented as static classes with static methods
+- They should be placed in a `Workflows` folder or namespace
+- They should use `ISekibanExecutor` interface for better testability
+- They should return domain-specific result types that encapsulate success/failure information
+- They can be called from API endpoints or other services
+
+### Using Workflows in API Endpoints
+
+```csharp
+// In Program.cs
+apiRoute.MapPost("/users/register",
+    async ([FromBody] RegisterUserCommand command, [FromServices] SekibanOrleansExecutor executor) => 
+    {
+        // Use the workflow to check for duplicates
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, executor);
+        if (result.IsDuplicate)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Duplicate UserId",
+                detail: result.ErrorMessage);
+        }
+        return result.CommandResult;
+    });
+```
+
+### Testing Workflows
+
+Workflows can be tested using the same in-memory testing approach as other Sekiban components:
+
+```csharp
+public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
+{
+    protected override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainDomainTypes.Generate(YourDomainEventsJsonContext.Default.Options);
+
+    [Fact]
+    public async Task CheckUserIdDuplicate_WhenUserIdExists_ReturnsDuplicate()
+    {
+        // Arrange - Create a user with the ID we want to test
+        var existingUserId = "U12345";
+        var command = new RegisterUserCommand(
+            "John Doe",
+            existingUserId,
+            "john@example.com");
+
+        // Register a user with the same ID to ensure it exists
+        GivenCommand(command);
+
+        // Act - Try to register another user with the same ID
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
+
+        // Assert
+        Assert.True(result.IsDuplicate);
+        Assert.Contains(existingUserId, result.ErrorMessage);
+        Assert.Null(result.CommandResult);
+    }
+
+    [Fact]
+    public async Task CheckUserIdDuplicate_WhenUserIdDoesNotExist_ReturnsSuccess()
+    {
+        // Arrange
+        var newUserId = "U67890";
+        var command = new RegisterUserCommand(
+            "Jane Doe",
+            newUserId,
+            "jane@example.com");
+
+        // Act
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
+
+        // Assert
+        Assert.False(result.IsDuplicate);
+        Assert.Null(result.ErrorMessage);
+        Assert.NotNull(result.CommandResult);
+    }
+}
+```
+
+**Key Points**:
+- Use `SekibanInMemoryTestBase` for testing workflows
+- The base class provides an `Executor` property that implements `ISekibanExecutor`
+- Use `GivenCommand` to set up the test state
+- Test both success and failure scenarios
+
 ## Common Issues and Solutions
 
 1. **Namespace Errors**: Make sure to use `Sekiban.Pure.*` namespaces, not `Sekiban.Core.*`.
@@ -739,3 +883,5 @@ dotnet run --project MyProject.AppHost --launch-profile https
 This ensures that your application uses HTTPS for secure communication, which is especially important for production environments.
 
 4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
+
+5. **ISekibanExecutor vs. SekibanOrleansExecutor**: When implementing domain services or workflows, use `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
