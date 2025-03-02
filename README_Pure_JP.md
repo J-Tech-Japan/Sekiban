@@ -557,3 +557,400 @@ public async Task ManualExecutorTest()
 1. **コマンドのテスト**: コマンドが期待されるイベントと状態変更を生成することを検証
 2. **プロジェクターのテスト**: プロジェクターがイベントを正しく適用してアグリゲート状態を構築することを検証
 3. **クエリのテスト**: クエリが現在の状態に基づいて期待される結果を返すことを検証
+4. **状態遷移のテスト**: 特に異なるペイロードタイプを使用する場合、状態遷移が正しく機能することを検証
+5. **エラーケースのテスト**: 検証が失敗した場合にコマンドが適切に失敗することを検証
+6. **シリアル化のテスト**: Orleansテストでは、コマンドとイベントがシリアル化可能であることを検証
+
+## Sekibanプロジェクトの作成と使用
+
+### 1. プロジェクトセットアップ
+
+テンプレートから始めます：
+```bash
+dotnet new install Sekiban.Pure.Templates
+dotnet new sekiban-orleans-aspire -n MyProject
+```
+
+### 2. API設定
+
+テンプレートは必要なすべての設定を含むProgram.csを生成します。以下はその仕組みです：
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// AspireとOrleans統合を追加
+builder.AddServiceDefaults();
+builder.UseOrleans(config =>
+{
+    config.UseDashboard(options => { });
+    config.AddMemoryStreams("EventStreamProvider")
+          .AddMemoryGrainStorage("EventStreamProvider");
+});
+
+// ドメインタイプとシリアル化を登録
+builder.Services.AddSingleton(
+    OrleansSekibanDomainDomainTypes.Generate(
+        OrleansSekibanDomainEventsJsonContext.Default.Options));
+
+// データベース（Cosmos DBまたはPostgreSQL）を設定
+if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
+{
+    builder.AddSekibanCosmosDb();
+} else
+{
+    builder.AddSekibanPostgresDb();
+}
+```
+
+### 3. APIエンドポイント
+
+コマンドとクエリのエンドポイントをマッピングします：
+
+```csharp
+// クエリエンドポイント
+apiRoute.MapGet("/weatherforecast", 
+    async ([FromServices]SekibanOrleansExecutor executor) =>
+    {
+        var list = await executor.QueryAsync(new WeatherForecastQuery(""))
+                                .UnwrapBox();
+        return list.Items;
+    })
+    .WithOpenApi();
+
+// コマンドエンドポイント
+apiRoute.MapPost("/inputweatherforecast",
+    async (
+        [FromBody] InputWeatherForecastCommand command,
+        [FromServices] SekibanOrleansExecutor executor) => 
+            await executor.CommandAsync(command).UnwrapBox())
+    .WithOpenApi();
+```
+
+ポイント：
+- コマンドとクエリの処理には`SekibanOrleansExecutor`を使用
+- コマンドはPOSTエンドポイントにマッピング
+- クエリは通常GETエンドポイントにマッピング
+- 結果は`UnwrapBox()`を使用して`ResultBox`からアンラップ
+- OpenAPIサポートはデフォルトで含まれる
+
+### 4. 実装ステップ
+
+1. プロジェクトテンプレートから始める
+2. ドメインモデル（アグリゲート）を定義
+3. ユーザーの意図を表すコマンドを作成
+4. 状態変更を表すイベントを定義
+5. イベントをアグリゲートに適用するプロジェクターを実装
+6. データを取得およびフィルタリングするクエリを作成
+7. JSONシリアル化コンテキストを設定
+8. `SekibanOrleansExecutor`を使用してAPIエンドポイントをマッピング
+
+### 5. 設定オプション
+
+テンプレートは2つのデータベースオプションをサポートしています：
+```json
+{
+  "Sekiban": {
+    "Database": "Cosmos"  // または "Postgres"
+  }
+}
+```
+
+## Webフロントエンド実装
+
+ドメイン用のWebフロントエンドを実装するには：
+
+1. WebプロジェクトでAPIクライアントを作成します：
+```csharp
+public class YourApiClient(HttpClient httpClient)
+{
+    public async Task<YourQuery.ResultRecord[]> GetItemsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        List<YourQuery.ResultRecord>? items = null;
+
+        await foreach (var item in httpClient.GetFromJsonAsAsyncEnumerable<YourQuery.ResultRecord>("/api/items", cancellationToken))
+        {
+            if (item is not null)
+            {
+                items ??= [];
+                items.Add(item);
+            }
+        }
+
+        return items?.ToArray() ?? [];
+    }
+
+    public async Task CreateItemAsync(
+        string param1,
+        string param2,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new CreateYourItemCommand(param1, param2);
+        await httpClient.PostAsJsonAsync("/api/createitem", command, cancellationToken);
+    }
+}
+```
+
+2. Program.csでAPIクライアントを登録します：
+```csharp
+builder.Services.AddHttpClient<YourApiClient>(client =>
+{
+    client.BaseAddress = new("https+http://apiservice");
+});
+```
+
+3. ドメインとやり取りするためのRazorページを作成します
+
+## SekibanDomainTypesとソース生成
+
+### SekibanDomainTypesの理解
+
+Sekibanはビルド時にドメインタイプ登録を作成するためにソース生成を使用します。これはドメインモデル登録を簡素化し、型安全性を確保するフレームワークの重要な部分です。
+
+```csharp
+// このクラスはSekiban.Pure.SourceGeneratorによって自動生成されます
+// 手動で作成する必要はありません
+public static class YourProjectDomainDomainTypes
+{
+    // DIコンテナにドメインタイプを登録するために使用
+    public static SekibanDomainTypes Generate(JsonSerializerOptions options) => 
+        // 実装はドメインモデルに基づいて生成される
+        ...
+
+    // シリアル化チェックに使用
+    public static SekibanDomainTypes Generate() => 
+        Generate(new JsonSerializerOptions());
+}
+```
+
+### ソース生成に関する重要なポイント
+
+1. **命名規則**：
+   - 生成されるクラスは`[ProjectName]DomainDomainTypes`パターンに従います
+   - 例えば、「SchoolManagement」という名前のプロジェクトは`SchoolManagementDomainDomainTypes`を持ちます
+
+2. **名前空間**：
+   - 生成されるクラスは`[ProjectName].Generated`名前空間に配置されます
+   - 例えば、`SchoolManagement.Domain.Generated`
+
+3. **アプリケーションでの使用法**：
+   ```csharp
+   // Program.csで
+   builder.Services.AddSingleton(
+       YourProjectDomainDomainTypes.Generate(
+           YourProjectDomainEventsJsonContext.Default.Options));
+   ```
+
+4. **テストでの使用法**：
+   ```csharp
+   // テストクラスで
+   protected override SekibanDomainTypes GetDomainTypes() => 
+       YourProjectDomainDomainTypes.Generate(
+           YourProjectDomainEventsJsonContext.Default.Options);
+   ```
+
+5. **テストに必要なインポート**：
+   ```csharp
+   using YourProject.Domain;
+   using YourProject.Domain.Generated; // 生成された型を含む
+   using Sekiban.Pure;
+   using Sekiban.Pure.xUnit;
+   ```
+
+### ソース生成のトラブルシューティング
+
+1. **生成された型が見つからない**：
+   - テストを実行する前にプロジェクトが正常にビルドされていることを確認
+   - すべてのドメイン型に必要な属性があることを確認
+   - ソース生成に関連するビルド警告を確認
+
+2. **名前空間エラー**：
+   - 正しい生成された名前空間をインポートしていることを確認
+   - 名前空間はソースファイルでは表示されず、コンパイルされたアセンブリでのみ表示される
+
+3. **型が見つからないエラー**：
+   - 正しい命名規則を使用していることを確認
+   - クラス名の入力ミスを確認
+
+4. **テストのベストプラクティス**：
+   - 常にソース生成された型を直接参照する
+   - テスト用に独自のドメイン型クラスを作成しない
+   - メインアプリケーションと同じJsonSerializerOptionsを使用する
+
+## ワークフローとドメインサービス
+
+Sekibanは、複数のアグリゲートにまたがるビジネスロジックや特殊な処理を必要とするビジネスロジックをカプセル化するドメインワークフローとサービスの実装をサポートしています。
+
+### ドメインワークフロー
+
+ドメインワークフローは、複数のアグリゲートを含むビジネスプロセスや複雑な検証ロジックを実装するステートレスサービスです。特に以下の場合に有用です：
+
+1. **クロスアグリゲート操作**: ビジネスプロセスが複数のアグリゲートにまたがる場合
+2. **複雑な検証**: 検証が複数のアグリゲートや外部システムに対するチェックを必要とする場合
+3. **再利用可能なビジネスロジック**: 同じロジックが複数の場所で使用される場合
+
+```csharp
+// 重複チェック用のドメインワークフローの例
+namespace YourProject.Domain.Workflows;
+
+public static class DuplicateCheckWorkflows
+{
+    // 重複チェック操作の結果型
+    public class DuplicateCheckResult
+    {
+        public bool IsDuplicate { get; }
+        public string? ErrorMessage { get; }
+        public object? CommandResult { get; }
+
+        private DuplicateCheckResult(bool isDuplicate, string? errorMessage, object? commandResult)
+        {
+            IsDuplicate = isDuplicate;
+            ErrorMessage = errorMessage;
+            CommandResult = commandResult;
+        }
+
+        public static DuplicateCheckResult Duplicate(string errorMessage) => 
+            new(true, errorMessage, null);
+
+        public static DuplicateCheckResult Success(object commandResult) => 
+            new(false, null, commandResult);
+    }
+
+    // 登録前にIDの重複をチェックするワークフローメソッド
+    public static async Task<DuplicateCheckResult> CheckUserIdDuplicate(
+        RegisterUserCommand command,
+        ISekibanExecutor executor)
+    {
+        // userIdが既に存在するかチェック
+        var userIdExists = await executor.QueryAsync(new UserIdExistsQuery(command.UserId)).UnwrapBox();
+        if (userIdExists)
+        {
+            return DuplicateCheckResult.Duplicate($"ID '{command.UserId}' を持つユーザーは既に存在します");
+        }
+        
+        // 重複がなければコマンドを実行
+        var result = await executor.CommandAsync(command).UnwrapBox();
+        return DuplicateCheckResult.Success(result);
+    }
+}
+```
+
+**ポイント**:
+- ワークフローは通常、静的クラスと静的メソッドとして実装されます
+- `Workflows`フォルダーまたは名前空間に配置する必要があります
+- より良いテスト可能性のために`ISekibanExecutor`インターフェースを使用する必要があります
+- 成功/失敗情報をカプセル化するドメイン固有の結果型を返す必要があります
+- APIエンドポイントや他のサービスから呼び出すことができます
+
+### APIエンドポイントでのワークフローの使用
+
+```csharp
+// Program.csで
+apiRoute.MapPost("/users/register",
+    async ([FromBody] RegisterUserCommand command, [FromServices] SekibanOrleansExecutor executor) => 
+    {
+        // 重複をチェックするためにワークフローを使用
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, executor);
+        if (result.IsDuplicate)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "ユーザーIDの重複",
+                detail: result.ErrorMessage);
+        }
+        return result.CommandResult;
+    });
+```
+
+### ワークフローのテスト
+
+ワークフローは、他のSekibanコンポーネントと同じインメモリテストアプローチを使用してテストできます：
+
+```csharp
+public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
+{
+    protected override SekibanDomainTypes GetDomainTypes() => 
+        YourDomainDomainTypes.Generate(YourDomainEventsJsonContext.Default.Options);
+
+    [Fact]
+    public async Task CheckUserIdDuplicate_WhenUserIdExists_ReturnsDuplicate()
+    {
+        // Arrange - テストしたいIDを持つユーザーを作成
+        var existingUserId = "U12345";
+        var command = new RegisterUserCommand(
+            "John Doe",
+            existingUserId,
+            "john@example.com");
+
+        // 同じIDを持つユーザーが存在することを確認するために登録
+        GivenCommand(command);
+
+        // Act - 同じIDで別のユーザーを登録しようとする
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
+
+        // Assert
+        Assert.True(result.IsDuplicate);
+        Assert.Contains(existingUserId, result.ErrorMessage);
+        Assert.Null(result.CommandResult);
+    }
+
+    [Fact]
+    public async Task CheckUserIdDuplicate_WhenUserIdDoesNotExist_ReturnsSuccess()
+    {
+        // Arrange
+        var newUserId = "U67890";
+        var command = new RegisterUserCommand(
+            "Jane Doe",
+            newUserId,
+            "jane@example.com");
+
+        // Act
+        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
+
+        // Assert
+        Assert.False(result.IsDuplicate);
+        Assert.Null(result.ErrorMessage);
+        Assert.NotNull(result.CommandResult);
+    }
+}
+```
+
+**ポイント**:
+- ワークフローのテストには`SekibanInMemoryTestBase`を使用
+- ベースクラスは`ISekibanExecutor`を実装する`Executor`プロパティを提供
+- テスト状態を設定するには`GivenCommand`を使用
+- 成功と失敗の両方のシナリオをテスト
+
+## 一般的な問題と解決策
+
+1. **名前空間エラー**: `Sekiban.Core.*`ではなく`Sekiban.Pure.*`名前空間を使用していることを確認してください。
+
+2. **コマンドコンテキスト**: コマンドコンテキストはアグリゲートペイロードを直接公開しません。アグリゲート状態をチェックする必要がある場合は、コマンドハンドラーでパターンマッチングを使用してください：
+   ```csharp
+   if (context.AggregatePayload is YourAggregate aggregate)
+   {
+       // アグリゲートプロパティを使用
+   }
+   ```
+
+3. **アプリケーションの実行**: Aspireホストでアプリケーションを実行するには、次のコマンドを使用します：
+
+```bash
+dotnet run --project MyProject.AppHost
+```
+
+HTTPSプロファイルでAppHostを起動するには、次を使用します：
+
+```bash
+dotnet run --project MyProject.AppHost --launch-profile https
+```
+
+これにより、アプリケーションがHTTPSを使用して安全に通信することが保証されます。これは特に本番環境で重要です。
+
+4. **Webフロントエンドへのアクセス**: WebフロントエンドはAspireダッシュボードに表示されるURLで利用可能で、通常は`https://localhost:XXXXX`のようなURLです。
+
+5. **ISekibanExecutor vs. SekibanOrleansExecutor**: ドメインサービスやワークフローを実装する場合、より良いテスト可能性のために具体的な`SekibanOrleansExecutor`クラスではなく`ISekibanExecutor`インターフェースを使用してください。`ISekibanExecutor`インターフェースは`Sekiban.Pure.Executors`名前空間にあります。
+
+## 結論
+
+Sekibanは.NETアプリケーションでイベントソーシングを実装するための強力なフレームワークを提供します。このガイドで概説されている主要コンポーネントを理解し、ベストプラクティスに従うことで、LLMプログラミングエージェントはSekibanイベントソーシングプロジェクトを効果的に作成および維持できます。
