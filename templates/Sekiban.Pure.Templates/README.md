@@ -29,7 +29,7 @@ var grainStorage = storage.AddBlobs("orleans-sekiban-grain-state");
 var postgresPassword = builder.AddParameter("postgres-password", true);
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres", password: postgresPassword)
-    .WithDataVolume("orleansSekibanPostgresData")
+    // .WithDataVolume() // Uncomment to use a data volume
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
 

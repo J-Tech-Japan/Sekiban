@@ -1,3 +1,4 @@
+using OrleansSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
@@ -13,7 +14,7 @@ public record WeatherForecastQuery(string LocationContains)
         return projection.Payload.Aggregates.Where(m => m.Value.GetPayload() is WeatherForecast)
             .Select(m => ((WeatherForecast)m.Value.GetPayload(), m.Value.PartitionKeys))
             .Select((touple) => new WeatherForecastRecord(touple.PartitionKeys.AggregateId, touple.Item1.Location,
-                touple.Item1.Date, touple.Item1.TemperatureC, touple.Item1.Summary, touple.Item1.GetTemperatureF()))
+                touple.Item1.Date, touple.Item1.TemperatureC, touple.Item1.Summary, touple.Item1.TemperatureC.GetFahrenheit()))
             .ToResultBox();
     }
 
@@ -27,9 +28,9 @@ public record WeatherForecastQuery(string LocationContains)
         Guid WeatherForecastId,
         string Location,
         DateOnly Date,
-        int TemperatureC,
+        TemperatureCelsius TemperatureC,
         string Summary,
-        int TemperatureF
+        double TemperatureF
     );
 
 }
