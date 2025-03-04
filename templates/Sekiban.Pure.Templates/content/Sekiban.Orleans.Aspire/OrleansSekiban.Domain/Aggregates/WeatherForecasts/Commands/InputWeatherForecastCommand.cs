@@ -1,4 +1,5 @@
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using OrleansSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
@@ -11,7 +12,7 @@ namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 public record InputWeatherForecastCommand(
     string Location,
     DateOnly Date,
-    int TemperatureC,
+    TemperatureCelsius TemperatureC,
     string Summary
 ) : ICommandWithHandler<InputWeatherForecastCommand, WeatherForecastProjector>
 {
@@ -19,5 +20,5 @@ public record InputWeatherForecastCommand(
         PartitionKeys.Generate<WeatherForecastProjector>();
 
     public ResultBox<EventOrNone> Handle(InputWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
-        => EventOrNone.Event(new WeatherForecastInputted(command.Location, command.Date,command.TemperatureC, command.Summary));    
+        => EventOrNone.Event(new WeatherForecastInputted(command.Location, command.Date, command.TemperatureC, command.Summary));    
 }

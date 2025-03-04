@@ -1,3 +1,4 @@
+using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
 
 namespace OrleansSekiban.Domain;
@@ -6,12 +7,6 @@ namespace OrleansSekiban.Domain;
 public record WeatherForecast(
     string Location,
     DateOnly Date,
-    int TemperatureC,
+    TemperatureCelsius TemperatureC,
     string Summary
-) : IAggregatePayload
-{
-    public int GetTemperatureF()
-    {
-        return 32 + (int)(TemperatureC / 0.5556);
-    }
-}
+) : IAggregatePayload;

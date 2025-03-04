@@ -5,6 +5,7 @@
 @using OrleansSekiban.Domain
 @using System.ComponentModel.DataAnnotations
 @using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands
+@using OrleansSekiban.Domain.ValueObjects
 @using Sekiban.Pure.Aggregates
 
 @inject WeatherApiClient WeatherApi
@@ -248,7 +249,7 @@ else
             var command = new InputWeatherForecastCommand(
                 forecastModel.Location!,
                 DateOnly.FromDateTime(forecastModel.Date!.Value),
-                forecastModel.TemperatureC,
+                new TemperatureCelsius(forecastModel.TemperatureC),
                 forecastModel.Summary!);
 
             await WeatherApi.InputWeatherAsync(command);

@@ -1,4 +1,5 @@
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;

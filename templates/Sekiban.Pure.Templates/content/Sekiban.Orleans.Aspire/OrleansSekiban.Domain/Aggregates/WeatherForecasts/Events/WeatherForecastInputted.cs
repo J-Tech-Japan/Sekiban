@@ -1,3 +1,4 @@
+using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Events;
 
 namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
@@ -6,6 +7,6 @@ namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
 public record WeatherForecastInputted(
     string Location,
     DateOnly Date,
-    int TemperatureC,
+    TemperatureCelsius TemperatureC,
     string Summary
 ) : IEventPayload;
