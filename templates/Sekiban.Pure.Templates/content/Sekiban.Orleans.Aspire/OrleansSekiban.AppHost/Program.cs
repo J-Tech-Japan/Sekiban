@@ -12,7 +12,7 @@ var queue = storage.AddQueues("orleans-sekiban-queue");
 
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres")
-    // .WithDataVolume()
+    // .WithDataVolume() // Uncomment to use a data volume
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
 
