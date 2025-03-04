@@ -14,4 +14,8 @@
       <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.0-preview6" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="ValueObjects\" />
+    </ItemGroup>
+
 </Project>

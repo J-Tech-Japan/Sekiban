@@ -1,4 +1,5 @@
 using OrleansSekiban.Domain;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 
 namespace OrleansSekiban.Web;
 

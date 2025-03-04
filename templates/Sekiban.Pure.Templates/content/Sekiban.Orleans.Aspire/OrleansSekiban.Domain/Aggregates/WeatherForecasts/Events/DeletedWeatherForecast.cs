@@ -1,6 +1,6 @@
 using Sekiban.Pure.Aggregates;
 
-namespace OrleansSekiban.Domain;
+namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
 
 [GenerateSerializer]
 public record DeletedWeatherForecast(
