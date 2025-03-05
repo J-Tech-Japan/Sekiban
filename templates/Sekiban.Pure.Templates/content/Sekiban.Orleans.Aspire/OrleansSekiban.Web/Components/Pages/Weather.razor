@@ -257,7 +257,7 @@ else
             
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();
-            await JsRuntime.InvokeVoidAsync("$", "#addForecastModal", "modal", "hide");
+            await JsRuntime.InvokeVoidAsync("DisplayAddModal", "hide");
         }
         catch (Exception ex)
         {
