@@ -13,8 +13,10 @@ public record WeatherForecastQuery(string LocationContains)
     {
         return projection.Payload.Aggregates.Where(m => m.Value.GetPayload() is WeatherForecast)
             .Select(m => ((WeatherForecast)m.Value.GetPayload(), m.Value.PartitionKeys))
-            .Select((touple) => new WeatherForecastRecord(touple.PartitionKeys.AggregateId, touple.Item1.Location,
-                touple.Item1.Date, touple.Item1.TemperatureC, touple.Item1.Summary, touple.Item1.TemperatureC.GetFahrenheit()))
+            .Where(tuple => string.IsNullOrEmpty(query.LocationContains) || 
+                           tuple.Item1.Location.Contains(query.LocationContains, StringComparison.OrdinalIgnoreCase))
+            .Select((tuple) => new WeatherForecastRecord(tuple.PartitionKeys.AggregateId, tuple.Item1.Location,
+                tuple.Item1.Date, tuple.Item1.TemperatureC, tuple.Item1.Summary, tuple.Item1.TemperatureC.GetFahrenheit()))
             .ToResultBox();
     }
 

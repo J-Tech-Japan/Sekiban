@@ -26,8 +26,8 @@ var apiService = builder.AddProject<OrleansSekiban_ApiService>("apiservice")
     // .WithEndpoint("https", annotation => annotation.IsProxied = false)
     .WithReference(postgres)
     .WithReference(orleans)
-    .WithReplicas(2);
-
+    // .WithReplicas(2); // Uncomment to run with 2 replicas
+    ;
 builder.AddProject<Projects.OrleansSekiban_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
