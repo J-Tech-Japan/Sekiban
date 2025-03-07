@@ -6,6 +6,7 @@ using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
 using Sekiban.Pure.Orleans.xUnit;
 using Sekiban.Pure.Postgres;
 using Sekiban.Pure.Projectors;
@@ -28,6 +29,32 @@ public class ClientCommandPerformanceTestsPostgres : SekibanOrleansTestBase<Clie
 
         services.AddSekibanPostgresDb(configuration);
     }
+    
+    /// <summary>
+    /// Removes all events from the event store to ensure a clean state for performance tests
+    /// </summary>
+    private async Task RemoveAllEventsAsync()
+    {
+        // Set up a service provider to get the IEventRemover
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json", false, false)
+            .AddEnvironmentVariables()
+            .AddUserSecrets(Assembly.GetExecutingAssembly())
+            .Build();
+        
+        // Register domain types first
+        var domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
+        services.AddSingleton(domainTypes);
+        
+        // Add Postgres DB services
+        services.AddSekibanPostgresDb(configuration);
+        var serviceProvider = services.BuildServiceProvider();
+        
+        // Get the event remover and remove all events
+        var eventRemover = serviceProvider.GetRequiredService<IEventRemover>();
+        await eventRemover.RemoveAllEvents();
+    }
     [Fact]
     public void TestClientCommandStartingUpTime()
     {
@@ -39,8 +66,10 @@ public class ClientCommandPerformanceTestsPostgres : SekibanOrleansTestBase<Clie
     // [InlineData(1, 1, 10)]
     // [InlineData(1, 1, 20)]
     [InlineData(10, 10, 10)]
-    public void TestClientCommandPerformance(int branchCount, int clientsPerBranch, int nameChangesPerClient)
+    public async Task TestClientCommandPerformance(int branchCount, int clientsPerBranch, int nameChangesPerClient)
     {
+        // Clear all events before starting the test
+        await RemoveAllEventsAsync();
         var stopwatch = new Stopwatch();
         stopwatch.Start();
 

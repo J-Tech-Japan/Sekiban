@@ -219,6 +219,9 @@
        - ✅ Update PostgresDbEventWriter to implement IEventRemover
        - ✅ Update DI registration in SekibanPostgresExtensions
        - ✅ Create direct PostgreSQL tests without Orleans
+   - ✅ Integrate event removal in performance tests
+     - ✅ Update ClientCommandPerformanceTestsCosmos to clear events before tests
+     - ✅ Implement private method for event removal in test classes
    - ⬜ Document event management capabilities
    - ⬜ Implement additional event management features (filtering, transformation)
 

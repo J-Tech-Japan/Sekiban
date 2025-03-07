@@ -42,6 +42,11 @@ The event removal functionality has been successfully implemented for the in-mem
      - It works with an empty container
      - New events can be added after removal
 
+7. **Enhanced Performance Tests**
+   - Updated ClientCommandPerformanceTestsCosmos.cs to use event removal
+   - Added a private method to remove all events before running performance tests
+   - Ensured tests start with a clean event store for consistent performance measurements
+
 ### Next Immediate Development Task
 
 The next immediate development task will focus on extending the event removal functionality to the DynamoDB storage backend:
