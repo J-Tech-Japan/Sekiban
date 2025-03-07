@@ -171,7 +171,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     ///     DomainTypes is always registered by default.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    protected virtual void ConfigureServices(IServiceCollection services)
+    public virtual void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(_repository);
         services.AddTransient<IEventWriter, InMemoryEventWriter>();
@@ -179,7 +179,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         // Additional services can be registered here.
     }
 
-    public virtual void Configure(ISiloBuilder siloBuilder)
+    public void Configure(ISiloBuilder siloBuilder)
     {
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryGrainStorage("PubSubStore");

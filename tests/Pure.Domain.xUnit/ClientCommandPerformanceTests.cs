@@ -1,5 +1,6 @@
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Pure.Domain.Generated;
 using ResultBoxes;
 using Sekiban.Pure;
@@ -15,7 +16,7 @@ public class ClientCommandPerformanceTests : SekibanOrleansTestBase<ClientComman
 {
     public override SekibanDomainTypes GetDomainTypes() =>
         PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
-    public override void Configure(ISiloBuilder siloBuilder)
+    public override void ConfigureServices(IServiceCollection services)
     {
         var builder = new ConfigurationBuilder()
             .SetBasePath(ApplicationEnvironment.ApplicationBasePath)
@@ -24,8 +25,8 @@ public class ClientCommandPerformanceTests : SekibanOrleansTestBase<ClientComman
             .AddUserSecrets(Assembly.GetExecutingAssembly());
         var configuration = builder.Build();
 
-        // siloBuilder.Services.AddSekibanPostgresDb(configuration);
-        siloBuilder.Services.AddSekibanCosmosDb(configuration);
+        // services.AddSekibanPostgresDb(configuration);
+        services.AddSekibanCosmosDb(configuration);
     }
     [Fact]
     public void TestClientCommandStartingUpTime()
