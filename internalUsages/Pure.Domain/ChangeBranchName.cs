@@ -1,3 +1,4 @@
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
@@ -6,6 +7,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Pure.Domain;
 
+[GenerateSerializer]
 public record ChangeBranchName(Guid BranchId, string NameToChange)
     : ICommandWithHandler<ChangeBranchName, BranchProjector>
 {

@@ -3,4 +3,4 @@ using Sekiban.Pure.Events;
 namespace Pure.Domain;
 
 [GenerateSerializer]
-public record BranchNameChanged(string Name) : IEventPayload;
+public record ClientCreated(Guid BranchId, string Name, string Email) : IEventPayload;

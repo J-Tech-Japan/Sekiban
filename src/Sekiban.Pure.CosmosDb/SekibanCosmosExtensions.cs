@@ -10,20 +10,28 @@ public static class SekibanCosmosExtensions
         this IHostApplicationBuilder builder,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
-        builder.Services.AddTransient<IEventWriter, CosmosDbEventWriter>();
-        builder.Services.AddTransient<CosmosDbFactory>();
-        builder.Services.AddTransient<IEventReader, CosmosDbEventReader>();
-        builder.Services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();
-        var dbOption =
-            SekibanAzureCosmosDbOption.FromConfiguration(
-                builder.Configuration.GetSection("Sekiban"),
-                (builder.Configuration as IConfigurationRoot)!);
+        builder.Services.AddSekibanCosmosDb(builder.Configuration, optionsFunc);
+        return builder;
+    }
+    public static IServiceCollection AddSekibanCosmosDb(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
+    {
+        services.AddTransient<IEventWriter, CosmosDbEventWriter>();
+        services.AddTransient<CosmosDbFactory>();
+        services.AddTransient<IEventReader, CosmosDbEventReader>();
+        services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();
+        var dbOption = SekibanAzureCosmosDbOption.FromConfiguration(
+            configuration.GetSection("Sekiban"),
+            (configuration as IConfigurationRoot)!);
         var clientOption = optionsFunc is null
             ? new SekibanCosmosClientOptions()
             : optionsFunc(new SekibanCosmosClientOptions());
-        builder.Services.AddSingleton(dbOption);
-        builder.Services.AddMemoryCache();
-        builder.Services.AddSingleton(clientOption);
-        return builder;
+        services.AddSingleton(dbOption);
+        services.AddMemoryCache();
+        services.AddSingleton(clientOption);
+        return services;
     }
+
 }

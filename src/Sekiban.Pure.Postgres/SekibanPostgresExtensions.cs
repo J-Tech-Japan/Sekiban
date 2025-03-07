@@ -6,19 +6,25 @@ namespace Sekiban.Pure.Postgres;
 
 public static class SekibanPostgresExtensions
 {
-    public static IHostApplicationBuilder AddSekibanPostgresDb(
-        this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddSekibanPostgresDb(this IHostApplicationBuilder builder)
     {
-        builder.Services.AddTransient<IEventWriter, PostgresDbEventWriter>();
-        builder.Services.AddTransient<PostgresDbFactory>();
-        builder.Services.AddTransient<IPostgresMemoryCacheAccessor, PostgresMemoryCacheAccessor>();
-        builder.Services.AddTransient<IEventReader, PostgresDbEventReader>();
-        var dbOption =
-            SekibanPostgresDbOption.FromConfiguration(
-                builder.Configuration.GetSection("Sekiban"),
-                (builder.Configuration as IConfigurationRoot)!);
-        builder.Services.AddSingleton(dbOption);
-        builder.Services.AddMemoryCache();
+        builder.Services.AddSekibanPostgresDb(builder.Configuration);
         return builder;
     }
+    public static IServiceCollection AddSekibanPostgresDb(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddTransient<IEventWriter, PostgresDbEventWriter>();
+        services.AddTransient<PostgresDbFactory>();
+        services.AddTransient<IPostgresMemoryCacheAccessor, PostgresMemoryCacheAccessor>();
+        services.AddTransient<IEventReader, PostgresDbEventReader>();
+        var dbOption = SekibanPostgresDbOption.FromConfiguration(
+            configuration.GetSection("Sekiban"),
+            (configuration as IConfigurationRoot)!);
+        services.AddSingleton(dbOption);
+        services.AddMemoryCache();
+        return services;
+    }
+
 }

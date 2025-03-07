@@ -1,0 +1,137 @@
+using Microsoft.DotNet.PlatformAbstractions;
+using Microsoft.Extensions.Configuration;
+using Pure.Domain.Generated;
+using ResultBoxes;
+using Sekiban.Pure;
+using Sekiban.Pure.CosmosDb;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Orleans.xUnit;
+using Sekiban.Pure.Projectors;
+using System.Diagnostics;
+using System.Reflection;
+namespace Pure.Domain.xUnit;
+
+public class ClientCommandPerformanceTests : SekibanOrleansTestBase<ClientCommandPerformanceTests>
+{
+    public override SekibanDomainTypes GetDomainTypes() =>
+        PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
+    public override void Configure(ISiloBuilder siloBuilder)
+    {
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(ApplicationEnvironment.ApplicationBasePath)
+            .AddJsonFile("appsettings.json", false, false)
+            .AddEnvironmentVariables()
+            .AddUserSecrets(Assembly.GetExecutingAssembly());
+        var configuration = builder.Build();
+
+        // siloBuilder.Services.AddSekibanPostgresDb(configuration);
+        siloBuilder.Services.AddSekibanCosmosDb(configuration);
+    }
+    [Fact]
+    public void TestClientCommandStartingUpTime()
+    {
+    }
+    [Theory]
+    // [InlineData(1, 1, 1)]
+    // [InlineData(2, 2, 2)]
+    // [InlineData(3, 3, 3)]
+    // [InlineData(1, 1, 10)]
+    // [InlineData(1, 1, 20)]
+    [InlineData(10, 10, 10)]
+    public void TestClientCommandPerformance(int branchCount, int clientsPerBranch, int nameChangesPerClient)
+    {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+
+        var branchIds = new List<Guid>();
+        var clientIds = new List<Guid>();
+
+        // Create branches
+        for (var i = 0; i < branchCount; i++)
+        {
+            var branchName = $"Branch-{i}";
+
+            GivenCommandWithResult(new RegisterBranch(branchName))
+                .Do(
+                    response =>
+                    {
+                        Assert.Equal(1, response.Version);
+                        branchIds.Add(response.PartitionKeys.AggregateId);
+                    })
+                .UnwrapBox();
+        }
+
+        // Create clients for each branch
+        foreach (var branchId in branchIds)
+        {
+            for (var j = 0; j < clientsPerBranch; j++)
+            {
+                var clientName = $"Client-{branchId}-{j}";
+                var clientEmail = $"client-{branchId}-{j}@example.com";
+
+                WhenCommandWithResult(new CreateClient(branchId, clientName, clientEmail))
+                    .Do(
+                        response =>
+                        {
+                            Assert.Equal(1, response.Version);
+                            clientIds.Add(response.PartitionKeys.AggregateId);
+                        })
+                    .UnwrapBox();
+            }
+        }
+
+        // Change client names multiple times
+        foreach (var clientId in clientIds)
+        {
+            for (var k = 0; k < nameChangesPerClient; k++)
+            {
+                var newName = $"Client-{clientId}-Changed-{k}";
+                var clientAggregate = ThenGetAggregateWithResult<ClientProjector>(
+                        PartitionKeys<ClientProjector>.Existing(clientId))
+                    .UnwrapBox();
+
+                WhenCommandWithResult(
+                        new ChangeClientName(clientId, newName)
+                        {
+                            ReferenceVersion = clientAggregate.Version
+                        })
+                    .Do(response => Assert.Equal(k + 2, response.Version))
+                    .UnwrapBox();
+            }
+        }
+
+        stopwatch.Stop();
+
+        // Verify final state
+        ThenGetMultiProjectorWithResult<AggregateListProjector<BranchProjector>>()
+            .Do(
+                projector =>
+                {
+                    Assert.Equal(branchCount, projector.Aggregates.Count);
+                })
+            .UnwrapBox();
+
+        ThenGetMultiProjectorWithResult<AggregateListProjector<ClientProjector>>()
+            .Do(
+                projector =>
+                {
+                    Assert.Equal(branchCount * clientsPerBranch, projector.Aggregates.Count);
+
+                    // Output performance metrics
+                    Console.WriteLine($"Created {branchCount} branches");
+                    Console.WriteLine($"Created {branchCount * clientsPerBranch} clients");
+                    Console.WriteLine(
+                        $"Performed {branchCount * clientsPerBranch * nameChangesPerClient} name changes");
+                    Console.WriteLine(
+                        $"Total operations: {branchCount + branchCount * clientsPerBranch + branchCount * clientsPerBranch * nameChangesPerClient}");
+                    Console.WriteLine($"Total execution time: {stopwatch.ElapsedMilliseconds}ms");
+
+                    var totalOperations = branchCount +
+                        branchCount * clientsPerBranch +
+                        branchCount * clientsPerBranch * nameChangesPerClient;
+                    Console.WriteLine(
+                        $"Average time per operation: {stopwatch.ElapsedMilliseconds / (double)totalOperations}ms");
+                })
+            .UnwrapBox();
+    }
+}

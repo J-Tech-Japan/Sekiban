@@ -120,17 +120,13 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     /// <summary>
     ///     Execute command in Given phase.
     /// </summary>
-    protected CommandResponse GivenCommand(
-        ICommandWithHandlerSerializable command,
-        IEvent? relatedEvent = null) =>
+    protected CommandResponse GivenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
     ///     Execute command in When phase.
     /// </summary>
-    protected CommandResponse WhenCommand(
-        ICommandWithHandlerSerializable command,
-        IEvent? relatedEvent = null) =>
+    protected CommandResponse WhenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
@@ -143,8 +139,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     protected TResult ThenQuery<TResult>(IQueryCommon<TResult> query) where TResult : notnull =>
         _executor.QueryAsync(query).UnwrapBox().Result;
 
-    protected ListQueryResult<TResult> ThenQuery<TResult>(IListQueryCommon<TResult> query)
-        where TResult : notnull =>
+    protected ListQueryResult<TResult> ThenQuery<TResult>(IListQueryCommon<TResult> query) where TResult : notnull =>
         _executor.QueryAsync(query).UnwrapBox().Result;
 
     protected TMultiProjector ThenGetMultiProjector<TMultiProjector>()
@@ -172,8 +167,8 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
 
 
     /// <summary>
-    /// Configures the services for the test. Override this method to customize the services.
-    /// DomainTypes is always registered by default.
+    ///     Configures the services for the test. Override this method to customize the services.
+    ///     DomainTypes is always registered by default.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     protected virtual void ConfigureServices(IServiceCollection services)
@@ -186,18 +181,17 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
 
     public virtual void Configure(ISiloBuilder siloBuilder)
     {
-        siloBuilder.AddMemoryGrainStorage("PubSubStore");
         siloBuilder.AddMemoryGrainStorageAsDefault();
-        siloBuilder
-            .AddMemoryStreams("EventStreamProvider")
-            .AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(services => 
-        {
-            // Always register DomainTypes
-            services.AddSingleton(_domainTypes);
-            
-            // Allow customization of other services
-            ConfigureServices(services);
-        });
+        siloBuilder.AddMemoryGrainStorage("PubSubStore");
+        siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+        siloBuilder.ConfigureServices(
+            services =>
+            {
+                // Always register DomainTypes
+                services.AddSingleton(_domainTypes);
+
+                // Allow customization of other services
+                ConfigureServices(services);
+            });
     }
 }
