@@ -118,6 +118,12 @@ This file captures important patterns, preferences, and project intelligence for
      - CosmosDbEventWriter: Calls dbFactory.DeleteAllFromEventContainer()
      - PostgresDbEventWriter: Calls dbFactory.DeleteAllFromEventContainer()
    - Consider implementing selective event removal in the future
+   - For test classes that need to clear events before running:
+     - Create a private async RemoveAllEventsAsync() method
+     - Set up a dedicated ServiceCollection and register domain types
+     - Add the appropriate database services (AddSekibanCosmosDb, AddSekibanPostgresDb, etc.)
+     - Get IEventRemover from the service provider and call RemoveAllEvents()
+     - Call this method at the beginning of test methods to ensure a clean state
 
 ## Known Challenges
 
