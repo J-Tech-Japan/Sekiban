@@ -4,6 +4,36 @@
 
 The current focus for Sekiban is on the newer Sekiban.Pure version, which integrates with Microsoft Orleans for distributed processing and state management. This version represents a more functional approach to event sourcing and provides better support for distributed systems.
 
+### Recently Completed Development Task
+
+The event removal functionality has been successfully implemented:
+
+1. **Created IEventRemover Interface**
+   - Added a new interface in src/Sekiban.Pure/Events/IEventRemover.cs
+   - Defined a RemoveAllEvents() method that returns a Task
+   - Added XML documentation for the interface and method
+
+2. **Added Repository Support**
+   - Implemented a ClearAllEvents() method in Repository.cs
+   - Used thread-safe implementation with the existing lock mechanism
+   - Returns a ResultBox with the count of removed events
+
+3. **Updated InMemoryEventWriter**
+   - Made InMemoryEventWriter implement both IEventWriter and IEventRemover
+   - Implemented the RemoveAllEvents() method to call repository.ClearAllEvents()
+   - Added proper XML documentation
+
+4. **Created Unit Tests**
+   - Added EventRemovalTests.cs with three test cases:
+     - Verifying that RemoveAllEvents clears all events
+     - Testing that it works with an empty repository
+     - Confirming that new events can be added after removal
+   - All tests are passing
+
+### Next Immediate Development Task
+
+The next immediate development task will focus on extending the event removal functionality to other storage backends:
+
 Key areas of active development include:
 
 1. **Orleans Integration**

@@ -55,6 +55,22 @@ This file captures important patterns, preferences, and project intelligence for
    builder.Services.AddSingleton(DomainTypes.Generate()) → app.MapPost/MapGet → SekibanOrleansExecutor.CommandAsync/QueryAsync
    ```
 
+5. **Event Remover Registration**
+   ```
+   // Register the Repository
+   builder.Services.AddSingleton<Repository>();
+   
+   // Register the InMemoryEventWriter as both IEventWriter and IEventRemover
+   builder.Services.AddSingleton<InMemoryEventWriter>();
+   builder.Services.AddSingleton<IEventWriter>(sp => sp.GetRequiredService<InMemoryEventWriter>());
+   builder.Services.AddSingleton<IEventRemover>(sp => sp.GetRequiredService<InMemoryEventWriter>());
+   ```
+
+6. **Event Removal Flow**
+   ```
+   IEventRemover.RemoveAllEvents() → Repository.ClearAllEvents() → _events.Clear()
+   ```
+
 ## Project-Specific Patterns
 
 1. **State Machine Pattern**
@@ -76,6 +92,13 @@ This file captures important patterns, preferences, and project intelligence for
    - Use `context.AppendEvent(eventPayload)` to add multiple events
    - Return `EventOrNone.None` when using AppendEvent
    - Or return the last event using `EventOrNone.Event`
+
+5. **Event Removal Pattern**
+   - Use `IEventRemover` interface for event removal operations
+   - Implement thread-safe event removal in storage backends
+   - Use `RemoveAllEvents()` method to clear all events
+   - Return a Task that represents the asynchronous operation
+   - Consider implementing selective event removal in the future
 
 ## Known Challenges
 
@@ -147,6 +170,19 @@ This file captures important patterns, preferences, and project intelligence for
    
    // Assert
    aggregate.Payload.Should().BeOfType<YourAggregateState>();
+   ```
+
+5. **Using Event Removal**
+   ```csharp
+   // Get the event remover from DI
+   var eventRemover = serviceProvider.GetRequiredService<IEventRemover>();
+   
+   // Remove all events
+   await eventRemover.RemoveAllEvents();
+   
+   // Verify events were removed
+   var repository = serviceProvider.GetRequiredService<Repository>();
+   repository.Events.Should().BeEmpty();
    ```
 
 ## Evolution of Project Decisions

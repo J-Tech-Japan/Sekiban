@@ -55,6 +55,20 @@ public class Repository
         return ResultBox.FromValue(events);
     }
 
+    /// <summary>
+    /// Clears all events from the repository
+    /// </summary>
+    /// <returns>A ResultBox containing the number of events that were removed</returns>
+    public ResultBox<int> ClearAllEvents()
+    {
+        lock (_lock)
+        {
+            var count = _events.Count;
+            _events.Clear();
+            return ResultBox.FromValue(count);
+        }
+    }
+
     public Task<ResultBox<MultiProjectionState<TMultiProjection>>> LoadMultiProjection<TMultiProjection>(
         IMultiProjectionEventSelector eventSelector)
         where TMultiProjection : IMultiProjector<TMultiProjection>

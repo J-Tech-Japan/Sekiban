@@ -35,5 +35,23 @@ The project has two main versions:
 ## Project Status
 The project is actively maintained by J-Tech Japan (株式会社ジェイテックジャパン), with ongoing development for new features and improvements. The newer Sekiban.Pure.Orleans version is currently under active development.
 
+## Current Development Focus
+The current development focus is on Sekiban.Pure.* which is located in the src/Sekiban.Pure* folders.
+
+## Recently Completed
+Event removal functionality has been successfully implemented:
+
+1. ✅ Created a new interface `IEventRemover` in src/Sekiban.Pure/Events with a `RemoveAllEvents()` method
+2. ✅ Implemented `IEventRemover` in src/Sekiban.Pure/Events/InMemoryEventWriter.cs
+3. ✅ Added unit tests in tests/Pure.Domain.Test/EventRemovalTests.cs to verify that `RemoveAllEvents()` works correctly
+
+## Current Focus
+Extending the event removal functionality to other storage backends:
+
+1. Implement `IEventRemover` for Cosmos DB storage
+2. Implement `IEventRemover` for DynamoDB storage
+3. Implement `IEventRemover` for PostgreSQL storage
+4. Add unit tests for each implementation
+
 ## License
 Apache 2.0 open source license
