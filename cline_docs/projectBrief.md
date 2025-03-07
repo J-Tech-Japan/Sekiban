@@ -5,13 +5,3 @@ I am developing Sekiban.Pure.* now which is in
 maily please edit those.
 
 # Current Issue.
-I want to add to remove all feature in 
-src/Sekiban.Pure/Events
-
-First, I want to add IEventRemover in 
-src/Sekiban.Pure/Events
-Which has RemoveAllEvents()
-
-Then implement IEventRemover to the src/Sekiban.Pure/Events/InMemoryEventWriter.cs
-
-And Add tests/Pure.Domain.Test to make unit test for if RemoveAllEvents works.
