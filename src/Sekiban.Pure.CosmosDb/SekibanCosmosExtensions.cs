@@ -18,7 +18,9 @@ public static class SekibanCosmosExtensions
         IConfiguration configuration,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
-        services.AddTransient<IEventWriter, CosmosDbEventWriter>();
+        services.AddTransient<CosmosDbEventWriter>();
+        services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
+        services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
         services.AddTransient<CosmosDbFactory>();
         services.AddTransient<IEventReader, CosmosDbEventReader>();
         services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();

@@ -43,15 +43,17 @@ Event removal functionality has been successfully implemented:
 
 1. ✅ Created a new interface `IEventRemover` in src/Sekiban.Pure/Events with a `RemoveAllEvents()` method
 2. ✅ Implemented `IEventRemover` in src/Sekiban.Pure/Events/InMemoryEventWriter.cs
-3. ✅ Added unit tests in tests/Pure.Domain.Test/EventRemovalTests.cs to verify that `RemoveAllEvents()` works correctly
+3. ✅ Implemented `IEventRemover` in src/Sekiban.Pure.CosmosDb/CosmosDbEventWriter.cs
+4. ✅ Implemented `IEventRemover` in src/Sekiban.Pure.Postgres/PostgresDbEventWriter.cs
+5. ✅ Added unit tests in tests/Pure.Domain.Test/EventRemovalTests.cs to verify that `RemoveAllEvents()` works correctly for in-memory storage
+6. ✅ Added unit tests in tests/Pure.Domain.xUnit/CosmosDbEventRemovalTests.cs to verify that `RemoveAllEvents()` works correctly for CosmosDb
+7. ✅ Added unit tests in tests/Pure.Domain.xUnit/PostgresDbEventRemovalTests.cs to verify that `RemoveAllEvents()` works correctly for PostgreSQL
 
 ## Current Focus
-Extending the event removal functionality to other storage backends:
+Extending the event removal functionality to the remaining storage backend:
 
-1. Implement `IEventRemover` for Cosmos DB storage
-2. Implement `IEventRemover` for DynamoDB storage
-3. Implement `IEventRemover` for PostgreSQL storage
-4. Add unit tests for each implementation
+1. Implement `IEventRemover` for DynamoDB storage
+2. Add unit tests for DynamoDB implementation
 
 ## License
 Apache 2.0 open source license

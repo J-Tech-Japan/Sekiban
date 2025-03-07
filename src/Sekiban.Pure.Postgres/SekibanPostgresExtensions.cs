@@ -15,7 +15,9 @@ public static class SekibanPostgresExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddTransient<IEventWriter, PostgresDbEventWriter>();
+        services.AddTransient<PostgresDbEventWriter>();
+        services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<PostgresDbEventWriter>());
+        services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<PostgresDbEventWriter>());
         services.AddTransient<PostgresDbFactory>();
         services.AddTransient<IPostgresMemoryCacheAccessor, PostgresMemoryCacheAccessor>();
         services.AddTransient<IEventReader, PostgresDbEventReader>();

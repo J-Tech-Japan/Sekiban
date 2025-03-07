@@ -6,7 +6,7 @@ The current focus for Sekiban is on the newer Sekiban.Pure version, which integr
 
 ### Recently Completed Development Task
 
-The event removal functionality has been successfully implemented:
+The event removal functionality has been successfully implemented for the in-memory event writer, CosmosDb, and PostgreSQL:
 
 1. **Created IEventRemover Interface**
    - Added a new interface in src/Sekiban.Pure/Events/IEventRemover.cs
@@ -23,16 +23,45 @@ The event removal functionality has been successfully implemented:
    - Implemented the RemoveAllEvents() method to call repository.ClearAllEvents()
    - Added proper XML documentation
 
-4. **Created Unit Tests**
-   - Added EventRemovalTests.cs with three test cases:
-     - Verifying that RemoveAllEvents clears all events
-     - Testing that it works with an empty repository
-     - Confirming that new events can be added after removal
-   - All tests are passing
+4. **Updated CosmosDbEventWriter**
+   - Made CosmosDbEventWriter implement both IEventWriter and IEventRemover
+   - Implemented the RemoveAllEvents() method to call dbFactory.DeleteAllFromEventContainer()
+   - Updated DI registration in SekibanCosmosExtensions to register CosmosDbEventWriter as both IEventWriter and IEventRemover
+
+5. **Updated PostgresDbEventWriter**
+   - Made PostgresDbEventWriter implement both IEventWriter and IEventRemover
+   - Implemented the RemoveAllEvents() method to call dbFactory.DeleteAllFromEventContainer()
+   - Updated DI registration in SekibanPostgresExtensions to register PostgresDbEventWriter as both IEventWriter and IEventRemover
+
+6. **Created Unit Tests**
+   - Added EventRemovalTests.cs with three test cases for in-memory event writer
+   - Added CosmosDbEventRemovalTests.cs with three test cases for CosmosDb
+   - Added PostgresDbEventRemovalTests.cs with three test cases for PostgreSQL
+   - All tests verify that:
+     - RemoveAllEvents clears all events
+     - It works with an empty container
+     - New events can be added after removal
 
 ### Next Immediate Development Task
 
-The next immediate development task will focus on extending the event removal functionality to other storage backends:
+The next immediate development task will focus on extending the event removal functionality to the DynamoDB storage backend:
+
+1. **Update DynamoDbEventWriter**
+   - Make DynamoDbEventWriter implement both IEventWriter and IEventRemover
+   - Implement the RemoveAllEvents() method to call dbFactory.DeleteAllFromEventContainer()
+   - Add proper XML documentation
+
+2. **Update SekibanDynamoExtensions**
+   - Update the DI registration to register DynamoDbEventWriter as both IEventWriter and IEventRemover
+   - Ensure proper service lifetime management
+
+3. **Create DynamoDB Unit Tests**
+   - Create DynamoDbEventRemovalTests.cs in tests/Pure.Domain.xUnit
+   - Implement tests that directly set up DynamoDB services without using Orleans
+   - Verify that RemoveAllEvents works correctly with DynamoDB
+   - Test that new events can be added after removal
+
+Note: The testing approach uses direct service setup rather than Orleans, as Orleans keeps state which makes it difficult to test complete event removal effectively. Since event removal will primarily be used in test cases to clean up past events before tests, this approach better reflects its actual usage.
 
 Key areas of active development include:
 

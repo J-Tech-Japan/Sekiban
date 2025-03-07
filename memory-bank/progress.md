@@ -209,9 +209,18 @@
 1. **Event Management Enhancements**
    - ✅ Implement event removal functionality for InMemoryEventWriter
    - ✅ Add unit tests for event removal
-   - Extend event removal to other storage backends (Cosmos DB, DynamoDB, PostgreSQL)
-   - Document event management capabilities
-   - Implement additional event management features (filtering, transformation)
+   - 🔄 Extend event removal to other storage backends:
+     - ✅ Cosmos DB
+       - ✅ Update CosmosDbEventWriter to implement IEventRemover
+       - ✅ Update DI registration in SekibanCosmosExtensions
+       - ✅ Create direct CosmosDb tests without Orleans
+     - ⬜ DynamoDB
+     - ✅ PostgreSQL
+       - ✅ Update PostgresDbEventWriter to implement IEventRemover
+       - ✅ Update DI registration in SekibanPostgresExtensions
+       - ✅ Create direct PostgreSQL tests without Orleans
+   - ⬜ Document event management capabilities
+   - ⬜ Implement additional event management features (filtering, transformation)
 
 2. **Sekiban.Pure.Orleans Stabilization**
    - Bug fixes and performance improvements

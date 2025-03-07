@@ -27,9 +27,7 @@ public class CosmosDbFactory(
         await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
     }
 
-    public async Task<T> CosmosActionAsync<T>(
-        DocumentType documentType,
-        Func<Container, Task<T>> cosmosAction)
+    public async Task<T> CosmosActionAsync<T>(DocumentType documentType, Func<Container, Task<T>> cosmosAction)
     {
         try
         {
@@ -179,7 +177,7 @@ public class CosmosDbFactory(
             async container =>
             {
                 var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
-                var feedIterator = container.GetItemQueryIterator<CosmosEventInfo>(query.ToQueryDefinition());
+                var feedIterator = container.GetItemQueryIterator<EventDocumentCommon>(query.ToQueryDefinition());
 
                 var deleteItemIds = new List<(Guid id, PartitionKey partitionKey)>();
                 while (feedIterator.HasMoreResults)
@@ -191,7 +189,7 @@ public class CosmosDbFactory(
                         var id = item.Id;
                         var partitionKey = item.PartitionKey;
                         var rootPartitionKey = item.RootPartitionKey;
-                        var aggregateType = item.AggregateType;
+                        var aggregateType = item.AggregateGroup;
 
                         deleteItemIds.Add(
                             (id,

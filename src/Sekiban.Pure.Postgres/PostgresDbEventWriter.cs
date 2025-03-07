@@ -2,7 +2,7 @@ using Sekiban.Pure.Events;
 using Sekiban.Pure.Serialize;
 namespace Sekiban.Pure.Postgres;
 
-public class PostgresDbEventWriter : IEventWriter
+public class PostgresDbEventWriter : IEventWriter, IEventRemover
 {
     private readonly PostgresDbFactory _dbFactory;
     private readonly IEventTypes _eventTypes;
@@ -27,5 +27,14 @@ public class PostgresDbEventWriter : IEventWriter
                 await dbContext.Events.AddRangeAsync(dbEvents);
                 await dbContext.SaveChangesAsync();
             });
+    }
+    
+    /// <summary>
+    /// Removes all events from the PostgreSQL event table
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public Task RemoveAllEvents()
+    {
+        return _dbFactory.DeleteAllFromEventContainer();
     }
 }

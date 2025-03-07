@@ -57,18 +57,33 @@ This file captures important patterns, preferences, and project intelligence for
 
 5. **Event Remover Registration**
    ```
-   // Register the Repository
+   // For InMemoryEventWriter
    builder.Services.AddSingleton<Repository>();
-   
-   // Register the InMemoryEventWriter as both IEventWriter and IEventRemover
    builder.Services.AddSingleton<InMemoryEventWriter>();
    builder.Services.AddSingleton<IEventWriter>(sp => sp.GetRequiredService<InMemoryEventWriter>());
    builder.Services.AddSingleton<IEventRemover>(sp => sp.GetRequiredService<InMemoryEventWriter>());
+   
+   // For CosmosDbEventWriter
+   services.AddTransient<CosmosDbEventWriter>();
+   services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
+   services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
+   
+   // For PostgresDbEventWriter
+   services.AddTransient<PostgresDbEventWriter>();
+   services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<PostgresDbEventWriter>());
+   services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<PostgresDbEventWriter>());
    ```
 
 6. **Event Removal Flow**
    ```
+   // For InMemoryEventWriter
    IEventRemover.RemoveAllEvents() → Repository.ClearAllEvents() → _events.Clear()
+   
+   // For CosmosDbEventWriter
+   IEventRemover.RemoveAllEvents() → CosmosDbFactory.DeleteAllFromEventContainer() → DeleteAllFromAggregateFromContainerIncludes()
+   
+   // For PostgresDbEventWriter
+   IEventRemover.RemoveAllEvents() → PostgresDbFactory.DeleteAllFromEventContainer() → DeleteAllFromAggregateFromContainerIncludes()
    ```
 
 ## Project-Specific Patterns
@@ -98,6 +113,10 @@ This file captures important patterns, preferences, and project intelligence for
    - Implement thread-safe event removal in storage backends
    - Use `RemoveAllEvents()` method to clear all events
    - Return a Task that represents the asynchronous operation
+   - Implementation varies by storage backend:
+     - InMemoryEventWriter: Clears events from the Repository
+     - CosmosDbEventWriter: Calls dbFactory.DeleteAllFromEventContainer()
+     - PostgresDbEventWriter: Calls dbFactory.DeleteAllFromEventContainer()
    - Consider implementing selective event removal in the future
 
 ## Known Challenges
@@ -180,9 +199,14 @@ This file captures important patterns, preferences, and project intelligence for
    // Remove all events
    await eventRemover.RemoveAllEvents();
    
-   // Verify events were removed
+   // Verify events were removed (for InMemoryEventWriter)
    var repository = serviceProvider.GetRequiredService<Repository>();
    repository.Events.Should().BeEmpty();
+   
+   // Verify events were removed (for CosmosDb or PostgreSQL)
+   var eventReader = serviceProvider.GetRequiredService<IEventReader>();
+   var events = await eventReader.GetEvents(EventRetrievalInfo.All);
+   events.UnwrapBox().Should().BeEmpty();
    ```
 
 ## Evolution of Project Decisions
