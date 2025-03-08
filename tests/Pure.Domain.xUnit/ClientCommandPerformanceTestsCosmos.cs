@@ -29,35 +29,7 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly());
         var configuration = builder.Build();
-
-        // Create isolated Cosmos DB options
-        var baseOptions = SekibanAzureCosmosDbOption.FromConfiguration(
-            configuration.GetSection("Sekiban"),
-            configuration!);
-
-        var isolatedOptions = new SekibanAzureCosmosDbOption
-        {
-            CosmosEventsContainer = $"{baseOptions.CosmosEventsContainer}-test-{_testRunId}",
-            CosmosItemsContainer = $"{baseOptions.CosmosItemsContainer}-test-{_testRunId}",
-            CosmosConnectionString = baseOptions.CosmosConnectionString,
-            CosmosConnectionStringName = baseOptions.CosmosConnectionStringName,
-            CosmosEndPointUrl = baseOptions.CosmosEndPointUrl,
-            CosmosAuthorizationKey = baseOptions.CosmosAuthorizationKey,
-            CosmosDatabase = baseOptions.CosmosDatabase,
-            LegacyPartitions = baseOptions.LegacyPartitions
-        };
-
-        services.AddSingleton(isolatedOptions);
-
-        // Add Cosmos DB services
-        services.AddTransient<CosmosDbEventWriter>();
-        services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
-        services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
-        services.AddTransient<CosmosDbFactory>();
-        services.AddTransient<IEventReader, CosmosDbEventReader>();
-        services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();
-        services.AddMemoryCache();
-        services.AddSingleton(new SekibanCosmosClientOptions());
+        services.AddSekibanCosmosDb(configuration);
     }
 
     /// <summary>
@@ -73,37 +45,8 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly())
             .Build();
-
-        // Create isolated Cosmos DB options
-        var baseOptions = SekibanAzureCosmosDbOption.FromConfiguration(
-            configuration.GetSection("Sekiban"),
-            configuration!);
-
-        var isolatedOptions = new SekibanAzureCosmosDbOption
-        {
-            CosmosEventsContainer = $"{baseOptions.CosmosEventsContainer}-test-{_testRunId}",
-            CosmosItemsContainer = $"{baseOptions.CosmosItemsContainer}-test-{_testRunId}",
-            CosmosConnectionString = baseOptions.CosmosConnectionString,
-            CosmosConnectionStringName = baseOptions.CosmosConnectionStringName,
-            CosmosEndPointUrl = baseOptions.CosmosEndPointUrl,
-            CosmosAuthorizationKey = baseOptions.CosmosAuthorizationKey,
-            CosmosDatabase = baseOptions.CosmosDatabase,
-            LegacyPartitions = baseOptions.LegacyPartitions
-        };
-
-        services.AddSingleton(isolatedOptions);
         services.AddSingleton(GetDomainTypes());
-
-        // Add Cosmos DB services
-        services.AddTransient<CosmosDbEventWriter>();
-        services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
-        services.AddTransient<IEventRemover>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
-        services.AddTransient<CosmosDbFactory>();
-        services.AddTransient<IEventReader, CosmosDbEventReader>();
-        services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();
-        services.AddMemoryCache();
-        services.AddSingleton(new SekibanCosmosClientOptions());
-
+        services.AddSekibanCosmosDb(configuration);
         var serviceProvider = services.BuildServiceProvider();
 
         // Get the event remover and remove all events
