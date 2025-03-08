@@ -132,19 +132,31 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
 
 
 
+    /// <summary>
+    /// Configures the services for the test. Override this method to customize the services.
+    /// DomainTypes is always registered by default.
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton(_repository);
+        services.AddTransient<IEventWriter, InMemoryEventWriter>();
+        services.AddTransient<IEventReader, InMemoryEventReader>();
+        // Additional services can be registered here.
+    }
+
     public virtual void Configure(ISiloBuilder siloBuilder)
     {
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(
-            services =>
-            {
-                services.AddSingleton(_domainTypes);
-                services.AddSingleton(_repository);
-                services.AddTransient<IEventWriter, InMemoryEventWriter>();
-                services.AddTransient<IEventReader, InMemoryEventReader>();
-                // services.AddTransient()
-            });
+        siloBuilder.ConfigureServices(services => 
+        {
+            // Always register DomainTypes
+            services.AddSingleton(_domainTypes);
+            
+            // Allow customization of other services
+            ConfigureServices(services);
+        });
     }
 }

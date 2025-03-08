@@ -13,6 +13,8 @@
             <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
             <PrivateAssets>all</PrivateAssets>
         </ProjectReference>
+        <ProjectReference Include="..\..\src\Sekiban.Pure.Orleans\Sekiban.Pure.Orleans.csproj" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="9.1.2" />
     </ItemGroup>
 
 </Project>

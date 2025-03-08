@@ -13,7 +13,10 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
     protected QueryPerformanceTestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
+        ISekibanServiceProviderGenerator providerGenerator) : base(
+        sekibanTestFixture,
+        testOutputHelper,
+        providerGenerator)
     {
     }
 
@@ -45,6 +48,7 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
     [InlineData(1, 1, 100, 17)]
     [InlineData(1, 1, 100, 18)]
     [InlineData(1, 1, 100, 19)]
+    // [InlineData(10, 10, 10, 20)] // its too slow in this environment
     public async Task TestQuery2(int numberOfBranch, int numberOfClient, int changeNameCount, int id)
     {
         for (var i = 0; i < numberOfBranch; i++)
@@ -81,7 +85,8 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     TestOutputHelper.WriteLine($"client change name {k + 1}");
-                    var aggregate = await aggregateLoader.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
+                    var aggregate
+                        = await aggregateLoader.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     TestOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await commandExecutor.ExecCommandAsync(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")

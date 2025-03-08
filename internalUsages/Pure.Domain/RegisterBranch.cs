@@ -1,3 +1,4 @@
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
@@ -6,6 +7,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Pure.Domain;
 
+[GenerateSerializer]
 public record RegisterBranch(string Name) : ICommandWithHandler<RegisterBranch, BranchProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(RegisterBranch command) => PartitionKeys<BranchProjector>.Generate();

@@ -76,19 +76,25 @@
 
 ### Core Enhancements
 
-1. **Materialized View Helpers**
+1. **Event Management Features**
+   - Event removal functionality (implemented for InMemoryEventWriter)
+   - Event filtering capabilities
+   - Event transformation utilities
+   - Event lifecycle management
+
+2. **Materialized View Helpers**
    - Database-specific view creation
    - Change feed integration
    - View management utilities
    - Performance optimization
 
-2. **Event Schema Evolution**
+3. **Event Schema Evolution**
    - Event upcasters
    - Schema migration tools
    - Compatibility layer
    - Version management
 
-3. **Advanced Projection Features**
+4. **Advanced Projection Features**
    - Projection dependencies
    - Conditional projections
    - Projection pruning
@@ -200,17 +206,36 @@
 
 ### Short-term (Next 3 Months)
 
-1. **Sekiban.Pure.Orleans Stabilization**
+1. **Event Management Enhancements**
+   - ✅ Implement event removal functionality for InMemoryEventWriter
+   - ✅ Add unit tests for event removal
+   - 🔄 Extend event removal to other storage backends:
+     - ✅ Cosmos DB
+       - ✅ Update CosmosDbEventWriter to implement IEventRemover
+       - ✅ Update DI registration in SekibanCosmosExtensions
+       - ✅ Create direct CosmosDb tests without Orleans
+     - ⬜ DynamoDB
+     - ✅ PostgreSQL
+       - ✅ Update PostgresDbEventWriter to implement IEventRemover
+       - ✅ Update DI registration in SekibanPostgresExtensions
+       - ✅ Create direct PostgreSQL tests without Orleans
+   - ✅ Integrate event removal in performance tests
+     - ✅ Update ClientCommandPerformanceTestsCosmos to clear events before tests
+     - ✅ Implement private method for event removal in test classes
+   - ⬜ Document event management capabilities
+   - ⬜ Implement additional event management features (filtering, transformation)
+
+2. **Sekiban.Pure.Orleans Stabilization**
    - Bug fixes and performance improvements
    - Enhanced documentation
    - Additional examples
 
-2. **PostgreSQL Optimization**
+3. **PostgreSQL Optimization**
    - Performance enhancements
    - Advanced query capabilities
    - Migration tools
 
-3. **Documentation Expansion**
+4. **Documentation Expansion**
    - Comprehensive guides
    - Best practices documentation
    - Troubleshooting guides
