@@ -34,7 +34,7 @@
         <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.1.2"/>
         <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview8"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

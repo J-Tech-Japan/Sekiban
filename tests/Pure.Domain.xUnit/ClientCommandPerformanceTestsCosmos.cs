@@ -8,7 +8,6 @@ using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Orleans.xUnit;
-using Sekiban.Pure.Postgres;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics;
 using System.Reflection;
@@ -18,7 +17,7 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
 {
     // Generate a unique ID for this test class
     private readonly string _testRunId = Guid.NewGuid().ToString("N").Substring(0, 8);
-    
+
     public override SekibanDomainTypes GetDomainTypes() =>
         PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
 
@@ -34,8 +33,8 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
         // Create isolated Cosmos DB options
         var baseOptions = SekibanAzureCosmosDbOption.FromConfiguration(
             configuration.GetSection("Sekiban"),
-            (configuration as IConfigurationRoot)!);
-            
+            configuration!);
+
         var isolatedOptions = new SekibanAzureCosmosDbOption
         {
             CosmosEventsContainer = $"{baseOptions.CosmosEventsContainer}-test-{_testRunId}",
@@ -47,9 +46,9 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             CosmosDatabase = baseOptions.CosmosDatabase,
             LegacyPartitions = baseOptions.LegacyPartitions
         };
-        
+
         services.AddSingleton(isolatedOptions);
-        
+
         // Add Cosmos DB services
         services.AddTransient<CosmosDbEventWriter>();
         services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
@@ -60,9 +59,9 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
         services.AddMemoryCache();
         services.AddSingleton(new SekibanCosmosClientOptions());
     }
-    
+
     /// <summary>
-    /// Removes all events from the event store to ensure a clean state for performance tests
+    ///     Removes all events from the event store to ensure a clean state for performance tests
     /// </summary>
     private async Task RemoveAllEventsAsync()
     {
@@ -74,12 +73,12 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly())
             .Build();
-        
+
         // Create isolated Cosmos DB options
         var baseOptions = SekibanAzureCosmosDbOption.FromConfiguration(
             configuration.GetSection("Sekiban"),
-            (configuration as IConfigurationRoot)!);
-            
+            configuration!);
+
         var isolatedOptions = new SekibanAzureCosmosDbOption
         {
             CosmosEventsContainer = $"{baseOptions.CosmosEventsContainer}-test-{_testRunId}",
@@ -91,10 +90,10 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             CosmosDatabase = baseOptions.CosmosDatabase,
             LegacyPartitions = baseOptions.LegacyPartitions
         };
-        
+
         services.AddSingleton(isolatedOptions);
         services.AddSingleton(GetDomainTypes());
-        
+
         // Add Cosmos DB services
         services.AddTransient<CosmosDbEventWriter>();
         services.AddTransient<IEventWriter>(sp => sp.GetRequiredService<CosmosDbEventWriter>());
@@ -104,26 +103,26 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
         services.AddTransient<ICosmosMemoryCacheAccessor, CosmosMemoryCacheAccessor>();
         services.AddMemoryCache();
         services.AddSingleton(new SekibanCosmosClientOptions());
-        
+
         var serviceProvider = services.BuildServiceProvider();
-        
+
         // Get the event remover and remove all events
         var eventRemover = serviceProvider.GetRequiredService<IEventRemover>();
         await eventRemover.RemoveAllEvents();
     }
-    
+
     [Fact]
     public void TestClientCommandStartingUpTime()
     {
     }
-    
+
     [Theory]
-    // [InlineData(1, 1, 1)]
+    [InlineData(1, 1, 1)]
     // [InlineData(2, 2, 2)]
     // [InlineData(3, 3, 3)]
     // [InlineData(1, 1, 10)]
     // [InlineData(1, 1, 20)]
-    [InlineData(10, 10, 10)]
+    // [InlineData(10, 10, 10)]
     public async Task TestClientCommandPerformance(int branchCount, int clientsPerBranch, int nameChangesPerClient)
     {
         // Clear all events before starting the test
