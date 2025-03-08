@@ -1,6 +1,0 @@
-@Sekiban.Infrastructure.Postgres.MigrationHost_HostAddress = http://localhost:5037
-
-GET {{Sekiban.Infrastructure.Postgres.MigrationHost_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

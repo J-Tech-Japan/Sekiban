@@ -1,15 +1,9 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Pure.Domain.Generated;
 using ResultBoxes;
-using Sekiban.Pure;
 using Sekiban.Pure.Command.Handlers;
-using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
-using Sekiban.Pure.Repositories;
-using System.Reflection;
 
 namespace Pure.Domain.xUnit;
 
@@ -23,29 +17,15 @@ public static class EventReaderExtensions
     }
 }
 
-public class CosmosDbEventRemovalTests
+public class CosmosDbEventRemovalTests : CosmosDbTestBase
 {
-    private readonly IServiceProvider _serviceProvider;
     private readonly IEventWriter _eventWriter;
     private readonly IEventReader _eventReader;
-    private readonly SekibanDomainTypes _domainTypes;
+    
     public CosmosDbEventRemovalTests()
     {
-        // Set up services
-        var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder()
-            .AddJsonFile("appsettings.json", false, false)
-            .AddEnvironmentVariables()
-            .AddUserSecrets(Assembly.GetExecutingAssembly())
-            .Build();
-            
-        _domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
-        services.AddSingleton(_domainTypes);
-        services.AddSekibanCosmosDb(configuration);
-        
-        _serviceProvider = services.BuildServiceProvider();
-        _eventWriter = _serviceProvider.GetRequiredService<IEventWriter>();
-        _eventReader = _serviceProvider.GetRequiredService<IEventReader>();
+        _eventWriter = ServiceProvider.GetRequiredService<IEventWriter>();
+        _eventReader = ServiceProvider.GetRequiredService<IEventReader>();
     }
 
     [Fact]
@@ -79,7 +59,7 @@ public class CosmosDbEventRemovalTests
         Assert.NotEmpty(events);
         
         // Get the event remover
-        var eventRemover = _serviceProvider.GetRequiredService<IEventRemover>();
+        var eventRemover = ServiceProvider.GetRequiredService<IEventRemover>();
         
         // Act - Remove all events
         await eventRemover.RemoveAllEvents();
@@ -93,7 +73,7 @@ public class CosmosDbEventRemovalTests
     public async Task RemoveAllEvents_ShouldWorkWithEmptyContainer()
     {
         // Arrange - Get the event remover
-        var eventRemover = _serviceProvider.GetRequiredService<IEventRemover>();
+        var eventRemover = ServiceProvider.GetRequiredService<IEventRemover>();
         
         // Make sure the container is empty
         await eventRemover.RemoveAllEvents();
@@ -129,7 +109,7 @@ public class CosmosDbEventRemovalTests
         Assert.NotEmpty(events);
         
         // Get the event remover
-        var eventRemover = _serviceProvider.GetRequiredService<IEventRemover>();
+        var eventRemover = ServiceProvider.GetRequiredService<IEventRemover>();
         
         // Act - Remove all events
         await eventRemover.RemoveAllEvents();

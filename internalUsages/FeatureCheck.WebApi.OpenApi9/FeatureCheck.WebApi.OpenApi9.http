@@ -1,6 +1,0 @@
-@FeatureCheck.WebApi.OpenApi9_HostAddress = http://localhost:5244
-
-GET {{FeatureCheck.WebApi.OpenApi9_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
