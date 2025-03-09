@@ -10,7 +10,7 @@ public record SekibanCosmosClientOptions
     {
         AllowBulkExecution = true,
         MaxRetryAttemptsOnRateLimitedRequests = 200,
-        ConnectionMode = ConnectionMode.Gateway,
+        ConnectionMode = ConnectionMode.Direct,
         GatewayModeMaxConnectionLimit = 200
     };
 }
