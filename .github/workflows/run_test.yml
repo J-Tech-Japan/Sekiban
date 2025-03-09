@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   regularAggregateTest:
+    runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:14
@@ -33,8 +35,6 @@ jobs:
           - 8081:8081
         env:
           PROTOCOL: https
-      max-parallel: 4
-    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
