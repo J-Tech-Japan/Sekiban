@@ -37,7 +37,7 @@ jobs:
         env:
           PROTOCOL: https
         options: >-
-          --health-cmd curl -f http://localhost:8081/_explorer/emulator.html
+          --health-cmd 'curl -f http://localhost:8081/_explorer/emulator.html'
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
