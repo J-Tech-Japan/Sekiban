@@ -55,4 +55,4 @@ jobs:
         dotnet build Sekiban.sln -c Release
     - name: dotnet test
       run: |
-        dotnet test -c Release -m:1
+        dotnet test -c Release
