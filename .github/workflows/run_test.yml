@@ -44,6 +44,13 @@ jobs:
     - name: dotnet build
       run: |
         dotnet build -c Release
-    - name: dotnet test
+    - name: dotnet test by project
       run: |
-        dotnet test -c Release --no-build --verbosity normal
+        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj  -c Release --no-build --verbosity normal
+    - name: dotnet test by project2
+      run: |
+        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal
+    - name: dotnet test by project3
+      run: |
+        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal
+  
