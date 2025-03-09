@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Caching.Memory;
-
 namespace Sekiban.Pure.CosmosDb;
 
 /// <summary>

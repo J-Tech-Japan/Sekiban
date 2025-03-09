@@ -1,7 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-
 namespace Sekiban.Pure.CosmosDb;
 
 public class CosmosPartitionGenerator

@@ -20,21 +20,16 @@ public class PostgresDbEventWriter : IEventWriter, IEventRemover
         await _dbFactory.DbActionAsync(
             async dbContext =>
             {
-                var dbEvents = events
-                    .Select(ev => DbEvent.FromEvent(ev, _serializer, _eventTypes))
-                    .ToList();
+                var dbEvents = events.Select(ev => DbEvent.FromEvent(ev, _serializer, _eventTypes)).ToList();
 
                 await dbContext.Events.AddRangeAsync(dbEvents);
                 await dbContext.SaveChangesAsync();
             });
     }
-    
+
     /// <summary>
-    /// Removes all events from the PostgreSQL event table
+    ///     Removes all events from the PostgreSQL event table
     /// </summary>
     /// <returns>A task that represents the asynchronous operation</returns>
-    public Task RemoveAllEvents()
-    {
-        return _dbFactory.DeleteAllFromEventContainer();
-    }
+    public Task RemoveAllEvents() => _dbFactory.DeleteAllFromEventContainer();
 }

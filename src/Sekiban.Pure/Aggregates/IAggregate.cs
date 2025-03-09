@@ -13,6 +13,7 @@ public interface IAggregate
     public OptionalValue<SortableUniqueIdValue> GetLastSortableUniqueIdValue() =>
         SortableUniqueIdValue.OptionalValue(LastSortableUniqueId);
     public IAggregatePayload GetPayload();
-    public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>() where TAggregatePayload : IAggregatePayload;
+    public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayload;
 
 }

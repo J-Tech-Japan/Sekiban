@@ -4,7 +4,8 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.CosmosDb;
 
-public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes sekibanDomainTypes) : IEventWriter, IEventRemover
+public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes sekibanDomainTypes)
+    : IEventWriter, IEventRemover
 {
 
     public Task SaveEvents<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent => dbFactory.CosmosActionAsync(
@@ -34,13 +35,10 @@ public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes s
                 }) ??
             Task.CompletedTask;
     }
-    
+
     /// <summary>
-    /// Removes all events from the Cosmos DB event container
+    ///     Removes all events from the Cosmos DB event container
     /// </summary>
     /// <returns>A task that represents the asynchronous operation</returns>
-    public Task RemoveAllEvents()
-    {
-        return dbFactory.DeleteAllFromEventContainer();
-    }
+    public Task RemoveAllEvents() => dbFactory.DeleteAllFromEventContainer();
 }

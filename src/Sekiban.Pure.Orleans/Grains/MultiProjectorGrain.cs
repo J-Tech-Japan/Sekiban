@@ -15,8 +15,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     private readonly SekibanDomainTypes sekibanDomainTypes;
 
     public MultiProjectorGrain(
-        [PersistentState("multiProjector", "Default")]
-        IPersistentState<MultiProjectionState> safeState,
+        [PersistentState("multiProjector", "Default")] IPersistentState<MultiProjectionState> safeState,
         IEventReader eventReader,
         SekibanDomainTypes sekibanDomainTypes)
     {
@@ -106,8 +105,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         {
             // 安全と判断できるイベントと、最新の（不安全な）イベントの分割点を検出
             var splitIndex = eventsList.FindLastIndex(
-                e =>
-                    new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeThresholdSortable));
+                e => new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeThresholdSortable));
 
             if (splitIndex >= 0)
             {
@@ -154,9 +152,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                 GetProjectorForQuery,
                 new ServiceCollection().BuildServiceProvider()) ??
             throw new ApplicationException("Query not found");
-        return result
-            .Remap(value => value.ToGeneral(query))
-            .UnwrapBox();
+        return result.Remap(value => value.ToGeneral(query)).UnwrapBox();
     }
 
     public async Task<IListQueryResult> QueryAsync(IListQueryCommon query)
@@ -174,8 +170,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     {
         await BuildStateAsync();
         return UnsafeState?.ToResultBox<IMultiProjectorStateCommon>() ??
-            safeState?.State.ToResultBox<IMultiProjectorStateCommon>() ??
-            new ApplicationException("No state found");
+            safeState?.State.ToResultBox<IMultiProjectorStateCommon>() ?? new ApplicationException("No state found");
     }
 
     public IMultiProjectorCommon GetProjectorFromMultiProjectorName()

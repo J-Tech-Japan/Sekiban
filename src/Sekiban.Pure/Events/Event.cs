@@ -1,6 +1,4 @@
-using System.Text.Json.Serialization;
 using Sekiban.Pure.Documents;
-
 namespace Sekiban.Pure.Events;
 
 public record Event<TEventPayload>(
@@ -11,8 +9,5 @@ public record Event<TEventPayload>(
     int Version,
     EventMetadata Metadata) : IEvent where TEventPayload : IEventPayload
 {
-    public IEventPayload GetPayload()
-    {
-        return Payload;
-    }
+    public IEventPayload GetPayload() => Payload;
 }

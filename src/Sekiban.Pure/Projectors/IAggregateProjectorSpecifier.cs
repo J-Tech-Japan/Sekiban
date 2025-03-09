@@ -1,5 +1,4 @@
 using ResultBoxes;
-
 namespace Sekiban.Pure.Projectors;
 
 public interface IAggregateProjectorSpecifier

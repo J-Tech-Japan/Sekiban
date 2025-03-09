@@ -12,9 +12,11 @@ public class InMemoryEventReader(Repository repository) : IEventReader
         // Apply ISortableIdCondition filtering
         query = eventRetrievalInfo.SortableIdCondition switch
         {
-            SinceSortableIdCondition since => query.Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0),
-            BetweenSortableIdCondition between => query.Where(m => m.SortableUniqueId.CompareTo(between.Start.Value) > 0 && 
-                                                                  m.SortableUniqueId.CompareTo(between.End.Value) < 0),
+            SinceSortableIdCondition since => query.Where(
+                m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0),
+            BetweenSortableIdCondition between => query.Where(
+                m => m.SortableUniqueId.CompareTo(between.Start.Value) > 0 &&
+                    m.SortableUniqueId.CompareTo(between.End.Value) < 0),
             SortableIdConditionNone => query,
             _ => throw new ArgumentOutOfRangeException()
         };

@@ -5,8 +5,7 @@ using Sekiban.Pure.Orleans.Parts;
 namespace Sekiban.Pure.Orleans.Grains;
 
 public class AggregateEventHandlerGrain(
-    [PersistentState("aggregate", "Default")]
-    IPersistentState<AggregateEventHandlerGrain.ToPersist> state,
+    [PersistentState("aggregate", "Default")] IPersistentState<AggregateEventHandlerGrain.ToPersist> state,
     SekibanDomainTypes sekibanDomainTypes,
     IEventWriter eventWriter,
     IEventReader eventReader) : Grain, IAggregateEventHandlerGrain
@@ -15,8 +14,7 @@ public class AggregateEventHandlerGrain(
 
     public async Task<IReadOnlyList<IEvent>> AppendEventsAsync(
         string expectedLastSortableUniqueId,
-        IReadOnlyList<IEvent> newEvents
-    )
+        IReadOnlyList<IEvent> newEvents)
     {
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
         var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(sekibanDomainTypes.EventTypes);
@@ -46,21 +44,14 @@ public class AggregateEventHandlerGrain(
     }
 
 
-    public Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(
-        string fromSortableUniqueId,
-        int? limit = null
-    )
+    public Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int? limit = null)
     {
         var index = _events.FindIndex(e => e.SortableUniqueId == fromSortableUniqueId);
 
         if (index < 0)
             return Task.FromResult<IReadOnlyList<IEvent>>(new List<IEvent>());
 
-        return Task.FromResult<IReadOnlyList<IEvent>>(
-            _events
-                .Skip(index + 1)
-                .Take(limit ?? int.MaxValue)
-                .ToList());
+        return Task.FromResult<IReadOnlyList<IEvent>>(_events.Skip(index + 1).Take(limit ?? int.MaxValue).ToList());
     }
 
     public async Task<IReadOnlyList<IEvent>> GetAllEventsAsync()
@@ -96,10 +87,7 @@ public class AggregateEventHandlerGrain(
             var last = lastEvent?.SortableUniqueId ?? string.Empty;
             var value = new SortableUniqueIdValue(last);
             if (string.IsNullOrWhiteSpace(last)) return new ToPersist(string.Empty, OptionalValue<DateTime>.Empty);
-            return new ToPersist(
-                last,
-                value.GetTicks()
-            );
+            return new ToPersist(last, value.GetTicks());
         }
     }
 }

@@ -17,7 +17,9 @@ public record EventRetrievalInfo(
         ISortableIdCondition sortableIdCondition,
         int? MaxCount = null) => new(
         string.IsNullOrWhiteSpace(rootPartitionKey)
-            ? (aggregateId.HasValue ? OptionalValue.FromValue(IDocument.DefaultRootPartitionKey) : OptionalValue<string>.Empty) 
+            ? aggregateId.HasValue
+                ? OptionalValue.FromValue(IDocument.DefaultRootPartitionKey)
+                : OptionalValue<string>.Empty
             : OptionalValue.FromNullableValue(rootPartitionKey),
         OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
         OptionalValue.FromNullableValue(aggregateId),
@@ -51,7 +53,10 @@ public record EventRetrievalInfo(
                     ? ExceptionOrNone.None
                     : new ApplicationException("Root Partition Key is not set"))
             .Remap(
-                aggregateName => PartitionKeys.Existing(AggregateId.GetValue(),aggregateName, RootPartitionKey.GetValue()).ToPrimaryKeysString());
+                aggregateName =>
+                    PartitionKeys
+                        .Existing(AggregateId.GetValue(), aggregateName, RootPartitionKey.GetValue())
+                        .ToPrimaryKeysString());
     public static EventRetrievalInfo FromPartitionKeys(PartitionKeys partitionKeys) =>
         new(
             OptionalValue.FromValue(partitionKeys.RootPartitionKey),

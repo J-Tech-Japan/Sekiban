@@ -1,45 +1,41 @@
-﻿using System;
+﻿#nullable disable
+
 using Microsoft.EntityFrameworkCore.Migrations;
+namespace Sekiban.Pure.Postgres.Migrations;
 
-#nullable disable
-
-namespace Sekiban.Pure.Postgres.Migrations
+/// <inheritdoc />
+public partial class initial : Migration
 {
     /// <inheritdoc />
-    public partial class initial : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.CreateTable(
-                name: "Events",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Payload = table.Column<string>(type: "json", nullable: false),
-                    SortableUniqueId = table.Column<string>(type: "text", nullable: false),
-                    Version = table.Column<int>(type: "integer", nullable: false),
-                    AggregateId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RootPartitionKey = table.Column<string>(type: "text", nullable: false),
-                    TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    PartitionKey = table.Column<string>(type: "text", nullable: false),
-                    AggregateGroup = table.Column<string>(type: "text", nullable: false),
-                    PayloadTypeName = table.Column<string>(type: "text", nullable: false),
-                    CausationId = table.Column<string>(type: "text", nullable: false),
-                    CorrelationId = table.Column<string>(type: "text", nullable: false),
-                    ExecutedUser = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Events", x => x.Id);
-                });
-        }
+        migrationBuilder.CreateTable(
+            "Events",
+            table => new
+            {
+                Id = table.Column<Guid>("uuid", nullable: false),
+                Payload = table.Column<string>("json", nullable: false),
+                SortableUniqueId = table.Column<string>("text", nullable: false),
+                Version = table.Column<int>("integer", nullable: false),
+                AggregateId = table.Column<Guid>("uuid", nullable: false),
+                RootPartitionKey = table.Column<string>("text", nullable: false),
+                TimeStamp = table.Column<DateTime>("timestamp with time zone", nullable: false),
+                PartitionKey = table.Column<string>("text", nullable: false),
+                AggregateGroup = table.Column<string>("text", nullable: false),
+                PayloadTypeName = table.Column<string>("text", nullable: false),
+                CausationId = table.Column<string>("text", nullable: false),
+                CorrelationId = table.Column<string>("text", nullable: false),
+                ExecutedUser = table.Column<string>("text", nullable: false)
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("PK_Events", x => x.Id);
+            });
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(
-                name: "Events");
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(name: "Events");
     }
 }

@@ -14,10 +14,7 @@ public interface IAggregateEventHandlerGrain : IGrainWithStringKey
     ///     (成功時) 新たな LastSortableUniqueId
     ///     (失敗時) 例外をスローする or もしくは差分イベントを返す別パターンなど
     /// </returns>
-    Task<IReadOnlyList<IEvent>> AppendEventsAsync(
-        string expectedLastSortableUniqueId,
-        IReadOnlyList<IEvent> newEvents
-    );
+    Task<IReadOnlyList<IEvent>> AppendEventsAsync(string expectedLastSortableUniqueId, IReadOnlyList<IEvent> newEvents);
 
     /// <summary>
     ///     イベントの差分を取得する。
@@ -25,10 +22,7 @@ public interface IAggregateEventHandlerGrain : IGrainWithStringKey
     /// <param name="fromSortableUniqueId">差分の取得開始点となる SortableUniqueId</param>
     /// <param name="limit">取得する最大件数(必要なら)</param>
     /// <returns>該当するイベント一覧</returns>
-    Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(
-        string fromSortableUniqueId,
-        int? limit = null
-    );
+    Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int? limit = null);
 
     /// <summary>
     ///     全イベントを最初から取得する。

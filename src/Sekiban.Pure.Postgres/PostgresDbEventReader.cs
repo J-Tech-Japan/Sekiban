@@ -79,8 +79,7 @@ public class PostgresDbEventReader : IEventReader
                 {
                     if (string.IsNullOrWhiteSpace(dbEvent.PayloadTypeName)) continue;
 
-                    var jsonPayload = _serializer.Deserialize<JsonNode>(
-                        dbEvent.Payload);
+                    var jsonPayload = _serializer.Deserialize<JsonNode>(dbEvent.Payload);
 
 
                     if (jsonPayload is null) continue;
@@ -96,8 +95,7 @@ public class PostgresDbEventReader : IEventReader
                         dbEvent.PayloadTypeName,
                         dbEvent.TimeStamp,
                         dbEvent.PartitionKey,
-                        new EventMetadata(dbEvent.CausationId, dbEvent.CorrelationId, dbEvent.ExecutedUser)
-                    );
+                        new EventMetadata(dbEvent.CausationId, dbEvent.CorrelationId, dbEvent.ExecutedUser));
 
                     var converted = _eventTypes.DeserializeToTyped(
                         eventDocument,

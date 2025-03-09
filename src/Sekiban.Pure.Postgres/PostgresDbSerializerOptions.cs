@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 namespace Sekiban.Pure.Postgres;
 
 public class PostgresDbSerializerOptions

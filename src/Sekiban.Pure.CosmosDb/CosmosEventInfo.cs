@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 namespace Sekiban.Pure.CosmosDb;
 
 public record CosmosEventInfo

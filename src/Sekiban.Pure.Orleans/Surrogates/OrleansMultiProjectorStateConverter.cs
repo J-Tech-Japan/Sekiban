@@ -1,13 +1,12 @@
-using Orleans;
 using Sekiban.Pure.Projectors;
-
 namespace Sekiban.Pure.Orleans.Surrogates;
 
 [RegisterConverter]
 public sealed class OrleansMultiProjectorStateConverter : IConverter<MultiProjectionState, OrleansMultiProjectorState>
 {
     public MultiProjectionState ConvertFromSurrogate(in OrleansMultiProjectorState surrogate) =>
-        new(surrogate.ProjectorCommon,
+        new(
+            surrogate.ProjectorCommon,
             surrogate.LastEventId,
             surrogate.LastSortableUniqueId,
             surrogate.Version,
@@ -15,18 +14,18 @@ public sealed class OrleansMultiProjectorStateConverter : IConverter<MultiProjec
             surrogate.RootPartitionKey);
 
     public OrleansMultiProjectorState ConvertToSurrogate(in MultiProjectionState value) =>
-        new(value.ProjectorCommon,
+        new(
+            value.ProjectorCommon,
             value.LastEventId,
             value.LastSortableUniqueId,
             value.Version,
             value.AppliedSnapshotVersion,
             value.RootPartitionKey);
 }
-
 [RegisterConverter]
-public sealed class OrleansMultiProjectorStateConverter<TMultiProjector> : 
-    IConverter<MultiProjectionState<TMultiProjector>, OrleansMultiProjectorState>
-    where TMultiProjector : IMultiProjector<TMultiProjector>
+public sealed class
+    OrleansMultiProjectorStateConverter<TMultiProjector> : IConverter<MultiProjectionState<TMultiProjector>,
+    OrleansMultiProjectorState> where TMultiProjector : IMultiProjector<TMultiProjector>
 {
     public MultiProjectionState<TMultiProjector> ConvertFromSurrogate(in OrleansMultiProjectorState surrogate)
     {
@@ -45,7 +44,8 @@ public sealed class OrleansMultiProjectorStateConverter<TMultiProjector> :
     }
 
     public OrleansMultiProjectorState ConvertToSurrogate(in MultiProjectionState<TMultiProjector> value) =>
-        new(value.Payload,
+        new(
+            value.Payload,
             value.LastEventId,
             value.LastSortableUniqueId,
             value.Version,

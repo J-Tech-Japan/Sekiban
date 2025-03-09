@@ -1,4 +1,3 @@
-using Sekiban.Pure.Exceptions;
 using Sekiban.Pure.Validations;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Pure.Exceptions;

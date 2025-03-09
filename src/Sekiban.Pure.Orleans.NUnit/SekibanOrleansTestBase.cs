@@ -71,21 +71,19 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     ///     Get aggregate in Then phase
     /// </summary>
     protected ResultBox<Aggregate> ThenGetAggregateWithResult<TAggregateProjector>(PartitionKeys partitionKeys)
-        where TAggregateProjector : IAggregateProjector, new()
-        => _executor.LoadAggregateAsync<TAggregateProjector>(partitionKeys).UnwrapBox().Result;
+        where TAggregateProjector : IAggregateProjector, new() =>
+        _executor.LoadAggregateAsync<TAggregateProjector>(partitionKeys).UnwrapBox().Result;
 
-    protected ResultBox<TResult> ThenQueryWithResult<TResult>(IQueryCommon<TResult> query) where TResult : notnull
-        => _executor.QueryAsync(query).UnwrapBox().Result;
+    protected ResultBox<TResult> ThenQueryWithResult<TResult>(IQueryCommon<TResult> query) where TResult : notnull =>
+        _executor.QueryAsync(query).UnwrapBox().Result;
 
     protected ResultBox<ListQueryResult<TResult>> ThenQueryWithResult<TResult>(IListQueryCommon<TResult> query)
-        where TResult : notnull
-        => _executor.QueryAsync(query).UnwrapBox().Result;
+        where TResult : notnull => _executor.QueryAsync(query).UnwrapBox().Result;
 
     protected ResultBox<TMultiProjector> ThenGetMultiProjectorWithResult<TMultiProjector>()
         where TMultiProjector : IMultiProjector<TMultiProjector>
     {
-        var projector
-            = _cluster.Client.GetGrain<IMultiProjectorGrain>(TMultiProjector.GetMultiProjectorName());
+        var projector = _cluster.Client.GetGrain<IMultiProjectorGrain>(TMultiProjector.GetMultiProjectorName());
         var state = projector.GetStateAsync().Result;
         var typed = _domainTypes.MultiProjectorsType.ToTypedState(state);
         if (typed is MultiProjectionState<TMultiProjector> multiProjectionState)
@@ -98,9 +96,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     /// <summary>
     ///     Execute command in When phase.
     /// </summary>
-    protected CommandResponse WhenCommand(
-        ICommandWithHandlerSerializable command,
-        IEvent? relatedEvent = null) =>
+    protected CommandResponse WhenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
@@ -113,8 +109,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     protected TResult ThenQuery<TResult>(IQueryCommon<TResult> query) where TResult : notnull =>
         _executor.QueryAsync(query).UnwrapBox().Result;
 
-    protected ListQueryResult<TResult> ThenQuery<TResult>(IListQueryCommon<TResult> query)
-        where TResult : notnull =>
+    protected ListQueryResult<TResult> ThenQuery<TResult>(IListQueryCommon<TResult> query) where TResult : notnull =>
         _executor.QueryAsync(query).UnwrapBox().Result;
 
     protected TMultiProjector ThenGetMultiProjector<TMultiProjector>()
@@ -133,8 +128,8 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
 
 
     /// <summary>
-    /// Configures the services for the test. Override this method to customize the services.
-    /// DomainTypes is always registered by default.
+    ///     Configures the services for the test. Override this method to customize the services.
+    ///     DomainTypes is always registered by default.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     protected virtual void ConfigureServices(IServiceCollection services)
@@ -150,13 +145,14 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(services => 
-        {
-            // Always register DomainTypes
-            services.AddSingleton(_domainTypes);
-            
-            // Allow customization of other services
-            ConfigureServices(services);
-        });
+        siloBuilder.ConfigureServices(
+            services =>
+            {
+                // Always register DomainTypes
+                services.AddSingleton(_domainTypes);
+
+                // Allow customization of other services
+                ConfigureServices(services);
+            });
     }
 }

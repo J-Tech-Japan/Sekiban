@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-
 namespace Sekiban.Pure.Postgres;
 
 public record SekibanPostgresDbOption
@@ -21,10 +20,9 @@ public record SekibanPostgresDbOption
     {
         var azureSection = section.GetSection("Postgres");
         var postgresConnectionStringName = azureSection.GetValue<string>(nameof(ConnectionStringName)) ??
-                                           PostgresConnectionStringNameDefaultValue;
+            PostgresConnectionStringNameDefaultValue;
         var postgresConnectionString = configurationRoot.GetConnectionString(postgresConnectionStringName) ??
-                                       section.GetValue<string>(nameof(ConnectionString)) ??
-                                       section.GetValue<string>("PostgresConnectionString");
+            section.GetValue<string>(nameof(ConnectionString)) ?? section.GetValue<string>("PostgresConnectionString");
         return new SekibanPostgresDbOption
         {
             ConnectionStringName = postgresConnectionStringName,

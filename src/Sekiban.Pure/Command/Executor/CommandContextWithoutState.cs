@@ -10,8 +10,7 @@ public record CommandContextWithoutState(
     PartitionKeys PartitionKeys,
     IEventTypes EventTypes,
     CommandMetadata CommandMetadata,
-    IServiceProvider ServiceProvider)
-    : ICommandContextWithoutState
+    IServiceProvider ServiceProvider) : ICommandContextWithoutState
 {
     public string OriginalSortableUniqueId => string.Empty;
     public List<IEvent> Events { get; } = new();

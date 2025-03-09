@@ -6,8 +6,7 @@ using Sekiban.Pure.Orleans.Parts;
 namespace Sekiban.Pure.Orleans.Grains;
 
 public class AggregateProjectorGrain(
-    [PersistentState("aggregate", "Default")]
-    IPersistentState<Aggregate> state,
+    [PersistentState("aggregate", "Default")] IPersistentState<Aggregate> state,
     SekibanDomainTypes sekibanDomainTypes,
     IServiceProvider serviceProvider) : Grain, IAggregateProjectorGrain
 {
@@ -81,11 +80,7 @@ public class AggregateProjectorGrain(
         if (await eventHandlerGrain.GetLastSortableUniqueIdAsync() != read.LastSortableUniqueId)
         {
             var events = await eventHandlerGrain.GetDeltaEventsAsync(read.LastSortableUniqueId);
-            read = read
-                .Project(
-                    events.ToList(),
-                    GetPartitionKeysAndProjector().Projector)
-                .UnwrapBox();
+            read = read.Project(events.ToList(), GetPartitionKeysAndProjector().Projector).UnwrapBox();
             UpdatedAfterWrite = true;
         }
         return read;
