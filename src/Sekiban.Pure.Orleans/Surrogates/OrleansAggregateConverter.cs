@@ -29,8 +29,7 @@ public sealed class OrleansAggregateConverter : IConverter<Aggregate, OrleansAgg
 [RegisterConverter]
 public sealed class
     OrleansAggregateConverter<TAggregatePayload> : IConverter<Aggregate<TAggregatePayload>,
-    OrleansAggregate<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayload
+    OrleansAggregate<TAggregatePayload>> where TAggregatePayload : IAggregatePayload
 {
     private readonly OrleansPartitionKeysConverter _partitionKeysConverter = new();
 

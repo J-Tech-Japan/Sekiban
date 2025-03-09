@@ -9,7 +9,8 @@ public sealed class OrleansEventConverter<TEventPayload> : IConverter<Event<TEve
     private readonly OrleansEventMetadataConverter _metadataConverter = new();
 
     public Event<TEventPayload> ConvertFromSurrogate(in OrleansEvent<TEventPayload> surrogate) =>
-        new(surrogate.Id,
+        new(
+            surrogate.Id,
             surrogate.Payload,
             _partitionKeysConverter.ConvertFromSurrogate(surrogate.PartitionKeys),
             surrogate.SortableUniqueId,
@@ -17,7 +18,8 @@ public sealed class OrleansEventConverter<TEventPayload> : IConverter<Event<TEve
             _metadataConverter.ConvertFromSurrogate(surrogate.Metadata));
 
     public OrleansEvent<TEventPayload> ConvertToSurrogate(in Event<TEventPayload> value) =>
-        new(value.Id,
+        new(
+            value.Id,
             value.Payload,
             _partitionKeysConverter.ConvertToSurrogate(value.PartitionKeys),
             value.SortableUniqueId,

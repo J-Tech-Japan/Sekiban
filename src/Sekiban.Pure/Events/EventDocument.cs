@@ -1,5 +1,4 @@
 using Sekiban.Pure.Documents;
-
 namespace Sekiban.Pure.Events;
 
 public record EventDocument<TEventPayload>(
@@ -19,9 +18,17 @@ public record EventDocument<TEventPayload>(
     public static EventDocument<TEventPayload> FromEvent(Event<TEventPayload> ev)
     {
         var sortableUniqueIdValue = new SortableUniqueIdValue(ev.SortableUniqueId);
-        return new EventDocument<TEventPayload>(ev.Id, ev.Payload, ev.SortableUniqueId, ev.Version,
-            ev.PartitionKeys.AggregateId, ev.PartitionKeys.Group,
-            ev.PartitionKeys.RootPartitionKey, ev.Payload.GetType().Name, sortableUniqueIdValue.GetTicks() ,
-            ev.PartitionKeys.ToPrimaryKeysString(), ev.Metadata);
+        return new EventDocument<TEventPayload>(
+            ev.Id,
+            ev.Payload,
+            ev.SortableUniqueId,
+            ev.Version,
+            ev.PartitionKeys.AggregateId,
+            ev.PartitionKeys.Group,
+            ev.PartitionKeys.RootPartitionKey,
+            ev.Payload.GetType().Name,
+            sortableUniqueIdValue.GetTicks(),
+            ev.PartitionKeys.ToPrimaryKeysString(),
+            ev.Metadata);
     }
 }

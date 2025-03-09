@@ -1,9 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using System;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
 namespace Sekiban.Pure.SourceGenerator;
 
@@ -109,8 +107,7 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine("            _ => ResultBox<IAggregateProjector>.FromException(");
-        sb.AppendLine(
-            "       new ResultsInvalidOperationException($\"Projector Type {projectorName} Not Found\"))");
+        sb.AppendLine("       new ResultsInvalidOperationException($\"Projector Type {projectorName} Not Found\"))");
         sb.AppendLine("        };");
         sb.AppendLine("    };");
         sb.AppendLine("}");

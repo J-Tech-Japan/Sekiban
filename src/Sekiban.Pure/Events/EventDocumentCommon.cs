@@ -23,8 +23,15 @@ public record EventDocumentCommon(
         var p = Payload.Deserialize<TEventPayload>(options);
         if (p == null)
         {
-            return ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException("Failed to deserialize payload"));
+            return ResultBox<IEvent>.FromException(
+                new SekibanEventTypeNotFoundException("Failed to deserialize payload"));
         }
-        return new Event<TEventPayload>(Id, p, new PartitionKeys(AggregateId, AggregateGroup, RootPartitionKey), SortableUniqueId, Version, Metadata);
+        return new Event<TEventPayload>(
+            Id,
+            p,
+            new PartitionKeys(AggregateId, AggregateGroup, RootPartitionKey),
+            SortableUniqueId,
+            Version,
+            Metadata);
     }
 }

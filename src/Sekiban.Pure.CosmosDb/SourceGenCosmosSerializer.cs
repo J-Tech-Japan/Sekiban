@@ -1,8 +1,7 @@
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using Microsoft.Azure.Cosmos;
 using Sekiban.Pure.Events;
-
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 namespace Sekiban.Pure.CosmosDb;
 
 public class SourceGenCosmosSerializer<TEventTypes> : CosmosSerializer where TEventTypes : IEventTypes, new()
@@ -15,7 +14,9 @@ public class SourceGenCosmosSerializer<TEventTypes> : CosmosSerializer where TEv
         // check if all event types are registered
         eventTypes.CheckEventJsonContextOption(serializerOptions);
         // ソースジェネレーターで生成されたオプションを利用できるようにする
-        _serializerOptions = serializerOptions ?? new JsonSerializerOptions() { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase};
+        _serializerOptions = serializerOptions ??
+            new JsonSerializerOptions
+                { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     }
     public override T FromStream<T>(Stream stream)
     {
@@ -58,15 +59,14 @@ public class SourceGenCosmosSerializer<TEventTypes> : CosmosSerializer where TEv
             var writer = new Utf8JsonWriter(stream);
             writer.WriteRawValue(json);
             writer.Flush();
-        }
-        else
+        } else
         {
             // 対象型がソースジェネレータに登録されていない場合は、フォールバック
             JsonSerializer.Serialize(stream, input, _serializerOptions);
         }
-        
+
         // ストリームの先頭にシーク
         stream.Seek(0, SeekOrigin.Begin);
-        return stream;    
+        return stream;
     }
 }

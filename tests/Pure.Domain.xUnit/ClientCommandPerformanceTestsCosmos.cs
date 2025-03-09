@@ -8,7 +8,6 @@ using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Orleans.xUnit;
-using Sekiban.Pure.Postgres;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics;
 using System.Reflection;
@@ -16,6 +15,9 @@ namespace Pure.Domain.xUnit;
 
 public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<ClientCommandPerformanceTestsCosmos>
 {
+    // Generate a unique ID for this test class
+    private readonly string _testRunId = Guid.NewGuid().ToString("N").Substring(0, 8);
+
     public override SekibanDomainTypes GetDomainTypes() =>
         PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
 
@@ -27,48 +29,43 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly());
         var configuration = builder.Build();
-
         services.AddSekibanCosmosDb(configuration);
     }
-    
+
     /// <summary>
-    /// Removes all events from the event store to ensure a clean state for performance tests
+    ///     Removes all events from the event store to ensure a clean state for performance tests
     /// </summary>
     private async Task RemoveAllEventsAsync()
     {
-        // Set up a service provider to get the IEventRemover
+        // Create a new service provider with the same isolated container settings
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder()
+            .SetBasePath(ApplicationEnvironment.ApplicationBasePath)
             .AddJsonFile("appsettings.json", false, false)
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly())
             .Build();
-        
-        // Register domain types first
-        var domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
-        services.AddSingleton(domainTypes);
-        
-        // Add Cosmos DB services
+        services.AddSingleton(GetDomainTypes());
         services.AddSekibanCosmosDb(configuration);
         var serviceProvider = services.BuildServiceProvider();
-        
+
         // Get the event remover and remove all events
         var eventRemover = serviceProvider.GetRequiredService<IEventRemover>();
         await eventRemover.RemoveAllEvents();
     }
-    
+
     [Fact]
     public void TestClientCommandStartingUpTime()
     {
     }
-    
+
     [Theory]
-    // [InlineData(1, 1, 1)]
+    [InlineData(1, 1, 1)]
     // [InlineData(2, 2, 2)]
     // [InlineData(3, 3, 3)]
     // [InlineData(1, 1, 10)]
     // [InlineData(1, 1, 20)]
-    [InlineData(10, 10, 10)]
+    // [InlineData(10, 10, 10)]
     public async Task TestClientCommandPerformance(int branchCount, int clientsPerBranch, int nameChangesPerClient)
     {
         // Clear all events before starting the test

@@ -18,15 +18,15 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <TargetFramework>net9.0</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.Server" Version="9.0.1"/>
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.0.1"/>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.1">
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

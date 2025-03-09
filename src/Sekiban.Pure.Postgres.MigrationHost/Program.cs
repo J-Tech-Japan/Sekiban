@@ -1,7 +1,6 @@
-﻿﻿// See https://aka.ms/new-console-template for more information
+﻿// See https://aka.ms/new-console-template for more information
 
 using Sekiban.Pure.Postgres;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // dotnet ef migrations add initial -p ../Sekiban.Infrastructure.Postgres

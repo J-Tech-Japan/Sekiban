@@ -1,7 +1,6 @@
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
-using Sekiban.Pure.Orleans.Surrogates;
 namespace Sekiban.Pure.Orleans;
 
 public interface IAggregateProjectorGrain : IGrainWithStringKey

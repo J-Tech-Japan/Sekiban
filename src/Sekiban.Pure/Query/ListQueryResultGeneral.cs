@@ -12,30 +12,25 @@ public record ListQueryResultGeneral(
     public static ListQueryResultGeneral Empty =>
         new(0, 0, 0, 0, Array.Empty<object>(), string.Empty, new EmptyListQueryCommon());
 
-    public virtual bool Equals(ListQueryResultGeneral? other)
-    {
-        return other != null &&
-               TotalCount == other.TotalCount &&
-               TotalPages == other.TotalPages &&
-               CurrentPage == other.CurrentPage &&
-               PageSize == other.PageSize &&
-               Items.SequenceEqual(other.Items);
-    }
+    public virtual bool Equals(ListQueryResultGeneral? other) =>
+        other != null &&
+        TotalCount == other.TotalCount &&
+        TotalPages == other.TotalPages &&
+        CurrentPage == other.CurrentPage &&
+        PageSize == other.PageSize &&
+        Items.SequenceEqual(other.Items);
 
-    public ListQueryResultGeneral ToGeneral(IListQueryCommon query)
-    {
-        return this;
-    }
+    public ListQueryResultGeneral ToGeneral(IListQueryCommon query) => this;
 
     public override int GetHashCode()
     {
         unchecked
         {
             var hashCode = TotalCount.GetHashCode();
-            hashCode = (hashCode * 397) ^ TotalPages.GetHashCode();
-            hashCode = (hashCode * 397) ^ CurrentPage.GetHashCode();
-            hashCode = (hashCode * 397) ^ PageSize.GetHashCode();
-            hashCode = (hashCode * 397) ^ Items.GetHashCode();
+            hashCode = hashCode * 397 ^ TotalPages.GetHashCode();
+            hashCode = hashCode * 397 ^ CurrentPage.GetHashCode();
+            hashCode = hashCode * 397 ^ PageSize.GetHashCode();
+            hashCode = hashCode * 397 ^ Items.GetHashCode();
             return hashCode;
         }
     }

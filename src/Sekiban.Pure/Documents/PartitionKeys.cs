@@ -1,10 +1,16 @@
-using System.ComponentModel.DataAnnotations;
 using ResultBoxes;
 using Sekiban.Pure.Exceptions;
 using Sekiban.Pure.Extensions;
 using Sekiban.Pure.Projectors;
+using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Pure.Documents;
-public record PartitionKeys(Guid AggregateId, [property:RegularExpression("^[a-z0-9-_]{1,36}$")]string Group, [property:RegularExpression("^[a-z0-9-_]{1,36}$")]string RootPartitionKey)
+
+public record PartitionKeys(
+    Guid AggregateId,
+    [property: RegularExpression("^[a-z0-9-_]{1,36}$")]
+    string Group,
+    [property: RegularExpression("^[a-z0-9-_]{1,36}$")]
+    string RootPartitionKey)
 {
     public const string RootPartitionKeyRegexPattern = "^[a-z0-9-_]{1,36}$";
     private const string AggregateGroupRegexPattern = "^[a-zA-Z0-9-_]{1,36}$";
@@ -32,17 +38,19 @@ public record PartitionKeys(Guid AggregateId, [property:RegularExpression("^[a-z
         var split = primaryKeyString.Split('@');
         if (split.Length != 3)
         {
-            return ResultBox<PartitionKeys>.Error(new SekibanPartitionKeyInvalidException($"Invalid primary key string: {primaryKeyString}"));
+            return ResultBox<PartitionKeys>.Error(
+                new SekibanPartitionKeyInvalidException($"Invalid primary key string: {primaryKeyString}"));
         }
         if (Guid.TryParse(split[2], out var guid))
         {
             return new PartitionKeys(guid, split[1], split[0]);
         }
-        return ResultBox<PartitionKeys>.Error(new SekibanPartitionKeyInvalidException($"Invalid primary key string Id can not be parsed: {primaryKeyString}"));
+        return ResultBox<PartitionKeys>.Error(
+            new SekibanPartitionKeyInvalidException(
+                $"Invalid primary key string Id can not be parsed: {primaryKeyString}"));
     }
     public string ToPrimaryKeysString() => $"{RootPartitionKey}@{Group}@{AggregateId}";
 }
-
 public static class PartitionKeys<TAggregateProjector> where TAggregateProjector : IAggregateProjector, new()
 {
     public static PartitionKeys Generate(string rootPartitionKey = PartitionKeys.DefaultRootPartitionKey) =>

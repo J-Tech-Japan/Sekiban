@@ -56,7 +56,7 @@ public class Repository
     }
 
     /// <summary>
-    /// Clears all events from the repository
+    ///     Clears all events from the repository
     /// </summary>
     /// <returns>A ResultBox containing the number of events that were removed</returns>
     public ResultBox<int> ClearAllEvents()
@@ -70,16 +70,12 @@ public class Repository
     }
 
     public Task<ResultBox<MultiProjectionState<TMultiProjection>>> LoadMultiProjection<TMultiProjection>(
-        IMultiProjectionEventSelector eventSelector)
-        where TMultiProjection : IMultiProjector<TMultiProjection>
+        IMultiProjectionEventSelector eventSelector) where TMultiProjection : IMultiProjector<TMultiProjection>
     {
         List<IEvent> events;
         lock (_lock)
         {
-            events = _events
-                .Where(eventSelector.GetEventSelector)
-                .OrderBy(e => e.SortableUniqueId)
-                .ToList();
+            events = _events.Where(eventSelector.GetEventSelector).OrderBy(e => e.SortableUniqueId).ToList();
         }
         return ResultBox
             .FromValue(events)

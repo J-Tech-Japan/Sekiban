@@ -1,9 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 namespace Sekiban.Pure.Postgres;
 
-public class PostgresDbFactory(
-    SekibanPostgresDbOption dbOption,
-    IPostgresMemoryCacheAccessor memoryCache)
+public class PostgresDbFactory(SekibanPostgresDbOption dbOption, IPostgresMemoryCacheAccessor memoryCache)
 {
     private static string GetMemoryCacheDbContextKey() => "dbContext.Postgres";
 

@@ -1,6 +1,5 @@
 using ResultBoxes;
 using Sekiban.Pure.Exceptions;
-
 namespace Sekiban.Pure.Query;
 
 /// <summary>
@@ -22,30 +21,26 @@ public record ListQueryResult<T>(
 {
     public static ListQueryResult<T> Empty => new(0, 0, 0, 0, Array.Empty<T>());
 
-    public virtual bool Equals(ListQueryResult<T>? other)
-    {
-        return other != null &&
-               TotalCount == other.TotalCount &&
-               TotalPages == other.TotalPages &&
-               CurrentPage == other.CurrentPage &&
-               PageSize == other.PageSize &&
-               Items.SequenceEqual(other.Items);
-    }
+    public virtual bool Equals(ListQueryResult<T>? other) =>
+        other != null &&
+        TotalCount == other.TotalCount &&
+        TotalPages == other.TotalPages &&
+        CurrentPage == other.CurrentPage &&
+        PageSize == other.PageSize &&
+        Items.SequenceEqual(other.Items);
 
-    public ListQueryResultGeneral ToGeneral(IListQueryCommon query)
-    {
-        return new ListQueryResultGeneral(TotalCount, TotalPages, CurrentPage, PageSize, Items.Cast<object>(),
-            typeof(T).Name, query);
-    }
+    public ListQueryResultGeneral ToGeneral(IListQueryCommon query) =>
+        new(TotalCount, TotalPages, CurrentPage, PageSize, Items.Cast<object>(), typeof(T).Name, query);
 
     public static ResultBox<ListQueryResult<T>> FromGeneral(ListQueryResultGeneral general)
     {
-        return ResultBox.WrapTry(() => new ListQueryResult<T>(
-            general.TotalCount,
-            general.TotalPages,
-            general.CurrentPage,
-            general.PageSize,
-            general.Items.Cast<T>()));
+        return ResultBox.WrapTry(
+            () => new ListQueryResult<T>(
+                general.TotalCount,
+                general.TotalPages,
+                general.CurrentPage,
+                general.PageSize,
+                general.Items.Cast<T>()));
     }
 
     internal static ListQueryResult<T> MakeQueryListResult(
@@ -72,10 +67,10 @@ public record ListQueryResult<T>(
         unchecked
         {
             var hashCode = TotalCount.GetHashCode();
-            hashCode = (hashCode * 397) ^ TotalPages.GetHashCode();
-            hashCode = (hashCode * 397) ^ CurrentPage.GetHashCode();
-            hashCode = (hashCode * 397) ^ PageSize.GetHashCode();
-            hashCode = (hashCode * 397) ^ Items.GetHashCode();
+            hashCode = hashCode * 397 ^ TotalPages.GetHashCode();
+            hashCode = hashCode * 397 ^ CurrentPage.GetHashCode();
+            hashCode = hashCode * 397 ^ PageSize.GetHashCode();
+            hashCode = hashCode * 397 ^ Items.GetHashCode();
             return hashCode;
         }
     }

@@ -2,13 +2,7 @@ namespace Sekiban.Pure.Query;
 
 public record QueryResult<T>(T Value) : IQueryResult
 {
-    public object GetValue()
-    {
-        return Value;
-    }
+    public object GetValue() => Value;
 
-    public QueryResultGeneral ToGeneral(IQueryCommon query)
-    {
-        return new QueryResultGeneral(Value, typeof(T).Name, query);
-    }
+    public QueryResultGeneral ToGeneral(IQueryCommon query) => new(Value, typeof(T).Name, query);
 }

@@ -10,8 +10,7 @@ public class QueryExecutor(IServiceProvider serviceProvider)
             Func<MultiProjectionState<TMultiProjector>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> filter,
             Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> sort,
             Func<IMultiProjectionEventSelector, Task<ResultBox<MultiProjectionState<TMultiProjector>>>>
-                repositoryLoader)
-        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
+                repositoryLoader) where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
         where TMultiProjector : IMultiProjector<TMultiProjector>
     {
