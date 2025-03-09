@@ -28,17 +28,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       cosmosdb:
-        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator
-        env:
-          ACCEPT_EULA: Y
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
         ports:
           - 8081:8081
-        options: >-
-          --health-cmd "curl -f http://localhost:8081/_explorer/emulator.pem || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          strategy:
+        env:
+          PROTOCOL: https
       max-parallel: 4
     runs-on: ubuntu-latest
     steps:
