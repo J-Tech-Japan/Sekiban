@@ -29,12 +29,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --workdir /var/lib/postgresql/data
       cosmosdb:
         image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
         ports:
           - 8081:8081
         env:
           PROTOCOL: https
+        options: >-
+          --health-cmd curl -f http://localhost:8081/_explorer/emulator.html
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --workdir /var/lib/cosmosdb/data
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
