@@ -35,6 +35,11 @@ jobs:
           - 8081:8081
         env:
           PROTOCOL: https
+
+    env:
+      COSMOSDB_CONNECTION_STRING: ${{ secrets.COSMOSDB_CONNECTION_STRING }}
+      COSMOSDB_DATABASE_NAME: ${{ vars.COSMOSDB_DATABASE_NAME }}
+      COSMOSDB_CONTAINER_NAME: ${{ vars.COSMOSDB_CONTAINER_NAME }}
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 9
