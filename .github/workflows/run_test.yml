@@ -44,8 +44,7 @@ jobs:
     - name: Export Cosmos DB Emulator Certificate
       run: |
         sudo apt update && sudo apt install -y openssl
-        openssl s_client -connect localhost:8081 </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > cosmos_emulator.cert
-        
+        openssl s_client -showcerts -connect localhost:8081 </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > cosmos_emulator.cert        
         sudo cp cosmos_emulator.cert /usr/local/share/ca-certificates/
         sudo update-ca-certificates
     - name: Secret Settings
