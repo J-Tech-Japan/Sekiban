@@ -39,7 +39,7 @@ jobs:
       run: |
         pushd ./tests/Pure.Domain.xUnit
         dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "AccountEndpoint=https://cosmosdb:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=postgres;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
+        dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=127.0.0.1;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
     - name: dotnet test
       run: |
         dotnet test -c Release
