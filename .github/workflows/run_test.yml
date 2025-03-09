@@ -47,7 +47,7 @@ jobs:
         dotnet-version: 9.0.x
     - name: Secret Settings
       run: |
-        pushd ./tests/Sekiban.Test.Abstructs
+        pushd ./tests/Pure.Domain.xUnit
         dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "AccountEndpoint=https://cosmosdb:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRW1F2=="
         dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "Host=postgres;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
     - name: Restore dependencies
