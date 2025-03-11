@@ -1,6 +1,5 @@
-using Pure.Domain.Generated;
-using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Documents;
+using Sekiban.Pure.Projectors;
 namespace Pure.Domain.Test;
 
 public class BasicTests
@@ -25,7 +24,7 @@ public class BasicTests
         Assert.Equal("tenant1", partitionKeys.RootPartitionKey);
         Assert.Equal("group1", partitionKeys.Group);
     }
-    
+
     public string GetVersion<TAggregateProjector>() where TAggregateProjector : IAggregateProjector, new() =>
         new TAggregateProjector().GetVersion();
 }

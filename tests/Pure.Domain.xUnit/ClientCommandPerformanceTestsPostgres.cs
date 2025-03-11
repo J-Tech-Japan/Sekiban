@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Pure.Domain.Generated;
 using ResultBoxes;
 using Sekiban.Pure;
-using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Orleans.xUnit;
@@ -29,9 +28,9 @@ public class ClientCommandPerformanceTestsPostgres : SekibanOrleansTestBase<Clie
 
         services.AddSekibanPostgresDb(configuration);
     }
-    
+
     /// <summary>
-    /// Removes all events from the event store to ensure a clean state for performance tests
+    ///     Removes all events from the event store to ensure a clean state for performance tests
     /// </summary>
     private async Task RemoveAllEventsAsync()
     {
@@ -42,15 +41,15 @@ public class ClientCommandPerformanceTestsPostgres : SekibanOrleansTestBase<Clie
             .AddEnvironmentVariables()
             .AddUserSecrets(Assembly.GetExecutingAssembly())
             .Build();
-        
+
         // Register domain types first
         var domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
         services.AddSingleton(domainTypes);
-        
+
         // Add Postgres DB services
         services.AddSekibanPostgresDb(configuration);
         var serviceProvider = services.BuildServiceProvider();
-        
+
         // Get the event remover and remove all events
         var eventRemover = serviceProvider.GetRequiredService<IEventRemover>();
         await eventRemover.RemoveAllEvents();
