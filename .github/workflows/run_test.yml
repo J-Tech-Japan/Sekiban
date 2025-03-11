@@ -6,7 +6,7 @@ on:
     branches: [ main ]
     paths:
       - "src/**"
-      - "test/**"
+      - "tests/**"
       - "samples/**"
 concurrency:
   group: CosmosDbConnect
