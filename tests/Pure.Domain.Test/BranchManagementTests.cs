@@ -11,7 +11,8 @@ public class BranchManagementTests
     [Fact]
     public async Task ChangeBranchNameSpec()
     {
-        var executor = new CommandExecutor(new ServiceCollection().BuildServiceProvider()) { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor(new ServiceCollection().BuildServiceProvider())
+            { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(executor.Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch1"), CommandMetadata.Create("test"));
@@ -37,7 +38,8 @@ public class BranchManagementTests
     [Fact]
     public async Task MultipleBranchesSpec()
     {
-        var executor = new CommandExecutor(new ServiceCollection().BuildServiceProvider()) { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor(new ServiceCollection().BuildServiceProvider())
+            { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(executor.Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch 0"), CommandMetadata.Create("test"));

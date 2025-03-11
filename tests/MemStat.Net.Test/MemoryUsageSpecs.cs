@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-
 namespace MemStat.Net.Test;
 
 public class MemoryUsageSpecs
