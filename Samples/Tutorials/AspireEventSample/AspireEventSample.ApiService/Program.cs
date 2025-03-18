@@ -1,8 +1,12 @@
 using AspireEventSample.ApiService;
 using AspireEventSample.ApiService.Aggregates.Branches;
+using AspireEventSample.ApiService.Aggregates.ReadModel;
 using AspireEventSample.ApiService.Generated;
+using AspireEventSample.ApiService.Grains;
 using AspireEventSample.ApiService.Projections;
+using AspireEventSample.ReadModels;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ResultBoxes;
 using Scalar.AspNetCore;
 using Sekiban.Pure;
@@ -35,6 +39,18 @@ builder.UseOrleans(
         config.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
     });
 
+// Configure ReadModel Postgres database
+var readModelConnectionString = builder.Configuration.GetConnectionString("ReadModel");
+builder.Services.AddDbContext<BranchDbContext>(options =>
+    options.UseNpgsql(readModelConnectionString, 
+        b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
+
+// Register the BranchEntityPostgresWriter grain
+// builder.Services.AddTransient<IBranchEntityPostgresWriter, BranchEntityPostgresWriter>();
+
+// Register the DatabaseInitializer
+builder.Services.AddTransient<DatabaseInitializer>();
+
 
 // source generator serialization options
 builder.Services.AddSingleton(
@@ -61,6 +77,19 @@ if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.To
     builder.AddSekibanPostgresDb();
 }
 var app = builder.Build();
+
+// Apply migrations and initialize the database
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<BranchDbContext>();
+    app.Logger.LogInformation("Applying database migrations...");
+    await dbContext.Database.MigrateAsync();
+    app.Logger.LogInformation("Database migrations applied successfully.");
+    
+    var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    await initializer.InitializeAsync();
+}
+
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 

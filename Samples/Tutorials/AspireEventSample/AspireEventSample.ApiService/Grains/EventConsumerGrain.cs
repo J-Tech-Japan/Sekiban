@@ -21,7 +21,7 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
         // Handle Branch events
         if (item.GetPayload() is BranchCreated || item.GetPayload() is BranchNameChanged)
         {
-            var branchEntityWriter = GrainFactory.GetGrain<IBranchEntityWriter>(item.PartitionKeys.RootPartitionKey);
+            var branchEntityWriter = GrainFactory.GetGrain<IBranchEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
             var existing = await branchEntityWriter.GetEntityByIdAsync(
                 item.PartitionKeys.RootPartitionKey,
                 item.PartitionKeys.Group,
@@ -38,7 +38,8 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                     AggregateGroup = item.PartitionKeys.Group,
                     LastSortableUniqueId = item.SortableUniqueId,
                     TimeStamp = DateTime.UtcNow,
-                    Name = created.Name
+                    Name = created.Name,
+                    Country = created.Country // Use Country from the event
                 };
                 await branchEntityWriter.AddOrUpdateEntityAsync(entity);
             } else if (item.GetPayload() is BranchNameChanged nameChanged && existing != null)
@@ -48,6 +49,7 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                     LastSortableUniqueId = item.SortableUniqueId,
                     TimeStamp = DateTime.UtcNow,
                     Name = nameChanged.Name
+                    // Country property is preserved from existing entity through the 'with' expression
                 };
                 await branchEntityWriter.AddOrUpdateEntityAsync(updated);
             }
