@@ -14,6 +14,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.UnitTest"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.NUnitTest", "AspireEventSample.NUnitTest\AspireEventSample.NUnitTest.csproj", "{3B134D75-1000-4F0B-B293-5D06D2B32A73}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.MigrationHost", "AspireEventSample.MigrationHost\AspireEventSample.MigrationHost.csproj", "{17C5E813-04B6-4156-A16C-C957FF956728}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.ReadModels", "AspireEventSample.ReadModels\AspireEventSample.ReadModels.csproj", "{569646DD-AC28-46BB-982D-B178A85359EB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,6 +48,14 @@ Global
 		{3B134D75-1000-4F0B-B293-5D06D2B32A73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3B134D75-1000-4F0B-B293-5D06D2B32A73}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3B134D75-1000-4F0B-B293-5D06D2B32A73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17C5E813-04B6-4156-A16C-C957FF956728}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17C5E813-04B6-4156-A16C-C957FF956728}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17C5E813-04B6-4156-A16C-C957FF956728}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17C5E813-04B6-4156-A16C-C957FF956728}.Release|Any CPU.Build.0 = Release|Any CPU
+		{569646DD-AC28-46BB-982D-B178A85359EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{569646DD-AC28-46BB-982D-B178A85359EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{569646DD-AC28-46BB-982D-B178A85359EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{569646DD-AC28-46BB-982D-B178A85359EB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -9,11 +9,14 @@ var clusteringTable = storage.AddTables("clustering");
 var grainStorage = storage.AddBlobs("grain-state");
 
 var postgresPassword = builder.AddParameter("postgres-password", true);
-var postgres = builder
+var postgresServer = builder
     .AddPostgres("aspireOrleansPostgres", password: postgresPassword)
     .WithDataVolume("aspireOrleansPostgresData")
-    .WithPgAdmin()
-    .AddDatabase("SekibanPostgres");
+    .WithPgAdmin();
+
+// Add databases
+var sekibanPostgres = postgresServer.AddDatabase("SekibanPostgres");
+var readModelDb = postgresServer.AddDatabase("ReadModel");
 
 var orleans = builder
     .AddOrleans("default")
@@ -24,7 +27,8 @@ var orleans = builder
 var apiService = builder
     .AddProject<AspireEventSample_ApiService>("apiservice")
     .WithEndpoint("https", annotation => annotation.IsProxied = false)
-    .WithReference(postgres)
+    .WithReference(sekibanPostgres)
+    .WithReference(readModelDb)
     .WithReference(orleans);
 
 builder
