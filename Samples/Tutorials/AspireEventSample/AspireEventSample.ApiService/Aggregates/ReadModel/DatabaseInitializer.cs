@@ -18,12 +18,22 @@ public class DatabaseInitializer
     {
         try
         {
-            _logger.LogInformation("Ensuring database is created...");
+            _logger.LogInformation("Initializing database...");
             
-            // Create the database if it doesn't exist
-            await _dbContext.Database.EnsureCreatedAsync();
-            
-            _logger.LogInformation("Database initialization completed successfully.");
+            // Check database connection
+            if (await _dbContext.Database.CanConnectAsync())
+            {
+                _logger.LogInformation("Database connection successful.");
+                
+                // Perform any additional initialization if needed
+                // For example, seeding initial data
+                
+                _logger.LogInformation("Database initialization completed successfully.");
+            }
+            else
+            {
+                _logger.LogWarning("Could not connect to the database.");
+            }
         }
         catch (Exception ex)
         {

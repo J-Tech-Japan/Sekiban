@@ -46,7 +46,7 @@ builder.Services.AddDbContext<BranchDbContext>(options =>
         b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
 
 // Register the BranchEntityPostgresWriter grain
-builder.Services.AddTransient<IBranchEntityPostgresWriter, BranchEntityPostgresWriter>();
+// builder.Services.AddTransient<IBranchEntityPostgresWriter, BranchEntityPostgresWriter>();
 
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
@@ -78,9 +78,14 @@ if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.To
 }
 var app = builder.Build();
 
-// Initialize the database
+// Apply migrations and initialize the database
 using (var scope = app.Services.CreateScope())
 {
+    var dbContext = scope.ServiceProvider.GetRequiredService<BranchDbContext>();
+    app.Logger.LogInformation("Applying database migrations...");
+    await dbContext.Database.MigrateAsync();
+    app.Logger.LogInformation("Database migrations applied successfully.");
+    
     var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
     await initializer.InitializeAsync();
 }

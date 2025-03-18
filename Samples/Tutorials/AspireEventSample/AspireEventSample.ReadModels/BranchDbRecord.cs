@@ -9,6 +9,7 @@ public class BranchDbRecord
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public DateTime TimeStamp { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Country { get; set; } = string.Empty;
 
     // Default constructor for EF Core
 

@@ -19,6 +19,8 @@ public record BranchEntity : IReadModelEntity
     public required DateTime TimeStamp { get; init; }
     [Id(6)]
     public required string Name { get; init; }
+    [Id(7)]
+    public required string Country { get; init; }
 
     // Constructor to create from BranchEntity
     public static BranchDbRecord ToDbRecord(BranchEntity entity) =>
@@ -30,7 +32,8 @@ public record BranchEntity : IReadModelEntity
             AggregateGroup = entity.AggregateGroup,
             LastSortableUniqueId = entity.LastSortableUniqueId,
             TimeStamp = entity.TimeStamp,
-            Name = entity.Name
+            Name = entity.Name,
+            Country = entity.Country
         };
 
     // Convert to BranchEntity
@@ -43,7 +46,8 @@ public record BranchEntity : IReadModelEntity
             AggregateGroup = record.AggregateGroup,
             LastSortableUniqueId = record.LastSortableUniqueId,
             TimeStamp = record.TimeStamp,
-            Name = record.Name
+            Name = record.Name,
+            Country = record.Country
         };
 
 }

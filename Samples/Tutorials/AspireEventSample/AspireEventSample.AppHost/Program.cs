@@ -25,11 +25,14 @@ var orleans = builder
 
 
 var apiService = builder
-    .AddProject<AspireEventSample_ApiService>("apiservice")
-    .WithEndpoint("https", annotation => annotation.IsProxied = false)
-    .WithReference(sekibanPostgres)
-    .WithReference(readModelDb)
-    .WithReference(orleans);
+        .AddProject<AspireEventSample_ApiService>("apiservice")
+        .WithEndpoint("https", annotation => annotation.IsProxied = false)
+        .WithReference(sekibanPostgres)
+        .WithReference(readModelDb)
+        .WithReference(orleans)
+        .WaitFor(sekibanPostgres)
+        .WaitFor(readModelDb)
+    ;
 
 builder
     .AddProject<AspireEventSample_Web>("webfrontend")
