@@ -1,6 +1,7 @@
 using AspireEventSample.ApiService.Aggregates.Branches;
 using AspireEventSample.ApiService.Aggregates.Carts;
 using AspireEventSample.ApiService.Aggregates.ReadModel;
+using AspireEventSample.ReadModels;
 using Orleans.Streams;
 using Sekiban.Pure.Events;
 namespace AspireEventSample.ApiService.Grains;
@@ -30,7 +31,7 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
             // Create or update branch entity based on event type
             if (item.GetPayload() is BranchCreated created)
             {
-                var entity = new BranchEntity
+                var entity = new BranchDbRecord
                 {
                     Id = Guid.NewGuid(),
                     TargetId = targetId,
@@ -44,14 +45,11 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                 await branchEntityWriter.AddOrUpdateEntityAsync(entity);
             } else if (item.GetPayload() is BranchNameChanged nameChanged && existing != null)
             {
-                var updated = existing with
-                {
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    Name = nameChanged.Name
-                    // Country property is preserved from existing entity through the 'with' expression
-                };
-                await branchEntityWriter.AddOrUpdateEntityAsync(updated);
+                existing.LastSortableUniqueId = item.SortableUniqueId;
+                existing.TimeStamp = DateTime.UtcNow;
+                existing.Name = nameChanged.Name;
+                // Country property is preserved from existing entity
+                await branchEntityWriter.AddOrUpdateEntityAsync(existing);
             }
         }
         // Handle Cart events

@@ -1,7 +1,7 @@
-using AspireEventSample.ApiService.Aggregates.ReadModel;
+using AspireEventSample.ReadModels;
 using Sekiban.Pure.Orleans.ReadModels;
 namespace AspireEventSample.ApiService.Grains;
 
-public interface IBranchEntityPostgresWriter : IEntityWriter<BranchEntity>, IGrainWithStringKey
+public interface IBranchEntityPostgresWriter : IEntityWriter<BranchDbRecord>, IGrainWithStringKey
 {
 }
