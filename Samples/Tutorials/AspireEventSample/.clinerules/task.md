@@ -1,0 +1,2 @@
+clinerules_bank/tasks/002_sourcegenerator.md
+に書いていることを試してみてください。

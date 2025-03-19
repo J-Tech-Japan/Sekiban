@@ -1,5 +1,8 @@
+using Orleans.Serialization;
+
 namespace AspireEventSample.ReadModels;
 
+[GenerateSerializer]
 public class BranchDbRecord
 {
     public Guid Id { get; set; }

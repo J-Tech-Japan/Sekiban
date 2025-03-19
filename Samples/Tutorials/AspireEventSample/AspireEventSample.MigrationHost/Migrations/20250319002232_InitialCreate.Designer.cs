@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AspireEventSample.MigrationHost.Migrations
 {
     [DbContext(typeof(BranchDbContext))]
-    [Migration("20250318070100_InitialCreate")]
+    [Migration("20250319002232_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -31,6 +31,10 @@ namespace AspireEventSample.MigrationHost.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("AggregateGroup")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Country")
                         .IsRequired()
                         .HasColumnType("text");
 

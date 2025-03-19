@@ -21,7 +21,8 @@ namespace AspireEventSample.MigrationHost.Migrations
                     AggregateGroup = table.Column<string>(type: "text", nullable: false),
                     LastSortableUniqueId = table.Column<string>(type: "text", nullable: false),
                     TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false)
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Country = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
