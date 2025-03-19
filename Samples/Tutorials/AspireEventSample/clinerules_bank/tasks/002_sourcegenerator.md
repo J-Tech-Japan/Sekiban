@@ -1,0 +1,5 @@
+AspireEventSample.ReadModels/BranchDbRecord.cs と
+AspireEventSample.ApiService/Aggregates/ReadModel/BranchEntity.cs
+は同じ内容です。もし、BranchDbRecord に [GenerateSerializer] を書いて、Orleansで使えるようにしても問題無いのであればそうしたいです。一度
+AspireEventSample.MigrationHost/Migrations 
+フォルダのマイグレーションを削除して、新規で[GenerateSerializer] を書いてもマイグレーションが使えるか試してみてください。
