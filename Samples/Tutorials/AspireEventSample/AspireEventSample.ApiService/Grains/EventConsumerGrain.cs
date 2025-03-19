@@ -57,6 +57,7 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
             item.GetPayload() is ShoppingCartItemAdded ||
             item.GetPayload() is ShoppingCartPaymentProcessed)
         {
+            // Handle with in-memory writer
             var cartEntityWriter = GrainFactory.GetGrain<ICartEntityWriter>(item.PartitionKeys.RootPartitionKey);
             var existing = await cartEntityWriter.GetEntityByIdAsync(
                 item.PartitionKeys.RootPartitionKey,
@@ -104,6 +105,70 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                     Status = "Paid"
                 };
                 await cartEntityWriter.AddOrUpdateEntityAsync(updated);
+            }
+
+            // Handle with Postgres writer
+            var cartEntityPostgresWriter = GrainFactory.GetGrain<ICartEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
+            var existingPostgres = await cartEntityPostgresWriter.GetEntityByIdAsync(
+                item.PartitionKeys.RootPartitionKey,
+                item.PartitionKeys.Group,
+                targetId);
+
+            if (item.GetPayload() is ShoppingCartCreated createdEvent)
+            {
+                var entity = new CartDbRecord
+                {
+                    Id = Guid.NewGuid(),
+                    TargetId = targetId,
+                    RootPartitionKey = item.PartitionKeys.RootPartitionKey,
+                    AggregateGroup = item.PartitionKeys.Group,
+                    LastSortableUniqueId = item.SortableUniqueId,
+                    TimeStamp = DateTime.UtcNow,
+                    UserId = createdEvent.UserId,
+                    Status = "Created",
+                    TotalAmount = 0,
+                    ItemsJson = "[]" // Empty array as JSON
+                };
+                await cartEntityPostgresWriter.AddOrUpdateEntityAsync(entity);
+            } 
+            else if (item.GetPayload() is ShoppingCartItemAdded itemAddedEvent && existingPostgres != null)
+            {
+                // Parse existing items from JSON
+                List<ShoppingCartItems> items;
+                if (string.IsNullOrEmpty(existingPostgres.ItemsJson) || existingPostgres.ItemsJson == "[]")
+                {
+                    items = new List<ShoppingCartItems>();
+                }
+                else
+                {
+                    items = System.Text.Json.JsonSerializer.Deserialize<List<ShoppingCartItems>>(existingPostgres.ItemsJson) ?? new List<ShoppingCartItems>();
+                }
+
+                // Add the new item
+                items.Add(new ShoppingCartItems(
+                    itemAddedEvent.Name, 
+                    itemAddedEvent.Quantity, 
+                    itemAddedEvent.ItemId, 
+                    itemAddedEvent.Price));
+
+                // Calculate total amount
+                var totalAmount = items.Sum(i => i.Price * i.Quantity);
+
+                // Update the record
+                existingPostgres.LastSortableUniqueId = item.SortableUniqueId;
+                existingPostgres.TimeStamp = DateTime.UtcNow;
+                existingPostgres.ItemsJson = System.Text.Json.JsonSerializer.Serialize(items);
+                existingPostgres.TotalAmount = totalAmount;
+
+                await cartEntityPostgresWriter.AddOrUpdateEntityAsync(existingPostgres);
+            } 
+            else if (item.GetPayload() is ShoppingCartPaymentProcessed && existingPostgres != null)
+            {
+                existingPostgres.LastSortableUniqueId = item.SortableUniqueId;
+                existingPostgres.TimeStamp = DateTime.UtcNow;
+                existingPostgres.Status = "Paid";
+
+                await cartEntityPostgresWriter.AddOrUpdateEntityAsync(existingPostgres);
             }
         }
     }
