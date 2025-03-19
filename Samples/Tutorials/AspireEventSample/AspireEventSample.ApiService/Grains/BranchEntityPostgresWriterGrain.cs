@@ -2,11 +2,11 @@ using AspireEventSample.ReadModels;
 using Microsoft.EntityFrameworkCore;
 namespace AspireEventSample.ApiService.Grains;
 
-public class BranchEntityPostgresWriter : Grain, IBranchEntityPostgresWriter
+public class BranchEntityPostgresWriterGrain : Grain, IBranchEntityPostgresWriterGrain
 {
     private readonly BranchDbContext _dbContext;
 
-    public BranchEntityPostgresWriter(BranchDbContext dbContext) => _dbContext = dbContext;
+    public BranchEntityPostgresWriterGrain(BranchDbContext dbContext) => _dbContext = dbContext;
 
     private static string GetCompositeKey(string rootPartitionKey, string aggregateGroup, Guid targetId) =>
         $"{rootPartitionKey}@{aggregateGroup}@{targetId}";

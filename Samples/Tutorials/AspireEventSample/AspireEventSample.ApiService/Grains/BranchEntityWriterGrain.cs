@@ -5,7 +5,7 @@ using AspireEventSample.ReadModels;
 using Orleans;
 using Sekiban.Pure.Documents;
 
-public class BranchEntityWriter : Grain, IBranchEntityWriter
+public class BranchEntityWriterGrain : Grain, IBranchEntityWriterGrain
 {
     private readonly ConcurrentDictionary<string, BranchDbRecord> _entities = new();
 

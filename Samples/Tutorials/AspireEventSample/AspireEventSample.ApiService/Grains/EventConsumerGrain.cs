@@ -4,6 +4,7 @@ using AspireEventSample.ApiService.Aggregates.ReadModel;
 using AspireEventSample.ReadModels;
 using Orleans.Streams;
 using Sekiban.Pure.Events;
+using System.Text.Json;
 namespace AspireEventSample.ApiService.Grains;
 
 [ImplicitStreamSubscription("AllEvents")]
@@ -22,7 +23,8 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
         // Handle Branch events
         if (item.GetPayload() is BranchCreated || item.GetPayload() is BranchNameChanged)
         {
-            var branchEntityWriter = GrainFactory.GetGrain<IBranchEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
+            var branchEntityWriter
+                = GrainFactory.GetGrain<IBranchEntityPostgresWriterGrain>(item.PartitionKeys.RootPartitionKey);
             var existing = await branchEntityWriter.GetEntityByIdAsync(
                 item.PartitionKeys.RootPartitionKey,
                 item.PartitionKeys.Group,
@@ -108,7 +110,8 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
             }
 
             // Handle with Postgres writer
-            var cartEntityPostgresWriter = GrainFactory.GetGrain<ICartEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
+            var cartEntityPostgresWriter
+                = GrainFactory.GetGrain<ICartEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
             var existingPostgres = await cartEntityPostgresWriter.GetEntityByIdAsync(
                 item.PartitionKeys.RootPartitionKey,
                 item.PartitionKeys.Group,
@@ -130,26 +133,26 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                     ItemsJson = "[]" // Empty array as JSON
                 };
                 await cartEntityPostgresWriter.AddOrUpdateEntityAsync(entity);
-            } 
-            else if (item.GetPayload() is ShoppingCartItemAdded itemAddedEvent && existingPostgres != null)
+            } else if (item.GetPayload() is ShoppingCartItemAdded itemAddedEvent && existingPostgres != null)
             {
                 // Parse existing items from JSON
                 List<ShoppingCartItems> items;
                 if (string.IsNullOrEmpty(existingPostgres.ItemsJson) || existingPostgres.ItemsJson == "[]")
                 {
                     items = new List<ShoppingCartItems>();
-                }
-                else
+                } else
                 {
-                    items = System.Text.Json.JsonSerializer.Deserialize<List<ShoppingCartItems>>(existingPostgres.ItemsJson) ?? new List<ShoppingCartItems>();
+                    items = JsonSerializer.Deserialize<List<ShoppingCartItems>>(existingPostgres.ItemsJson) ??
+                        new List<ShoppingCartItems>();
                 }
 
                 // Add the new item
-                items.Add(new ShoppingCartItems(
-                    itemAddedEvent.Name, 
-                    itemAddedEvent.Quantity, 
-                    itemAddedEvent.ItemId, 
-                    itemAddedEvent.Price));
+                items.Add(
+                    new ShoppingCartItems(
+                        itemAddedEvent.Name,
+                        itemAddedEvent.Quantity,
+                        itemAddedEvent.ItemId,
+                        itemAddedEvent.Price));
 
                 // Calculate total amount
                 var totalAmount = items.Sum(i => i.Price * i.Quantity);
@@ -157,12 +160,11 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                 // Update the record
                 existingPostgres.LastSortableUniqueId = item.SortableUniqueId;
                 existingPostgres.TimeStamp = DateTime.UtcNow;
-                existingPostgres.ItemsJson = System.Text.Json.JsonSerializer.Serialize(items);
+                existingPostgres.ItemsJson = JsonSerializer.Serialize(items);
                 existingPostgres.TotalAmount = totalAmount;
 
                 await cartEntityPostgresWriter.AddOrUpdateEntityAsync(existingPostgres);
-            } 
-            else if (item.GetPayload() is ShoppingCartPaymentProcessed && existingPostgres != null)
+            } else if (item.GetPayload() is ShoppingCartPaymentProcessed && existingPostgres != null)
             {
                 existingPostgres.LastSortableUniqueId = item.SortableUniqueId;
                 existingPostgres.TimeStamp = DateTime.UtcNow;

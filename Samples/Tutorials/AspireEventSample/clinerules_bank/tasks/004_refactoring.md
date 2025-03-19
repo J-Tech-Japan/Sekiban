@@ -1,0 +1,3 @@
+AspireEventSample.ApiService/Grains/BranchEntityPostgresWriter.cs 
+をリファクタリングしたい
+
