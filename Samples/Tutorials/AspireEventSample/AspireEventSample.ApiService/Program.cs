@@ -46,8 +46,9 @@ builder.Services.AddDbContext<BranchDbContext>(options =>
         b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
 
 // Register the Postgres writer grains
-// builder.Services.AddTransient<IBranchEntityPostgresWriter, BranchEntityPostgresWriter>();
-// builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
+builder.Services.AddTransient<BranchEntityPostgresWriter>();
+builder.Services.AddTransient<IBranchEntityPostgresWriterGrain, BranchEntityPostgresWriterGrain>();
+builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
 
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
