@@ -52,7 +52,6 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
 
         // Get grain references
         var branchWriter = GrainFactory.GetGrain<IBranchEntityPostgresReadModelAccessorGrain>("default");
-        var cartWriter = GrainFactory.GetGrain<ICartReadModelAccessor>("default");
         var cartPostgresWriter = GrainFactory.GetGrain<CartEntityPostgresWriter>("default");
 
         // Create handlers directly
@@ -67,7 +66,6 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
 
         _handlers.Add(
             new ShoppingCartReadModelHandler(
-                cartWriter,
                 cartPostgresWriter,
                 cartItemPostgresWriter,
                 _eventContextProvider,
