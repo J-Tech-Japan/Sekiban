@@ -1,12 +1,12 @@
 using Orleans.Serialization;
 using Sekiban.Pure.Orleans.ReadModels;
-using System.Text.Json.Serialization;
 
 namespace AspireEventSample.ReadModels;
 
 [GenerateSerializer]
-public class CartDbRecord : IReadModelEntity
+public class CartItemDbRecord : IReadModelEntity
 {
+    // IReadModelEntity properties
     [Id(0)]
     public Guid Id { get; set; }
     [Id(1)]
@@ -20,16 +20,15 @@ public class CartDbRecord : IReadModelEntity
     [Id(5)]
     public DateTime TimeStamp { get; set; }
 
-    // Cart specific properties
+    // Cart item specific properties
     [Id(6)]
-    public Guid UserId { get; set; }
+    public Guid CartId { get; set; } // Reference to the parent cart
     [Id(7)]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public string Status { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
     [Id(8)]
-    public int TotalAmount { get; set; }
-    
-    // Items are now stored in a separate table (CartItemDbRecord)
-
-    // Default constructor for EF Core
+    public int Quantity { get; set; }
+    [Id(9)]
+    public Guid ItemId { get; set; }
+    [Id(10)]
+    public int Price { get; set; }
 }

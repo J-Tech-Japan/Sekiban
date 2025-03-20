@@ -1,19 +1,15 @@
-using AspireEventSample.ApiService.Aggregates.Carts;
 using AspireEventSample.ReadModels;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System.Text.Json;
-
 namespace AspireEventSample.ApiService.Grains;
 
-public class CartEntityPostgresWriter : Grain, ICartEntityPostgresWriter
+public class CartEntityPostgresWriterGrain : Grain, ICartEntityPostgresWriter
 {
     private readonly BranchDbContext _dbContext;
-    private readonly ILogger<CartEntityPostgresWriter> _logger;
+    private readonly ILogger<CartEntityPostgresWriterGrain> _logger;
 
-    public CartEntityPostgresWriter(
+    public CartEntityPostgresWriterGrain(
         BranchDbContext dbContext,
-        ILogger<CartEntityPostgresWriter> logger)
+        ILogger<CartEntityPostgresWriterGrain> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -66,8 +62,7 @@ public class CartEntityPostgresWriter : Grain, ICartEntityPostgresWriter
                 // Add new entity
                 _logger.LogDebug("Adding new cart entity with ID {CartId}", entity.TargetId);
                 await _dbContext.Carts.AddAsync(entity);
-            }
-            else
+            } else
             {
                 // Update existing entity
                 _logger.LogDebug("Updating cart entity with ID {CartId}", entity.TargetId);
@@ -84,8 +79,11 @@ public class CartEntityPostgresWriter : Grain, ICartEntityPostgresWriter
             throw;
         }
     }
-    
-    public async Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
+
+    public async Task<string> GetLastSortableUniqueIdAsync(
+        string rootPartitionKey,
+        string aggregateGroup,
+        Guid targetId)
     {
         _logger.LogDebug("Getting last sortable unique ID for cart with ID {CartId}", targetId);
         var record = await _dbContext
@@ -96,7 +94,7 @@ public class CartEntityPostgresWriter : Grain, ICartEntityPostgresWriter
                     e.TargetId == targetId)
             .OrderByDescending(e => e.TimeStamp)
             .FirstOrDefaultAsync();
-            
+
         return record?.LastSortableUniqueId ?? string.Empty;
     }
 }
