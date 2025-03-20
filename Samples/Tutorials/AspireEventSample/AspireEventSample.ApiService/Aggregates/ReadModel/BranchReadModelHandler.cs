@@ -2,7 +2,6 @@ using AspireEventSample.ApiService.Aggregates.Branches;
 using AspireEventSample.ApiService.Grains;
 using AspireEventSample.ReadModels;
 using Microsoft.Extensions.Logging;
-using Orleans;
 using Sekiban.Pure.Events;
 
 namespace AspireEventSample.ApiService.Aggregates.ReadModel;
@@ -12,16 +11,16 @@ namespace AspireEventSample.ApiService.Aggregates.ReadModel;
 /// </summary>
 public class BranchReadModelHandler : IReadModelHandler
 {
-    private readonly IGrainFactory _grainFactory;
+    private readonly IBranchWriter _branchWriter;
     private readonly IEventContextProvider _eventContextProvider;
     private readonly ILogger<BranchReadModelHandler> _logger;
     
     public BranchReadModelHandler(
-        IGrainFactory grainFactory,
+        IBranchWriter branchWriter,
         IEventContextProvider eventContextProvider,
         ILogger<BranchReadModelHandler> logger)
     {
-        _grainFactory = grainFactory;
+        _branchWriter = branchWriter;
         _eventContextProvider = eventContextProvider;
         _logger = logger;
     }
@@ -70,8 +69,7 @@ public class BranchReadModelHandler : IReadModelHandler
             Country = @event.Country
         };
         
-        var branchWriterGrain = _grainFactory.GetGrain<IBranchEntityPostgresWriterGrain>(context.RootPartitionKey);
-        await branchWriterGrain.AddOrUpdateEntityAsync(entity);
+        await _branchWriter.AddOrUpdateEntityAsync(entity);
     }
     
     /// <summary>
@@ -84,8 +82,7 @@ public class BranchReadModelHandler : IReadModelHandler
         _logger.LogInformation("Processing BranchNameChanged event for branch with ID {BranchId}, new name: {BranchName}",
             context.TargetId, @event.Name);
         
-        var branchWriterGrain = _grainFactory.GetGrain<IBranchEntityPostgresWriterGrain>(context.RootPartitionKey);
-        var existing = await branchWriterGrain.GetEntityByIdAsync(
+        var existing = await _branchWriter.GetEntityByIdAsync(
             context.RootPartitionKey, 
             context.AggregateGroup, 
             context.TargetId);
@@ -96,7 +93,7 @@ public class BranchReadModelHandler : IReadModelHandler
             existing.TimeStamp = DateTime.UtcNow;
             existing.Name = @event.Name;
             
-            await branchWriterGrain.AddOrUpdateEntityAsync(existing);
+            await _branchWriter.AddOrUpdateEntityAsync(existing);
         }
         else
         {

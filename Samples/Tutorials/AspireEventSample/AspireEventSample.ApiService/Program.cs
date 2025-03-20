@@ -57,6 +57,16 @@ builder.Services.AddTransient<DatabaseInitializer>();
 builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
 builder.Services.AddTransient<EventProcessor>();
 builder.Services.AddTransient<OrleansStreamEventSourceAdapter>();
+
+// Register entity writers
+builder.Services.AddTransient<IBranchWriter>(sp => 
+    sp.GetRequiredService<BranchEntityPostgresWriter>());
+builder.Services.AddTransient<ICartEntityWriter>(sp => 
+    sp.GetRequiredService<CartEntityWriter>());
+builder.Services.AddTransient<ICartEntityPostgresWriter>(sp => 
+    sp.GetRequiredService<CartEntityPostgresWriter>());
+
+// Register read model handlers
 builder.Services.AddTransient<BranchReadModelHandler>();
 builder.Services.AddTransient<ShoppingCartReadModelHandler>();
 

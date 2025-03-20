@@ -2,7 +2,6 @@ using AspireEventSample.ApiService.Aggregates.Carts;
 using AspireEventSample.ApiService.Grains;
 using AspireEventSample.ReadModels;
 using Microsoft.Extensions.Logging;
-using Orleans;
 using Sekiban.Pure.Events;
 using System.Text.Json;
 
@@ -13,16 +12,19 @@ namespace AspireEventSample.ApiService.Aggregates.ReadModel;
 /// </summary>
 public class ShoppingCartReadModelHandler : IReadModelHandler
 {
-    private readonly IGrainFactory _grainFactory;
+    private readonly ICartEntityWriter _inMemoryWriter;
+    private readonly ICartEntityPostgresWriter _postgresWriter;
     private readonly IEventContextProvider _eventContextProvider;
     private readonly ILogger<ShoppingCartReadModelHandler> _logger;
     
     public ShoppingCartReadModelHandler(
-        IGrainFactory grainFactory,
+        ICartEntityWriter inMemoryWriter,
+        ICartEntityPostgresWriter postgresWriter,
         IEventContextProvider eventContextProvider,
         ILogger<ShoppingCartReadModelHandler> logger)
     {
-        _grainFactory = grainFactory;
+        _inMemoryWriter = inMemoryWriter;
+        _postgresWriter = postgresWriter;
         _eventContextProvider = eventContextProvider;
         _logger = logger;
     }
@@ -94,12 +96,9 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
         };
         
         // Save to both repositories
-        var inMemoryWriterGrain = _grainFactory.GetGrain<ICartEntityWriter>(context.RootPartitionKey);
-        var postgresWriterGrain = _grainFactory.GetGrain<ICartEntityPostgresWriter>(context.RootPartitionKey);
-        
         await Task.WhenAll(
-            inMemoryWriterGrain.AddOrUpdateEntityAsync(inMemoryEntity),
-            postgresWriterGrain.AddOrUpdateEntityAsync(postgresEntity)
+            _inMemoryWriter.AddOrUpdateEntityAsync(inMemoryEntity),
+            _postgresWriter.AddOrUpdateEntityAsync(postgresEntity)
         );
     }
     
@@ -113,12 +112,8 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
         _logger.LogInformation("Processing ShoppingCartItemAdded event for cart ID {CartId}, item: {ItemName}",
             context.TargetId, @event.Name);
         
-        // Get grain references
-        var inMemoryWriterGrain = _grainFactory.GetGrain<ICartEntityWriter>(context.RootPartitionKey);
-        var postgresWriterGrain = _grainFactory.GetGrain<ICartEntityPostgresWriter>(context.RootPartitionKey);
-        
         // Update in-memory entity
-        var inMemoryEntity = await inMemoryWriterGrain.GetEntityByIdAsync(
+        var inMemoryEntity = await _inMemoryWriter.GetEntityByIdAsync(
             context.RootPartitionKey,
             context.AggregateGroup,
             context.TargetId);
@@ -140,11 +135,11 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
                 TotalAmount = totalAmount
             };
             
-            await inMemoryWriterGrain.AddOrUpdateEntityAsync(updatedInMemoryEntity);
+            await _inMemoryWriter.AddOrUpdateEntityAsync(updatedInMemoryEntity);
         }
         
         // Update Postgres entity
-        var postgresEntity = await postgresWriterGrain.GetEntityByIdAsync(
+        var postgresEntity = await _postgresWriter.GetEntityByIdAsync(
             context.RootPartitionKey,
             context.AggregateGroup,
             context.TargetId);
@@ -175,7 +170,7 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
             postgresEntity.ItemsJson = JsonSerializer.Serialize(items);
             postgresEntity.TotalAmount = totalAmount;
             
-            await postgresWriterGrain.AddOrUpdateEntityAsync(postgresEntity);
+            await _postgresWriter.AddOrUpdateEntityAsync(postgresEntity);
         }
     }
     
@@ -189,12 +184,8 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
         _logger.LogInformation("Processing ShoppingCartPaymentProcessed event for cart ID {CartId}",
             context.TargetId);
         
-        // Get grain references
-        var inMemoryWriterGrain = _grainFactory.GetGrain<ICartEntityWriter>(context.RootPartitionKey);
-        var postgresWriterGrain = _grainFactory.GetGrain<ICartEntityPostgresWriter>(context.RootPartitionKey);
-        
         // Update in-memory entity
-        var inMemoryEntity = await inMemoryWriterGrain.GetEntityByIdAsync(
+        var inMemoryEntity = await _inMemoryWriter.GetEntityByIdAsync(
             context.RootPartitionKey,
             context.AggregateGroup,
             context.TargetId);
@@ -208,11 +199,11 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
                 Status = "Paid"
             };
             
-            await inMemoryWriterGrain.AddOrUpdateEntityAsync(updatedInMemoryEntity);
+            await _inMemoryWriter.AddOrUpdateEntityAsync(updatedInMemoryEntity);
         }
         
         // Update Postgres entity
-        var postgresEntity = await postgresWriterGrain.GetEntityByIdAsync(
+        var postgresEntity = await _postgresWriter.GetEntityByIdAsync(
             context.RootPartitionKey,
             context.AggregateGroup,
             context.TargetId);
@@ -223,7 +214,7 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
             postgresEntity.TimeStamp = DateTime.UtcNow;
             postgresEntity.Status = "Paid";
             
-            await postgresWriterGrain.AddOrUpdateEntityAsync(postgresEntity);
+            await _postgresWriter.AddOrUpdateEntityAsync(postgresEntity);
         }
     }
 }
