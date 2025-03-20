@@ -1,5 +1,7 @@
+using AspireEventSample.ApiService.Aggregates.ReadModel;
 using AspireEventSample.ReadModels;
-using Sekiban.Pure.Orleans.ReadModels;
+using Orleans;
+
 namespace AspireEventSample.ApiService.Grains;
 
 public interface ICartEntityPostgresWriter : IEntityWriter<CartDbRecord>, IGrainWithStringKey

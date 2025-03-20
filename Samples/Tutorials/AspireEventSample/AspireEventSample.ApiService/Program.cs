@@ -53,6 +53,17 @@ builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWrite
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
 
+// Register ReadModel components
+builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
+builder.Services.AddTransient<EventProcessor>();
+builder.Services.AddTransient<OrleansStreamEventSourceAdapter>();
+builder.Services.AddTransient<BranchReadModelHandler>();
+builder.Services.AddTransient<ShoppingCartReadModelHandler>();
+
+// Register all IReadModelHandler implementations
+builder.Services.AddTransient<IReadModelHandler, BranchReadModelHandler>();
+builder.Services.AddTransient<IReadModelHandler, ShoppingCartReadModelHandler>();
+
 
 // source generator serialization options
 builder.Services.AddSingleton(

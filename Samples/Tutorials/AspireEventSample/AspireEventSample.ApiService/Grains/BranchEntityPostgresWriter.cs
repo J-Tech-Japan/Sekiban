@@ -1,12 +1,21 @@
 using AspireEventSample.ReadModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
 namespace AspireEventSample.ApiService.Grains;
 
 public class BranchEntityPostgresWriter : IBranchWriter
 {
     private readonly BranchDbContext _dbContext;
+    private readonly ILogger<BranchEntityPostgresWriter> _logger;
 
-    public BranchEntityPostgresWriter(BranchDbContext dbContext) => _dbContext = dbContext;
+    public BranchEntityPostgresWriter(
+        BranchDbContext dbContext,
+        ILogger<BranchEntityPostgresWriter> logger)
+    {
+        _dbContext = dbContext;
+        _logger = logger;
+    }
 
     private static string GetCompositeKey(string rootPartitionKey, string aggregateGroup, Guid targetId) =>
         $"{rootPartitionKey}@{aggregateGroup}@{targetId}";
@@ -45,21 +54,50 @@ public class BranchEntityPostgresWriter : IBranchWriter
 
     public async Task<BranchDbRecord> AddOrUpdateEntityAsync(BranchDbRecord entity)
     {
-        // Check if the entity already exists
-        var existingEntity = await _dbContext.Branches.FindAsync(entity.Id);
+        try
+        {
+            // Check if the entity already exists
+            var existingEntity = await _dbContext.Branches.FindAsync(entity.Id);
 
-        if (existingEntity == null)
-        {
-            // Add new entity
-            await _dbContext.Branches.AddAsync(entity);
-        } else
-        {
-            // Update existing entity
-            _dbContext.Branches.Remove(existingEntity);
-            await _dbContext.Branches.AddAsync(entity);
+            if (existingEntity == null)
+            {
+                // Add new entity
+                _logger.LogDebug("Adding new branch entity with ID {BranchId}, name: {BranchName}",
+                    entity.TargetId, entity.Name);
+                    
+                await _dbContext.Branches.AddAsync(entity);
+            }
+            else
+            {
+                // Update existing entity
+                _logger.LogDebug("Updating branch entity with ID {BranchId}, name: {BranchName}",
+                    entity.TargetId, entity.Name);
+                    
+                _dbContext.Branches.Remove(existingEntity);
+                await _dbContext.Branches.AddAsync(entity);
+            }
+
+            await _dbContext.SaveChangesAsync();
+            return entity;
         }
-
-        await _dbContext.SaveChangesAsync();
-        return entity;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving branch entity with ID {BranchId}", entity.TargetId);
+            throw;
+        }
+    }
+    
+    public async Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
+    {
+        var record = await _dbContext
+            .Branches
+            .Where(
+                e => e.RootPartitionKey == rootPartitionKey &&
+                    e.AggregateGroup == aggregateGroup &&
+                    e.TargetId == targetId)
+            .OrderByDescending(e => e.TimeStamp)
+            .FirstOrDefaultAsync();
+            
+        return record?.LastSortableUniqueId ?? string.Empty;
     }
 }
