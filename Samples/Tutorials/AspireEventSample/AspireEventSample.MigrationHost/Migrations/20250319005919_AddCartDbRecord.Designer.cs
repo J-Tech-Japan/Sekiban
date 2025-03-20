@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AspireEventSample.MigrationHost.Migrations
 {
     [DbContext(typeof(BranchDbContext))]
-    [Migration("20250318071705_AddCountryToBranch")]
-    partial class AddCountryToBranch
+    [Migration("20250319005919_AddCartDbRecord")]
+    partial class AddCartDbRecord
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -61,6 +61,50 @@ namespace AspireEventSample.MigrationHost.Migrations
                     b.HasIndex("RootPartitionKey", "AggregateGroup", "TargetId");
 
                     b.ToTable("Branches");
+                });
+
+            modelBuilder.Entity("AspireEventSample.ReadModels.CartDbRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AggregateGroup")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastSortableUniqueId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RootPartitionKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("TimeStamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TotalAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RootPartitionKey", "AggregateGroup", "TargetId");
+
+                    b.ToTable("Carts");
                 });
 #pragma warning restore 612, 618
         }

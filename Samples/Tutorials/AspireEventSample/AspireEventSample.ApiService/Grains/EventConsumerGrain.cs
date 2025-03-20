@@ -1,5 +1,3 @@
-using AspireEventSample.ApiService.Aggregates.Branches;
-using AspireEventSample.ApiService.Aggregates.Carts;
 using AspireEventSample.ApiService.Aggregates.ReadModel;
 using Orleans.Streams;
 using Sekiban.Pure.Events;
@@ -8,113 +6,74 @@ namespace AspireEventSample.ApiService.Grains;
 [ImplicitStreamSubscription("AllEvents")]
 public class EventConsumerGrain : Grain, IEventConsumerGrain
 {
+    private readonly ILogger<EventConsumerGrain> _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IEventContextProvider _eventContextProvider;
     private IAsyncStream<IEvent>? _stream;
     private StreamSubscriptionHandle<IEvent>? _subscriptionHandle;
+    private EventProcessor? _eventProcessor;
+    private readonly List<IReadModelHandler> _handlers = new();
 
-    public Task OnErrorAsync(Exception ex) => Task.CompletedTask;
-
-    // Stream completion handler
-    public async Task OnNextAsync(IEvent item, StreamSequenceToken? token)
+    public EventConsumerGrain(
+        ILogger<EventConsumerGrain> logger,
+        ILoggerFactory loggerFactory,
+        IEventContextProvider eventContextProvider)
     {
-        var targetId = item.PartitionKeys.AggregateId;
-
-        // Handle Branch events
-        if (item.GetPayload() is BranchCreated || item.GetPayload() is BranchNameChanged)
-        {
-            var branchEntityWriter = GrainFactory.GetGrain<IBranchEntityPostgresWriter>(item.PartitionKeys.RootPartitionKey);
-            var existing = await branchEntityWriter.GetEntityByIdAsync(
-                item.PartitionKeys.RootPartitionKey,
-                item.PartitionKeys.Group,
-                targetId);
-
-            // Create or update branch entity based on event type
-            if (item.GetPayload() is BranchCreated created)
-            {
-                var entity = new BranchEntity
-                {
-                    Id = Guid.NewGuid(),
-                    TargetId = targetId,
-                    RootPartitionKey = item.PartitionKeys.RootPartitionKey,
-                    AggregateGroup = item.PartitionKeys.Group,
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    Name = created.Name,
-                    Country = created.Country // Use Country from the event
-                };
-                await branchEntityWriter.AddOrUpdateEntityAsync(entity);
-            } else if (item.GetPayload() is BranchNameChanged nameChanged && existing != null)
-            {
-                var updated = existing with
-                {
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    Name = nameChanged.Name
-                    // Country property is preserved from existing entity through the 'with' expression
-                };
-                await branchEntityWriter.AddOrUpdateEntityAsync(updated);
-            }
-        }
-        // Handle Cart events
-        else if (item.GetPayload() is ShoppingCartCreated ||
-            item.GetPayload() is ShoppingCartItemAdded ||
-            item.GetPayload() is ShoppingCartPaymentProcessed)
-        {
-            var cartEntityWriter = GrainFactory.GetGrain<ICartEntityWriter>(item.PartitionKeys.RootPartitionKey);
-            var existing = await cartEntityWriter.GetEntityByIdAsync(
-                item.PartitionKeys.RootPartitionKey,
-                item.PartitionKeys.Group,
-                targetId);
-
-            if (item.GetPayload() is ShoppingCartCreated created)
-            {
-                var entity = new CartEntity
-                {
-                    Id = Guid.NewGuid(),
-                    TargetId = targetId,
-                    RootPartitionKey = item.PartitionKeys.RootPartitionKey,
-                    AggregateGroup = item.PartitionKeys.Group,
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    UserId = created.UserId,
-                    Items = new List<ShoppingCartItems>(),
-                    Status = "Created",
-                    TotalAmount = 0
-                };
-                await cartEntityWriter.AddOrUpdateEntityAsync(entity);
-            } else if (item.GetPayload() is ShoppingCartItemAdded itemAdded && existing != null)
-            {
-                var updatedItems = new List<ShoppingCartItems>(existing.Items)
-                {
-                    new(itemAdded.Name, itemAdded.Quantity, itemAdded.ItemId, itemAdded.Price)
-                };
-                var totalAmount = updatedItems.Sum(item => item.Price * item.Quantity);
-
-                var updated = existing with
-                {
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    Items = updatedItems,
-                    TotalAmount = totalAmount
-                };
-                await cartEntityWriter.AddOrUpdateEntityAsync(updated);
-            } else if (item.GetPayload() is ShoppingCartPaymentProcessed && existing != null)
-            {
-                var updated = existing with
-                {
-                    LastSortableUniqueId = item.SortableUniqueId,
-                    TimeStamp = DateTime.UtcNow,
-                    Status = "Paid"
-                };
-                await cartEntityWriter.AddOrUpdateEntityAsync(updated);
-            }
-        }
+        _logger = logger;
+        _loggerFactory = loggerFactory;
+        _eventContextProvider = eventContextProvider;
     }
 
-    public Task OnCompletedAsync() => Task.CompletedTask;
+    public Task OnErrorAsync(Exception ex)
+    {
+        _logger.LogError(ex, "Error in event stream");
+        return Task.CompletedTask;
+    }
+
+    public Task OnNextAsync(IEvent item, StreamSequenceToken? token)
+    {
+        _logger.LogDebug(
+            "Processing event {EventType} with ID {EventId}",
+            item.GetPayload().GetType().Name,
+            item.PartitionKeys.AggregateId);
+
+        return _eventProcessor!.ProcessEventAsync(item);
+    }
+
+    public Task OnCompletedAsync()
+    {
+        _logger.LogInformation("Event stream completed");
+        return Task.CompletedTask;
+    }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        // _logger.LogInformation("OnActivateAsync");
+        _logger.LogInformation("Activating EventConsumerGrain");
+
+        // Get grain references
+        var branchWriter = GrainFactory.GetGrain<IBranchEntityPostgresReadModelAccessorGrain>("default");
+        var cartWriter = GrainFactory.GetGrain<ICartReadModelAccessor>("default");
+        var cartPostgresWriter = GrainFactory.GetGrain<CartEntityPostgresWriter>("default");
+
+        // Create handlers directly
+        _handlers.Add(
+            new BranchReadModelHandler(
+                branchWriter,
+                _eventContextProvider,
+                _loggerFactory.CreateLogger<BranchReadModelHandler>()));
+
+        _handlers.Add(
+            new ShoppingCartReadModelHandler(
+                cartWriter,
+                cartPostgresWriter,
+                _eventContextProvider,
+                _loggerFactory.CreateLogger<ShoppingCartReadModelHandler>()));
+
+        // Create event processor
+        _eventProcessor = new EventProcessor(
+            _handlers,
+            _eventContextProvider,
+            _loggerFactory.CreateLogger<EventProcessor>());
 
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
 

@@ -1,10 +1,11 @@
 using Orleans.Serialization;
 using Sekiban.Pure.Orleans.ReadModels;
+using System.Text.Json.Serialization;
 
 namespace AspireEventSample.ReadModels;
 
 [GenerateSerializer]
-public class BranchDbRecord : IReadModelEntity
+public class CartDbRecord : IReadModelEntity
 {
     [Id(0)]
     public Guid Id { get; set; }
@@ -18,10 +19,19 @@ public class BranchDbRecord : IReadModelEntity
     public string LastSortableUniqueId { get; set; } = string.Empty;
     [Id(5)]
     public DateTime TimeStamp { get; set; }
+
+    // Cart specific properties
     [Id(6)]
-    public string Name { get; set; } = string.Empty;
+    public Guid UserId { get; set; }
     [Id(7)]
-    public string Country { get; set; } = string.Empty;
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public string Status { get; set; } = string.Empty;
+    [Id(8)]
+    public int TotalAmount { get; set; }
+    
+    // We need to store the items as a JSON string since EF Core doesn't support complex types directly
+    [Id(9)]
+    public string ItemsJson { get; set; } = string.Empty;
 
     // Default constructor for EF Core
 }

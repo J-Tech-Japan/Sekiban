@@ -1,14 +1,7 @@
-AspireEventSample.ApiService/Grains/IBranchEntityPostgresWriter.cs
-
-これはPostgres用のデータベース書き込み機能です。 
-
-AspireEventSample.ApiService/Grains/BranchEntityWriter.cs
-を真似して、 BranchEntityPostgresWriter を実装してください。
-
-NPGSql+EntityFramework, BranchテーブルのみのDbContextを作ってください。
-
-AspireEventSample.AppHost/Program.cs　
-で ReadModel というPostgresデータベースを作成して、Aspireで取得したconnection string でDbContextに接続してください。
-
-コードをできるだけ調べて、下記に日本語で具体的な実装プランを記述してください。
------実装プラン------
+clinerules_bank/tasks/002_sourcegenerator.md
+に書いていることを試してみてください。
+## 追加依頼 1
+を上記のファイルに追記しましたのでそれも行ってください。
+## 追加依頼 2
+clinerules_bank/tasks/003_cart_read_model.md
+を実行してください。

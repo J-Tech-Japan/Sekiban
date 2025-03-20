@@ -6,13 +6,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AspireEventSample.MigrationHost.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddCartDbRecord : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "Branches",
+                name: "Carts",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -21,16 +21,19 @@ namespace AspireEventSample.MigrationHost.Migrations
                     AggregateGroup = table.Column<string>(type: "text", nullable: false),
                     LastSortableUniqueId = table.Column<string>(type: "text", nullable: false),
                     TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false)
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    TotalAmount = table.Column<int>(type: "integer", nullable: false),
+                    ItemsJson = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Branches", x => x.Id);
+                    table.PrimaryKey("PK_Carts", x => x.Id);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Branches_RootPartitionKey_AggregateGroup_TargetId",
-                table: "Branches",
+                name: "IX_Carts_RootPartitionKey_AggregateGroup_TargetId",
+                table: "Carts",
                 columns: new[] { "RootPartitionKey", "AggregateGroup", "TargetId" });
         }
 
@@ -38,7 +41,7 @@ namespace AspireEventSample.MigrationHost.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "Branches");
+                name: "Carts");
         }
     }
 }

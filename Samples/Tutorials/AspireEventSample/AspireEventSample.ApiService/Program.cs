@@ -41,16 +41,28 @@ builder.UseOrleans(
 
 // Configure ReadModel Postgres database
 var readModelConnectionString = builder.Configuration.GetConnectionString("ReadModel");
-builder.Services.AddDbContext<BranchDbContext>(options =>
-    options.UseNpgsql(readModelConnectionString, 
-        b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
+builder.Services.AddDbContext<BranchDbContext>(
+    options =>
+        options.UseNpgsql(
+            readModelConnectionString,
+            b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
 
-// Register the BranchEntityPostgresWriter grain
-// builder.Services.AddTransient<IBranchEntityPostgresWriter, BranchEntityPostgresWriter>();
+// Register the Postgres writer grains
+builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
+builder.Services
+    .AddTransient<IBranchEntityPostgresReadModelAccessorGrain, BranchPostgresReadModelAccessorGrain>();
+builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
 
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
 
+// Register ReadModel components
+builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
+
+// Register entity writers
+builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
+builder.Services.AddTransient<CartEntityPostgresWriter>();
+builder.Services.AddTransient<CartEntityPostgresWriter>();
 
 // source generator serialization options
 builder.Services.AddSingleton(
@@ -64,8 +76,6 @@ builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddTransient<SekibanOrleansExecutor>();
-
-
 
 if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
 {
@@ -85,7 +95,7 @@ using (var scope = app.Services.CreateScope())
     app.Logger.LogInformation("Applying database migrations...");
     await dbContext.Database.MigrateAsync();
     app.Logger.LogInformation("Database migrations applied successfully.");
-    
+
     var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
     await initializer.InitializeAsync();
 }
