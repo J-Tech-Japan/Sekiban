@@ -4,7 +4,7 @@ using Sekiban.Pure.Events;
 namespace AspireEventSample.ApiService.Aggregates.ReadModel;
 
 /// <summary>
-/// Event processor
+/// Event processor for read models
 /// </summary>
 public class EventProcessor
 {

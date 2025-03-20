@@ -55,25 +55,11 @@ builder.Services.AddTransient<DatabaseInitializer>();
 
 // Register ReadModel components
 builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
-builder.Services.AddTransient<EventProcessor>();
-builder.Services.AddTransient<OrleansStreamEventSourceAdapter>();
 
 // Register entity writers
-builder.Services.AddTransient<IBranchWriter>(sp => 
-    sp.GetRequiredService<BranchEntityPostgresWriter>());
-builder.Services.AddTransient<ICartEntityWriter>(sp => 
-    sp.GetRequiredService<CartEntityWriter>());
-builder.Services.AddTransient<ICartEntityPostgresWriter>(sp => 
-    sp.GetRequiredService<CartEntityPostgresWriter>());
-
-// Register read model handlers
-builder.Services.AddTransient<BranchReadModelHandler>();
-builder.Services.AddTransient<ShoppingCartReadModelHandler>();
-
-// Register all IReadModelHandler implementations
-builder.Services.AddTransient<IReadModelHandler, BranchReadModelHandler>();
-builder.Services.AddTransient<IReadModelHandler, ShoppingCartReadModelHandler>();
-
+builder.Services.AddTransient<BranchEntityPostgresWriter>();
+builder.Services.AddTransient<CartEntityWriter>();
+builder.Services.AddTransient<CartEntityPostgresWriter>();
 
 // source generator serialization options
 builder.Services.AddSingleton(
@@ -87,8 +73,6 @@ builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddTransient<SekibanOrleansExecutor>();
-
-
 
 if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
 {

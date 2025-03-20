@@ -8,17 +8,22 @@ namespace AspireEventSample.ApiService.Grains;
 [ImplicitStreamSubscription("AllEvents")]
 public class EventConsumerGrain : Grain, IEventConsumerGrain
 {
-    private readonly OrleansStreamEventSourceAdapter _adapter;
     private readonly ILogger<EventConsumerGrain> _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IEventContextProvider _eventContextProvider;
     private IAsyncStream<IEvent>? _stream;
     private StreamSubscriptionHandle<IEvent>? _subscriptionHandle;
+    private EventProcessor? _eventProcessor;
+    private List<IReadModelHandler> _handlers = new();
     
     public EventConsumerGrain(
-        OrleansStreamEventSourceAdapter adapter,
-        ILogger<EventConsumerGrain> logger)
+        ILogger<EventConsumerGrain> logger,
+        ILoggerFactory loggerFactory,
+        IEventContextProvider eventContextProvider)
     {
-        _adapter = adapter;
         _logger = logger;
+        _loggerFactory = loggerFactory;
+        _eventContextProvider = eventContextProvider;
     }
     
     public Task OnErrorAsync(Exception ex)
@@ -27,13 +32,12 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
         return Task.CompletedTask;
     }
     
-    // Use adapter to process events
     public Task OnNextAsync(IEvent item, StreamSequenceToken? token)
     {
         _logger.LogDebug("Processing event {EventType} with ID {EventId}",
             item.GetPayload().GetType().Name, item.PartitionKeys.AggregateId);
             
-        return _adapter.ProcessStreamEventAsync(item, token);
+        return _eventProcessor!.ProcessEventAsync(item);
     }
     
     public Task OnCompletedAsync()
@@ -45,6 +49,29 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Activating EventConsumerGrain");
+
+        // Get grain references
+        var branchWriter = GrainFactory.GetGrain<IBranchEntityPostgresWriterGrain>("default");
+        var cartWriter = GrainFactory.GetGrain<ICartEntityWriter>("default");
+        var cartPostgresWriter = GrainFactory.GetGrain<ICartEntityPostgresWriter>("default");
+        
+        // Create handlers directly
+        _handlers.Add(new BranchReadModelHandler(
+            branchWriter, 
+            _eventContextProvider,
+            _loggerFactory.CreateLogger<BranchReadModelHandler>()));
+            
+        _handlers.Add(new ShoppingCartReadModelHandler(
+            cartWriter,
+            cartPostgresWriter,
+            _eventContextProvider,
+            _loggerFactory.CreateLogger<ShoppingCartReadModelHandler>()));
+        
+        // Create event processor
+        _eventProcessor = new EventProcessor(
+            _handlers,
+            _eventContextProvider,
+            _loggerFactory.CreateLogger<EventProcessor>());
 
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
 
