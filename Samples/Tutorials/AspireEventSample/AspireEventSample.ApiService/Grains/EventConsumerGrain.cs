@@ -62,10 +62,14 @@ public class EventConsumerGrain : Grain, IEventConsumerGrain
                 _eventContextProvider,
                 _loggerFactory.CreateLogger<BranchReadModelHandler>()));
 
+        // Get cart item writer grain
+        var cartItemPostgresWriter = GrainFactory.GetGrain<CartItemEntityPostgresWriter>("default");
+
         _handlers.Add(
             new ShoppingCartReadModelHandler(
                 cartWriter,
                 cartPostgresWriter,
+                cartItemPostgresWriter,
                 _eventContextProvider,
                 _loggerFactory.CreateLogger<ShoppingCartReadModelHandler>()));
 
