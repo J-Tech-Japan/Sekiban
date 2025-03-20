@@ -1,21 +1,15 @@
 using AspireEventSample.ReadModels;
 using Microsoft.EntityFrameworkCore;
-using Orleans.Runtime;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
 namespace AspireEventSample.ApiService.Grains;
 
-public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
+public class CartItemEntityPostgresWriterGrain : Grain, ICartItemEntityPostgresWriterGrain
 {
     private readonly BranchDbContext _dbContext;
-    private readonly ILogger<CartItemEntityPostgresWriter> _logger;
+    private readonly ILogger<CartItemEntityPostgresWriterGrain> _logger;
 
-    public CartItemEntityPostgresWriter(
+    public CartItemEntityPostgresWriterGrain(
         BranchDbContext dbContext,
-        ILogger<CartItemEntityPostgresWriter> logger)
+        ILogger<CartItemEntityPostgresWriterGrain> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -29,8 +23,7 @@ public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
             if (existingEntity == null)
             {
                 await _dbContext.CartItems.AddAsync(entity);
-            }
-            else
+            } else
             {
                 _dbContext.Entry(existingEntity).CurrentValues.SetValues(entity);
             }
@@ -45,14 +38,19 @@ public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
         }
     }
 
-    public async Task<CartItemDbRecord?> GetEntityByIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
+    public async Task<CartItemDbRecord?> GetEntityByIdAsync(
+        string rootPartitionKey,
+        string aggregateGroup,
+        Guid targetId)
     {
         try
         {
-            return await _dbContext.CartItems
-                .Where(e => e.RootPartitionKey == rootPartitionKey &&
-                            e.AggregateGroup == aggregateGroup &&
-                            e.TargetId == targetId)
+            return await _dbContext
+                .CartItems
+                .Where(
+                    e => e.RootPartitionKey == rootPartitionKey &&
+                        e.AggregateGroup == aggregateGroup &&
+                        e.TargetId == targetId)
                 .OrderByDescending(e => e.LastSortableUniqueId)
                 .FirstOrDefaultAsync();
         }
@@ -71,11 +69,13 @@ public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
     {
         try
         {
-            return await _dbContext.CartItems
-                .Where(e => e.RootPartitionKey == rootPartitionKey &&
-                            e.AggregateGroup == aggregateGroup &&
-                            e.TargetId == targetId &&
-                            string.Compare(e.LastSortableUniqueId, beforeSortableUniqueId) <= 0)
+            return await _dbContext
+                .CartItems
+                .Where(
+                    e => e.RootPartitionKey == rootPartitionKey &&
+                        e.AggregateGroup == aggregateGroup &&
+                        e.TargetId == targetId &&
+                        string.Compare(e.LastSortableUniqueId, beforeSortableUniqueId) <= 0)
                 .OrderByDescending(e => e.LastSortableUniqueId)
                 .ToListAsync();
         }
@@ -86,14 +86,19 @@ public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
         }
     }
 
-    public async Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
+    public async Task<string> GetLastSortableUniqueIdAsync(
+        string rootPartitionKey,
+        string aggregateGroup,
+        Guid targetId)
     {
         try
         {
-            var entity = await _dbContext.CartItems
-                .Where(e => e.RootPartitionKey == rootPartitionKey &&
-                            e.AggregateGroup == aggregateGroup &&
-                            e.TargetId == targetId)
+            var entity = await _dbContext
+                .CartItems
+                .Where(
+                    e => e.RootPartitionKey == rootPartitionKey &&
+                        e.AggregateGroup == aggregateGroup &&
+                        e.TargetId == targetId)
                 .OrderByDescending(e => e.LastSortableUniqueId)
                 .FirstOrDefaultAsync();
 
@@ -110,7 +115,8 @@ public class CartItemEntityPostgresWriter : ICartItemEntityPostgresWriter
     {
         try
         {
-            return await _dbContext.CartItems
+            return await _dbContext
+                .CartItems
                 .Where(e => e.CartId == cartId)
                 .ToListAsync();
         }

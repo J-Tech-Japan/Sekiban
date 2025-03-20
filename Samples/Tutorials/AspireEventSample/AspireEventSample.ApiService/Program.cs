@@ -8,13 +8,11 @@ using AspireEventSample.ApiService.Projections;
 using AspireEventSample.ReadModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ResultBoxes;
 using Scalar.AspNetCore;
 using Sekiban.Pure;
 using Sekiban.Pure.AspNetCore;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.CosmosDb;
-using Sekiban.Pure.Documents;
 using Sekiban.Pure.Orleans;
 using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Postgres;
@@ -52,8 +50,8 @@ builder.Services.AddDbContext<BranchDbContext>(
 builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
 builder.Services
     .AddTransient<IBranchEntityPostgresReadModelAccessorGrain, BranchPostgresReadModelAccessorGrain>();
-builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
-builder.Services.AddTransient<ICartItemEntityPostgresWriter, CartItemEntityPostgresWriter>();
+builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriterGrain>();
+builder.Services.AddTransient<ICartItemEntityPostgresWriterGrain, CartItemEntityPostgresWriterGrain>();
 
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
@@ -63,8 +61,8 @@ builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
 
 // Register entity writers
 builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
-builder.Services.AddTransient<CartEntityPostgresWriter>();
-builder.Services.AddTransient<CartItemEntityPostgresWriter>();
+builder.Services.AddTransient<CartEntityPostgresWriterGrain>();
+builder.Services.AddTransient<CartItemEntityPostgresWriterGrain>();
 
 // source generator serialization options
 builder.Services.AddSingleton(

@@ -9,19 +9,19 @@ namespace AspireEventSample.ApiService.Aggregates.ReadModel;
 /// </summary>
 public class ShoppingCartReadModelHandler : IReadModelHandler
 {
-    private readonly CartEntityPostgresWriter _postgresReadModelAccessorGrain;
-    private readonly CartItemEntityPostgresWriter _cartItemPostgresWriter;
+    private readonly ICartEntityPostgresWriter _postgresReadModelAccessorGrain;
+    private readonly ICartItemEntityPostgresWriter _cartItemPostgresWriterGrain;
     private readonly IEventContextProvider _eventContextProvider;
     private readonly ILogger<ShoppingCartReadModelHandler> _logger;
 
     public ShoppingCartReadModelHandler(
-        CartEntityPostgresWriter postgresReadModelAccessorGrain,
-        CartItemEntityPostgresWriter cartItemPostgresWriter,
+        ICartEntityPostgresWriter postgresReadModelAccessorGrain,
+        ICartItemEntityPostgresWriter cartItemPostgresWriterGrain,
         IEventContextProvider eventContextProvider,
         ILogger<ShoppingCartReadModelHandler> logger)
     {
         _postgresReadModelAccessorGrain = postgresReadModelAccessorGrain;
-        _cartItemPostgresWriter = cartItemPostgresWriter;
+        _cartItemPostgresWriterGrain = cartItemPostgresWriterGrain;
         _eventContextProvider = eventContextProvider;
         _logger = logger;
     }
@@ -108,7 +108,7 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
             };
 
             // Get all cart items to calculate total amount
-            var existingItems = await _cartItemPostgresWriter.GetItemsByCartIdAsync(postgresEntity.TargetId);
+            var existingItems = await _cartItemPostgresWriterGrain.GetItemsByCartIdAsync(postgresEntity.TargetId);
             existingItems.Add(cartItemEntity); // Add the new item to the list for calculation
 
             // Calculate total amount
@@ -122,7 +122,7 @@ public class ShoppingCartReadModelHandler : IReadModelHandler
             // Save both entities
             await Task.WhenAll(
                 _postgresReadModelAccessorGrain.AddOrUpdateEntityAsync(postgresEntity),
-                _cartItemPostgresWriter.AddOrUpdateEntityAsync(cartItemEntity)
+                _cartItemPostgresWriterGrain.AddOrUpdateEntityAsync(cartItemEntity)
             );
         }
     }
