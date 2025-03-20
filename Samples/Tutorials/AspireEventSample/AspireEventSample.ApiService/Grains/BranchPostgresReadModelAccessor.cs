@@ -1,17 +1,15 @@
 using AspireEventSample.ReadModels;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-
 namespace AspireEventSample.ApiService.Grains;
 
-public class BranchEntityPostgresWriter : IBranchWriter
+public class BranchPostgresReadModelAccessor : IBranchReadModelAccessor
 {
     private readonly BranchDbContext _dbContext;
-    private readonly ILogger<BranchEntityPostgresWriter> _logger;
+    private readonly ILogger<BranchPostgresReadModelAccessor> _logger;
 
-    public BranchEntityPostgresWriter(
+    public BranchPostgresReadModelAccessor(
         BranchDbContext dbContext,
-        ILogger<BranchEntityPostgresWriter> logger)
+        ILogger<BranchPostgresReadModelAccessor> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -62,17 +60,20 @@ public class BranchEntityPostgresWriter : IBranchWriter
             if (existingEntity == null)
             {
                 // Add new entity
-                _logger.LogDebug("Adding new branch entity with ID {BranchId}, name: {BranchName}",
-                    entity.TargetId, entity.Name);
-                    
+                _logger.LogDebug(
+                    "Adding new branch entity with ID {BranchId}, name: {BranchName}",
+                    entity.TargetId,
+                    entity.Name);
+
                 await _dbContext.Branches.AddAsync(entity);
-            }
-            else
+            } else
             {
                 // Update existing entity
-                _logger.LogDebug("Updating branch entity with ID {BranchId}, name: {BranchName}",
-                    entity.TargetId, entity.Name);
-                    
+                _logger.LogDebug(
+                    "Updating branch entity with ID {BranchId}, name: {BranchName}",
+                    entity.TargetId,
+                    entity.Name);
+
                 _dbContext.Branches.Remove(existingEntity);
                 await _dbContext.Branches.AddAsync(entity);
             }
@@ -86,8 +87,11 @@ public class BranchEntityPostgresWriter : IBranchWriter
             throw;
         }
     }
-    
-    public async Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
+
+    public async Task<string> GetLastSortableUniqueIdAsync(
+        string rootPartitionKey,
+        string aggregateGroup,
+        Guid targetId)
     {
         var record = await _dbContext
             .Branches
@@ -97,7 +101,7 @@ public class BranchEntityPostgresWriter : IBranchWriter
                     e.TargetId == targetId)
             .OrderByDescending(e => e.TimeStamp)
             .FirstOrDefaultAsync();
-            
+
         return record?.LastSortableUniqueId ?? string.Empty;
     }
 }

@@ -1,20 +1,13 @@
-using System.Collections.Concurrent;
-using AspireEventSample.ApiService.Aggregates.ReadModel;
 using AspireEventSample.ReadModels;
-using Microsoft.Extensions.Logging;
-using Orleans;
-
+using System.Collections.Concurrent;
 namespace AspireEventSample.ApiService.Grains;
 
-public class BranchEntityWriterGrain : Grain, IBranchEntityWriterGrain
+public class BranchReadModelAccessorGrain : Grain, IBranchEntityReadModelAccessorGrain
 {
     private readonly ConcurrentDictionary<string, BranchDbRecord> _entities = new();
-    private readonly ILogger<BranchEntityWriterGrain> _logger;
+    private readonly ILogger<BranchReadModelAccessorGrain> _logger;
 
-    public BranchEntityWriterGrain(ILogger<BranchEntityWriterGrain> logger)
-    {
-        _logger = logger;
-    }
+    public BranchReadModelAccessorGrain(ILogger<BranchReadModelAccessorGrain> logger) => _logger = logger;
 
     private static string GetCompositeKey(string rootPartitionKey, string aggregateGroup, Guid targetId) =>
         $"{rootPartitionKey}@{aggregateGroup}@{targetId}";
@@ -26,15 +19,20 @@ public class BranchEntityWriterGrain : Grain, IBranchEntityWriterGrain
         return Task.FromResult(_entities.TryGetValue(key, out var entity) ? entity : null);
     }
 
-    public Task<List<BranchDbRecord>> GetHistoryEntityByIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId, string beforeSortableUniqueId)
+    public Task<List<BranchDbRecord>> GetHistoryEntityByIdAsync(
+        string rootPartitionKey,
+        string aggregateGroup,
+        Guid targetId,
+        string beforeSortableUniqueId)
     {
         // In a real implementation, this would query historical versions
         // For now, just return the current entity in a list if it exists
         var key = GetCompositeKey(rootPartitionKey, aggregateGroup, targetId);
         _logger.LogDebug("Getting branch entity history with ID {BranchId}", targetId);
-        return Task.FromResult(_entities.TryGetValue(key, out var entity) 
-            ? new List<BranchDbRecord> { entity } 
-            : new List<BranchDbRecord>());
+        return Task.FromResult(
+            _entities.TryGetValue(key, out var entity)
+                ? new List<BranchDbRecord> { entity }
+                : new List<BranchDbRecord>());
     }
 
     public Task<BranchDbRecord> AddOrUpdateEntityAsync(BranchDbRecord entity)
@@ -44,7 +42,7 @@ public class BranchEntityWriterGrain : Grain, IBranchEntityWriterGrain
         _entities.AddOrUpdate(key, entity, (_, _) => entity);
         return Task.FromResult(entity);
     }
-    
+
     public Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
     {
         var key = GetCompositeKey(rootPartitionKey, aggregateGroup, targetId);

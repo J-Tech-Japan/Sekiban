@@ -41,13 +41,16 @@ builder.UseOrleans(
 
 // Configure ReadModel Postgres database
 var readModelConnectionString = builder.Configuration.GetConnectionString("ReadModel");
-builder.Services.AddDbContext<BranchDbContext>(options =>
-    options.UseNpgsql(readModelConnectionString, 
-        b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
+builder.Services.AddDbContext<BranchDbContext>(
+    options =>
+        options.UseNpgsql(
+            readModelConnectionString,
+            b => b.MigrationsAssembly("AspireEventSample.MigrationHost")));
 
 // Register the Postgres writer grains
-builder.Services.AddTransient<BranchEntityPostgresWriter>();
-builder.Services.AddTransient<IBranchEntityPostgresWriterGrain, BranchEntityPostgresWriterGrain>();
+builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
+builder.Services
+    .AddTransient<IBranchEntityPostgresReadModelAccessorGrain, BranchPostgresReadModelAccessorGrain>();
 builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
 
 // Register the DatabaseInitializer
@@ -57,8 +60,8 @@ builder.Services.AddTransient<DatabaseInitializer>();
 builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
 
 // Register entity writers
-builder.Services.AddTransient<BranchEntityPostgresWriter>();
-builder.Services.AddTransient<CartEntityWriter>();
+builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
+builder.Services.AddTransient<CartEntityPostgresWriter>();
 builder.Services.AddTransient<CartEntityPostgresWriter>();
 
 // source generator serialization options
@@ -92,7 +95,7 @@ using (var scope = app.Services.CreateScope())
     app.Logger.LogInformation("Applying database migrations...");
     await dbContext.Database.MigrateAsync();
     app.Logger.LogInformation("Database migrations applied successfully.");
-    
+
     var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
     await initializer.InitializeAsync();
 }

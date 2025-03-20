@@ -1,62 +1,62 @@
 using AspireEventSample.ApiService.Aggregates.Branches;
 using AspireEventSample.ApiService.Grains;
 using AspireEventSample.ReadModels;
-using Microsoft.Extensions.Logging;
 using Sekiban.Pure.Events;
-
 namespace AspireEventSample.ApiService.Aggregates.ReadModel;
 
 /// <summary>
-/// Branch read model handler
+///     Branch read model handler
 /// </summary>
 public class BranchReadModelHandler : IReadModelHandler
 {
-    private readonly IBranchWriter _branchWriter;
+    private readonly IBranchReadModelAccessor _branchReadModelAccessor;
     private readonly IEventContextProvider _eventContextProvider;
     private readonly ILogger<BranchReadModelHandler> _logger;
-    
+
     public BranchReadModelHandler(
-        IBranchWriter branchWriter,
+        IBranchReadModelAccessor branchReadModelAccessor,
         IEventContextProvider eventContextProvider,
         ILogger<BranchReadModelHandler> logger)
     {
-        _branchWriter = branchWriter;
+        _branchReadModelAccessor = branchReadModelAccessor;
         _eventContextProvider = eventContextProvider;
         _logger = logger;
     }
-    
+
     /// <summary>
-    /// Handle event
+    ///     Handle event
     /// </summary>
     public async Task HandleEventAsync(IEvent @event)
     {
         var eventPayload = @event.GetPayload();
-        
+
         // Switch based on event type
         switch (eventPayload)
         {
             case BranchCreated branchCreated:
                 await HandleBranchCreatedAsync(branchCreated);
                 break;
-                
+
             case BranchNameChanged branchNameChanged:
                 await HandleBranchNameChangedAsync(branchNameChanged);
                 break;
-                
+
             // Other event types can be handled here
         }
     }
-    
+
     /// <summary>
-    /// Handle BranchCreated event
+    ///     Handle BranchCreated event
     /// </summary>
     private async Task HandleBranchCreatedAsync(BranchCreated @event)
     {
         var context = _eventContextProvider.GetCurrentEventContext();
-        
-        _logger.LogInformation("Processing BranchCreated event for branch {BranchName} with ID {BranchId}",
-            @event.Name, context.TargetId);
-        
+
+        _logger.LogInformation(
+            "Processing BranchCreated event for branch {BranchName} with ID {BranchId}",
+            @event.Name,
+            context.TargetId);
+
         var entity = new BranchDbRecord
         {
             Id = Guid.NewGuid(),
@@ -68,36 +68,38 @@ public class BranchReadModelHandler : IReadModelHandler
             Name = @event.Name,
             Country = @event.Country
         };
-        
-        await _branchWriter.AddOrUpdateEntityAsync(entity);
+
+        await _branchReadModelAccessor.AddOrUpdateEntityAsync(entity);
     }
-    
+
     /// <summary>
-    /// Handle BranchNameChanged event
+    ///     Handle BranchNameChanged event
     /// </summary>
     private async Task HandleBranchNameChangedAsync(BranchNameChanged @event)
     {
         var context = _eventContextProvider.GetCurrentEventContext();
-        
-        _logger.LogInformation("Processing BranchNameChanged event for branch with ID {BranchId}, new name: {BranchName}",
-            context.TargetId, @event.Name);
-        
-        var existing = await _branchWriter.GetEntityByIdAsync(
-            context.RootPartitionKey, 
-            context.AggregateGroup, 
+
+        _logger.LogInformation(
+            "Processing BranchNameChanged event for branch with ID {BranchId}, new name: {BranchName}",
+            context.TargetId,
+            @event.Name);
+
+        var existing = await _branchReadModelAccessor.GetEntityByIdAsync(
+            context.RootPartitionKey,
+            context.AggregateGroup,
             context.TargetId);
-            
+
         if (existing != null)
         {
             existing.LastSortableUniqueId = context.SortableUniqueId;
             existing.TimeStamp = DateTime.UtcNow;
             existing.Name = @event.Name;
-            
-            await _branchWriter.AddOrUpdateEntityAsync(existing);
-        }
-        else
+
+            await _branchReadModelAccessor.AddOrUpdateEntityAsync(existing);
+        } else
         {
-            _logger.LogWarning("Branch with ID {BranchId} not found when processing BranchNameChanged event",
+            _logger.LogWarning(
+                "Branch with ID {BranchId} not found when processing BranchNameChanged event",
                 context.TargetId);
         }
     }

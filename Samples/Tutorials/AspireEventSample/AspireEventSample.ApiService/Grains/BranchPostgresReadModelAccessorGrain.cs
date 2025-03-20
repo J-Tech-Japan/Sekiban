@@ -1,25 +1,23 @@
 using AspireEventSample.ReadModels;
-using Microsoft.Extensions.Logging;
-
 namespace AspireEventSample.ApiService.Grains;
 
-public class BranchEntityPostgresWriterGrain : Grain, IBranchEntityPostgresWriterGrain
+public class BranchPostgresReadModelAccessorGrain : Grain, IBranchEntityPostgresReadModelAccessorGrain
 {
-    private readonly IBranchWriter _branchWriter;
-    private readonly ILogger<BranchEntityPostgresWriterGrain> _logger;
+    private readonly IBranchReadModelAccessor _branchReadModelAccessor;
+    private readonly ILogger<BranchPostgresReadModelAccessorGrain> _logger;
 
-    public BranchEntityPostgresWriterGrain(
-        BranchEntityPostgresWriter branchWriter,
-        ILogger<BranchEntityPostgresWriterGrain> logger)
+    public BranchPostgresReadModelAccessorGrain(
+        BranchPostgresReadModelAccessor branchReadModelAccessor,
+        ILogger<BranchPostgresReadModelAccessorGrain> logger)
     {
-        _branchWriter = branchWriter;
+        _branchReadModelAccessor = branchReadModelAccessor;
         _logger = logger;
     }
 
     public Task<BranchDbRecord?> GetEntityByIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
     {
         _logger.LogDebug("Getting branch entity with ID {BranchId}", targetId);
-        return _branchWriter.GetEntityByIdAsync(rootPartitionKey, aggregateGroup, targetId);
+        return _branchReadModelAccessor.GetEntityByIdAsync(rootPartitionKey, aggregateGroup, targetId);
     }
 
     public Task<List<BranchDbRecord>> GetHistoryEntityByIdAsync(
@@ -29,18 +27,22 @@ public class BranchEntityPostgresWriterGrain : Grain, IBranchEntityPostgresWrite
         string beforeSortableUniqueId)
     {
         _logger.LogDebug("Getting branch entity history with ID {BranchId}", targetId);
-        return _branchWriter.GetHistoryEntityByIdAsync(rootPartitionKey, aggregateGroup, targetId, beforeSortableUniqueId);
+        return _branchReadModelAccessor.GetHistoryEntityByIdAsync(
+            rootPartitionKey,
+            aggregateGroup,
+            targetId,
+            beforeSortableUniqueId);
     }
 
     public Task<BranchDbRecord> AddOrUpdateEntityAsync(BranchDbRecord entity)
     {
         _logger.LogDebug("Adding or updating branch entity with ID {BranchId}", entity.TargetId);
-        return _branchWriter.AddOrUpdateEntityAsync(entity);
+        return _branchReadModelAccessor.AddOrUpdateEntityAsync(entity);
     }
-    
+
     public Task<string> GetLastSortableUniqueIdAsync(string rootPartitionKey, string aggregateGroup, Guid targetId)
     {
         _logger.LogDebug("Getting last sortable unique ID for branch with ID {BranchId}", targetId);
-        return _branchWriter.GetLastSortableUniqueIdAsync(rootPartitionKey, aggregateGroup, targetId);
+        return _branchReadModelAccessor.GetLastSortableUniqueIdAsync(rootPartitionKey, aggregateGroup, targetId);
     }
 }
