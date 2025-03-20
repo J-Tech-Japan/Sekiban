@@ -52,6 +52,7 @@ builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
 builder.Services
     .AddTransient<IBranchEntityPostgresReadModelAccessorGrain, BranchPostgresReadModelAccessorGrain>();
 builder.Services.AddTransient<ICartEntityPostgresWriter, CartEntityPostgresWriter>();
+builder.Services.AddTransient<ICartItemEntityPostgresWriter, CartItemEntityPostgresWriter>();
 
 // Register the DatabaseInitializer
 builder.Services.AddTransient<DatabaseInitializer>();
@@ -62,7 +63,7 @@ builder.Services.AddSingleton<IEventContextProvider, EventContextProvider>();
 // Register entity writers
 builder.Services.AddTransient<BranchPostgresReadModelAccessor>();
 builder.Services.AddTransient<CartEntityPostgresWriter>();
-builder.Services.AddTransient<CartEntityPostgresWriter>();
+builder.Services.AddTransient<CartItemEntityPostgresWriter>();
 
 // source generator serialization options
 builder.Services.AddSingleton(
