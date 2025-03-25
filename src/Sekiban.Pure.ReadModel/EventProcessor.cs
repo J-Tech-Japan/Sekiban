@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Sekiban.Pure.Events;
-
-namespace AspireEventSample.ApiService.Aggregates.ReadModel;
+namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
 /// Event processor for read models

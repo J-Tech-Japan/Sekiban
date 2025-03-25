@@ -1,4 +1,4 @@
-namespace Sekiban.Pure.Orleans.ReadModels;
+namespace Sekiban.Pure.ReadModel;
 
 public interface IReadModelEntity
 {

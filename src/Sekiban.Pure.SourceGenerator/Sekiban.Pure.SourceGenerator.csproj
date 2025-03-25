@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Pure.SourceGenerator</PackageId>
-        <Version>1.0.0-preview11</Version>
+        <Version>1.0.0-preview12</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Source Generator</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview11</PackageVersion>
+        <PackageVersion>1.0.0-preview12</PackageVersion>
         <Description>Read model initial release</Description>
         <AssemblyName>Sekiban.Pure.SourceGenerator</AssemblyName>
         <RootNamespace>Sekiban.Pure.SourceGenerator</RootNamespace>
