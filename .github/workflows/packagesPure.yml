@@ -57,3 +57,7 @@ jobs:
     - name: Pack Pure xUnit
       run: |
         dotnet nuget push "src/Sekiban.Pure.xUnit/bin/Release/Sekiban.Pure.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure ReadModel
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.ReadModel/bin/Release/Sekiban.Pure.ReadModel.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+  
