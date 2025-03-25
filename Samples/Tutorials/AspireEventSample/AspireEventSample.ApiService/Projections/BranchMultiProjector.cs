@@ -1,4 +1,4 @@
-using AspireEventSample.ApiService.Aggregates.Branches;
+using AspireEventSample.Domain.Aggregates.Branches;
 using ResultBoxes;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;

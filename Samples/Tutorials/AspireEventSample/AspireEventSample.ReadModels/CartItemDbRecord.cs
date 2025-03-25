@@ -1,6 +1,4 @@
-using Orleans.Serialization;
-using Sekiban.Pure.Orleans.ReadModels;
-
+using Sekiban.Pure.ReadModel;
 namespace AspireEventSample.ReadModels;
 
 [GenerateSerializer]

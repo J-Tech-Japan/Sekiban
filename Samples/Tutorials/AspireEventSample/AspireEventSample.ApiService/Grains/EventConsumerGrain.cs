@@ -1,4 +1,4 @@
-using AspireEventSample.ApiService.Aggregates.ReadModel;
+using AspireEventSample.ApiService.ReadModel;
 using Orleans.Streams;
 using Sekiban.Pure.Events;
 namespace AspireEventSample.ApiService.Grains;
