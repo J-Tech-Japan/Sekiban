@@ -7,12 +7,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Orleans.xUnit</PackageId>
-        <Version>1.0.0-preview12</Version>
+        <Version>1.0.1-preview01</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans xUnit Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.0-preview12</PackageVersion>
+        <PackageVersion>1.0.1-preview01</PackageVersion>
         <Description>Read model initial release</Description>
         <AssemblyName>Sekiban.Pure.Orleans.xUnit</AssemblyName>
         <RootNamespace>Sekiban.Pure.Orleans.xUnit</RootNamespace>
@@ -31,7 +31,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.1.2"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview12"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview01"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
             <PrivateAssets>all</PrivateAssets>
