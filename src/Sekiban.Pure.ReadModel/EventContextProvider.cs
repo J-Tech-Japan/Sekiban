@@ -1,6 +1,5 @@
 using Sekiban.Pure.Events;
-
-namespace AspireEventSample.ApiService.Aggregates.ReadModel;
+namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
 /// Implementation of event context provider

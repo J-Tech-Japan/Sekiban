@@ -1,5 +1,4 @@
-using Sekiban.Pure.Orleans.ReadModels;
-namespace AspireEventSample.ApiService.Aggregates.ReadModel;
+namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
 ///     Interface for read model entity writers

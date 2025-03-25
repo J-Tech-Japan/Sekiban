@@ -1,4 +1,4 @@
-namespace Sekiban.Pure.Orleans.ReadModels;
+namespace Sekiban.Pure.ReadModel;
 
 public interface IEntityWriter<TEntity> where TEntity : IReadModelEntity
 {
