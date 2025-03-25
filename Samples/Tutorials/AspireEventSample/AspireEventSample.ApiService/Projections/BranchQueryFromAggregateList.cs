@@ -1,10 +1,11 @@
-using AspireEventSample.ApiService.Aggregates.Branches;
+using AspireEventSample.Domain.Aggregates.Branches;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 namespace AspireEventSample.ApiService.Projections;
+
 [GenerateSerializer]
-public record BranchQueryFromAggregateList([property:Id(0)]string NameContains)
+public record BranchQueryFromAggregateList([property: Id(0)] string NameContains)
     : IMultiProjectionListQuery<AggregateListProjector<BranchProjector>,
         BranchQueryFromAggregateList, BranchQueryFromAggregateList.Record>
 {

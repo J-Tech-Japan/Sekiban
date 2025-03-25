@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.Migration
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.ReadModels", "AspireEventSample.ReadModels\AspireEventSample.ReadModels.csproj", "{569646DD-AC28-46BB-982D-B178A85359EB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AspireEventSample.Domain", "AspireEventSample.Domain\AspireEventSample.Domain.csproj", "{D502596F-5618-4357-A28D-2B1FCF53E64D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +58,10 @@ Global
 		{569646DD-AC28-46BB-982D-B178A85359EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{569646DD-AC28-46BB-982D-B178A85359EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{569646DD-AC28-46BB-982D-B178A85359EB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D502596F-5618-4357-A28D-2B1FCF53E64D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D502596F-5618-4357-A28D-2B1FCF53E64D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D502596F-5618-4357-A28D-2B1FCF53E64D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D502596F-5618-4357-A28D-2B1FCF53E64D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

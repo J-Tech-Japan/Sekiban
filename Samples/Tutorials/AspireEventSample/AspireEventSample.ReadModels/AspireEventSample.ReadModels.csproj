@@ -10,7 +10,8 @@
     <ItemGroup>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
         <PackageReference Include="Microsoft.Orleans.Core" Version="9.1.2"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview9"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview01"/>
+        <PackageReference Include="Sekiban.Pure.ReadModel" Version="1.0.1-preview01"/>
     </ItemGroup>
 
 </Project>

@@ -1,10 +1,10 @@
 using AspireEventSample.ApiService;
-using AspireEventSample.ApiService.Aggregates.Branches;
-using AspireEventSample.ApiService.Aggregates.ReadModel;
 using AspireEventSample.ApiService.Endpoints;
 using AspireEventSample.ApiService.Generated;
 using AspireEventSample.ApiService.Grains;
 using AspireEventSample.ApiService.Projections;
+using AspireEventSample.ApiService.ReadModel;
+using AspireEventSample.Domain.Aggregates.Branches;
 using AspireEventSample.ReadModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

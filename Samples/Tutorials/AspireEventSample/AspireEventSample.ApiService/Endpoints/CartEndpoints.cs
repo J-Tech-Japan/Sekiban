@@ -1,12 +1,10 @@
-using AspireEventSample.ApiService.Aggregates.Carts;
+using AspireEventSample.Domain.Aggregates.Carts;
 using Microsoft.AspNetCore.Mvc;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Orleans;
 using Sekiban.Pure.Orleans.Parts;
-using Sekiban.Pure.Projectors;
-
 namespace AspireEventSample.ApiService.Endpoints;
 
 public static class CartEndpoints
@@ -68,9 +66,12 @@ public static class CartEndpoints
                     [FromServices] SekibanDomainTypes sekibanTypes) =>
                 {
                     var partitionKeyAndProjector =
-                        new PartitionKeysAndProjector(PartitionKeys<ShoppingCartProjector>.Existing(cartId), new ShoppingCartProjector());
+                        new PartitionKeysAndProjector(
+                            PartitionKeys<ShoppingCartProjector>.Existing(cartId),
+                            new ShoppingCartProjector());
                     var aggregateProjectorGrain =
-                        clusterClient.GetGrain<IAggregateProjectorGrain>(partitionKeyAndProjector.ToProjectorGrainKey());
+                        clusterClient.GetGrain<IAggregateProjectorGrain>(
+                            partitionKeyAndProjector.ToProjectorGrainKey());
                     var state = await aggregateProjectorGrain.RebuildStateAsync();
                     return sekibanTypes.AggregateTypes.ToTypedPayload(state).UnwrapBox();
                 })

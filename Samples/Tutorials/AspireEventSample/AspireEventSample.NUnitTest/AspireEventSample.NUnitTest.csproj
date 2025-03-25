@@ -13,12 +13,12 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1"/>
         <PackageReference Include="NUnit" Version="4.3.2"/>
         <PackageReference Include="NUnit.Analyzers" Version="4.6.0">
-          <PrivateAssets>all</PrivateAssets>
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
-        <PackageReference Include="Sekiban.Pure.NUnit" Version="1.0.0-preview9" />
-        <PackageReference Include="Sekiban.Pure.Orleans.NUnit" Version="1.0.0-preview9" />
+        <PackageReference Include="NUnit3TestAdapter" Version="5.0.0"/>
+        <PackageReference Include="Sekiban.Pure.NUnit" Version="1.0.1-preview01"/>
+        <PackageReference Include="Sekiban.Pure.Orleans.NUnit" Version="1.0.1-preview01"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -27,6 +27,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\AspireEventSample.ApiService\AspireEventSample.ApiService.csproj"/>
+        <ProjectReference Include="..\AspireEventSample.Domain\AspireEventSample.Domain.csproj"/>
     </ItemGroup>
 
 </Project>

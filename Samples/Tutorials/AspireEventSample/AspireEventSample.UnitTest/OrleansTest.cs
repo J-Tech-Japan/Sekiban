@@ -1,7 +1,7 @@
-using AspireEventSample.ApiService.Aggregates.Branches;
-using AspireEventSample.ApiService.Aggregates.Carts;
 using AspireEventSample.ApiService.Generated;
 using AspireEventSample.ApiService.Projections;
+using AspireEventSample.Domain.Aggregates.Branches;
+using AspireEventSample.Domain.Aggregates.Carts;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Orleans.xUnit;
@@ -19,11 +19,12 @@ public class OrleansTest : SekibanOrleansTestBase<OrleansTest>
             // .Do(_ => Task.Delay(10000))
             .Conveyor(response => ThenGetAggregateWithResult<BranchProjector>(response.PartitionKeys))
             .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<Branch>())
-            .Do(payload =>
-            {
-                Assert.Equal("ES", payload.Name);
-                Assert.Equal("Japan", payload.Country);
-            })
+            .Do(
+                payload =>
+                {
+                    Assert.Equal("ES", payload.Name);
+                    Assert.Equal("Japan", payload.Country);
+                })
             .Conveyor(_ => ThenGetMultiProjectorWithResult<BranchMultiProjector>())
             .Do(
                 projector =>

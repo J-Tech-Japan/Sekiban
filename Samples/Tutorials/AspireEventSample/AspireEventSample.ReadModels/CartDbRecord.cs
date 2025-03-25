@@ -1,7 +1,5 @@
-using Orleans.Serialization;
-using Sekiban.Pure.Orleans.ReadModels;
+using Sekiban.Pure.ReadModel;
 using System.Text.Json.Serialization;
-
 namespace AspireEventSample.ReadModels;
 
 [GenerateSerializer]
@@ -28,7 +26,7 @@ public class CartDbRecord : IReadModelEntity
     public string Status { get; set; } = string.Empty;
     [Id(8)]
     public int TotalAmount { get; set; }
-    
+
     // Items are now stored in a separate table (CartItemDbRecord)
 
     // Default constructor for EF Core

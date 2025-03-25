@@ -1,6 +1,6 @@
-﻿﻿﻿using AspireEventSample.ApiService.Aggregates.Branches;
-using AspireEventSample.ApiService.Generated;
+﻿using AspireEventSample.ApiService.Generated;
 using AspireEventSample.ApiService.Projections;
+using AspireEventSample.Domain.Aggregates.Branches;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Pure;
 using Sekiban.Pure.Command.Handlers;

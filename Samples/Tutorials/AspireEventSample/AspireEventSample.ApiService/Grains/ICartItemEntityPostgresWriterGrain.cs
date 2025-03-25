@@ -1,4 +1,4 @@
-using AspireEventSample.ApiService.Aggregates.ReadModel;
+using AspireEventSample.ApiService.ReadModel;
 using AspireEventSample.ReadModels;
 namespace AspireEventSample.ApiService.Grains;
 
