@@ -332,6 +332,14 @@ public class SerializableAggregateListProjectorTests
             }
         }
     }
+
+    [Fact]
+    public void CheckTypeName()
+    {
+        var name = typeof(AggregateListProjector<BranchProjector>).FullName;
+        Assert.Contains("BranchProjector", name);
+    }
+    
     
     [Fact]
     public async Task SerializeDeserialize_MixedTypeListProjector_Success()
