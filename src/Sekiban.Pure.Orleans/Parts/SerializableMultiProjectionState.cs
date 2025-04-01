@@ -91,7 +91,7 @@ public record SerializableMultiProjectionState
         var compressedPayload = await CompressStringAsync(payloadJson);
         
         var assembly = state.ProjectorCommon.GetType().Assembly;
-        var versionString = assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+        var versionString = state.ProjectorCommon.GetVersion();
         
         return new SerializableMultiProjectionState
         {
@@ -131,12 +131,19 @@ public record SerializableMultiProjectionState
                 PayloadTypeName, 
                 domainTypes);
             
+            
             if (!projectorBox.IsSuccess || projectorBox.GetValue() == null)
             {
                 return OptionalValue<MultiProjectionState>.None;
             }
             
             var projector = projectorBox.GetValue();
+            
+            if (projector.GetVersion() != PayloadVersion)
+            {
+                // The projector type is not from the same assembly as MultiProjectionState
+                return OptionalValue<MultiProjectionState>.None;
+            }
             
             // Recreate the MultiProjectionState
             var state = new MultiProjectionState(
