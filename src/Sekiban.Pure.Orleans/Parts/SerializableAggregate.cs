@@ -88,16 +88,16 @@ public record SerializableAggregate
 
     // 変換メソッド：SerializableAggregate → Aggregate
     public async Task<OptionalValue<Aggregate>> ToAggregateAsync(
-        IAggregateProjector projector,
+        SekibanDomainTypes domainTypes,
         JsonSerializerOptions options)
     {
         try
         {
-            // Payloadの型が現在のアプリケーションで利用可能か確認
+            // Payloadの型を SekibanDomainTypes.AggregateTypes から取得
             Type? payloadType = null;
             try
             {
-                payloadType = projector.GetPayloadTypeByName(PayloadTypeName);
+                payloadType = domainTypes.AggregateTypes.GetPayloadTypeByName(PayloadTypeName);
                 if (payloadType == null)
                 {
                     // 型が見つからない場合は互換性なしと判断
