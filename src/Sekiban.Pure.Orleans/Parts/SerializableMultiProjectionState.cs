@@ -70,27 +70,21 @@ public record SerializableMultiProjectionState
     /// <param name="options">JSON serializer options</param>
     /// <typeparam name="TProjection">The projector type</typeparam>
     /// <returns>A serializable representation of the state</returns>
-    public static async Task<SerializableMultiProjectionState> CreateFromAsync<TProjection>(
+    public static async Task<SerializableMultiProjectionState> CreateFromAsync(
         MultiProjectionState state, 
-        JsonSerializerOptions options) 
-        where TProjection : IMultiProjectorCommon
+        JsonSerializerOptions options)
     {
-        if (state.ProjectorCommon is not TProjection projector)
-        {
-            throw new InvalidOperationException(
-                $"Projector is not of expected type. Expected {typeof(TProjection).FullName}, but got {state.ProjectorCommon?.GetType().FullName ?? "null"}");
-        }
-        
-        var payloadJson = JsonSerializer.Serialize(projector, options);
+        var projector = state.ProjectorCommon;
+        var payloadJson = JsonSerializer.Serialize(projector,state.ProjectorCommon.GetType(), options);
         var compressedPayload = await CompressStringAsync(payloadJson);
         
-        var assembly = typeof(TProjection).Assembly;
+        var assembly = state.ProjectorCommon.GetType().Assembly;
         var versionString = assembly.GetName().Version?.ToString() ?? "0.0.0.0";
         
         return new SerializableMultiProjectionState
         {
             CompressedPayloadJson = compressedPayload,
-            PayloadTypeName = typeof(TProjection).AssemblyQualifiedName ?? string.Empty,
+            PayloadTypeName = state.ProjectorCommon.GetType().AssemblyQualifiedName ?? string.Empty,
             PayloadVersion = versionString,
             LastEventId = state.LastEventId,
             LastSortableUniqueId = state.LastSortableUniqueId,

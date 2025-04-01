@@ -114,13 +114,12 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     /// <summary>
     /// Saves the current multiProjectionState to persistent storage
     /// </summary>
-    private async Task PersistStateAsync<TProjection>(MultiProjectionState state) 
-        where TProjection : IMultiProjectorCommon
+    private async Task PersistStateAsync(MultiProjectionState state) 
     {
         try
         {
             // Convert MultiProjectionState to SerializableMultiProjectionState
-            safeState.State = await SerializableMultiProjectionState.CreateFromAsync<TProjection>(
+            safeState.State = await SerializableMultiProjectionState.CreateFromAsync(
                 state, 
                 jsonSerializerOptions);
             
@@ -159,7 +158,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                 "default");
             
             // Save initial state
-            await PersistStateAsync<IMultiProjectorCommon>(multiProjectionState);
+            await PersistStateAsync(multiProjectionState);
             return;
         }
         
@@ -227,7 +226,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
             unsafeState = null;
             
             // Persist to storage
-            await PersistStateAsync<IMultiProjectorCommon>(multiProjectionState);
+            await PersistStateAsync(multiProjectionState);
         }
         else
         {
@@ -253,7 +252,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                     multiProjectionState?.RootPartitionKey ?? "default");
                 
                 // Persist safe state
-                await PersistStateAsync<IMultiProjectorCommon>(multiProjectionState);
+                await PersistStateAsync(multiProjectionState);
             }
 
             // Process unsafe events (newer) for in-memory state only

@@ -209,7 +209,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(payload);
 
         // Act
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<MultiProjectorPayload>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         var result = await serializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
 
@@ -272,7 +272,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(payload);
 
         // Act
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<AggregateListProjector<BranchProjector>>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         var result = await serializable.ToMultiProjectionStateAsync<AggregateListProjector<BranchProjector>>(_jsonOptions);
 
@@ -323,7 +323,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(payload);
         
         // 一旦通常通りシリアライズ
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<MultiProjectorPayload>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         
         // バージョンを変更
@@ -344,7 +344,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(payload);
         
         // 一旦通常通りシリアライズ
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<MultiProjectorPayload>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         
         // 型名を変更
@@ -365,7 +365,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(payload);
         
         // 一旦通常通りシリアライズ
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<MultiProjectorPayload>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         
         // CompressedPayloadJsonをnullに設定
@@ -425,7 +425,7 @@ public class SerializableMultiProjectionStateTests
         var originalState = CreateMultiProjectionState(largePayload);
         
         // Act
-        var serializable = await SerializableMultiProjectionState.CreateFromAsync<MultiProjectorPayload>(
+        var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _jsonOptions);
         var result = await serializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
         
