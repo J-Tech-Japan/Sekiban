@@ -1,33 +1,112 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
+using System.Text.Json;
 namespace Sekiban.Pure.Orleans.Grains;
 
 public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 {
     private static readonly TimeSpan SafeStateTime = TimeSpan.FromSeconds(7);
-    private MultiProjectionState? UnsafeState { get; set; }
-    private readonly IPersistentState<MultiProjectionState> safeState;
+    
+    // In-memory state for the grain
+    private MultiProjectionState? multiProjectionState;
+    private MultiProjectionState? unsafeState;
+    
+    // Orleans persistent state using our serializable wrapper
+    private readonly IPersistentState<SerializableMultiProjectionState> safeState;
     private readonly IEventReader eventReader;
     private readonly SekibanDomainTypes sekibanDomainTypes;
-
+    private readonly ILogger<MultiProjectorGrain> logger;
     public MultiProjectorGrain(
-        [PersistentState("multiProjector", "Default")] IPersistentState<MultiProjectionState> safeState,
+        [PersistentState("multiProjector", "Default")] IPersistentState<SerializableMultiProjectionState> safeState,
         IEventReader eventReader,
-        SekibanDomainTypes sekibanDomainTypes)
+        SekibanDomainTypes sekibanDomainTypes,
+        ILogger<MultiProjectorGrain> logger)
     {
         this.safeState = safeState;
         this.eventReader = eventReader;
         this.sekibanDomainTypes = sekibanDomainTypes;
+        this.logger = logger;
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         await base.OnActivateAsync(cancellationToken);
+        
+        // Read persistent state
         await safeState.ReadStateAsync();
+        
+        // If we have a persistent state, try to convert it to MultiProjectionState
+        if (safeState.RecordExists && safeState.State != null)
+        {
+            // Get the projector type from the grain name
+            var projectorType = GetProjectorFromMultiProjectorName();
+            
+            // Try to convert the serializable state to MultiProjectionState
+            var stateResult = await TryRestoreStateAsync(projectorType);
+            
+            if (stateResult.HasValue)
+            {
+                // Successfully restored state
+                multiProjectionState = stateResult.Value;
+                logger.LogInformation("Successfully restored MultiProjectorGrain state from persistent storage");
+            }
+            else
+            {
+                // Failed to restore state, we'll rebuild from events
+                logger.LogWarning("Failed to restore MultiProjectorGrain state from persistent storage. Rebuilding from events.");
+                await RebuildStateAsync();
+            }
+        }
+        else
+        {
+            // No persistent state exists, initialize from events
+            await RebuildStateAsync();
+        }
+    }
+
+    /// <summary>
+    /// Attempts to restore MultiProjectionState from the serializable persistent state using IMultiProjectorTypes
+    /// </summary>
+    private async Task<OptionalValue<MultiProjectionState>> TryRestoreStateAsync(IMultiProjectorCommon projector)
+    {
+        try
+        {
+            // Use the non-generic ToMultiProjectionStateAsync method with SekibanDomainTypes
+            return await safeState.State.ToMultiProjectionStateAsync(sekibanDomainTypes);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error restoring MultiProjectionState");
+            return OptionalValue<MultiProjectionState>.None;
+        }
+    }
+
+    /// <summary>
+    /// Saves the current multiProjectionState to persistent storage using IMultiProjectorTypes
+    /// </summary>
+    private async Task PersistStateAsync(MultiProjectionState state) 
+    {
+        try
+        {
+            // Convert MultiProjectionState to SerializableMultiProjectionState using SekibanDomainTypes
+            safeState.State = await SerializableMultiProjectionState.CreateFromAsync(
+                state, 
+                sekibanDomainTypes);
+            
+            // Write to persistent storage
+            await safeState.WriteStateAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error persisting MultiProjectionState");
+            // Continue execution even if persistence fails
+        }
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -37,52 +116,69 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
     public async Task RebuildStateAsync()
     {
-        // 初回または完全再構築時は、プロジェクターはグレイン名から取得する
+        // Get the projector from the grain name
         var projector = GetProjectorFromMultiProjectorName();
-        // 全イベントを取得
+        
+        // Get all events
         var events = (await eventReader.GetEvents(EventRetrievalInfo.All)).UnwrapBox().ToList();
+        
         if (!events.Any())
         {
-            safeState.State = new MultiProjectionState(projector, Guid.Empty, string.Empty, 0, 0, "default");
+            // No events, create initial state
+            multiProjectionState = new MultiProjectionState(
+                projector, 
+                Guid.Empty, 
+                string.Empty, 
+                0, 
+                0, 
+                "default");
+            
+            // Save initial state
+            await PersistStateAsync(multiProjectionState);
             return;
         }
+        
+        // Process events to build state
         await UpdateProjectionAsync(events, projector);
     }
 
     public async Task BuildStateAsync()
     {
-        if (!safeState.RecordExists)
+        if (multiProjectionState == null)
         {
+            // No in-memory state, rebuild from all events
             await RebuildStateAsync();
             return;
         }
 
-        // 以前の安全状態の最後の SortableUniqueId をチェックポイントとして利用
-        var checkpoint = safeState.State.LastSortableUniqueId;
+        // Use the last sortable ID as checkpoint for incremental update
+        var checkpoint = multiProjectionState.LastSortableUniqueId;
         var retrievalInfo = EventRetrievalInfo.All with
         {
             SortableIdCondition = ISortableIdCondition.Since(new SortableUniqueIdValue(checkpoint))
         };
 
+        // Get events since the checkpoint
         var events = (await eventReader.GetEvents(retrievalInfo)).UnwrapBox().ToList();
+        
         if (!events.Any())
         {
+            // No new events
             return;
         }
 
-        // 既存の安全状態に基づくプロジェクターを利用
-        var projector = safeState.State.ProjectorCommon;
-        await UpdateProjectionAsync(events, projector);
+        // Apply new events to current state
+        await UpdateProjectionAsync(events, multiProjectionState.ProjectorCommon);
     }
 
     /// <summary>
-    ///     取得したイベント群を安全／不安全に分割し、状態を更新する共通処理
+    /// Updates projection state with new events, handling safe and unsafe states
     /// </summary>
     private async Task UpdateProjectionAsync(List<IEvent> events, IMultiProjectorCommon projector)
     {
         var currentTime = DateTime.UtcNow;
         var safeTimeThreshold = currentTime.Subtract(SafeStateTime);
-        // 安全判定のため、しっかりとしたタイムスタンプ形式で比較
+        // Safety threshold for event timestamps
         var safeThresholdSortable = new SortableUniqueIdValue(safeTimeThreshold.ToString("O"));
         var eventsList = events.ToList();
         var lastEvent = eventsList.Last();
@@ -90,59 +186,75 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
         if (lastEventSortable.IsEarlierThan(safeThresholdSortable))
         {
-            // 全てのイベントが安全と判断できる場合
+            // All events are considered "safe" (older than threshold)
             var projectedState = sekibanDomainTypes.MultiProjectorsType.Project(projector, eventsList).UnwrapBox();
-            safeState.State = new MultiProjectionState(
+            
+            // Update in-memory state
+            multiProjectionState = new MultiProjectionState(
                 projectedState,
                 lastEvent.Id,
                 lastEvent.SortableUniqueId,
-                (safeState.State?.Version ?? 0) + 1,
+                (multiProjectionState?.Version ?? 0) + 1,
                 0,
-                safeState.State?.RootPartitionKey ?? "default");
-            UnsafeState = null;
-            await safeState.WriteStateAsync();
-        } else
+                multiProjectionState?.RootPartitionKey ?? "default");
+            
+            // Clear unsafe state
+            unsafeState = null;
+            
+            // Persist to storage
+            await PersistStateAsync(multiProjectionState);
+        }
+        else
         {
-            // 安全と判断できるイベントと、最新の（不安全な）イベントの分割点を検出
+            // Some events are "unsafe" (newer than threshold)
+            // Find the split point between safe and unsafe events
             var splitIndex = eventsList.FindLastIndex(
                 e => new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeThresholdSortable));
 
             if (splitIndex >= 0)
             {
+                // Process safe events and persist them
                 var safeEvents = eventsList.Take(splitIndex + 1).ToList();
                 var lastSafeEvent = safeEvents.Last();
-                var safeProjectedState
-                    = sekibanDomainTypes.MultiProjectorsType.Project(projector, safeEvents).UnwrapBox();
-                safeState.State = new MultiProjectionState(
+                var safeProjectedState = sekibanDomainTypes.MultiProjectorsType.Project(projector, safeEvents).UnwrapBox();
+                
+                // Update in-memory state with safe events
+                multiProjectionState = new MultiProjectionState(
                     safeProjectedState,
                     lastSafeEvent.Id,
                     lastSafeEvent.SortableUniqueId,
-                    (safeState.State?.Version ?? 0) + 1,
+                    (multiProjectionState?.Version ?? 0) + 1,
                     0,
-                    safeState.State?.RootPartitionKey ?? "default");
-                await safeState.WriteStateAsync();
+                    multiProjectionState?.RootPartitionKey ?? "default");
+                
+                // Persist safe state
+                await PersistStateAsync(multiProjectionState);
             }
 
-            // 不安全な最新イベントを既存の安全状態に適用して更新
+            // Process unsafe events (newer) for in-memory state only
             var unsafeEvents = eventsList.Skip(Math.Max(splitIndex + 1, 0)).ToList();
             var unsafeProjectedState = sekibanDomainTypes
                 .MultiProjectorsType
-                .Project(safeState.State.ProjectorCommon, unsafeEvents)
+                .Project(multiProjectionState!.ProjectorCommon, unsafeEvents)
                 .UnwrapBox();
-            UnsafeState = new MultiProjectionState(
+            
+            // Set unsafe state (in-memory only, not persisted)
+            unsafeState = new MultiProjectionState(
                 unsafeProjectedState,
                 lastEvent.Id,
                 lastEvent.SortableUniqueId,
-                safeState.State.Version + 1,
+                multiProjectionState.Version + 1,
                 0,
-                safeState.State.RootPartitionKey);
+                multiProjectionState.RootPartitionKey);
         }
     }
 
     public async Task<MultiProjectionState> GetStateAsync()
     {
         await BuildStateAsync();
-        return UnsafeState ?? safeState.State;
+        // Return unsafe state if available, otherwise return safe state
+        return unsafeState ?? multiProjectionState ?? 
+               throw new InvalidOperationException("MultiProjectorGrain state not initialized");
     }
 
     public async Task<QueryResultGeneral> QueryAsync(IQueryCommon query)
@@ -152,6 +264,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                 GetProjectorForQuery,
                 new ServiceCollection().BuildServiceProvider()) ??
             throw new ApplicationException("Query not found");
+        
         return result.Remap(value => value.ToGeneral(query)).UnwrapBox();
     }
 
@@ -162,6 +275,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                 GetProjectorForQuery,
                 new ServiceCollection().BuildServiceProvider()) ??
             throw new ApplicationException("Query not found");
+        
         return result.UnwrapBox();
     }
 
@@ -169,8 +283,11 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         IMultiProjectionEventSelector multiProjectionEventSelector)
     {
         await BuildStateAsync();
-        return UnsafeState?.ToResultBox<IMultiProjectorStateCommon>() ??
-            safeState?.State.ToResultBox<IMultiProjectorStateCommon>() ?? new ApplicationException("No state found");
+        
+        // Use unsafe state if available, otherwise use safe state
+        return unsafeState?.ToResultBox<IMultiProjectorStateCommon>() ??
+               multiProjectionState?.ToResultBox<IMultiProjectorStateCommon>() ?? 
+               new ApplicationException("No state found");
     }
 
     public IMultiProjectorCommon GetProjectorFromMultiProjectorName()
