@@ -167,6 +167,7 @@ public record SerializableMultiProjectionState
         using (var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal, true))
         {
             await gzipStream.WriteAsync(bytes);
+            await gzipStream.FlushAsync(); // Ensure all data is written to the underlying stream
         }
         
         return outputStream.ToArray();
