@@ -1,5 +1,6 @@
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
 using System.Text.Json.Serialization;
 namespace Pure.Domain;
 
@@ -31,6 +32,8 @@ namespace Pure.Domain;
 [JsonSerializable(typeof(ConfirmedUser))]
 [JsonSerializable(typeof(EmptyAggregatePayload))]
 [JsonSerializable(typeof(UnconfirmedUser))]
+[JsonSerializable(typeof(SerializableAggregate))]
+[JsonSerializable(typeof(SerializableAggregateListProjector))]
 public partial class PureDomainEventsJsonContext : JsonSerializerContext
 {
 }

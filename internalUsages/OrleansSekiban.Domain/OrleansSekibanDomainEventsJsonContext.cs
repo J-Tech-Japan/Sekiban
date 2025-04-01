@@ -23,7 +23,6 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(EventDocument<WeatherForecastLocationUpdated>))]
 [JsonSerializable(typeof(WeatherForecastLocationUpdated))]
 [JsonSerializable(typeof(IMultiProjectorCommon))]
-[JsonSerializable(typeof(MultiProjectionState<>))]
 [JsonSerializable(typeof(Dictionary<string, Aggregate>))]
 [JsonSerializable(typeof(Aggregate))]
 [JsonSerializable(typeof(AggregateListProjector<WeatherForecastProjector>))]
