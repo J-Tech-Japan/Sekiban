@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
 using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
@@ -23,6 +24,8 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(MultiProjectionState<>))]
 [JsonSerializable(typeof(Dictionary<string, Aggregate>))]
 [JsonSerializable(typeof(Aggregate))]
+[JsonSerializable(typeof(AggregateListProjector<WeatherForecastProjector>))]
+[JsonSerializable(typeof(MultiProjectionState<AggregateListProjector<WeatherForecastProjector>>))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }
