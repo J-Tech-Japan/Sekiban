@@ -22,8 +22,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     private readonly IEventReader eventReader;
     private readonly SekibanDomainTypes sekibanDomainTypes;
     private readonly ILogger<MultiProjectorGrain> logger;
-    private readonly JsonSerializerOptions jsonSerializerOptions;
-
     public MultiProjectorGrain(
         [PersistentState("multiProjector", "Default")] IPersistentState<SerializableMultiProjectionState> safeState,
         IEventReader eventReader,
@@ -34,9 +32,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         this.eventReader = eventReader;
         this.sekibanDomainTypes = sekibanDomainTypes;
         this.logger = logger;
-        
-        // Use the same JSON options that are used elsewhere in the application
-        this.jsonSerializerOptions = sekibanDomainTypes.JsonSerializerOptions;
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -76,33 +71,14 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     }
 
     /// <summary>
-    /// Attempts to restore MultiProjectionState from the serializable persistent state
+    /// Attempts to restore MultiProjectionState from the serializable persistent state using IMultiProjectorTypes
     /// </summary>
     private async Task<OptionalValue<MultiProjectionState>> TryRestoreStateAsync(IMultiProjectorCommon projector)
     {
         try
         {
-            // Use the type of the projector to restore the state
-            var projectorType = projector.GetType();
-            
-            // Get the generic method that can handle this specific projector type
-            var method = typeof(SerializableMultiProjectionState)
-                .GetMethod(nameof(SerializableMultiProjectionState.ToMultiProjectionStateAsync))
-                ?.MakeGenericMethod(projectorType);
-            
-            if (method == null)
-            {
-                logger.LogError("Could not find ToMultiProjectionStateAsync method");
-                return OptionalValue<MultiProjectionState>.None;
-            }
-            
-            // Invoke the generic method on our serializable state
-            var task = (Task<OptionalValue<MultiProjectionState>>)method.Invoke(
-                safeState.State, 
-                new object[] { jsonSerializerOptions })!;
-            
-            // Wait for the result
-            return await task;
+            // Use the non-generic ToMultiProjectionStateAsync method with SekibanDomainTypes
+            return await safeState.State.ToMultiProjectionStateAsync(sekibanDomainTypes);
         }
         catch (Exception ex)
         {
@@ -112,16 +88,16 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     }
 
     /// <summary>
-    /// Saves the current multiProjectionState to persistent storage
+    /// Saves the current multiProjectionState to persistent storage using IMultiProjectorTypes
     /// </summary>
     private async Task PersistStateAsync(MultiProjectionState state) 
     {
         try
         {
-            // Convert MultiProjectionState to SerializableMultiProjectionState
+            // Convert MultiProjectionState to SerializableMultiProjectionState using SekibanDomainTypes
             safeState.State = await SerializableMultiProjectionState.CreateFromAsync(
                 state, 
-                jsonSerializerOptions);
+                sekibanDomainTypes);
             
             // Write to persistent storage
             await safeState.WriteStateAsync();

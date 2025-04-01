@@ -7,7 +7,9 @@ using Sekiban.Pure.Events;
 using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Pure.Domain;
+using Pure.Domain.Generated;
 using ResultBoxes;
+using Sekiban.Pure;
 
 namespace Pure.Domain.xUnit;
 
@@ -16,18 +18,12 @@ namespace Pure.Domain.xUnit;
 /// </summary>
 public class SerializableMultiProjectionStateTests
 {
-    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly SekibanDomainTypes _domainTypes;
 
     public SerializableMultiProjectionStateTests()
     {
-        // テスト用のJsonSerializerOptionsを作成
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true,
-            // Add custom converter for PartitionKeys to handle dictionary serialization
-            Converters = { new PartitionKeysJsonConverter() }
-        };
+        // テスト用のSekibanDomainTypesを取得
+        _domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
     }
 
     #region Helper Methods
@@ -210,8 +206,8 @@ public class SerializableMultiProjectionStateTests
 
         // Act
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
-        var result = await serializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
+            originalState, _domainTypes);
+        var result = await serializable.ToMultiProjectionStateAsync(_domainTypes);
 
         // Assert
         Assert.True(result.HasValue);
@@ -273,8 +269,8 @@ public class SerializableMultiProjectionStateTests
 
         // Act
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
-        var result = await serializable.ToMultiProjectionStateAsync<AggregateListProjector<BranchProjector>>(_jsonOptions);
+            originalState, _domainTypes);
+        var result = await serializable.ToMultiProjectionStateAsync(_domainTypes);
 
         // Assert
         Assert.True(result.HasValue);
@@ -324,13 +320,13 @@ public class SerializableMultiProjectionStateTests
         
         // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
+            originalState, _domainTypes);
         
         // バージョンを変更
         var modifiedSerializable = serializable with { PayloadVersion = "999.0.0.0" };
         
         // Act
-        var result = await modifiedSerializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
+        var result = await modifiedSerializable.ToMultiProjectionStateAsync(_domainTypes);
         
         // Assert
         Assert.False(result.HasValue);
@@ -345,13 +341,13 @@ public class SerializableMultiProjectionStateTests
         
         // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
+            originalState, _domainTypes);
         
         // 型名を変更
         var modifiedSerializable = serializable with { PayloadTypeName = "Some.Invalid.Type, Assembly" };
         
         // Act
-        var result = await modifiedSerializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
+        var result = await modifiedSerializable.ToMultiProjectionStateAsync(_domainTypes);
         
         // Assert
         Assert.False(result.HasValue);
@@ -366,13 +362,13 @@ public class SerializableMultiProjectionStateTests
         
         // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
+            originalState, _domainTypes);
         
         // CompressedPayloadJsonをnullに設定
         var modifiedSerializable = serializable with { CompressedPayloadJson = null };
         
         // Act
-        var result = await modifiedSerializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
+        var result = await modifiedSerializable.ToMultiProjectionStateAsync(_domainTypes);
         
         // Assert
         Assert.False(result.HasValue);
@@ -426,8 +422,8 @@ public class SerializableMultiProjectionStateTests
         
         // Act
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
-            originalState, _jsonOptions);
-        var result = await serializable.ToMultiProjectionStateAsync<MultiProjectorPayload>(_jsonOptions);
+            originalState, _domainTypes);
+        var result = await serializable.ToMultiProjectionStateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);

@@ -68,14 +68,26 @@ public record SerializableMultiProjectionState
     /// </summary>
     /// <param name="state">The source MultiProjectionState to convert</param>
     /// <param name="options">JSON serializer options</param>
+    /// <param name="domainTypes"></param>
     /// <typeparam name="TProjection">The projector type</typeparam>
     /// <returns>A serializable representation of the state</returns>
     public static async Task<SerializableMultiProjectionState> CreateFromAsync(
         MultiProjectionState state, 
-        JsonSerializerOptions options)
+        SekibanDomainTypes domainTypes)
     {
         var projector = state.ProjectorCommon;
-        var payloadJson = JsonSerializer.Serialize(projector,state.ProjectorCommon.GetType(), options);
+        
+        // Use IMultiProjectorTypes for serialization
+        var serializedPayloadBox = await domainTypes.MultiProjectorsType.GetSerialisedMultiProjector(
+            projector, 
+            domainTypes);
+        
+        if (!serializedPayloadBox.IsSuccess)
+        {
+            throw new InvalidOperationException($"Failed to serialize projector: {serializedPayloadBox.GetException()?.Message}");
+        }
+        
+        var payloadJson = serializedPayloadBox.GetValue();
         var compressedPayload = await CompressStringAsync(payloadJson);
         
         var assembly = state.ProjectorCommon.GetType().Assembly;
@@ -100,29 +112,9 @@ public record SerializableMultiProjectionState
     /// <param name="options">JSON serializer options</param>
     /// <typeparam name="TProjection">The projector type</typeparam>
     /// <returns>An optional containing the MultiProjectionState if conversion was successful, or None if not</returns>
-    public async Task<OptionalValue<MultiProjectionState>> ToMultiProjectionStateAsync<TProjection>(
-        JsonSerializerOptions options) 
-        where TProjection : IMultiProjectorCommon
+    public async Task<OptionalValue<MultiProjectionState>> ToMultiProjectionStateAsync(
+        SekibanDomainTypes domainTypes) 
     {
-        // Verify type compatibility
-        var expectedTypeName = typeof(TProjection).AssemblyQualifiedName;
-        if (!string.Equals(PayloadTypeName, expectedTypeName, StringComparison.Ordinal))
-        {
-            // Type mismatch - return None to indicate failure
-            return OptionalValue<MultiProjectionState>.None;
-        }
-        
-        // Verify version compatibility
-        var currentAssembly = typeof(TProjection).Assembly;
-        var currentVersion = currentAssembly.GetName().Version?.ToString() ?? "0.0.0.0";
-        
-        if (!string.Equals(PayloadVersion, currentVersion, StringComparison.Ordinal))
-        {
-            // Version mismatch - return None to indicate failure
-            // This allows the caller to rebuild the state from scratch if needed
-            return OptionalValue<MultiProjectionState>.None;
-        }
-        
         if (CompressedPayloadJson == null)
         {
             return OptionalValue<MultiProjectionState>.None;
@@ -130,14 +122,21 @@ public record SerializableMultiProjectionState
         
         try
         {
-            // Decompress and deserialize the payload
+            // Decompress the payload
             var payloadJson = await DecompressStringAsync(CompressedPayloadJson);
-            var projector = JsonSerializer.Deserialize<TProjection>(payloadJson, options);
             
-            if (projector == null)
+            // Use IMultiProjectorTypes for deserialization
+            var projectorBox = await domainTypes.MultiProjectorsType.GetSerialisedMultiProjector(
+                payloadJson, 
+                PayloadTypeName, 
+                domainTypes);
+            
+            if (!projectorBox.IsSuccess || projectorBox.GetValue() == null)
             {
                 return OptionalValue<MultiProjectionState>.None;
             }
+            
+            var projector = projectorBox.GetValue();
             
             // Recreate the MultiProjectionState
             var state = new MultiProjectionState(
