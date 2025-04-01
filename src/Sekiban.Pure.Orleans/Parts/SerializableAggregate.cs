@@ -93,7 +93,23 @@ public record SerializableAggregate
     {
         try
         {
-            // Payloadの型を SekibanDomainTypes.AggregateTypes から取得
+            // EmptyAggregatePayloadの場合は特別処理
+            if (PayloadTypeName == typeof(EmptyAggregatePayload).Name)
+            {
+                // EmptyAggregatePayloadは直接作成可能
+                var emptyAggregate = new Aggregate(
+                    new EmptyAggregatePayload(),
+                    PartitionKeys,
+                    Version,
+                    LastSortableUniqueId,
+                    ProjectorVersion,
+                    ProjectorTypeName,
+                    PayloadTypeName);
+
+                return new OptionalValue<Aggregate>(emptyAggregate);
+            }
+            
+            // その他のPayload型はドメインタイプから取得
             Type? payloadType = null;
             try
             {
