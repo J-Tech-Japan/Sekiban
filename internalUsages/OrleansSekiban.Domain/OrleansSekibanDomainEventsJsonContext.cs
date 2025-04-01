@@ -23,13 +23,9 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(EventDocument<WeatherForecastLocationUpdated>))]
 [JsonSerializable(typeof(WeatherForecastLocationUpdated))]
 [JsonSerializable(typeof(IMultiProjectorCommon))]
-[JsonSerializable(typeof(Dictionary<string, Aggregate>))]
-[JsonSerializable(typeof(Aggregate))]
-[JsonSerializable(typeof(AggregateListProjector<WeatherForecastProjector>))]
-[JsonSerializable(typeof(MultiProjectionState<AggregateListProjector<WeatherForecastProjector>>))]
 [JsonSerializable(typeof(PartitionKeys))]
-[JsonSerializable(typeof(Dictionary<PartitionKeys, Aggregate>))]
-[JsonSerializable(typeof(KeyValuePair<PartitionKeys, Aggregate>))]
+[JsonSerializable(typeof(SerializableAggregateListProjector))]
+[JsonSerializable(typeof(SerializableAggregate))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }

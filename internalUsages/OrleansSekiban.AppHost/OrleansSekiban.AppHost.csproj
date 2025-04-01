@@ -9,6 +9,7 @@
     <Nullable>enable</Nullable>
     <IsAspireHost>true</IsAspireHost>
   <IsPackable>true</IsPackable>
+  <UserSecretsId>af6520c2-3433-4dfc-a9a0-c66cd97f1a73</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
