@@ -28,43 +28,188 @@ clinerules_bank/tasks/issue583_02_test.md
 
 この行の上は削除しないでください。
 ーーーーーーーーーーーーーーーーーーーーーーーー以下の行に追記可能-------------------
-## テスト実装方針
 
-1.  **テスト対象の分析:**
-    *   `src/Sekiban.Pure.Orleans/Parts/SerializableMultiProjectionState.cs`: Orleans環境でのMultiProjectionの状態をシリアライズ可能にするクラス。
-    *   `internalUsages/Pure.Domain/MultiProjectorPayload.cs`: 複数のプロジェクターペイロードを保持できるカスタムペイロード。
-    *   `src/Sekiban.Pure/Projectors/AggregateListProjector.cs`: 特定のAggregateProjectorに対応するAggregateのリストを保持する汎用プロジェクター。
-    *   `clinerules_bank/tasks/issue583_01_restore.md` で実装された保存・リストア機能（具体的な実装内容は不明なため、Orleansの標準的な永続化機構を利用していると仮定）。
+## SerializableMultiProjectionState テスト実装方針
 
-2.  **テストシナリオの定義:**
-    *   **SerializableMultiProjectionState:**
-        *   `SerializableMultiProjectionState` インスタンスを作成し、シリアライズ・デシリアライズが正しく行えることを確認する。
-        *   Orleansのテスト環境 (`SekibanOrleansTestBase`) を利用し、`SerializableMultiProjectionState` を含むMultiProjectionの状態を永続化（保存）する。
-        *   永続化された状態をリストアし、内容が保存前と同一であることを確認する。
-    *   **MultiProjectorPayload:**
-        *   `MultiProjectorPayload` を使用するMultiProjectionを定義するテストシナリオを作成する。
-        *   関連するコマンドを実行し、`MultiProjectorPayload` の状態を更新する。
-        *   更新されたMultiProjectionの状態を永続化（保存）する。
-        *   永続化された状態をリストアし、`MultiProjectorPayload` 内の各プロジェクターの状態が正しく復元されていることを確認する。
-    *   **AggregateListProjector<BranchProjector>:**
-        *   `Branch` Aggregate と `BranchProjector` を使用するテストシナリオを作成する。
-        *   `AggregateListProjector<BranchProjector>` をMultiProjectionとして使用する。
-        *   `RegisterBranch` や `ChangeBranchName` などのコマンドを実行し、Aggregateリストの状態を更新する。
-        *   更新された `AggregateListProjector` の状態を永続化（保存）する。
-        *   永続化された状態をリストアし、リスト内の `Branch` Aggregateの状態が正しく復元されていることを確認する。
+SerializableMultiProjectionState の機能を検証するための包括的なテスト方針を以下に示します。このテスト実装は、Orleans での状態の保存とリストア機能が正常に動作することを確認するために設計されています。
 
-3.  **テストフレームワークと基底クラスの選定:**
-    *   `SerializableMultiProjectionState` がOrleansプロジェクトに存在し、保存・リストア機能もおそらくOrleansの永続化を利用していると考えられるため、`Sekiban.Pure.Orleans.xUnit` の `SekibanOrleansTestBase<T>` をテスト基底クラスとして使用する。これにより、OrleansのGrainや永続化機能を含めたテストが可能になる。
+### 1. テストクラスの設計
 
-4.  **テストファイルの構成:**
-    *   `tests/Pure.Domain.xUnit` プロジェクト内に、新しいテストファイル `MultiProjectionPersistenceTests.cs` を作成する。
-    *   各テストシナリオに対応するテストメソッドを `[Fact]` 属性で定義し、メソッド名はテスト内容がわかるように命名する (例: `CanSaveAndRestore_SerializableMultiProjectionState`, `CanSaveAndRestore_MultiProjectorPayload`, `CanSaveAndRestore_AggregateListProjector`)。
+```csharp
+namespace Pure.Domain.xUnit;
 
-5.  **テストコードの実装:**
-    *   `SekibanOrleansTestBase<T>` が提供するメソッド (`GivenCommandWithResult`, `WhenCommandWithResult`, `ThenGetMultiProjectorWithResult` など) を使用して、コマンド実行、イベント適用、プロジェクションの状態取得を行う。
-    *   `issue583_01_restore.md` で実装された保存・リストア処理をテスト内で実行する。`SekibanOrleansTestBase` は通常、テストクラスごとにOrleansのインメモリクラスターをセットアップするため、標準的なGrainの永続化がテストできるはず。特定の保存・リストア用メソッドが追加されている場合は、それらを呼び出す。
-    *   リストア後、`ThenGetMultiProjectorWithResult` などでプロジェクションの状態を取得し、`Assert.Equal` や `Assert.True` などを用いて、期待される状態と一致するか検証する。特にリストアされたペイロードの内容（プロパティ値、リストの要素数など）を詳細に確認する。
+/// <summary>
+/// SerializableMultiProjectionState のシリアライズ/デシリアライズをテストするためのテストクラス
+/// </summary>
+public class SerializableMultiProjectionStateTests
+{
+    // テストメソッドを実装
+}
+```
 
-**質問:**
+### 2. テスト対象の機能
 
-*   `issue583_01_restore.md` で実装されたMultiProjectionの保存・リストア機能は、具体的にどのような方法で行われますか？ (例: Orleansの標準的なGrain永続化、特定のサービスやメソッドの呼び出しなど)。この情報により、テストコードで適切な保存・リストア処理を呼び出すことができます。現状はOrleansの標準的な永続化を前提として計画を進めます。
+テストでは以下の内容を検証します：
+
+1. **基本的なシリアライズ/デシリアライズテスト**:
+   - `MultiProjectorPayload` を使用して基本的な変換が正常に動作することを確認
+   - シリアライズから正確なデシリアライズが行われることを確認
+
+2. **`AggregateListProjector<BranchProjector>` 変換テスト**:
+   - `AggregateListProjector<BranchProjector>` インスタンスで変換が正常に動作することを確認
+   - アグリゲートを含む状態を正確に保存/復元できることを確認
+
+3. **バージョン互換性テスト**:
+   - 異なるバージョン値での動作確認
+   - バージョン非互換時の適切なエラー処理（`OptionalValue.None` の返却）
+
+4. **型互換性テスト**:
+   - 型名の不一致時の適切なエラー処理を確認
+   - 間違った型変換試行時の挙動確認
+
+5. **エッジケーステスト**:
+   - `null` 値を含むケース
+   - 大きなデータセットでの圧縮/解凍の検証
+   - 破損データのハンドリング
+
+### 3. テスト実装の詳細
+
+#### 3.1 テストメソッド1: 基本的なシリアライズ/デシリアライズテスト
+
+```csharp
+[Fact]
+public async Task SerializeDeserialize_MultiProjectorPayload_Success()
+{
+    // Arrange
+    // - 初期の MultiProjectorPayload インスタンスを作成
+    // - テスト用にいくつかのユーザーとカートを追加
+    // - MultiProjectionState を構築
+
+    // Act
+    // - MultiProjectionState → SerializableMultiProjectionState に変換
+    // - SerializableMultiProjectionState → MultiProjectionState に変換
+
+    // Assert
+    // - 元の状態と復元された状態を比較
+    // - ユーザーデータとカートデータが完全に一致することを検証
+}
+```
+
+#### 3.2 テストメソッド2: AggregateListProjector テスト
+
+```csharp
+[Fact]
+public async Task SerializeDeserialize_AggregateListProjector_Success()
+{
+    // Arrange
+    // - AggregateListProjector<BranchProjector> インスタンスを作成
+    // - テスト用に複数のブランチエンティティを追加
+    // - MultiProjectionState を構築
+
+    // Act
+    // - MultiProjectionState → SerializableMultiProjectionState に変換
+    // - SerializableMultiProjectionState → MultiProjectionState に変換
+
+    // Assert
+    // - 元の状態と復元された状態を比較
+    // - すべてのブランチデータが正確に保持されていることを確認
+    // - 各ブランチのプロパティが正確に復元されていることを確認
+}
+```
+
+#### 3.3 テストメソッド3: バージョン不一致テスト
+
+```csharp
+[Fact]
+public async Task Deserialize_VersionMismatch_ReturnsNone()
+{
+    // Arrange
+    // - 標準のMultiProjectionStateを作成
+    // - SerializableMultiProjectionStateに変換
+    // - バージョン値を手動で変更
+
+    // Act
+    // - 変更されたバージョンのSerializableMultiProjectionStateからMultiProjectionStateへの変換を試行
+
+    // Assert
+    // - 結果が OptionalValue.None であることを確認
+}
+```
+
+#### 3.4 テストメソッド4: 型不一致テスト
+
+```csharp
+[Fact]
+public async Task Deserialize_TypeNameMismatch_ReturnsNone()
+{
+    // Arrange
+    // - MultiProjectorPayload の MultiProjectionState を作成
+    // - SerializableMultiProjectionState に変換
+    // - PayloadTypeName を手動で変更
+
+    // Act
+    // - 変更された型名のSerializableMultiProjectionStateからMultiProjectionStateへの変換を試行
+
+    // Assert
+    // - 結果が OptionalValue.None であることを確認
+}
+```
+
+#### 3.5 テストメソッド5: 大規模データテスト
+
+```csharp
+[Fact]
+public async Task SerializeDeserialize_LargeData_Success()
+{
+    // Arrange
+    // - 多数のエンティティを含む大きなMultiProjectorPayloadを作成
+    // - MultiProjectionStateを構築
+
+    // Act
+    // - MultiProjectionState → SerializableMultiProjectionState に変換
+    // - SerializableMultiProjectionState → MultiProjectionState に変換
+
+    // Assert
+    // - 変換前後でデータが一致することを確認
+    // - 特に大量データの圧縮と解凍が正確に行われることを検証
+}
+```
+
+### 4. 実装に必要なヘルパー
+
+テスト実装で必要となる主なヘルパーメソッドとクラス：
+
+1. **JsonSerializerOptions モック**:
+   - テストで使用するJsonSerializerOptionsを作成するメソッド
+   - 実環境と同様の設定を適用するか、テスト用に最適化した設定を使用
+
+2. **データ比較ヘルパー**:
+   - MultiProjectorPayloadのインスタンス同士を比較するためのヘルパーメソッド
+   - 深いプロパティレベルでの比較ロジック 
+
+3. **テストデータジェネレーター**:
+   - テスト用の様々なデータセットを生成するメソッド
+   - 小規模/大規模のデータ、特殊ケースデータなど
+
+### 5. テストにおける重要な考慮事項
+
+1. **非同期コードの適切なテスト**:
+   - すべての非同期オペレーション（圧縮/解凍など）が正しくテストされることを確認
+
+2. **エラーケースの包括的な検証**:
+   - 型の不一致、バージョンの不一致、無効なデータなど様々なエラーケースの検証
+
+3. **Orleans依存の分離**:
+   - テストがOrleans Silosに依存せずに実行できるよう、SerializableMultiProjectionStateの機能を独立してテスト
+
+4. **実際のシナリオのシミュレーション**:
+   - 実際のアプリケーションの使用パターンに基づいたテストを含める
+   - 例：ドメインイベントの処理とその後の状態の保存/復元
+
+### 6. 具体的なテスト実装例
+
+Pure.Domain.xUnitプロジェクトに新しいテストファイル `SerializableMultiProjectionStateTests.cs` を作成し、上記のテストメソッドを実装します。具体的な実装では、SerializableMultiProjectionStateクラスの変換メソッドへの入力として有効なMultiProjectionStateオブジェクトを構築し、変換と逆変換の前後で状態が正確に保持されることを検証します。
+
+各テストは、異なるプロジェクターの型（MultiProjectorPayload、AggregateListProjector<BranchProjector>など）に対して行い、シリアライズ/デシリアライズのプロセスが正しく機能することを確認します。また、エラーケース（バージョン不一致、型不一致など）も適切に処理されることを検証します。
+
+このテスト実装により、SerializableMultiProjectionStateクラスが期待通りに動作し、Orleans環境でのグレイン状態の保存と復元が正しく行われることが確認できます。
