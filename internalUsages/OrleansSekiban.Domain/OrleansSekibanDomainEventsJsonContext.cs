@@ -3,12 +3,14 @@ using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
 using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 
 namespace OrleansSekiban.Domain;
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, 
+                          Converters = [typeof(PartitionKeysJsonConverter)])]
 [JsonSerializable(typeof(EventDocumentCommon))]
 [JsonSerializable(typeof(EventDocumentCommon[]))]
 [JsonSerializable(typeof(EmptyAggregatePayload))]
@@ -26,6 +28,9 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(Aggregate))]
 [JsonSerializable(typeof(AggregateListProjector<WeatherForecastProjector>))]
 [JsonSerializable(typeof(MultiProjectionState<AggregateListProjector<WeatherForecastProjector>>))]
+[JsonSerializable(typeof(PartitionKeys))]
+[JsonSerializable(typeof(Dictionary<PartitionKeys, Aggregate>))]
+[JsonSerializable(typeof(KeyValuePair<PartitionKeys, Aggregate>))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }

@@ -15,18 +15,10 @@ namespace Pure.Domain.xUnit;
 /// </summary>
 public class SerializableAggregateTests
 {
-    private readonly JsonSerializerOptions _jsonOptions;
     private readonly SekibanDomainTypes _domainTypes;
 
     public SerializableAggregateTests()
     {
-        // テスト用のJsonSerializerOptionsを作成
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
-        
         // テスト用のSekibanDomainTypesを取得
         _domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
     }
@@ -163,8 +155,8 @@ public class SerializableAggregateTests
         var originalAggregate = CreateBranchAggregate();
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -180,8 +172,8 @@ public class SerializableAggregateTests
         var originalAggregate = CreateClientAggregate();
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -197,8 +189,8 @@ public class SerializableAggregateTests
         var originalAggregate = CreateUserAggregate(confirmed: true);
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -217,8 +209,8 @@ public class SerializableAggregateTests
         var originalAggregate = CreateUserAggregate(confirmed: false);
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -237,8 +229,8 @@ public class SerializableAggregateTests
         var originalAggregate = CreateEmptyAggregate();
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -257,13 +249,13 @@ public class SerializableAggregateTests
         var originalAggregate = CreateBranchAggregate();
         
         // Act - まず正常にシリアライズ
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
         
         // ペイロード型名を変更
         var modifiedSerializable = serializable with { PayloadTypeName = "NonExistentType" };
         
         // デシリアライズ試行
-        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.False(result.HasValue);
@@ -276,13 +268,13 @@ public class SerializableAggregateTests
         var originalAggregate = CreateBranchAggregate();
         
         // Act - まず正常にシリアライズ
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
         
         // 不正な圧縮データに置き換え
         var modifiedSerializable = serializable with { CompressedPayloadJson = new byte[] { 1, 2, 3, 4, 5 } };
         
         // デシリアライズ試行
-        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.False(result.HasValue);
@@ -295,13 +287,13 @@ public class SerializableAggregateTests
         var originalAggregate = CreateBranchAggregate();
         
         // Act - まず正常にシリアライズ
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
         
         // 空の圧縮データに置き換え
         var modifiedSerializable = serializable with { CompressedPayloadJson = Array.Empty<byte>() };
         
         // デシリアライズ試行
-        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var result = await modifiedSerializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);
@@ -387,8 +379,8 @@ public class SerializableAggregateTests
             typeof(Branch).Name);
         
         // Act
-        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _jsonOptions);
-        var result = await serializable.ToAggregateAsync(_domainTypes, _jsonOptions);
+        var serializable = await SerializableAggregate.CreateFromAsync(originalAggregate, _domainTypes.JsonSerializerOptions);
+        var result = await serializable.ToAggregateAsync(_domainTypes);
         
         // Assert
         Assert.True(result.HasValue);

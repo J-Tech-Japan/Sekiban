@@ -1,15 +1,8 @@
 using ResultBoxes;
-using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
-using Sekiban.Pure.Projectors;
-using System;
-using System.IO;
 using System.IO.Compression;
-using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-
-namespace Sekiban.Pure.Orleans.Parts;
+namespace Sekiban.Pure.Aggregates;
 
 [Serializable]
 public record SerializableAggregate
@@ -88,8 +81,7 @@ public record SerializableAggregate
 
     // 変換メソッド：SerializableAggregate → Aggregate
     public async Task<OptionalValue<Aggregate>> ToAggregateAsync(
-        SekibanDomainTypes domainTypes,
-        JsonSerializerOptions options)
+        SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -147,7 +139,7 @@ public record SerializableAggregate
                 payload = (IAggregatePayload?)JsonSerializer.Deserialize(
                     decompressedJson, 
                     payloadType, 
-                    options);
+                    domainTypes.JsonSerializerOptions);
                 
                 if (payload == null)
                 {

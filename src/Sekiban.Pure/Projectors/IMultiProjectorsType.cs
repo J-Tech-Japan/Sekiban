@@ -15,4 +15,5 @@ public interface IMultiProjectorTypes
     ResultBox<string> GetMultiProjectorNameFromMultiProjector(IMultiProjectorCommon multiProjector);
     IMultiProjectorStateCommon ToTypedState(MultiProjectionState state);
     List<Type> GetMultiProjectorTypes();
+    // public ResultBox<string> GetSerialisedMultiProjector(IMultiProjectorCommon multiProjector);
 }

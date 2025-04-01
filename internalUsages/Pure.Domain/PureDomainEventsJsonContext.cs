@@ -1,3 +1,4 @@
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using System.Text.Json.Serialization;
 namespace Pure.Domain;
@@ -25,6 +26,11 @@ namespace Pure.Domain;
 [JsonSerializable(typeof(UserRegistered))]
 [JsonSerializable(typeof(EventDocument<UserUnconfirmed>))]
 [JsonSerializable(typeof(UserUnconfirmed))]
+[JsonSerializable(typeof(Branch))]
+[JsonSerializable(typeof(Client))]
+[JsonSerializable(typeof(ConfirmedUser))]
+[JsonSerializable(typeof(EmptyAggregatePayload))]
+[JsonSerializable(typeof(UnconfirmedUser))]
 public partial class PureDomainEventsJsonContext : JsonSerializerContext
 {
 }

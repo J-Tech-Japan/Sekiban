@@ -92,7 +92,7 @@ public class AggregateProjectorGrain(
         
         if (serializableState != null)
         {
-            var aggregateOptional = await serializableState.ToAggregateAsync(sekibanDomainTypes, JsonOptions);
+            var aggregateOptional = await serializableState.ToAggregateAsync(sekibanDomainTypes);
             if (aggregateOptional.HasValue)
             {
                 var aggregate = aggregateOptional.GetValue();
