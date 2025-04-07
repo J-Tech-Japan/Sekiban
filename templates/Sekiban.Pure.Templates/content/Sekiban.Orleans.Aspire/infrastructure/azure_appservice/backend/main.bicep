@@ -1,6 +1,3 @@
-@description('The environment name suffix to add to resource names')
-param environmentName string
-
 @description('The Azure region for deploying resources')
 param location string = resourceGroup().location
 
@@ -13,13 +10,10 @@ param appServicePlanSku object = {
 }
 
 @description('The name of the App Service')
-param appServiceName string = 'map-scan-api-${environmentName}'
-
-@description('The resource group containing the virtual network')
-param vnetResourceGroup string = resourceGroup().name
+param appServiceName string = 'backend-${resourceGroup().name}'
 
 @description('Key Vault name')
-param keyVaultName string = 'kv-${appServiceName}'
+param keyVaultName string = 'kv-${resourceGroup().name}'
 
 @description('Enable VNet integration')
 param enableVnetIntegration bool = false
@@ -27,7 +21,7 @@ param enableVnetIntegration bool = false
 @description('The name of the virtual network')
 param vnetName string
 
-@description('The name of the subnet for the MapScan API')
+@description('The name of the subnet for the Backend API')
 param subnetName string
 
 // AAD params
@@ -42,21 +36,16 @@ param SekibanConnectionStringName string = 'SekibanCosmos'
 param SekibanBlobConnectionStringName string = 'SekibanBlob'
 param QueueConnectionStringName string = 'QueueStorage'
 
-param SekibanConnectionStringSecretName string = 'MapScanCosmosDbConnectionString'
-param SekibanBlobConnectionStringSecretName string = 'MapScanBlobConnectionString'
-param QueueConnectionStringSecretName string = 'MapScanQueueConnectionString'
+param SekibanConnectionStringSecretName string = 'CosmosDbConnectionString'
+param SekibanBlobConnectionStringSecretName string = 'BlobConnectionString'
+param QueueConnectionStringSecretName string = 'QueueConnectionString'
 
-param DivideScanAreaFunctionTriggerQueueName string = 'divide-scanarea'
 param municipalityApiBaseUrl string
 param SekibanInfrastructure string = 'Cosmos'
 
 @description('App Service Plan already exists')
 param appServicePlanExists bool = false
 
-// Construct subnet ID string using provided parameters
-var mapScanApiSubnetId = enableVnetIntegration
-  ? '/subscriptions/${subscription().subscriptionId}/resourceGroups/${vnetResourceGroup}/providers/Microsoft.Network/virtualNetworks/${vnetName}/subnets/${subnetName}'
-  : ''
 
 // Reference to existing Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
@@ -135,7 +124,7 @@ module vnetIntegrationModule 'vnet-integration.bicep' = if (enableVnetIntegratio
   name: 'vnetIntegrationDeployment'
   params: {
     webAppResourceId: appServiceModule.outputs.webAppResourceId
-    subnetResourceId: mapScanApiSubnetId
+    subnetResourceId: backendApiSubnetId
   }
 }
 
@@ -150,6 +139,6 @@ module keyVaultAccessModule 'key-vault-access.bicep' = {
 }
 
 // Outputs
-output mapScanApiAppServiceName string = appServiceModule.outputs.name
-output mapScanApiAppServiceUrl string = appServiceModule.outputs.url
+output backendApiAppServiceName string = appServiceModule.outputs.name
+output backendApiAppServiceUrl string = appServiceModule.outputs.url
 output applicationInsightsInstrumentationKey string = applicationInsightsModule.outputs.instrumentationKey

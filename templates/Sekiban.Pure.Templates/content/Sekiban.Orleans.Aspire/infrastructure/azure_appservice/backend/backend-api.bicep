@@ -1,6 +1,3 @@
-@description('The environment name suffix to add to resource names')
-param environmentName string
-
 @description('The Azure region for deploying resources')
 param location string = resourceGroup().location
 
@@ -13,13 +10,13 @@ param appServicePlanSku object = {
 }
 
 @description('The name of the App Service')
-param appServiceName string = 'map-scan-api-${environmentName}'
+param appServiceName string = 'backend-${resourceGroup().name}'
 
 @description('The resource group containing the virtual network')
 param vnetResourceGroup string = resourceGroup().name
 
 @description('Key Vault name')
-param keyVaultName string = 'kv-${appServiceName}'
+param keyVaultName string = 'kv-${resourceGroup().name}'
 
 @description('Enable VNet integration')
 param enableVnetIntegration bool = false
@@ -29,18 +26,6 @@ param vnetName string
 
 @description('The name of the subnet for the MapScan API')
 param subnetName string
-
-@description('The Azure AD application ID (client ID)')
-param aadClientIdSecretName string = 'AadClientId'
-
-@description('The Azure AD tenant ID')
-param aadTenantIdSecretName string = 'AadTenantId'
-
-@description('The name of the secret in KeyVault that contains the Azure AD client secret')
-param aadClientSecretSecretName string = 'AadClientSecret'
-param aadAudienceSecretName string = 'AadAudience'
-param aadDomainSecretName string = 'AadDomain'
-
 
 param SekibanConnectionStringName string = 'SekibanCosmos'
 param SekibanBlobConnectionStringName string = 'SekibanBlob'

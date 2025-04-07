@@ -2,7 +2,6 @@ param appServiceName string
 param location string
 param appServicePlanId string
 param keyVaultName string
-param environmentName string
 param applicationInsightsInstrumentationKey string
 param applicationInsightsConnectionString string
 
