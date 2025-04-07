@@ -1,11 +1,8 @@
-@description('The environment name suffix to add to resource names')
-param environmentName string = 'staging'
-
 @description('The Azure region for deploying resources')
 param location string = resourceGroup().location
 
 @description('The name of the first Cosmos DB account for SekibanDb')
-param mapDbAccountName string = 'cosmos-map-${environmentName}'
+param mapDbAccountName string = 'cosmos-${resourceGroup().name}'
 
 // Create the first Cosmos DB account with serverless configuration for SekibanDb
 resource sekibanDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {

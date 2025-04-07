@@ -1,11 +1,8 @@
-@description('The environment name suffix to add to resource names')
-param environmentName string = 'dev'
-
 @description('The Azure region for deploying resources')
 param location string = resourceGroup().location
 
 @description('The name of the storage account for Orleans')
-param storageAccountName string = 'storagemunicipal${environmentName}'
+param storageAccountName string = 'storage-${resourceGroup().name}'
 
 @description('The name of the table used for Orleans clustering')
 param clusteringTableName string = 'orleanssekibanclustering'
