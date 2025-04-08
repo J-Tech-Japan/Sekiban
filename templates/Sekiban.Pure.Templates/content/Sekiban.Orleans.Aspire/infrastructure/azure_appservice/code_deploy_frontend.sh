@@ -22,19 +22,19 @@ KEYVAULT_NAME="kv-${RESOURCE_GROUP}"
 # get location name from {environment}.local.json parameter name is "location"
 LOCATION=$(jq -r '.location' "$CONFIG_FILE")
 
-# Get backend relative path from config file
+# Get Frontend relative path from config file
 FRONTEND_PATH=$(jq -r '.frontendRelativePath' "$CONFIG_FILE")
 
-# Verify the backend path exists
+# Verify the Frontend path exists
 if [ ! -d "$FRONTEND_PATH" ]; then
-    echo "Error: Backend directory not found at $FRONTEND_PATH"
+    echo "Error: Frontend directory not found at $FRONTEND_PATH"
     exit 1
 fi
 
-echo "Backend path: $FRONTEND_PATH"
+echo "Frontend path: $FRONTEND_PATH"
 
 # App Service name will follow the naming convention
-APP_SERVICE_NAME="backend-${RESOURCE_GROUP}"
+APP_SERVICE_NAME="frontend-${RESOURCE_GROUP}"
 
 # Build and publish the application
 echo "Building and publishing .NET 9.0 application..."

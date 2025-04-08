@@ -40,3 +40,21 @@ az deployment group create \
   --template-file main.bicep
 
 ```
+
+create your deploy file as mydeploy.local.json
+Use only lower case and '-' and number in your resource group name
+```json
+{
+    "resourceGroupName": "your-resource-888",
+    "location": "japaneast",
+    "backendRelativePath": "../../OrleansSekiban.ApiService",
+    "frontendRelativePath": "../../OrleansSekiban.Web"
+}
+```
+
+
+```bash
+# create resource group
+chmod +x ./create_resource_group.sh
+./create_resource_group.sh mydeploy   
+```
