@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Postgres</PackageId>
-        <Version>1.0.1-preview02</Version>
+        <Version>1.0.1-preview03</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework PostgreSQL Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview02</PackageVersion>
+        <PackageVersion>1.0.1-preview03</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.Postgres</AssemblyName>
         <RootNamespace>Sekiban.Pure.Postgres</RootNamespace>
@@ -33,7 +33,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.2"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.2"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview02"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview03"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.2"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
             <PrivateAssets>all</PrivateAssets>

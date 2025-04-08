@@ -1,6 +1,9 @@
 using System.Text.Json.Serialization;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
 
 namespace OrleansSekiban.Domain;
 
@@ -13,6 +16,10 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(WeatherForecastDeleted))]
 [JsonSerializable(typeof(EventDocument<WeatherForecastLocationUpdated>))]
 [JsonSerializable(typeof(WeatherForecastLocationUpdated))]
+[JsonSerializable(typeof(IMultiProjectorCommon))]
+[JsonSerializable(typeof(PartitionKeys))]
+[JsonSerializable(typeof(SerializableAggregateListProjector))]
+[JsonSerializable(typeof(SerializableAggregate))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }
