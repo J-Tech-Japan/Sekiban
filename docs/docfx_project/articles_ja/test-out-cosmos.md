@@ -8,8 +8,7 @@ GetStartedソリューションをテストするには、Cosmos DBが必要で�
 
 どちらを使用する場合も、以下の情報を取得する必要があります。
 
-- **URI**
-- **Primary Key**
+- **CosmosDB Connection String**
 
 Windowsのローカルエミュレーターについては、[このページ](./prepare-cosmos-db-local.md)をご覧ください。
 
@@ -47,12 +46,9 @@ Visual Studio 2022をインストールします。バージョンは17.7（dotn
 
 ```json
 {
-  "Sekiban": {
-    "Default": {
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbEndPointUrl": "write your URI",
-      "CosmosDbAuthorizationKey": "write your primary key"
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos" :"[Set your cosmosDB connection string here.]",
+    "SekibanBlob" : "[Set your blob connection string here. (not necessary for just running the sample)]"
   }
 }
 ```
@@ -88,7 +84,7 @@ phonenumber.valueを6桁以上の数値に変更し、`Execute`コマンドを�
 
 #### ローカルエミュレータ
 
-Cosmos DBエミュレータ 2.14.2 では、階層的なパーティションキーデータを石版から作成することができますが、Data Explorerは保存されたjsonデータを表示することができません。まだ旧版のフロントエンドを使用していると考えられます。
+Cosmos DBエミュレータ 2.14.2 では、階層的なパーティションキーデータをSekibanから作成することができますが、Data Explorerは保存されたjsonデータを表示することができません。まだ旧版のフロントエンドを使用していると考えられます。
 
 データを表示するには、`Azure Databases Extension for VS Code` を使用できます。
 

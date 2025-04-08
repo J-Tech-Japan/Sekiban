@@ -8,8 +8,7 @@ You can use either local emulator or use Azure Cosmos DB. Sekiban uses new [Hier
 
 Either way you used, you need to get following information.
 
-- **URI**
-- **Primary Key**
+- **CosmosDB Connection String**
 
 For Local Emulator in Windows, please see [This Page](./prepare-cosmos-db-local.md)
 
@@ -54,12 +53,9 @@ Install Visual Studio 2022. It should be 17.7 or higher version.(dotnet 7 compat
 
 ```json
 {
-  "Sekiban": {
-    "Default": {
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbEndPointUrl": "write your URI",
-      "CosmosDbAuthorizationKey": "write your primary key"
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos" :"[Set your cosmosDB connection string here.]",
+    "SekibanBlob" : "[Set your blob connection string here. (not necessary for just running the sample)]"
   }
 }
 ```

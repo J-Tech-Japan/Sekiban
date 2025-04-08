@@ -1,0 +1,19 @@
+# Project Configuration
+
+## Tech Stack
+- C# and .NET 8 and 9
+
+## Project Structure
+src/* package files
+internalUsages/* test usages
+test/* unit and feature tests
+
+## Development Workflow
+- Cline helps write and review code changes\
+- Change only files you are asked.
+
+## Security
+DO NOT read or modify:
+- .env files
+- **/config/secrets.*
+- Any file containing API keys or credentials

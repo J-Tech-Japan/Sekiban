@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
 using System.Reflection;
 var builder = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
@@ -14,8 +15,8 @@ var builder = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
 var configuration = builder.Build();
 var serviceCollection = new ServiceCollection();
 serviceCollection.AddSingleton<IConfiguration>(configuration);
-SekibanEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition());
-serviceCollection.AddSekibanCosmosDB();
+SekibanAspNetCoreEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition(), SekibanSettings.FromConfiguration(configuration));
+serviceCollection.AddSekibanCosmosDb(configuration);
 serviceCollection.AddLogging();
 serviceCollection.AddTransient<EventsConverter>();
 var ServiceProvider = serviceCollection.BuildServiceProvider();

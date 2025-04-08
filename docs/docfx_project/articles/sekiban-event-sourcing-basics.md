@@ -264,16 +264,11 @@ There are few preparation and addition to the `Program.cs`
     Make New Web Project with Web API (Controller), and reference `Domain Project`. And you can add web project and add `Sekiban.Web` Nuget Package and Infrastructure package. You can choose Cosmos DB or Dynamo DB and add Nuget Package `Sekiban.Infrastructure.Cosmos` or `Sekiban.Infrastructure.Dynamo`.
 
 2. Make Web Dependency
-    Web Dependency is setting for the web api in that project, if you make restriction for what command or aggregate or queries can be used in certain web, you can make settings in this file. As a start, all aggregate, command and queries can be use in web project, can be written like this.
+    Web Dependency is setting for the web api in that project, if you make restriction for what command or aggregate or queries can be used in certain web, you can make settings in this file. As a start, all aggregate, command and queries can be use in web project. When you want to control which aggregate is active for some web api or not, you can create specific web dependency but usually, you can make default web dependency using domain dependency with following code.
 
 ```csharp
-public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
-{
-    public bool ShouldMakeSimpleAggregateListQueries => true;
-    public bool ShouldMakeSimpleSingleProjectionListQueries => true;
-    public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
-    public SekibanControllerOptions Options => new();
-}
+// Sekiban Web Setting
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 ```
 
 3. Edit Program.cs
@@ -284,19 +279,19 @@ public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new DomainDependency(), configuration: builder.Configuration);
+builder.AddSekibanWithDependency<DomainDependency>();
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB();
+builder.AddSekibanCosmosDb();
 // Change line above to Dynamo DB if you use Dynamo DB
-//builder.Services.AddSekibanCosmosDB();
+//builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb(new SekibanWebDependency());
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 // Add Sekiban CustomSchemaIds etc.
-builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 var app = builder.Build();
 
@@ -329,17 +324,9 @@ Here is the appsettings.json for cosmos project.
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "Sekiban": {
-    "Default": {
-      "AggregateEventCosmosDbContainer": "events",
-      "AggregateEventCosmosDbContainerDissolvable": "dissolvableevents",
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbEndPointUrl": "[Set your CosmosDb endpoint url here.]",
-      "CosmosDbAuthorizationKey": "[Set your CosmosDb authorization key here.]",
-      "CosmosDbDatabase": "SekibanBasics",
-      "CosmosDbContainer": "items",
-      "CosmosDbContainerDissolvable": "dissolvableitems"
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos": "[Set your cosmosDB connection string here.]",
+    "SekibanBlob": "[Set your blob connection string here. (not necessary for just running the sample)]",
   }
 }
 
@@ -348,7 +335,8 @@ Here is the appsettings.json for cosmos project.
 You can add Secret Information to set your own setting. 
 
 Dynamo Setting is below.
-```
+
+```json
 {
   "Logging": {
     "LogLevel": {
@@ -358,15 +346,17 @@ Dynamo Setting is below.
   },
   "Sekiban": {
     "Default": {
-      "DynamoDbRegion": "ap-northeast-1",
-      "AwsAccessKeyId": "[Set your dynamo db access id here]",
-      "AwsAccessKey": "[Set your dynamo db access key here]",
-      "DynamoDbItemsTable": "jjlt_items",
-      "DynamoDbEventsTable": "jjlt_events",
-      "DynamoDbItemsTableDissolvable": "jjlt_d_items",
-      "DynamoDbEventsTableDissolvable": "jjlt_d_events",
-      "S3BucketName": "jjlt-s3",
-      "S3Region": "us-west-1",
+      "Aws" : {
+        "DynamoRegion": "ap-northeast-1",
+        "AccessKeyId": "[Set your dynamo db access id here]",
+        "AccessKey": "[Set your dynamo db access key here]",
+        "DynamoItemsTable": "jjlt_items",
+        "DynamoEventsTable": "jjlt_events",
+        "DynamoItemsTableDissolvable": "jjlt_d_items",
+        "DynamoEventsTableDissolvable": "jjlt_d_events",
+        "S3BucketName": "jjlt-s3",
+        "S3Region": "us-west-1",
+      }
     }
   },
   "AllowedHosts": "*"

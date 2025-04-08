@@ -1,0 +1,7 @@
+AspireEventSample.ApiService/Grains/BranchEntityPostgresWriter.cs 
+をリファクタリングしたい
+
+AspireEventSample.ApiService/Grains/IBranchWriter.cs 
+の継承クラスと、Grain化のためのクラスに分けることによって、Grainを使用せずにも使えるようにしたい。
+
+Grainを使用するユースケースは残して行ってください。

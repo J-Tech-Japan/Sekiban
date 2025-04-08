@@ -1,0 +1,32 @@
+name: nuget package memStat release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore dependencies
+      run: |
+        pushd ./
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
+        dotnet restore Sekiban.sln
+    - name: Build with dotnet
+      run: |
+        pushd ./
+        dotnet build Sekiban.sln -c Release
+    - name: Pack MemStat
+      run: |
+        dotnet nuget push "src/MemStat.Net/bin/Release/MemStat.Net.0.1.4.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+        

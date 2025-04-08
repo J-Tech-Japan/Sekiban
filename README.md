@@ -6,17 +6,34 @@ Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azu
   <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
 </p>
 
+## (NEW) Sekiban new version - Sekiban.Pure.Orleans
+
+We moved main repository for the new Sekiban.Pure.Orleans project. Past project Sekiban.Core and upto 0.23 version to core_main branch of this repository.
+
+[Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
+
+mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェクトのみを残したものとなっています。旧バージョンは、core_mainブランチに残しています。
+[Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
+
+
+
 ## What is Sekiban?
 
 **Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C#
-and .NET Core 7+, it allows developers to use a declarative API to create event sourcing applications. Sekiban supports
+and .NET Core 9+, it allows developers to use a declarative API to create event sourcing applications. **New Version* of Sekiban is now working with [Microsoft Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/overview) and use of actor model increace its scalability and performance in multi thread environment. Sekiban supports
 various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)
-and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/), facilitating deployment on either Azure or AWS.
+, and Postgres, facilitating deployment on either Azure or AWS.
 
 ## Getting started
-Do you want to start coding? If so, please see [Quick Start](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/quick-start.md)
 
-日本語の情報をお探しでしょうか？ [Sekiban - イベントソーシングとCQRSフレームワークの紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles_ja/intro.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
+
+Do you want to start coding? If so, please see [Readme Pure](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure.md)
+
+日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure_JP.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
+
+## AI Programming?
+
+You might use coding agent like Devin, Cline or Cursor .. etc. We made [Readme for LLM](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure_For_LLM.md) so you can copy and paste for framework instructions.
 
 ## Sponsors
 
@@ -37,7 +54,7 @@ Sekiban is an Apache 2.0 open source project with its ongoing development. We wi
 
 If you've landed here, you're likely already familiar with Event Sourcing and CQRS. However, if you require more
 detailed insights, Greg Young's informative YouTube talk might be of assistance. Check out
-the [transcript](https://www.eventstore.com/blog/transcript-of-greg-youngs-talk-at-code-on-the-beach-2014-cqrs-and-event-sourcing)
+the [transcript](https://www.kurrent.io/blog/transcript-of-greg-youngs-talk-at-code-on-the-beach-2014-cqrs-and-event-sourcing)
 of Greg's presentation at the Code on the Beach 2014 event on CQRS and Event Sourcing.
 Greg suggests creating your event sourcing system instead of relying on frameworks, a viewpoint I share, as constructing
 your framework can deepen your understanding of event sourcing concepts.
@@ -75,7 +92,7 @@ projections, tests, and queries for practical solutions without unnecessary comp
 
 ## Compatibility
 
-Sekiban is compatible with .NET 7 and 8.
+Sekiban Pure is compatible with .NET 9.
 
 For **Azure Cosmos DB**, Sekiban supports
 the [Hierarchical Partition Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep)
@@ -86,7 +103,7 @@ When using **Dynamo DB** with Sekiban, you need to set up a Partition Key and So
 
 ## Scale of Sekiban Projects
 
-As of Sekiban version 0.14, the framework doesn't have built-in materialized view helper features. Sekiban's Live
+As of Sekiban version 1.0.0.Preview, we are working on built-in materialized view helper features. Sekiban's Live
 Projection capability is well-suited for small to medium-sized systems. Typically, Sekiban can handle Live Projections
 provided the system memory can accommodate the size of the Multiple Projections.
 
@@ -108,7 +125,7 @@ project and determines its future direction.
 
 ## Documentation
 
-We are planning to deploy documentation, eventually please see
+We are planning to deploy documentation on [Sekiban.dev](https://www.sekiban.dev), we have not done yet. eventually please see
 
 https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/intro.md
 
@@ -128,6 +145,12 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
   <img alt="developer J-Tech Japan." src="./docs/images/jtechjapanlogo.svg" width="500">
   </a>
 </p>
+
+## Contributors
+
+<a href="https://github.com/J-Tech-Japan/Sekiban/graphs/contributors">
+  <img alt="contributors" src="https://contrib.rocks/image?repo=J-Tech-Japan/Sekiban"/>
+</a>
 
 # License
 

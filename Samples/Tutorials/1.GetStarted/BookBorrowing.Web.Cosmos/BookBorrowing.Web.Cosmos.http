@@ -1,6 +1,0 @@
-@BookBorrowing.Web.Cosmos_HostAddress = http://localhost:5073
-
-GET {{BookBorrowing.Web.Cosmos_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

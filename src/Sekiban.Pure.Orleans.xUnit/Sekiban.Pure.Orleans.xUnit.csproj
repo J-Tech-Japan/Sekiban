@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>Sekiban.Pure.Orleans.xUnit</PackageId>
+        <Version>1.0.1-preview02</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans xUnit Integration</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>1.0.1-preview02</PackageVersion>
+        <Description>Multi Blob saving and reading issue resolved</Description>
+        <AssemblyName>Sekiban.Pure.Orleans.xUnit</AssemblyName>
+        <RootNamespace>Sekiban.Pure.Orleans.xUnit</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <TargetFramework>net9.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Pure.Orleans\Sekiban.Pure.Orleans.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.1.2"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview02"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>
