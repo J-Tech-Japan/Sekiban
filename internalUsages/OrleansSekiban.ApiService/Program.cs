@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Azure.Storage.Queues;
+using Orleans.Storage;
 using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using OrleansSekiban.Domain.Generated;
@@ -48,6 +49,9 @@ builder.UseOrleans(
                 opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("orleans-sekiban-grain-state");
             });
         });
+        // Orleans will automatically discover grains in the same assembly
+        config.ConfigureServices(services =>
+            services.AddTransient<IGrainStorageSerializer, SystemTextJsonStorageSerializer>());
     });
 
 builder.Services.AddSingleton(
