@@ -2,7 +2,7 @@
 param location string = resourceGroup().location
 
 @description('The name of the storage account for Orleans')
-param storageAccountName string = 'storage-${resourceGroup().name}'
+param storageAccountName string = 'storage${replace(resourceGroup().name, '-', '')}'
 
 @description('The name of the table used for Orleans clustering')
 param clusteringTableName string = 'orleanssekibanclustering'
@@ -69,7 +69,7 @@ resource orleansQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@20
 }
 
 // Get the storage account connection string for output
-var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${listKeys(storageAccount.id, storageAccount.apiVersion).keys[0].value}'
+var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
 
 // Outputs
 output storageAccountName string = storageAccount.name

@@ -1,12 +1,12 @@
 @description('The name of the existing first Cosmos DB account (for SekibanDb)')
-param mapDbAccountName string
+param cosmosDbAccountName string = 'cosmos-${resourceGroup().name}'
 
 @description('The name of the existing Key Vault to store secrets')
-param keyVaultName string
+param keyVaultName string = 'kv-${resourceGroup().name}'
 
 // Reference the existing first Cosmos DB account
 resource sekibanDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' existing = {
-  name: mapDbAccountName
+  name: cosmosDbAccountName
 }
 
 // Reference to existing Key Vault
@@ -17,7 +17,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
 // Store SekibanDb Cosmos DB connection string in Key Vault
 resource sekibanDbConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'MapScanCosmosDbConnectionString' // Consider parameterizing secret names if needed
+  name: 'SekibanCosmosDbConnectionString' // Consider parameterizing secret names if needed
   properties: {
     value: sekibanDbAccount.listConnectionStrings().connectionStrings[0].connectionString
   }
@@ -26,7 +26,7 @@ resource sekibanDbConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023
 // Store SekibanDb Cosmos DB endpoint in Key Vault
 resource sekibanDbEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'MapScanCosmosDbEndpoint' // Consider parameterizing secret names if needed
+  name: 'SekibanCosmosDbEndpoint' // Consider parameterizing secret names if needed
   properties: {
     value: sekibanDbAccount.properties.documentEndpoint
   }

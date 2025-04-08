@@ -1,9 +1,9 @@
-param appServiceName string
-param location string
+param baseName string = resourceGroup().name
+param location string = resourceGroup().location
 
 // Create Log Analytics Workspace
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
-  name: 'law-${appServiceName}'
+  name: 'law-${baseName}'
   location: location
   properties: {
     sku: {

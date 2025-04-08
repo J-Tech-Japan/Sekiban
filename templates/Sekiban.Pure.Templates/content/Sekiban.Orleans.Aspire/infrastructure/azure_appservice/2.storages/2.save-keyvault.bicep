@@ -1,8 +1,8 @@
 @description('The name of the existing storage account for Orleans')
-param storageAccountName string
+param storageAccountName string = 'storage${replace(resourceGroup().name, '-', '')}'
 
 @description('The name of the existing Key Vault to store secrets')
-param keyVaultName string
+param keyVaultName string = 'kv-${resourceGroup().name}'
 
 // Reference the existing storage account
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
@@ -20,7 +20,7 @@ var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${stor
 // Store Orleans Clustering connection string in existing Key Vault
 resource orleansClusteringConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'MunicipalOrleansClusteringConnectionString' // Consider parameterizing secret names if needed
+  name: 'OrleansClusteringConnectionString' // Consider parameterizing secret names if needed
   properties: {
     value: storageConnectionString
   }
@@ -29,7 +29,7 @@ resource orleansClusteringConnectionStringSecret 'Microsoft.KeyVault/vaults/secr
 // Store Orleans Grain State connection string in existing Key Vault
 resource orleansGrainStateConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'MunicipalOrleansGrainStateConnectionString' // Consider parameterizing secret names if needed
+  name: 'OrleansGrainStateConnectionString' // Consider parameterizing secret names if needed
   properties: {
     value: storageConnectionString
   }
@@ -38,7 +38,7 @@ resource orleansGrainStateConnectionStringSecret 'Microsoft.KeyVault/vaults/secr
 // Store Orleans Queue connection string in existing Key Vault
 resource orleansQueueConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'MunicipalOrleansQueueConnectionString' // Consider parameterizing secret names if needed
+  name: 'OrleansQueueConnectionString' // Consider parameterizing secret names if needed
   properties: {
     value: storageConnectionString
   }

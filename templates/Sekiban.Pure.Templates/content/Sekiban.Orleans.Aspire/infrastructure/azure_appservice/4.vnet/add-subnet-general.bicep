@@ -1,6 +1,3 @@
-@description('Location for all resources.')
-param location string = resourceGroup().location
-
 @description('Name of the existing virtual network')
 param vnetName string
 
@@ -16,7 +13,7 @@ resource subnetResources 'Microsoft.Network/virtualNetworks/subnets@2022-07-01' 
   parent: existingVNet
   properties: {
     addressPrefix: subnet.addressPrefix
-    delegations: contains(subnet, 'delegations') ? subnet.delegations : [
+    delegations: subnet.?delegations ?? [
       {
         name: 'delegation'
         properties: {
@@ -24,7 +21,7 @@ resource subnetResources 'Microsoft.Network/virtualNetworks/subnets@2022-07-01' 
         }
       }
     ]
-    serviceEndpoints: contains(subnet, 'serviceEndpoints') ? subnet.serviceEndpoints : [
+    serviceEndpoints: subnet.?serviceEndpoints ?? [
       {
         service: 'Microsoft.Web'
         locations: [
@@ -34,6 +31,3 @@ resource subnetResources 'Microsoft.Network/virtualNetworks/subnets@2022-07-01' 
     ]
   }
 }]
-
-@description('Map of subnet names to their resource IDs')
-output subnetIds object = {for (subnet, i) in subnetConfigs: subnet.name => subnetResources[i].id}
