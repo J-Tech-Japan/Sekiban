@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
