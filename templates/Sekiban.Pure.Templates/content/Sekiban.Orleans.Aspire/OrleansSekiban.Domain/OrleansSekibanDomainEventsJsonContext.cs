@@ -20,6 +20,7 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(PartitionKeys))]
 [JsonSerializable(typeof(SerializableAggregateListProjector))]
 [JsonSerializable(typeof(SerializableAggregate))]
+[JsonSerializable(typeof(EmptyAggregatePayload))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }
