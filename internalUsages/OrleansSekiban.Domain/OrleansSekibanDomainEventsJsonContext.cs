@@ -9,23 +9,21 @@ using Sekiban.Pure.Projectors;
 
 namespace OrleansSekiban.Domain;
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, 
-                          Converters = [typeof(PartitionKeysJsonConverter)])]
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(EventDocumentCommon))]
 [JsonSerializable(typeof(EventDocumentCommon[]))]
-[JsonSerializable(typeof(EmptyAggregatePayload))]
-[JsonSerializable(typeof(WeatherForecast))]
-[JsonSerializable(typeof(TemperatureCelsius))]
-[JsonSerializable(typeof(EventDocument<WeatherForecastInputted>))]
-[JsonSerializable(typeof(WeatherForecastInputted))]
-[JsonSerializable(typeof(EventDocument<WeatherForecastDeleted>))]
-[JsonSerializable(typeof(WeatherForecastDeleted))]
-[JsonSerializable(typeof(EventDocument<WeatherForecastLocationUpdated>))]
-[JsonSerializable(typeof(WeatherForecastLocationUpdated))]
-[JsonSerializable(typeof(IMultiProjectorCommon))]
-[JsonSerializable(typeof(PartitionKeys))]
-[JsonSerializable(typeof(SerializableAggregateListProjector))]
-[JsonSerializable(typeof(SerializableAggregate))]
+[JsonSerializable(typeof(Sekiban.Pure.Aggregates.EmptyAggregatePayload))]
+[JsonSerializable(typeof(Sekiban.Pure.Projectors.IMultiProjectorCommon))]
+[JsonSerializable(typeof(Sekiban.Pure.Documents.PartitionKeys))]
+[JsonSerializable(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector))]
+[JsonSerializable(typeof(Sekiban.Pure.Aggregates.SerializableAggregate))]
+[JsonSerializable(typeof(EventDocument<OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastDeleted>))]
+[JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastDeleted))]
+[JsonSerializable(typeof(EventDocument<OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastInputted>))]
+[JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastInputted))]
+[JsonSerializable(typeof(EventDocument<OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated>))]
+[JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }
