@@ -22,12 +22,25 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-builder.AddKeyedAzureTableClient("orleans-sekiban-clustering");
-builder.AddKeyedAzureBlobClient("orleans-sekiban-grain-state");
-builder.AddKeyedAzureQueueClient("orleans-sekiban-queue");
+builder.AddKeyedAzureTableClient("OrleansSekibanClustering");
+builder.AddKeyedAzureBlobClient("OrleansSekibanGrainState");
+builder.AddKeyedAzureQueueClient("OrleansSekibanQueue");
 builder.UseOrleans(
     config =>
     {
+        // Check for VNet IP Address from environment variable APP Service specific setting
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_IP"]) &&
+            !string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_PORTS"]))
+        {
+            // Get IP and ports from environment variables
+            var ip = System.Net.IPAddress.Parse(builder.Configuration["WEBSITE_PRIVATE_IP"]!);
+            var ports = builder.Configuration["WEBSITE_PRIVATE_PORTS"]!.Split(',');
+            if (ports.Length < 2) throw new Exception("Insufficient number of private ports");
+            int siloPort = int.Parse(ports[0]), gatewayPort = int.Parse(ports[1]);
+            Console.WriteLine($"Using WEBSITE_PRIVATE_IP: {ip}, siloPort: {siloPort}, gatewayPort: {gatewayPort}");
+            config.ConfigureEndpoints(ip, siloPort, gatewayPort, true);
+        }
+
         // config.UseDashboard(options => { });
         config.AddAzureQueueStreams("EventStreamProvider", (SiloAzureQueueStreamConfigurator configurator) =>
         {
@@ -35,7 +48,7 @@ builder.UseOrleans(
             {
                 options.Configure<IServiceProvider>((queueOptions, sp) =>
                 {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("orleans-sekiban-queue");
+                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("OrleansSekibanQueue");
                 });
             });
         });
@@ -45,7 +58,7 @@ builder.UseOrleans(
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("orleans-sekiban-grain-state");
+                opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("OrleansSekibanGrainState");
             });
         });
     });
