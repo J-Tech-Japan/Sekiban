@@ -9,7 +9,7 @@ param applicationInsightsName string = 'ai-${resourceGroup().name}'
 
 // Orleans parameters
 param orleansClusterId string = 'orleans-cluster-${uniqueString('${resourceGroup().name}cluster')}'
-param orleansClusteringProviderType string = 'AzureStorage'
+param orleansClusteringProviderType string = 'AzureTableStorage'
 param orleansClusteringServiceKey string = 'OrleansSekibanClustering'
 param orleansEnableDistributedTracing bool = true
 param orleansGatewayPort int = 30000
