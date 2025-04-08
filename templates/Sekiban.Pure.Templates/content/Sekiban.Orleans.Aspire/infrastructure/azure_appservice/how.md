@@ -32,6 +32,11 @@ remember file name 'mydeploy' and use in following step
 
 3. Create Resource Group
 
+You might need to install jq library to your environment.
+
+https://jqlang.org/download/
+
+
 ```bash
 # create resource group
 chmod +x ./create_resource_group.sh
@@ -47,7 +52,7 @@ a. Deploy All
 ```bash
 
 chmod +x ./runbicep.sh
-./runbicep mydeploy main.bicep
+./runbicep.sh mydeploy main.bicep
 ```
 
 b. Deploy Each Bicep
@@ -69,6 +74,8 @@ chmod +x ./user_access_keyvault.sh
 ```
 
 6. Deploy Backend Code
+
+You might need to install zip command. e.g. `choco install zip`
 
 ```bash
 chmod +x ./code_deploy_backend.sh
