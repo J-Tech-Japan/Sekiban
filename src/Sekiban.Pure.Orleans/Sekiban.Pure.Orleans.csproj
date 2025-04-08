@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Orleans</PackageId>
-        <Version>1.0.1-preview03</Version>
+        <Version>1.0.1-preview04</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview03</PackageVersion>
+        <PackageVersion>1.0.1-preview04</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.Orleans</AssemblyName>
         <RootNamespace>Sekiban.Pure.Orleans</RootNamespace>
@@ -31,7 +31,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview03"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview04"/>
     </ItemGroup>
 
     <ItemGroup>

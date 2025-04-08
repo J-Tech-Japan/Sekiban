@@ -176,6 +176,36 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine(
             "                throw new SekibanEventTypeNotFoundException($\"EventDocumentCommon[] not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EventDocumentCommon[]))] \");");
         sb.AppendLine("            }");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(Sekiban.Pure.Aggregates.EmptyAggregatePayload), options) == null)");
+        sb.AppendLine("            {");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"EmptyAggregatePayload not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(EmptyAggregatePayload))]\");");
+        sb.AppendLine("            }");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(Sekiban.Pure.Projectors.IMultiProjectorCommon), options) == null)");
+        sb.AppendLine("            {");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"IMultiProjectorCommon not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(IMultiProjectorCommon))]\");");
+        sb.AppendLine("            }");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(Sekiban.Pure.Documents.PartitionKeys), options) == null)");
+        sb.AppendLine("            {");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"PartitionKeys not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(PartitionKeys))]\");");
+        sb.AppendLine("            }");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector), options) == null)");
+        sb.AppendLine("            {");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"SerializableAggregateListProjector not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(SerializableAggregateListProjector))]\");");
+        sb.AppendLine("            }");
+        sb.AppendLine(
+            "            if (options?.TypeInfoResolver?.GetTypeInfo(typeof(Sekiban.Pure.Aggregates.SerializableAggregate), options) == null)");
+        sb.AppendLine("            {");
+        sb.AppendLine(
+            "                throw new SekibanEventTypeNotFoundException($\"SerializableAggregate not found in {options?.TypeInfoResolver?.GetType().Name ?? string.Empty}, put attribute [JsonSerializable(typeof(SerializableAggregate))]\");");
+        sb.AppendLine("            }");
         foreach (var type in eventTypes)
         {
             switch (type.InterfaceName, type.TypeCount)
@@ -244,6 +274,11 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("    [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]");
         sb.AppendLine("    [JsonSerializable(typeof(EventDocumentCommon))]");
         sb.AppendLine("    [JsonSerializable(typeof(EventDocumentCommon[]))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Aggregates.EmptyAggregatePayload))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Projectors.IMultiProjectorCommon))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Documents.PartitionKeys))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Aggregates.SerializableAggregate))]");
         foreach (var type in eventTypes)
         {
             sb.AppendLine($"    [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]");
