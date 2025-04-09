@@ -6,8 +6,6 @@
 # Login by specifying tenant ID
 az login --tenant <tenant-id>
 
-az login --tenant smartresourcejp.onmicrosoft.com
-
 # Or login using organization domain name
 az login --tenant contoso.onmicrosoft.com
 
