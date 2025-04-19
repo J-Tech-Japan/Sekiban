@@ -1,9 +1,11 @@
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
 using OrleansSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 
-namespace OrleansSekiban.Domain;
+namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
 [GenerateSerializer]
 public record WeatherForecastQuery(string LocationContains)

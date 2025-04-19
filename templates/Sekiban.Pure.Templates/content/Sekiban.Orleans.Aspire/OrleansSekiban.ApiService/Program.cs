@@ -3,6 +3,7 @@ using Azure.Storage.Queues;
 using Orleans.Storage;
 using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 using OrleansSekiban.Domain.Generated;
 using ResultBoxes;
 using Scalar.AspNetCore;

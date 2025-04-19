@@ -5,6 +5,7 @@
 @using OrleansSekiban.Domain
 @using System.ComponentModel.DataAnnotations
 @using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands
+@using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries
 @using OrleansSekiban.Domain.ValueObjects
 @using Sekiban.Pure.Aggregates
 
@@ -238,7 +239,7 @@ else
         }
         catch (Exception ex)
         {
-            editLocationModel.Error = "Failed to update location. Please try again.";
+            editLocationModel.Error = $"Failed to update location. Please try again. {ex.Message}";
         }
     }
 
@@ -261,7 +262,7 @@ else
         }
         catch (Exception ex)
         {
-            forecastModel.Error = "Failed to add weather forecast. Please try again.";
+            forecastModel.Error = $"Failed to add weather forecast. Please try again. {ex.Message}";
         }
     }
 }

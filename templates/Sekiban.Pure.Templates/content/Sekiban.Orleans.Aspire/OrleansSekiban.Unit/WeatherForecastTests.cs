@@ -9,6 +9,9 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.xUnit;
 using System.Linq;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
 namespace OrleansSekiban.Unit;
 
