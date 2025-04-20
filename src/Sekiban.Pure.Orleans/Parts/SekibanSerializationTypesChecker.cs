@@ -87,7 +87,7 @@ public static class SekibanSerializationTypesChecker
             if (typeInfoResolver?.GetTypeInfo(type, domainTypes.JsonSerializerOptions) == null)
             {
                 throw new SerializationException(
-                    $"{type.FullName} is not serializable with System.Text.Json. Please consider adding to class{domainTypes.JsonSerializerOptions.GetType().Name} class needs to add [JsonSerializable(typeof({type.FullName}))] attribute to the type.");
+                    $"{type.FullName} is not serializable with System.Text.Json. Please consider adding to class {domainTypes.JsonSerializerOptions.GetType().Name} class needs to add [JsonSerializable(typeof({type.FullName}))] attribute to the type.");
             }
         }
     }

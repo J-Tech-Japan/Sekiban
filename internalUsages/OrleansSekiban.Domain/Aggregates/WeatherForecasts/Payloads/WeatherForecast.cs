@@ -1,7 +1,6 @@
 using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
-
-namespace OrleansSekiban.Domain;
+namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
 
 [GenerateSerializer]
 public record WeatherForecast(

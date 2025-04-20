@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
 using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
@@ -24,8 +25,8 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastInputted))]
 [JsonSerializable(typeof(EventDocument<OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated>))]
 [JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated))]
-[JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events.DeletedWeatherForecast))]
-[JsonSerializable(typeof(OrleansSekiban.Domain.WeatherForecast))]
+[JsonSerializable(typeof(DeletedWeatherForecast))]
+[JsonSerializable(typeof(WeatherForecast))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }
