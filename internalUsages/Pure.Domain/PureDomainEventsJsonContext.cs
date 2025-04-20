@@ -6,7 +6,7 @@ using Sekiban.Pure.Projectors;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 namespace Pure.Domain;
-   [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+    [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
     [JsonSerializable(typeof(EventDocumentCommon))]
     [JsonSerializable(typeof(EventDocumentCommon[]))]
     [JsonSerializable(typeof(Sekiban.Pure.Aggregates.EmptyAggregatePayload))]
@@ -14,7 +14,6 @@ namespace Pure.Domain;
     [JsonSerializable(typeof(Sekiban.Pure.Documents.PartitionKeys))]
     [JsonSerializable(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector))]
     [JsonSerializable(typeof(Sekiban.Pure.Aggregates.SerializableAggregate))]
-    [JsonSerializable(typeof(Pure.Domain.MultiProjectorPayload))]
     [JsonSerializable(typeof(EventDocument<Pure.Domain.BranchCreated>))]
     [JsonSerializable(typeof(Pure.Domain.BranchCreated))]
     [JsonSerializable(typeof(EventDocument<Pure.Domain.BranchNameChanged>))]
@@ -41,6 +40,7 @@ namespace Pure.Domain;
     [JsonSerializable(typeof(Pure.Domain.ConfirmedUser))]
     [JsonSerializable(typeof(Pure.Domain.PaymentProcessingShoppingCart))]
     [JsonSerializable(typeof(Pure.Domain.UnconfirmedUser))]
+    [JsonSerializable(typeof(Pure.Domain.MultiProjectorPayload))]
     public partial class PureDomainEventsJsonContext : JsonSerializerContext
     {
     }

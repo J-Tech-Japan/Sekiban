@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Serialization;
 using System.Runtime.Serialization;
+using System.Text.Json;
 namespace Sekiban.Pure.Orleans.Parts;
 
 public static class SekibanSerializationTypesChecker
@@ -27,7 +28,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.EventTypes.GetEventTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
@@ -35,7 +36,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.CommandTypes.GetCommandTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
@@ -43,7 +44,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.QueryTypes.GetQueryTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
@@ -51,7 +52,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.QueryTypes.GetQueryResponseTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
@@ -59,7 +60,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.AggregateTypes.GetAggregateTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
@@ -67,17 +68,24 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.MultiProjectorsType.GetMultiProjectorTypes())
         {
-            CheckTypeSerializability(type);
+            CheckTypeSerializability(type, domainTypes);
         }
     }
 
-    private static void CheckTypeSerializability(Type type)
+    private static void CheckTypeSerializability(Type type, SekibanDomainTypes domainTypes)
     {
         var serializer = GetSerializer();
         if (!serializer.CanSerialize(type))
         {
             throw new SerializationException(
                 $"{type.FullName} is not serializable with Orleans Default Serializer. Please consider adding [GenerateSerializer] attribute to the type.");
+        }
+        // also check if the type is serializable with System.Text.Json
+        var typeInfoResolver = domainTypes.JsonSerializerOptions.TypeInfoResolver;
+        if (typeInfoResolver?.GetTypeInfo(type, domainTypes.JsonSerializerOptions) == null)
+        {
+            throw new SerializationException(
+                $"{type.FullName} is not serializable with System.Text.Json. Please consider adding to class{domainTypes.JsonSerializerOptions.GetType().Name} class needs to add [JsonSerializable(typeof({type.FullName}))] attribute to the type.");
         }
     }
 }
