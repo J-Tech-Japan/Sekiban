@@ -14,6 +14,7 @@ namespace Pure.Domain;
     [JsonSerializable(typeof(Sekiban.Pure.Documents.PartitionKeys))]
     [JsonSerializable(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector))]
     [JsonSerializable(typeof(Sekiban.Pure.Aggregates.SerializableAggregate))]
+    [JsonSerializable(typeof(Pure.Domain.MultiProjectorPayload))]
     [JsonSerializable(typeof(EventDocument<Pure.Domain.BranchCreated>))]
     [JsonSerializable(typeof(Pure.Domain.BranchCreated))]
     [JsonSerializable(typeof(EventDocument<Pure.Domain.BranchNameChanged>))]

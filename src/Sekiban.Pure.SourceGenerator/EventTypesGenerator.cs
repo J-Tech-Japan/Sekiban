@@ -247,6 +247,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Documents.PartitionKeys))]");
         sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Projectors.SerializableAggregateListProjector))]");
         sb.AppendLine("    [JsonSerializable(typeof(Sekiban.Pure.Aggregates.SerializableAggregate))]");
+        sb.AppendLine("    [JsonSerializable(typeof(Pure.Domain.MultiProjectorPayload))]");
         foreach (var type in eventTypes)
         {
             sb.AppendLine($"    [JsonSerializable(typeof(EventDocument<{type.RecordName}>))]");
