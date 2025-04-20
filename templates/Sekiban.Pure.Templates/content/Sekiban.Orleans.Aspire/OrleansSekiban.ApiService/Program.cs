@@ -3,6 +3,7 @@ using Azure.Storage.Queues;
 using Orleans.Storage;
 using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 using OrleansSekiban.Domain.Generated;
 using ResultBoxes;
 using Scalar.AspNetCore;
@@ -70,7 +71,7 @@ builder.UseOrleans(
 builder.Services.AddSingleton(
     OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
 
-SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate());
+SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
 
 builder.Services.AddTransient<ICommandMetadataProvider, CommandMetadataProvider>();
 builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>();

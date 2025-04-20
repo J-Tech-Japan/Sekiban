@@ -271,7 +271,7 @@ namespace OrleansSekiban.Playwright.Base
                 Console.WriteLine($"Error checking hardcoded path: {ex.Message}");
             }
             
-            return null;
+            throw new Exception("Error checking hardcoded path");
         }
         
         private string FindSolutionRoot(string startingDirectory)
@@ -293,7 +293,7 @@ namespace OrleansSekiban.Playwright.Base
                     }
                     
                     // Check if we've reached the root directory
-                    string parent = Directory.GetParent(directory)?.FullName;
+                    string parent = Directory.GetParent(directory)?.FullName ?? throw new Exception("Failed to find solution root");
                     if (string.IsNullOrEmpty(parent) || parent == directory)
                     {
                         break;
@@ -307,7 +307,7 @@ namespace OrleansSekiban.Playwright.Base
                 Console.WriteLine($"Error finding solution root: {ex.Message}");
             }
             
-            return null;
+            throw new Exception("Error finding solution root");
         }
         
         private async Task<bool> WaitForServerToStart()

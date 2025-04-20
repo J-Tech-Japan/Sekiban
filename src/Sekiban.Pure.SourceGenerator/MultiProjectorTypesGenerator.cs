@@ -27,10 +27,10 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
             (ctx, source) =>
             {
                 var (compilation, types) = source;
-                var multiProjectorTypes = ImmutableArray.CreateBuilder<MultiProjectorValue>();
+                var multiProjectorTypes = ImmutableArray.CreateBuilder<SekibanTypesExtractors.MultiProjectorValue>();
                 var aggregateProjectorTypes = ImmutableArray.CreateBuilder<AggregateProjectorValues>();
 
-                multiProjectorTypes.AddRange(GetMultiProjectorValues(compilation, types));
+                multiProjectorTypes.AddRange(SekibanTypesExtractors.GetMultiProjectorValues(compilation, types));
                 aggregateProjectorTypes.AddRange(GetAggregateProjectorValues(compilation, types));
                 // Generate source code
                 var rootNamespace = compilation.AssemblyName ?? throw new ApplicationException("AssemblyName is null");
@@ -42,36 +42,6 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
             });
     }
 
-    public ImmutableArray<MultiProjectorValue> GetMultiProjectorValues(
-        Compilation compilation,
-        ImmutableArray<SyntaxNode> types)
-    {
-        var iMultiProjectorCommonSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.Projectors.IMultiProjectorCommon");
-        if (iMultiProjectorCommonSymbol == null)
-            return new ImmutableArray<MultiProjectorValue>();
-        var multiProjectorTypes = ImmutableArray.CreateBuilder<MultiProjectorValue>();
-        foreach (var typeSyntax in types)
-        {
-            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
-                throw new ApplicationException("TypeSymbol is null");
-            var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol.AllInterfaces.Any(
-                m => m.Equals(iMultiProjectorCommonSymbol, SymbolEqualityComparer.Default)))
-            {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iMultiProjectorCommonSymbol, SymbolEqualityComparer.Default));
-                multiProjectorTypes.Add(
-                    new MultiProjectorValue
-                    {
-                        TypeName = typeSymbol.ToDisplayString()
-                    });
-            }
-        }
-
-        return multiProjectorTypes.ToImmutable();
-    }
     public ImmutableArray<AggregateProjectorValues> GetAggregateProjectorValues(
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
@@ -108,7 +78,7 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
     }
 
     private string GenerateSourceCode(
-        ImmutableArray<MultiProjectorValue> multiProjectorTypes,
+        ImmutableArray<SekibanTypesExtractors.MultiProjectorValue> multiProjectorTypes,
         ImmutableArray<AggregateProjectorValues> aggregateProjectorTypes,
         string rootNamespace)
     {
@@ -342,8 +312,4 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    public class MultiProjectorValue
-    {
-        public string TypeName { get; set; } = string.Empty;
-    }
 }
