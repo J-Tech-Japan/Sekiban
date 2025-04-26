@@ -3,7 +3,8 @@ using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var storage = builder.AddAzureStorage("azurestorage")
-    .RunAsEmulator(opt => opt.WithDataVolume());
+    // .RunAsEmulator(opt => opt.WithDataVolume());
+    .RunAsEmulator();
     // .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0")); // no need this line for new template
 var clusteringTable = storage.AddTables("orleans-sekiban-clustering");
 var grainStorage = storage.AddBlobs("orleans-sekiban-grain-state");
