@@ -5,7 +5,7 @@ using Sekiban.Pure.Orleans.Parts;
 namespace Sekiban.Pure.Orleans.Grains;
 
 public class AggregateEventHandlerGrain(
-    [PersistentState("aggregate", "Default")] IPersistentState<AggregateEventHandlerGrain.ToPersist> state,
+    [PersistentState("aggregate", "Default")] IPersistentState<AggregateEventHandlerGrainToPersist> state,
     SekibanDomainTypes sekibanDomainTypes,
     IEventWriter eventWriter,
     IEventReader eventReader) : Grain, IAggregateEventHandlerGrain
@@ -32,7 +32,7 @@ public class AggregateEventHandlerGrain(
             0)
             throw new InvalidCastException("Expected last event ID is later than new events");
 
-        var persist = ToPersist.FromEvents(toStoreEvents);
+        var persist = AggregateEventHandlerGrainToPersist.FromEvents(toStoreEvents);
         state.State = persist;
         await state.WriteStateAsync();
         _events.AddRange(toStoreEvents);
@@ -76,18 +76,7 @@ public class AggregateEventHandlerGrain(
         await base.OnActivateAsync(cancellationToken);
         await state.ReadStateAsync();
         if (state.State == null || string.IsNullOrWhiteSpace(state.State.LastSortableUniqueId))
-            state.State = new ToPersist(string.Empty, OptionalValue<DateTime>.Empty);
+            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty};
     }
 
-    public record ToPersist(string LastSortableUniqueId, OptionalValue<DateTime> LastUpdatedAt)
-    {
-        public static ToPersist FromEvents(IEnumerable<IEvent> events)
-        {
-            var lastEvent = events.LastOrDefault();
-            var last = lastEvent?.SortableUniqueId ?? string.Empty;
-            var value = new SortableUniqueIdValue(last);
-            if (string.IsNullOrWhiteSpace(last)) return new ToPersist(string.Empty, OptionalValue<DateTime>.Empty);
-            return new ToPersist(last, value.GetTicks());
-        }
-    }
 }
