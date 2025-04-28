@@ -47,6 +47,7 @@ public class MultiProjectionSnapshotGenerator(
                 ISortableIdCondition.FromMultiProjectionState(state)),
             events =>
             {
+                logger.LogInformation($"MultiProjectionSnapshotGenerator prossessing {events.Count()} events for {typeof(TProjection).FullName}");
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {

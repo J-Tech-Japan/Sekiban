@@ -314,20 +314,31 @@ public class CosmosDocumentRepository(
                         query.ToQueryDefinition(),
                         null,
                         options);
-                    var events = new List<IEvent>();
-                    while (feedIterator.HasMoreResults)
+                    if (eventRetrievalInfo.MaxCount.HasValue)
                     {
-                        var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
-                        events.AddRange(toAdds);
-                        if (eventRetrievalInfo.MaxCount.HasValue &&
-                            events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                        var events = new List<IEvent>();
+                        while (feedIterator.HasMoreResults)
                         {
-                            events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
-                            break;
+                            var response = await feedIterator.ReadNextAsync();
+                            var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                            events.AddRange(toAdds);
+                            if (eventRetrievalInfo.MaxCount.HasValue &&
+                                events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                            {
+                                events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
+                                break;
+                            }
+                        }
+                        resultAction(events);
+                    } else
+                    {
+                        while (feedIterator.HasMoreResults)
+                        {
+                            var response = await feedIterator.ReadNextAsync();
+                            var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                            resultAction(toAdds);
                         }
                     }
-                    resultAction(events);
                 } else
                 {
                     var options = CreateDefaultOptions();
@@ -358,20 +369,31 @@ public class CosmosDocumentRepository(
                         query.ToQueryDefinition(),
                         null,
                         options);
-                    var events = new List<IEvent>();
-                    while (feedIterator.HasMoreResults)
+                    if (eventRetrievalInfo.MaxCount.HasValue)
                     {
-                        var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
-                        events.AddRange(toAdds);
-                        if (eventRetrievalInfo.MaxCount.HasValue &&
-                            events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                        var events = new List<IEvent>();
+                        while (feedIterator.HasMoreResults)
                         {
-                            events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
-                            break;
+                            var response = await feedIterator.ReadNextAsync();
+                            var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                            events.AddRange(toAdds);
+                            if (eventRetrievalInfo.MaxCount.HasValue &&
+                                events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                            {
+                                events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
+                                break;
+                            }
+                        }
+                        resultAction(events);
+                    } else
+                    {
+                        while (feedIterator.HasMoreResults)
+                        {
+                            var response = await feedIterator.ReadNextAsync();
+                            var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                            resultAction(toAdds);
                         }
                     }
-                    resultAction(events);
                 }
             });
         return true;
