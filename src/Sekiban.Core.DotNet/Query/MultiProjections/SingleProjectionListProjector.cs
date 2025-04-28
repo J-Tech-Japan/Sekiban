@@ -17,6 +17,8 @@ public class
     where TProjector : ISingleProjector<TProjection>, new()
 {
     private readonly TProjector _projector = new();
+    // Dictionary with composite key (AggregateId, RootPartitionKey) for O(1) lookup
+    private readonly Dictionary<(Guid AggregateId, string RootPartitionKey), TProjection> _aggregateDict = new();
 
     private SingleProjectionListState<TState> State { get; set; }
 
@@ -31,13 +33,16 @@ public class
 
     public void ApplyEvent(IEvent ev)
     {
-        var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
-        if (targetAggregate is null)
+        // Use composite key dictionary for O(1) lookup
+        var key = (ev.AggregateId, ev.RootPartitionKey);
+        if (!_aggregateDict.TryGetValue(key, out var targetAggregate))
         {
             var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
             aggregate.ApplyEvent(ev);
             List.Add(aggregate);
-        } else
+            _aggregateDict[key] = aggregate;
+        } 
+        else
         {
             targetAggregate.ApplyEvent(ev);
         }
@@ -66,16 +71,19 @@ public class
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
         State = snapshot.Payload;
-        List = State
-            .List
-            .Select(
-                m =>
-                {
-                    var aggregate = _projector.CreateInitialAggregate(m.AggregateId);
-                    aggregate.ApplySnapshot(m);
-                    return aggregate;
-                })
-            .ToList();
+        
+        // Clear the existing collection and rebuild
+        List.Clear();
+        _aggregateDict.Clear();
+        
+        foreach (var state in State.List)
+        {
+            var aggregate = _projector.CreateInitialAggregate(state.AggregateId);
+            aggregate.ApplySnapshot(state);
+            List.Add(aggregate);
+            // Use composite key with RootPartitionKey from the aggregate
+            _aggregateDict[(aggregate.AggregateId, aggregate.RootPartitionKey)] = aggregate;
+        }
     }
 
     public List<string> TargetAggregateNames() =>
