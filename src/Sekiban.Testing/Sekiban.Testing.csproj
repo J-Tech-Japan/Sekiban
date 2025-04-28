@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.23.2</Version>
+        <Version>0.23.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.2</PackageVersion>
+        <PackageVersion>0.23.3</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
@@ -29,7 +29,7 @@
         </PackageReference>
         <PackageReference Include="xunit.assert" Version="2.9.3"/>
         <PackageReference Include="xunit.extensibility.core" Version="2.9.3"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.2"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="xunit.extensibility.execution" Version="2.9.3"/>
     </ItemGroup>
