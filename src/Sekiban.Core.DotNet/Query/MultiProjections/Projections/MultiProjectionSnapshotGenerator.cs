@@ -22,6 +22,8 @@ public class MultiProjectionSnapshotGenerator(
 {
     private static readonly JsonSerializerOptions _jsonSerializerOptions = new();
 
+    public Func<IMultiProjectionCommon, Task<IMultiProjectionCommon>>? EventRetriverSubstition = null; 
+
     public async Task<MultiProjectionState<TProjectionPayload>>
         GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
             int minimumNumberOfEventsToGenerateSnapshot,
@@ -38,38 +40,54 @@ public class MultiProjectionSnapshotGenerator(
             projector.ApplySnapshot(state);
         }
 
-        // get events from after snapshot or the initial and project them
-        await eventRepository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(
-                rootPartitionKey,
-                new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
-                null,
-                ISortableIdCondition.FromMultiProjectionState(state)),
-            events =>
-            {
-                logger.LogInformation($"MultiProjectionSnapshotGenerator prossessing {events.Count()} events for {typeof(TProjection).FullName}");
-                var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                foreach (var ev in events)
+        if (EventRetriverSubstition == null)
+        {
+            logger.LogInformation($"Will Retrieve events. Current Version is {projector.Version} events for {typeof(TProjection).FullName}");
+            // get events from after snapshot or the initial and project them
+            await eventRepository.GetEvents(
+                EventRetrievalInfo.FromNullableValues(
+                    rootPartitionKey,
+                    new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
+                    null,
+                    ISortableIdCondition.FromMultiProjectionState(state)),
+                events =>
                 {
-                    if (ev.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
-                        ev.GetSortableUniqueId().IsLaterThanOrEqual(projector.LastSortableUniqueId))
+                    logger.LogInformation($"MultiProjectionSnapshotGenerator current Version is {projector.Version} prossessing {events.Count()} events for {typeof(TProjection).FullName}");
+                    var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+                    foreach (var ev in events)
                     {
-                        projector.ApplyEvent(ev);
+                        if (ev.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
+                            ev.GetSortableUniqueId().IsLaterThanOrEqual(projector.LastSortableUniqueId))
+                        {
+                            projector.ApplyEvent(ev);
+                        }
                     }
-                }
-            });
+                });
+        }
+        else
+        {
+            logger.LogInformation($"MultiProjectionSnapshotGenerator start prossessing with EventRetriverSubstition");
+            var result = await EventRetriverSubstition(projector);
+            if (result.GetType() == projector.GetType())
+            {
+                projector = (TProjection)result;
+                logger.LogInformation($"MultiProjectionSnapshotGenerator end prossessing with EventRetriverSubstition");
+            }else{
+            {
+                logger.LogError("EventRetriverSubstition result type is not same as projector type");
+            }}
+        }
         // save snapshot
         var usedVersion = projector.Version - state.Version;
         if (usedVersion > minimumNumberOfEventsToGenerateSnapshot)
         {
             state = projector.ToState();
-            var json = JsonSerializer.Serialize(state, _jsonSerializerOptions);
-            var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            
+            await using var ms = new MemoryStream(capacity: 256 * 1024); // 初期容量推定
+            await JsonSerializer.SerializeAsync(ms, state, state.GetType(), _jsonSerializerOptions);
+            ms.Position = 0;
             var blobId = Guid.NewGuid();
-            await blobAccessor.SetBlobWithGZipAsync(
-                SekibanBlobContainer.MultiProjectionState,
-                FilenameForSnapshot(typeof(TProjectionPayload), blobId, state.LastSortableUniqueId),
-                memoryStream);
+            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.MultiProjectionState, FilenameForSnapshot(typeof(TProjectionPayload), blobId, state.LastSortableUniqueId), ms);
             var snapshotDocument = new MultiProjectionSnapshotDocument(
                 typeof(TProjectionPayload),
                 blobId,
