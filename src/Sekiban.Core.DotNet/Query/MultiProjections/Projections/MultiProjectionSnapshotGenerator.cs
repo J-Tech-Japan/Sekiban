@@ -135,9 +135,9 @@ public class MultiProjectionSnapshotGenerator(
                         snapshotDocument.LastSortableUniqueId));
                 if (snapshotStream != null)
                 {
-                    using var reader = new StreamReader(snapshotStream);
-                    var snapshotString = await reader.ReadToEndAsync();
-                    var state = JsonSerializer.Deserialize<MultiProjectionState<TProjectionPayload>>(snapshotString);
+                    var state = await JsonSerializer.DeserializeAsync<MultiProjectionState<TProjectionPayload>>(
+                        snapshotStream,
+                        _jsonSerializerOptions);
                     if (state != null)
                     {
                         return state;
