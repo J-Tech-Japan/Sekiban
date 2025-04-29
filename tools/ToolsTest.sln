@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProjectionFromJsonL", "ProjectionFromJsonL\ProjectionFromJsonL.csproj", "{8C1A2540-D79F-4256-9783-2C4C8DF3587F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingAnalysis.MapScan.Domain", "..\..\SR_BuildingAnalysis\src\BuildingAnalysis\BuildingAnalysis.MapScan.Domain\BuildingAnalysis.MapScan.Domain.csproj", "{F6A94502-76FE-491A-A4AB-6DEFCCB4186E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.Cosmos", "..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj", "{33A5B4B5-BB48-4C72-91C6-76B89165B8A2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8C1A2540-D79F-4256-9783-2C4C8DF3587F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C1A2540-D79F-4256-9783-2C4C8DF3587F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C1A2540-D79F-4256-9783-2C4C8DF3587F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C1A2540-D79F-4256-9783-2C4C8DF3587F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6A94502-76FE-491A-A4AB-6DEFCCB4186E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6A94502-76FE-491A-A4AB-6DEFCCB4186E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6A94502-76FE-491A-A4AB-6DEFCCB4186E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6A94502-76FE-491A-A4AB-6DEFCCB4186E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{33A5B4B5-BB48-4C72-91C6-76B89165B8A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33A5B4B5-BB48-4C72-91C6-76B89165B8A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{33A5B4B5-BB48-4C72-91C6-76B89165B8A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33A5B4B5-BB48-4C72-91C6-76B89165B8A2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

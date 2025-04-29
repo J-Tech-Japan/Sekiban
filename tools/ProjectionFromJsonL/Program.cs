@@ -15,6 +15,8 @@ using Sekiban.Infrastructure.Cosmos;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using BuildingAnalysis.MapScan.Domain.Queries.Projections;
+
 Console.WriteLine("Hello, World!");
 
 
@@ -40,10 +42,53 @@ var file = "/Users/tomohisa/dev/cosmos-migration-tool/events.cosmos.sr.mapscan.2
 Console.WriteLine(file);
 
 
+// multiProjectionSnapshotGenerator.EventRetriverSubstition = async projector =>
+// {
+//     var typedProjector = projector as SingleProjectionListProjector<Aggregate<DetectedObject>, AggregateState<DetectedObject>,
+//         DefaultSingleProjector<DetectedObject>> ?? throw new ApplicationException("SingleProjectionListProjector is not registered");
+//     await Task.CompletedTask;
+//
+//     var i = 0;
+//     var stopwatch = new Stopwatch();
+//     stopwatch.Start();
+//     var lastBatchTime = DateTime.Now;
+//     await JsonlBatchProcessor.RunAsync(file,10_000, async (batch, ct) =>
+//     {
+//         await Task.CompletedTask;
+//         var currentTime = DateTime.Now;
+//         var elapsedTime = currentTime - lastBatchTime;
+//         Console.WriteLine($"Batch: {i++}, Elapsed time: {elapsedTime.TotalSeconds:F2} seconds, Items per second: {batch.Count / elapsedTime.TotalSeconds:F2}");
+//         Console.WriteLine(batch.Count);
+//         lastBatchTime = currentTime;
+//         foreach (var evstring in batch)
+//         {
+//             var evJsonElement = SekibanJsonHelper.Deserialize<JsonElement>(evstring);
+//             var ev = EventProcessor.ProcessEvent(evJsonElement, registeredEventTypes);
+//             if (ev.AggregateType == typeof(DetectedObject).Name)
+//             {
+//                 if (typedProjector.EventShouldBeApplied(ev))
+//                 {
+//                     typedProjector.ApplyEvent(ev);
+//                 }
+//             }
+//         }
+//     }, CancellationToken.None);
+//
+//     Console.WriteLine("Done");
+//     Console.WriteLine($"Version: {typedProjector.Version}");
+//     // var state = typedProjector.ToState();
+//     // Console.WriteLine($"State: {state}");
+//
+//     return typedProjector;
+// };
+//
+// await multiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<Aggregate<DetectedObject>, AggregateState<DetectedObject>,
+//     DefaultSingleProjector<DetectedObject>>,SingleProjectionListState<AggregateState<DetectedObject>>>(3000,IMultiProjectionService.ProjectionAllRootPartitions);
+
+
 multiProjectionSnapshotGenerator.EventRetriverSubstition = async projector =>
 {
-    var typedProjector = projector as SingleProjectionListProjector<Aggregate<DetectedObject>, AggregateState<DetectedObject>,
-        DefaultSingleProjector<DetectedObject>> ?? throw new ApplicationException("SingleProjectionListProjector is not registered");
+    var typedProjector = projector as MultiProjection<DetectedObjectsProjection> ?? throw new ApplicationException(" MultiProjection<DetectedObjectsProjection> is not registered");
     await Task.CompletedTask;
 
     var i = 0;
@@ -62,12 +107,9 @@ multiProjectionSnapshotGenerator.EventRetriverSubstition = async projector =>
         {
             var evJsonElement = SekibanJsonHelper.Deserialize<JsonElement>(evstring);
             var ev = EventProcessor.ProcessEvent(evJsonElement, registeredEventTypes);
-            if (ev.AggregateType == typeof(DetectedObject).Name)
+            if (typedProjector.EventShouldBeApplied(ev))
             {
-                if (typedProjector.EventShouldBeApplied(ev))
-                {
-                    typedProjector.ApplyEvent(ev);
-                }
+                typedProjector.ApplyEvent(ev);
             }
         }
     }, CancellationToken.None);
@@ -80,9 +122,7 @@ multiProjectionSnapshotGenerator.EventRetriverSubstition = async projector =>
     return typedProjector;
 };
 
-await multiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<Aggregate<DetectedObject>, AggregateState<DetectedObject>,
-    DefaultSingleProjector<DetectedObject>>,SingleProjectionListState<AggregateState<DetectedObject>>>(3000,IMultiProjectionService.ProjectionAllRootPartitions);
-
+await multiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync< MultiProjection<DetectedObjectsProjection>,DetectedObjectsProjection>(3000,IMultiProjectionService.ProjectionAllRootPartitions);
 
 
 
