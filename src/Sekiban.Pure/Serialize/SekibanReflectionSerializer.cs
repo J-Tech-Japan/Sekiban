@@ -9,5 +9,6 @@ public class SekibanReflectionSerializer : ISekibanSerializer
     public JsonSerializerOptions GetJsonSerializerOptions() => _serializerOptions;
     public string Serialize<T>(T json) => JsonSerializer.Serialize(json, _serializerOptions);
 
-    public T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, _serializerOptions);
+    public T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, _serializerOptions) 
+        ?? throw new JsonException("Deserialization failed.");
 }

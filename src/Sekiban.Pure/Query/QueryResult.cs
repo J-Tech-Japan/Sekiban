@@ -1,6 +1,7 @@
 namespace Sekiban.Pure.Query;
 
-public record QueryResult<T>(T Value) : IQueryResult
+public record QueryResult<T>(T Value) : IQueryResult 
+    where T : notnull
 {
     public object GetValue() => Value;
 

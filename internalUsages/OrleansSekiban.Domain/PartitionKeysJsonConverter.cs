@@ -38,7 +38,7 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
             switch (propertyName)
             {
                 case "rootPartitionKey":
-                    rootPartitionKey = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
+                    rootPartitionKey = reader.TokenType == JsonTokenType.Null ? string.Empty : reader.GetString();
                     break;
                 case "aggregateGroup":
                     aggregateGroup = reader.GetString();
@@ -53,7 +53,7 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
         }
 
         // Create a new PartitionKeys using the proper constructor
-        return new PartitionKeys(aggregateId, aggregateGroup ?? string.Empty, rootPartitionKey);
+        return new PartitionKeys(aggregateId, aggregateGroup ?? string.Empty, rootPartitionKey ?? string.Empty);
     }
 
     public override void Write(Utf8JsonWriter writer, PartitionKeys value, JsonSerializerOptions options)
@@ -105,6 +105,6 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
         var aggregateId = Guid.Parse(parts[2]);
         
         // Create a new PartitionKeys using the proper constructor
-        return new PartitionKeys(aggregateId, aggregateGroup, rootPartitionKey);
+        return new PartitionKeys(aggregateId, aggregateGroup, rootPartitionKey ?? string.Empty);
     }
 }

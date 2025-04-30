@@ -38,10 +38,12 @@ public class SourceGenCosmosSerializer<TEventTypes> : CosmosSerializer where TEv
             if (typeInfo != null)
             {
                 // ソースジェネレータで最適化されたデシリアライゼーション
-                return (T)JsonSerializer.Deserialize(stream, typeInfo);
+                return JsonSerializer.Deserialize(stream, typeInfo) 
+                    ?? throw new JsonException("Failed to deserialize the stream.");
             }
             // ※ 同期処理で呼び出すために GetAwaiter().GetResult() を利用
-            return JsonSerializer.Deserialize<T>(stream, _serializerOptions);
+            return JsonSerializer.Deserialize<T>(stream, _serializerOptions) 
+                ?? throw new JsonException("Failed to deserialize the stream.");
         }
     }
 
