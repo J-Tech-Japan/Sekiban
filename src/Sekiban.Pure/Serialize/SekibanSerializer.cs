@@ -2,22 +2,23 @@ using Sekiban.Pure.Events;
 using System.Text.Json;
 namespace Sekiban.Pure.Serialize;
 
-public class SekibanSourceGenSerializer : ISekibanSerializer
+public class SekibanSerializer : ISekibanSerializer
 {
     private readonly JsonSerializerOptions _serializerOptions;
-    private SekibanSourceGenSerializer(JsonSerializerOptions serializerOptions) =>
+    private SekibanSerializer(JsonSerializerOptions? serializerOptions) =>
         _serializerOptions = serializerOptions ??
             new JsonSerializerOptions
                 { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public static SekibanSourceGenSerializer FromOptions<TEventTypes>(JsonSerializerOptions serializerOptions)
-        where TEventTypes : IEventTypes, new()
+    public static SekibanSerializer FromOptions(JsonSerializerOptions? serializerOptions, IEventTypes eventTypes)
     {
-        var eventTypes = new TEventTypes();
         // check if all event types are registered
-        eventTypes.CheckEventJsonContextOption(serializerOptions);
+        if (serializerOptions is not null)
+        {
+            eventTypes.CheckEventJsonContextOption(serializerOptions);
+        }
         // ソースジェネレーターで生成されたオプションを利用できるようにする
-        return new SekibanSourceGenSerializer(serializerOptions);
+        return new SekibanSerializer(serializerOptions);
     }
 
     public JsonSerializerOptions GetJsonSerializerOptions() => _serializerOptions;

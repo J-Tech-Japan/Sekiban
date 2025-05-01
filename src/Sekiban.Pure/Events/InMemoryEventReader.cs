@@ -26,7 +26,7 @@ public class InMemoryEventReader(Repository repository) : IEventReader
             var partitionKeyResult = eventRetrievalInfo.GetPartitionKey();
             if (!partitionKeyResult.IsSuccess)
             {
-                return ResultBox<IReadOnlyList<IEvent>>.Error(partitionKeyResult.Exception);
+                return ResultBox<IReadOnlyList<IEvent>>.Error(partitionKeyResult.Exception!);
             }
             var partitionKey = partitionKeyResult.GetValue();
             query = query.Where(e => e.PartitionKeys.ToPrimaryKeysString() == partitionKey);
