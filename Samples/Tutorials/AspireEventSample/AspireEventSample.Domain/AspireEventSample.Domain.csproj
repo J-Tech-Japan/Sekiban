@@ -9,7 +9,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.Serialization" Version="9.1.2"/>
-        <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview01"/>
+        <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview06" />
     </ItemGroup>
 
 </Project>
