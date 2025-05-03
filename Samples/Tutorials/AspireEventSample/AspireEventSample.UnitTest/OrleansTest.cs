@@ -1,7 +1,7 @@
 using AspireEventSample.ApiService.Generated;
-using AspireEventSample.ApiService.Projections;
 using AspireEventSample.Domain.Aggregates.Branches;
 using AspireEventSample.Domain.Aggregates.Carts;
+using AspireEventSample.Domain.Projections;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Orleans.xUnit;

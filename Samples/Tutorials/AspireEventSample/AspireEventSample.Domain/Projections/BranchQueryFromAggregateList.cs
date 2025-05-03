@@ -1,8 +1,9 @@
 using AspireEventSample.Domain.Aggregates.Branches;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-namespace AspireEventSample.ApiService.Projections;
+namespace AspireEventSample.Domain.Projections;
 
 [GenerateSerializer]
 public record BranchQueryFromAggregateList([property: Id(0)] string NameContains)

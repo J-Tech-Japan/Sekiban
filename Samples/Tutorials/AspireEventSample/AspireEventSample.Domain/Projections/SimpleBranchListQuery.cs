@@ -1,7 +1,8 @@
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-namespace AspireEventSample.ApiService.Projections;
+namespace AspireEventSample.Domain.Projections;
 
 [GenerateSerializer]
 public record SimpleBranchListQuery([property: Id(0)] string NameContain)

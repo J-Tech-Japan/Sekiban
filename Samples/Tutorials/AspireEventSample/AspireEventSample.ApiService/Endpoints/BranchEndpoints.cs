@@ -1,5 +1,5 @@
-using AspireEventSample.ApiService.Projections;
 using AspireEventSample.Domain.Aggregates.Branches;
+using AspireEventSample.Domain.Projections;
 using Microsoft.AspNetCore.Mvc;
 using ResultBoxes;
 using Sekiban.Pure;

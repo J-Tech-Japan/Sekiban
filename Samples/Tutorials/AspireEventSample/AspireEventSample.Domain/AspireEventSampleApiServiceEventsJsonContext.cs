@@ -1,6 +1,10 @@
 using AspireEventSample.Domain.Aggregates.Branches;
 using AspireEventSample.Domain.Aggregates.Carts;
+using AspireEventSample.Domain.Projections;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
 using System.Text.Json.Serialization;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(EventDocumentCommon))]
@@ -15,6 +19,11 @@ using System.Text.Json.Serialization;
 [JsonSerializable(typeof(ShoppingCartItemAdded))]
 [JsonSerializable(typeof(EventDocument<ShoppingCartPaymentProcessed>))]
 [JsonSerializable(typeof(ShoppingCartPaymentProcessed))]
+[JsonSerializable(typeof(EmptyAggregatePayload))]
+[JsonSerializable(typeof(IMultiProjectorCommon))]
+[JsonSerializable(typeof(PartitionKeys))]
+[JsonSerializable(typeof(SerializableAggregateListProjector))]
+[JsonSerializable(typeof(BranchMultiProjector))]
 public partial class AspireEventSampleApiServiceEventsJsonContext : JsonSerializerContext
 {
 }
