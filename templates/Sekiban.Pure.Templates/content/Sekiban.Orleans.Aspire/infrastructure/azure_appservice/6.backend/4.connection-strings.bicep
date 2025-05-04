@@ -6,6 +6,8 @@ param keyVaultName string = 'kv-${resourceGroup().name}'
 @allowed(['cosmos', 'postgres'])
 param databaseType string = 'cosmos'
 
+param orleansClusterType string = 'cosmos'
+
 // データベース接続文字列のパラメータ名（アプリケーション設定用）
 var databaseConnectionStringName = databaseType == 'postgres' 
   ? 'SekibanPostgres' 
@@ -14,8 +16,14 @@ var databaseConnectionStringSecretName = databaseType == 'postgres'
   ? 'SekibanPostgresConnectionString' 
   : 'SekibanCosmosDbConnectionString'
 
+var orleansClusteringConnectionStringName = orleansClusterType == 'cosmos' 
+  ? 'OrleansCosmos' 
+  : 'OrleansSekibanClustering'
+var orleansClusteringConnectionStringSecretName = orleansClusterType == 'cosmos' 
+  ? 'SekibanCosmosDbConnectionString' 
+  : 'OrleansClusteringConnectionString'
 
-var orleansClusteringConnectionStringSecretName = 'OrleansClusteringConnectionString'
+
 var orleansGrainStateConnectionStringSecretName = 'OrleansGrainStateConnectionString'
 var orleansQueueConnectionStringSecretName = 'OrleansQueueConnectionString'
 // Reference to the existing App Service
@@ -32,7 +40,7 @@ resource connectionStringsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
       value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/${databaseConnectionStringSecretName}/)'
       type: 'Custom'
     }
-    OrleansSekibanClustering: {
+    '${orleansClusteringConnectionStringName}': {
       value: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}.vault.azure.net/secrets/${orleansClusteringConnectionStringSecretName}/)'
       type: 'Custom'
     }

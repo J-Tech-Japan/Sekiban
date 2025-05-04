@@ -3,6 +3,9 @@ param appServiceName string = 'backend-${resourceGroup().name}'
 @allowed(['cosmos', 'postgres'])
 param databaseType string = 'cosmos'
 
+param orleansClusterType string = 'cosmos'
+param orleansDefaultGrainType string = 'cosmos'
+
 param aspNetCoreEnvironment string = 'Production'
 
 param applicationInsightsName string = 'ai-${resourceGroup().name}'
@@ -46,14 +49,28 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsightsConnectionString
     ApplicationInsightsAgent_EXTENSION_VERSION: '~3'
     Sekiban__Database: databaseType
-    Orleans__ClusterId: orleansClusterId
-    Orleans__Clustering__ProviderType: orleansClusteringProviderType
-    Orleans__Clustering__ServiceKey: orleansClusteringServiceKey
+    // Orleans cluster settings - only added if orleansClusterType is not 'cosmos'
+    // When orleansClusterType is 'cosmos', these settings are completely omitted since they're controlled by code
+    ...(orleansClusterType != 'cosmos' ? {
+      Orleans__ClusterId: orleansClusterId
+      Orleans__Clustering__ProviderType: orleansClusteringProviderType
+      Orleans__Clustering__ServiceKey: orleansClusteringServiceKey
+    } : {})
+    ...(orleansClusterType == 'cosmos' ? {
+      ORLEANS_CLUSTERING_TYPE: 'cosmos'
+    } : {})
+    ...(orleansDefaultGrainType != 'cosmos' ? {
+      Orleans__GrainStorage__Default__ProviderType: orleansGrainStorageDefaultProviderType
+      Orleans__GrainStorage__Default__ServiceKey: orleansGrainStorageDefaultServiceKey
+    } : {})
+    ...(orleansDefaultGrainType == 'cosmos' ? {
+      ORLEANS_GRAIN_DEFAULT_TYPE: 'cosmos'
+    } : {})
     Orleans__EnableDistributedTracing: string(orleansEnableDistributedTracing)
     Orleans__Endpoints__GatewayPort: string(orleansGatewayPort)
     Orleans__Endpoints__SiloPort: string(orleansSiloPort)
-    Orleans__GrainStorage__Default__ProviderType: orleansGrainStorageDefaultProviderType
-    Orleans__GrainStorage__Default__ServiceKey: orleansGrainStorageDefaultServiceKey
+    // Orleans__GrainStorage__Default__ProviderType: orleansGrainStorageDefaultProviderType
+    // Orleans__GrainStorage__Default__ServiceKey: orleansGrainStorageDefaultServiceKey
     Orleans__GrainStorage__OrleansSekibanQueue__ProviderType: orleansGrainStorageOrleansSekibanQueueProviderType
     Orleans__GrainStorage__OrleansSekibanQueue__ServiceKey: orleansGrainStorageOrleansSekibanQueueServiceKey
     Orleans__ServiceId: orleansServiceId
