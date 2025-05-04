@@ -20,6 +20,7 @@
     <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
