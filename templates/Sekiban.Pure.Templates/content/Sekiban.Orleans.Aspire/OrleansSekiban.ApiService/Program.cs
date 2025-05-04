@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Azure.Storage.Queues;
+using Orleans.Configuration;
 using Orleans.Storage;
 using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 using OrleansSekiban.Domain.Generated;
+using OrleansSekiban.Domain.Projections.Count;
 using ResultBoxes;
 using Scalar.AspNetCore;
 using Sekiban.Pure.AspNetCore;
@@ -30,6 +32,27 @@ builder.AddKeyedAzureQueueClient("OrleansSekibanQueue");
 builder.UseOrleans(
     config =>
     {
+        if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
+        {
+            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ?? throw new InvalidOperationException();
+            config.UseCosmosClustering(options =>
+            {
+                options.ConfigureCosmosClient(connectionString);
+                // this can be enabled if you use Provisioning 
+                // options.IsResourceCreationEnabled = true;
+            });
+        }
+        if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
+        {
+            config.AddCosmosGrainStorageAsDefault(options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ?? throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+        }
+
+
         // Check for VNet IP Address from environment variable APP Service specific setting
         if (!string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_IP"]) &&
             !string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_PORTS"]))
@@ -51,8 +74,54 @@ builder.UseOrleans(
                 options.Configure<IServiceProvider>((queueOptions, sp) =>
                 {
                     queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("OrleansSekibanQueue");
+                    queueOptions.QueueNames = [
+                        "ywnh5ws65snztguqv8zfa3raz-eventstreamprovider-0",
+                        "ywnh5ws65snztguqv8zfa3raz-eventstreamprovider-1",
+                        "ywnh5ws65snztguqv8zfa3raz-eventstreamprovider-2"];
+                    queueOptions.MessageVisibilityTimeout  = TimeSpan.FromMinutes(2);
                 });
             });
+            configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
+                ob.Configure(o => o.TotalQueueCount = 3));   // 8 → 3 へ
+
+            // --- Pulling Agent の頻度・バッチ ---
+            configurator.ConfigurePullingAgent(ob =>
+                ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod  = TimeSpan.FromMinutes(10);
+                }));
+            // --- キャッシュ ---
+            configurator.ConfigureCacheSize(8192);
+        });
+        config.AddAzureQueueStreams("OrleansSekibanQueue", (SiloAzureQueueStreamConfigurator configurator) =>
+        {
+            configurator.ConfigureAzureQueue(options =>
+            {
+                options.Configure<IServiceProvider>((queueOptions, sp) =>
+                {
+                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("OrleansSekibanQueue");
+                    queueOptions.QueueNames = [
+                        "ywnh5ws65snztguqv8zfa3raz-orleanssekibanqueue-0",
+                        "ywnh5ws65snztguqv8zfa3raz-orleanssekibanqueue-1",
+                        "ywnh5ws65snztguqv8zfa3raz-orleanssekibanqueue-2"];
+                    queueOptions.MessageVisibilityTimeout  = TimeSpan.FromMinutes(2);
+                });
+            });
+            configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
+                ob.Configure(o => o.TotalQueueCount = 3));   // 8 → 3 へ
+
+            // --- Pulling Agent の頻度・バッチ ---
+            configurator.ConfigurePullingAgent(ob =>
+                ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod  = TimeSpan.FromMinutes(10);
+                }));
+            // --- キャッシュ ---
+            configurator.ConfigureCacheSize(8192);
         });
         
         // Add grain storage for the stream provider
@@ -155,6 +224,9 @@ apiRoute
     .WithName("UpdateWeatherForecastLocation")
     .WithOpenApi();
 
+apiRoute.MapGet("/weatherCountByLocation/{location}", async ([FromRoute] string location, [FromServices] SekibanOrleansExecutor executor) => await executor.QueryAsync(new WeatherCountQuery(location)).UnwrapBox()).WithOpenApi()
+    .WithName("GetWeatherCountByLocation")
+    .WithDescription("Get the count of weather forecasts by location");
 app.MapDefaultEndpoints();
 
 app.Run();

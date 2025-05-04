@@ -22,7 +22,8 @@ Use only lower case and '-' and number in your resource group name
     "resourceGroupName": "your-resource-888",
     "location": "japaneast",
     "backendRelativePath": "../../OrleansSekiban.ApiService",
-    "frontendRelativePath": "../../OrleansSekiban.Web"
+    "frontendRelativePath": "../../OrleansSekiban.Web",
+    "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
 }
 ```
 
@@ -41,9 +42,18 @@ chmod +x ./create_resource_group.sh
 ./create_resource_group.sh mydeploy   
 ```
 
+4. Purge Key Vault (if needed)
 
+If you've previously deleted a Key Vault with the same name and are encountering issues recreating it, you may need to purge the soft-deleted Key Vault first:
 
-4. Deploy bicep file (all or each)
+```bash
+chmod +x ./purge_keyvault.sh
+./purge_keyvault.sh mydeploy
+```
+
+Note: This script should only be used when a Key Vault has been deleted but is still in a "soft-deleted" state, preventing you from creating a new Key Vault with the same name.
+
+5. Deploy bicep file (all or each)
 
 a. Deploy All
 
@@ -64,14 +74,14 @@ chmod +x ./runbicep.sh
 
 ```
 
-5. Give yourself access to KeyVault (optional)
+6. Give yourself access to KeyVault (optional)
 
 ```bash
 chmod +x ./user_access_keyvault.sh
 ./user_access_keyvault.sh mydeploy   
 ```
 
-6. Deploy Backend Code
+7. Deploy Backend Code
 
 You might need to install zip command. e.g. `choco install zip`
 
@@ -81,14 +91,14 @@ chmod +x ./code_deploy_backend.sh
 ```
 
 
-7. Deploy Frontend Code
+8. Deploy Frontend Code
 
 ```bash
 chmod +x ./code_deploy_frontend.sh
 ./code_deploy_frontend.sh mydeploy   
 ```
 
-8. Setup Github Actions (Optional) - Create Azure Credentials
+9. Setup Github Actions (Optional) - Create Azure Credentials
 
 ```bash
 chmod +x ./generate_azure_credentials.sh
@@ -98,7 +108,7 @@ chmod +x ./generate_azure_credentials.sh
 json will print on the screen, you will keep that json as AZURE_CREDENTIALS_MYDEPLOY in github secrets.
 
 
-9. Setup Github Actions
+10. Setup Github Actions
 
 you need to include mydeploy.local.json to the git
 deploy-backend.yml

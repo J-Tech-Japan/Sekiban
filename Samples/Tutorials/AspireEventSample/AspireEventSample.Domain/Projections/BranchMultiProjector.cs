@@ -1,9 +1,10 @@
 using AspireEventSample.Domain.Aggregates.Branches;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 using System.Collections.Immutable;
-namespace AspireEventSample.ApiService.Projections;
+namespace AspireEventSample.Domain.Projections;
 
 [GenerateSerializer]
 public record BranchMultiProjector(

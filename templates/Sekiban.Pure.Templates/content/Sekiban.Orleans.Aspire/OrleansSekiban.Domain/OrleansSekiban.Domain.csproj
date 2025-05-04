@@ -10,8 +10,8 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Orleans.Server" Version="9.1.2" />
-      <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview05" />
-      <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview05" />
+      <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview06" />
+      <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview06" />
     </ItemGroup>
 
     <ItemGroup>

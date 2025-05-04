@@ -15,11 +15,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.1.0"/>
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.1.0"/>
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.1.0"/>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.3"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.3"/>
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.2.1" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.2.1" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.2.1" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.3">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -32,12 +32,12 @@
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.Design" Version="1.1.0"/>
         <PackageReference Include="OrleansDashboard" Version="8.2.0"/>
-        <PackageReference Include="Scalar.AspNetCore" Version="2.1.1"/>
-        <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview01"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview01"/>
-        <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview01"/>
-        <PackageReference Include="Sekiban.Pure.ReadModel" Version="1.0.1-preview01"/>
-        <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview01"/>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.2.5" />
+        <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview06" />
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview06" />
+        <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview06" />
+        <PackageReference Include="Sekiban.Pure.ReadModel" Version="1.0.1-preview06" />
+        <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview06" />
     </ItemGroup>
 
 </Project>
