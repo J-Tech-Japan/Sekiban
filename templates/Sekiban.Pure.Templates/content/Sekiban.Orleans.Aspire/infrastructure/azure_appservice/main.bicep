@@ -58,6 +58,7 @@ module orleansClusterContainer '3.cosmos/4.orleans-cluster-container.bicep' = {
     orleansClusterType: orleansClusterType
   }
   dependsOn: [
+    cosmosCreate
     cosmosDatabase
   ]
 }
@@ -69,7 +70,7 @@ module orleansGrainContainer '3.cosmos/5.orleans-grain-container.bicep' = {
     orleansDefaultGrainType: orleansDefaultGrainType
   }
   dependsOn: [
-    cosmosDatabase
+    orleansClusterContainer
   ]
 }
 
