@@ -22,7 +22,8 @@ Use only lower case and '-' and number in your resource group name
     "resourceGroupName": "your-resource-888",
     "location": "japaneast",
     "backendRelativePath": "../../OrleansSekiban.ApiService",
-    "frontendRelativePath": "../../OrleansSekiban.Web"
+    "frontendRelativePath": "../../OrleansSekiban.Web",
+    "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
 }
 ```
 
