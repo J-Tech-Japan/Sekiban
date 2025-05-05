@@ -6,6 +6,12 @@ param databaseType string = 'cosmos'
 param orleansClusterType string = 'cosmos'
 param orleansDefaultGrainType string = 'cosmos'
 
+@description('Queue type for Orleans')
+param orleansQueueType string = 'eventhub'
+
+@description('Event Hub instance name')
+param eventHubName string =  'eventhub-${resourceGroup().name}'
+
 param aspNetCoreEnvironment string = 'Production'
 
 param applicationInsightsName string = 'ai-${resourceGroup().name}'
@@ -69,12 +75,17 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     Orleans__EnableDistributedTracing: string(orleansEnableDistributedTracing)
     Orleans__Endpoints__GatewayPort: string(orleansGatewayPort)
     Orleans__Endpoints__SiloPort: string(orleansSiloPort)
-    // Orleans__GrainStorage__Default__ProviderType: orleansGrainStorageDefaultProviderType
-    // Orleans__GrainStorage__Default__ServiceKey: orleansGrainStorageDefaultServiceKey
     Orleans__GrainStorage__OrleansSekibanQueue__ProviderType: orleansGrainStorageOrleansSekibanQueueProviderType
     Orleans__GrainStorage__OrleansSekibanQueue__ServiceKey: orleansGrainStorageOrleansSekibanQueueServiceKey
     Orleans__ServiceId: orleansServiceId
-    Orleans__Streaming__OrleansSekibanQueue__ProviderType: orleansStreamingOrleansSekibanQueueProviderType
-    Orleans__Streaming__OrleansSekibanQueue__ServiceKey: orleansStreamingOrleansSekibanQueueServiceKey
+    ...(orleansQueueType != 'eventhub' ? {
+      Orleans__Streaming__OrleansSekibanQueue__ProviderType: orleansStreamingOrleansSekibanQueueProviderType
+      Orleans__Streaming__OrleansSekibanQueue__ServiceKey: orleansStreamingOrleansSekibanQueueServiceKey
+    } : {})
+    // EventHub settings - only added if orleansQueueType is 'eventhub'
+    ...(orleansQueueType == 'eventhub' ? {
+      ORLEANS_QUEUE_TYPE: 'eventhub'
+      ORLEANS_QUEUE_EVENTHUB_NAME: eventHubName
+    } : {})
   }
 }
