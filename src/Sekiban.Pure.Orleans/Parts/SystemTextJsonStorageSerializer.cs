@@ -1,5 +1,5 @@
 using Orleans.Storage;
-using System.Text.Json;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 namespace Sekiban.Pure.Orleans.Parts;
 
 public class SystemTextJsonStorageSerializer : IGrainStorageSerializer

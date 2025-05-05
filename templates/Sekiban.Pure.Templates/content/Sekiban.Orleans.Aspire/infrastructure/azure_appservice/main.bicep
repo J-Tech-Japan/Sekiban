@@ -8,6 +8,8 @@ targetScope = 'resourceGroup'
 param orleansClusterType string = 'cosmos'
 param orleansDefaultGrainType string = 'cosmos'
 
+@description('Queue type for Orleans')
+param orleansQueueType string = 'eventhub'
 
 // 1. Key Vault
 module keyVaultCreate '1.keyvault/create.bicep' = {
@@ -101,13 +103,32 @@ module logAnalyticsCreate '5.applicationinsights_and_log/2.log-analytics-workspa
   params: {}
 }
 
-// 6. Backend App Service
-module backendPlan '6.backend/1.plan.bicep' = {
+// 6. Event Hub
+module eventHubCreate '6.eventhub/1.create.bicep' = {
+  name: 'eventHubCreateDeployment'
+  params: {
+    orleansQueueType: orleansQueueType
+  }
+}
+
+module eventHubSaveKeyVault '6.eventhub/2.save-keyvalult.bicep' = {
+  name: 'eventHubSaveKeyVaultDeployment'
+  params: {
+    orleansQueueType: orleansQueueType
+  }
+  dependsOn: [
+    keyVaultCreate
+    eventHubCreate
+  ]
+}
+
+// 7. Backend App Service
+module backendPlan '7.backend/1.plan.bicep' = {
   name: 'backendPlanDeployment'
   params: {}
 }
 
-module backendAppServiceCreate '6.backend/2.app-service-create.bicep' = {
+module backendAppServiceCreate '7.backend/2.app-service-create.bicep' = {
   name: 'backendAppServiceCreateDeployment'
   params: {}
   dependsOn: [
@@ -115,7 +136,7 @@ module backendAppServiceCreate '6.backend/2.app-service-create.bicep' = {
   ]
 }
 
-module backendKeyVaultAccess '6.backend/3.key-vault-access.bicep' = {
+module backendKeyVaultAccess '7.backend/3.key-vault-access.bicep' = {
   name: 'backendKeyVaultAccessDeployment'
   params: {}
   dependsOn: [
@@ -124,16 +145,18 @@ module backendKeyVaultAccess '6.backend/3.key-vault-access.bicep' = {
   ]
 }
 
-module backendConnectionStrings '6.backend/4.connection-strings.bicep' = {
+module backendConnectionStrings '7.backend/4.connection-strings.bicep' = {
   name: 'backendConnectionStringsDeployment'
-  params: {}
+  params: {
+    orleansQueueType: orleansQueueType
+  }
   dependsOn: [
     keyVaultCreate // Needs Key Vault URI
     backendAppServiceCreate
   ]
 }
 
-module backendDiagnosticSettings '6.backend/5.diagnostic-settings.bicep' = {
+module backendDiagnosticSettings '7.backend/5.diagnostic-settings.bicep' = {
   name: 'backendDiagnosticSettingsDeployment'
   params: {}
   dependsOn: [
@@ -142,11 +165,12 @@ module backendDiagnosticSettings '6.backend/5.diagnostic-settings.bicep' = {
   ]
 }
 
-module backendAppSettings '6.backend/6.app-settings.bicep' = {
+module backendAppSettings '7.backend/6.app-settings.bicep' = {
   name: 'backendAppSettingsDeployment'
   params: {
     orleansClusterType: orleansClusterType
     orleansDefaultGrainType: orleansDefaultGrainType
+    orleansQueueType: orleansQueueType
   }
   dependsOn: [
     keyVaultCreate
@@ -154,10 +178,11 @@ module backendAppSettings '6.backend/6.app-settings.bicep' = {
     cosmosCreate
     appInsightsCreate
     backendAppServiceCreate
+    eventHubCreate
   ]
 }
 
-module backendVnetIntegration '6.backend/7.vnet-integration.bicep' = {
+module backendVnetIntegration '7.backend/7.vnet-integration.bicep' = {
   name: 'backendVnetIntegrationDeployment'
   params: {}
   dependsOn: [
@@ -166,7 +191,7 @@ module backendVnetIntegration '6.backend/7.vnet-integration.bicep' = {
   ]
 }
 
-module backendIpAccess '6.backend/8.ipaccess.bicep' = {
+module backendIpAccess '7.backend/8.ipaccess.bicep' = {
   name: 'backendIpAccessDeployment'
   params: {}
   dependsOn: [
@@ -174,13 +199,13 @@ module backendIpAccess '6.backend/8.ipaccess.bicep' = {
   ]
 }
 
-// 7. Blazor Frontend App Service
-module blazorPlan '7.blazor/1.plan.bicep' = {
+// 8. Blazor Frontend App Service
+module blazorPlan '8.blazor/1.plan.bicep' = {
   name: 'blazorPlanDeployment'
   params: {}
 }
 
-module blazorAppService '7.blazor/2.app-service.bicep' = {
+module blazorAppService '8.blazor/2.app-service.bicep' = {
   name: 'blazorAppServiceDeployment'
   params: {}
   dependsOn: [
@@ -188,7 +213,7 @@ module blazorAppService '7.blazor/2.app-service.bicep' = {
   ]
 }
 
-module blazorDiagnosticSettings '7.blazor/3.diagnositic-settings.bicep' = {
+module blazorDiagnosticSettings '8.blazor/3.diagnositic-settings.bicep' = {
   name: 'blazorDiagnosticSettingsDeployment'
   params: {}
   dependsOn: [
@@ -197,7 +222,7 @@ module blazorDiagnosticSettings '7.blazor/3.diagnositic-settings.bicep' = {
   ]
 }
 
-module blazorAppSettings '7.blazor/4.app-settings.bicep' = {
+module blazorAppSettings '8.blazor/4.app-settings.bicep' = {
   name: 'blazorAppSettingsDeployment'
   params: {}
   dependsOn: [
@@ -207,7 +232,7 @@ module blazorAppSettings '7.blazor/4.app-settings.bicep' = {
   ]
 }
 
-module blazorVnetIntegration '7.blazor/5.vnet-integration.bicep' = {
+module blazorVnetIntegration '8.blazor/5.vnet-integration.bicep' = {
   name: 'blazorVnetIntegrationDeployment'
   params: {}
   dependsOn: [
