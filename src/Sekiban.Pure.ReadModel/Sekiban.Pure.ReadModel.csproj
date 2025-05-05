@@ -6,12 +6,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Pure.ReadModel</PackageId>
-        <Version>1.0.1-preview06</Version>
+        <Version>1.0.1-preview07</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview06</PackageVersion>
+        <PackageVersion>1.0.1-preview07</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.ReadModel</AssemblyName>
         <RootNamespace>Sekiban.Pure.ReadModel</RootNamespace>
@@ -25,7 +25,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Sekiban.Pure\Sekiban.Pure.csproj" />
-        <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview06"/>
+        <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview07"/>
     <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.1.0">
             <PrivateAssets>all</PrivateAssets>
