@@ -69,15 +69,13 @@ builder.UseOrleans(
 
         // config.UseDashboard(options => { });
         
-
-        
-                if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
+        if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
         {
             config.AddEventHubStreams(
                 "EventStreamProvider",
                 configurator =>
                 {
-                    // Existing Event Hub connection settings
+                    // Existing Event Hub connection settings
                     configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
                         options.ConfigureEventHubConnection(
@@ -85,7 +83,6 @@ builder.UseOrleans(
                             builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
                             "$Default");
                     }));
-
                     // 🔑 NEW –‑ tell Orleans where to persist checkpoints
                     configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
                     {
@@ -94,14 +91,12 @@ builder.UseOrleans(
                         cp.ConfigureTableServiceClient(
                             builder.Configuration.GetConnectionString("OrleansSekibanTable"));
                     }));
-
-                    // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
                 });
             config.AddEventHubStreams(
                 "OrleansSekibanQueue",
                 configurator =>
                 {
-                    // Existing Event Hub connection settings
+                    // Existing Event Hub connection settings
                     configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
                         options.ConfigureEventHubConnection(
@@ -204,7 +199,7 @@ builder.UseOrleans(
                 {
                     opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansPubSubGrainState");
                     // opt.GrainStorageSerializer = sp.GetRequiredService<CustomJsonSerializer>();
-                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSerializer>();
+                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSekibanOrleansSerializer>();
                 });
                 // options.GrainStorageSerializer は既定でこの Newtonsoft シリアライザーになる
                 options.Configure<IGrainStorageSerializer>(
@@ -219,7 +214,7 @@ builder.UseOrleans(
                     opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansPubSubGrainState");
                     // opt.GrainStorageSerializer = sp.GetRequiredService<IGrainStorageSerializer>();
                     // opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("OrleansSekibanGrainState");
-                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSerializer>();
+                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSekibanOrleansSerializer>();
                     // opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("OrleansSekibanGrainState");
                 });
                 // options.GrainStorageSerializer は既定でこの Newtonsoft シリアライザーになる
@@ -228,7 +223,7 @@ builder.UseOrleans(
             });
             // Orleans will automatically discover grains in the same assembly
             config.ConfigureServices(services =>
-                services.AddTransient<IGrainStorageSerializer, CustomJsonSerializer>());
+                services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonSekibanOrleansSerializer>());
 
         }
         // Orleans will automatically discover grains in the same assembly

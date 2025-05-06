@@ -23,12 +23,13 @@
     <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.1.2" />
     <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.1.2" />
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.2.5" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.1.2" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview06" />
-    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview06" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview06" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview07" />
+    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview07" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview07" />
   </ItemGroup>
 
 </Project>
