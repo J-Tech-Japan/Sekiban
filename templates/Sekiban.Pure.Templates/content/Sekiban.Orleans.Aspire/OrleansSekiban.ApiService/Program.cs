@@ -28,6 +28,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 builder.AddKeyedAzureTableClient("OrleansSekibanClustering");
+builder.AddKeyedAzureTableClient("OrleansSekibanGrainTable");
 builder.AddKeyedAzureBlobClient("OrleansSekibanGrainState");
 builder.AddKeyedAzureQueueClient("OrleansSekibanQueue");
 builder.UseOrleans(
@@ -197,11 +198,9 @@ builder.UseOrleans(
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansPubSubGrainState");
-                    // opt.GrainStorageSerializer = sp.GetRequiredService<CustomJsonSerializer>();
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansSekibanGrainTable");
                     opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSekibanOrleansSerializer>();
                 });
-                // options.GrainStorageSerializer は既定でこの Newtonsoft シリアライザーになる
                 options.Configure<IGrainStorageSerializer>(
                     (op, serializer) => op.GrainStorageSerializer = serializer);
             });
@@ -211,13 +210,9 @@ builder.UseOrleans(
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansPubSubGrainState");
-                    // opt.GrainStorageSerializer = sp.GetRequiredService<IGrainStorageSerializer>();
-                    // opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("OrleansSekibanGrainState");
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("OrleansSekibanGrainTable");
                     opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonSekibanOrleansSerializer>();
-                    // opt.BlobServiceClient = sp.GetKeyedService<Azure.Storage.Blobs.BlobServiceClient>("OrleansSekibanGrainState");
                 });
-                // options.GrainStorageSerializer は既定でこの Newtonsoft シリアライザーになる
                 options.Configure<IGrainStorageSerializer>(
                     (op, serializer) => op.GrainStorageSerializer = serializer);
             });
@@ -239,7 +234,8 @@ SekibanSerializationTypesChecker.CheckDomainSerializability(OrleansSekibanDomain
 builder.Services.AddTransient<ICommandMetadataProvider, CommandMetadataProvider>();
 builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>();
 builder.Services.AddHttpContextAccessor();
-
+builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonSekibanOrleansSerializer>();
+builder.Services.AddTransient<NewtonsoftJsonSekibanOrleansSerializer>();
 builder.Services.AddTransient<SekibanOrleansExecutor>();
 
 
