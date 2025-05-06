@@ -1,8 +1,11 @@
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
+using OrleansSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 
-namespace OrleansSekiban.Domain;
+namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
 [GenerateSerializer]
 public record WeatherForecastQuery(string LocationContains)
@@ -12,8 +15,10 @@ public record WeatherForecastQuery(string LocationContains)
     {
         return projection.Payload.Aggregates.Where(m => m.Value.GetPayload() is WeatherForecast)
             .Select(m => ((WeatherForecast)m.Value.GetPayload(), m.Value.PartitionKeys))
-            .Select((touple) => new WeatherForecastRecord(touple.PartitionKeys.AggregateId, touple.Item1.Location,
-                touple.Item1.Date, touple.Item1.TemperatureC, touple.Item1.Summary, touple.Item1.GetTemperatureF()))
+            .Where(tuple => string.IsNullOrEmpty(query.LocationContains) || 
+                           tuple.Item1.Location.Contains(query.LocationContains, StringComparison.OrdinalIgnoreCase))
+            .Select((tuple) => new WeatherForecastRecord(tuple.PartitionKeys.AggregateId, tuple.Item1.Location,
+                tuple.Item1.Date, tuple.Item1.TemperatureC, tuple.Item1.Summary, tuple.Item1.TemperatureC.GetFahrenheit()))
             .ToResultBox();
     }
 
@@ -27,9 +32,9 @@ public record WeatherForecastQuery(string LocationContains)
         Guid WeatherForecastId,
         string Location,
         DateOnly Date,
-        int TemperatureC,
+        TemperatureCelsius TemperatureC,
         string Summary,
-        int TemperatureF
+        double TemperatureF
     );
 
 }

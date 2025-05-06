@@ -9,7 +9,6 @@
     <Nullable>enable</Nullable>
     <IsAspireHost>true</IsAspireHost>
   <IsPackable>true</IsPackable>
-  <UserSecretsId>ca9e087a-c53c-426c-b02d-065bfd129920</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,10 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.1.0" />
-    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="9.1.0" />
-    <PackageReference Include="Aspire.Hosting.Orleans" Version="9.1.0" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.1.0" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.2.1" />
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="9.2.1" />
+    <PackageReference Include="Aspire.Hosting.Orleans" Version="9.2.1" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.2.1" />
   </ItemGroup>
 
 </Project>

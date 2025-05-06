@@ -4,6 +4,9 @@
 
 @using OrleansSekiban.Domain
 @using System.ComponentModel.DataAnnotations
+@using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands
+@using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries
+@using OrleansSekiban.Domain.ValueObjects
 @using Sekiban.Pure.Aggregates
 
 @inject WeatherApiClient WeatherApi
@@ -42,7 +45,7 @@ else
                 <tr>
                     <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
+                    <td>@forecast.TemperatureC.Value</td>
                     <td>@forecast.TemperatureF</td>
                     <td>@forecast.Summary</td>
                     <td>
@@ -236,7 +239,7 @@ else
         }
         catch (Exception ex)
         {
-            editLocationModel.Error = "Failed to update location. Please try again.";
+            editLocationModel.Error = $"Failed to update location. Please try again. {ex.Message}";
         }
     }
 
@@ -247,7 +250,7 @@ else
             var command = new InputWeatherForecastCommand(
                 forecastModel.Location!,
                 DateOnly.FromDateTime(forecastModel.Date!.Value),
-                forecastModel.TemperatureC,
+                new TemperatureCelsius(forecastModel.TemperatureC),
                 forecastModel.Summary!);
 
             await WeatherApi.InputWeatherAsync(command);
@@ -255,11 +258,11 @@ else
             
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();
-            await JsRuntime.InvokeVoidAsync("$", "#addForecastModal", "modal", "hide");
+            await JsRuntime.InvokeVoidAsync("DisplayAddModal", "hide");
         }
         catch (Exception ex)
         {
-            forecastModel.Error = "Failed to add weather forecast. Please try again.";
+            forecastModel.Error = $"Failed to add weather forecast. Please try again. {ex.Message}";
         }
     }
 }

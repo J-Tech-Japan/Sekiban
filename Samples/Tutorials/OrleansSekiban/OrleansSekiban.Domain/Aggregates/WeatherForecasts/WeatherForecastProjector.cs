@@ -1,8 +1,11 @@
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
+using OrleansSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 
-namespace OrleansSekiban.Domain;
+namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts;
 
 public class WeatherForecastProjector : IAggregateProjector
 {
