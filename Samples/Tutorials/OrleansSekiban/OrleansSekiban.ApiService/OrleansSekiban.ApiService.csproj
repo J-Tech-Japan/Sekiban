@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <UserSecretsId>2caef674-c1c4-4994-adce-a78fedee1ae8</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OrleansSekiban.Domain\OrleansSekiban.Domain.csproj" />
+    <ProjectReference Include="..\OrleansSekiban.ServiceDefaults\OrleansSekiban.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.2.1" />
+    <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.2.1" />
+    <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.2.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.1.2" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.1.2" />
+    <PackageReference Include="OrleansDashboard" Version="8.2.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.2.5" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.1.2" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview07" />
+    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview07" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview07" />
+  </ItemGroup>
+
+</Project>
