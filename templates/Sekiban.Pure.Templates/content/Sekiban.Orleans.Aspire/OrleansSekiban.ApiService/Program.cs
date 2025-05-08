@@ -223,7 +223,7 @@ builder.UseOrleans(
         }
         // Orleans will automatically discover grains in the same assembly
         config.ConfigureServices(services =>
-            services.AddTransient<IGrainStorageSerializer, SystemTextJsonStorageSerializer>());
+            services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonSekibanOrleansSerializer>());
     });
 
 builder.Services.AddSingleton(
