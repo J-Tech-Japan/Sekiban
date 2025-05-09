@@ -11,6 +11,8 @@ param orleansDefaultGrainType string = 'cosmos'
 @description('Queue type for Orleans')
 param orleansQueueType string = 'azurestorage' //'eventhub'
 
+param shareAppServicePlan bool = true
+
 // 1. Key Vault
 module keyVaultCreate '1.keyvault/create.bicep' = {
   name: 'keyVaultDeployment'
@@ -125,12 +127,16 @@ module eventHubSaveKeyVault '6.eventhub/2.save-keyvalult.bicep' = {
 // 7. Backend App Service
 module backendPlan '7.backend/1.plan.bicep' = {
   name: 'backendPlanDeployment'
-  params: {}
+  params: {
+    shareAppServicePlan: shareAppServicePlan
+  }
 }
 
 module backendAppServiceCreate '7.backend/2.app-service-create.bicep' = {
   name: 'backendAppServiceCreateDeployment'
-  params: {}
+  params: {
+    shareAppServicePlan: shareAppServicePlan
+  }
   dependsOn: [
     backendPlan
   ]
@@ -204,12 +210,16 @@ module backendIpAccess '7.backend/8.ipaccess.bicep' = {
 // 8. Blazor Frontend App Service
 module blazorPlan '8.blazor/1.plan.bicep' = {
   name: 'blazorPlanDeployment'
-  params: {}
+  params: {
+    shareAppServicePlan: shareAppServicePlan
+  }
 }
 
 module blazorAppService '8.blazor/2.app-service.bicep' = {
   name: 'blazorAppServiceDeployment'
-  params: {}
+  params: {
+    shareAppServicePlan: shareAppServicePlan
+  }
   dependsOn: [
     blazorPlan
   ]

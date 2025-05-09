@@ -5,8 +5,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 var storage = builder.AddAzureStorage("azurestorage")
     .RunAsEmulator();
     // .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0")); // no need this line for new template
-    var clusteringTable = storage.AddTables("OrleansSekibanClustering");
-    var grainTable = storage.AddTables("OrleansSekibanGrainTable");
+var clusteringTable = storage.AddTables("OrleansSekibanClustering");
+var grainTable = storage.AddTables("OrleansSekibanGrainTable");
 var grainStorage = storage.AddBlobs("OrleansSekibanGrainState");
 var queue = storage.AddQueues("OrleansSekibanQueue");
 

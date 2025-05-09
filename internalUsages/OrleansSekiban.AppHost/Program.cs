@@ -6,9 +6,10 @@ var storage = builder.AddAzureStorage("azurestorage")
     // .RunAsEmulator(opt => opt.WithDataVolume());
     .RunAsEmulator();
     // .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0")); // no need this line for new template
-var clusteringTable = storage.AddTables("orleans-sekiban-clustering");
-var grainStorage = storage.AddBlobs("orleans-sekiban-grain-state");
-var queue = storage.AddQueues("orleans-sekiban-queue");
+    var clusteringTable = storage.AddTables("OrleansSekibanClustering");
+    var grainTable = storage.AddTables("OrleansSekibanGrainTable");
+    var grainStorage = storage.AddBlobs("OrleansSekibanGrainState");
+    var queue = storage.AddQueues("OrleansSekibanQueue");
 
 
 
@@ -22,6 +23,7 @@ var orleans = builder.AddOrleans("default")
     .WithClustering(clusteringTable)
     .WithGrainStorage("Default", grainStorage)
     .WithGrainStorage("orleans-sekiban-queue", grainStorage)
+    .WithGrainStorage("OrleansSekibanGrainTable", grainTable)
     .WithStreaming(queue);
 
 var apiService = builder.AddProject<OrleansSekiban_ApiService>("apiservice")
