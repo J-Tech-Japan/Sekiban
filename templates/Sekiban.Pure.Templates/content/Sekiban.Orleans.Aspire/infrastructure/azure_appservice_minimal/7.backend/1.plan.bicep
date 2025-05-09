@@ -1,4 +1,5 @@
-param appServiceName string = 'backend-${resourceGroup().name}'
+param shareAppServicePlan bool = true
+param appServicePlanName string = shareAppServicePlan ? 'asp-${resourceGroup().name}' : 'asp-backend-${resourceGroup().name}'
 param location string = resourceGroup().location
 param appServicePlanSku object = {
   name: 'B1'
@@ -7,7 +8,7 @@ param appServicePlanSku object = {
 }
 // Create App Service Plan only if it doesn't exist
 resource newAppServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: 'asp-${appServiceName}'
+  name: appServicePlanName
   location: location
   sku: {
     name: appServicePlanSku.name
