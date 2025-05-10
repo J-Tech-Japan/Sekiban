@@ -15,7 +15,7 @@ var storage = builder.AddAzureStorage("azurestorage")
 
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres")
-    .WithDataVolume() // Uncomment to use a data volume
+    // .WithDataVolume() // Uncomment to use a data volume
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
 

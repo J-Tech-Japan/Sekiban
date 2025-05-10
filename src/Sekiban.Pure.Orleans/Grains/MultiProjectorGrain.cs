@@ -40,7 +40,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     // ---------- Stream ----------
     private IAsyncStream<IEvent>? _eventStream;
     private StreamSubscriptionHandle<IEvent>? _subscription;
-    private readonly Queue<IEvent> _buffer = new();
+    private readonly List<IEvent> _buffer = new();
     private bool _bootstrapping = true;
     private bool _streamActive = false;
 
@@ -102,8 +102,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
     #region Stream callbacks
 
-    private Task OnStreamEventAsync(IEvent e, StreamSequenceToken? _) =>
-        _bootstrapping ? Enqueue(e) : ApplyEventAsync(e);
+    private Task OnStreamEventAsync(IEvent e, StreamSequenceToken? _) => Enqueue(e);
 
     private Task OnStreamErrorAsync(Exception ex)
     {
@@ -119,14 +118,87 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
     private Task Enqueue(IEvent e)
     {
-        _buffer.Enqueue(e);
+        _buffer.Add(e);
         return Task.CompletedTask;
+    }
+
+    private void InitializeState()
+    {
+        var projector = GetProjectorFromName();
+        _safeState = new MultiProjectionState(
+            projector, 
+            Guid.Empty, 
+            string.Empty,
+            0, 
+            0, 
+            _safeState?.RootPartitionKey ?? "default");
     }
 
     private void FlushBuffer()
     {
-        while (_buffer.TryDequeue(out var evt))
-            ApplyEventAsync(evt).GetAwaiter().GetResult();
+        if (_safeState is null && _unsafeState is null)
+        {
+            InitializeState();
+        }
+        if (!_buffer.Any()) return;
+        
+        var projector = GetProjectorFromName();
+        
+        _buffer.Sort((a, b) => {
+            var aValue = new SortableUniqueIdValue(a.SortableUniqueId);
+            var bValue = new SortableUniqueIdValue(b.SortableUniqueId);
+            return aValue.IsEarlierThan(bValue) ? -1 : (aValue.IsLaterThan(bValue) ? 1 : 0);
+        });
+        
+        // safeBorderを計算
+        var safeBorder = new SortableUniqueIdValue((DateTime.UtcNow - SafeStateWindow).ToString("O"));
+        
+        // safeBorderより古いイベントのインデックスを探す
+        int splitIndex = _buffer.FindLastIndex(e => 
+            new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
+        
+        // 古いイベントがあれば処理
+        if (splitIndex >= 0)
+        {
+            // 古いイベントを取得
+            var oldEvents = _buffer.Take(splitIndex + 1).ToList();
+            
+            // _safeStateに適用
+            var newSafeState = _domainTypes.MultiProjectorsType.Project(_safeState?.ProjectorCommon ?? projector, oldEvents).UnwrapBox();
+            var lastOldEvt = oldEvents.Last();
+            _safeState = new MultiProjectionState(
+                newSafeState, 
+                lastOldEvt.Id, 
+                lastOldEvt.SortableUniqueId,
+                (_safeState?.Version ?? 0) + 1, 
+                0, 
+                _safeState?.RootPartitionKey ?? "default");
+            
+            // 適用したイベントはバッファから削除
+            _buffer.RemoveRange(0, splitIndex + 1);
+            
+            // スナップショット更新フラグをセット
+            _pendingSave = true;
+        }
+        
+        // バッファに残っているイベント（新しいイベント）があり、かつ_safeStateが初期化されていれば
+        if (_buffer.Any() && _safeState != null)
+        {
+            // _unsafeStateを更新
+            var newUnsafeState = _domainTypes.MultiProjectorsType.Project(_safeState.ProjectorCommon, _buffer).UnwrapBox();
+            var lastNewEvt = _buffer.Last();
+            _unsafeState = new MultiProjectionState(
+                newUnsafeState,
+                lastNewEvt.Id,
+                lastNewEvt.SortableUniqueId,
+                _safeState.Version + 1,
+                0,
+                _safeState.RootPartitionKey);
+        } else
+        {
+            _unsafeState = null;
+        }
+        // 注意: バッファの残りのイベントは削除せず、保持しておく
     }
 
     #endregion
@@ -235,18 +307,17 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
     private async Task<MultiProjectionState> BuildStateIfNeededAsync()
     {
-        if (_safeState is null)
+        if (_streamActive)
         {
-            if (_streamActive)
-            {
-                // ストリームアクティブの場合はバッファだけを処理
-                FlushBuffer();
-            }
-            else
-            {
-                // ストリームがアクティブでない場合のみイベントストアから読み込む
-                await CatchUpFromStoreAsync();
-            }
+            // ストリームアクティブの場合はバッファを処理
+            // 新しいFlushBuffer実装により、古いイベントは_safeStateに適用され、
+            // 新しいイベントは_unsafeStateに適用される
+            FlushBuffer();
+        }
+        else
+        {
+            // ストリームが非アクティブの場合はイベントストアから読み込む
+            await CatchUpFromStoreAsync();
         }
         return _unsafeState ?? _safeState ?? throw new InvalidOperationException("State not initialized");
     }

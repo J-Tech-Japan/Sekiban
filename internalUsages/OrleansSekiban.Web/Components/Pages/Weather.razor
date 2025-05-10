@@ -231,7 +231,7 @@ else
             await WeatherApi.UpdateLocationAsync(
                 editLocationModel.WeatherForecastId,
                 editLocationModel.NewLocation!);
-                
+            await Task.Delay(300);
             forecasts = await WeatherApi.GetWeatherAsync();
             
             await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
@@ -251,8 +251,8 @@ else
                 DateOnly.FromDateTime(forecastModel.Date!.Value),
                 new TemperatureCelsius(forecastModel.TemperatureC),
                 forecastModel.Summary!);
-
             await WeatherApi.InputWeatherAsync(command);
+            await Task.Delay(300);
             forecasts = await WeatherApi.GetWeatherAsync();
             
             // Reset form and close modal
