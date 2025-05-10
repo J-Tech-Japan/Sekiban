@@ -138,8 +138,9 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         {
             SortableIdCondition = string.IsNullOrEmpty(lastId)
                 ? ISortableIdCondition.None
-                : ISortableIdCondition.Since(new SortableUniqueIdValue(lastId)),
-            ToDateTime = DateTime.UtcNow.AddSeconds(10)
+                : ISortableIdCondition.Between(
+                    new SortableUniqueIdValue(lastId), 
+                    new SortableUniqueIdValue(SortableUniqueIdValue.Generate(DateTime.UtcNow.AddSeconds(10), Guid.Empty)))
         };
 
         var events = (await _eventReader.GetEvents(retrieval)).UnwrapBox().ToList();
