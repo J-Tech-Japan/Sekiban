@@ -42,6 +42,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     private StreamSubscriptionHandle<IEvent>? _subscription;
     private readonly Queue<IEvent> _buffer = new();
     private bool _bootstrapping = true;
+    private bool _streamActive = false;
 
     // ---------- Snapshot control ----------
     private IDisposable? _persistTimer;
@@ -84,6 +85,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         _persistTimer = RegisterTimer(_ => PersistTick(), null, PersistInterval, PersistInterval);
 
         _bootstrapping = false;
+        _streamActive = true;
         FlushBuffer();
     }
 
@@ -92,6 +94,7 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         _persistTimer?.Dispose();
         if (_subscription is not null) await _subscription.UnsubscribeAsync();
         if (_pendingSave) await PersistStateAsync(_safeState);
+        _streamActive = false;
         await base.OnDeactivateAsync(reason, token);
     }
 
@@ -232,7 +235,19 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 
     private async Task<MultiProjectionState> BuildStateIfNeededAsync()
     {
-        if (_safeState is null) await CatchUpFromStoreAsync();
+        if (_safeState is null)
+        {
+            if (_streamActive)
+            {
+                // ストリームアクティブの場合はバッファだけを処理
+                FlushBuffer();
+            }
+            else
+            {
+                // ストリームがアクティブでない場合のみイベントストアから読み込む
+                await CatchUpFromStoreAsync();
+            }
+        }
         return _unsafeState ?? _safeState ?? throw new InvalidOperationException("State not initialized");
     }
 
