@@ -180,7 +180,7 @@ else
         try
         {
             var response = await WeatherApi.RemoveWeatherAsync(weatherForecastId);
-            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.GetLastSortableUniqueId());
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
         }
         catch (Exception ex)
         {
@@ -232,10 +232,7 @@ else
             var response = await WeatherApi.UpdateLocationAsync(
                 editLocationModel.WeatherForecastId,
                 editLocationModel.NewLocation!);
-                
-            // 最後のイベントのSortableUniqueIdを取得
-            var lastEventSortableUniqueId = response.Events.LastOrDefault()?.SortableUniqueId;
-            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: lastEventSortableUniqueId);
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
             
             await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
         }
@@ -256,9 +253,7 @@ else
                 forecastModel.Summary!);
                 
             var response = await WeatherApi.InputWeatherAsync(command);
-            // 最後のイベントのSortableUniqueIdを取得
-            var lastEventSortableUniqueId = response.Events.LastOrDefault()?.SortableUniqueId;
-            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: lastEventSortableUniqueId);
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
             
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();

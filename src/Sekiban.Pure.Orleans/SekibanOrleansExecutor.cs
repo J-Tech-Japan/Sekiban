@@ -5,9 +5,10 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
+using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-namespace Sekiban.Pure.Orleans.Parts;
+namespace Sekiban.Pure.Orleans;
 
 public class SekibanOrleansExecutor(
     IClusterClient clusterClient,
@@ -107,3 +108,4 @@ public class SekibanOrleansExecutor(
         }
     }
 }
+
