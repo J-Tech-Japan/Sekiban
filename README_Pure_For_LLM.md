@@ -474,19 +474,35 @@ builder.Services.AddHttpClient<YourApiClient>(client =>
 
 ## File Structure
 
+The latest templates use a more structured folder hierarchy:
+
 ```
 YourProject.Domain/
-├── YourAggregate.cs                    // Aggregate
-├── YourAggregateProjector.cs           // Projector
-├── CreateYourAggregateCommand.cs       // Command
-├── UpdateYourAggregateCommand.cs       // Command
-├── DeleteYourAggregateCommand.cs       // Command
-├── YourAggregateCreated.cs             // Event
-├── YourAggregateUpdated.cs             // Event
-├── YourAggregateDeleted.cs             // Event
-├── YourAggregateQuery.cs               // Query
+├── Aggregates/                         // Aggregate-related folder
+│   └── YourEntity/                     // Entity-specific folder
+│       ├── Commands/                   // Commands
+│       │   ├── CreateYourEntityCommand.cs
+│       │   ├── UpdateYourEntityCommand.cs
+│       │   └── DeleteYourEntityCommand.cs
+│       ├── Events/                     // Events
+│       │   ├── YourEntityCreated.cs
+│       │   ├── YourEntityUpdated.cs
+│       │   └── YourEntityDeleted.cs
+│       ├── Payloads/                   // Aggregate payloads
+│       │   └── YourEntity.cs
+│       ├── Queries/                    // Queries
+│       │   └── YourEntityQuery.cs
+│       └── YourEntityProjector.cs      // Projector
+├── Projections/                        // Multi-projections
+│   └── CustomProjection/
+│       ├── YourCustomProjection.cs
+│       └── YourCustomQuery.cs
+├── ValueObjects/                       // Value objects
+│   └── YourValueObject.cs
 └── YourDomainEventsJsonContext.cs      // JSON Context
 ```
+
+This structure helps organize related code more logically, following Domain-Driven Design principles.
 
 ## Unit Testing
 
