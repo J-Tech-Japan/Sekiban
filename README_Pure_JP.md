@@ -951,6 +951,109 @@ dotnet run --project MyProject.AppHost --launch-profile https
 
 5. **ISekibanExecutor vs. SekibanOrleansExecutor**: ドメインサービスやワークフローを実装する場合、より良いテスト可能性のために具体的な`SekibanOrleansExecutor`クラスではなく`ISekibanExecutor`インターフェースを使用してください。`ISekibanExecutor`インターフェースは`Sekiban.Pure.Executors`名前空間にあります。
 
-## 結論
+## 高度なクエリ機能
 
-Sekibanは.NETアプリケーションでイベントソーシングを実装するための強力なフレームワークを提供します。このガイドで概説されている主要コンポーネントを理解し、ベストプラクティスに従うことで、LLMプログラミングエージェントはSekibanイベントソーシングプロジェクトを効果的に作成および維持できます。
+### 特定のイベントを待機する
+
+イベントソーシングシステムでは、特に分散システムにおいて、コマンドが処理されてからクエリがそのコマンドの結果を反映するまでにタイムラグが生じることがあります。Sekibanでは、クエリが結果を返す前に特定のイベントが処理されるのを待機するメカニズムを提供しています。
+
+#### IWaitForSortableUniqueIdインターフェース
+
+```csharp
+public interface IWaitForSortableUniqueId
+{
+    string? WaitForSortableUniqueId { get; }
+}
+```
+
+このインターフェースを使用すると、クエリオブジェクトは実行前に特定のイベント（そのソート可能な一意のIDで識別される）を待機するよう指定できます。
+
+#### 待機クエリの実装
+
+特定のイベントを待機できるクエリを実装するには：
+
+```csharp
+[GenerateSerializer]
+public record WeatherForecastQuery(string QueryId) : 
+    IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, 
+                             WeatherForecastQuery, 
+                             WeatherForecastQuery.WeatherForecastRecord>,
+    IWaitForSortableUniqueId
+{
+    public string? WaitForSortableUniqueId { get; set; }
+
+    // クエリ処理の実装...
+    public static ResultBox<IEnumerable<WeatherForecastRecord>> HandleFilter(
+        MultiProjectionState<AggregateListProjector<WeatherForecastProjector>> state,
+        WeatherForecastQuery query,
+        IQueryContext context)
+    {
+        // 実装の詳細...
+    }
+
+    // 結果の型
+    [GenerateSerializer]
+    public record WeatherForecastRecord(
+        string Id,
+        string Location,
+        DateOnly Date,
+        int TemperatureC,
+        string Summary);
+}
+```
+
+#### APIクライアントでの待機機能の使用
+
+APIクライアントを実装する場合：
+
+```csharp
+public async Task<WeatherForecastRecord[]> GetWeatherAsync(
+    int maxItems = 10, 
+    string? waitForSortableUniqueId = null, 
+    CancellationToken cancellationToken = default)
+{
+    var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
+        ? "/api/weatherforecast"
+        : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+        
+    // HTTPリクエストを行う...
+}
+```
+
+#### API設定
+
+APIエンドポイントが待機パラメータを受け入れて使用するように設定します：
+
+```csharp
+apiRoute
+    .MapGet(
+        "/weatherforecast",
+        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
+        {
+            var query = new WeatherForecastQuery("")
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var list = await executor.QueryAsync(query).UnwrapBox();
+            return list.Items;
+        });
+```
+
+#### 即時更新のためのクライアント側の実装
+
+コマンドを実行した後、後続のクエリを行う際にコマンドの `LastSortableUniqueId` プロパティを使用します：
+
+```csharp
+// コマンドを実行
+var response = await WeatherApi.UpdateLocationAsync(
+    weatherForecastId,
+    newLocation);
+    
+// LastSortableUniqueIdを使用してクエリを実行し、更新された状態を確実に取得
+var forecasts = await WeatherApi.GetWeatherAsync(
+    waitForSortableUniqueId: response.LastSortableUniqueId);
+```
+
+このパターンを使用することで、UIが常に最新の状態変更を反映し、よりユーザー体験の一貫性を保証します。
+
+## 結論

@@ -953,6 +953,109 @@ This ensures that your application uses HTTPS for secure communication, which is
 
 5. **ISekibanExecutor vs. SekibanOrleansExecutor**: When implementing domain services or workflows, use `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
 
-## Conclusion
+## Advanced Query Features
 
-Sekiban provides a powerful framework for implementing event sourcing in .NET applications. By understanding the key components and following the best practices outlined in this guide, LLM programming agents can effectively create and maintain Sekiban event sourcing projects.
+### Waiting for Specific Events
+
+In event-sourced systems, there can be a gap between when a command is processed and when a query reflects the results of that command, especially in distributed systems. Sekiban provides a mechanism to ensure queries wait for specific events to be processed before returning results.
+
+#### The IWaitForSortableUniqueId Interface
+
+```csharp
+public interface IWaitForSortableUniqueId
+{
+    string? WaitForSortableUniqueId { get; }
+}
+```
+
+This interface allows query objects to specify that they should wait for a particular event (identified by its sortable unique ID) before executing.
+
+#### Implementing Waiting Queries
+
+To implement a query that can wait for specific events:
+
+```csharp
+[GenerateSerializer]
+public record WeatherForecastQuery(string QueryId) : 
+    IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, 
+                             WeatherForecastQuery, 
+                             WeatherForecastQuery.WeatherForecastRecord>,
+    IWaitForSortableUniqueId
+{
+    public string? WaitForSortableUniqueId { get; set; }
+
+    // Query handling implementation...
+    public static ResultBox<IEnumerable<WeatherForecastRecord>> HandleFilter(
+        MultiProjectionState<AggregateListProjector<WeatherForecastProjector>> state,
+        WeatherForecastQuery query,
+        IQueryContext context)
+    {
+        // Implementation details...
+    }
+
+    // Result type
+    [GenerateSerializer]
+    public record WeatherForecastRecord(
+        string Id,
+        string Location,
+        DateOnly Date,
+        int TemperatureC,
+        string Summary);
+}
+```
+
+#### Using the Wait for Feature in API Clients
+
+When implementing an API client:
+
+```csharp
+public async Task<WeatherForecastRecord[]> GetWeatherAsync(
+    int maxItems = 10, 
+    string? waitForSortableUniqueId = null, 
+    CancellationToken cancellationToken = default)
+{
+    var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
+        ? "/api/weatherforecast"
+        : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+        
+    // Make the HTTP request...
+}
+```
+
+#### API Configuration
+
+Configure your API endpoints to accept and use the wait parameter:
+
+```csharp
+apiRoute
+    .MapGet(
+        "/weatherforecast",
+        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
+        {
+            var query = new WeatherForecastQuery("")
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var list = await executor.QueryAsync(query).UnwrapBox();
+            return list.Items;
+        });
+```
+
+#### Client-Side Implementation for Immediate Updates
+
+After executing a command, use the command's `LastSortableUniqueId` property when making subsequent queries:
+
+```csharp
+// Execute a command
+var response = await WeatherApi.UpdateLocationAsync(
+    weatherForecastId,
+    newLocation);
+    
+// Query using the LastSortableUniqueId to ensure we get the updated state
+var forecasts = await WeatherApi.GetWeatherAsync(
+    waitForSortableUniqueId: response.LastSortableUniqueId);
+```
+
+This pattern ensures that your UI always reflects the most recent state changes, providing a more consistent user experience.
+
+## Conclusion
