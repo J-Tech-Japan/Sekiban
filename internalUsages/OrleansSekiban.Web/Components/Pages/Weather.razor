@@ -1,4 +1,4 @@
-﻿@page "/weather"
+@page "/weather"
 @attribute [StreamRendering(true)]
 @attribute [OutputCache(Duration = 5)]
 
@@ -7,6 +7,7 @@
 @using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands
 @using OrleansSekiban.Domain.ValueObjects
 @using Sekiban.Pure.Aggregates
+@using Sekiban.Pure.Command.Executor
 
 @inject WeatherApiClient WeatherApi
 @inject IJSRuntime JsRuntime
@@ -178,8 +179,8 @@ else
     {
         try
         {
-            await WeatherApi.RemoveWeatherAsync(weatherForecastId);
-            forecasts = await WeatherApi.GetWeatherAsync();
+            var response = await WeatherApi.RemoveWeatherAsync(weatherForecastId);
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.GetLastSortableUniqueId());
         }
         catch (Exception ex)
         {
@@ -228,11 +229,13 @@ else
     {
         try
         {
-            await WeatherApi.UpdateLocationAsync(
+            var response = await WeatherApi.UpdateLocationAsync(
                 editLocationModel.WeatherForecastId,
                 editLocationModel.NewLocation!);
-            await Task.Delay(300);
-            forecasts = await WeatherApi.GetWeatherAsync();
+                
+            // 最後のイベントのSortableUniqueIdを取得
+            var lastEventSortableUniqueId = response.Events.LastOrDefault()?.SortableUniqueId;
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: lastEventSortableUniqueId);
             
             await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
         }
@@ -251,9 +254,11 @@ else
                 DateOnly.FromDateTime(forecastModel.Date!.Value),
                 new TemperatureCelsius(forecastModel.TemperatureC),
                 forecastModel.Summary!);
-            await WeatherApi.InputWeatherAsync(command);
-            await Task.Delay(300);
-            forecasts = await WeatherApi.GetWeatherAsync();
+                
+            var response = await WeatherApi.InputWeatherAsync(command);
+            // 最後のイベントのSortableUniqueIdを取得
+            var lastEventSortableUniqueId = response.Events.LastOrDefault()?.SortableUniqueId;
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: lastEventSortableUniqueId);
             
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();
