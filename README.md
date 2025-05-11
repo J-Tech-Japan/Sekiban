@@ -27,13 +27,13 @@ various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft
 ## Getting started
 
 
-Do you want to start coding? If so, please see [Readme Pure](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure.md)
+Do you want to start coding? If so, please see [Readme Pure](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure.md)
 
-日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure_JP.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
+日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_JP.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
 
 ## AI Programming?
 
-You might use coding agent like Devin, Cline or Cursor .. etc. We made [Readme for LLM](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Pure_For_LLM.md) so you can copy and paste for framework instructions.
+You might use coding agent like Devin, Cline or Cursor .. etc. We made [Readme for LLM](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_For_LLM.md) so you can copy and paste for framework instructions.
 
 ## Sponsors
 

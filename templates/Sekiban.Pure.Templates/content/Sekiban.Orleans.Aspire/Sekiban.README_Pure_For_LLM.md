@@ -474,19 +474,35 @@ builder.Services.AddHttpClient<YourApiClient>(client =>
 
 ## File Structure
 
+The latest templates use a more structured folder hierarchy:
+
 ```
 YourProject.Domain/
-├── YourAggregate.cs                    // Aggregate
-├── YourAggregateProjector.cs           // Projector
-├── CreateYourAggregateCommand.cs       // Command
-├── UpdateYourAggregateCommand.cs       // Command
-├── DeleteYourAggregateCommand.cs       // Command
-├── YourAggregateCreated.cs             // Event
-├── YourAggregateUpdated.cs             // Event
-├── YourAggregateDeleted.cs             // Event
-├── YourAggregateQuery.cs               // Query
+├── Aggregates/                         // Aggregate-related folder
+│   └── YourEntity/                     // Entity-specific folder
+│       ├── Commands/                   // Commands
+│       │   ├── CreateYourEntityCommand.cs
+│       │   ├── UpdateYourEntityCommand.cs
+│       │   └── DeleteYourEntityCommand.cs
+│       ├── Events/                     // Events
+│       │   ├── YourEntityCreated.cs
+│       │   ├── YourEntityUpdated.cs
+│       │   └── YourEntityDeleted.cs
+│       ├── Payloads/                   // Aggregate payloads
+│       │   └── YourEntity.cs
+│       ├── Queries/                    // Queries
+│       │   └── YourEntityQuery.cs
+│       └── YourEntityProjector.cs      // Projector
+├── Projections/                        // Multi-projections
+│   └── CustomProjection/
+│       ├── YourCustomProjection.cs
+│       └── YourCustomQuery.cs
+├── ValueObjects/                       // Value objects
+│   └── YourValueObject.cs
 └── YourDomainEventsJsonContext.cs      // JSON Context
 ```
+
+This structure helps organize related code more logically, following Domain-Driven Design principles.
 
 ## Unit Testing
 
@@ -885,3 +901,81 @@ This ensures that your application uses HTTPS for secure communication, which is
 4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
 
 5. **ISekibanExecutor vs. SekibanOrleansExecutor**: When implementing domain services or workflows, use `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
+
+## Testing
+
+Sekiban provides several approaches for unit testing your event-sourced applications. You can choose between in-memory testing for simplicity or Orleans-based testing for more complex scenarios.
+
+## Advanced Query Features
+
+### Waiting for Specific Events with IWaitForSortableUniqueId
+
+When building real-time UI applications with event sourcing, there's often a lag between command execution and when the updated state is available for queries. Sekiban solves this with the `IWaitForSortableUniqueId` interface.
+
+```csharp
+// Define a query that can wait for specific events
+[GenerateSerializer]
+public record YourQuery(string QueryParam) : 
+    IMultiProjectionQuery<YourProjection, YourQuery, YourResult>,
+    IWaitForSortableUniqueId
+{
+    // Implement the interface property
+    public string? WaitForSortableUniqueId { get; set; }
+    
+    // Query handling implementation
+    public static ResultBox<YourResult> HandleQuery(
+        MultiProjectionState<YourProjection> state,
+        YourQuery query,
+        IQueryContext context)
+    {
+        // Your query logic here
+    }
+}
+```
+
+**Required for Wait-Enabled Queries**:
+- Implement the `IWaitForSortableUniqueId` interface
+- Add a public property `WaitForSortableUniqueId` with getter and setter
+- The property should be nullable string type
+
+#### Implementation Example: API Endpoints
+
+```csharp
+// In Program.cs
+apiRoute.MapGet("/your-endpoint",
+    async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
+    {
+        var query = new YourQuery("parameter") 
+        {
+            WaitForSortableUniqueId = waitForSortableUniqueId
+        };
+        return await executor.QueryAsync(query).UnwrapBox();
+    });
+```
+
+#### Implementation Example: Client-Side
+
+```csharp
+// API Client implementation
+public async Task<YourResult> GetResultAsync(string? waitForSortableUniqueId = null)
+{
+    var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
+        ? "/api/your-endpoint"
+        : $"/api/your-endpoint?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+    
+    // Make the HTTP request
+}
+
+// Using the client after executing a command
+var commandResult = await client.ExecuteCommandAsync(new YourCommand());
+var updatedResult = await client.GetResultAsync(commandResult.LastSortableUniqueId);
+```
+
+**Key Points**:
+- The `LastSortableUniqueId` is available in command execution results
+- Pass this ID to subsequent queries to ensure they see the updated state
+- This provides immediate consistency in your application UI
+
+## Deployment
+
+Sekiban supports deployment to various environments, including local development, staging, and production. Ensure that your configuration files are set up correctly for each environment.

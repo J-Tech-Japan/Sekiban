@@ -8,6 +8,7 @@
 @using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries
 @using OrleansSekiban.Domain.ValueObjects
 @using Sekiban.Pure.Aggregates
+@using Sekiban.Pure.Command.Executor
 
 @inject WeatherApiClient WeatherApi
 @inject IJSRuntime JsRuntime
@@ -179,8 +180,8 @@ else
     {
         try
         {
-            await WeatherApi.RemoveWeatherAsync(weatherForecastId);
-            forecasts = await WeatherApi.GetWeatherAsync();
+            var response = await WeatherApi.RemoveWeatherAsync(weatherForecastId);
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
         }
         catch (Exception ex)
         {
@@ -229,17 +230,16 @@ else
     {
         try
         {
-            await WeatherApi.UpdateLocationAsync(
+            var response = await WeatherApi.UpdateLocationAsync(
                 editLocationModel.WeatherForecastId,
                 editLocationModel.NewLocation!);
-                
-            forecasts = await WeatherApi.GetWeatherAsync();
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
             
             await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
         }
         catch (Exception ex)
         {
-            editLocationModel.Error = $"Failed to update location. Please try again. {ex.Message}";
+            editLocationModel.Error = "Failed to update location. Please try again.";
         }
     }
 
@@ -252,9 +252,9 @@ else
                 DateOnly.FromDateTime(forecastModel.Date!.Value),
                 new TemperatureCelsius(forecastModel.TemperatureC),
                 forecastModel.Summary!);
-
-            await WeatherApi.InputWeatherAsync(command);
-            forecasts = await WeatherApi.GetWeatherAsync();
+                
+            var response = await WeatherApi.InputWeatherAsync(command);
+            forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
             
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();
@@ -262,7 +262,7 @@ else
         }
         catch (Exception ex)
         {
-            forecastModel.Error = $"Failed to add weather forecast. Please try again. {ex.Message}";
+            forecastModel.Error = "Failed to add weather forecast. Please try again.";
         }
     }
 }

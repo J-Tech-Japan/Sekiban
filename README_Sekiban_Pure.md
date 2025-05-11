@@ -1,6 +1,6 @@
 # Sekiban Event Sourcing Guide for Developer
-[For LLM](README_Pure_For_LLM.md)
-[日本語版はこちら (Japanese Version)](README_Pure_JP.md)
+[For LLM](README_Sekiban_Pure_For_LLM.md)
+[日本語版はこちら (Japanese Version)](README_Sekiban_Pure_JP.md)
 
 This guide explains how to create and work with event sourcing projects using Sekiban, based on the template structure in `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.Domain`.
 
