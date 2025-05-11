@@ -13,7 +13,11 @@ public class WeatherApiClient(HttpClient httpClient)
 
         var query = new WeatherForecastQuery("") { WaitForSortableUniqueId = waitForSortableUniqueId };
         
-        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastQuery.WeatherForecastRecord>("/api/weatherforecast", cancellationToken))
+        var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
+            ? "/api/weatherforecast"
+            : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+            
+        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastQuery.WeatherForecastRecord>(requestUri, cancellationToken))
         {
             if (forecasts?.Count >= maxItems)
             {

@@ -292,9 +292,13 @@ string[] summaries =
 apiRoute
     .MapGet(
         "/weatherforecast",
-        async ([FromServices] SekibanOrleansExecutor executor) =>
+        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
         {
-            var list = await executor.QueryAsync(new WeatherForecastQuery("")).UnwrapBox();
+            var query = new WeatherForecastQuery("")
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var list = await executor.QueryAsync(query).UnwrapBox();
             return list.Items;
         })
     .WithOpenApi()
