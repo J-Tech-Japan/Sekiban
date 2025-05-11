@@ -10,9 +10,6 @@ public class WeatherApiClient(HttpClient httpClient)
     public async Task<WeatherForecastQuery.WeatherForecastRecord[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
     {
         List<WeatherForecastQuery.WeatherForecastRecord>? forecasts = null;
-
-        var query = new WeatherForecastQuery("") { WaitForSortableUniqueId = waitForSortableUniqueId };
-        
         var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
             ? "/api/weatherforecast"
             : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
