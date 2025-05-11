@@ -8,8 +8,11 @@ namespace OrleansSekiban.Domain;
 
 [GenerateSerializer]
 public record WeatherForecastQuery(string LocationContains)
-    : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastQuery.WeatherForecastRecord>
+    : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastQuery.WeatherForecastRecord>,
+      IWaitForSortableUniqueId
 {
+    public string? WaitForSortableUniqueId { get; set; }
+    
     public static ResultBox<IEnumerable<WeatherForecastRecord>> HandleFilter(MultiProjectionState<AggregateListProjector<WeatherForecastProjector>> projection, WeatherForecastQuery query, IQueryContext context)
     {
         return projection.Payload.Aggregates.Where(m => m.Value.GetPayload() is WeatherForecast)

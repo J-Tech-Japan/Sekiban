@@ -298,6 +298,29 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         return res.UnwrapBox();
     }
 
+    public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
+    {
+        // バッファ内に存在するか確認
+        if (_buffer.Any(e => new SortableUniqueIdValue(e.SortableUniqueId).IsLaterThanOrEqual(new SortableUniqueIdValue(sortableUniqueId))))
+        {
+            return Task.FromResult(true);
+        }
+        
+        // LastSortableUniqueIdが目標のIDより新しいか確認
+        if (!string.IsNullOrEmpty(_safeState?.LastSortableUniqueId))
+        {
+            var lastId = new SortableUniqueIdValue(_safeState.LastSortableUniqueId);
+            var targetId = new SortableUniqueIdValue(sortableUniqueId);
+            
+            if (lastId.IsLaterThanOrEqual(targetId))
+            {
+                return Task.FromResult(true);
+            }
+        }
+        
+        return Task.FromResult(false);
+    }
+
     #endregion
 
     #region Helpers

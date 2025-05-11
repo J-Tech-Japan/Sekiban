@@ -9,4 +9,5 @@ public interface IMultiProjectorGrain : IGrainWithStringKey
     Task<MultiProjectionState> GetStateAsync();
     Task<QueryResultGeneral> QueryAsync(IQueryCommon query);
     Task<IListQueryResult> QueryAsync(IListQueryCommon query);
+    Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
 }
