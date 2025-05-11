@@ -5,7 +5,7 @@ namespace Sekiban.Pure.Documents;
 public static class SortableUniqueIdWaitHelper
 {
     public const int DefaultWaitTimeoutMs = 30000;
-    public const int DefaultPollingIntervalMs = 100;
+    public const int DefaultPollingIntervalMs = 200;
     
     public static bool HasProcessedTargetId(string? currentId, string targetId)
     {
