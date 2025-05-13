@@ -353,6 +353,43 @@ Key points:
 - Use `[JsonSourceGenerationOptions]` to configure serialization
 - Define as a partial class
 
+### Using ToSimpleCommandResponse() for Efficient API Endpoints
+
+When creating API endpoints that execute commands, using the `ToSimpleCommandResponse()` extension method offers several benefits:
+
+1. **Reduced Payload Size**: Converts the full CommandResponse (with all events) to a compact CommandResponseSimple
+2. **Easy Access to LastSortableUniqueId**: Extracts the most important information for client-side consistency
+3. **Clean API Design**: Combined with `UnwrapBox()`, creates clean, consistent API responses
+
+#### Implementation Example
+
+```csharp
+apiRoute
+    .MapPost(
+        "/inputweatherforecast",
+        async (
+                [FromBody] InputWeatherForecastCommand command,
+                [FromServices] SekibanOrleansExecutor executor) =>
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+    .WithName("InputWeatherForecast")
+    .WithOpenApi();
+```
+
+#### Client-Side Usage
+
+After executing a command, use the returned `LastSortableUniqueId` to ensure your subsequent queries see the updated state:
+
+```csharp
+// Execute a command
+var response = await weatherApiClient.InputWeatherAsync(new InputWeatherForecastCommand(...));
+
+// Use the LastSortableUniqueId for subsequent queries
+var forecasts = await weatherApiClient.GetWeatherAsync(
+    waitForSortableUniqueId: response.LastSortableUniqueId);
+```
+
+This pattern ensures that your UI always reflects the most recent state changes, providing a more consistent user experience.
+
 ## Project Structure
 
 A typical Sekiban event sourcing project follows this structure:
@@ -624,7 +661,7 @@ apiRoute.MapPost("/inputweatherforecast",
     async (
         [FromBody] InputWeatherForecastCommand command,
         [FromServices] SekibanOrleansExecutor executor) => 
-            await executor.CommandAsync(command).UnwrapBox())
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
     .WithOpenApi();
 ```
 
@@ -634,6 +671,7 @@ Key points:
 - Queries are typically mapped to GET endpoints
 - Results are unwrapped from `ResultBox` using `UnwrapBox()`
 - OpenAPI support is included by default
+- Command execution results can be simplified using `ToSimpleCommandResponse()`, making it easy to access important information like LastSortableUniqueId
 
 ### 4. Implementation Steps
 

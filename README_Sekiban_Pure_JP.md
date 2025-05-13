@@ -622,9 +622,46 @@ apiRoute.MapPost("/inputweatherforecast",
     async (
         [FromBody] InputWeatherForecastCommand command,
         [FromServices] SekibanOrleansExecutor executor) => 
-            await executor.CommandAsync(command).UnwrapBox())
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
     .WithOpenApi();
 ```
+
+### ToSimpleCommandResponse()を使用した効率的なAPIエンドポイント
+
+コマンドを実行するAPIエンドポイントを作成する際に、`ToSimpleCommandResponse()`拡張メソッドを使用すると以下のようなメリットがあります：
+
+1. **ペイロードサイズの削減**: 完全なCommandResponse（すべてのイベントを含む）からコンパクトなCommandResponseSimpleに変換します
+2. **LastSortableUniqueIdへの簡単なアクセス**: クライアント側の一貫性確保に重要な情報を抽出します
+3. **クリーンなAPI設計**: `UnwrapBox()`と組み合わせることで、クリーンで一貫性のあるAPIレスポンスを作成します
+
+#### 実装例
+
+```csharp
+apiRoute
+    .MapPost(
+        "/inputweatherforecast",
+        async (
+                [FromBody] InputWeatherForecastCommand command,
+                [FromServices] SekibanOrleansExecutor executor) =>
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+    .WithName("InputWeatherForecast")
+    .WithOpenApi();
+```
+
+#### クライアント側での使用
+
+コマンドを実行した後、返された`LastSortableUniqueId`を使用して、後続のクエリが更新された状態を確実に取得できるようにします：
+
+```csharp
+// コマンドを実行
+var response = await weatherApiClient.InputWeatherAsync(new InputWeatherForecastCommand(...));
+
+// LastSortableUniqueIdを後続のクエリで使用
+var forecasts = await weatherApiClient.GetWeatherAsync(
+    waitForSortableUniqueId: response.LastSortableUniqueId);
+```
+
+このパターンを使用することで、UIが常に最新の状態変更を反映し、より一貫性のあるユーザー体験を提供できます。
 
 ポイント：
 - コマンドとクエリの処理には`SekibanOrleansExecutor`を使用
@@ -632,6 +669,7 @@ apiRoute.MapPost("/inputweatherforecast",
 - クエリは通常GETエンドポイントにマッピング
 - 結果は`UnwrapBox()`を使用して`ResultBox`からアンラップ
 - OpenAPIサポートはデフォルトで含まれる
+- コマンド実行結果は`ToSimpleCommandResponse()`を使用して簡略化することで、LastSortableUniqueIdなどの重要情報を簡単に取得可能
 
 ### 4. 実装ステップ
 
