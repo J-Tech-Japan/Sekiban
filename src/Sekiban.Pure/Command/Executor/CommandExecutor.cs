@@ -25,15 +25,14 @@ public class CommandExecutor(IServiceProvider serviceProvider)
         CommandMetadata commandMetadata) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
         specifyPartitionKeys(command)
             .ToResultBox()
-            .Conveyor(
-                partitionKeys => ExecuteGeneralWithPartitionKeys<TCommand, TAggregatePayload>(
-                    command,
-                    projector,
-                    partitionKeys,
-                    handler,
-                    commandMetadata,
-                    (pk, pj) => Repository.Load(pk, pj).ToTask(),
-                    (_, events) => Repository.Save(events).ToTask()));
+            .Conveyor(partitionKeys => ExecuteGeneralWithPartitionKeys<TCommand, TAggregatePayload>(
+                command,
+                projector,
+                partitionKeys,
+                handler,
+                commandMetadata,
+                (pk, pj) => Repository.Load(pk, pj).ToTask(),
+                (_, events) => Repository.Save(events).ToTask()));
 
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
     public Task<ResultBox<CommandResponse>> ExecuteGeneralWithPartitionKeys<TCommand, TAggregatePayload>(
@@ -49,26 +48,22 @@ public class CommandExecutor(IServiceProvider serviceProvider)
             .Start
             .Conveyor(_ => command.ValidateProperties().ToList().ToResultBox())
             .Verify(errors => errors.Count == 0 ? ExceptionOrNone.None : new SekibanValidationErrorsException(errors))
-            .Conveyor(
-                _ => CreateCommandContextWithoutState<TCommand, TAggregatePayload>(
-                    command,
+            .Conveyor(_ => CreateCommandContextWithoutState<TCommand, TAggregatePayload>(
+                command,
+                partitionKeys,
+                projector,
+                handler,
+                loader,
+                commandMetadata))
+            .Combine(context => RunHandler<TCommand, TAggregatePayload>(command, context, handler)
+                .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
+            .Conveyor(values => saver(values.Value1.OriginalSortableUniqueId, values.Value2.ProducedEvents)
+                .Remap(savedEvent => TwoValues.FromValues(values.Value1, savedEvent)))
+            .Conveyor((context, savedEvents) => ResultBox.FromValue(
+                new CommandResponse(
                     partitionKeys,
-                    projector,
-                    handler,
-                    loader,
-                    commandMetadata))
-            .Combine(
-                context => RunHandler<TCommand, TAggregatePayload>(command, context, handler)
-                    .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
-            .Conveyor(
-                values => saver(values.Value1.OriginalSortableUniqueId, values.Value2.ProducedEvents)
-                    .Remap(savedEvent => TwoValues.FromValues(values.Value1, savedEvent)))
-            .Conveyor(
-                (context, savedEvents) => ResultBox.FromValue(
-                    new CommandResponse(
-                        partitionKeys,
-                        savedEvents,
-                        savedEvents.Count > 0 ? savedEvents.Last().Version : context.GetCurrentVersion())));
+                    savedEvents,
+                    savedEvents.Count > 0 ? savedEvents.Last().Version : context.GetCurrentVersion())));
 
 
     private Task<ResultBox<ICommandContextWithoutState>> CreateCommandContextWithoutState<TCommand, TAggregatePayload>(
@@ -92,14 +87,13 @@ public class CommandExecutor(IServiceProvider serviceProvider)
                 .Start
                 .Conveyor(keys => loader(partitionKeys, projector))
                 .Verify(aggregate => VerifyAggregateType<TCommand, TAggregatePayload>(command, aggregate))
-                .Conveyor(
-                    aggregate => ResultBox<ICommandContextWithoutState>.FromValue(
-                        new CommandContext<TAggregatePayload>(
-                            aggregate,
-                            projector,
-                            EventTypes,
-                            commandMetadata,
-                            serviceProvider)))
+                .Conveyor(aggregate => ResultBox<ICommandContextWithoutState>.FromValue(
+                    new CommandContext<TAggregatePayload>(
+                        aggregate,
+                        projector,
+                        EventTypes,
+                        commandMetadata,
+                        serviceProvider)))
         };
 
     private ExceptionOrNone VerifyAggregateType<TCommand, TAggregatePayload>(TCommand command, Aggregate aggregate)

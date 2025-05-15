@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Serialization;
 using System.Runtime.Serialization;
-using System.Text.Json;
 namespace Sekiban.Pure.Orleans.Parts;
 
 public static class SekibanSerializationTypesChecker
@@ -52,7 +51,7 @@ public static class SekibanSerializationTypesChecker
     {
         foreach (var type in domainTypes.QueryTypes.GetQueryResponseTypes())
         {
-            CheckTypeSerializability(type, domainTypes,false);
+            CheckTypeSerializability(type, domainTypes, false);
         }
     }
 
