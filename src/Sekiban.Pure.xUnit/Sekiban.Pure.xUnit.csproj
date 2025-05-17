@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.xUnit</PackageId>
-        <Version>1.0.1-preview12</Version>
+        <Version>1.0.1-preview13</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework xUnit Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview12</PackageVersion>
+        <PackageVersion>1.0.1-preview13</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.xUnit</AssemblyName>
         <RootNamespace>Sekiban.Pure.xUnit</RootNamespace>
@@ -34,7 +34,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview12"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview13"/>
     </ItemGroup>
 
 </Project>

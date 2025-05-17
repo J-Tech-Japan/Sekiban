@@ -139,7 +139,11 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
 
     private Task Enqueue(IEvent e)
     {
-        _buffer.Add(e);
+        // 同じSortableUniqueIdを持つイベントが既にバッファにあるかチェック
+        if (!_buffer.Any(existingEvent => existingEvent.SortableUniqueId == e.SortableUniqueId))
+        {
+            _buffer.Add(e);
+        }
         return Task.CompletedTask;
     }
 
@@ -255,7 +259,14 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         LogState();
         if (events.Count > 0)
         {
-            _buffer.AddRange(events);
+            // 重複チェックを行いながら追加
+            foreach (var e in events)
+            {
+                if (!_buffer.Any(existingEvent => existingEvent.SortableUniqueId == e.SortableUniqueId))
+                {
+                    _buffer.Add(e);
+                }
+            }
             FlushBuffer();
         }
         _logger.LogInformation("Catch Up Finished {count} events", events.Count);
