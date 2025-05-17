@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exceptions;
 namespace Sekiban.Pure.Projectors;
@@ -44,14 +45,13 @@ public record MultiProjectionState<TMultiProjector>(
     {
         return Payload
             .Project(Payload, ev)
-            .Remap(
-                p => this with
-                {
-                    Payload = p,
-                    LastEventId = ev.Id,
-                    LastSortableUniqueId = ev.SortableUniqueId,
-                    Version = Version + 1
-                });
+            .Remap(p => this with
+            {
+                Payload = p,
+                LastEventId = ev.Id,
+                LastSortableUniqueId = ev.SortableUniqueId,
+                Version = Version + 1
+            });
     }
 }
 public record MultiProjectionState(
@@ -62,4 +62,6 @@ public record MultiProjectionState(
     int AppliedSnapshotVersion,
     string RootPartitionKey) : IMultiProjectorStateCommon
 {
+    public SortableUniqueIdValue GetLastSortableUniqueId() => string.IsNullOrEmpty(LastSortableUniqueId) ? SortableUniqueIdValue.MinValue : 
+        new(LastSortableUniqueId);
 }

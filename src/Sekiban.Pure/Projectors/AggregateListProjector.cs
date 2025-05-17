@@ -3,13 +3,14 @@ using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using System.Collections.Immutable;
-using System.Text.Json;
 namespace Sekiban.Pure.Projectors;
 
 public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<PartitionKeys, Aggregate> Aggregates)
-    : IMultiProjector<AggregateListProjector<TAggregateProjector>>
+    : IMultiProjector<AggregateListProjector<TAggregateProjector>>, IAggregateListProjectorAccessor
     where TAggregateProjector : IAggregateProjector, new()
 {
+
+    public IList<Aggregate> GetAggregates() => Aggregates.Values.ToList();
     public static AggregateListProjector<TAggregateProjector> GenerateInitialPayload() =>
         new(ImmutableDictionary<PartitionKeys, Aggregate>.Empty);
     public ResultBox<AggregateListProjector<TAggregateProjector>> Project(
@@ -33,5 +34,4 @@ public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<Pa
     public static string GetMultiProjectorName() => typeof(AggregateListProjector<TAggregateProjector>).Name +
         "+" +
         typeof(TAggregateProjector).Name;
-
 }

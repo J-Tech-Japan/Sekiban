@@ -15,6 +15,11 @@ public interface IMultiProjectorTypes
     ResultBox<string> GetMultiProjectorNameFromMultiProjector(IMultiProjectorCommon multiProjector);
     IMultiProjectorStateCommon ToTypedState(MultiProjectionState state);
     List<Type> GetMultiProjectorTypes();
-    public Task<ResultBox<string>> GetSerialisedMultiProjector(IMultiProjectorCommon multiProjector, SekibanDomainTypes domainTypes);
-    public Task<ResultBox<IMultiProjectorCommon>> GetSerialisedMultiProjector(string json, string typeFullName, SekibanDomainTypes domainTypes);
+    public Task<ResultBox<string>> GetSerialisedMultiProjector(
+        IMultiProjectorCommon multiProjector,
+        SekibanDomainTypes domainTypes);
+    public Task<ResultBox<IMultiProjectorCommon>> GetSerialisedMultiProjector(
+        string json,
+        string typeFullName,
+        SekibanDomainTypes domainTypes);
 }

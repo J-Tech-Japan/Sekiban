@@ -117,6 +117,8 @@ public record SortableUniqueIdValue(string Value)
     public static SortableUniqueIdValue? NullableValue(string? value) =>
         value != null ? new SortableUniqueIdValue(value) : null;
 
+    public static SortableUniqueIdValue MinValue => Generate(DateTime.MinValue, Guid.Empty);
+    
     public static OptionalValue<SortableUniqueIdValue> OptionalValue(string? value) =>
         !string.IsNullOrWhiteSpace(value)
             ? new SortableUniqueIdValue(value)
