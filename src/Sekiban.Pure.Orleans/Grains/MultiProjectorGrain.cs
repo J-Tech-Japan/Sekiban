@@ -21,6 +21,7 @@ namespace Sekiban.Pure.Orleans.Grains;
 /// Projection grain that maintains a multi‑projection state and is fed by an Orleans stream.
 /// スナップショット保存は 5 分ごとのバックグラウンド‑タイマーで行う。
 /// </summary>
+[ImplicitStreamSubscription("AllEvents")]
 public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 {
     // ---------- Tunables ----------
