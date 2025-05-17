@@ -21,7 +21,6 @@ namespace Sekiban.Pure.Orleans.Grains;
 /// Projection grain that maintains a multi‑projection state and is fed by an Orleans stream.
 /// スナップショット保存は 5 分ごとのバックグラウンド‑タイマーで行う。
 /// </summary>
-[ImplicitStreamSubscription("AllEvents")]
 public class MultiProjectorGrain : Grain, IMultiProjectorGrain
 {
     // ---------- Tunables ----------
@@ -67,27 +66,33 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
     {
         await base.OnActivateAsync(ct);
 
-        // 1) restore snapshot
+        _logger.LogInformation("restore snapshot"); 
         await _persistentState.ReadStateAsync(ct);
         if (_persistentState.RecordExists && _persistentState.State is not null)
         {
             var restored = await _persistentState.State.ToMultiProjectionStateAsync(_domainTypes);
             if (restored.HasValue) _safeState = restored.Value;
+            _logger.LogInformation("restored snapshot {SafeState}", _safeState?.ProjectorCommon.GetType().Name ?? "error");
         }
 
         // 2) catch‑up
+        _logger.LogInformation("catch up from store");
         await CatchUpFromStoreAsync();
 
         // 3) subscribe stream
+        _logger.LogInformation("subscribe stream");
         _eventStream = this.GetStreamProvider("EventStreamProvider").GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
         _subscription = await _eventStream.SubscribeAsync(OnStreamEventAsync, OnStreamErrorAsync, OnStreamCompletedAsync);
 
         // 4) snapshot timer
+        _logger.LogInformation("start snapshot timer");
         _persistTimer = RegisterTimer(_ => PersistTick(), null, PersistInterval, PersistInterval);
 
         _bootstrapping = false;
         _streamActive = true;
+        _logger.LogInformation("stream active");
         FlushBuffer();
+        _logger.LogInformation("stream buffer flushed");
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken token)
