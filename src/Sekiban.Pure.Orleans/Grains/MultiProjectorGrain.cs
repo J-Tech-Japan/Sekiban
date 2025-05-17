@@ -62,6 +62,26 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
 
     #region Activation / Deactivation
 
+    private void LogState()
+    {
+        _logger.LogInformation("SafeState {SafeState}", _safeState?.ProjectorCommon.GetType().Name ?? "error");
+        _logger.LogInformation("SafeState Version {SafeState}", _safeState?.Version.ToString() ?? "error");
+        // _logger.LogInformation("SafeState Last SortableUniqueId {SafeState}", _safeState?.LastSortableUniqueId ?? "error");
+        // _logger.LogInformation("SafeState Last EventId {SafeState}", _safeState?.LastEventId.ToString() ?? "error");
+        if (_safeState?.ProjectorCommon is IAggregateListProjectorAccessor accessor)
+        {
+            _logger.LogInformation("SafeState list count {Count}", accessor.GetAggregates().Count);
+        }
+        _logger.LogInformation("UnsafeState {SafeState}", _unsafeState?.ProjectorCommon.GetType().Name ?? "error");
+        _logger.LogInformation("UnsafeState Version {SafeState}", _unsafeState?.Version.ToString() ?? "error");
+        // _logger.LogInformation("UnsafeState Last SortableUniqueId {SafeState}", _unsafeState?.LastSortableUniqueId ?? "error");
+        // _logger.LogInformation("UnsafeState Last EventId {SafeState}", _unsafeState?.LastEventId.ToString() ?? "error");
+        if (_unsafeState?.ProjectorCommon is IAggregateListProjectorAccessor accessorUnsafe)
+        {
+            _logger.LogInformation("UnsafeState list count {Count}", accessorUnsafe.GetAggregates().Count);
+        }
+    }
+
     public override async Task OnActivateAsync(CancellationToken ct)
     {
         await base.OnActivateAsync(ct);
@@ -72,27 +92,20 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         {
             var restored = await _persistentState.State.ToMultiProjectionStateAsync(_domainTypes);
             if (restored.HasValue) _safeState = restored.Value;
-            _logger.LogInformation("restored snapshot {SafeState}", _safeState?.ProjectorCommon.GetType().Name ?? "error");
+            LogState();
         }
 
         // 2) catch‑up
         _logger.LogInformation("catch up from store");
         await CatchUpFromStoreAsync();
+        LogState();
 
         // 4) snapshot timer
         _logger.LogInformation("start snapshot timer");
         
         // 必要に応じてこちらに修正（Orleans 9の最新API）
-        // _persistTimer = this.RegisterGrainTimer(_ => PersistTick(), null, new() 
-        // { 
-        //     DueTime = PersistInterval, 
-        //     Period = PersistInterval, 
-        //     Interleave = true 
-        // });
+        _persistTimer = this.RegisterGrainTimer(_ => PersistTick(), PersistInterval, PersistInterval);
         
-        // 互換性のためにこのままにしておく
-        _persistTimer = this.RegisterTimer(_ => PersistTick(), null, PersistInterval, PersistInterval);
-
         // ストリーム初期化はライフサイクルコールバックで行うため、ここでは行わない
         _bootstrapping = false;
     }
@@ -144,6 +157,9 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
 
     private void FlushBuffer()
     {
+        _logger.LogInformation("Start flush buffer {count} events", _buffer.Count);
+        LogState();
+
         if (_safeState is null && _unsafeState is null)
         {
             InitializeState();
@@ -159,17 +175,22 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         });
         
         // safeBorderを計算
-        var safeBorder = new SortableUniqueIdValue((DateTime.UtcNow - SafeStateWindow).ToString("O"));
-        
+        var safeBorderId = SortableUniqueIdValue.Generate((DateTime.UtcNow - SafeStateWindow), Guid.Empty);
+        var safeBorder = new SortableUniqueIdValue(safeBorderId);
         // safeBorderより古いイベントのインデックスを探す
         int splitIndex = _buffer.FindLastIndex(e => 
             new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
         
+        _logger.LogInformation("Splitted Total {count} events", _buffer.Count);
+        _logger.LogInformation("SplitIndex {count} events", splitIndex);
+        
         // 古いイベントがあれば処理
         if (splitIndex >= 0)
         {
+            _logger.LogInformation("Working on old events");
+            var sortableUniqueIdFrom = _safeState?.GetLastSortableUniqueId() ?? SortableUniqueIdValue.MinValue;   
             // 古いイベントを取得
-            var oldEvents = _buffer.Take(splitIndex + 1).ToList();
+            var oldEvents = _buffer.Take(splitIndex + 1).Where(e => (new SortableUniqueIdValue(e.SortableUniqueId)).IsLaterThan(sortableUniqueIdFrom)).ToList();
             
             // _safeStateに適用
             var newSafeState = _domainTypes.MultiProjectorsType.Project(_safeState?.ProjectorCommon ?? projector, oldEvents).UnwrapBox();
@@ -188,7 +209,9 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
             // スナップショット更新フラグをセット
             _pendingSave = true;
         }
-        
+
+        _logger.LogInformation("After worked old events Total {count} events", _buffer.Count);
+
         // バッファに残っているイベント（新しいイベント）があり、かつ_safeStateが初期化されていれば
         if (_buffer.Any() && _safeState != null)
         {
@@ -207,6 +230,8 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
             _unsafeState = null;
         }
         // 注意: バッファの残りのイベントは削除せず、保持しておく
+        _logger.LogInformation("Finish flush buffer {count} events", _buffer.Count);
+        LogState();
     }
 
     #endregion
@@ -225,37 +250,19 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
                     new SortableUniqueIdValue(lastId), 
                     new SortableUniqueIdValue(SortableUniqueIdValue.Generate(DateTime.UtcNow.AddSeconds(10), Guid.Empty)))
         };
-
         var events = (await _eventReader.GetEvents(retrieval)).UnwrapBox().ToList();
-        if (events.Count > 0) await UpdateProjectionAsync(events, projector);
+        _logger.LogInformation("Catch Up Starting Events {count} events", events.Count);
+        LogState();
+        if (events.Count > 0)
+        {
+            _buffer.AddRange(events);
+            FlushBuffer();
+        }
+        _logger.LogInformation("Catch Up Finished {count} events", events.Count);
+        LogState();
     }
 
-    private Task ApplyEventAsync(IEvent evt) =>
-        UpdateProjectionAsync(new List<IEvent> { evt }, GetProjectorFromName());
 
-    private async Task UpdateProjectionAsync(List<IEvent> events, IMultiProjectorCommon projector)
-    {
-        if (!events.Any()) return;
-
-        var safeBorder = new SortableUniqueIdValue((DateTime.UtcNow - SafeStateWindow).ToString("O"));
-        var lastEvt = events.Last();
-        bool allSafe = new SortableUniqueIdValue(lastEvt.SortableUniqueId).IsEarlierThan(safeBorder);
-
-        if (allSafe)
-        {
-            var newState = _domainTypes.MultiProjectorsType.Project(projector, events).UnwrapBox();
-            _safeState = new MultiProjectionState(newState, lastEvt.Id, lastEvt.SortableUniqueId, (_safeState?.Version ?? 0) + 1, 0, _safeState?.RootPartitionKey ?? "default");
-            _unsafeState = null;
-            _pendingSave = true;
-        }
-        else
-        {
-            var split = events.FindLastIndex(e => new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
-            if (split >= 0) await UpdateProjectionAsync(events.Take(split + 1).ToList(), projector);
-            var newProj = _domainTypes.MultiProjectorsType.Project(projector, events.Skip(split + 1).ToList()).UnwrapBox();
-            _unsafeState = new MultiProjectionState(newProj, lastEvt.Id, lastEvt.SortableUniqueId, (_safeState?.Version ?? 0) + 1, 0, _safeState?.RootPartitionKey ?? "default");
-        }
-    }
 
     private Task PersistTick()
     {
@@ -271,8 +278,17 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
     private async Task PersistStateAsync(MultiProjectionState? state)
     {
         if (state is null) return;
-        _persistentState.State = await SerializableMultiProjectionState.CreateFromAsync(state, _domainTypes);
-        await _persistentState.WriteStateAsync();
+        if (state.Version == 0) return;
+        _logger.LogInformation("Persisting state {version}", state.Version);
+        if (_persistentState.State is null || _persistentState.State.Version != state.Version)
+        {
+            _persistentState.State = await SerializableMultiProjectionState.CreateFromAsync(state, _domainTypes);
+            await _persistentState.WriteStateAsync();
+            _logger.LogInformation("Persisting state written {version}", state.Version);
+        } else
+        {
+            _logger.LogInformation("Persisting state not written {version}", state.Version);
+        }
     }
 
     #endregion
@@ -340,19 +356,15 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
     {
         if (_streamActive)
         {
-            // ストリームアクティブの場合はバッファを処理
-            // 新しいFlushBuffer実装により、古いイベントは_safeStateに適用され、
-            // 新しいイベントは_unsafeStateに適用される
+            _logger.LogInformation("stream active, flush buffer {count} events", _buffer.Count);
             FlushBuffer();
+            _logger.LogInformation("stream active, flush buffer finished {count} events", _buffer.Count);
         }
         else
         {
-            // ストリームが非アクティブの場合はイベントストアから読み込む
+            _logger.LogInformation("stream inactive, catch up from store");
             await CatchUpFromStoreAsync();
-            
-            // この時点でまだストリームが初期化されていない場合、初期のクエリが発生している可能性がある
-            // ライフサイクルベースの初期化を待たずに処理を続行するため、オプションとしてこの時点で
-            // _safeStateを使用して処理を続行する
+            _logger.LogInformation("stream inactive, catch up from store finished");
         }
         return _unsafeState ?? _safeState ?? throw new InvalidOperationException("State not initialized");
     }
