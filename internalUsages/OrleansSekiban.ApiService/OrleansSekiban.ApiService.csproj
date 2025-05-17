@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
+    <UserSecretsId>e520a00e-03d2-4a9c-8287-b84062005bf0</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,9 +31,9 @@
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.1.17" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.1.2" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview10" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview11" />
     <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.0-preview9" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview10" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview11" />
   </ItemGroup>
 
 </Project>

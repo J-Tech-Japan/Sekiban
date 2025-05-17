@@ -3,8 +3,8 @@ using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var storage = builder.AddAzureStorage("azurestorage")
-    // .RunAsEmulator(opt => opt.WithDataVolume());
-    .RunAsEmulator();
+    .RunAsEmulator(opt => opt.WithDataVolume());
+    // .RunAsEmulator();
     // .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0")); // no need this line for new template
     var clusteringTable = storage.AddTables("OrleansSekibanClustering");
     var grainTable = storage.AddTables("OrleansSekibanGrainTable");
@@ -15,7 +15,7 @@ var storage = builder.AddAzureStorage("azurestorage")
 
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres")
-    // .WithDataVolume() // Uncomment to use a data volume
+    .WithDataVolume() // Uncomment to use a data volume
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
 
