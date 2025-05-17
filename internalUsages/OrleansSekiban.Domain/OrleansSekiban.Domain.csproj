@@ -10,7 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Orleans.Server" Version="9.1.2" />
-      <PackageReference Include="Sekiban.Pure" Version="1.0.0-preview9" />
+      <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview13" />
     </ItemGroup>
 
     <ItemGroup>
