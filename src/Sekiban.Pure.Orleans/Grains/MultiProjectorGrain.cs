@@ -21,7 +21,7 @@ namespace Sekiban.Pure.Orleans.Grains;
 /// Projection grain that maintains a multi‑projection state and is fed by an Orleans stream.
 /// スナップショット保存は 5 分ごとのバックグラウンド‑タイマーで行う。
 /// </summary>
-public class MultiProjectorGrain : Grain, IMultiProjectorGrain
+public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecycleParticipant<IGrainLifecycle>
 {
     // ---------- Tunables ----------
     private static readonly TimeSpan SafeStateWindow = TimeSpan.FromSeconds(7);
@@ -79,26 +79,28 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         _logger.LogInformation("catch up from store");
         await CatchUpFromStoreAsync();
 
-        // 3) subscribe stream
-        _logger.LogInformation("subscribe stream");
-        _eventStream = this.GetStreamProvider("EventStreamProvider").GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
-        _subscription = await _eventStream.SubscribeAsync(OnStreamEventAsync, OnStreamErrorAsync, OnStreamCompletedAsync);
-
         // 4) snapshot timer
         _logger.LogInformation("start snapshot timer");
-        _persistTimer = RegisterTimer(_ => PersistTick(), null, PersistInterval, PersistInterval);
+        
+        // 必要に応じてこちらに修正（Orleans 9の最新API）
+        // _persistTimer = this.RegisterGrainTimer(_ => PersistTick(), null, new() 
+        // { 
+        //     DueTime = PersistInterval, 
+        //     Period = PersistInterval, 
+        //     Interleave = true 
+        // });
+        
+        // 互換性のためにこのままにしておく
+        _persistTimer = this.RegisterTimer(_ => PersistTick(), null, PersistInterval, PersistInterval);
 
+        // ストリーム初期化はライフサイクルコールバックで行うため、ここでは行わない
         _bootstrapping = false;
-        _streamActive = true;
-        _logger.LogInformation("stream active");
-        FlushBuffer();
-        _logger.LogInformation("stream buffer flushed");
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken token)
     {
         _persistTimer?.Dispose();
-        if (_subscription is not null) await _subscription.UnsubscribeAsync();
+        // ストリームの購読解除はCloseStreamsAsyncで行われるため、ここでは行わない
         if (_pendingSave) await PersistStateAsync(_safeState);
         _streamActive = false;
         await base.OnDeactivateAsync(reason, token);
@@ -347,6 +349,10 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
         {
             // ストリームが非アクティブの場合はイベントストアから読み込む
             await CatchUpFromStoreAsync();
+            
+            // この時点でまだストリームが初期化されていない場合、初期のクエリが発生している可能性がある
+            // ライフサイクルベースの初期化を待たずに処理を続行するため、オプションとしてこの時点で
+            // _safeStateを使用して処理を続行する
         }
         return _unsafeState ?? _safeState ?? throw new InvalidOperationException("State not initialized");
     }
@@ -358,5 +364,47 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain
                new ApplicationException("No state available");
     }
 
+    #endregion
+
+    #region ILifecycleParticipant implementation
+    
+    /// <summary>
+    /// Grainのライフサイクルに参加するためのメソッド。
+    /// Activateステージ後に実行される独自のステージを登録する。
+    /// </summary>
+    /// <param name="lifecycle">グレインのライフサイクル</param>
+    public void Participate(IGrainLifecycle lifecycle)
+    {
+        // Activateステージの直後、Lastの前に実行されるカスタムステージ
+        var stage = GrainLifecycleStage.Activate + 100;
+        lifecycle.Subscribe(this.GetType().FullName!, stage, InitStreamsAsync, CloseStreamsAsync);
+    }
+    
+    /// <summary>
+    /// ストリームを初期化するメソッド。
+    /// Activateステージの後に実行される。
+    /// </summary>
+    private async Task InitStreamsAsync(CancellationToken ct)
+    {
+        _logger.LogInformation("subscribe stream");
+        _eventStream = this.GetStreamProvider("EventStreamProvider").GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
+        _subscription = await _eventStream.SubscribeAsync(OnStreamEventAsync, OnStreamErrorAsync, OnStreamCompletedAsync);
+        
+        _bootstrapping = false;
+        _streamActive = true;
+        _logger.LogInformation("stream active");
+        FlushBuffer();
+        _logger.LogInformation("stream buffer flushed");
+    }
+    
+    /// <summary>
+    /// ストリームをクリーンアップするメソッド。
+    /// グレインの非アクティブ化時に実行される。
+    /// </summary>
+    private Task CloseStreamsAsync(CancellationToken ct)
+    {
+        return _subscription?.UnsubscribeAsync() ?? Task.CompletedTask;
+    }
+    
     #endregion
 }
