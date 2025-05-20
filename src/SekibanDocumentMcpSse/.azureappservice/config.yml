@@ -1,0 +1,7 @@
+name: SekibanDocumentMcp
+location: japaneast
+deploy:
+  path: ../
+tags:
+  environment: production
+  application: sekibandocumentmcp
