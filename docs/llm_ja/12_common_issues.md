@@ -13,6 +13,7 @@
 > - [Orleansセットアップ](10_orleans_setup.md)
 > - [ユニットテスト](11_unit_testing.md)
 > - [一般的な問題と解決策](12_common_issues.md) (現在のページ)
+> - [ResultBox](13_result_box.md)
 
 ## 一般的な問題と解決策
 
