@@ -359,3 +359,96 @@ public class TodoItemProjector : IAggregateProjector
         };
 }
 ```
+
+## Multiple Projectors for Single Aggregate
+
+One powerful feature of Sekiban is the ability to use multiple projectors on the same event stream. As long as the PartitionKeys align, you can create different views of the same events using different projectors.
+
+### Using LoadAggregateAsync for Multiple Projections
+
+The `LoadAggregateAsync` method on `SekibanOrleansExecutor` allows you to load an aggregate using any projector that shares the same stream structure:
+
+```csharp
+using Sekiban.Pure.Executors;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.ResultBoxes;
+using System.Threading.Tasks;
+using System;
+
+// First, load with the primary projector
+var partitionKeys = PartitionKeys.Existing<UserProjector>(userId);
+var result = await sekibanExecutor.LoadAggregateAsync<UserProjector>(partitionKeys);
+
+// Then load the same events with a different projector
+var userActivityResult = await sekibanExecutor.LoadAggregateAsync<UserActivityProjector>(partitionKeys);
+
+// Both projections use the same events but produce different views
+if (result.IsSuccess && userActivityResult.IsSuccess)
+{
+    var user = result.GetValue().GetPayload();  // Standard user projection
+    var activity = userActivityResult.GetValue().GetPayload();  // Activity-focused projection
+    
+    // Work with both projections...
+}
+```
+
+### Example: Multiple Projections for User Data
+
+```csharp
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
+using System;
+using System.Collections.Generic;
+
+// Standard user projector
+public class UserProjector : IAggregateProjector
+{
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)
+        => (payload, ev.GetPayload()) switch
+        {
+            (EmptyAggregatePayload, UserCreated e) => new User(e.Name, e.Email),
+            (User user, EmailChanged e) => user with { Email = e.NewEmail },
+            _ => payload
+        };
+}
+
+// Activity-focused projector for the same events
+public class UserActivityProjector : IAggregateProjector
+{
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)
+    {
+        var activityLog = payload is UserActivity activity 
+            ? activity.ActivityLog 
+            : new List<UserActivityEntry>();
+            
+        // Add new activity based on event type
+        switch (ev.GetPayload())
+        {
+            case UserCreated:
+                activityLog.Add(new UserActivityEntry(ev.Timestamp, "User Created"));
+                break;
+            case EmailChanged e:
+                activityLog.Add(new UserActivityEntry(ev.Timestamp, $"Email changed to {e.NewEmail}"));
+                break;
+            case UserConfirmed:
+                activityLog.Add(new UserActivityEntry(ev.Timestamp, "Account confirmed"));
+                break;
+        }
+        
+        return new UserActivity(activityLog);
+    }
+}
+
+public record UserActivity(List<UserActivityEntry> ActivityLog) : IAggregatePayload;
+public record UserActivityEntry(DateTime Timestamp, string Activity);
+```
+
+**Benefits of Multiple Projectors**:
+
+1. **Different perspectives**: View the same event stream from different angles
+2. **Specialized projections**: Create task-specific views of the same data
+3. **Separation of concerns**: Keep your primary aggregate model clean while adding specialized views
+4. **Evolving models**: Add new projectors without changing existing ones
+```
