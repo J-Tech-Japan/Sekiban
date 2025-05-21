@@ -114,6 +114,12 @@ public record EventHistoryItem(Guid Id, DateTime Timestamp, int Version, string 
 You can create custom multi-projectors to maintain specialized views of your domain:
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Projectors;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 [GenerateSerializer]
 public class OrderStatisticsProjector : IMultiProjector
 {

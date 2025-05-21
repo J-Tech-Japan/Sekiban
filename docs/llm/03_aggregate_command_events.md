@@ -19,6 +19,9 @@
 An aggregate is a domain entity that encapsulates state and business rules. In Sekiban, aggregates are implemented as immutable records:
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+
 [GenerateSerializer]
 public record YourAggregate(...properties...) : IAggregatePayload
 {
@@ -34,6 +37,9 @@ public record YourAggregate(...properties...) : IAggregatePayload
 ### Example: User Aggregate
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+
 [GenerateSerializer]
 public record User(string Name, string Email, bool IsConfirmed = false) : IAggregatePayload
 {
@@ -49,6 +55,12 @@ public record User(string Name, string Email, bool IsConfirmed = false) : IAggre
 Commands represent user intentions to change system state. They are implemented as records with handlers:
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.ResultBoxes;
+
 [GenerateSerializer]
 public record YourCommand(...parameters...) 
     : ICommandWithHandler<YourCommand, YourAggregateProjector>
@@ -78,6 +90,13 @@ public record YourCommand(...parameters...)
 ### Example: Create User Command
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.ResultBoxes;
+
 [GenerateSerializer]
 public record CreateUser(string Name, string Email) 
     : ICommandWithHandler<CreateUser, UserProjector>
@@ -95,6 +114,14 @@ public record CreateUser(string Name, string Email)
 You can specify a third generic parameter to enforce state-based constraints at the type level:
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.ResultBoxes;
+using System;
+
 [GenerateSerializer]
 public record RevokeUser(Guid UserId) 
     : ICommandWithHandler<RevokeUser, UserProjector, ConfirmedUser>
@@ -122,6 +149,11 @@ There are two ways to access the aggregate payload in command handlers, dependin
 
 1. **With Type Constraint (Three Generic Parameters)**:
    ```csharp
+   using Sekiban.Pure.Aggregates;
+   using Sekiban.Pure.Command.Handlers;
+   using Sekiban.Pure.Events;
+   using Sekiban.Pure.ResultBoxes;
+
    // Using ICommandWithHandler<TCommand, TProjector, TAggregatePayload>
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<ConfirmedUser> context)
    {
@@ -138,6 +170,11 @@ There are two ways to access the aggregate payload in command handlers, dependin
 
 2. **Without Type Constraint (Two Generic Parameters)**:
    ```csharp
+   using Sekiban.Pure.Aggregates;
+   using Sekiban.Pure.Command.Handlers;
+   using Sekiban.Pure.Events;
+   using Sekiban.Pure.ResultBoxes;
+
    // Using ICommandWithHandler<TCommand, TProjector>
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
    {
@@ -162,6 +199,11 @@ The three-parameter version is preferred when you know the exact state the aggre
 If a command needs to generate multiple events, you can use the `AppendEvent` method on the command context:
 
 ```csharp
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.ResultBoxes;
+
 public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAggregatePayload> context)
 {
     // First, append events one by one
@@ -199,6 +241,9 @@ Events contain two parts:
 
 2. **Event Payload** (defined by developers):
    ```csharp
+   using Orleans.Serialization.Attributes;
+   using Sekiban.Pure.Events;
+
    [GenerateSerializer]
    public record YourEvent(...parameters...) : IEventPayload;
    ```
@@ -212,6 +257,9 @@ Events contain two parts:
 ### Example: User Events
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Events;
+
 [GenerateSerializer]
 public record UserCreated(string Name, string Email) : IEventPayload;
 
@@ -228,6 +276,8 @@ public record EmailChanged(string NewEmail) : IEventPayload;
 ## PartitionKeys Structure
 
 ```csharp
+using Sekiban.Pure.Documents;
+
 public class PartitionKeys
 {
     string RootPartitionKey;  // Optional tenant key for multi-tenancy
@@ -238,6 +288,8 @@ public class PartitionKeys
 
 **Usage in Commands**:
 ```csharp
+using Sekiban.Pure.Documents;
+
 // For new aggregates:
 public PartitionKeys SpecifyPartitionKeys(YourCommand command) => 
     PartitionKeys.Generate<YourProjector>();
@@ -252,6 +304,10 @@ public PartitionKeys SpecifyPartitionKeys(YourCommand command) =>
 Projectors build the current state by applying events to aggregates:
 
 ```csharp
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
+
 // Example of state transitions in projector
 public class UserProjector : IAggregateProjector
 {
@@ -281,6 +337,10 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 ### Example: Todo Item Projector
 
 ```csharp
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
+
 public class TodoItemProjector : IAggregateProjector
 {
     public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)

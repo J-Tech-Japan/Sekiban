@@ -110,12 +110,18 @@ Let's create a minimal Todo application domain:
 
 1. Create a TodoItem aggregate payload:
    ```csharp
+   using Orleans.Serialization.Attributes;
+   using Sekiban.Pure.Aggregates;
+
    [GenerateSerializer]
    public record TodoItem(string Title, bool IsCompleted = false) : IAggregatePayload;
    ```
 
 2. Create TodoItem events:
    ```csharp
+   using Orleans.Serialization.Attributes;
+   using Sekiban.Pure.Events;
+
    [GenerateSerializer]
    public record TodoItemCreated(string Title) : IEventPayload;
    
@@ -125,6 +131,13 @@ Let's create a minimal Todo application domain:
 
 3. Create TodoItem commands:
    ```csharp
+   using Orleans.Serialization.Attributes;
+   using Sekiban.Pure.Aggregates;
+   using Sekiban.Pure.Command.Handlers;
+   using Sekiban.Pure.Documents;
+   using Sekiban.Pure.Events;
+   using Sekiban.Pure.ResultBoxes;
+
    [GenerateSerializer]
    public record CreateTodoItem(string Title) 
        : ICommandWithHandler<CreateTodoItem, TodoItemProjector>
@@ -139,6 +152,10 @@ Let's create a minimal Todo application domain:
 
 4. Create TodoItem projector:
    ```csharp
+   using Sekiban.Pure.Aggregates;
+   using Sekiban.Pure.Events;
+   using Sekiban.Pure.Projectors;
+
    public class TodoItemProjector : IAggregateProjector
    {
        public IAggregatePayload Project(IAggregatePayload payload, IEvent ev)

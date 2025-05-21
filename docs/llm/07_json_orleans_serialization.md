@@ -19,6 +19,10 @@
 In Sekiban, JSON serialization is handled through System.Text.Json's source generators for Ahead-of-Time (AOT) compilation. This provides better performance and compatibility with Native AOT scenarios.
 
 ```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Sekiban.Core.Events;
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(EventDocumentCommon))]
 [JsonSerializable(typeof(EventDocumentCommon[]))]

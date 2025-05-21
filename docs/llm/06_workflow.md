@@ -27,6 +27,13 @@ Domain workflows are stateless services that implement business processes that m
 3. **Reusable Business Logic**: When the same logic is used in multiple places
 
 ```csharp
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Executors;
+using Sekiban.Pure.Query;
+using Sekiban.Pure.ResultBoxes;
+using System;
+using System.Threading.Tasks;
+
 // Example of a domain workflow for duplicate checking
 namespace YourProject.Domain.Workflows;
 

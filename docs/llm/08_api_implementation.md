@@ -19,6 +19,16 @@
 ### Basic Setup Pattern
 
 ```csharp
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Sekiban.Core.Command;
+using Sekiban.Core.Query;
+using Sekiban.Infrastructure.Helpers;
+using YourProject.Domain;
+using YourProject.Domain.Generated;
+
 // Program.cs
 var builder = WebApplication.CreateBuilder(args);
 

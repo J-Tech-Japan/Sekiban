@@ -32,6 +32,15 @@ dotnet add package Sekiban.Testing
 The simplest approach uses the `SekibanInMemoryTestBase` class from the `Sekiban.Pure.xUnit` namespace:
 
 ```csharp
+using Sekiban.Pure;
+using Sekiban.Pure.xUnit;
+using System;
+using Xunit;
+using YourProject.Domain;
+using YourProject.Domain.Aggregates.YourEntity.Commands;
+using YourProject.Domain.Aggregates.YourEntity.Payloads;
+using YourProject.Domain.Generated;
+
 public class YourTests : SekibanInMemoryTestBase
 {
     // Override to provide your domain types

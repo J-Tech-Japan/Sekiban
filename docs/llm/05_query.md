@@ -23,6 +23,15 @@ Sekiban supports two types of queries: List Queries and Non-List Queries.
 List Queries return collections of items and support filtering and sorting operations.
 
 ```csharp
+using Orleans.Serialization.Attributes;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Query;
+using Sekiban.Pure.ResultBoxes;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 [GenerateSerializer]
 public record YourListQuery(string FilterParameter = null)
     : IMultiProjectionListQuery<AggregateListProjector<YourAggregateProjector>, YourListQuery, YourListQuery.ResultRecord>
