@@ -1,220 +1,383 @@
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 
 namespace SekibanDocumentMcpSse;
 
-public class SekibanDocumentService
+/// <summary>
+/// Service for handling Sekiban documentation
+/// </summary>
+public class SekibanDocumentService : IDisposable
 {
-    private readonly ILogger<SekibanDocumentService> logger;
-    private readonly IConfiguration configuration;
-    private readonly IHostEnvironment environment;
-    private List<DocumentationItem> documentationItems = new();
-    private List<CodeSample> codeSamples = new();
-    private bool isInitialized = false;
+    private readonly ILogger<SekibanDocumentService> _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly MarkdownReader _markdownReader;
+    private readonly DocumentationOptions _options;
+    private readonly IWebHostEnvironment _environment;
+    private List<MarkdownDocument> _documents = new();
+    private bool _isInitialized;
+    private FileSystemWatcher? _fileWatcher;
 
+    /// <summary>
+    /// Constructor
+    /// </summary>
     public SekibanDocumentService(
         ILogger<SekibanDocumentService> logger,
-        IConfiguration configuration,
-        IHostEnvironment environment)
+        ILoggerFactory loggerFactory,
+        IOptions<DocumentationOptions> options,
+        IWebHostEnvironment environment)
     {
-        this.logger = logger;
-        this.configuration = configuration;
-        this.environment = environment;
+        _logger = logger;
+        _loggerFactory = loggerFactory;
+        _options = options.Value;
+        _environment = environment;
+        
+        // Resolve base path - use absolute path if provided, otherwise combine with content root
+        string docsBasePath = _options.BasePath;
+        if (!Path.IsPathRooted(docsBasePath))
+        {
+            docsBasePath = Path.Combine(_environment.ContentRootPath, docsBasePath);
+        }
+        
+        _markdownReader = new MarkdownReader(
+            _loggerFactory.CreateLogger<MarkdownReader>(),
+            docsBasePath);
     }
 
-    public async Task Initialize()
+    /// <summary>
+    /// Initialize the service and load all documents
+    /// </summary>
+    public async Task InitializeAsync()
     {
-        if (isInitialized) return;
+        if (_isInitialized) return;
 
         try
         {
-            // Read documentation from embedded resource or file system
-            var docPath = Path.Combine(environment.ContentRootPath, "Documentation", "README_Sekiban_Pure_For_LLM.md");
-            if (File.Exists(docPath))
+            _documents = await _markdownReader.ReadAllDocumentsAsync();
+            _logger.LogInformation("Loaded {Count} Markdown documents", _documents.Count);
+            
+            if (_options.EnableFileWatcher)
             {
-                var content = await File.ReadAllTextAsync(docPath);
-                ParseDocumentation(content);
+                SetupFileWatcher();
             }
-            else
-            {
-                logger.LogWarning("Documentation file not found at: {DocPath}", docPath);
-                // Use embedded documentation as fallback
-                var embeddedContent = GetEmbeddedDocumentation();
-                ParseDocumentation(embeddedContent);
-            }
-
-            isInitialized = true;
+            
+            _isInitialized = true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to initialize documentation");
+            _logger.LogError(ex, "Failed to initialize documentation service");
             throw;
         }
     }
-
-    private string GetEmbeddedDocumentation()
+    
+    /// <summary>
+    /// Setup file watcher to reload documents when they change
+    /// </summary>
+    private void SetupFileWatcher()
     {
-        // This would be the documentation content embedded in the assembly
-        // For now, we'll just provide a basic content to demonstrate the functionality
-        return @"# Sekiban Event Sourcing - LLM Implementation Guide
-
-## Getting Started
-Sekiban is a modern event sourcing framework for .NET applications.
-
-## Important Notes
-Please use the correct namespaces and follow the recommended project structure.
-
-## Core Concepts
-Event Sourcing: Store all state changes as immutable events. Current state is derived by replaying events.";
-    }
-
-    private void ParseDocumentation(string content)
-    {
-        // Parse the markdown content into documentation items and code samples
-        // This is a simplified implementation
-        var lines = content.Split('\n');
-        DocumentationItem? currentItem = null;
-        CodeSample? currentSample = null;
-        bool inCodeBlock = false;
-        string codeBlockContent = string.Empty;
-        string codeBlockLanguage = string.Empty;
-
-        foreach (var line in lines)
+        try
         {
-            if (line.StartsWith("# "))
+            string directory = Path.GetDirectoryName(_markdownReader._docsBasePath) ?? _markdownReader._docsBasePath;
+            
+            _fileWatcher = new FileSystemWatcher(directory)
             {
-                // Main title
-                if (currentItem != null)
-                {
-                    documentationItems.Add(currentItem);
-                }
-                currentItem = new DocumentationItem
-                {
-                    Title = line.Substring(2).Trim(),
-                    Category = "General",
-                    Content = ""
-                };
-            }
-            else if (line.StartsWith("## "))
-            {
-                // Section title
-                if (currentItem != null)
-                {
-                    documentationItems.Add(currentItem);
-                }
-                currentItem = new DocumentationItem
-                {
-                    Title = line.Substring(3).Trim(),
-                    Category = "Section",
-                    Content = ""
-                };
-            }
-            else if (line.StartsWith("### "))
-            {
-                // Subsection title
-                if (currentItem != null)
-                {
-                    documentationItems.Add(currentItem);
-                }
-                currentItem = new DocumentationItem
-                {
-                    Title = line.Substring(4).Trim(),
-                    Category = "Subsection",
-                    Content = ""
-                };
-            }
-            else if (line.StartsWith("```") && !inCodeBlock)
-            {
-                // Start of code block
-                inCodeBlock = true;
-                codeBlockLanguage = line.Substring(3).Trim();
-                codeBlockContent = "";
-                currentSample = new CodeSample
-                {
-                    Title = currentItem?.Title ?? "Code Sample",
-                    Language = codeBlockLanguage,
-                    Code = ""
-                };
-            }
-            else if (line.StartsWith("```") && inCodeBlock)
-            {
-                // End of code block
-                inCodeBlock = false;
-                if (currentSample != null)
-                {
-                    currentSample.Code = codeBlockContent.Trim();
-                    codeSamples.Add(currentSample);
-                    currentSample = null;
-                }
-            }
-            else if (inCodeBlock)
-            {
-                // Content of code block
-                codeBlockContent += line + "\n";
-            }
-            else
-            {
-                // Regular content
-                if (currentItem != null)
-                {
-                    currentItem.Content += line + "\n";
-                }
-            }
+                Filter = "*.md",
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
+                EnableRaisingEvents = true
+            };
+            
+            _fileWatcher.Changed += OnFileChanged;
+            _fileWatcher.Created += OnFileChanged;
+            _fileWatcher.Deleted += OnFileChanged;
+            _fileWatcher.Renamed += OnFileChanged;
+            
+            _logger.LogInformation("File watcher set up for directory: {Directory}", directory);
         }
-
-        // Add the last item if there is one
-        if (currentItem != null)
+        catch (Exception ex)
         {
-            documentationItems.Add(currentItem);
+            _logger.LogError(ex, "Failed to set up file watcher");
         }
     }
 
-    public async Task<DocumentationItem> GetGeneralDocumentation()
+    /// <summary>
+    /// Handle file changes
+    /// </summary>
+    private async void OnFileChanged(object sender, FileSystemEventArgs e)
     {
-        await Initialize();
-        return documentationItems.FirstOrDefault(d => d.Category == "General") ?? 
-               new DocumentationItem { Title = "Sekiban Documentation", Category = "General", Content = "Documentation not available." };
+        try
+        {
+            _logger.LogInformation("Document file changed: {FullPath}, reloading documents", e.FullPath);
+            await Task.Delay(500); // Small delay to ensure file is fully written
+            _documents = await _markdownReader.ReadAllDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling file change event");
+        }
+    }
+    
+    /// <summary>
+    /// Get all document titles
+    /// </summary>
+    public async Task<List<DocumentInfo>> GetAllDocumentsAsync()
+    {
+        await InitializeAsync();
+        return _documents.Select(d => new DocumentInfo
+        {
+            FileName = d.FileName,
+            Title = d.Title,
+            Sections = d.Sections
+        }).ToList();
+    }
+    
+    /// <summary>
+    /// Get a document by filename
+    /// </summary>
+    public async Task<MarkdownDocument?> GetDocumentAsync(string fileName)
+    {
+        await InitializeAsync();
+        return _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    /// <summary>
+    /// Get a document by index
+    /// </summary>
+    public async Task<MarkdownDocument?> GetDocumentByIndexAsync(int index)
+    {
+        await InitializeAsync();
+        if (index >= 0 && index < _documents.Count)
+        {
+            return _documents[index];
+        }
+        return null;
+    }
+    
+    /// <summary>
+    /// Get the navigation structure
+    /// </summary>
+    public async Task<List<NavigationItem>> GetNavigationAsync()
+    {
+        await InitializeAsync();
+        var navigation = new List<NavigationItem>();
+        
+        foreach (var doc in _documents)
+        {
+            navigation.Add(new NavigationItem
+            {
+                Title = doc.Title,
+                FileName = doc.FileName,
+                Sections = doc.Sections.Select(s => new NavigationSection
+                {
+                    Title = s
+                }).ToList()
+            });
+        }
+        
+        return navigation;
     }
 
-    public async Task<DocumentationItem> GetComponentDocumentation(string component)
+    /// <summary>
+    /// Get a specific section from a document
+    /// </summary>
+    public async Task<SectionContent?> GetSectionContentAsync(string fileName, string sectionTitle)
     {
-        await Initialize();
-        return documentationItems.FirstOrDefault(d => d.Title.Contains(component, StringComparison.OrdinalIgnoreCase)) ?? 
-               new DocumentationItem { Title = component, Category = "Component", Content = $"Documentation for {component} not available." };
+        await InitializeAsync();
+        var document = _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        if (document == null) return null;
+        
+        var content = document.GetSectionContent(sectionTitle);
+        if (string.IsNullOrEmpty(content)) return null;
+        
+        return new SectionContent
+        {
+            DocumentTitle = document.Title,
+            SectionTitle = sectionTitle,
+            Content = content
+        };
     }
 
-    public async Task<CodeSample> GetCodeSample(string feature)
+    /// <summary>
+    /// Search across all documents
+    /// </summary>
+    public async Task<List<SearchResult>> SearchAsync(string query)
     {
-        await Initialize();
-        return codeSamples.FirstOrDefault(s => s.Title.Contains(feature, StringComparison.OrdinalIgnoreCase)) ?? 
-               new CodeSample { Title = feature, Language = "csharp", Code = $"// Code sample for {feature} not available." };
+        await InitializeAsync();
+        var results = new List<SearchResult>();
+        var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var document in _documents)
+        {
+            // Search in title
+            bool titleMatched = searchTerms.All(term => document.Title.ToLower().Contains(term));
+            
+            // Search in content
+            var contentMatches = new List<string>();
+            foreach (var section in document.Sections)
+            {
+                var sectionContent = document.GetSectionContent(section);
+                if (searchTerms.All(term => sectionContent.ToLower().Contains(term)))
+                {
+                    contentMatches.Add(section);
+                }
+            }
+            
+            if (titleMatched || contentMatches.Count > 0)
+            {
+                results.Add(new SearchResult
+                {
+                    DocumentTitle = document.Title,
+                    FileName = document.FileName,
+                    MatchedInTitle = titleMatched,
+                    MatchedSections = contentMatches
+                });
+            }
+        }
+        
+        return results;
     }
-
-    public async Task<List<DocumentationItem>> SearchDocumentation(string keyword)
+    
+    /// <summary>
+    /// Get all code samples across documents
+    /// </summary>
+    public async Task<List<SekibanCodeSample>> GetAllCodeSamplesAsync()
     {
-        await Initialize();
-        return documentationItems
-            .Where(d => d.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase) || 
-                         d.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+        await InitializeAsync();
+        var samples = new List<SekibanCodeSample>();
+        
+        foreach (var document in _documents)
+        {
+            foreach (var sample in document.CodeSamples)
+            {
+                samples.Add(new SekibanCodeSample
+                {
+                    Title = sample.Context,
+                    Language = sample.Language,
+                    Code = sample.Code,
+                    DocumentTitle = document.Title,
+                    FileName = document.FileName
+                });
+            }
+        }
+        
+        return samples;
+    }
+    
+    /// <summary>
+    /// Get code samples by language
+    /// </summary>
+    public async Task<List<SekibanCodeSample>> GetCodeSamplesByLanguageAsync(string language)
+    {
+        var allSamples = await GetAllCodeSamplesAsync();
+        return allSamples
+            .Where(s => s.Language.Equals(language, StringComparison.OrdinalIgnoreCase))
             .ToList();
+    }
+    
+    /// <summary>
+    /// Search for code samples
+    /// </summary>
+    public async Task<List<SekibanCodeSample>> SearchCodeSamplesAsync(string query)
+    {
+        var allSamples = await GetAllCodeSamplesAsync();
+        var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        
+        return allSamples
+            .Where(s => searchTerms.All(term => 
+                s.Title.ToLower().Contains(term) || 
+                s.Code.ToLower().Contains(term)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Dispose resources
+    /// </summary>
+    public void Dispose()
+    {
+        if (_fileWatcher != null)
+        {
+            _fileWatcher.Changed -= OnFileChanged;
+            _fileWatcher.Created -= OnFileChanged;
+            _fileWatcher.Deleted -= OnFileChanged;
+            _fileWatcher.Renamed -= OnFileChanged;
+            _fileWatcher.Dispose();
+        }
     }
 }
 
-public class DocumentationItem
+#region Models
+
+/// <summary>
+/// Basic information about a document
+/// </summary>
+public class DocumentInfo
+{
+    public string FileName { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public List<string> Sections { get; set; } = new();
+}
+
+/// <summary>
+/// Navigation item for UI
+/// </summary>
+public class NavigationItem
 {
     public string Title { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public List<NavigationSection> Sections { get; set; } = new();
+}
+
+/// <summary>
+/// Section in navigation
+/// </summary>
+public class NavigationSection
+{
+    public string Title { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Content of a specific section
+/// </summary>
+public class SectionContent
+{
+    public string DocumentTitle { get; set; } = string.Empty;
+    public string SectionTitle { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
 }
 
-public class CodeSample
+/// <summary>
+/// Search result
+/// </summary>
+public class SearchResult
+{
+    public string DocumentTitle { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public bool MatchedInTitle { get; set; }
+    public List<string> MatchedSections { get; set; } = new();
+}
+
+/// <summary>
+/// Code sample with context
+/// </summary>
+public class SekibanCodeSample
 {
     public string Title { get; set; } = string.Empty;
     public string Language { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
+    public string DocumentTitle { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
 }
 
-[JsonSerializable(typeof(List<DocumentationItem>))]
-[JsonSerializable(typeof(DocumentationItem))]
-[JsonSerializable(typeof(CodeSample))]
-[JsonSerializable(typeof(List<CodeSample>))]
+#endregion
+
+/// <summary>
+/// JSON serialization context
+/// </summary>
+[JsonSerializable(typeof(List<DocumentInfo>))]
+[JsonSerializable(typeof(DocumentInfo))]
+[JsonSerializable(typeof(List<NavigationItem>))]
+[JsonSerializable(typeof(NavigationItem))]
+[JsonSerializable(typeof(SectionContent))]
+[JsonSerializable(typeof(List<SearchResult>))]
+[JsonSerializable(typeof(SearchResult))]
+[JsonSerializable(typeof(List<SekibanCodeSample>))]
+[JsonSerializable(typeof(SekibanCodeSample))]
 internal sealed partial class SekibanContext : JsonSerializerContext { }
