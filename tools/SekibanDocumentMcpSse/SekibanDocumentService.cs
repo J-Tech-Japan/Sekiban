@@ -37,6 +37,7 @@ public class SekibanDocumentService : IDisposable
         {
             // For Azure deployment, use WebRootPath first, then fall back to ContentRootPath
             string basePath = AppContext.BaseDirectory;
+            logger.LogInformation("AppContext.BaseDirectory: {BasePath}", basePath);
             docsBasePath = Path.Combine(basePath, docsBasePath);
         }
         
