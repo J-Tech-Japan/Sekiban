@@ -91,36 +91,36 @@ public sealed class SekibanDocumentTools
         return JsonSerializer.Serialize(results, SekibanContext.Default.ListSearchResult);
     }
 
-    /// <summary>
-    /// Get code samples from Sekiban documentation
-    /// </summary>
-    [McpServerTool, Description("Get code samples from Sekiban documentation.")]
-    public async Task<string> GetCodeSamples(
-        [Description("Optional language filter (e.g., 'csharp', 'json')")] string? language = null)
-    {
-        List<SekibanCodeSample> samples;
-        if (string.IsNullOrEmpty(language))
-        {
-            samples = await _documentService.GetAllCodeSamplesAsync();
-        }
-        else
-        {
-            samples = await _documentService.GetCodeSamplesByLanguageAsync(language);
-        }
-        
-        return JsonSerializer.Serialize(samples, SekibanContext.Default.ListSekibanCodeSample);
-    }
-
-    /// <summary>
-    /// Search for code samples
-    /// </summary>
-    [McpServerTool, Description("Search for code samples in Sekiban documentation.")]
-    public async Task<string> SearchCodeSamples(
-        [Description("The search keyword or phrase")] string query)
-    {
-        var samples = await _documentService.SearchCodeSamplesAsync(query);
-        return JsonSerializer.Serialize(samples, SekibanContext.Default.ListSekibanCodeSample);
-    }
+    // /// <summary>
+    // /// Get code samples from Sekiban documentation
+    // /// </summary>
+    // [McpServerTool, Description("Get code samples from Sekiban documentation.")]
+    // public async Task<string> GetCodeSamples(
+    //     [Description("Optional language filter (e.g., 'csharp', 'json')")] string? language = null)
+    // {
+    //     List<SekibanCodeSample> samples;
+    //     if (string.IsNullOrEmpty(language))
+    //     {
+    //         samples = await _documentService.GetAllCodeSamplesAsync();
+    //     }
+    //     else
+    //     {
+    //         samples = await _documentService.GetCodeSamplesByLanguageAsync(language);
+    //     }
+    //     
+    //     return JsonSerializer.Serialize(samples, SekibanContext.Default.ListSekibanCodeSample);
+    // }
+    //
+    // /// <summary>
+    // /// Search for code samples
+    // /// </summary>
+    // [McpServerTool, Description("Search for code samples in Sekiban documentation.")]
+    // public async Task<string> SearchCodeSamples(
+    //     [Description("The search keyword or phrase")] string query)
+    // {
+    //     var samples = await _documentService.SearchCodeSamplesAsync(query);
+    //     return JsonSerializer.Serialize(samples, SekibanContext.Default.ListSekibanCodeSample);
+    // }
 
     /// <summary>
     /// Ask a question about Sekiban and get an answer

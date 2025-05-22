@@ -35,7 +35,7 @@ public class SekibanDocumentService : IDisposable
         string docsBasePath = _options.BasePath;
         if (!Path.IsPathRooted(docsBasePath))
         {
-            docsBasePath = Path.Combine(_environment.ContentRootPath, docsBasePath);
+            docsBasePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, docsBasePath);
         }
         
         _markdownReader = new MarkdownReader(
