@@ -9,6 +9,26 @@ module keyVaultCreate '1.keyvault/create.bicep' = {
   params: {}
 }
 
+// 2. Azure OpenAI
+module azureOpenAICreate '2.azureopenai/1.azure-openai.bicep' = {
+  name: 'azureOpenAICreateDeployment'
+  params: {}
+}
+
+module azureOpenAIKeyVaultSecrets '2.azureopenai/2.keyvault-secrets.bicep' = {
+  name: 'azureOpenAIKeyVaultSecretsDeployment'
+  params: {
+    azureOpenAIEndpoint: azureOpenAICreate.outputs.azureOpenAIEndpoint
+    azureOpenAIApiKey: azureOpenAICreate.outputs.azureOpenAIApiKey
+    gptDeploymentName: azureOpenAICreate.outputs.gptDeploymentName
+    embeddingDeploymentName: azureOpenAICreate.outputs.embeddingDeploymentName
+  }
+  dependsOn: [
+    keyVaultCreate
+    azureOpenAICreate
+  ]
+}
+
 // 5. Application Insights & Log Analytics
 module appInsightsCreate '5.applicationinsights_and_log/1.application-insights.bicep' = {
   name: 'appInsightsCreateDeployment'
@@ -68,8 +88,13 @@ module mcpAppSettings '7.backend/6.app-settings.bicep' = {
     keyVaultCreate
     appInsightsCreate
     mcpAppServiceCreate
+    azureOpenAIKeyVaultSecrets
   ]
 }
 
-// Output the MCP App Service hostname
+// Output the MCP App Service hostname and Azure OpenAI information
 output mcpHostName string = mcpAppServiceCreate.outputs.appServiceHostName
+output azureOpenAIEndpoint string = azureOpenAICreate.outputs.azureOpenAIEndpoint
+output azureOpenAIName string = azureOpenAICreate.outputs.azureOpenAIName
+output gptDeploymentName string = azureOpenAICreate.outputs.gptDeploymentName
+output embeddingDeploymentName string = azureOpenAICreate.outputs.embeddingDeploymentName

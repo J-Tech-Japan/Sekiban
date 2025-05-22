@@ -52,11 +52,62 @@ GitHub Secretsの設定:
 - `minimal_main.bicep`: メインのBicepテンプレート
 - 各サブディレクトリには特定のリソースタイプ用のBicepテンプレートが含まれています
 
-## Key Vaultシークレット
+## Azure OpenAI
 
-デプロイ後、以下のシークレットをKey Vaultに追加する必要があります:
+このテンプレートは、Azure OpenAIリソースを自動的に作成し、以下のモデルをデプロイします：
 
-- `AzureOpenAIEndpoint`: Azure OpenAIのエンドポイント
-- `AzureOpenAIApiKey`: Azure OpenAIのAPIキー
-- `AzureOpenAIDeploymentName`: Azure OpenAIのデプロイ名
-- `AzureOpenAIEmbeddingDeploymentName`: Azure OpenAIの埋め込みモデルデプロイ名
+### 自動デプロイされるモデル
+- **GPT-4.1**: `gpt-4` (turbo-2024-04-09版) - 最新のGPT-4.1機能を提供
+- **Text Embedding**: `text-embedding-ada-002`
+
+### Key Vaultシークレット
+
+Azure OpenAIの設定は自動的にKey Vaultに保存されます：
+
+- `AzureOpenAIEndpoint`: Azure OpenAIのエンドポイント（自動設定）
+- `AzureOpenAIApiKey`: Azure OpenAIのAPIキー（自動設定）
+- `AzureOpenAIDeploymentName`: GPT-4.1のデプロイ名（自動設定）
+- `AzureOpenAIEmbeddingDeploymentName`: 埋め込みモデルのデプロイ名（自動設定）
+
+### デプロイされるリソース
+
+1. **Azure OpenAI アカウント**: `aoai-{resourceGroupName}`
+2. **GPT-4.1 デプロイメント**: `gpt-41`
+3. **Text Embedding デプロイメント**: `text-embedding-ada-002`
+4. **Key Vault シークレット**: 上記の設定値が自動的に保存
+
+### 注意事項
+
+- Azure OpenAIは利用可能なリージョンが限られています
+- GPT-4.1モデルは容量制限があるため、デプロイに時間がかかる場合があります
+- 初回デプロイ時にAzure OpenAIサービスの利用申請が必要な場合があります
+- GPT-4.1は `gpt-4` モデルの `turbo-2024-04-09` バージョンとしてデプロイされます
+
+## デプロイ後の確認
+
+デプロイが完了したら、以下を確認してください：
+
+1. Azure ポータルでAzure OpenAIリソースが作成されていること
+2. GPT-4.1とText Embeddingモデルがデプロイされていること
+3. Key Vaultに必要なシークレットが保存されていること
+4. App ServiceがKey Vaultのシークレットにアクセスできること
+
+## トラブルシューティング
+
+### Azure OpenAIのデプロイが失敗する場合
+
+1. リージョンがAzure OpenAIをサポートしているか確認
+2. Azure OpenAIサービスの利用申請が承認されているか確認
+3. サブスクリプションの制限を確認
+4. GPT-4.1モデル（turbo-2024-04-09）が選択したリージョンで利用可能か確認
+
+### Key Vaultアクセスエラーの場合
+
+1. App ServiceのManaged Identityが有効になっているか確認
+2. Key Vaultのアクセスポリシーが正しく設定されているか確認
+
+### GPT-4.1モデルについて
+
+- Azure OpenAIでは、GPT-4.1の機能は `gpt-4` モデルの `turbo-2024-04-09` バージョンで提供されます
+- このバージョンには、改善されたパフォーマンスと新機能が含まれています
+- デプロイ名は `gpt-41` として設定されますが、実際のモデル名は `gpt-4` です
