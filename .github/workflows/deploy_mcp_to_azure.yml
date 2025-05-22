@@ -12,7 +12,7 @@ on:
       environment:
         description: 'Environment to deploy to'
         required: true
-        default: 'dev'
+        default: 'sekibanmcp'
         type: string
 
 jobs:
@@ -39,17 +39,17 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Create Resource Group if not exists
+      - name: Create environment-specific local.json from secrets
         run: |
           cd tools/SekibanDocumentMcpSse/infrastructure/azure_appservice_minimal
-          chmod +x create_resource_group.sh
-          ./create_resource_group.sh $ENVIRONMENT
-
-      - name: Deploy Bicep template
-        run: |
-          cd tools/SekibanDocumentMcpSse/infrastructure/azure_appservice_minimal
-          chmod +x runbicep.sh
-          ./runbicep.sh $ENVIRONMENT minimal_main.bicep
+          cat > $ENVIRONMENT.local.json << EOF
+          {
+            "resourceGroupName": "${{ secrets.AZURE_RESOURCE_GROUP_NAME }}",
+            "location": "${{ secrets.AZURE_LOCATION }}",
+            "mcpRelativePath": "../../"
+          }
+          EOF
+          echo "Created $ENVIRONMENT.local.json with resource group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
 
       - name: Deploy MCP App
         run: |
