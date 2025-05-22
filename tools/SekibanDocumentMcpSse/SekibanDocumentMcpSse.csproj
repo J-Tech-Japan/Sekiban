@@ -5,14 +5,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PublishAot>false</PublishAot>
+    <UserSecretsId>22219344-84ed-4531-a1e3-b3eeb66ffceb</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.AI.OpenAI" Version="2.0.0" />
-    <PackageReference Include="OpenAI" Version="2.0.0" />
-    <PackageReference Include="Markdig" Version="0.34.0" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.4" />
+    <PackageReference Include="OpenAI" Version="2.2.0-beta.4" />
+    <PackageReference Include="Markdig" Version="0.41.1" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.1" />
-    <PackageReference Include="System.Text.Json" Version="8.0.3" />
+    <PackageReference Include="System.Text.Json" Version="9.0.5" />
   </ItemGroup>
 
   <ItemGroup>

@@ -35,7 +35,7 @@ public class AzureOpenAIService
             {
                 _client = new AzureOpenAIClient(
                     new Uri(_options.Endpoint),
-                    new ApiKeyCredential(_options.ApiKey));
+                    new ApiKeyCredential(_options.ApiKey), new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2024_12_01_Preview));
                 _logger.LogInformation("Azure OpenAI client initialized");
             }
             catch (Exception ex)
@@ -103,7 +103,29 @@ public class AzureOpenAIService
             // Complete chat
             var response = await chatClient.CompleteChatAsync(messages);
             
-            return response.Value.Content?.ToString() ?? "No response content";
+            // レスポンス内容を取得
+            try 
+            {
+                // Azure OpenAI SDK 2024-12-01-Preview の応答形式で内容を抽出
+                var contentProperty = response.Value.GetType().GetProperty("Content");
+                if (contentProperty != null)
+                {
+                    // Content プロパティから値を取得
+                    var content = contentProperty.GetValue(response.Value)?.ToString();
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        return content;
+                    }
+                }
+
+                // プロパティが見つからない場合は ToString() を使用
+                return response.Value.ToString() ?? "No response content";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error extracting content from Azure OpenAI response");
+                return "Error processing response from Azure OpenAI";
+            }
         }
         catch (Exception ex)
         {
