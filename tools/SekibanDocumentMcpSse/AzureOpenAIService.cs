@@ -111,7 +111,7 @@ public class AzureOpenAIService
                 if (contentProperty != null)
                 {
                     // Content プロパティから値を取得
-                    var content = contentProperty.GetValue(response.Value)?.ToString();
+                    var content = response.Value.Content.FirstOrDefault()?.Text;
                     if (!string.IsNullOrEmpty(content))
                     {
                         return content;
@@ -119,7 +119,7 @@ public class AzureOpenAIService
                 }
 
                 // プロパティが見つからない場合は ToString() を使用
-                return response.Value.ToString() ?? "No response content";
+                return response.Value.Content.FirstOrDefault()?.Text ?? "No response content";
             }
             catch (Exception ex)
             {
