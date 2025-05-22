@@ -9,34 +9,6 @@ module keyVaultCreate '1.keyvault/create.bicep' = {
   params: {}
 }
 
-// 2. Storages
-module storageCreate '2.storages/1.create.bicep' = {
-  name: 'storageCreateDeployment'
-  params: {}
-}
-
-// 3. Cosmos DB
-module cosmosCreate '3.cosmos/1.create.bicep' = {
-  name: 'cosmosCreateDeployment'
-  params: {}
-}
-
-module cosmosDatabase '3.cosmos/2.database.bicep' = {
-  name: 'cosmosDatabaseDeployment'
-  params: {}
-  dependsOn: [
-    cosmosCreate
-  ]
-}
-
-module cosmosContainer '3.cosmos/3.container.bicep' = {
-  name: 'cosmosContainerDeployment'
-  params: {}
-  dependsOn: [
-    cosmosDatabase
-  ]
-}
-
 // 5. Application Insights & Log Analytics
 module appInsightsCreate '5.applicationinsights_and_log/1.application-insights.bicep' = {
   name: 'appInsightsCreateDeployment'
@@ -77,7 +49,6 @@ module mcpConnectionStrings '7.backend/4.connection-strings.bicep' = {
   dependsOn: [
     keyVaultCreate
     mcpAppServiceCreate
-    cosmosCreate
   ]
 }
 
@@ -95,8 +66,6 @@ module mcpAppSettings '7.backend/6.app-settings.bicep' = {
   params: {}
   dependsOn: [
     keyVaultCreate
-    storageCreate
-    cosmosCreate
     appInsightsCreate
     mcpAppServiceCreate
   ]
