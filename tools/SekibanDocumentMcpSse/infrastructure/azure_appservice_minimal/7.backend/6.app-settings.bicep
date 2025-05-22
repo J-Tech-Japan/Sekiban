@@ -1,5 +1,5 @@
 // Configure app settings for App Service
-param appServiceName string = 'mcp-${resourceGroup().name}'
+param appServiceName string = '${resourceGroup().name}'
 param applicationInsightsName string = 'ai-${resourceGroup().name}'
 param aspNetCoreEnvironment string = 'Production'
 

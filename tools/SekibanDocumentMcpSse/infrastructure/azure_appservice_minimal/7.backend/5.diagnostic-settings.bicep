@@ -1,5 +1,5 @@
 // Configure diagnostic settings for App Service
-param appServiceName string = 'mcp-${resourceGroup().name}'
+param appServiceName string = '${resourceGroup().name}'
 param logAnalyticsWorkspaceName string = 'log-${resourceGroup().name}'
 param diagnosticSettingName string = 'AppServiceDiagnostics'
 
