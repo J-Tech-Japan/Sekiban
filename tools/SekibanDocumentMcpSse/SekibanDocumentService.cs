@@ -36,9 +36,7 @@ public class SekibanDocumentService : IDisposable
         if (!Path.IsPathRooted(docsBasePath))
         {
             // For Azure deployment, use WebRootPath first, then fall back to ContentRootPath
-            string basePath = !string.IsNullOrEmpty(_environment.WebRootPath) 
-                ? _environment.WebRootPath 
-                : AppContext.BaseDirectory;
+            string basePath = AppContext.BaseDirectory;
             docsBasePath = Path.Combine(basePath, docsBasePath);
         }
         
