@@ -1,7 +1,9 @@
 using Azure;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.Options;
+using System.ClientModel;
 using System.Text;
+using OpenAI.Chat;
 
 namespace SekibanDocumentMcpSse;
 
@@ -13,7 +15,7 @@ public class AzureOpenAIService
     private readonly ILogger<AzureOpenAIService> _logger;
     private readonly AzureOpenAIOptions _options;
     private readonly SekibanDocumentService _documentService;
-    private OpenAIClient? _client;
+    private AzureOpenAIClient? _client;
 
     /// <summary>
     /// Constructor
@@ -31,9 +33,9 @@ public class AzureOpenAIService
         {
             try
             {
-                _client = new OpenAIClient(
+                _client = new AzureOpenAIClient(
                     new Uri(_options.Endpoint),
-                    new AzureKeyCredential(_options.ApiKey));
+                    new ApiKeyCredential(_options.ApiKey));
                 _logger.LogInformation("Azure OpenAI client initialized");
             }
             catch (Exception ex)
@@ -88,25 +90,20 @@ public class AzureOpenAIService
                     context.AppendLine(firstDocument.Content);
                 }
             }
+
+            // Get the chat client
+            var chatClient = _client.GetChatClient(_options.DeploymentName);
             
-            // Create chat completion options
-            var chatCompletionOptions = new ChatCompletionsOptions
-            {
-                DeploymentName = _options.DeploymentName,
-                Messages =
-                {
-                    new ChatRequestSystemMessage(_options.SystemMessage),
-                    new ChatRequestUserMessage($"Here is documentation about Sekiban:\n\n{context}\n\nBased on this information, please answer the following question: {question}")
-                },
-                MaxTokens = _options.MaxTokens,
-                Temperature = _options.Temperature
-            };
+            // Create chat messages
+            var systemMessage = new SystemChatMessage(_options.SystemMessage);
+            var userMessage = new UserChatMessage($"Here is documentation about Sekiban:\n\n{context}\n\nBased on this information, please answer the following question: {question}");
             
-            // Get the response from Azure OpenAI
-            var response = await _client.GetChatCompletionsAsync(chatCompletionOptions);
-            var responseMessage = response.Value.Choices[0].Message;
+            var messages = new ChatMessage[] { systemMessage, userMessage };
             
-            return responseMessage.Content;
+            // Complete chat
+            var response = await chatClient.CompleteChatAsync(messages);
+            
+            return response.Value.Content?.ToString() ?? "No response content";
         }
         catch (Exception ex)
         {
