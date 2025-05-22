@@ -1,0 +1,58 @@
+name: Deploy Sekiban Document MCP to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/SekibanDocumentMcpSse/**'
+      - '.github/workflows/deploy_mcp_to_azure.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Create Resource Group if not exists
+        run: |
+          cd tools/SekibanDocumentMcpSse/infrastructure/azure_appservice_minimal
+          chmod +x create_resource_group.sh
+          ./create_resource_group.sh $ENVIRONMENT
+
+      - name: Deploy Bicep template
+        run: |
+          cd tools/SekibanDocumentMcpSse/infrastructure/azure_appservice_minimal
+          chmod +x runbicep.sh
+          ./runbicep.sh $ENVIRONMENT minimal_main.bicep
+
+      - name: Deploy MCP App
+        run: |
+          cd tools/SekibanDocumentMcpSse/infrastructure/azure_appservice_minimal
+          chmod +x code_deploy_mcp.sh
+          ./code_deploy_mcp.sh $ENVIRONMENT
