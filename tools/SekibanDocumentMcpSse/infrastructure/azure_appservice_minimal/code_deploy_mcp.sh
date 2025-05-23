@@ -34,7 +34,7 @@ fi
 echo "MCP path: $MCP_PATH"
 
 # App Service name will follow the naming convention
-APP_SERVICE_NAME="mcp-${RESOURCE_GROUP}"
+APP_SERVICE_NAME="${RESOURCE_GROUP}"
 
 # Build and publish the application
 echo "Building and publishing .NET application..."

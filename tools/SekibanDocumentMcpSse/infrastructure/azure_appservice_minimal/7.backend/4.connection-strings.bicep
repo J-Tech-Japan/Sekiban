@@ -1,5 +1,5 @@
 // Set connection strings for App Service
-param appServiceName string = 'mcp-${resourceGroup().name}'
+param appServiceName string = '${resourceGroup().name}'
 param keyVaultName string = 'kv-${resourceGroup().name}'
 
 // Reference to existing App Service

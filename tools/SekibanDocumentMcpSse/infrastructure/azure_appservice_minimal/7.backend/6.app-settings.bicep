@@ -1,5 +1,5 @@
 // Configure app settings for App Service
-param appServiceName string = 'mcp-${resourceGroup().name}'
+param appServiceName string = '${resourceGroup().name}'
 param applicationInsightsName string = 'ai-${resourceGroup().name}'
 param aspNetCoreEnvironment string = 'Production'
 
@@ -30,7 +30,7 @@ resource appSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     AzureOpenAI__ApiKey: '@Microsoft.KeyVault(SecretUri=https://kv-${resourceGroup().name}.vault.azure.net/secrets/AzureOpenAIApiKey/)'
     AzureOpenAI__DeploymentName: '@Microsoft.KeyVault(SecretUri=https://kv-${resourceGroup().name}.vault.azure.net/secrets/AzureOpenAIDeploymentName/)'
     AzureOpenAI__EmbeddingDeploymentName: '@Microsoft.KeyVault(SecretUri=https://kv-${resourceGroup().name}.vault.azure.net/secrets/AzureOpenAIEmbeddingDeploymentName/)'
-    Documentation__BasePath: '/home/site/wwwroot/docs/llm'
+    Documentation__BasePath: ''
     Documentation__EnableFileWatcher: 'false'
   }
 }

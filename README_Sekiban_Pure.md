@@ -876,11 +876,11 @@ public static class DuplicateCheckWorkflows
 ```
 
 **Key Points**:
-- Workflows are typically implemented as static classes with static methods
-- They should be placed in a `Workflows` folder or namespace
-- They should use `ISekibanExecutor` interface for better testability
-- They should return domain-specific result types that encapsulate success/failure information
-- They can be called from API endpoints or other services
+- Workflows can be implemented as either static classes with static methods or instance-based classes with dependency injection 🏗️
+- They should be placed in a `Workflows` folder or namespace 📁
+- They should use `ISekibanExecutor` interface for better testability 🧪
+- They should return domain-specific result types that encapsulate success/failure information 📊
+- They can be called from API endpoints or other services 🔗
 
 ### Using Workflows in API Endpoints
 

@@ -1,5 +1,5 @@
 // Create App Service for MCP
-param appServiceName string = 'mcp-${resourceGroup().name}'
+param appServiceName string = resourceGroup().name
 param location string = resourceGroup().location
 param appServicePlanName string = 'plan-${resourceGroup().name}'
 param linuxFxVersion string = 'DOTNETCORE|8.0'

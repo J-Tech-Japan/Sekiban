@@ -35,7 +35,10 @@ public class SekibanDocumentService : IDisposable
         string docsBasePath = _options.BasePath;
         if (!Path.IsPathRooted(docsBasePath))
         {
-            docsBasePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, docsBasePath);
+            // For Azure deployment, use WebRootPath first, then fall back to ContentRootPath
+            string basePath = AppContext.BaseDirectory;
+            logger.LogInformation("AppContext.BaseDirectory: {BasePath}", basePath);
+            docsBasePath = Path.Combine(basePath, docsBasePath);
         }
         
         _markdownReader = new MarkdownReader(
