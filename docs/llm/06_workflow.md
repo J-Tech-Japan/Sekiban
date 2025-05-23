@@ -28,54 +28,40 @@ Domain workflows are stateless services that implement business processes that m
 3. **Reusable Business Logic**: When the same logic is used in multiple places
 
 ```csharp
-using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Executors;
-using Sekiban.Pure.Query;
-using Sekiban.Pure.ResultBoxes;
-using System;
-using System.Threading.Tasks;
+using EsCQRSQuestions.Domain.Aggregates.Questions.Commands;
+using EsCQRSQuestions.Domain.Aggregates.Questions.Queries;
+using EsCQRSQuestions.Domain.Projections.Questions;
+using ResultBoxes;
+using Sekiban.Pure.Command;
+using System.Text.Json;
+using Sekiban.Pure.Command.Executor;
+namespace EsCQRSQuestions.Domain.Workflows;
 
-// Example of a domain workflow for duplicate checking
-namespace YourProject.Domain.Workflows;
-
-public static class DuplicateCheckWorkflows
+/// <summary>
+/// Workflow to manage question display. 🚀
+/// </summary>
+public class QuestionDisplayWorkflow(ISekibanExecutor executor)
 {
-    // Result type for duplicate check operations
-    public class DuplicateCheckResult
+    /// <summary>
+    /// Workflow for exclusive control of question display. 🔒
+    /// Stops any currently displayed questions in the group before displaying the specified question. 📊
+    /// </summary>
+    public Task<ResultBox<CommandResponseSimple>> StartDisplayQuestionExclusivelyAsync(
+        Guid questionId)
     {
-        public bool IsDuplicate { get; }
-        public string? ErrorMessage { get; }
-        public object? CommandResult { get; }
-
-        private DuplicateCheckResult(bool isDuplicate, string? errorMessage, object? commandResult)
-        {
-            IsDuplicate = isDuplicate;
-            ErrorMessage = errorMessage;
-            CommandResult = commandResult;
-        }
-
-        public static DuplicateCheckResult Duplicate(string errorMessage) => 
-            new(true, errorMessage, null);
-
-        public static DuplicateCheckResult Success(object commandResult) => 
-            new(false, null, commandResult);
-    }
-
-    // Workflow method that checks for duplicate IDs before registering
-    public static async Task<DuplicateCheckResult> CheckUserIdDuplicate(
-        RegisterUserCommand command,
-        ISekibanExecutor executor)
-    {
-        // Check if userId already exists
-        var userIdExists = await executor.QueryAsync(new UserIdExistsQuery(command.UserId)).UnwrapBox();
-        if (userIdExists)
-        {
-            return DuplicateCheckResult.Duplicate($"User with ID '{command.UserId}' already exists");
-        }
-        
-        // If no duplicate, proceed with the command
-        var result = await executor.CommandAsync(command).UnwrapBox();
-        return DuplicateCheckResult.Success(result);
+        return executor.QueryAsync(new QuestionsQuery(string.Empty))
+            .Conveyor(result => result.Items.Any(q => q.QuestionId == questionId)
+                ? result.Items.First(q => q.QuestionId == questionId).ToResultBox()
+                : new Exception($"Question not found: {questionId}"))
+            .Combine(detail => executor.QueryAsync(
+                new QuestionsQuery(string.Empty, detail.QuestionGroupId)))
+            .Do((detail, questions) => questions.Items.Where(q => q.IsDisplayed && q.QuestionId != questionId).ToList()
+                .ToResultBox().ScanEach(async record =>
+                {
+                    await executor.CommandAsync(new StopDisplayCommand(record.QuestionId));
+                }))
+            .Conveyor(items => executor.CommandAsync(new StartDisplayCommand(questionId)).ToSimpleCommandResponse());
     }
 }
 ```
@@ -91,90 +77,18 @@ public static class DuplicateCheckWorkflows
 
 ```csharp
 // In Program.cs
-apiRoute.MapPost("/users/register",
-    async ([FromBody] RegisterUserCommand command, [FromServices] SekibanOrleansExecutor executor) => 
-    {
-        // Use the workflow to check for duplicates
-        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, executor);
-        if (result.IsDuplicate)
+apiRoute
+    .MapPost(
+        "/questions/startDisplay",
+        async (
+            [FromBody] StartDisplayCommand command,
+            [FromServices] SekibanOrleansExecutor executor) =>
         {
-            return Results.Problem(
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Duplicate UserId",
-                detail: result.ErrorMessage);
-        }
-        return Results.Ok(result.CommandResult);
-    });
-```
-
-## Example: Order Processing Workflow
-
-Let's create a more complex workflow for processing orders that involves multiple aggregates and validations:
-
-```csharp
-public static class OrderProcessingWorkflow
-{
-    public record OrderProcessingResult
-    {
-        public bool IsSuccess { get; }
-        public string? ErrorMessage { get; }
-        public Guid? OrderId { get; }
-        
-        private OrderProcessingResult(bool isSuccess, string? errorMessage, Guid? orderId)
-        {
-            IsSuccess = isSuccess;
-            ErrorMessage = errorMessage;
-            OrderId = orderId;
-        }
-        
-        public static OrderProcessingResult Success(Guid orderId) => new(true, null, orderId);
-        public static OrderProcessingResult Failure(string errorMessage) => new(false, errorMessage, null);
-    }
-    
-    public static async Task<OrderProcessingResult> ProcessOrder(
-        CreateOrderCommand command,
-        ISekibanExecutor executor)
-    {
-        // 1. Check if customer exists
-        var customerExists = await executor.QueryAsync(
-            new CustomerExistsQuery(command.CustomerId)).UnwrapBox();
-            
-        if (!customerExists)
-        {
-            return OrderProcessingResult.Failure($"Customer '{command.CustomerId}' not found");
-        }
-        
-        // 2. Check product inventory for each item
-        foreach (var item in command.Items)
-        {
-            var inventory = await executor.QueryAsync(
-                new GetProductInventoryQuery(item.ProductId)).UnwrapBox();
-                
-            if (inventory < item.Quantity)
-            {
-                return OrderProcessingResult.Failure(
-                    $"Insufficient inventory for product '{item.ProductId}'. " +
-                    $"Requested: {item.Quantity}, Available: {inventory}");
-            }
-        }
-        
-        // 3. Create the order
-        var orderResult = await executor.CommandAsync(command).UnwrapBox();
-        var orderId = orderResult.PartitionKeys.AggregateId;
-        
-        // 4. Update inventory for each product
-        foreach (var item in command.Items)
-        {
-            await executor.CommandAsync(new DecrementInventoryCommand(
-                item.ProductId, 
-                item.Quantity, 
-                orderId));
-        }
-        
-        // 5. Return success result with order ID
-        return OrderProcessingResult.Success(orderId);
-    }
-}
+            var workflow = new QuestionDisplayWorkflow(executor);
+            return await workflow.StartDisplayQuestionExclusivelyAsync(command.QuestionId).UnwrapBox();
+        })
+    .WithOpenApi()
+    .WithName("StartDisplayQuestion");
 ```
 
 ## Implementing a Saga Pattern with Workflows
@@ -182,72 +96,7 @@ public static class OrderProcessingWorkflow
 For more complex business processes that may require compensation/rollback, you can implement the Saga pattern:
 
 ```csharp
-public static class PaymentProcessingSaga
-{
-    public record PaymentProcessingResult
-    {
-        public bool IsSuccess { get; }
-        public string? ErrorMessage { get; }
-        public Guid? TransactionId { get; }
-        
-        private PaymentProcessingResult(bool isSuccess, string? errorMessage, Guid? transactionId)
-        {
-            IsSuccess = isSuccess;
-            ErrorMessage = errorMessage;
-            TransactionId = transactionId;
-        }
-        
-        public static PaymentProcessingResult Success(Guid transactionId) => 
-            new(true, null, transactionId);
-            
-        public static PaymentProcessingResult Failure(string errorMessage) => 
-            new(false, errorMessage, null);
-    }
-    
-    public static async Task<PaymentProcessingResult> ProcessPayment(
-        ProcessPaymentCommand command,
-        ISekibanExecutor executor)
-    {
-        // 1. Reserve funds from customer account
-        var reserveResult = await executor.CommandAsync(
-            new ReserveFundsCommand(command.AccountId, command.Amount, command.OrderId)).UnwrapBox();
-            
-        if (reserveResult is CommandExecutionError error)
-        {
-            return PaymentProcessingResult.Failure($"Failed to reserve funds: {error.Message}");
-        }
-        
-        try
-        {
-            // 2. Charge the payment provider
-            var chargeResult = await executor.CommandAsync(
-                new ChargePaymentProviderCommand(command.PaymentMethod, command.Amount)).UnwrapBox();
-                
-            if (chargeResult is CommandExecutionError chargeError)
-            {
-                // Compensation: Release reserved funds
-                await executor.CommandAsync(
-                    new ReleaseFundsCommand(command.AccountId, command.Amount, command.OrderId));
-                    
-                return PaymentProcessingResult.Failure($"Payment provider error: {chargeError.Message}");
-            }
-            
-            // 3. Confirm the payment
-            var confirmResult = await executor.CommandAsync(
-                new ConfirmPaymentCommand(command.OrderId, command.Amount)).UnwrapBox();
-                
-            return PaymentProcessingResult.Success(confirmResult.PartitionKeys.AggregateId);
-        }
-        catch (Exception ex)
-        {
-            // Compensation: Release reserved funds
-            await executor.CommandAsync(
-                new ReleaseFundsCommand(command.AccountId, command.Amount, command.OrderId));
-                
-            return PaymentProcessingResult.Failure($"Unexpected error: {ex.Message}");
-        }
-    }
-}
+
 ```
 
 ## Testing Workflows
@@ -263,42 +112,11 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
     [Fact]
     public async Task CheckUserIdDuplicate_WhenUserIdExists_ReturnsDuplicate()
     {
-        // Arrange - Create a user with the ID we want to test
-        var existingUserId = "U12345";
-        var command = new RegisterUserCommand(
-            "John Doe",
-            existingUserId,
-            "john@example.com");
-
-        // Register a user with the same ID to ensure it exists
-        GivenCommand(command);
-
-        // Act - Try to register another user with the same ID
-        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
-
-        // Assert
-        Assert.True(result.IsDuplicate);
-        Assert.Contains(existingUserId, result.ErrorMessage);
-        Assert.Null(result.CommandResult);
     }
 
     [Fact]
     public async Task CheckUserIdDuplicate_WhenUserIdDoesNotExist_ReturnsSuccess()
     {
-        // Arrange
-        var newUserId = "U67890";
-        var command = new RegisterUserCommand(
-            "Jane Doe",
-            newUserId,
-            "jane@example.com");
-
-        // Act
-        var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
-
-        // Assert
-        Assert.False(result.IsDuplicate);
-        Assert.Null(result.ErrorMessage);
-        Assert.NotNull(result.CommandResult);
     }
 }
 ```
