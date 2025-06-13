@@ -73,12 +73,12 @@ const filterEvents = async (
 		.filter(
 			(x) =>
 				query.SortableIdStart === null ||
-				query.SortableIdStart <= x.SortableUniqueId,
+				query.SortableIdStart < x.SortableUniqueId,
 		)
 		.filter(
 			(x) =>
 				query.SortableIdEnd === null ||
-				x.SortableUniqueId <= query.SortableIdEnd,
+				x.SortableUniqueId < query.SortableIdEnd,
 		)
 		.toSorted(asc((x) => x.SortableUniqueId));
 
@@ -94,11 +94,11 @@ const filterBlobs = async (
 	query: DbBlobQuery,
 ): Promise<DbBlob[]> => {
 	if (query.Name === null) {
-		const items = await idb.getAll(store);
+		const items = (await idb.getAll(store)).sort(asc(x => x.Id));
 		return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 	}
 
-	const items = await idb.getAllFromIndex(store, "Name", query.Name);
+	const items = (await idb.getAllFromIndex(store, "Name", query.Name)).sort(asc(x => x.Id));
 	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 };
 
@@ -151,10 +151,10 @@ const operations = (idb: SekibanDb) => {
 			.filter(
 				(x) =>
 					query.SortableIdStart === null ||
-					query.SortableIdStart <= x.SortableUniqueId,
+					query.SortableIdStart < x.SortableUniqueId,
 			);
 
-		return items;
+		return items.sort(asc(x => x.SortableUniqueId));
 	};
 
 	const removeAllCommandsAsync = async (): Promise<void> => {
