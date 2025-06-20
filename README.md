@@ -49,7 +49,7 @@ https://sekiban-doc-mcp.azurewebsites.net/sse
 To register Sekiban MCP with Claude Desktop, run the following command:
 
 ```bash
-claude mcp add --transport http sekiban-documents https://sekiban-doc-mcp.azurewebsites.net/sse
+claude mcp add sekibanDocument --transport sse https://sekiban-doc-mcp.azurewebsites.net/sse
 ```
 
 This integration allows you to access Sekiban documentation, examples, and best practices directly from your AI assistant, making development more efficient and informed.
