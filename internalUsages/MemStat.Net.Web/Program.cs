@@ -1,4 +1,5 @@
 using MemStat.Net;
+using MemStat.Net.Web;
 using Microsoft.AspNetCore.Mvc;
 using ResultBoxes;
 var builder = WebApplication.CreateBuilder(args);

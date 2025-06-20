@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Shared;
+namespace Sekiban.Pure.DateProducer;
 
 /// <summary>
 ///     Sekiban Date Producer.
