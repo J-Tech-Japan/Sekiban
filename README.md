@@ -35,6 +35,25 @@ Do you want to start coding? If so, please see [Readme Pure](https://github.com/
 
 You might use coding agent like Devin, Cline or Cursor .. etc. We made [Readme for LLM](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_For_LLM.md) so you can copy and paste for framework instructions.
 
+## Sekiban MCP (Model Context Protocol)
+
+Sekiban provides MCP (Model Context Protocol) support to enhance your development experience with AI coding assistants. The Sekiban MCP server offers direct access to Sekiban documentation and examples through Server-Sent Events (SSE).
+
+**MCP Server URL:** 
+https://sekiban-doc-mcp.azurewebsites.net/
+if this does not work in your case, try below.
+https://sekiban-doc-mcp.azurewebsites.net/sse
+
+### Adding Sekiban MCP to Claude Desktop
+
+To register Sekiban MCP with Claude Desktop, run the following command:
+
+```bash
+claude mcp add --transport http sekiban-documents https://sekiban-doc-mcp.azurewebsites.net/sse
+```
+
+This integration allows you to access Sekiban documentation, examples, and best practices directly from your AI assistant, making development more efficient and informed.
+
 ## Sponsors
 
 Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
