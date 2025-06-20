@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
-using Sekiban.Core.Shared;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.DateProducer;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;

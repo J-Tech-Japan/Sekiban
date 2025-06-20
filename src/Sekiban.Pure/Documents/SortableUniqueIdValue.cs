@@ -1,5 +1,5 @@
 using ResultBoxes;
-using Sekiban.Core.Shared;
+using Sekiban.Pure.DateProducer;
 namespace Sekiban.Pure.Documents;
 
 /// <summary>

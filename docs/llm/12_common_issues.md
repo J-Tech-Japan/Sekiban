@@ -75,7 +75,20 @@ public record YourCommand(...)
 }
 ```
 
-## 3. Serialization Issues
+## 3. Time Unified Acquisition - SekibanDateProducer
+
+**Issue**: Time acquisition methods are not unified within and outside the Sekiban system.
+
+**Solution**: Use `SekibanDateProducer` to obtain unified time across the entire system:
+
+```csharp
+// Get time using the same method as Sekiban
+var currentTime = SekibanDateProducer.GetRegistered().UtcNow;
+```
+
+This approach allows you to use the same time source for both Sekiban's event sourcing system and external systems. Time can also be mocked during testing.
+
+## 4. Serialization Issues
 
 **Issue**: `System.NotSupportedException: Orleans serialization requires types to be serializable.`
 
@@ -105,7 +118,7 @@ public class ComplexType
 }
 ```
 
-## 4. Source Generation Issues
+## 5. Source Generation Issues
 
 **Issue**: Missing `YourProjectDomainDomainTypes` class.
 
@@ -116,7 +129,7 @@ public class ComplexType
 3. Use the correct namespace for the generated types: `using YourProject.Domain.Generated;`
 4. Rebuild the solution to trigger source generation
 
-## 5. Query Result Issues
+## 6. Query Result Issues
 
 **Issue**: Query returns empty or stale results after executing a command.
 
@@ -132,7 +145,7 @@ var query = new YourQuery(...) { WaitForSortableUniqueId = lastSortableId };
 var queryResult = await executor.QueryAsync(query).UnwrapBox();
 ```
 
-## 6. Multiple Events from Command
+## 7. Multiple Events from Command
 
 **Issue**: Need to return multiple events from a command handler.
 
@@ -148,7 +161,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 }
 ```
 
-## 7. Orleans Clustering Issues
+## 8. Orleans Clustering Issues
 
 **Issue**: Orleans silo cannot connect to cluster.
 
@@ -170,7 +183,7 @@ siloBuilder.UseKubernetesHosting();
 
 And ensure connection strings are correctly configured.
 
-## 8. Database Configuration
+## 9. Database Configuration
 
 **Issue**: Application cannot connect to the database.
 
@@ -198,7 +211,7 @@ builder.AddSekibanCosmosDb();
 builder.AddSekibanPostgresDb();
 ```
 
-## 9. Testing Issues
+## 10. Testing Issues
 
 **Issue**: Tests fail with serialization exceptions.
 
@@ -213,7 +226,7 @@ public void TestSerializable()
 }
 ```
 
-## 10. Performance Issues
+## 11. Performance Issues
 
 **Issue**: Slow performance with large event streams.
 
@@ -225,7 +238,7 @@ public void TestSerializable()
 4. Consider using multiple projections for different query needs
 5. Use pagination for large result sets
 
-## 11. Concurrency Issues
+## 12. Concurrency Issues
 
 **Issue**: Command fails with concurrency exceptions.
 
@@ -246,7 +259,7 @@ public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<YourAg
 }
 ```
 
-## 12. API Endpoint Issues
+## 13. API Endpoint Issues
 
 **Issue**: API endpoints return 500 Internal Server Error.
 
@@ -275,7 +288,7 @@ apiRoute.MapPost("/command",
     });
 ```
 
-## 13. Dependency Injection Issues
+## 14. Dependency Injection Issues
 
 **Issue**: `System.InvalidOperationException: No service for type 'YourDomainDomainTypes'`
 
@@ -287,7 +300,7 @@ builder.Services.AddSingleton(
         YourDomainEventsJsonContext.Default.Options));
 ```
 
-## 14. Running the Application
+## 15. Running the Application
 
 **Issue**: Issues running the application with the Aspire host.
 
@@ -303,7 +316,7 @@ To launch with HTTPS profile:
 dotnet run --project MyProject.AppHost --launch-profile https
 ```
 
-## 15. ISekibanExecutor vs. SekibanOrleansExecutor
+## 16. ISekibanExecutor vs. SekibanOrleansExecutor
 
 **Issue**: Not sure which executor type to use.
 

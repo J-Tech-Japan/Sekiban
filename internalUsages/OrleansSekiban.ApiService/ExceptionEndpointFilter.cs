@@ -1,4 +1,5 @@
 using Sekiban.Pure.Exceptions;
+namespace OrleansSekiban.ApiService;
 
 public class ExceptionEndpointFilter : IEndpointFilter
 {

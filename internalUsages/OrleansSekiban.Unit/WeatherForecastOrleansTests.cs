@@ -1,4 +1,5 @@
 using OrleansSekiban.Domain;
+using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
 using OrleansSekiban.Domain.Generated;

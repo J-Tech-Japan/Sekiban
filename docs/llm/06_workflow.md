@@ -97,7 +97,7 @@ For more complex business processes that may require compensation/rollback, you 
 
 ```csharp
 using Sekiban.Pure.Command.Executor;
-using Sekiban.Core.Shared;
+using Sekiban.Pure;
 using Sekiban.Pure.Command;
 using ResultBoxes;
 using System.Threading.Tasks;
@@ -217,7 +217,7 @@ using OrderProcess.Domain.Aggregates.Inventory.Projections;
 using OrderProcess.Domain.Aggregates.Payment.Projections;
 using OrderProcess.Domain.Workflows;
 using Sekiban.Pure.xUnit;
-using Sekiban.Core.Shared;
+using Sekiban.Pure;
 
 namespace OrderProcess.Tests.Workflows;
 
@@ -313,7 +313,7 @@ using EsCQRSQuestions.Domain.Workflows;
 using EsCQRSQuestions.Domain.Aggregates.Questions.Commands;
 using EsCQRSQuestions.Domain.Projections.Questions;
 using Sekiban.Pure.xUnit;
-using Sekiban.Core.Shared;
+using Sekiban.Pure;
 
 namespace EsCQRSQuestions.Tests.Workflows;
 

@@ -53,17 +53,17 @@ public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggre
         return EventOrNone.Event(new YourEvent(...));
     }
     
-    return new SomeException("YourAggregateが必要です");
+    return new SomeException("Expected YourAggregate");
 }
 ```
 
-または、より強力な型付けのために `ICommandWithHandler` の3パラメータバージョンを使用します：
+または、`ICommandWithHandler`の3パラメーター版を使用してより強い型付けを行います：
 
 ```csharp
 public record YourCommand(...) 
     : ICommandWithHandler<YourCommand, YourProjector, YourAggregateType>
 {
-    // コンテキストはICommandContext<YourAggregateType>に型付けされています
+    // これでコンテキストがICommandContext<YourAggregateType>に型付けされます
     public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<YourAggregateType> context)
     {
         var aggregate = context.GetAggregate();
@@ -75,7 +75,20 @@ public record YourCommand(...)
 }
 ```
 
-## 3. シリアライゼーションの問題
+## 3. 時間の統一取得 - SekibanDateProducer
+
+**問題**: Sekibanシステム内外で時間取得の方法が統一されていない。
+
+**解決策**: `SekibanDateProducer`を使用してシステム全体で統一された時間を取得してください：
+
+```csharp
+// Sekibanと同じ方法で時間を取得
+var currentTime = SekibanDateProducer.GetRegistered().UtcNow;
+```
+
+この方法により、Sekibanのイベントソーシングシステムと外部システムで同じ時間ソースを使用できます。テスト時には時間をモックすることも可能です。
+
+## 4. シリアライゼーションの問題
 
 **問題**: `System.NotSupportedException: Orleansシリアライゼーションには、型がシリアライズ可能である必要があります。`
 
@@ -105,7 +118,7 @@ public class ComplexType
 }
 ```
 
-## 4. ソース生成の問題
+## 5. ソース生成の問題
 
 **問題**: `YourProjectDomainDomainTypes` クラスが見つからない。
 
@@ -116,7 +129,7 @@ public class ComplexType
 3. 生成された型に対して正しい名前空間を使用する：`using YourProject.Domain.Generated;`
 4. ソース生成をトリガーするためにソリューションを再ビルドする
 
-## 5. クエリ結果の問題
+## 6. クエリ結果の問題
 
 **問題**: コマンドを実行した後、クエリが空または古い結果を返す。
 
@@ -132,7 +145,7 @@ var query = new YourQuery(...) { WaitForSortableUniqueId = lastSortableId };
 var queryResult = await executor.QueryAsync(query).UnwrapBox();
 ```
 
-## 6. コマンドからの複数イベント
+## 7. コマンドからの複数イベント
 
 **問題**: コマンドハンドラーから複数のイベントを返す必要がある。
 
@@ -148,7 +161,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 }
 ```
 
-## 7. Orleansクラスタリングの問題
+## 8. Orleansクラスタリングの問題
 
 **問題**: OrleansシロがクラスタにConnectできない。
 
@@ -170,7 +183,7 @@ siloBuilder.UseKubernetesHosting();
 
 そして、接続文字列が正しく設定されていることを確認してください。
 
-## 8. データベース設定
+## 9. データベース設定
 
 **問題**: アプリケーションがデータベースに接続できない。
 
@@ -198,7 +211,7 @@ builder.AddSekibanCosmosDb();
 builder.AddSekibanPostgresDb();
 ```
 
-## 9. テストの問題
+## 10. テストの問題
 
 **問題**: シリアライゼーション例外でテストが失敗する。
 
@@ -213,7 +226,7 @@ public void TestSerializable()
 }
 ```
 
-## 10. パフォーマンスの問題
+## 11. パフォーマンスの問題
 
 **問題**: 大きなイベントストリームでのパフォーマンスが遅い。
 
@@ -225,7 +238,7 @@ public void TestSerializable()
 4. 異なるクエリニーズに対して複数のプロジェクションの使用を検討する
 5. 大きな結果セットにはページネーションを使用する
 
-## 11. 並行処理の問題
+## 12. 並行処理の問題
 
 **問題**: 同時実行例外でコマンドが失敗する。
 
@@ -246,7 +259,7 @@ public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<YourAg
 }
 ```
 
-## 12. APIエンドポイントの問題
+## 13. APIエンドポイントの問題
 
 **問題**: APIエンドポイントが500 Internal Server Errorを返す。
 
@@ -275,7 +288,7 @@ apiRoute.MapPost("/command",
     });
 ```
 
-## 13. 依存性注入の問題
+## 14. 依存性注入の問題
 
 **問題**: `System.InvalidOperationException: 型 'YourDomainDomainTypes' のサービスがありません`
 
@@ -287,7 +300,7 @@ builder.Services.AddSingleton(
         YourDomainEventsJsonContext.Default.Options));
 ```
 
-## 14. アプリケーションの実行
+## 15. アプリケーションの実行
 
 **問題**: Aspireホストでアプリケーションを実行する際の問題。
 
@@ -303,7 +316,7 @@ HTTPSプロファイルで起動するには：
 dotnet run --project MyProject.AppHost --launch-profile https
 ```
 
-## 15. ISekibanExecutor vs. SekibanOrleansExecutor
+## 16. ISekibanExecutor vs. SekibanOrleansExecutor
 
 **問題**: どのエグゼキューター型を使用すべきかわからない。
 
@@ -325,4 +338,35 @@ public static async Task<r> YourWorkflow(
 {
     // 実装
 }
+```
+
+## 17. SekibanDateProducerの使用
+
+**問題**: 外部システムからSekibanと一貫した時間取得方法が必要。
+
+**解決策**: `SekibanDateProducer.GetRegistered().UtcNow` を使用することで、外部システムからもSekibanと同じ方法で時間を取得できます。これにより、テスト時のモック化や時間の一貫性を保つことができます：
+
+```csharp
+using Sekiban.Pure.DateProducer;
+
+// Sekibanと一貫した時間取得
+var currentTime = SekibanDateProducer.GetRegistered().UtcNow;
+
+// テスト時にはモック実装に置き換え可能
+public class MockDateProducer : ISekibanDateProducer
+{
+    private readonly DateTime _fixedTime;
+    
+    public MockDateProducer(DateTime fixedTime)
+    {
+        _fixedTime = fixedTime;
+    }
+    
+    public DateTime UtcNow => _fixedTime;
+    public DateTime Now => _fixedTime.ToLocalTime();
+    public DateTime Today => _fixedTime.Date;
+}
+
+// テストでの使用例
+SekibanDateProducer.Register(new MockDateProducer(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
 ```
