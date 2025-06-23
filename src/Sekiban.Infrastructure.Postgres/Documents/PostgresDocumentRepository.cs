@@ -36,7 +36,7 @@ public class PostgresDocumentRepository(
                 var partition = PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType, rootPartitionKey);
                 var query = dbContext.Commands.Where(m => m.AggregateContainerGroup == aggregateContainerGroup);
                 query = query.Where(m => m.PartitionKey == partition);
-                GetCommandsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
+                GetCommandsInBatches(query).ForEach(resultAction);
                 await Task.CompletedTask;
             });
     }
@@ -396,7 +396,7 @@ public class PostgresDocumentRepository(
     }
 
 
-    private SnapshotDocument? GetSnapshotDocument(DbSingleProjectionSnapshotDocument dbSnapshot)
+    private static SnapshotDocument? GetSnapshotDocument(DbSingleProjectionSnapshotDocument dbSnapshot)
     {
         var payload = dbSnapshot.Snapshot is null
             ? null
@@ -420,17 +420,14 @@ public class PostgresDocumentRepository(
         };
     }
 
-
-    private IEnumerable<IEnumerable<string>> GetCommandsInBatches(
-        IEnumerable<DbCommandDocument> commands,
-        string? sinceSortableUniqueId)
+    private static IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands)
     {
         const int batchSize = 1000;
         List<string> commandBatch = [];
 
         foreach (var commandItem in commands)
         {
-            var commandDocument = FromDbCommand(commandItem, sinceSortableUniqueId);
+            var commandDocument = FromDbCommand(commandItem);
             if (commandDocument is not null)
             {
                 commandBatch.Add(JsonSerializer.Serialize(commandDocument));
@@ -442,20 +439,22 @@ public class PostgresDocumentRepository(
             }
         }
 
-        if (commandBatch.Any())
+        if (0 < commandBatch.Count)
         {
             yield return commandBatch;
         }
     }
-    private CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand, string? sinceSortableUniqueId)
+
+    private static CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand)
     {
         var payload = SekibanJsonHelper.Deserialize(dbCommand.Payload, typeof(JsonElement));
         if (payload is null)
         {
             return null;
         }
-        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ??
-            new List<CallHistory>();
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ?? [];
+
         return new CommandDocumentForJsonExport
         {
             Id = dbCommand.Id,
@@ -491,7 +490,7 @@ public class PostgresDocumentRepository(
             }
         }
 
-        if (eventBatch.Any())
+        if (0 < eventBatch.Count)
         {
             yield return eventBatch;
         }
@@ -511,8 +510,9 @@ public class PostgresDocumentRepository(
         {
             return null;
         }
-        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbEvent.CallHistories) ??
-            new List<CallHistory>();
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbEvent.CallHistories) ?? [];
+
         return Event.GenerateIEvent(
             dbEvent.Id,
             dbEvent.AggregateId,
