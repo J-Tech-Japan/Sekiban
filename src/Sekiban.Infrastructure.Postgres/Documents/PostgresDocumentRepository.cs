@@ -34,9 +34,20 @@ public class PostgresDocumentRepository(
             async dbContext =>
             {
                 var partition = PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType, rootPartitionKey);
-                var query = dbContext.Commands.Where(m => m.AggregateContainerGroup == aggregateContainerGroup);
-                query = query.Where(m => m.PartitionKey == partition);
+                var query = dbContext.Commands
+                    .Where(m =>
+                        m.AggregateContainerGroup == aggregateContainerGroup &&
+                        m.PartitionKey == partition
+                    );
+
+                if (sinceSortableUniqueId is not null)
+                {
+                    query = query.Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0);
+                }
+
+                query = query.OrderBy(m => m.SortableUniqueId);
                 GetCommandsInBatches(query).ForEach(resultAction);
+
                 await Task.CompletedTask;
             });
     }
@@ -296,7 +307,8 @@ public class PostgresDocumentRepository(
                             }
                             break;
                     }
-                } else
+                }
+                else
                 {
                     switch (aggregateContainerGroup)
                     {
@@ -495,6 +507,7 @@ public class PostgresDocumentRepository(
             yield return eventBatch;
         }
     }
+
     private IEvent? FromDbEvent(IDbEvent dbEvent)
     {
         if (string.IsNullOrEmpty(dbEvent.DocumentTypeName))
