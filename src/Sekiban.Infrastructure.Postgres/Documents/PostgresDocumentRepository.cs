@@ -242,11 +242,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
@@ -276,11 +276,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
@@ -325,11 +325,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
@@ -370,11 +370,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
