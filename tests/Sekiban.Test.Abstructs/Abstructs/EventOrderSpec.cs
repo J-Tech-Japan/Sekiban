@@ -23,9 +23,9 @@ public abstract class EventOrderSpec(
     public async Task EventOrderTest()
     {
         RemoveAllFromDefaultAndDissolvable();
-        
+
         var beforeSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
-        
+
         var branchResponse = await commandExecutor.ExecCommandAsync(new CreateBranch("Test"));
         var branchId = branchResponse.AggregateId!.Value;
         var clientResponse
@@ -61,7 +61,7 @@ public abstract class EventOrderSpec(
 
 
         // check if all event order and max count is correct
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 IDocument.DefaultRootPartitionKey,
@@ -77,24 +77,24 @@ public abstract class EventOrderSpec(
 
 
         // check if all event order is correct
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(103, eventsOldToNew.Count);
 
         // check if all event order and max count is correct
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None, 20),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(20, eventsOldToNew.Count);
-        
-        
-        
+
+
+
         var secondSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
-        
-        
+
+
         foreach (var i in Enumerable.Range(1, 50))
         {
             sekibanTestFixture.TestOutputHelper?.WriteLine($"i:{i}");
@@ -107,38 +107,57 @@ public abstract class EventOrderSpec(
                     $"test{i}") { ReferenceVersion = refVersion });
             refVersion = response.Version;
         }
+
         // single partition between test
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AggregateTypeStream<LoyaltyPoint>(), clientId, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), null),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(101, eventsOldToNew.Count);
 
+        // single partition boundary test
+        var sortableUniqueIdLowerBound = eventsOldToNew[0].SortableUniqueId;
+        var sortableUniqueIdUpperBound = eventsOldToNew[^1].SortableUniqueId;
+        eventsOldToNew = [];
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AggregateTypeStream<LoyaltyPoint>(), clientId, ISortableIdCondition.Between(sortableUniqueIdLowerBound, sortableUniqueIdUpperBound), null),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(99, eventsOldToNew.Count);
+
         // single partition between test with max count
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AggregateTypeStream<LoyaltyPoint>(), clientId, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), 30),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(30, eventsOldToNew.Count);
-        
+
         // all partition between test
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), null),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(103, eventsOldToNew.Count);
-        
+
+        // all partitions boundary test
+        sortableUniqueIdLowerBound = eventsOldToNew[0].SortableUniqueId;
+        sortableUniqueIdUpperBound = eventsOldToNew[^1].SortableUniqueId;
+        eventsOldToNew = [];
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(sortableUniqueIdLowerBound, sortableUniqueIdUpperBound), null),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(101, eventsOldToNew.Count);
+
         var thirdSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
-        
+
         // all partition between test
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(secondSortableUniqueId, thirdSortableUniqueId), null),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(50, eventsOldToNew.Count);
 
         // all partition between test with max count
-        eventsOldToNew = new List<IEvent>();
+        eventsOldToNew = [];
         await repository.GetEvents(
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(secondSortableUniqueId, thirdSortableUniqueId), 30),
             m => eventsOldToNew.AddRange(m));
