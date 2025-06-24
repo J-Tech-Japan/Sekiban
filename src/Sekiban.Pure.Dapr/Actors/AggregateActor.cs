@@ -242,7 +242,7 @@ public class AggregateActor : Actor, IAggregateActor
                 {
                     // Get delta events and project them
                     var deltaEvents = await eventHandlerActor.GetDeltaEventsAsync(
-                        aggregate.LastSortableUniqueId);
+                        aggregate.LastSortableUniqueId, -1);
                     
                     aggregate = aggregate.Project(deltaEvents.ToList(), _partitionInfo.Projector).UnwrapBox();
                     _currentAggregate = aggregate;

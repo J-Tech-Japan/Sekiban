@@ -21,9 +21,9 @@ public interface IAggregateEventHandlerActor : IActor
     /// Gets delta events from a specific point in the stream.
     /// </summary>
     /// <param name="fromSortableUniqueId">The starting point for retrieving events</param>
-    /// <param name="limit">Optional limit on the number of events to retrieve</param>
+    /// <param name="limit">Limit on the number of events to retrieve (use -1 for no limit)</param>
     /// <returns>List of events after the specified point</returns>
-    Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int? limit = null);
+    Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int limit);
 
     /// <summary>
     /// Gets all events for the aggregate stream.

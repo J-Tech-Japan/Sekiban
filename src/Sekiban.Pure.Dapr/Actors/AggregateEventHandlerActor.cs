@@ -88,15 +88,15 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         return toStoreEvents;
     }
 
-    public async Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int? limit = null)
+    public async Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
     {
         var retrievalInfo = GetEventRetrievalInfo();
         var allEvents = await _eventReader.GetEvents(retrievalInfo).UnwrapBox();
         
         if (string.IsNullOrWhiteSpace(fromSortableUniqueId))
         {
-            return limit.HasValue 
-                ? allEvents.Take(limit.Value).ToList() 
+            return limit > 0 
+                ? allEvents.Take(limit).ToList() 
                 : allEvents.ToList();
         }
 
@@ -108,8 +108,8 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         }
 
         var deltaEvents = allEvents.Skip(index + 1);
-        return limit.HasValue 
-            ? deltaEvents.Take(limit.Value).ToList() 
+        return limit > 0 
+            ? deltaEvents.Take(limit).ToList() 
             : deltaEvents.ToList();
     }
 
