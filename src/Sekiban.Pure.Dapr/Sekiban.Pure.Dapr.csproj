@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>Sekiban.Pure.Dapr</Title>
+    <Description>Event Sourcing and CQRS Framework with Dapr integration</Description>
+    <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- <PackageIcon>icon.png</PackageIcon> -->
+    <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+    <PackageTags>event-sourcing;cqrs;.net;dapr;microservices</PackageTags>
+    <Authors>J-Tech Japan</Authors>
+    <Company>J-Tech Japan</Company>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapr.Client" Version="1.14.0" />
+    <PackageReference Include="Dapr.AspNetCore" Version="1.14.0" />
+    <PackageReference Include="Dapr.Actors" Version="1.14.0" />
+    <PackageReference Include="Dapr.Actors.AspNetCore" Version="1.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sekiban.Pure\Sekiban.Pure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <!-- <None Include="..\..\icon.png" Pack="true" PackagePath="\" /> -->
+  </ItemGroup>
+
+</Project>

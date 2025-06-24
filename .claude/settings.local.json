@@ -1,3 +1,11 @@
 {
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": false,
+    "permissions": {
+    "allow": [
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(curl:*)"
+    ]
+  }
 }
