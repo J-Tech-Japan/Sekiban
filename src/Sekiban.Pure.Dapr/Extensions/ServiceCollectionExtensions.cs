@@ -6,6 +6,8 @@ using Sekiban.Pure.Dapr.Services;
 using Sekiban.Pure.Executors;
 using Sekiban.Pure.Repositories;
 using Sekiban.Pure;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
 
 namespace Sekiban.Pure.Dapr.Extensions;
 
@@ -28,6 +30,7 @@ public static class ServiceCollectionExtensions
         services.AddActors(options =>
         {
             options.Actors.RegisterActor<AggregateActor>();
+            options.Actors.RegisterActor<AggregateEventHandlerActor>();
             options.Actors.RegisterActor<MultiProjectorActor>();
             
             options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
@@ -38,6 +41,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(domainTypes);
         services.AddSingleton<Repository, DaprEventStore>();
         services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
+        
+        // Register event storage services
+        services.AddSingleton<IEventWriter, DaprEventStore>();
+        services.AddSingleton<IEventReader, DaprEventStore>();
 
         return services;
     }

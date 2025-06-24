@@ -44,14 +44,34 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
+            // Get projector type from command
+            var projectorType = GetProjectorTypeFromCommand(command);
+            if (projectorType == null)
+            {
+                return ResultBox<CommandResponse>.FromException(
+                    new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
+            }
+
+            // Get partition keys
             var partitionKeys = GetPartitionKeys(command);
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{partitionKeys.ToPrimaryKeysString()}");
+            
+            // Create actor ID with projector type
+            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
+            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,
                 nameof(AggregateActor));
 
-            return await aggregateActor.ExecuteCommandAsync(command, relatedEvent);
+            // Create command metadata
+            var commandId = Guid.NewGuid();
+            var metadata = new CommandMetadata(
+                CommandId: commandId,
+                CausationId: relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
+                CorrelationId: commandId.ToString(),
+                ExecutedUser: "system");
+
+            return await aggregateActor.ExecuteCommandAsync(command, metadata);
         }
         catch (Exception ex)
         {
@@ -98,34 +118,19 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{partitionKeys.ToPrimaryKeysString()}");
+            // Create actor ID with projector type
+            var projectorType = typeof(TAggregateProjector);
+            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
+            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
+            
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,
                 nameof(AggregateActor));
 
-            var eventsResult = await aggregateActor.GetEventsAsync();
-            if (!eventsResult.IsSuccess)
-            {
-                return ResultBox<Aggregate>.FromException(eventsResult.GetException());
-            }
-
-            var events = eventsResult.GetValue().ToList();
-            var projector = new TAggregateProjector();
-            var initialPayload = new Sekiban.Pure.Aggregates.EmptyAggregatePayload();
-            var payload = projector.Project(initialPayload, null!);
+            // Get the current state from the actor
+            var aggregate = await aggregateActor.GetStateAsync();
             
-            foreach (var evt in events)
-            {
-                payload = projector.Project(payload, evt);
-            }
-            
-            return ResultBox<Aggregate>.FromValue(
-                Aggregate.FromPayload(
-                    payload,
-                    partitionKeys,
-                    events.Count,
-                    events.LastOrDefault()?.SortableUniqueId ?? string.Empty,
-                    projector));
+            return ResultBox<Aggregate>.FromValue(aggregate);
         }
         catch (Exception ex)
         {
@@ -144,5 +149,36 @@ public class SekibanDaprExecutor : ISekibanExecutor
         }
 
         throw new InvalidOperationException($"GetPartitionKeys method not found for command type {commandType.Name}");
+    }
+
+    private Type? GetProjectorTypeFromCommand(ICommandWithHandlerSerializable command)
+    {
+        var commandType = command.GetType();
+        
+        // Look for ICommandWithHandler<TCommand, TProjector> interface
+        var commandInterface = commandType
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && 
+                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,>));
+        
+        if (commandInterface != null)
+        {
+            // Get the projector type from the generic arguments
+            return commandInterface.GetGenericArguments()[1];
+        }
+
+        // Look for ICommandWithHandler<TCommand, TProjector, TPayload> interface
+        var commandWithPayloadInterface = commandType
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && 
+                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,,>));
+        
+        if (commandWithPayloadInterface != null)
+        {
+            // Get the projector type from the generic arguments
+            return commandWithPayloadInterface.GetGenericArguments()[1];
+        }
+
+        return null;
     }
 }
