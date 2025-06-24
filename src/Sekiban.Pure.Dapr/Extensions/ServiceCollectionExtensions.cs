@@ -24,7 +24,11 @@ public static class ServiceCollectionExtensions
             configureOptions?.Invoke(options);
         });
 
-        // Add Dapr (will be added when configuring MVC/WebAPI)
+        // Add Dapr client directly
+        services.AddSingleton<global::Dapr.Client.DaprClient>(provider =>
+        {
+            return new global::Dapr.Client.DaprClientBuilder().Build();
+        });
         
         // Add Actors
         services.AddActors(options =>
@@ -54,6 +58,10 @@ public static class ServiceCollectionExtensions
         SekibanDomainTypes domainTypes)
     {
         services.AddSingleton(domainTypes);
+        services.AddSingleton<global::Dapr.Client.DaprClient>(provider =>
+        {
+            return new global::Dapr.Client.DaprClientBuilder().Build();
+        });
         services.AddSingleton<Repository, DaprEventStore>();
         
         return services;

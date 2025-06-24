@@ -22,7 +22,7 @@ public record DaprSerializableAggregate
     /// <summary>
     /// Creates a DaprSerializableAggregate from an Aggregate
     /// </summary>
-    public static async Task<DaprSerializableAggregate> CreateFromAsync(
+    public static Task<DaprSerializableAggregate> CreateFromAsync(
         Aggregate aggregate,
         JsonSerializerOptions jsonOptions)
     {
@@ -40,7 +40,7 @@ public record DaprSerializableAggregate
             payloadJson = JsonSerializer.Serialize(aggregate.Payload, aggregate.Payload.GetType(), jsonOptions);
         }
 
-        return new DaprSerializableAggregate
+        var result = new DaprSerializableAggregate
         {
             ProjectorTypeName = aggregate.ProjectorTypeName,
             ProjectorVersion = aggregate.ProjectorVersion,
@@ -50,12 +50,14 @@ public record DaprSerializableAggregate
             PayloadJson = payloadJson,
             PayloadTypeName = payloadTypeName
         };
+        
+        return Task.FromResult(result);
     }
 
     /// <summary>
     /// Converts back to an Aggregate
     /// </summary>
-    public async Task<OptionalValue<Aggregate>> ToAggregateAsync(SekibanDomainTypes domainTypes)
+    public Task<OptionalValue<Aggregate>> ToAggregateAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -66,7 +68,7 @@ public record DaprSerializableAggregate
                 var payloadType = Type.GetType(PayloadTypeName);
                 if (payloadType == null)
                 {
-                    return OptionalValue<Aggregate>.Empty;
+                    return Task.FromResult(OptionalValue<Aggregate>.Empty);
                 }
 
                 var deserialized = JsonSerializer.Deserialize(PayloadJson, payloadType, domainTypes.JsonSerializerOptions);
@@ -76,7 +78,7 @@ public record DaprSerializableAggregate
                 }
                 else
                 {
-                    return OptionalValue<Aggregate>.Empty;
+                    return Task.FromResult(OptionalValue<Aggregate>.Empty);
                 }
             }
 
@@ -90,11 +92,11 @@ public record DaprSerializableAggregate
                 PayloadTypeName: PayloadTypeName);
 
             var result = new OptionalValue<Aggregate>(aggregate);
-            return await Task.FromResult(result);
+            return Task.FromResult(result);
         }
         catch
         {
-            return OptionalValue<Aggregate>.Empty;
+            return Task.FromResult(OptionalValue<Aggregate>.Empty);
         }
     }
 }
