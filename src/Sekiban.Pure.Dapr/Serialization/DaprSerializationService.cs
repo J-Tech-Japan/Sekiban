@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Documents;
 
 namespace Sekiban.Pure.Dapr.Serialization;
 
@@ -77,7 +78,7 @@ public class DaprSerializationService : IDaprSerializationService
         }
     }
 
-    public async ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregateCommon aggregate)
+    public async ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregate aggregate)
     {
         ArgumentNullException.ThrowIfNull(aggregate);
 
@@ -109,9 +110,9 @@ public class DaprSerializationService : IDaprSerializationService
                 CompressedPayload = compressedPayload,
                 PayloadTypeName = typeAlias,
                 Version = aggregate.Version,
-                AggregateId = aggregate.GetAggregateId(),
-                RootPartitionKey = aggregate.GetRootPartitionKey(),
-                LastEventId = aggregate.LastEventId,
+                AggregateId = aggregate.PartitionKeys.AggregateId,
+                RootPartitionKey = aggregate.PartitionKeys.RootPartitionKey,
+                LastEventId = aggregate.LastSortableUniqueId,
                 IsCompressed = isCompressed,
                 Metadata = new Dictionary<string, string>
                 {
@@ -122,12 +123,12 @@ public class DaprSerializationService : IDaprSerializationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to serialize aggregate {AggregateId}", aggregate.GetAggregateId());
+            _logger.LogError(ex, "Failed to serialize aggregate {AggregateId}", aggregate.PartitionKeys.AggregateId);
             throw;
         }
     }
 
-    public async ValueTask<IAggregateCommon?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate)
+    public async ValueTask<IAggregate?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate)
     {
         ArgumentNullException.ThrowIfNull(surrogate);
 
@@ -167,15 +168,15 @@ public class DaprSerializationService : IDaprSerializationService
                 return null;
             }
 
-            // Create aggregate instance using reflection
-            var aggregateType = typeof(Aggregate<>).MakeGenericType(payloadType);
-            var aggregate = Activator.CreateInstance(
-                aggregateType,
-                surrogate.AggregateId,
-                payload,
+            // Create aggregate instance
+            var aggregate = new Aggregate(
+                payload as IAggregatePayload ?? throw new InvalidOperationException("Payload must implement IAggregatePayload"),
+                new PartitionKeys(surrogate.AggregateId, string.Empty, surrogate.RootPartitionKey),
                 surrogate.Version,
-                surrogate.RootPartitionKey,
-                surrogate.LastEventId) as IAggregateCommon;
+                surrogate.LastEventId ?? string.Empty, // LastSortableUniqueId
+                "1", // ProjectorVersion - TODO: need to handle this properly
+                payloadType.Name, // ProjectorTypeName  
+                payloadType.AssemblyQualifiedName ?? payloadType.FullName ?? payloadType.Name); // PayloadTypeName
 
             return aggregate;
         }

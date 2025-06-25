@@ -22,12 +22,12 @@ public interface IDaprSerializationService
     /// <summary>
     /// Serializes an aggregate to a surrogate
     /// </summary>
-    ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregateCommon aggregate);
+    ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregate aggregate);
 
     /// <summary>
     /// Deserializes an aggregate from a surrogate
     /// </summary>
-    ValueTask<IAggregateCommon?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate);
+    ValueTask<IAggregate?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate);
 
     /// <summary>
     /// Serializes a command to an envelope

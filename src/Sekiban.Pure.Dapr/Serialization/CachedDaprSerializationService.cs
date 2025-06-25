@@ -59,13 +59,13 @@ public class CachedDaprSerializationService : IDaprSerializationService
         return result;
     }
 
-    public ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregateCommon aggregate)
+    public ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregate aggregate)
     {
         // Don't cache serialization as aggregates change frequently
         return _innerService.SerializeAggregateAsync(aggregate);
     }
 
-    public async ValueTask<IAggregateCommon?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate)
+    public async ValueTask<IAggregate?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate)
     {
         if (surrogate?.CompressedPayload == null || surrogate.CompressedPayload.Length == 0)
         {
@@ -74,7 +74,7 @@ public class CachedDaprSerializationService : IDaprSerializationService
 
         var cacheKey = $"aggregate:{surrogate.AggregateId}:{surrogate.Version}:{GenerateHash(surrogate.CompressedPayload)}";
         
-        if (_cache.TryGetValue<IAggregateCommon>(cacheKey, out var cached))
+        if (_cache.TryGetValue<IAggregate>(cacheKey, out var cached))
         {
             _logger.LogDebug("Cache hit for aggregate {AggregateId} version {Version}", 
                 surrogate.AggregateId, surrogate.Version);

@@ -3,16 +3,16 @@ using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Keys;
 using Sekiban.Pure.Repositories;
 using Sekiban.Pure.Dapr.Serialization;
+using System.Text.Json;
 
 namespace Sekiban.Pure.Dapr.EventStore;
 
 /// <summary>
 /// Dapr state store implementation of event store using the new serialization system
 /// </summary>
-public class DaprEventStore : ISekibanRepository
+public class DaprEventStore : Repository, IEventWriter, IEventReader
 {
     private readonly DaprClient _daprClient;
     private readonly IDaprSerializationService _serialization;
@@ -32,196 +32,155 @@ public class DaprEventStore : ISekibanRepository
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _stateStoreName = stateStoreName;
         _pubSubName = pubSubName;
+        
+        // Set up serializer and deserializer for base Repository
+        Serializer = (evt) => JsonSerializer.Serialize(evt);
+        Deserializer = (json) => JsonSerializer.Deserialize<IEvent>(json)!;
     }
 
-    public async Task<ResultBox<EventDocumentWithBlobData>> SaveEventAsync(
-        EventDocument eventDocument,
-        Type eventPayloadType)
+    /// <summary>
+    /// Implementation of IEventWriter - saves events to Dapr state store
+    /// </summary>
+    public async Task SaveEvents<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent
     {
-        try
+        var eventsList = events.ToList();
+        
+        foreach (var @event in eventsList)
         {
-            // Create event envelope
-            var envelope = await _serialization.SerializeEventAsync(
-                eventDocument.Event,
-                eventDocument.AggregateId,
-                eventDocument.Version,
-                eventDocument.RootPartitionKey);
-
-            // Generate state key
-            var key = GenerateEventKey(eventDocument);
-
-            // Save to Dapr state store
-            await _daprClient.SaveStateAsync(_stateStoreName, key, envelope);
-
-            // Publish event for subscribers
-            var topicName = $"events.{eventDocument.Event.GetType().Name}";
-            await _daprClient.PublishEventAsync(_pubSubName, topicName, envelope);
-
-            // Also publish to a general events topic
-            await _daprClient.PublishEventAsync(_pubSubName, "events.all", envelope);
-
-            return ResultBox.FromValue(new EventDocumentWithBlobData(eventDocument));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save event {EventId}", eventDocument.Id);
-            return ResultBox<EventDocumentWithBlobData>.FromException(ex);
-        }
-    }
-
-    public async Task<ResultBox<List<EventDocumentWithBlobData>>> GetEventsByPartitionKeysAsync(
-        PartitionKeys partitionKeys,
-        int? skip = null,
-        int? limit = null)
-    {
-        try
-        {
-            var events = new List<EventDocumentWithBlobData>();
-            
-            // Query pattern for partition keys
-            var keyPattern = GeneratePartitionKeyPattern(partitionKeys);
-            
-            // Note: Dapr doesn't have built-in query support for state stores
-            // In production, you'd need to implement a proper indexing solution
-            // For now, we'll simulate with a known range of versions
-            
-            var version = 1;
-            var foundEvents = 0;
-            var skippedEvents = 0;
-            
-            while (true)
+            try
             {
-                var key = $"{keyPattern}:v{version}";
-                var envelope = await _daprClient.GetStateAsync<DaprEventEnvelope>(_stateStoreName, key);
+                // Create event envelope
+                var envelope = await _serialization.SerializeEventAsync(
+                    @event,
+                    @event.PartitionKeys.AggregateId,
+                    @event.Version,
+                    @event.PartitionKeys.RootPartitionKey);
+
+                // Generate state key
+                var key = GenerateEventKey(@event.PartitionKeys, @event.Version);
+
+                // Save to Dapr state store
+                await _daprClient.SaveStateAsync(_stateStoreName, key, envelope);
                 
-                if (envelope == null)
-                {
-                    // No more events
-                    break;
-                }
+                // Update metadata
+                await UpdateAggregateMetadata(@event);
+
+                // Publish event for subscribers
+                await PublishEvent(@event, envelope);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save event {EventId}", @event.Id);
+                throw;
+            }
+        }
+        
+        // Also save to in-memory repository
+        base.Save(eventsList.Cast<IEvent>().ToList());
+    }
+
+    /// <summary>
+    /// Implementation of IEventReader - retrieves events from Dapr state store
+    /// </summary>
+    public async Task<ResultBox<IReadOnlyList<IEvent>>> GetEvents(EventRetrievalInfo eventRetrievalInfo)
+    {
+        try
+        {
+            var events = new List<IEvent>();
+            
+            // For now, use a simple approach - try to load events by version
+            // In production, you'd want to implement proper querying
+            if (eventRetrievalInfo.AggregateId.HasValue)
+            {
+                var partitionKeys = new PartitionKeys(
+                    eventRetrievalInfo.AggregateId.Value,
+                    string.Empty,
+                    eventRetrievalInfo.RootPartitionKey.GetValue() ?? string.Empty);
                 
-                if (skip.HasValue && skippedEvents < skip.Value)
-                {
-                    skippedEvents++;
-                    version++;
-                    continue;
-                }
+                var version = 1;
+                var foundEvents = 0;
                 
-                var @event = await _serialization.DeserializeEventAsync(envelope);
-                if (@event != null)
+                while (true)
                 {
-                    var eventDocument = new EventDocument(
-                        @event,
-                        envelope.AggregateId,
-                        envelope.RootPartitionKey,
-                        envelope.Version);
+                    var key = GenerateEventKey(partitionKeys, version);
+                    var envelope = await _daprClient.GetStateAsync<DaprEventEnvelope>(_stateStoreName, key);
                     
-                    events.Add(new EventDocumentWithBlobData(eventDocument));
-                    foundEvents++;
-                    
-                    if (limit.HasValue && foundEvents >= limit.Value)
+                    if (envelope == null)
                     {
                         break;
                     }
+                    
+                    // Check sortable ID condition
+                    if (eventRetrievalInfo.SortableIdCondition != null)
+                    {
+                        var sortableIdValue = new SortableUniqueIdValue(envelope.SortableUniqueId);
+                        if (eventRetrievalInfo.SortableIdCondition.OutsideOfRange(sortableIdValue))
+                        {
+                            version++;
+                            continue;
+                        }
+                    }
+                    
+                    var @event = await _serialization.DeserializeEventAsync(envelope);
+                    if (@event != null)
+                    {
+                        events.Add(@event);
+                        foundEvents++;
+                        
+                        if (eventRetrievalInfo.MaxCount.HasValue && foundEvents >= eventRetrievalInfo.MaxCount.Value)
+                        {
+                            break;
+                        }
+                    }
+                    
+                    version++;
                 }
-                
-                version++;
             }
             
-            return ResultBox.FromValue(events);
+            return ResultBox.FromValue<IReadOnlyList<IEvent>>(events);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get events for partition keys {PartitionKeys}", partitionKeys);
-            return ResultBox<List<EventDocumentWithBlobData>>.FromException(ex);
+            _logger.LogError(ex, "Failed to get events for retrieval info {Info}", eventRetrievalInfo);
+            return ResultBox<IReadOnlyList<IEvent>>.FromException(ex);
         }
     }
 
-    public async Task<ResultBox<EventDocumentWithBlobData?>> GetLatestEventByPartitionKeysAsync(
-        PartitionKeys partitionKeys)
+    /// <summary>
+    /// Override Save method to persist to Dapr
+    /// </summary>
+    public new ResultBox<List<IEvent>> Save(List<IEvent> events)
     {
-        try
-        {
-            // Get metadata key
-            var metadataKey = $"{GeneratePartitionKeyPattern(partitionKeys)}:metadata";
-            var metadata = await _daprClient.GetStateAsync<AggregateMetadata>(_stateStoreName, metadataKey);
-            
-            if (metadata == null || metadata.LatestVersion == 0)
-            {
-                return ResultBox.FromValue<EventDocumentWithBlobData?>(null);
-            }
-            
-            // Get the latest event
-            var eventKey = $"{GeneratePartitionKeyPattern(partitionKeys)}:v{metadata.LatestVersion}";
-            var envelope = await _daprClient.GetStateAsync<DaprEventEnvelope>(_stateStoreName, eventKey);
-            
-            if (envelope == null)
-            {
-                return ResultBox.FromValue<EventDocumentWithBlobData?>(null);
-            }
-            
-            var @event = await _serialization.DeserializeEventAsync(envelope);
-            if (@event == null)
-            {
-                return ResultBox.FromValue<EventDocumentWithBlobData?>(null);
-            }
-            
-            var eventDocument = new EventDocument(
-                @event,
-                envelope.AggregateId,
-                envelope.RootPartitionKey,
-                envelope.Version);
-            
-            return ResultBox.FromValue<EventDocumentWithBlobData?>(new EventDocumentWithBlobData(eventDocument));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get latest event for partition keys {PartitionKeys}", partitionKeys);
-            return ResultBox<EventDocumentWithBlobData?>.FromException(ex);
-        }
+        // Save to Dapr asynchronously
+        Task.Run(async () => await SaveEvents(events)).Wait();
+        
+        // Also save to in-memory store
+        return base.Save(events);
     }
 
-    public async Task<ResultBox<bool>> DeleteEventsByPartitionKeysAsync(PartitionKeys partitionKeys)
+    private string GenerateEventKey(PartitionKeys partitionKeys, int version)
     {
-        try
-        {
-            var keyPattern = GeneratePartitionKeyPattern(partitionKeys);
-            
-            // Get metadata to know how many events to delete
-            var metadataKey = $"{keyPattern}:metadata";
-            var metadata = await _daprClient.GetStateAsync<AggregateMetadata>(_stateStoreName, metadataKey);
-            
-            if (metadata != null)
-            {
-                // Delete all events
-                for (var version = 1; version <= metadata.LatestVersion; version++)
-                {
-                    var eventKey = $"{keyPattern}:v{version}";
-                    await _daprClient.DeleteStateAsync(_stateStoreName, eventKey);
-                }
-                
-                // Delete metadata
-                await _daprClient.DeleteStateAsync(_stateStoreName, metadataKey);
-            }
-            
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete events for partition keys {PartitionKeys}", partitionKeys);
-            return ResultBox<bool>.FromException(ex);
-        }
+        return $"events:{partitionKeys.RootPartitionKey}:{partitionKeys.AggregateId}:v{version}";
     }
 
-    private string GenerateEventKey(EventDocument eventDocument)
+    private async Task UpdateAggregateMetadata(IEvent @event)
     {
-        var partitionKey = GeneratePartitionKeyPattern(eventDocument.PartitionKeys);
-        return $"{partitionKey}:v{eventDocument.Version}";
+        var metadataKey = $"events:{@event.PartitionKeys.RootPartitionKey}:{@event.PartitionKeys.AggregateId}:metadata";
+        await _daprClient.SaveStateAsync(_stateStoreName, metadataKey, new AggregateMetadata
+        {
+            LatestVersion = @event.Version,
+            LastEventId = @event.GetSortableUniqueId(),
+            LastModified = DateTime.UtcNow
+        });
     }
 
-    private string GeneratePartitionKeyPattern(PartitionKeys partitionKeys)
+    private async Task PublishEvent(IEvent @event, DaprEventEnvelope envelope)
     {
-        return $"events:{partitionKeys.RootPartitionKey}:{partitionKeys.AggregateId}";
+        var topicName = $"events.{@event.GetType().Name}";
+        await _daprClient.PublishEventAsync(_pubSubName, topicName, envelope);
+        
+        // Also publish to a general events topic
+        await _daprClient.PublishEventAsync(_pubSubName, "events.all", envelope);
     }
 
     /// <summary>

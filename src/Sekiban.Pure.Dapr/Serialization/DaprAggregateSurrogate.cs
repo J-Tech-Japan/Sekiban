@@ -7,7 +7,7 @@ namespace Sekiban.Pure.Dapr.Serialization;
 /// Surrogate for serializing aggregate state in Dapr
 /// </summary>
 [GenerateSerializer]
-public class DaprAggregateSurrogate : DaprSurrogate<IAggregateCommon>
+public class DaprAggregateSurrogate : DaprSurrogate<IAggregate>
 {
     /// <summary>
     /// Compressed payload data
@@ -57,12 +57,12 @@ public class DaprAggregateSurrogate : DaprSurrogate<IAggregateCommon>
     [Id(7)]
     public bool IsCompressed { get; set; } = true;
 
-    public override IAggregateCommon ConvertFromSurrogate()
+    public override IAggregate ConvertFromSurrogate()
     {
         throw new NotImplementedException("Use DaprSerializationService for deserialization");
     }
 
-    public override void ConvertToSurrogate(IAggregateCommon value)
+    public override void ConvertToSurrogate(IAggregate value)
     {
         throw new NotImplementedException("Use DaprSerializationService for serialization");
     }

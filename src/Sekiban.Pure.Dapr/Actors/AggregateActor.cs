@@ -247,12 +247,18 @@ public class AggregateActor : Actor, IAggregateActor
                     var deltaEvents = await eventHandlerActor.GetDeltaEventsAsync(
                         aggregate.LastSortableUniqueId, -1);
                     
-                    aggregate = aggregate.Project(deltaEvents.ToList(), _partitionInfo.Projector).UnwrapBox();
-                    _currentAggregate = aggregate;
+                    // Create a new aggregate by projecting the delta events
+                    var concreteAggregate = aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");
+                    var projectedResult = concreteAggregate.Project(deltaEvents.ToList(), _partitionInfo.Projector);
+                    if (!projectedResult.IsSuccess)
+                    {
+                        throw new InvalidOperationException($"Failed to project delta events: {projectedResult.GetException().Message}");
+                    }
+                    _currentAggregate = projectedResult.GetValue();
                     _hasUnsavedChanges = true;
                 }
                 
-                return aggregate;
+                return aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");
             }
         }
         

@@ -8,6 +8,8 @@ using Sekiban.Pure.Repositories;
 using Sekiban.Pure;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Dapr.EventStore;
+using Sekiban.Pure.Dapr.Serialization;
 
 namespace Sekiban.Pure.Dapr.Extensions;
 
@@ -43,12 +45,19 @@ public static class ServiceCollectionExtensions
 
         // Register Sekiban services
         services.AddSingleton(domainTypes);
-        services.AddSingleton<Repository>(provider => provider.GetRequiredService<ISekibanRepository>());
-        services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
         
-        // Register event storage services
-        services.AddSingleton<IEventWriter, DaprEventStore>();
-        services.AddSingleton<IEventReader, DaprEventStore>();
+        // Register event storage services with new serialization
+        services.AddSingleton<Repository>(provider =>
+        {
+            var daprClient = provider.GetRequiredService<global::Dapr.Client.DaprClient>();
+            var serialization = provider.GetRequiredService<IDaprSerializationService>();
+            var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sekiban.Pure.Dapr.EventStore.DaprEventStore>>();
+            return new Sekiban.Pure.Dapr.EventStore.DaprEventStore(daprClient, serialization, logger);
+        });
+        services.AddSingleton<IEventWriter>(provider => (IEventWriter)provider.GetRequiredService<Repository>());
+        services.AddSingleton<IEventReader>(provider => (IEventReader)provider.GetRequiredService<Repository>());
+        
+        services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
 
         return services;
     }
@@ -62,7 +71,13 @@ public static class ServiceCollectionExtensions
         {
             return new global::Dapr.Client.DaprClientBuilder().Build();
         });
-        services.AddSingleton<Repository>(provider => provider.GetRequiredService<ISekibanRepository>());
+        services.AddSingleton<Repository>(provider =>
+        {
+            var daprClient = provider.GetRequiredService<global::Dapr.Client.DaprClient>();
+            var serialization = provider.GetRequiredService<IDaprSerializationService>();
+            var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sekiban.Pure.Dapr.EventStore.DaprEventStore>>();
+            return new Sekiban.Pure.Dapr.EventStore.DaprEventStore(daprClient, serialization, logger);
+        });
         
         return services;
     }

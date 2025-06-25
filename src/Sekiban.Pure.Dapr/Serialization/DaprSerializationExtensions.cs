@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Sekiban.Pure.Dapr.Serialization;
 
@@ -58,7 +60,19 @@ public static class DaprSerializationExtensions
     public static IServiceCollection AddCachedDaprSerialization(this IServiceCollection services)
     {
         services.AddMemoryCache();
-        services.Decorate<IDaprSerializationService, CachedDaprSerializationService>();
+        // Replace the existing registration with the cached version
+        services.AddSingleton<IDaprSerializationService>(sp =>
+        {
+            var innerService = new DaprSerializationService(
+                sp.GetRequiredService<IDaprTypeRegistry>(),
+                sp.GetRequiredService<IOptions<DaprSerializationOptions>>(),
+                sp.GetRequiredService<ILogger<DaprSerializationService>>());
+            
+            return new CachedDaprSerializationService(
+                innerService,
+                sp.GetRequiredService<IMemoryCache>(),
+                sp.GetRequiredService<ILogger<CachedDaprSerializationService>>());
+        });
         return services;
     }
 
