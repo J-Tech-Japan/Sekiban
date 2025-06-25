@@ -1,13 +1,12 @@
 using Dapr.Actors;
 using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Command.Executor;
-using Sekiban.Pure.Command.Handlers;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
 /// <summary>
 /// Dapr actor interface for aggregate projection and command execution.
 /// This is the Dapr equivalent of Orleans' IAggregateProjectorGrain.
+/// Uses concrete types for proper JSON serialization by Dapr.
 /// </summary>
 public interface IAggregateActor : IActor
 {
@@ -16,26 +15,24 @@ public interface IAggregateActor : IActor
     /// If state is not created or projector version has changed,
     /// it will be rebuilt from events.
     /// </summary>
-    /// <returns>Current aggregate state</returns>
-    Task<Aggregate> GetStateAsync();
+    /// <returns>Current aggregate state serialized as JSON</returns>
+    Task<string> GetStateAsync();
 
     /// <summary>
     /// Entry point for command execution.
+    /// Accepts a CommandEnvelope containing Protobuf-serialized command.
     /// Uses the current state and CommandHandler to generate events,
     /// then sends them to AggregateEventHandlerActor.
     /// </summary>
-    /// <param name="command">Command to execute</param>
-    /// <param name="metadata">Command metadata</param>
+    /// <param name="envelope">Command envelope with Protobuf payload</param>
     /// <returns>Command response with state and generated events</returns>
-    Task<CommandResponse> ExecuteCommandAsync(
-        ICommandWithHandlerSerializable command,
-        CommandMetadata metadata);
+    Task<CommandResponse> ExecuteCommandAsync(CommandEnvelope envelope);
 
     /// <summary>
     /// Rebuilds state from scratch (for version upgrades or state corruption).
     /// Retrieves all events from AggregateEventHandlerActor and reconstructs
     /// state through the Projector logic.
     /// </summary>
-    /// <returns>Newly rebuilt state</returns>
-    Task<Aggregate> RebuildStateAsync();
+    /// <returns>Newly rebuilt state serialized as JSON</returns>
+    Task<string> RebuildStateAsync();
 }

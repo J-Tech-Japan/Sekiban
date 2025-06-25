@@ -38,12 +38,14 @@ public static class ServiceCollectionExtensions
         // Add serialization services
         services.AddSekibanDaprSerialization();
         
-        // Add Actors (including Protobuf actors)
+        // Add Actors (including Protobuf and Envelope actors)
         services.AddActors(options =>
         {
             options.Actors.RegisterActor<AggregateActor>();
             options.Actors.RegisterActor<ProtobufAggregateActor>();
+            options.Actors.RegisterActor<EnvelopeAggregateActor>();
             options.Actors.RegisterActor<AggregateEventHandlerActor>();
+            options.Actors.RegisterActor<EnvelopeAggregateEventHandlerActor>();
             options.Actors.RegisterActor<MultiProjectorActor>();
             
             options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
@@ -219,6 +221,71 @@ public static class ServiceCollectionExtensions
             return registry;
         });
         
+        return services;
+    }
+
+    /// <summary>
+    /// Adds Sekiban with Dapr using envelope-based actor communication
+    /// This is the recommended approach for production use
+    /// </summary>
+    public static IServiceCollection AddSekibanWithDaprEnvelopes(
+        this IServiceCollection services,
+        SekibanDomainTypes domainTypes,
+        Action<DaprSekibanOptions>? configureOptions = null,
+        Action<DaprSerializationOptions>? configureSerializationOptions = null)
+    {
+        // Configure options
+        services.Configure<DaprSekibanOptions>(options =>
+        {
+            configureOptions?.Invoke(options);
+        });
+
+        services.Configure<DaprSerializationOptions>(options =>
+        {
+            configureSerializationOptions?.Invoke(options);
+        });
+
+        // Add Dapr client
+        services.AddSingleton<global::Dapr.Client.DaprClient>(provider =>
+        {
+            return new global::Dapr.Client.DaprClientBuilder().Build();
+        });
+        
+        // Add Protobuf serialization services
+        services.AddSekibanDaprProtobufSerialization(configureSerializationOptions);
+        
+        // Add envelope services
+        services.AddSingleton<IProtobufTypeMapper, ProtobufTypeMapper>();
+        services.AddSingleton<IEnvelopeProtobufService, EnvelopeProtobufService>();
+        
+        // Add Actors (Envelope-based)
+        services.AddActors(options =>
+        {
+            options.Actors.RegisterActor<EnvelopeAggregateActor>();
+            options.Actors.RegisterActor<EnvelopeAggregateEventHandlerActor>();
+            options.Actors.RegisterActor<MultiProjectorActor>();
+            
+            options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
+            options.ActorScanInterval = TimeSpan.FromSeconds(30);
+        });
+
+        // Register Sekiban services
+        services.AddSingleton(domainTypes);
+        
+        // Register envelope-based event storage
+        services.AddSingleton<Repository>(provider =>
+        {
+            var daprClient = provider.GetRequiredService<global::Dapr.Client.DaprClient>();
+            var serialization = provider.GetRequiredService<IDaprProtobufSerializationService>();
+            var logger = provider.GetRequiredService<ILogger<ProtobufDaprEventStore>>();
+            return new ProtobufDaprEventStore(daprClient, serialization, logger);
+        });
+        services.AddSingleton<IEventWriter>(provider => (IEventWriter)provider.GetRequiredService<Repository>());
+        services.AddSingleton<IEventReader>(provider => (IEventReader)provider.GetRequiredService<Repository>());
+        
+        // Register envelope-based executor
+        services.AddScoped<ISekibanExecutor, SekibanEnvelopeDaprExecutor>();
+
         return services;
     }
 }
