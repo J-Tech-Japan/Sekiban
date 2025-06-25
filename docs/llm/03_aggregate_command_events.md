@@ -55,6 +55,14 @@ public record User(string Name, string Email, bool IsConfirmed = false) : IAggre
 
 Commands represent user intentions to change system state. They are implemented as records with handlers:
 
+### Command Design Principles
+
+- **Internal Consistency Only**: Commands should only validate business rules within the aggregate boundary
+- **No External Dependencies**: Commands must not depend on external aggregates or systems
+- **Parameter-Based Input**: All required external information must be provided as command parameters
+- **No Retrieval Operations**: Commands must not execute database queries, API calls, or other external data retrieval
+- **Deterministic Behavior**: Same input should always produce the same result
+
 ```csharp
 using Orleans.Serialization.Attributes;
 using Sekiban.Pure.Aggregates;
@@ -76,8 +84,13 @@ public record YourCommand(...parameters...)
     //    PartitionKeys.Existing<YourAggregateProjector>(command.AggregateId);
 
     public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
-        => EventOrNone.Event(new YourEvent(...parameters...));
+    {
+        // Pure business logic only - no external data retrieval
+        // Validate using only command parameters and current aggregate state
+        return EventOrNone.Event(new YourEvent(...parameters...));
+    }
 }
+```
 ```
 
 **Required**:
