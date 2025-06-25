@@ -226,7 +226,7 @@ public class ProtobufDaprEventStore : Repository, IEventWriter, IEventReader
             foreach (var aggregateEvents in eventsByAggregate)
             {
                 // Create a batch save operation for each aggregate
-                var batchItems = new List<BulkStateItem>();
+                var batchItems = new List<SaveStateItem<byte[]>>();
                 
                 foreach (var @event in aggregateEvents.OrderBy(e => e.Version))
                 {
@@ -238,7 +238,7 @@ public class ProtobufDaprEventStore : Repository, IEventWriter, IEventReader
                     
                     var key = GenerateEventKey(@event.PartitionKeys, @event.Version);
                     
-                    batchItems.Add(new BulkStateItem(
+                    batchItems.Add(new SaveStateItem<byte[]>(
                         key,
                         protobufEnvelope.ToByteArray(),
                         null)); // No etag for new events

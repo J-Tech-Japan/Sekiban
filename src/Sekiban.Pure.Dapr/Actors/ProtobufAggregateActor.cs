@@ -6,6 +6,7 @@ using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Dapr.Parts;
@@ -115,13 +116,12 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             }
             
             // Create metadata
-            var metadata = new CommandMetadata
-            {
-                AggregateId = _partitionInfo?.PartitionKeys.AggregateId ?? Guid.Empty,
-                RootPartitionKey = _partitionInfo?.PartitionKeys.RootPartitionKey ?? string.Empty,
-                ExecutedAt = DateTime.UtcNow,
-                ExecutedBy = "dapr-actor"
-            };
+            var commandId = Guid.NewGuid();
+            var metadata = new CommandMetadata(
+                CommandId: commandId,
+                CausationId: request.RelatedEventId ?? string.Empty,
+                CorrelationId: request.Command.CorrelationId ?? commandId.ToString(),
+                ExecutedUser: "dapr-actor");
             
             // Execute command using existing logic
             var response = await ExecuteCommandInternalAsync(command, metadata);
@@ -129,13 +129,14 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             // Convert response to protobuf
             var protobufResponse = new ProtobufCommandResponse
             {
-                Success = response.IsSuccess,
-                ErrorMessage = response.ErrorMessage ?? string.Empty
+                Success = true,
+                ErrorMessage = string.Empty
             };
             
-            if (response.IsSuccess && response.Aggregate != null)
+            // Get the current aggregate state
+            if (_currentAggregate != null && _currentAggregate != Aggregate.Empty)
             {
-                var aggregateEnvelope = await _serialization.SerializeAggregateToProtobufAsync(response.Aggregate);
+                var aggregateEnvelope = await _serialization.SerializeAggregateToProtobufAsync(_currentAggregate);
                 protobufResponse.Aggregate = aggregateEnvelope;
             }
             
@@ -149,13 +150,9 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
                 protobufResponse.Events.Add(eventEnvelope);
             }
             
-            if (response.Metadata != null)
-            {
-                foreach (var kvp in response.Metadata)
-                {
-                    protobufResponse.Metadata[kvp.Key] = kvp.Value;
-                }
-            }
+            // Add standard metadata
+            protobufResponse.Metadata["CommandId"] = Guid.NewGuid().ToString();
+            protobufResponse.Metadata["ExecutedAt"] = DateTime.UtcNow.ToString("O");
             
             return protobufResponse.ToByteArray();
         }
@@ -180,7 +177,7 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
         return protobufEnvelope.ToByteArray();
     }
 
-    private async Task<CommandResponse> ExecuteCommandInternalAsync(
+    private async Task<SekibanCommandResponse> ExecuteCommandInternalAsync(
         ICommandWithHandlerSerializable command,
         CommandMetadata metadata)
     {
@@ -332,12 +329,28 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
                     if (lastEventId != aggregate.LastSortableUniqueId)
                     {
                         // Get delta events and project them
-                        var deltaEvents = await eventHandlerActor.GetDeltaEventsAsync(
+                        var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
                             aggregate.LastSortableUniqueId, -1);
+                        
+                        // Convert envelopes back to events
+                        var deltaEvents = new List<IEvent>();
+                        foreach (var envelope in deltaEventEnvelopes)
+                        {
+                            var eventType = Type.GetType(envelope.EventType);
+                            if (eventType != null)
+                            {
+                                var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
+                                var @event = System.Text.Json.JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
+                                if (@event != null)
+                                {
+                                    deltaEvents.Add(@event);
+                                }
+                            }
+                        }
                         
                         // Create a new aggregate by projecting the delta events
                         var concreteAggregate = aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");
-                        var projectedResult = concreteAggregate.Project(deltaEvents.ToList(), _partitionInfo.Projector);
+                        var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
                         if (!projectedResult.IsSuccess)
                         {
                             throw new InvalidOperationException($"Failed to project delta events: {projectedResult.GetException().Message}");

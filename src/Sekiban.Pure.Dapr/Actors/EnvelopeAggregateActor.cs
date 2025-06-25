@@ -5,6 +5,8 @@ using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Dapr.Parts;
@@ -101,7 +103,7 @@ public class EnvelopeAggregateActor : Actor, IAggregateActor
         return JsonSerializer.Serialize(aggregate);
     }
 
-    public async Task<CommandResponse> ExecuteCommandAsync(CommandEnvelope envelope)
+    public async Task<DaprCommandResponse> ExecuteCommandAsync(CommandEnvelope envelope)
     {
         if (_partitionInfo == null)
         {
@@ -121,8 +123,7 @@ public class EnvelopeAggregateActor : Actor, IAggregateActor
                 CommandId: Guid.NewGuid(),
                 CausationId: envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
                 CorrelationId: envelope.CorrelationId,
-                ExecutedUser: envelope.Metadata.GetValueOrDefault("ExecutedUser", "system"),
-                ExecutedAt: DateTime.UtcNow);
+                ExecutedUser: envelope.Metadata.GetValueOrDefault("ExecutedUser", "system"));
             
             var eventHandlerActor = GetEventHandlerActor();
             
@@ -165,7 +166,7 @@ public class EnvelopeAggregateActor : Actor, IAggregateActor
             var protobufResponse = await _envelopeService.ConvertToProtobufResponse(result, _partitionInfo.PartitionKeys);
             
             // Send events to event handler actor using envelopes
-            if (result.IsSuccess && result.Events.Any())
+            if (result.Events.Any())
             {
                 var eventEnvelopes = await _envelopeService.CreateEventEnvelopes(
                     result.Events,
