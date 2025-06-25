@@ -18,6 +18,9 @@ builder.Services.AddControllers().AddDapr();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Add memory cache for CachedDaprSerializationService - MUST be before AddSekibanWithDapr
+builder.Services.AddMemoryCache();
+
 // Generate domain types
 var domainTypes = DaprSampleDomainDomainTypes.Generate(DaprSampleEventsJsonContext.Default.Options);
 
