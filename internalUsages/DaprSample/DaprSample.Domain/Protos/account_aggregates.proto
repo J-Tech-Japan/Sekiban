@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package DaprSample.Domain.Aggregates;
+
+option csharp_namespace = "DaprSample.Domain.Aggregates";
+
+import "google/protobuf/timestamp.proto";
+
+// Account aggregate state
+message Account {
+    string account_id = 1;
+    string account_name = 2;
+    string account_type = 3;
+    double balance = 4;
+    string currency = 5;
+    AccountStatus status = 6;
+    google.protobuf.Timestamp created_at = 7;
+    google.protobuf.Timestamp last_modified_at = 8;
+    
+    // Transaction history (optional, for read models)
+    repeated Transaction transactions = 9;
+}
+
+// Account status enum
+enum AccountStatus {
+    ACCOUNT_STATUS_UNSPECIFIED = 0;
+    ACCOUNT_STATUS_ACTIVE = 1;
+    ACCOUNT_STATUS_SUSPENDED = 2;
+    ACCOUNT_STATUS_CLOSED = 3;
+}
+
+// Transaction record
+message Transaction {
+    string transaction_id = 1;
+    TransactionType type = 2;
+    double amount = 3;
+    double balance_after = 4;
+    string description = 5;
+    string reference_number = 6;
+    google.protobuf.Timestamp timestamp = 7;
+}
+
+// Transaction type enum
+enum TransactionType {
+    TRANSACTION_TYPE_UNSPECIFIED = 0;
+    TRANSACTION_TYPE_DEPOSIT = 1;
+    TRANSACTION_TYPE_WITHDRAWAL = 2;
+    TRANSACTION_TYPE_TRANSFER_IN = 3;
+    TRANSACTION_TYPE_TRANSFER_OUT = 4;
+}
+
+// Empty account state (before creation)
+message EmptyAccount {
+    // No fields - represents non-existent account
+}

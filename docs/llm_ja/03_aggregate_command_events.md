@@ -55,6 +55,14 @@ public record User(string Name, string Email, bool IsConfirmed = false) : IAggre
 
 コマンドはシステム状態を変更するためのユーザーの意図を表します。これらはハンドラーを持つレコードとして実装されます：
 
+### コマンド設計の原則
+
+- **内部一貫性のみ**：コマンドは集約境界内のビジネスルールのみを検証すべきです
+- **外部依存関係なし**：コマンドは外部集約やシステムに依存してはいけません
+- **パラメータベースの入力**：必要な外部情報は全てコマンドパラメータとして提供する必要があります
+- **取得処理の禁止**：コマンドはデータベースクエリ、API呼び出し、その他の外部データ取得を実行してはいけません
+- **決定論的動作**：同じ入力は常に同じ結果を生成すべきです
+
 ```csharp
 using Orleans.Serialization.Attributes;
 using Sekiban.Pure.Aggregates;
@@ -76,8 +84,13 @@ public record YourCommand(...parameters...)
     //    PartitionKeys.Existing<YourAggregateProjector>(command.AggregateId);
 
     public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
-        => EventOrNone.Event(new YourEvent(...parameters...));
+    {
+        // 純粋なビジネスロジックのみ - 外部データ取得なし
+        // コマンドパラメータと現在の集約状態のみを使用して検証
+        return EventOrNone.Event(new YourEvent(...parameters...));
+    }
 }
+```
 ```
 
 **必須**:
