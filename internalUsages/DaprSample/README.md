@@ -111,3 +111,30 @@ This sample implements:
 3. **Redis connection issues**
    - Ensure Redis is running (automatically handled by Aspire)
    - Check the components configuration in `components/` directory
+   - For development without Redis, use in-memory components (already configured)
+
+4. **IMemoryCache dependency error**
+   - The application requires `builder.Services.AddMemoryCache()` before `AddSekibanWithDapr()`
+   - This has been fixed in the current implementation
+
+## Development Configuration
+
+### In-Memory Components (Default)
+The sample is configured to use in-memory components for development:
+- `components/pubsub.yaml` - In-memory pub/sub
+- `components/statestore.yaml` - In-memory state store
+
+### Redis Components (Production)
+For production use with Redis:
+1. Rename `pubsub-redis.yaml.bak` to `pubsub.yaml`
+2. Rename `statestore-redis.yaml.bak` to `statestore.yaml`
+3. Ensure Redis is running
+
+## Implementation Details
+
+This sample implements the envelope-based design to solve Dapr's interface serialization limitations:
+
+1. **CommandEnvelope** - Wraps commands with Protobuf payloads for actor communication
+2. **EventEnvelope** - Wraps events with Protobuf payloads
+3. **EnvelopeAggregateActor** - Uses concrete envelope types for proper JSON serialization
+4. **Protobuf serialization** - Ensures efficient binary encoding and type safety

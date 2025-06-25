@@ -3,10 +3,6 @@ kind: Component
 metadata:
   name: sekiban-pubsub
 spec:
-  type: pubsub.redis
+  type: pubsub.in-memory
   version: v1
-  metadata:
-  - name: redisHost
-    value: redis:6379
-  - name: redisPassword
-    value: ""
+  metadata: []
