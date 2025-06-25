@@ -115,3 +115,305 @@ Sekiban implements a clean, modern approach to event sourcing with:
 3. **Strong Typing**: Type-safe commands, events, and aggregates
 4. **Minimal Infrastructure**: Simple setup with minimal configuration
 5. **Source Generation**: Automatic registration of domain types
+
+## Aggregate Design Principles
+
+### Aggregate Responsibilities
+
+Aggregates in Sekiban serve as consistency boundaries and encapsulate business rules:
+
+1. **Business Rule Enforcement**: Aggregates validate business invariants before events are generated
+2. **Consistency Boundary**: Each aggregate maintains its own consistency without depending on other aggregates
+3. **Event Generation**: Aggregates handle commands and produce events as the result of business operations
+4. **State Management**: Current aggregate state is derived by applying events in sequence
+
+### Performance Considerations
+
+- **Event Count Limitation**: Design aggregate streams to have lifecycles with **10,000 events or fewer**
+- **Stream Partitioning**: Consider partitioning streams at appropriate boundaries for long-lived aggregates
+- **Snapshot Functionality**: Consider using snapshot functionality for aggregates with large numbers of events
+
+### Aggregate Authorization Rules
+
+- **NO Authentication/Authorization Logic**: Aggregates and their command handlers should not contain authentication or authorization logic
+- **Pure Business Logic**: Focus only on domain rules and business invariants
+- **Separation of Concerns**: Authorization is handled at the Workflow level
+
+### Command Design Principles
+
+- **Internal Consistency Only**: Commands should only consider consistency within the aggregate, not depend on external aggregates or systems
+- **External Information Input**: All required external information must be provided as command parameters
+- **No Retrieval Operations**: Commands must not execute external data retrieval operations (database queries, API calls, etc.)
+- **Deterministic Behavior**: Commands should be designed to always return the same result for the same input
+
+```csharp
+/// <summary>
+/// User aggregate handles user-related business operations
+/// </summary>
+public record UserProjector : IProjector<UserProjector>
+{
+    public string Email { get; init; } = string.Empty;
+    public TenantId TenantId { get; init; } = new(Guid.Empty);
+    public bool IsActive { get; init; } = true;
+    
+    public UserProjector ApplyEvent(UserCreated ev) => this with 
+    { 
+        Email = ev.Email, 
+        TenantId = ev.TenantId,
+        IsActive = true 
+    };
+}
+
+/// <summary>
+/// Command to create a new user - no authorization logic
+/// All external information provided as parameters
+/// </summary>
+public record CreateUserCommand(
+    string Email,
+    TenantId TenantId,
+    DateTime? CreatedAt = null
+) : ICommand<UserProjector>
+{
+    public ResultBox<EventOrNone> Handle(UserProjector projector, ICommandContext context)
+    {
+        // Pure business logic only - no external retrieval operations
+        if (string.IsNullOrEmpty(Email))
+            return ResultBox.FromError("Email is required");
+            
+        // Internal consistency checks only
+        if (projector.Email == Email)
+            return ResultBox.FromError("User with this email already exists");
+            
+        return EventOrNone.Event(new UserCreated(Email, TenantId, CreatedAt ?? DateTime.UtcNow));
+    }
+    
+    public PartitionKeys SpecifyPartitionKeys(CreateUserCommand command) => 
+        PartitionKeys.Generate<UserProjector>();
+}
+```
+
+### Multi-Tenant Aggregate Design
+
+All aggregates (except Tenant itself) must include TenantId:
+
+```csharp
+/// <summary>
+/// TimeSheet aggregate with required TenantId for multi-tenancy
+/// </summary>
+public record TimeSheetProjector : IProjector<TimeSheetProjector>
+{
+    public TenantId TenantId { get; init; } = new(Guid.Empty);
+    public UserId UserId { get; init; } = new(Guid.Empty);
+    public DateTime Date { get; init; }
+    public List<TimeEntry> Entries { get; init; } = new();
+    
+    // Event handlers maintain TenantId
+    public TimeSheetProjector ApplyEvent(TimeSheetCreated ev) => this with 
+    { 
+        TenantId = ev.TenantId,
+        UserId = ev.UserId,
+        Date = ev.Date 
+    };
+}
+```
+
+## Workflow Design Principles
+
+### Workflow Responsibilities
+
+Workflows orchestrate business processes that span multiple aggregates and handle authorization:
+
+1. **Cross-Aggregate Operations**: Coordinate operations across multiple aggregates
+2. **Authorization & Authentication**: Implement RBAC-based access control
+3. **Business Process Orchestration**: Handle complex business workflows
+4. **External System Integration**: Manage interactions with external services
+
+### RBAC Implementation in Workflows
+
+```csharp
+/// <summary>
+/// Workflow for user management with RBAC authorization
+/// </summary>
+public record CreateUserWorkflow : IWorkflow<CreateUserWorkflow>
+{
+    public async Task<ResultBox<WorkflowResult>> ExecuteAsync(
+        CreateUserWorkflowInput input,
+        UserId executingUser,
+        IWorkflowContext context)
+    {
+        // Authorization check - only administrators can create users
+        var executingUserProjector = await context.GetAggregateAsync<UserProjector>(
+            PartitionKeys.Existing<UserProjector>(executingUser.Value));
+            
+        if (!executingUserProjector.IsAdministrator)
+            return ResultBox.FromError("Unauthorized: Only administrators can create users");
+        
+        // Tenant validation - ensure executing user belongs to the same tenant
+        if (executingUserProjector.TenantId != input.TenantId)
+            return ResultBox.FromError("Unauthorized: Cross-tenant operations not allowed");
+        
+        // Execute the business operation
+        var command = new CreateUserCommand(input.Email, input.TenantId);
+        var result = await context.ExecuteCommandAsync(command);
+        
+        return WorkflowResult.FromCommandResult(result);
+    }
+}
+
+/// <summary>
+/// Workflow input - separated from ExecutingUser for security
+/// </summary>
+public record CreateUserWorkflowInput(
+    string Email,
+    TenantId TenantId
+);
+```
+
+### Authorization Patterns
+
+- **ExecutingUser Separation**: Always pass ExecutingUser separately from workflow input to prevent API manipulation
+- **Tenant Validation**: Verify executing user's tenant matches target aggregate's tenant
+- **Role-Based Access**: Implement role checks within workflows
+- **Error Handling**: Return appropriate error messages for unauthorized access
+
+## Event Stream Design
+
+### Stream Identification Strategy
+
+Event streams in Sekiban are identified by PartitionKeys with three critical components:
+
+1. **AggregateId**: Unique identifier for the specific aggregate instance
+2. **AggregateGroup**: Logical grouping (typically projector name)
+3. **RootPartitionKey**: Tenant/environment separation
+
+### PartitionKeys Implementation Patterns
+
+#### For New Aggregates
+
+```csharp
+/// <summary>
+/// Generate new aggregate ID for create operations
+/// </summary>
+public PartitionKeys SpecifyPartitionKeys(CreateTenantCommand command) => 
+    PartitionKeys.Generate<TenantProjector>();
+
+/// <summary>
+/// Generate with tenant separation
+/// </summary>
+public PartitionKeys SpecifyPartitionKeys(CreateUserCommand command) => 
+    PartitionKeys.Generate<UserProjector>(command.TenantId.Value.ToString());
+```
+
+#### For Existing Aggregates
+
+```csharp
+/// <summary>
+/// Reference existing aggregate by ID
+/// </summary>
+public PartitionKeys SpecifyPartitionKeys(UpdateUserCommand command) => 
+    PartitionKeys.Existing<UserProjector>(command.UserId.Value);
+
+/// <summary>
+/// Reference existing aggregate with tenant separation
+/// </summary>
+public PartitionKeys SpecifyPartitionKeys(UpdateUserCommand command) => 
+    PartitionKeys.Existing<UserProjector>(
+        command.UserId.Value, 
+        command.TenantId.Value.ToString());
+```
+
+### Multi-Tenant Stream Design
+
+For multi-tenant applications, use RootPartitionKey for data separation:
+
+```csharp
+/// <summary>
+/// Value object for tenant identification
+/// </summary>
+[GenerateSerializer]
+public record TenantId([property:Required] Guid Value);
+
+/// <summary>
+/// Tenant-aware command with proper PartitionKeys
+/// </summary>
+public record AddUserToTenantCommand(
+    UserId UserId,
+    TenantId TenantId,
+    string Email
+) : ICommand<UserProjector>
+{
+    public PartitionKeys SpecifyPartitionKeys(AddUserToTenantCommand command) => 
+        PartitionKeys.Existing<UserProjector>(
+            command.UserId.Value, 
+            command.TenantId.Value.ToString());
+}
+```
+
+### Stream Design Benefits
+
+1. **Tenant Isolation**: RootPartitionKey ensures complete data separation
+2. **Scalable Querying**: AggregateGroup enables efficient aggregate list queries
+3. **Performance Optimization**: Proper partitioning improves query performance
+4. **Data Governance**: Clear boundaries for data access and management
+
+## Value Object Implementation
+
+### Validation Rules
+
+Use Data Annotations for validation instead of constructor validation:
+
+```csharp
+/// <summary>
+/// Tenant code value object with validation
+/// </summary>
+[GenerateSerializer]
+public record TenantCode([property:Required, property:StringLength(50, MinimumLength = 1)] string Value);
+
+/// <summary>
+/// User ID value object
+/// </summary>
+[GenerateSerializer]
+public record UserId([property:Required] Guid Value);
+```
+
+### DateTime Handling
+
+Accept DateTime as optional command properties for testability:
+
+```csharp
+/// <summary>
+/// Command with optional DateTime for testing flexibility
+/// </summary>
+public record CreateTenantCommand(
+    TenantCode Code, 
+    string Name,
+    DateTime? CreatedAt = null
+) : ICommand<TenantProjector>
+{
+    public ResultBox<EventOrNone> Handle(TenantProjector projector, ICommandContext context)
+    {
+        return EventOrNone.Event(new TenantCreated(
+            Code, 
+            Name, 
+            CreatedAt ?? DateTime.UtcNow));
+    }
+}
+```
+
+This design ensures:
+- **Testability**: Tests can specify exact timestamps
+- **Workflow Control**: Workflows can coordinate timestamps across operations
+- **Default Behavior**: Natural fallback to current time when not specified
+
+## Architecture Best Practices
+
+### Aggregate Stream Design
+
+- **Event Count Limitation**: Design aggregate streams with lifecycles of 10,000 events or fewer
+- **Appropriate Boundary Setting**: Partition streams at appropriate boundaries for long-lived aggregates
+- **Snapshot Utilization**: Utilize snapshot functionality for aggregates with large numbers of events
+
+### Command and Workflow Responsibility Separation
+
+- **Commands**: Responsible only for consistency and business rule enforcement within aggregates
+- **Workflows**: Responsible for external data retrieval, coordination between multiple aggregates, and authentication/authorization

@@ -24,8 +24,10 @@ Sekiban supports implementing domain workflows and services that encapsulate bus
 Domain workflows are stateless services that implement business processes that may involve multiple aggregates or complex validation logic. They are particularly useful for:
 
 1. **Cross-Aggregate Operations**: When a business process spans multiple aggregates
-2. **Complex Validation**: When validation requires checking against multiple aggregates or external systems
-3. **Reusable Business Logic**: When the same logic is used in multiple places
+2. **External Data Retrieval**: When business logic requires data from external systems or multiple aggregates
+3. **Complex Validation**: When validation requires checking against multiple aggregates or external systems
+4. **Reusable Business Logic**: When the same logic is used in multiple places
+5. **Authorization & Security**: Implementing RBAC and authentication logic
 
 ```csharp
 using Sekiban.Pure.Executors;
