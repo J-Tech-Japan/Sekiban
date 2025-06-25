@@ -141,12 +141,14 @@ public class SekibanDaprExecutor : ISekibanExecutor
 
     private PartitionKeys GetPartitionKeys(ICommandWithHandlerSerializable command)
     {
-        var partitionKeySpecifier = command.GetPartitionKeysSpecifier();
-        var partitionKeys = partitionKeySpecifier.DynamicInvoke(command) as PartitionKeys;
+        var partitionKeysSpecifier = command.GetPartitionKeysSpecifier();
+        var partitionKeys = partitionKeysSpecifier.DynamicInvoke(command) as PartitionKeys;
+        
         if (partitionKeys is null)
         {
-            throw new InvalidOperationException($"GetPartitionKeys method not found for command type {command.GetType().Name}");
+            throw new InvalidOperationException($"Failed to get partition keys for command type {command.GetType().Name}");
         }
+        
         return partitionKeys;
     }
 
