@@ -5,7 +5,6 @@ using Google.Protobuf;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Dapr.Configuration;
@@ -17,6 +16,8 @@ using Sekiban.Pure.Executors;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Microsoft.Extensions.Logging;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
 
@@ -48,7 +49,7 @@ public class SekibanProtobufDaprExecutor : ISekibanExecutor
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<ResultBox<CommandResponse>> CommandAsync(
+    public async Task<ResultBox<SekibanCommandResponse>> CommandAsync(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null)
     {
@@ -58,7 +59,7 @@ public class SekibanProtobufDaprExecutor : ISekibanExecutor
             var projectorType = GetProjectorTypeFromCommand(command);
             if (projectorType == null)
             {
-                return ResultBox<CommandResponse>.FromException(
+                return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
             }
 
@@ -92,14 +93,14 @@ public class SekibanProtobufDaprExecutor : ISekibanExecutor
             var protobufResponse = ProtobufCommandResponse.Parser.ParseFrom(responseBytes);
             
             // Convert to CommandResponse
-            var response = await ConvertProtobufResponseAsync(protobufResponse);
+            var response = await ConvertProtobufResponseAsync(protobufResponse, partitionKeys);
             
-            return ResultBox<CommandResponse>.FromValue(response);
+            return ResultBox<SekibanCommandResponse>.FromValue(response);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute command {CommandType}", command.GetType().Name);
-            return ResultBox<CommandResponse>.FromException(ex);
+            return ResultBox<SekibanCommandResponse>.FromException(ex);
         }
     }
 
@@ -226,17 +227,12 @@ public class SekibanProtobufDaprExecutor : ISekibanExecutor
     /// <summary>
     /// Converts a Protobuf command response to the standard CommandResponse
     /// </summary>
-    private async Task<CommandResponse> ConvertProtobufResponseAsync(ProtobufCommandResponse protobufResponse)
+    private async Task<SekibanCommandResponse> ConvertProtobufResponseAsync(ProtobufCommandResponse protobufResponse, PartitionKeys partitionKeys)
     {
         if (!protobufResponse.Success)
         {
-            return new CommandResponse(
-                IsSuccess: false,
-                ErrorMessage: protobufResponse.ErrorMessage,
-                Version: 0,
-                AggregateState: null,
-                Events: new List<IEvent>(),
-                Metadata: protobufResponse.Metadata);
+            // For errors, we need to throw an exception as SekibanCommandResponse only contains success data
+            throw new InvalidOperationException(protobufResponse.ErrorMessage);
         }
 
         // Deserialize aggregate if present
@@ -258,13 +254,10 @@ public class SekibanProtobufDaprExecutor : ISekibanExecutor
             }
         }
 
-        return new CommandResponse(
-            IsSuccess: true,
-            ErrorMessage: null,
-            Version: aggregate?.Version ?? 0,
-            AggregateState: aggregate,
+        return new SekibanCommandResponse(
+            PartitionKeys: partitionKeys,
             Events: events,
-            Metadata: protobufResponse.Metadata);
+            Version: aggregate?.Version ?? 0);
     }
 
     private PartitionKeys GetPartitionKeys(ICommandWithHandlerSerializable command)

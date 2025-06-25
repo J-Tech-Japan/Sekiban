@@ -4,6 +4,8 @@ using Dapr.Actors.Client;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
@@ -19,7 +21,7 @@ namespace Sekiban.Pure.Dapr.Actors;
 /// This is the Dapr equivalent of Orleans' AggregateProjectorGrain.
 /// </summary>
 [Actor(TypeName = nameof(AggregateActor))]
-public class AggregateActor : Actor, IAggregateActor
+public class AggregateActor : Actor, IAggregateActor, IRemindable
 {
     private readonly SekibanDomainTypes _sekibanDomainTypes;
     private readonly IServiceProvider _serviceProvider;
@@ -89,13 +91,22 @@ public class AggregateActor : Actor, IAggregateActor
         await base.OnDeactivateAsync();
     }
 
+    // Legacy method - kept for compatibility
     public async Task<Aggregate> GetStateAsync()
     {
         var eventHandlerActor = GetEventHandlerActor();
         return await LoadStateInternalAsync(eventHandlerActor);
     }
+    
+    // New envelope-based method
+    async Task<string> IAggregateActor.GetStateAsync()
+    {
+        var aggregate = await GetStateAsync();
+        return JsonSerializer.Serialize(aggregate);
+    }
 
-    public async Task<CommandResponse> ExecuteCommandAsync(
+    // Legacy method - kept for compatibility
+    public async Task<SekibanCommandResponse> ExecuteCommandAsync(
         ICommandWithHandlerSerializable command,
         CommandMetadata metadata)
     {
@@ -144,6 +155,7 @@ public class AggregateActor : Actor, IAggregateActor
         return result;
     }
 
+    // Legacy method - kept for compatibility
     public async Task<Aggregate> RebuildStateAsync()
     {
         if (_partitionInfo == null)
@@ -169,6 +181,91 @@ public class AggregateActor : Actor, IAggregateActor
         await SaveStateAsync();
         
         return aggregate;
+    }
+    
+    // New envelope-based RebuildStateAsync
+    async Task<string> IAggregateActor.RebuildStateAsync()
+    {
+        var aggregate = await RebuildStateAsync();
+        return JsonSerializer.Serialize(aggregate);
+    }
+    
+    // New envelope-based ExecuteCommandAsync
+    public async Task<DaprCommandResponse> ExecuteCommandAsync(CommandEnvelope envelope)
+    {
+        try
+        {
+            // Extract command from envelope
+            var commandType = Type.GetType(envelope.CommandType);
+            if (commandType == null)
+            {
+                return DaprCommandResponse.Failure(
+                    JsonSerializer.Serialize(new { Message = $"Command type not found: {envelope.CommandType}" }),
+                    envelope.Metadata);
+            }
+            
+            // Deserialize command from JSON payload
+            var commandJson = System.Text.Encoding.UTF8.GetString(envelope.CommandPayload);
+            var command = JsonSerializer.Deserialize(commandJson, commandType) as ICommandWithHandlerSerializable;
+            
+            if (command == null)
+            {
+                return DaprCommandResponse.Failure(
+                    JsonSerializer.Serialize(new { Message = $"Failed to deserialize command: {envelope.CommandType}" }),
+                    envelope.Metadata);
+            }
+            
+            // Create command metadata from envelope
+            var metadata = new CommandMetadata(
+                CommandId: Guid.Parse(envelope.CorrelationId),
+                CausationId: envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
+                CorrelationId: envelope.CorrelationId,
+                ExecutedUser: envelope.Metadata.GetValueOrDefault("ExecutedUser", "system"));
+            
+            // Execute command using legacy method
+            var response = await ExecuteCommandAsync(command, metadata);
+            
+            // Convert response to envelope format
+            var eventPayloads = new List<byte[]>();
+            var eventTypes = new List<string>();
+            
+            foreach (var @event in response.Events)
+            {
+                eventPayloads.Add(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
+                eventTypes.Add(@event.GetType().FullName ?? @event.GetType().Name);
+            }
+            
+            // Get the current aggregate state to include in response
+            byte[]? aggregateStatePayload = null;
+            string? aggregateStateType = null;
+            
+            if (_currentAggregate != null && _currentAggregate != Aggregate.Empty)
+            {
+                aggregateStatePayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(_currentAggregate));
+                aggregateStateType = _currentAggregate.GetType().FullName ?? _currentAggregate.GetType().Name;
+            }
+            
+            return DaprCommandResponse.Success(
+                eventPayloads,
+                eventTypes,
+                response.Version,
+                aggregateStatePayload,
+                aggregateStateType,
+                new Dictionary<string, string>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to execute command from envelope");
+            return DaprCommandResponse.Failure(
+                JsonSerializer.Serialize(new { Message = ex.Message }),
+                envelope.Metadata);
+        }
+    }
+    
+    public Task ReceiveReminderAsync(string reminderName, byte[] state, TimeSpan dueTime, TimeSpan period)
+    {
+        _logger.LogInformation("Received reminder: {ReminderName}", reminderName);
+        return Task.CompletedTask;
     }
 
     private async Task<PartitionKeysAndProjector> GetPartitionInfoAsync()
@@ -244,12 +341,28 @@ public class AggregateActor : Actor, IAggregateActor
                 if (lastEventId != aggregate.LastSortableUniqueId)
                 {
                     // Get delta events and project them
-                    var deltaEvents = await eventHandlerActor.GetDeltaEventsAsync(
+                    var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
                         aggregate.LastSortableUniqueId, -1);
+                    
+                    // Convert envelopes back to events
+                    var deltaEvents = new List<IEvent>();
+                    foreach (var envelope in deltaEventEnvelopes)
+                    {
+                        var eventType = Type.GetType(envelope.EventType);
+                        if (eventType != null)
+                        {
+                            var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
+                            var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
+                            if (@event != null)
+                            {
+                                deltaEvents.Add(@event);
+                            }
+                        }
+                    }
                     
                     // Create a new aggregate by projecting the delta events
                     var concreteAggregate = aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");
-                    var projectedResult = concreteAggregate.Project(deltaEvents.ToList(), _partitionInfo.Projector);
+                    var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
                     if (!projectedResult.IsSuccess)
                     {
                         throw new InvalidOperationException($"Failed to project delta events: {projectedResult.GetException().Message}");

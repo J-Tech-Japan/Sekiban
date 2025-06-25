@@ -8,6 +8,7 @@ using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Command;
 using Sekiban.Pure.Command.Handlers;
+using System.Text.Json;
 
 namespace Sekiban.Pure.Dapr.Parts;
 
@@ -53,15 +54,41 @@ public class DaprRepository
 
         try
         {
+            // Convert events to envelopes
+            var eventEnvelopes = new List<EventEnvelope>();
+            foreach (var @event in newEvents)
+            {
+                var envelope = new EventEnvelope
+                {
+                    EventType = @event.GetType().FullName ?? @event.GetType().Name,
+                    EventPayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)),
+                    AggregateId = _partitionKeys.AggregateId.ToString(),
+                    PartitionId = _partitionKeys.AggregateId,
+                    RootPartitionKey = _partitionKeys.RootPartitionKey,
+                    Version = @event.Version,
+                    SortableUniqueId = @event.GetSortableUniqueId(),
+                    Timestamp = DateTime.UtcNow,
+                    Metadata = new Dictionary<string, string>(),
+                    CorrelationId = string.Empty,
+                    CausationId = string.Empty
+                };
+                eventEnvelopes.Add(envelope);
+            }
+            
             // Append events to the event handler actor
-            var storedEvents = await _eventHandlerActor.AppendEventsAsync(
+            var response = await _eventHandlerActor.AppendEventsAsync(
                 lastSortableUniqueId,
-                newEvents);
+                eventEnvelopes);
+                
+            if (!response.IsSuccess)
+            {
+                return ResultBox<List<IEvent>>.FromException(new InvalidOperationException(response.ErrorMessage));
+            }
 
             // Update current aggregate with new events
-            _currentAggregate = _currentAggregate.Project(storedEvents.ToList(), _projector).UnwrapBox();
+            _currentAggregate = _currentAggregate.Project(newEvents, _projector).UnwrapBox();
 
-            return ResultBox<List<IEvent>>.FromValue(storedEvents.ToList());
+            return ResultBox<List<IEvent>>.FromValue(newEvents);
         }
         catch (Exception ex)
         {
@@ -74,13 +101,29 @@ public class DaprRepository
         try
         {
             // Get all events from the event handler
-            var events = await _eventHandlerActor.GetAllEventsAsync();
+            var eventEnvelopes = await _eventHandlerActor.GetAllEventsAsync();
+            
+            // Convert envelopes back to events
+            var events = new List<IEvent>();
+            foreach (var envelope in eventEnvelopes)
+            {
+                var eventType = Type.GetType(envelope.EventType);
+                if (eventType != null)
+                {
+                    var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
+                    var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
+                    if (@event != null)
+                    {
+                        events.Add(@event);
+                    }
+                }
+            }
             
             // Start with empty aggregate
             var aggregate = Aggregate.EmptyFromPartitionKeys(_partitionKeys);
             
             // Project all events
-            aggregate = aggregate.Project(events.ToList(), _projector).UnwrapBox();
+            aggregate = aggregate.Project(events, _projector).UnwrapBox();
             
             // Update current aggregate
             _currentAggregate = aggregate;

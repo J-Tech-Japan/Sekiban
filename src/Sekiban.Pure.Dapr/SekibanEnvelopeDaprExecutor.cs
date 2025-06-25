@@ -11,9 +11,12 @@ using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
+using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
 
@@ -46,7 +49,7 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<ResultBox<Sekiban.Pure.Command.Executor.CommandResponse>> CommandAsync(
+    public async Task<ResultBox<SekibanCommandResponse>> CommandAsync(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null)
     {
@@ -56,7 +59,7 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
             var projectorType = GetProjectorTypeFromCommand(command);
             if (projectorType == null)
             {
-                return ResultBox<Sekiban.Pure.Command.Executor.CommandResponse>.FromException(
+                return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
             }
 
@@ -95,12 +98,12 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
             // Convert response back to Sekiban CommandResponse
             var commandResponse = await ConvertFromEnvelopeResponse(response, partitionKeys);
             
-            return ResultBox<Sekiban.Pure.Command.Executor.CommandResponse>.FromValue(commandResponse);
+            return ResultBox<SekibanCommandResponse>.FromValue(commandResponse);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute command {CommandType}", command.GetType().Name);
-            return ResultBox<Sekiban.Pure.Command.Executor.CommandResponse>.FromException(ex);
+            return ResultBox<SekibanCommandResponse>.FromException(ex);
         }
     }
 
@@ -177,8 +180,8 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
     /// <summary>
     /// Converts envelope-based CommandResponse to Sekiban CommandResponse
     /// </summary>
-    private async Task<Sekiban.Pure.Command.Executor.CommandResponse> ConvertFromEnvelopeResponse(
-        CommandResponse envelopeResponse,
+    private async Task<SekibanCommandResponse> ConvertFromEnvelopeResponse(
+        DaprCommandResponse envelopeResponse,
         PartitionKeys partitionKeys)
     {
         if (!envelopeResponse.IsSuccess)
@@ -198,13 +201,8 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
                 }
             }
 
-            return new Sekiban.Pure.Command.Executor.CommandResponse(
-                IsSuccess: false,
-                ErrorMessage: errorMessage,
-                Version: 0,
-                AggregateState: null,
-                Events: new List<IEvent>(),
-                Metadata: envelopeResponse.Metadata);
+            // For errors, we should throw an exception
+            throw new InvalidOperationException(errorMessage);
         }
 
         // Extract events from payloads
@@ -264,13 +262,10 @@ public class SekibanEnvelopeDaprExecutor : ISekibanExecutor
             }
         }
 
-        return new Sekiban.Pure.Command.Executor.CommandResponse(
-            IsSuccess: true,
-            ErrorMessage: null,
-            Version: envelopeResponse.AggregateVersion,
-            AggregateState: aggregateState,
+        return new SekibanCommandResponse(
+            PartitionKeys: partitionKeys,
             Events: events,
-            Metadata: envelopeResponse.Metadata);
+            Version: envelopeResponse.AggregateVersion);
     }
 
     private PartitionKeys GetPartitionKeys(ICommandWithHandlerSerializable command)

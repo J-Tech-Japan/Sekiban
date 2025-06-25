@@ -2,6 +2,7 @@ using System.Text.Json;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Logging;
+using SystemType = System.Type;
 using Microsoft.Extensions.Options;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
@@ -93,7 +94,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
             CompressedPayload = protobufEnvelope.PayloadJson.ToByteArray(),
             PayloadTypeName = protobufEnvelope.PayloadType,
             Version = protobufEnvelope.Version,
-            AggregateId = protobufEnvelope.AggregateId,
+            AggregateId = Guid.Parse(protobufEnvelope.AggregateId),
             RootPartitionKey = protobufEnvelope.RootPartitionKey,
             LastEventId = protobufEnvelope.LastEventId,
             IsCompressed = protobufEnvelope.IsCompressed,
@@ -109,7 +110,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
             PayloadJson = ByteString.CopyFrom(surrogate.CompressedPayload),
             PayloadType = surrogate.PayloadTypeName,
             Version = surrogate.Version,
-            AggregateId = surrogate.AggregateId,
+            AggregateId = surrogate.AggregateId.ToString(),
             RootPartitionKey = surrogate.RootPartitionKey,
             LastEventId = surrogate.LastEventId,
             IsCompressed = surrogate.IsCompressed
@@ -185,7 +186,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
         try
         {
-            Type? payloadType = null;
+            SystemType? payloadType = null;
 
             if (_options.EnableTypeAliases)
             {
@@ -194,7 +195,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
             if (payloadType == null)
             {
-                payloadType = Type.GetType(envelope.PayloadType);
+                payloadType = SystemType.GetType(envelope.PayloadType);
             }
 
             if (payloadType == null)
@@ -207,7 +208,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
                 ? DaprCompressionUtility.Decompress(envelope.PayloadJson.ToByteArray())
                 : envelope.PayloadJson.ToByteArray();
 
-            var payload = JsonSerializer.Deserialize(json, payloadType, _jsonOptions);
+            var payload = JsonSerializer.Deserialize(new MemoryStream(json), payloadType, _jsonOptions);
             
             if (payload == null)
             {
@@ -330,7 +331,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
         try
         {
-            Type? commandType = null;
+            SystemType? commandType = null;
 
             if (_options.EnableTypeAliases)
             {
@@ -339,7 +340,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
             if (commandType == null)
             {
-                commandType = Type.GetType(envelope.CommandType);
+                commandType = SystemType.GetType(envelope.CommandType);
             }
 
             if (commandType == null)
@@ -352,7 +353,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
                 ? DaprCompressionUtility.Decompress(envelope.CommandJson.ToByteArray())
                 : envelope.CommandJson.ToByteArray();
 
-            var command = JsonSerializer.Deserialize(json, commandType, _jsonOptions) as ICommandWithHandlerSerializable;
+            var command = JsonSerializer.Deserialize(new MemoryStream(json), commandType, _jsonOptions) as ICommandWithHandlerSerializable;
             return command;
         }
         catch (Exception ex)
@@ -468,7 +469,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
         try
         {
-            Type? eventType = null;
+            SystemType? eventType = null;
 
             if (_options.EnableTypeAliases)
             {
@@ -477,7 +478,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
             if (eventType == null)
             {
-                eventType = Type.GetType(envelope.EventType);
+                eventType = SystemType.GetType(envelope.EventType);
             }
 
             if (eventType == null)
@@ -490,7 +491,7 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
                 ? DaprCompressionUtility.Decompress(envelope.EventJson.ToByteArray())
                 : envelope.EventJson.ToByteArray();
 
-            var @event = JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEvent;
+            var @event = JsonSerializer.Deserialize(new MemoryStream(json), eventType, _jsonOptions) as IEvent;
             return @event;
         }
         catch (Exception ex)

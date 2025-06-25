@@ -7,6 +7,8 @@ using Sekiban.Pure.Dapr.Protos;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using System.Text.Json;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 
 namespace Sekiban.Pure.Dapr.Serialization;
 
@@ -38,7 +40,7 @@ public interface IEnvelopeProtobufService
     /// <summary>
     /// Converts a CommandResponse with events to use Protobuf payloads
     /// </summary>
-    Task<CommandResponse> ConvertToProtobufResponse(Sekiban.Pure.Command.Executor.CommandResponse response, PartitionKeys partitionKeys);
+    Task<DaprCommandResponse> ConvertToProtobufResponse(SekibanCommandResponse response, PartitionKeys partitionKeys);
 }
 
 /// <summary>
@@ -225,26 +227,12 @@ public class EnvelopeProtobufService : IEnvelopeProtobufService
         return events;
     }
 
-    public async Task<CommandResponse> ConvertToProtobufResponse(
-        Sekiban.Pure.Command.Executor.CommandResponse response,
+    public async Task<DaprCommandResponse> ConvertToProtobufResponse(
+        SekibanCommandResponse response,
         PartitionKeys partitionKeys)
     {
         try
         {
-            if (!response.IsSuccess)
-            {
-                // Create error response
-                var errorData = new
-                {
-                    Message = response.ErrorMessage ?? "Command execution failed",
-                    IsSuccess = false
-                };
-                
-                return CommandResponse.Failure(
-                    JsonSerializer.Serialize(errorData),
-                    response.Metadata);
-            }
-
             // Serialize events to Protobuf
             var eventPayloads = new List<byte[]>();
             var eventTypes = new List<string>();
@@ -261,24 +249,17 @@ public class EnvelopeProtobufService : IEnvelopeProtobufService
                 eventTypes.Add(@event.GetType().FullName ?? @event.GetType().Name);
             }
 
-            // Serialize aggregate state if present
+            // Since SekibanCommandResponse doesn't have aggregate state, we'll leave it null
             byte[]? aggregateStatePayload = null;
             string? aggregateStateType = null;
 
-            if (response.AggregateState != null)
-            {
-                var protobufAggregate = await _protobufSerialization.SerializeAggregateToProtobufAsync(response.AggregateState);
-                aggregateStatePayload = protobufAggregate.PayloadJson.ToByteArray();
-                aggregateStateType = protobufAggregate.PayloadType;
-            }
-
-            return CommandResponse.Success(
+            return DaprCommandResponse.Success(
                 eventPayloads,
                 eventTypes,
                 response.Version,
                 aggregateStatePayload,
                 aggregateStateType,
-                response.Metadata);
+                new Dictionary<string, string>());
         }
         catch (Exception ex)
         {

@@ -17,6 +17,8 @@ using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure;
 using Sekiban.Pure.Dapr.Serialization;
+using System.Text.Json;
+using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
 
@@ -42,7 +44,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
         _options = options.Value;
     }
 
-    public async Task<ResultBox<CommandResponse>> CommandAsync(
+    public async Task<ResultBox<SekibanCommandResponse>> CommandAsync(
         ICommandWithHandlerSerializable command,
         IEvent? relatedEvent = null)
     {
@@ -52,7 +54,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
             var projectorType = GetProjectorTypeFromCommand(command);
             if (projectorType == null)
             {
-                return ResultBox<CommandResponse>.FromException(
+                return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
             }
 
@@ -75,11 +77,86 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 CorrelationId: commandId.ToString(),
                 ExecutedUser: "system");
 
-            return await aggregateActor.ExecuteCommandAsync(command, metadata);
+            // Create a command envelope for the new interface
+            var envelope = new CommandEnvelope(
+                commandType: command.GetType().FullName ?? command.GetType().Name,
+                commandPayload: System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command)),
+                aggregateId: partitionKeys.AggregateId.ToString(),
+                partitionId: partitionKeys.AggregateId,
+                rootPartitionKey: partitionKeys.RootPartitionKey,
+                metadata: new Dictionary<string, string>
+                {
+                    ["CausationId"] = metadata.CausationId,
+                    ["ExecutedUser"] = metadata.ExecutedUser
+                },
+                correlationId: metadata.CorrelationId);
+            
+            // Execute command via envelope
+            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(envelope);
+            
+            // Convert back to SekibanCommandResponse
+            if (!envelopeResponse.IsSuccess)
+            {
+                var errorMessage = "Command execution failed";
+                if (!string.IsNullOrEmpty(envelopeResponse.ErrorJson))
+                {
+                    try
+                    {
+                        var errorData = JsonSerializer.Deserialize<Dictionary<string, object>>(envelopeResponse.ErrorJson);
+                        errorMessage = errorData?.GetValueOrDefault("Message")?.ToString() ?? errorMessage;
+                    }
+                    catch
+                    {
+                        errorMessage = envelopeResponse.ErrorJson;
+                    }
+                }
+                
+                // For errors, we need to throw an exception as SekibanCommandResponse only contains success data
+                return ResultBox<SekibanCommandResponse>.FromException(
+                    new InvalidOperationException(errorMessage));
+            }
+            
+            // Extract events from payloads
+            var events = new List<IEvent>();
+            for (int i = 0; i < envelopeResponse.EventPayloads.Count; i++)
+            {
+                var eventJson = System.Text.Encoding.UTF8.GetString(envelopeResponse.EventPayloads[i]);
+                var eventType = Type.GetType(envelopeResponse.EventTypes[i]);
+                if (eventType != null)
+                {
+                    var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
+                    if (@event != null)
+                    {
+                        events.Add(@event);
+                    }
+                }
+            }
+            
+            // Extract aggregate state if present
+            Aggregate? aggregateState = null;
+            if (envelopeResponse.AggregateStatePayload != null && envelopeResponse.AggregateStateType != null)
+            {
+                try
+                {
+                    var json = System.Text.Encoding.UTF8.GetString(envelopeResponse.AggregateStatePayload);
+                    aggregateState = JsonSerializer.Deserialize<Aggregate>(json);
+                }
+                catch (Exception ex)
+                {
+                    // Log but don't fail
+                    Console.WriteLine($"Failed to deserialize aggregate state: {ex.Message}");
+                }
+            }
+            
+            return ResultBox<SekibanCommandResponse>.FromValue(
+                new SekibanCommandResponse(
+                    PartitionKeys: partitionKeys,
+                    Events: events,
+                    Version: envelopeResponse.AggregateVersion));
         }
         catch (Exception ex)
         {
-            return ResultBox<CommandResponse>.FromException(ex);
+            return ResultBox<SekibanCommandResponse>.FromException(ex);
         }
     }
 
@@ -131,8 +208,16 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 actorId,
                 nameof(AggregateActor));
 
-            // Get the current state from the actor
-            var aggregate = await aggregateActor.GetStateAsync();
+            // Get the current state from the actor as JSON
+            var stateJson = await aggregateActor.GetStateAsync();
+            
+            // Deserialize the JSON state
+            var aggregate = JsonSerializer.Deserialize<Aggregate>(stateJson);
+            if (aggregate == null)
+            {
+                return ResultBox<Aggregate>.FromException(
+                    new InvalidOperationException("Failed to deserialize aggregate state"));
+            }
             
             return ResultBox<Aggregate>.FromValue(aggregate);
         }

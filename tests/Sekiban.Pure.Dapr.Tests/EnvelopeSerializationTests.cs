@@ -1,5 +1,6 @@
 using Xunit;
 using Sekiban.Pure.Dapr.Actors;
+using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 using Sekiban.Pure.Dapr.Serialization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -130,7 +131,7 @@ public class EnvelopeSerializationTests
     public async Task CommandResponse_Success_SerializesCorrectly()
     {
         // Arrange
-        var response = CommandResponse.Success(
+        var response = DaprCommandResponse.Success(
             eventPayloads: new List<byte[]> { new byte[] { 1, 2, 3 }, new byte[] { 4, 5, 6 } },
             eventTypes: new List<string> { "Event1", "Event2" },
             aggregateVersion: 2,
@@ -140,7 +141,7 @@ public class EnvelopeSerializationTests
 
         // Act
         var json = JsonSerializer.Serialize(response);
-        var deserialized = JsonSerializer.Deserialize<CommandResponse>(json);
+        var deserialized = JsonSerializer.Deserialize<DaprCommandResponse>(json);
 
         // Assert
         Assert.NotNull(deserialized);
@@ -163,13 +164,13 @@ public class EnvelopeSerializationTests
             Details = new[] { "Field X is required", "Field Y is invalid" }
         };
         
-        var response = CommandResponse.Failure(
+        var response = DaprCommandResponse.Failure(
             JsonSerializer.Serialize(errorData),
             new Dictionary<string, string> { ["errorKey"] = "errorValue" });
 
         // Act
         var json = JsonSerializer.Serialize(response);
-        var deserialized = JsonSerializer.Deserialize<CommandResponse>(json);
+        var deserialized = JsonSerializer.Deserialize<DaprCommandResponse>(json);
 
         // Assert
         Assert.NotNull(deserialized);
