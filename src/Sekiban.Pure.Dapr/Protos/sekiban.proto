@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+option csharp_namespace = "Sekiban.Pure.Dapr.Protos";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// Command envelope for serializing commands with metadata
+message ProtobufCommandEnvelope {
+  bytes command_json = 1; // JSON serialized command
+  string command_type = 2; // Type alias or full name
+  bool is_compressed = 3;
+  map<string, string> headers = 4;
+  string correlation_id = 5;
+  string partition_key = 6;
+}
+
+// Event envelope for serializing events
+message ProtobufEventEnvelope {
+  string event_id = 1;
+  bytes event_json = 2; // JSON serialized event
+  string event_type = 3;
+  string aggregate_id = 4;
+  int32 version = 5;
+  google.protobuf.Timestamp timestamp = 6;
+  string root_partition_key = 7;
+  bool is_compressed = 8;
+  string sortable_unique_id = 9;
+  map<string, string> metadata = 10;
+}
+
+// Aggregate state envelope
+message ProtobufAggregateEnvelope {
+  bytes payload_json = 1; // JSON serialized payload
+  string payload_type = 2;
+  int32 version = 3;
+  string aggregate_id = 4;
+  string root_partition_key = 5;
+  string last_event_id = 6;
+  bool is_compressed = 7;
+  map<string, string> metadata = 8;
+}
+
+// Command response
+message ProtobufCommandResponse {
+  bool success = 1;
+  ProtobufAggregateEnvelope aggregate = 2;
+  repeated ProtobufEventEnvelope events = 3;
+  string error_message = 4;
+  map<string, string> metadata = 5;
+}
+
+// Multi-projection state
+message ProtobufMultiProjectionState {
+  map<string, ProtobufAggregateEnvelope> aggregates = 1;
+  string last_event_id = 2;
+  map<string, string> metadata = 3;
+}
+
+// Query request/response wrappers
+message ProtobufQueryRequest {
+  bytes query_json = 1;
+  string query_type = 2;
+  map<string, string> headers = 3;
+}
+
+message ProtobufQueryResponse {
+  bytes result_json = 1;
+  string result_type = 2;
+  bool success = 3;
+  string error_message = 4;
+}
+
+// Actor method messages
+message ExecuteCommandRequest {
+  ProtobufCommandEnvelope command = 1;
+  string related_event_id = 2;
+}
+
+message GetAggregateStateRequest {
+  string aggregate_id = 1;
+}
+
+message ProcessEventRequest {
+  ProtobufEventEnvelope event = 1;
+}
