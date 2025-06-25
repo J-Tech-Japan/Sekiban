@@ -141,14 +141,15 @@ public class SekibanDaprExecutor : ISekibanExecutor
 
     private PartitionKeys GetPartitionKeys(ICommandWithHandlerSerializable command)
     {
-        var commandType = command.GetType();
-        var method = commandType.GetMethod("GetPartitionKeys", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        if (method != null)
+        var partitionKeysSpecifier = command.GetPartitionKeysSpecifier();
+        var partitionKeys = partitionKeysSpecifier.DynamicInvoke(command) as PartitionKeys;
+        
+        if (partitionKeys is null)
         {
-            return (PartitionKeys)method.Invoke(null, new object[] { command })!;
+            throw new InvalidOperationException($"Failed to get partition keys for command type {command.GetType().Name}");
         }
-
-        throw new InvalidOperationException($"GetPartitionKeys method not found for command type {commandType.Name}");
+        
+        return partitionKeys;
     }
 
     private Type? GetProjectorTypeFromCommand(ICommandWithHandlerSerializable command)
