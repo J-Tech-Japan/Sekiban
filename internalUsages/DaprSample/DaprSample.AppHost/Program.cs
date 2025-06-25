@@ -4,16 +4,13 @@ var builder = DistributedApplication.CreateBuilder(args);
 var redis = builder.AddRedis("redis")
     .WithDataVolume();
 
-// Add Dapr with local components path
-builder.AddDapr(options =>
-{
-    options.EnableTelemetry = false;
-});
+// Add Dapr
+builder.AddDapr();
 
 // Add API project with Dapr sidecar
 var api = builder.AddProject<Projects.DaprSample_Api>("api")
     .WithExternalHttpEndpoints()
-    .WithDaprSidecar("sekiban-api")
+    .WithDaprSidecar()
     .WithReference(redis);
 
 builder.Build().Run();
