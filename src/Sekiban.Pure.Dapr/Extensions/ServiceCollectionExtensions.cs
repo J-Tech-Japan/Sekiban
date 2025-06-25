@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
 
         // Register Sekiban services
         services.AddSingleton(domainTypes);
-        services.AddSingleton<Repository, DaprEventStore>();
+        services.AddSingleton<Repository>(provider => provider.GetRequiredService<ISekibanRepository>());
         services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
         
         // Register event storage services
@@ -62,7 +62,7 @@ public static class ServiceCollectionExtensions
         {
             return new global::Dapr.Client.DaprClientBuilder().Build();
         });
-        services.AddSingleton<Repository, DaprEventStore>();
+        services.AddSingleton<Repository>(provider => provider.GetRequiredService<ISekibanRepository>());
         
         return services;
     }

@@ -16,6 +16,7 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure;
+using Sekiban.Pure.Dapr.Serialization;
 
 namespace Sekiban.Pure.Dapr;
 
@@ -24,17 +25,20 @@ public class SekibanDaprExecutor : ISekibanExecutor
     private readonly DaprClient _daprClient;
     private readonly IActorProxyFactory _actorProxyFactory;
     private readonly SekibanDomainTypes _domainTypes;
+    private readonly IDaprSerializationService _serialization;
     private readonly DaprSekibanOptions _options;
 
     public SekibanDaprExecutor(
         DaprClient daprClient,
         IActorProxyFactory actorProxyFactory,
         SekibanDomainTypes domainTypes,
+        IDaprSerializationService serialization,
         IOptions<DaprSekibanOptions> options)
     {
         _daprClient = daprClient;
         _actorProxyFactory = actorProxyFactory;
         _domainTypes = domainTypes;
+        _serialization = serialization;
         _options = options.Value;
     }
 

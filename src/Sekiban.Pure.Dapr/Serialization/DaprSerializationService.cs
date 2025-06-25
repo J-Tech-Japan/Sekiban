@@ -1,0 +1,374 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Events;
+
+namespace Sekiban.Pure.Dapr.Serialization;
+
+/// <summary>
+/// Default implementation of Dapr serialization service
+/// </summary>
+public class DaprSerializationService : IDaprSerializationService
+{
+    private readonly IDaprTypeRegistry _typeRegistry;
+    private readonly DaprSerializationOptions _options;
+    private readonly ILogger<DaprSerializationService> _logger;
+
+    public DaprSerializationService(
+        IDaprTypeRegistry typeRegistry,
+        IOptions<DaprSerializationOptions> options,
+        ILogger<DaprSerializationService> logger)
+    {
+        _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public async ValueTask<byte[]> SerializeAsync<T>(T value)
+    {
+        if (value == null)
+        {
+            return Array.Empty<byte>();
+        }
+
+        try
+        {
+            var json = JsonSerializer.SerializeToUtf8Bytes(value, _options.JsonSerializerOptions);
+
+            if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
+            {
+                return DaprCompressionUtility.Compress(json);
+            }
+
+            return json;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to serialize object of type {Type}", typeof(T).Name);
+            throw;
+        }
+    }
+
+    public async ValueTask<T?> DeserializeAsync<T>(byte[] data)
+    {
+        if (data == null || data.Length == 0)
+        {
+            return default;
+        }
+
+        try
+        {
+            byte[] json = data;
+
+            // Try to decompress if the data appears to be compressed
+            if (_options.EnableCompression && IsCompressed(data))
+            {
+                json = DaprCompressionUtility.Decompress(data);
+            }
+
+            return JsonSerializer.Deserialize<T>(json, _options.JsonSerializerOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize object of type {Type}", typeof(T).Name);
+            throw;
+        }
+    }
+
+    public async ValueTask<DaprAggregateSurrogate> SerializeAggregateAsync(IAggregateCommon aggregate)
+    {
+        ArgumentNullException.ThrowIfNull(aggregate);
+
+        try
+        {
+            var payload = aggregate.GetPayload();
+            var payloadType = payload.GetType();
+            var json = JsonSerializer.SerializeToUtf8Bytes(payload, payloadType, _options.JsonSerializerOptions);
+
+            byte[] compressedPayload;
+            bool isCompressed = false;
+
+            if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
+            {
+                compressedPayload = DaprCompressionUtility.Compress(json);
+                isCompressed = true;
+            }
+            else
+            {
+                compressedPayload = json;
+            }
+
+            var typeAlias = _options.EnableTypeAliases 
+                ? _typeRegistry.GetTypeAlias(payloadType) 
+                : payloadType.AssemblyQualifiedName ?? payloadType.FullName ?? payloadType.Name;
+
+            return new DaprAggregateSurrogate
+            {
+                CompressedPayload = compressedPayload,
+                PayloadTypeName = typeAlias,
+                Version = aggregate.Version,
+                AggregateId = aggregate.GetAggregateId(),
+                RootPartitionKey = aggregate.GetRootPartitionKey(),
+                LastEventId = aggregate.LastEventId,
+                IsCompressed = isCompressed,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["SerializedAt"] = DateTime.UtcNow.ToString("O"),
+                    ["SerializerVersion"] = "1.0"
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to serialize aggregate {AggregateId}", aggregate.GetAggregateId());
+            throw;
+        }
+    }
+
+    public async ValueTask<IAggregateCommon?> DeserializeAggregateAsync(DaprAggregateSurrogate surrogate)
+    {
+        ArgumentNullException.ThrowIfNull(surrogate);
+
+        if (surrogate.CompressedPayload == null || surrogate.CompressedPayload.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            Type? payloadType = null;
+
+            if (_options.EnableTypeAliases)
+            {
+                payloadType = _typeRegistry.ResolveType(surrogate.PayloadTypeName);
+            }
+
+            if (payloadType == null)
+            {
+                payloadType = Type.GetType(surrogate.PayloadTypeName);
+            }
+
+            if (payloadType == null)
+            {
+                _logger.LogError("Cannot resolve type {TypeName}", surrogate.PayloadTypeName);
+                throw new InvalidOperationException($"Cannot resolve type: {surrogate.PayloadTypeName}");
+            }
+
+            byte[] json = surrogate.IsCompressed
+                ? DaprCompressionUtility.Decompress(surrogate.CompressedPayload)
+                : surrogate.CompressedPayload;
+
+            var payload = JsonSerializer.Deserialize(json, payloadType, _options.JsonSerializerOptions);
+            
+            if (payload == null)
+            {
+                return null;
+            }
+
+            // Create aggregate instance using reflection
+            var aggregateType = typeof(Aggregate<>).MakeGenericType(payloadType);
+            var aggregate = Activator.CreateInstance(
+                aggregateType,
+                surrogate.AggregateId,
+                payload,
+                surrogate.Version,
+                surrogate.RootPartitionKey,
+                surrogate.LastEventId) as IAggregateCommon;
+
+            return aggregate;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize aggregate from surrogate");
+            throw;
+        }
+    }
+
+    public async ValueTask<DaprCommandEnvelope> SerializeCommandAsync(ICommandWithHandlerSerializable command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        try
+        {
+            var commandType = command.GetType();
+            var json = JsonSerializer.SerializeToUtf8Bytes(command, commandType, _options.JsonSerializerOptions);
+
+            byte[] commandData;
+            bool isCompressed = false;
+
+            if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
+            {
+                commandData = DaprCompressionUtility.Compress(json);
+                isCompressed = true;
+            }
+            else
+            {
+                commandData = json;
+            }
+
+            var typeAlias = _options.EnableTypeAliases
+                ? _typeRegistry.GetTypeAlias(commandType)
+                : commandType.AssemblyQualifiedName ?? commandType.FullName ?? commandType.Name;
+
+            return new DaprCommandEnvelope
+            {
+                CommandData = commandData,
+                CommandType = typeAlias,
+                IsCompressed = isCompressed,
+                Headers = new Dictionary<string, string>
+                {
+                    ["CommandTypeFull"] = commandType.FullName ?? commandType.Name
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to serialize command of type {Type}", command.GetType().Name);
+            throw;
+        }
+    }
+
+    public async ValueTask<ICommandWithHandlerSerializable?> DeserializeCommandAsync(DaprCommandEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        if (envelope.CommandData == null || envelope.CommandData.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            Type? commandType = null;
+
+            if (_options.EnableTypeAliases)
+            {
+                commandType = _typeRegistry.ResolveType(envelope.CommandType);
+            }
+
+            if (commandType == null)
+            {
+                commandType = Type.GetType(envelope.CommandType);
+            }
+
+            if (commandType == null)
+            {
+                _logger.LogError("Cannot resolve command type {TypeName}", envelope.CommandType);
+                throw new InvalidOperationException($"Cannot resolve command type: {envelope.CommandType}");
+            }
+
+            byte[] json = envelope.IsCompressed
+                ? DaprCompressionUtility.Decompress(envelope.CommandData)
+                : envelope.CommandData;
+
+            var command = JsonSerializer.Deserialize(json, commandType, _options.JsonSerializerOptions) as ICommandWithHandlerSerializable;
+            return command;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize command from envelope");
+            throw;
+        }
+    }
+
+    public async ValueTask<DaprEventEnvelope> SerializeEventAsync(IEvent @event, Guid aggregateId, int version, string rootPartitionKey)
+    {
+        ArgumentNullException.ThrowIfNull(@event);
+
+        try
+        {
+            var eventType = @event.GetType();
+            var json = JsonSerializer.SerializeToUtf8Bytes(@event, eventType, _options.JsonSerializerOptions);
+
+            byte[] eventData;
+            bool isCompressed = false;
+
+            if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
+            {
+                eventData = DaprCompressionUtility.Compress(json);
+                isCompressed = true;
+            }
+            else
+            {
+                eventData = json;
+            }
+
+            var typeAlias = _options.EnableTypeAliases
+                ? _typeRegistry.GetTypeAlias(eventType)
+                : eventType.AssemblyQualifiedName ?? eventType.FullName ?? eventType.Name;
+
+            return new DaprEventEnvelope
+            {
+                EventId = Guid.NewGuid(),
+                EventData = eventData,
+                EventType = typeAlias,
+                AggregateId = aggregateId,
+                Version = version,
+                Timestamp = DateTime.UtcNow,
+                RootPartitionKey = rootPartitionKey,
+                IsCompressed = isCompressed,
+                SortableUniqueId = @event.GetSortableUniqueId(),
+                Metadata = new Dictionary<string, string>
+                {
+                    ["EventTypeFull"] = eventType.FullName ?? eventType.Name
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to serialize event of type {Type}", @event.GetType().Name);
+            throw;
+        }
+    }
+
+    public async ValueTask<IEvent?> DeserializeEventAsync(DaprEventEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        if (envelope.EventData == null || envelope.EventData.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            Type? eventType = null;
+
+            if (_options.EnableTypeAliases)
+            {
+                eventType = _typeRegistry.ResolveType(envelope.EventType);
+            }
+
+            if (eventType == null)
+            {
+                eventType = Type.GetType(envelope.EventType);
+            }
+
+            if (eventType == null)
+            {
+                _logger.LogError("Cannot resolve event type {TypeName}", envelope.EventType);
+                throw new InvalidOperationException($"Cannot resolve event type: {envelope.EventType}");
+            }
+
+            byte[] json = envelope.IsCompressed
+                ? DaprCompressionUtility.Decompress(envelope.EventData)
+                : envelope.EventData;
+
+            var @event = JsonSerializer.Deserialize(json, eventType, _options.JsonSerializerOptions) as IEvent;
+            return @event;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize event from envelope");
+            throw;
+        }
+    }
+
+    private static bool IsCompressed(byte[] data)
+    {
+        // Check for GZip magic number
+        return data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b;
+    }
+}

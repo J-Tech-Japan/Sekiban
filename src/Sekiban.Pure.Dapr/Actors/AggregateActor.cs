@@ -8,6 +8,7 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Dapr.Parts;
+using Sekiban.Pure.Dapr.Serialization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +24,7 @@ public class AggregateActor : Actor, IAggregateActor
     private readonly SekibanDomainTypes _sekibanDomainTypes;
     private readonly IServiceProvider _serviceProvider;
     private readonly IActorProxyFactory _actorProxyFactory;
+    private readonly IDaprSerializationService _serialization;
     private readonly ILogger<AggregateActor> _logger;
     
     private const string StateKey = "aggregateState";
@@ -37,11 +39,13 @@ public class AggregateActor : Actor, IAggregateActor
         SekibanDomainTypes sekibanDomainTypes,
         IServiceProvider serviceProvider,
         IActorProxyFactory actorProxyFactory,
+        IDaprSerializationService serialization,
         ILogger<AggregateActor> logger) : base(host)
     {
         _sekibanDomainTypes = sekibanDomainTypes ?? throw new ArgumentNullException(nameof(sekibanDomainTypes));
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _actorProxyFactory = actorProxyFactory ?? throw new ArgumentNullException(nameof(actorProxyFactory));
+        _serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -219,14 +223,13 @@ public class AggregateActor : Actor, IAggregateActor
         }
         
         // Try to get saved state
-        var savedState = await StateManager.TryGetStateAsync<DaprSerializableAggregate>(StateKey);
+        var savedState = await StateManager.TryGetStateAsync<DaprAggregateSurrogate>(StateKey);
         
         if (savedState.HasValue)
         {
-            var aggregateOptional = await savedState.Value.ToAggregateAsync(_sekibanDomainTypes);
-            if (aggregateOptional.HasValue)
+            var aggregate = await _serialization.DeserializeAggregateAsync(savedState.Value);
+            if (aggregate != null)
             {
-                var aggregate = aggregateOptional.GetValue();
                 
                 // Check if projector version matches
                 if (_partitionInfo.Projector.GetVersion() != aggregate.ProjectorVersion)
@@ -260,11 +263,8 @@ public class AggregateActor : Actor, IAggregateActor
 
     private new async Task SaveStateAsync()
     {
-        var serializableState = await DaprSerializableAggregate.CreateFromAsync(
-            _currentAggregate,
-            _sekibanDomainTypes.JsonSerializerOptions);
-        
-        await StateManager.SetStateAsync(StateKey, serializableState);
+        var surrogate = await _serialization.SerializeAggregateAsync(_currentAggregate);
+        await StateManager.SetStateAsync(StateKey, surrogate);
         _hasUnsavedChanges = false;
     }
 
