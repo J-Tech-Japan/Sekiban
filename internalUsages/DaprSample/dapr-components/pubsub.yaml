@@ -3,10 +3,5 @@ kind: Component
 metadata:
   name: sekiban-pubsub
 spec:
-  type: pubsub.redis
+  type: pubsub.in-memory
   version: v1
-  metadata:
-  - name: connectionString
-    value: "$REDIS_CONNECTION_STRING"
-  - name: redisPassword
-    value: ""

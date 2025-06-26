@@ -3,12 +3,8 @@ kind: Component
 metadata:
   name: sekiban-statestore
 spec:
-  type: state.redis
+  type: state.in-memory
   version: v1
   metadata:
-  - name: connectionString
-    value: "$REDIS_CONNECTION_STRING"
-  - name: redisPassword
-    value: ""
   - name: actorStateStore
     value: "true"
