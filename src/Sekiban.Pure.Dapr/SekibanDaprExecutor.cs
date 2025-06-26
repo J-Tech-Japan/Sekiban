@@ -79,7 +79,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
 
             // Create a command envelope for the new interface
             var envelope = new CommandEnvelope(
-                commandType: command.GetType().FullName ?? command.GetType().Name,
+                commandType: command.GetType().AssemblyQualifiedName ?? command.GetType().FullName ?? command.GetType().Name,
                 commandPayload: System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command)),
                 aggregateId: partitionKeys.AggregateId.ToString(),
                 partitionId: partitionKeys.AggregateId,
