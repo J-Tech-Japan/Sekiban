@@ -6,7 +6,7 @@ spec:
   type: pubsub.redis
   version: v1
   metadata:
-  - name: redisHost
-    value: localhost:6379
+  - name: connectionString
+    value: "$REDIS_CONNECTION_STRING"
   - name: redisPassword
     value: ""

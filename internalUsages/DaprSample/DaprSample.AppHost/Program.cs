@@ -1,6 +1,8 @@
+using Aspire.Hosting.Dapr;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Add Redis for Dapr state store and pub/sub
+// Daprのデフォルトredisを使用せず、独自のRedisを6379ポートで起動
 var redis = builder.AddRedis("redis")
     .WithDataVolume();
 
@@ -10,7 +12,8 @@ builder.AddDapr();
 // Add API project with Dapr sidecar
 var api = builder.AddProject<Projects.DaprSample_Api>("api")
     .WithExternalHttpEndpoints()
-    .WithDaprSidecar()
-    .WithReference(redis);
+    .WithReference(redis)
+    .WaitFor(redis)
+    .WithDaprSidecar();
 
 builder.Build().Run();

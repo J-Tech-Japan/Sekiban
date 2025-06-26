@@ -49,6 +49,21 @@ app.UseCloudEvents();
 app.MapSubscribeHandler();
 app.MapActorsHandlers();
 
+// Debug endpoint to check environment variables
+app.MapGet("/debug/env", () =>
+{
+    var envVars = new Dictionary<string, string?>
+    {
+        ["REDIS_CONNECTION_STRING"] = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING"),
+        ["ConnectionStrings__redis"] = builder.Configuration.GetConnectionString("redis"),
+        ["APP_ID"] = Environment.GetEnvironmentVariable("APP_ID"),
+        ["DAPR_HTTP_PORT"] = Environment.GetEnvironmentVariable("DAPR_HTTP_PORT"),
+        ["DAPR_GRPC_PORT"] = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT")
+    };
+    
+    return Results.Ok(envVars);
+});
+
 // Map API endpoints
 app.MapPost("/api/users/create", async (CreateUser command, ISekibanExecutor executor) =>
 {
