@@ -7,13 +7,16 @@
 以下のツールがインストールされている必要があります：
 
 - .NET 9.0 SDK
-- Docker Desktop & Docker Compose### Docker Composeサービス
+- Docker Desktop & Docker Compose
+- Dapr CLI
+
+### Docker Composeサービス
 
 - **Redis**: `redis:6.0` - 永続化ボリューム付きRedisサーバー
-- **Placement Service**: `daprio/dapr` - Dapr Placement service（ポート6050）
+- **Placement Service**: `daprio/dapr` - Dapr Placement service（ポート50005）
 - **Zipkin**: `openzipkin/zipkin` - 分散トレーシング用（ポート9411）
 
-**注意**: Scheduler serviceは現在の設定では含めていません。Scheduler serviceはリマインダー機能に必要ですが、基本的なActor機能やState管理には必須ではありません。Scheduler serviceエラーが表示されても、アプリケーションは正常に動作します。pr CLI
+**注意**: 現在の設定では、開発環境用にin-memoryストレージを使用しています。本番環境ではRedisなどの永続化ストレージを使用してください。
 
 ## 起動手順
 
@@ -28,7 +31,7 @@ docker-compose up -d
 
 これにより以下のサービスが起動します：
 - **Redis**: ポート6379（状態ストア・Pub/Sub用）
-- **Dapr Placement Service**: ポート6050（Actor用）  
+- **Dapr Placement Service**: ポート50005（Actor用）  
 - **Zipkin**: ポート9411（分散トレーシング用）
 
 ### 2. 環境変数の設定
@@ -42,7 +45,15 @@ export DAPR_HTTP_PORT="3500"
 export DAPR_GRPC_PORT="50001"
 ```
 
-### 3. .NET アプリケーションのビルド
+### 3. Dapr の初期化（初回のみ）
+
+Daprがまだ初期化されていない場合：
+
+```bash
+dapr init --slim
+```
+
+### 4. .NET アプリケーションのビルド
 
 プロジェクトをビルドします：
 
@@ -51,7 +62,7 @@ cd internalUsages/DaprSample/DaprSample.Api
 dotnet build
 ```
 
-### 4. Dapr Sidecar の起動
+### 5. Dapr Sidecar の起動
 
 新しいターミナルウィンドウで、Dapr sidecarを起動します：
 
@@ -62,8 +73,8 @@ dapr run \
   --app-port 5000 \
   --dapr-http-port 3500 \
   --dapr-grpc-port 50001 \
-  --placement-host-address localhost:6050 \
-  --components-path ./dapr-components \
+  --placement-host-address localhost:50005 \
+  --resources-path ./dapr-components \
   -- dotnet run --project ./DaprSample.Api/DaprSample.Api.csproj --urls "https://localhost:5001;http://localhost:5000"
 ```
 
@@ -80,7 +91,7 @@ dapr run \
    ```bash
    curl -X POST http://localhost:5000/api/users/create \
      -H "Content-Type: application/json" \
-     -d '{"UserId": "123e4567-e89b-12d3-a456-426614174000", "Name": "テストユーザー"}'
+     -d '{"UserId": "123e4567-e89b-12d3-a456-426614174000", "Name": "テストユーザー", "Email": "test@example.com"}'
    ```
 
 3. **ユーザー取得**:
