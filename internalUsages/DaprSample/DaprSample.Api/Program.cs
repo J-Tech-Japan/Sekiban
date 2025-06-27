@@ -6,9 +6,15 @@ using Sekiban.Pure.Command;
 using Sekiban.Pure.Dapr.Extensions;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
+using DaprSample.Api;
 //using DaprSample.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
 // Add service defaults
 //builder.AddServiceDefaults();
@@ -32,6 +38,18 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
     options.EventTopicName = "domain-events";
     options.ActorIdPrefix = "dapr-sample";
 });
+
+// Override the AggregateEventHandlerActor with our simple implementation
+builder.Services.AddActors(options =>
+{
+    // Remove the default and add our simple version
+    options.Actors.RegisterActor<SimpleAggregateEventHandlerActor>("AggregateEventHandlerActor");
+});
+
+// Add in-memory event storage for testing
+builder.Services.AddSingleton<Sekiban.Pure.Events.IEventWriter, DaprSample.Api.InMemoryEventWriter>();
+// Use patched event reader to avoid timeout
+builder.Services.AddEventHandlerPatch();
 
 var app = builder.Build();
 
@@ -65,12 +83,25 @@ app.MapGet("/debug/env", () =>
 });
 
 // Map API endpoints
-app.MapPost("/api/users/create", async (CreateUser command, ISekibanExecutor executor) =>
+app.MapPost("/api/users/create", async (CreateUser command, ISekibanExecutor executor, ILogger<Program> logger) =>
 {
-    var result = await executor.CommandAsync(command);
-    return result.IsSuccess 
-        ? Results.Ok(new { success = true, aggregateId = command.UserId, version = result.GetValue().Version })
-        : Results.BadRequest(new { success = false, error = result.GetException().Message });
+    logger.LogInformation("=== CreateUser API called with UserId: {UserId}, Name: {Name} ===", command.UserId, command.Name);
+    
+    try
+    {
+        logger.LogInformation("About to call executor.CommandAsync...");
+        var result = await executor.CommandAsync(command);
+        logger.LogInformation("CommandAsync completed. IsSuccess: {IsSuccess}", result.IsSuccess);
+        
+        return result.IsSuccess 
+            ? Results.Ok(new { success = true, aggregateId = command.UserId, version = result.GetValue().Version })
+            : Results.BadRequest(new { success = false, error = result.GetException().Message });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Exception in CreateUser API");
+        return Results.BadRequest(new { success = false, error = ex.Message });
+    }
 })
 .WithName("CreateUser")
 .WithOpenApi();

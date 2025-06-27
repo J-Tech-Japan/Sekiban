@@ -151,6 +151,34 @@ public class DaprSerializationService : IDaprSerializationService
                 payloadType = Type.GetType(surrogate.PayloadTypeName);
             }
 
+            // If type resolution failed and it looks like a simple type name without assembly info,
+            // try to find it in known assemblies
+            if (payloadType == null && !surrogate.PayloadTypeName.Contains(','))
+            {
+                // Try to find the type in Sekiban.Pure assembly
+                var sekibanAssembly = typeof(EmptyAggregatePayload).Assembly;
+                payloadType = sekibanAssembly.GetType(surrogate.PayloadTypeName);
+                
+                // If not found, try with namespace
+                if (payloadType == null)
+                {
+                    payloadType = sekibanAssembly.GetType($"Sekiban.Pure.Aggregates.{surrogate.PayloadTypeName}");
+                }
+                
+                // If still not found, try to search all loaded assemblies for the type
+                if (payloadType == null)
+                {
+                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        payloadType = assembly.GetType(surrogate.PayloadTypeName);
+                        if (payloadType != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (payloadType == null)
             {
                 _logger.LogError("Cannot resolve type {TypeName}", surrogate.PayloadTypeName);

@@ -1,0 +1,12 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprConfig
+spec:
+  tracing:
+    sampling: "1"
+  metric:
+    enabled: true
+  features:
+    - name: actorReentrancy
+      enabled: true
