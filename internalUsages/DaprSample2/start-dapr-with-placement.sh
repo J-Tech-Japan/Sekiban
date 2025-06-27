@@ -2,7 +2,7 @@
 
 # Start Placement service first
 echo "Starting Dapr Placement service..."
-/home/vboxuser/.dapr/bin/placement --port 50005 &
+~/.dapr/bin/placement --port 50005 &
 PLACEMENT_PID=$!
 echo "Placement service started with PID: $PLACEMENT_PID"
 

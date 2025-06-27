@@ -23,19 +23,21 @@ public class DaprRepository
     private readonly IAggregateProjector _projector;
     private readonly IEventTypes _eventTypes;
     private Aggregate _currentAggregate;
-
+    private readonly SekibanDomainTypes _domainTypes;
     public DaprRepository(
         IAggregateEventHandlerActor eventHandlerActor,
         PartitionKeys partitionKeys,
         IAggregateProjector projector,
         IEventTypes eventTypes,
-        Aggregate currentAggregate)
+        Aggregate currentAggregate,
+        SekibanDomainTypes domainTypes)
     {
         _eventHandlerActor = eventHandlerActor ?? throw new ArgumentNullException(nameof(eventHandlerActor));
         _partitionKeys = partitionKeys ?? throw new ArgumentNullException(nameof(partitionKeys));
         _projector = projector ?? throw new ArgumentNullException(nameof(projector));
         _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _currentAggregate = currentAggregate ?? throw new ArgumentNullException(nameof(currentAggregate));
+        _domainTypes = domainTypes;
     }
 
     public ResultBox<Aggregate> GetAggregate()
@@ -65,7 +67,7 @@ public class DaprRepository
                 var envelope = new EventEnvelope
                 {
                     EventType = eventPayloadType.AssemblyQualifiedName ?? eventPayloadType.FullName ?? eventPayloadType.Name,
-                    EventPayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(eventPayload, eventPayloadType)),
+                    EventPayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(eventPayload, eventPayloadType, _domainTypes.JsonSerializerOptions)),
                     AggregateId = _partitionKeys.AggregateId.ToString(),
                     PartitionId = _partitionKeys.AggregateId,
                     RootPartitionKey = _partitionKeys.RootPartitionKey,

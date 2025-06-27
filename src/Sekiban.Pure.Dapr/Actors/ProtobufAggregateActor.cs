@@ -200,7 +200,8 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            _currentAggregate);
+            _currentAggregate,
+            _sekibanDomainTypes);
         
         // Execute command
         var commandExecutor = new CommandExecutor(_serviceProvider) 
@@ -241,7 +242,7 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys));
+            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys),_sekibanDomainTypes);
         
         // Load all events and rebuild state
         var aggregate = await repository.Load().UnwrapBox();

@@ -1,16 +1,26 @@
 #!/bin/bash
 
-# Start the Dapr application with scheduler disabled
-# This fixes the scheduler connection issue on port 50006
+echo "=== Dapr Sample Launcher ==="
+echo
+echo "Choose state store type:"
+echo "1) In-Memory (default, no dependencies)"
+echo "2) Redis (requires Redis server)"
+echo
 
-echo "Starting Dapr application with scheduler disabled..."
+read -p "Enter choice [1-2] (default: 1): " choice
+choice=${choice:-1}
 
-dapr run \
-  --app-id sekiban-api \
-  --app-port 5010 \
-  --dapr-http-port 3501 \
-  --dapr-grpc-port 50002 \
-  --scheduler-host-address " " \
-  --placement-host-address localhost:50005 \
-  --resources-path ./dapr-components \
-  -- dotnet run --project ./DaprSample.Api/DaprSample.Api.csproj --urls "http://localhost:5010"
+case $choice in
+    1)
+        echo "Starting with In-Memory state store..."
+        ./start-dapr-inmemory.sh
+        ;;
+    2)
+        echo "Starting with Redis state store..."
+        ./start-dapr-redis.sh
+        ;;
+    *)
+        echo "Invalid choice. Starting with In-Memory state store..."
+        ./start-dapr-inmemory.sh
+        ;;
+esac

@@ -139,7 +139,7 @@ public class EnvelopeAggregateActor : Actor, IAggregateActor
                 _partitionInfo.PartitionKeys,
                 _partitionInfo.Projector,
                 _sekibanDomainTypes.EventTypes,
-                _currentAggregate);
+                _currentAggregate,_sekibanDomainTypes);
             
             // Execute command
             var commandExecutor = new CommandExecutor(_serviceProvider) 
@@ -221,7 +221,7 @@ public class EnvelopeAggregateActor : Actor, IAggregateActor
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys));
+            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys),_sekibanDomainTypes);
         
         // Project all events to rebuild state
         var aggregate = Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys);

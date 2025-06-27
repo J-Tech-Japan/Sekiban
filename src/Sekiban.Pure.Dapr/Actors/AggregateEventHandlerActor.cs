@@ -245,16 +245,14 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
                     var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
                     
                     // Deserialize the event payload
-                    var eventPayload = JsonSerializer.Deserialize(eventJson, eventType) as IEventPayload;
+                    var eventPayload = JsonSerializer.Deserialize(eventJson, eventType, _sekibanDomainTypes.JsonSerializerOptions) as IEventPayload;
                     
                     if (eventPayload != null)
                     {
                         // Create the Event<T> wrapper
                         var eventWrapperType = typeof(Event<>).MakeGenericType(eventType);
-                        var partitionKeys = new PartitionKeys(
-                            Guid.Parse(envelope.AggregateId),
-                            string.Empty,
-                            envelope.RootPartitionKey);
+
+                        var partitionKeys = PartitionKeys.FromPrimaryKeysString(this.Id.GetId()).UnwrapBox();
                         
                         var @event = Activator.CreateInstance(
                             eventWrapperType,

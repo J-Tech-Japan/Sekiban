@@ -8,7 +8,52 @@ Sekibanとは独立したシンプルなDapr Actorの最小技術検証プロジ
 
 - **CounterActor**: 状態を持つシンプルなカウンターActor
 - **In-Memory State Store**: メモリ内でのActor状態管理
-- **REST API**: Actor操作のためのHTTPエンドポイント
+
+## 推奨起動方法 (Dapr 1.15+)
+
+```bash
+# DaprSample2ディレクトリに移動
+cd internalUsages/DaprSample2
+
+# アプリケーションを起動
+dapr run \
+  --app-id counter-demo \
+  --app-port 5003 \
+  --dapr-http-port 3501 \
+  --dapr-grpc-port 50002 \
+  --scheduler-host-address="" \
+  --resources-path ./dapr-components \
+  -- dotnet run --urls "http://localhost:5003"
+```
+
+## テスト方法
+
+```bash
+# カウンターの値を取得 (初期値は0)
+curl http://localhost:5003/counter/test1
+
+# カウンターをインクリメント
+curl -X POST http://localhost:5003/counter/test1/increment
+
+# 更新された値を取得 (1になっているはず)
+curl http://localhost:5003/counter/test1
+
+# カウンターをリセット
+curl -X POST http://localhost:5003/counter/test1/reset
+```
+
+## 自動テスト実行
+
+```bash
+# 包括的なテストスクリプトを実行
+./test-state-management.sh
+```
+
+## 設定のポイント
+
+- **scheduler-host-address=""**: Dapr 1.15+でScheduler接続タイムアウトを回避
+- **actorstore**: デモ用のin-memoryステートストア
+- **ポート5003**: DaprSampleとの競合を避けるため
 
 ## プロジェクト構成
 
