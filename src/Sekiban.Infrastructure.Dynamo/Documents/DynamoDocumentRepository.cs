@@ -53,11 +53,11 @@ public class DynamoDocumentRepository(
 
                 var resultList = await FetchDocumentsAsync(search);
                 var commands = (from document in resultList
-                                let json = document.ToJson()
                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                where sinceSortableUniqueId is null ||
-                                    !new SortableUniqueIdValue(sortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
-                                select json).ToList();
+                                where
+                                    sinceSortableUniqueId is null ||
+                                    new SortableUniqueIdValue(sortableUniqueId).IsLaterThan(sinceSortableUniqueId)
+                                select document.ToJson()).ToList();
                 resultAction(commands);
             });
 
