@@ -108,101 +108,56 @@ public class InMemoryDocumentRepository(
         EventRetrievalInfo eventRetrievalInfo,
         Action<IEnumerable<IEvent>> resultAction)
     {
+        await Task.CompletedTask;
+
+        var range = ListEvents(eventRetrievalInfo)
+            .Where(m => eventRetrievalInfo.SortableIdCondition.InsideOfRange(m.SortableUniqueId));
+        if (eventRetrievalInfo.MaxCount.HasValue)
+        {
+            range = range.Take(eventRetrievalInfo.MaxCount.Value);
+        }
+
+        resultAction(range.ToList());
+        return true;
+    }
+
+    private List<IEvent> ListEvents(EventRetrievalInfo eventRetrievalInfo)
+    {
         var sekibanContext = serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
-        await Task.CompletedTask;
+
+
         if (eventRetrievalInfo.GetIsPartition())
         {
-            var partitionKey = eventRetrievalInfo.GetPartitionKey();
-            if (partitionKey.IsSuccess)
-            {
-                var array = inMemoryDocumentStore.GetEventPartition(partitionKey.GetValue(), sekibanIdentifier);
-                var list = array.OrderBy(m => m.SortableUniqueId).ToList();
-                switch (eventRetrievalInfo.SortableIdCondition)
-                {
-                    case SinceSortableIdCondition since:
-                        var index = list.FindIndex(m => m.SortableUniqueId == since.SortableUniqueId.Value);
-                        if (index == list.Count - 1)
-                        {
-                            resultAction(Enumerable.Empty<IEvent>());
-                        } else
-                        {
-                            var range = list.GetRange(index + 1, list.Count - index - 1);
-                            range = eventRetrievalInfo.MaxCount.HasValue
-                                ? range.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                                : range;
-                            resultAction(range);
-                        }
-                        break;
-                    case BetweenSortableIdCondition between:
-                        var rangeBetween = list.Where(m =>
-                            !between.OutsideOfRange(new SortableUniqueIdValue(m.SortableUniqueId))).OrderBy(m => m.SortableUniqueId).ToList();
-                        rangeBetween = eventRetrievalInfo.MaxCount.HasValue
-                            ? rangeBetween.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                            : rangeBetween;
-                        resultAction(rangeBetween);
-                        break;
-                    case SortableIdConditionNone _:
-                        list = eventRetrievalInfo.MaxCount.HasValue
-                            ? list.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                            : list;
-                        resultAction(list);
-                        break;
-                    default:
-                        throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
-                }
-            }
-        } else
-        {
-            var enumerable = inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).AsEnumerable();
-            if (eventRetrievalInfo.HasAggregateStream())
-            {
-                var aggregateStream = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
-                enumerable = enumerable.Where(m => aggregateStream.Contains(m.AggregateType));
-            }
-            if (eventRetrievalInfo.HasRootPartitionKey())
-            {
-                enumerable = enumerable.Where(
-                    m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
-            }
-            var list = enumerable.OrderBy(m => m.SortableUniqueId).ToList();
+            var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
+            var array = inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier);
 
-            switch (eventRetrievalInfo.SortableIdCondition)
-            {
-                case SinceSortableIdCondition since:
-                    var index = list.FindIndex(m => m.SortableUniqueId == since.SortableUniqueId.Value);
-                    if (index == list.Count - 1)
-                    {
-                        resultAction(Enumerable.Empty<IEvent>());
-                    } else
-                    {
-                        var range = list.GetRange(index + 1, list.Count - index - 1);
-                        range = eventRetrievalInfo.MaxCount.HasValue
-                            ? range.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                            : range;
-                        resultAction(range);
-                    }
-                    break;
-                case BetweenSortableIdCondition between:
-                    var rangeBetween = list.Where(m =>
-                        !between.OutsideOfRange(new SortableUniqueIdValue(m.SortableUniqueId))).OrderBy(m => m.SortableUniqueId).ToList();
-                    rangeBetween = eventRetrievalInfo.MaxCount.HasValue
-                        ? rangeBetween.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                        : rangeBetween;
-                    resultAction(rangeBetween);
-                    break;
-                case SortableIdConditionNone _:
-                    list = eventRetrievalInfo.MaxCount.HasValue
-                        ? list.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
-                        : list;
-                    resultAction(list);
-                    break;
-                default:
-                    throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
-            }
+            return array
+                .OrderBy(m => m.SortableUniqueId)
+                .ToList();
         }
-        return true;
+
+
+        var enumerable = inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).AsEnumerable();
+
+        if (eventRetrievalInfo.HasAggregateStream())
+        {
+            var aggregateStream = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+            enumerable = enumerable
+                .Where(m => aggregateStream.Contains(m.AggregateType));
+        }
+
+        if (eventRetrievalInfo.HasRootPartitionKey())
+        {
+            var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+            enumerable = enumerable
+                .Where(m => m.RootPartitionKey == rootPartitionKey);
+        }
+
+        return enumerable
+            .OrderBy(x => x.SortableUniqueId)
+            .ToList();
     }
 }
