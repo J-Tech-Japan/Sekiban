@@ -18,8 +18,10 @@ DaprSample2/
 ├── ICounterActor.cs            # Actorインターフェース
 ├── CounterActor.cs             # Actor実装
 ├── Program.cs                  # アプリケーション設定
+├── start-dapr.sh               # Dapr起動スクリプト
+├── test-counter.sh             # APIテストスクリプト
 ├── dapr-components/
-│   └── statestore.yaml         # In-Memory State Store設定
+│   └── actorstore.yaml         # Actor用In-Memory State Store設定
 └── README.md                   # このファイル
 ```
 
@@ -45,15 +47,27 @@ dotnet build
 ```
 
 ### 2. Daprで実行
+
+#### 方法1: スタートアップスクリプトを使用（推奨）
+スケジューラー接続エラーを回避するため、専用のスクリプトを使用します：
+```bash
+./start-dapr.sh
+```
+
+#### 方法2: 手動で実行
+スケジューラーを無効化して実行する場合：
 ```bash
 dapr run \
   --app-id counter-demo \
   --app-port 5003 \
   --dapr-http-port 3501 \
   --dapr-grpc-port 50002 \
+  --scheduler-host-address " " \
   --resources-path ./dapr-components \
   -- dotnet run --urls "http://localhost:5003"
 ```
+
+> **注意**: Dapr 1.14以降ではスケジューラーサービスが導入されましたが、このアプリケーションではリマインダーやワークフローを使用しないため、スケジューラーを無効化しても問題ありません。
 
 ### 3. API テスト
 
