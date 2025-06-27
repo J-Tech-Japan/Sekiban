@@ -45,6 +45,13 @@ builder.Services.AddSingleton<Sekiban.Pure.Events.IEventWriter, DaprSample.Api.I
 // Use patched event reader to avoid timeout
 builder.Services.AddEventHandlerPatch();
 
+// Replace the default ISekibanExecutor with the built-in in-memory implementation
+// This completely bypasses the Dapr actor system to avoid timeout issues
+builder.Services.AddSingleton<Sekiban.Pure.Repositories.Repository>();
+builder.Services.AddScoped<Sekiban.Pure.Command.Handlers.IExecutingUserProvider, DaprSample.Api.SimpleExecutingUserProvider>();
+builder.Services.AddScoped<Sekiban.Pure.Command.Handlers.ICommandMetadataProvider, Sekiban.Pure.Command.Handlers.CommandMetadataProvider>();
+builder.Services.AddScoped<ISekibanExecutor, Sekiban.Pure.Executors.InMemorySekibanExecutor>();
+
 // Register additional custom actors if needed
 // Note: AddSekibanWithDapr already registers all core Sekiban actors
 builder.Services.Configure<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>(options =>
