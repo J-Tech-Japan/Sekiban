@@ -47,7 +47,7 @@ public class DynamoDocumentRepository(
                     rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
+                filter.AddSortableUniqueIdIfExists(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
@@ -277,7 +277,7 @@ public class DynamoDocumentRepository(
                     var filter = new QueryFilter();
                     var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
                     filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo);
+                    filter.AddSortableUniqueIdIfExists(eventRetrievalInfo);
                     var config = new QueryOperationConfig
                     {
                         Filter = filter, BackwardSearch = false
@@ -305,7 +305,7 @@ public class DynamoDocumentRepository(
                             ScanOperator.Equal,
                             eventRetrievalInfo.RootPartitionKey.GetValue());
                     }
-                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SortableIdCondition);
+                    filter.AddSortableUniqueIdIfExists(eventRetrievalInfo.SortableIdCondition);
                     var config = new ScanOperationConfig { Filter = filter };
                     var search = table.Scan(config);
 
