@@ -7,6 +7,7 @@ using Sekiban.Pure.Dapr.Extensions;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
 using DaprSample.Api;
+using Dapr.Client;
 //using DaprSample.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,17 +40,17 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
     options.ActorIdPrefix = "dapr-sample";
 });
 
-// Override the AggregateEventHandlerActor with our simple implementation
-builder.Services.AddActors(options =>
-{
-    // Remove the default and add our simple version
-    options.Actors.RegisterActor<SimpleAggregateEventHandlerActor>("AggregateEventHandlerActor");
-});
-
 // Add in-memory event storage for testing
 builder.Services.AddSingleton<Sekiban.Pure.Events.IEventWriter, DaprSample.Api.InMemoryEventWriter>();
 // Use patched event reader to avoid timeout
 builder.Services.AddEventHandlerPatch();
+
+// Register additional custom actors if needed
+// Note: AddSekibanWithDapr already registers all core Sekiban actors
+builder.Services.Configure<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>(options =>
+{
+    // Any additional actor configuration can go here
+});
 
 var app = builder.Build();
 
@@ -65,7 +66,99 @@ if (app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseCloudEvents();
 app.MapSubscribeHandler();
+
+// Log actor registration before mapping handlers
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+try 
+{
+    var actorOptions = app.Services.GetService<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>();
+    if (actorOptions?.Value != null && actorOptions.Value.Actors != null)
+    {
+        logger.LogInformation("=== REGISTERED ACTORS ===");
+        var actorCount = 0;
+        try 
+        {
+            // Try to iterate through registered actors
+            var actors = actorOptions.Value.Actors;
+            logger.LogInformation("Actor registration collection exists: {HasActors}", actors != null);
+            actorCount = actors?.Count ?? 0;
+            logger.LogInformation("Number of registered actors: {ActorCount}", actorCount);
+        }
+        catch (Exception innerEx)
+        {
+            logger.LogError(innerEx, "Error accessing actor collection");
+        }
+        logger.LogInformation("=== END REGISTERED ACTORS ===");
+    }
+    else
+    {
+        logger.LogWarning("ActorRuntimeOptions or Actors is null");
+    }
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "Error logging actor registration info");
+}
+
 app.MapActorsHandlers();
+
+// Wait for Dapr sidecar to be ready and actors to be registered
+var daprClient = app.Services.GetRequiredService<DaprClient>();
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+
+startupLogger.LogInformation("Waiting for Dapr sidecar to be ready...");
+
+// Log Dapr environment information
+startupLogger.LogInformation("Dapr Environment Info:");
+startupLogger.LogInformation("  - DAPR_HTTP_PORT: {DaprHttpPort}", Environment.GetEnvironmentVariable("DAPR_HTTP_PORT") ?? "Not Set");
+startupLogger.LogInformation("  - DAPR_GRPC_PORT: {DaprGrpcPort}", Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") ?? "Not Set");
+startupLogger.LogInformation("  - APP_ID: {AppId}", Environment.GetEnvironmentVariable("APP_ID") ?? "Not Set");
+startupLogger.LogInformation("  - Expected Dapr HTTP: http://localhost:3500");
+startupLogger.LogInformation("  - App Port: {AppPort}", 5000);
+
+// Wait for basic Dapr health
+var maxWaitTime = TimeSpan.FromSeconds(60); // Increased timeout
+var waitStartTime = DateTime.UtcNow;
+var isHealthy = false;
+
+while (DateTime.UtcNow - waitStartTime < maxWaitTime)
+{
+    try
+    {
+        await daprClient.CheckHealthAsync();
+        isHealthy = true;
+        startupLogger.LogInformation("Dapr health check passed.");
+        break;
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogDebug(ex, "Dapr health check failed, retrying...");
+        await Task.Delay(2000); // Increased retry interval
+    }
+}
+
+if (!isHealthy)
+{
+    startupLogger.LogWarning("Dapr health check did not pass within the timeout period.");
+}
+
+// Additional wait for actor registration to complete
+startupLogger.LogInformation("Giving Dapr additional time for actor registration...");
+await Task.Delay(10000); // Give Dapr 10 seconds to register actors
+startupLogger.LogInformation("Actor registration wait complete. Application is ready.");
+
+// Test actor registration by trying to create a proxy
+try 
+{
+    var testActorId = new Dapr.Actors.ActorId("test-actor-id");
+    var testProxy = app.Services.GetRequiredService<Dapr.Actors.Client.IActorProxyFactory>()
+        .CreateActorProxy<Sekiban.Pure.Dapr.Actors.IAggregateActor>(testActorId, nameof(Sekiban.Pure.Dapr.Actors.AggregateActor));
+    startupLogger.LogInformation("Test actor proxy created successfully.");
+}
+catch (Exception ex)
+{
+    startupLogger.LogError(ex, "Failed to create test actor proxy: {Error}", ex.Message);
+}
 
 // Debug endpoint to check environment variables
 app.MapGet("/debug/env", () =>

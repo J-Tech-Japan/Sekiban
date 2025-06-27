@@ -1,14 +1,10 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: sekiban-statestore
+  name: actorstore
 spec:
-  type: state.redis
+  type: state.in-memory
   version: v1
   metadata:
-  - name: redisHost
-    value: localhost:6379
-  - name: redisPassword
-    value: ""
   - name: actorStateStore
     value: "true"

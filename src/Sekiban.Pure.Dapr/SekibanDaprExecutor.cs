@@ -61,9 +61,13 @@ public class SekibanDaprExecutor : ISekibanExecutor
             // Get partition keys
             var partitionKeys = GetPartitionKeys(command);
             
-            // Create actor ID with projector type
-            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
+            // Create actor ID using partition keys primary string
+            var actorId = new ActorId(partitionKeys.ToPrimaryKeysString());
+            
+            // Debug: Print actor ID for troubleshooting
+            Console.WriteLine($"[DEBUG] Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine($"[DEBUG] ProjectorType: {projectorType.Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine($"[DEBUG] AggregateId: {partitionKeys.AggregateId}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,
@@ -199,10 +203,13 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // Create actor ID with projector type
-            var projectorType = typeof(TAggregateProjector);
-            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
+            // Create actor ID using partition keys primary string
+            var actorId = new ActorId(partitionKeys.ToPrimaryKeysString());
+            
+            // Debug: Print actor ID for troubleshooting
+            Console.WriteLine($"[DEBUG] LoadAggregate - Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine($"[DEBUG] LoadAggregate - ProjectorType: {typeof(TAggregateProjector).Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine($"[DEBUG] LoadAggregate - AggregateId: {partitionKeys.AggregateId}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,

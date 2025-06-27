@@ -38,16 +38,15 @@ public static class ServiceCollectionExtensions
         // Add serialization services
         services.AddSekibanDaprSerialization();
         
-        // Add Actors (including Protobuf and Envelope actors)
+        // Add Actors - ensure they are properly registered with Dapr
         services.AddActors(options =>
         {
+            // Register core Sekiban actors for standard Dapr usage
             options.Actors.RegisterActor<AggregateActor>();
-            options.Actors.RegisterActor<ProtobufAggregateActor>();
-            options.Actors.RegisterActor<EnvelopeAggregateActor>();
             options.Actors.RegisterActor<AggregateEventHandlerActor>();
-            options.Actors.RegisterActor<EnvelopeAggregateEventHandlerActor>();
             options.Actors.RegisterActor<MultiProjectorActor>();
             
+            // Configure actor runtime settings
             options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
             options.ActorScanInterval = TimeSpan.FromSeconds(30);
         });
@@ -120,16 +119,8 @@ public static class ServiceCollectionExtensions
         // Add Protobuf serialization services
         services.AddSekibanDaprProtobufSerialization(configureSerializationOptions);
         
-        // Add Actors (Protobuf-enabled)
-        services.AddActors(options =>
-        {
-            options.Actors.RegisterActor<ProtobufAggregateActor>();
-            options.Actors.RegisterActor<AggregateEventHandlerActor>();
-            options.Actors.RegisterActor<MultiProjectorActor>();
-            
-            options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
-            options.ActorScanInterval = TimeSpan.FromSeconds(30);
-        });
+        // Note: AddActors is called only once in AddSekibanWithDapr to avoid conflicts
+        // Protobuf actors are already registered in the main AddSekibanWithDapr method
 
         // Register Sekiban services
         services.AddSingleton(domainTypes);
@@ -258,16 +249,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProtobufTypeMapper, ProtobufTypeMapper>();
         services.AddSingleton<IEnvelopeProtobufService, EnvelopeProtobufService>();
         
-        // Add Actors (Envelope-based)
-        services.AddActors(options =>
-        {
-            options.Actors.RegisterActor<EnvelopeAggregateActor>();
-            options.Actors.RegisterActor<EnvelopeAggregateEventHandlerActor>();
-            options.Actors.RegisterActor<MultiProjectorActor>();
-            
-            options.ActorIdleTimeout = TimeSpan.FromMinutes(30);
-            options.ActorScanInterval = TimeSpan.FromSeconds(30);
-        });
+        // Note: AddActors is called only once in AddSekibanWithDapr to avoid conflicts
+        // Envelope actors are already registered in the main AddSekibanWithDapr method
 
         // Register Sekiban services
         services.AddSingleton(domainTypes);
