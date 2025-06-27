@@ -40,8 +40,10 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
     options.ActorIdPrefix = "dapr-sample";
 });
 
-// Add in-memory event storage for testing
+// Add shared in-memory event storage for testing
+builder.Services.AddSingleton<DaprSample.Api.SharedEventStorage>();
 builder.Services.AddSingleton<Sekiban.Pure.Events.IEventWriter, DaprSample.Api.InMemoryEventWriter>();
+builder.Services.AddSingleton<Sekiban.Pure.Events.IEventReader, DaprSample.Api.InMemoryEventReader>();
 // Use patched event reader to avoid timeout
 builder.Services.AddEventHandlerPatch();
 
