@@ -30,16 +30,16 @@ public class PartitionKeysAndProjector
         try
         {
             // Extract projector type and partition keys from the grain key
-            // Format: "ProjectorType:PartitionKeysString"
-            var parts = grainKey.Split(':', 2);
+            // Format: "PartitionKeysString=ProjectorType" (matching Orleans format)
+            var parts = grainKey.Split('=');
             if (parts.Length != 2)
             {
                 return ResultBox<PartitionKeysAndProjector>.FromException(
                     new ArgumentException($"Invalid grain key format: {grainKey}"));
             }
 
-            var projectorTypeName = parts[0];
-            var partitionKeysString = parts[1];
+            var partitionKeysString = parts[0];
+            var projectorTypeName = parts[1];
 
             // Get projector from specifier
             var projectorResult = projectorSpecifier.GetProjector(projectorTypeName);
@@ -73,7 +73,7 @@ public class PartitionKeysAndProjector
     /// </summary>
     public string ToProjectorGrainKey()
     {
-        return $"{Projector.GetType().Name}:{PartitionKeys.ToPrimaryKeysString()}";
+        return $"{PartitionKeys.ToPrimaryKeysString()}={Projector.GetType().Name}";
     }
 
     /// <summary>

@@ -10,3 +10,16 @@ spec:
   features:
     - name: actorReentrancy
       enabled: true
+  httpPipeline:
+    handlers:
+      - name: ratelimit
+        type: middleware.http.ratelimit
+  accessControl:
+    defaultAction: allow
+  components:
+    deny: []
+  actors:
+    actorIdleTimeout: 1h
+    actorScanInterval: 30s
+    drainOngoingCallTimeout: 60s
+    drainRebalancedActors: true

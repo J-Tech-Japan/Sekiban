@@ -79,22 +79,15 @@ public class DaprRepository
                 eventEnvelopes.Add(envelope);
             }
             
-            // PATCH: Skip actor call to avoid timeout issues for testing
-            // TODO: Remove this bypass once the actor implementation is working properly
-            Console.WriteLine($"DaprRepository.Save: Bypassing actor call for {eventEnvelopes.Count} events to avoid timeout");
-            
-            // Simulate successful response
-            var response = EventHandlingResponse.Success(eventEnvelopes.LastOrDefault()?.SortableUniqueId ?? lastSortableUniqueId);
-            
-            // Original code (commented out to avoid timeout):
-            // var response = await _eventHandlerActor.AppendEventsAsync(
-            //     lastSortableUniqueId,
-            //     eventEnvelopes);
-            //     
-            // if (!response.IsSuccess)
-            // {
-            //     return ResultBox<List<IEvent>>.FromException(new InvalidOperationException(response.ErrorMessage));
-            // }
+            // Call the event handler actor to append events
+            var response = await _eventHandlerActor.AppendEventsAsync(
+                lastSortableUniqueId,
+                eventEnvelopes);
+                
+            if (!response.IsSuccess)
+            {
+                return ResultBox<List<IEvent>>.FromException(new InvalidOperationException(response.ErrorMessage));
+            }
 
             // Update current aggregate with new events
             _currentAggregate = _currentAggregate.Project(newEvents, _projector).UnwrapBox();

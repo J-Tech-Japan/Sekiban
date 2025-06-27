@@ -6,6 +6,7 @@ using ResultBoxes;
 using Sekiban.Pure.Command;
 using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Dapr.Configuration;
+using Sekiban.Pure.Dapr.Parts;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exceptions;
@@ -50,23 +51,19 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // Get projector type from command
-            var projectorType = GetProjectorTypeFromCommand(command);
-            if (projectorType == null)
-            {
-                return ResultBox<SekibanCommandResponse>.FromException(
-                    new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
-            }
-
             // Get partition keys
             var partitionKeys = GetPartitionKeys(command);
             
-            // Create actor ID using partition keys primary string
-            var actorId = new ActorId(partitionKeys.ToPrimaryKeysString());
+            // Get projector from command (matching Orleans pattern)
+            var projector = command.GetProjector();
+            var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+            
+            // Create actor ID using the correct grain key format (matching Orleans pattern)
+            var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
             
             // Debug: Print actor ID for troubleshooting
             Console.WriteLine($"[DEBUG] Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
-            Console.WriteLine($"[DEBUG] ProjectorType: {projectorType.Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine($"[DEBUG] ProjectorType: {projector.GetType().Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
             Console.WriteLine($"[DEBUG] AggregateId: {partitionKeys.AggregateId}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
@@ -80,11 +77,11 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 CausationId: relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
                 CorrelationId: commandId.ToString(),
                 ExecutedUser: "system");
-
+            var serializedCommand = JsonSerializer.Serialize(command, command.GetType(), _domainTypes.JsonSerializerOptions);
             // Create a command envelope for the new interface
             var envelope = new CommandEnvelope(
                 commandType: command.GetType().AssemblyQualifiedName ?? command.GetType().FullName ?? command.GetType().Name,
-                commandPayload: System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command)),
+                commandPayload: System.Text.Encoding.UTF8.GetBytes(serializedCommand),
                 aggregateId: partitionKeys.AggregateId.ToString(),
                 partitionId: partitionKeys.AggregateId,
                 rootPartitionKey: partitionKeys.RootPartitionKey,
@@ -203,8 +200,11 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // Create actor ID using partition keys primary string
-            var actorId = new ActorId(partitionKeys.ToPrimaryKeysString());
+            // Create PartitionKeysAndProjector (matching Orleans pattern)
+            var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, new TAggregateProjector());
+            
+            // Create actor ID using the correct grain key format (matching Orleans pattern)
+            var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
             
             // Debug: Print actor ID for troubleshooting
             Console.WriteLine($"[DEBUG] LoadAggregate - Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
@@ -234,7 +234,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
                     new InvalidOperationException("Failed to convert SerializableAggregate to Aggregate"));
             }
             
-            return ResultBox<Aggregate>.FromValue(aggregateOptional.Value);
+            return ResultBox<Aggregate>.FromValue(aggregateOptional.Value!);
         }
         catch (Exception ex)
         {
@@ -254,36 +254,5 @@ public class SekibanDaprExecutor : ISekibanExecutor
         }
         
         return partitionKeys;
-    }
-
-    private Type? GetProjectorTypeFromCommand(ICommandWithHandlerSerializable command)
-    {
-        var commandType = command.GetType();
-        
-        // Look for ICommandWithHandler<TCommand, TProjector> interface
-        var commandInterface = commandType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && 
-                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,>));
-        
-        if (commandInterface != null)
-        {
-            // Get the projector type from the generic arguments
-            return commandInterface.GetGenericArguments()[1];
-        }
-
-        // Look for ICommandWithHandler<TCommand, TProjector, TPayload> interface
-        var commandWithPayloadInterface = commandType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && 
-                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,,>));
-        
-        if (commandWithPayloadInterface != null)
-        {
-            // Get the projector type from the generic arguments
-            return commandWithPayloadInterface.GetGenericArguments()[1];
-        }
-
-        return null;
     }
 }
