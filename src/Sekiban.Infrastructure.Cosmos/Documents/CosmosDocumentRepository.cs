@@ -138,11 +138,12 @@ public class CosmosDocumentRepository(
                 var query = container
                     .GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
-                query = sinceSortableUniqueId is not null
-                    ? query
-                        .Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
-                        .OrderByDescending(m => m.SortableUniqueId)
-                    : query.OrderBy(m => m.SortableUniqueId);
+                if (sinceSortableUniqueId is not null)
+                {
+                    query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
+                }
+                query = query.OrderBy(m => m.SortableUniqueId);
+
                 var feedIterator = container.GetItemQueryIterator<CommandDocumentForJsonExport>(query.ToQueryDefinition(), null, options);
                 var commands = new List<string>();
                 while (feedIterator.HasMoreResults)
