@@ -25,13 +25,13 @@ public record AggregateEnvelope
     /// The aggregate ID
     /// </summary>
     [JsonPropertyName("aggregateId")]
-    public string AggregateId { get; init; } = string.Empty;
+    public Guid AggregateId { get; init; } = Guid.Empty;
 
     /// <summary>
     /// Partition ID for distributed scenarios
     /// </summary>
-    [JsonPropertyName("partitionId")]
-    public Guid PartitionId { get; init; } = Guid.Empty;
+    [JsonPropertyName("aggregateGroup")]
+    public string AggregateGroup { get; init; } = string.Empty;
 
     /// <summary>
     /// Root partition key for multi-tenancy
@@ -80,8 +80,8 @@ public record AggregateEnvelope
     public AggregateEnvelope(
         string aggregateType,
         byte[] aggregatePayload,
-        string aggregateId,
-        Guid partitionId,
+        Guid aggregateId,
+        string aggregateGroup,
         string rootPartitionKey,
         int version,
         string lastSortableUniqueId,
@@ -92,7 +92,7 @@ public record AggregateEnvelope
         AggregateType = aggregateType;
         AggregatePayload = aggregatePayload;
         AggregateId = aggregateId;
-        PartitionId = partitionId;
+        AggregateGroup = aggregateGroup;
         RootPartitionKey = rootPartitionKey;
         Version = version;
         LastSortableUniqueId = lastSortableUniqueId;

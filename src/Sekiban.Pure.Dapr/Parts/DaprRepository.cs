@@ -117,10 +117,15 @@ public class DaprRepository
                 if (eventType != null)
                 {
                     var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                    var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                    if (@event != null)
+                    var payload = JsonSerializer.Deserialize(eventJson, eventType, _domainTypes.JsonSerializerOptions) as IEventPayload;
+                    if (payload == null)
                     {
-                        events.Add(@event);
+                        continue; // Skip if payload deserialization failed
+                    }
+                    var ev = _domainTypes.EventTypes.GenerateTypedEvent(payload, _partitionKeys, envelope.SortableUniqueId, envelope.Version, new EventMetadata(envelope.CausationId,envelope.CausationId,""));
+                    if (ev.IsSuccess)
+                    {
+                        events.Add(ev.GetValue());
                     }
                 }
             }

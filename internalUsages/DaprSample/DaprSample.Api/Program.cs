@@ -8,6 +8,8 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
 using DaprSample.Api;
 using Dapr.Client;
+using Microsoft.AspNetCore.Mvc;
+using Sekiban.Pure;
 //using DaprSample.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -208,7 +210,7 @@ app.MapPost("/api/users/{userId}/update-name", async (Guid userId, UpdateUserNam
 .WithName("UpdateUserName")
 .WithOpenApi();
 
-app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor) =>
+app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor, [FromServices]SekibanDomainTypes domainTypes) =>
 {
     var result = await executor.LoadAggregateAsync<DaprSample.Domain.User.UserProjector>(
         PartitionKeys.Existing<DaprSample.Domain.User.UserProjector>(userId));
@@ -218,12 +220,13 @@ app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor)
     }
     
     var aggregate = result.GetValue();
+    var typed = domainTypes.AggregateTypes.ToTypedPayload(aggregate).UnwrapBox();
     if (aggregate.Version == 0)
     {
         return Results.NotFound(new { success = false, error = "User not found" });
     }
     
-    return Results.Ok(new { success = true, data = aggregate.Payload });
+    return Results.Ok(new { success = true, data = (dynamic) typed });
 })
 .WithName("GetUser")
 .WithOpenApi();

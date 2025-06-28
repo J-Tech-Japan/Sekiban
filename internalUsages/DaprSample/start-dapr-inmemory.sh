@@ -3,6 +3,10 @@
 # Start the Dapr application with In-Memory state store
 # No external dependencies required - perfect for development and testing
 
+# Kill any existing process on port 5010
+echo "Stopping any existing process on port 5010..."
+lsof -ti:5010 | xargs kill -9 2>/dev/null || true
+
 echo "Starting Dapr application with In-Memory state store..."
 echo "No external dependencies required."
 echo
