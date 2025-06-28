@@ -272,13 +272,19 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         return aggregate;
     }
 
-    private Task<PartitionKeysAndProjector> GetPartitionInfoAsync()
+    private async Task<PartitionKeysAndProjector> GetPartitionInfoAsync()
     {
-        // PATCH: Skip state access to avoid timeout issues
-        // TODO: Restore state loading once Dapr state access issues are resolved
-        _logger.LogDebug("AggregateActor.GetPartitionInfoAsync: Bypassing state access to avoid timeout");
+        // Try to get saved partition info
+        var savedInfo = await StateManager.TryGetStateAsync<SerializedPartitionInfo>(PartitionInfoKey);
+        
+        if (savedInfo.HasValue && !string.IsNullOrEmpty(savedInfo.Value.GrainKey))
+        {
+            return PartitionKeysAndProjector
+                .FromGrainKey(savedInfo.Value.GrainKey, _sekibanDomainTypes.AggregateProjectorSpecifier)
+                .UnwrapBox();
+        }
 
-        // Parse from actor ID directly (skip state check)
+        // Parse from actor ID
         var actorId = Id.GetId();
         var grainKey = actorId.Contains(':') ? actorId.Substring(actorId.IndexOf(':') + 1) : actorId;
 
@@ -286,10 +292,10 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             .FromGrainKey(grainKey, _sekibanDomainTypes.AggregateProjectorSpecifier)
             .UnwrapBox();
 
-        // Skip state storage for now
-        // await StateManager.SetStateAsync(PartitionInfoKey, new SerializedPartitionInfo { GrainKey = grainKey });
+        // Save for future use
+        await StateManager.SetStateAsync(PartitionInfoKey, new SerializedPartitionInfo { GrainKey = grainKey });
 
-        return Task.FromResult(partitionInfo);
+        return partitionInfo;
     }
 
     private IAggregateEventHandlerActor GetEventHandlerActor()
@@ -314,10 +320,6 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             throw new InvalidOperationException("Partition info not initialized");
         }
 
-        // PATCH: Skip state access to avoid timeout issues for testing
-        // TODO: Restore state loading once Dapr state access issues are resolved
-        _logger.LogDebug("AggregateActor.LoadStateInternalAsync: Bypassing state access to avoid timeout");
-
         // Try to get saved state
         var savedState = await StateManager.TryGetStateAsync<DaprAggregateSurrogate>(StateKey);
 
@@ -335,13 +337,6 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                     return await RebuildStateAsync();
                 }
 
-                // PATCH: Skip event handler calls to avoid timeout issues for testing
-                // TODO: Remove this bypass once the EventHandlerActor implementation is working properly
-                Console.WriteLine(
-                    "AggregateActor.LoadStateInternalAsync: Bypassing EventHandlerActor calls to avoid timeout");
-
-                // Simulate no new events available
-                var lastEventId = aggregate.LastSortableUniqueId;
                 // Get delta events and project them
                 var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
                     aggregate.LastSortableUniqueId,
@@ -385,20 +380,11 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         return await RebuildStateAsync();
     }
 
-    private new Task SaveStateAsync()
+    private new async Task SaveStateAsync()
     {
-        // PATCH: Skip state saving to avoid timeout issues for testing
-        // TODO: Restore state saving once Dapr state access issues are resolved
-        _logger.LogDebug("AggregateActor.SaveStateAsync: Bypassing state saving to avoid timeout");
-
-        _hasUnsavedChanges = false;
-        return Task.CompletedTask;
-
-        /* ORIGINAL CODE - temporarily disabled due to timeout issues
         var surrogate = await _serialization.SerializeAggregateAsync(_currentAggregate);
         await StateManager.SetStateAsync(StateKey, surrogate);
         _hasUnsavedChanges = false;
-        */
     }
 
     public async Task SaveStateCallbackAsync(object? state)
