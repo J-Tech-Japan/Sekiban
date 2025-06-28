@@ -15,7 +15,7 @@ public interface IAggregateActor : IActor
     /// If state is not created or projector version has changed,
     /// it will be rebuilt from events.
     /// </summary>
-    /// <returns>Current aggregate state serialized as JSON</returns>
+    /// <returns>Current aggregate state as JSON string</returns>
     Task<string> GetStateAsync();
 
     /// <summary>
@@ -33,6 +33,6 @@ public interface IAggregateActor : IActor
     /// Retrieves all events from AggregateEventHandlerActor and reconstructs
     /// state through the Projector logic.
     /// </summary>
-    /// <returns>Newly rebuilt state serialized as JSON</returns>
-    Task<string> RebuildStateAsync();
+    /// <returns>Newly rebuilt state as an envelope with JSON→Binary payload</returns>
+    Task<AggregateEnvelope> RebuildStateAsync();
 }

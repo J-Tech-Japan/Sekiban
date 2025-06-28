@@ -266,8 +266,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IEventWriter>(provider => (IEventWriter)provider.GetRequiredService<Repository>());
         services.AddSingleton<IEventReader>(provider => (IEventReader)provider.GetRequiredService<Repository>());
         
-        // Register envelope-based executor
-        services.AddScoped<ISekibanExecutor, SekibanEnvelopeDaprExecutor>();
+        // Register Dapr executor
+        services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
 
         return services;
     }

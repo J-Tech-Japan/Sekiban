@@ -86,7 +86,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         return await LoadStateInternalAsync(eventHandlerActor);
     }
     
-    // New envelope-based method
+    // Interface implementation - returns JSON string
     async Task<string> IAggregateActor.GetStateAsync()
     {
         var aggregate = await GetStateAsync();
@@ -179,10 +179,10 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     }
     
     // New envelope-based RebuildStateAsync
-    async Task<string> IAggregateActor.RebuildStateAsync()
+    async Task<AggregateEnvelope> IAggregateActor.RebuildStateAsync()
     {
         var aggregate = await RebuildStateAsync();
-        return JsonSerializer.Serialize(aggregate);
+        return await CreateAggregateEnvelopeAsync(aggregate);
     }
     
     // New envelope-based ExecuteCommandAsync
@@ -447,6 +447,45 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during actor initialization");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Creates an AggregateEnvelope from an Aggregate.
+    /// Similar to CommandEnvelope creation, this converts the aggregate to JSON→Binary format.
+    /// </summary>
+    private async Task<AggregateEnvelope> CreateAggregateEnvelopeAsync(Aggregate aggregate)
+    {
+        try
+        {
+            // Convert aggregate to DaprSerializableAggregate first
+            var serializableAggregate = await DaprSerializableAggregate.CreateFromAsync(
+                aggregate, 
+                _sekibanDomainTypes.JsonSerializerOptions);
+
+            // Serialize to JSON and convert to bytes (similar to CommandEnvelope)
+            var json = JsonSerializer.Serialize(serializableAggregate, _sekibanDomainTypes.JsonSerializerOptions);
+            var payloadBytes = System.Text.Encoding.UTF8.GetBytes(json);
+
+            return new AggregateEnvelope(
+                aggregateType: typeof(DaprSerializableAggregate).AssemblyQualifiedName ?? typeof(DaprSerializableAggregate).FullName ?? nameof(DaprSerializableAggregate),
+                aggregatePayload: payloadBytes,
+                aggregateId: aggregate.PartitionKeys.AggregateId.ToString(),
+                partitionId: aggregate.PartitionKeys.AggregateId,
+                rootPartitionKey: aggregate.PartitionKeys.RootPartitionKey,
+                version: aggregate.Version,
+                lastSortableUniqueId: aggregate.LastSortableUniqueId,
+                projectorTypeName: aggregate.ProjectorTypeName,
+                projectorVersion: aggregate.ProjectorVersion,
+                metadata: new Dictionary<string, string>
+                {
+                    ["PayloadTypeName"] = aggregate.PayloadTypeName
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create AggregateEnvelope from Aggregate");
             throw;
         }
     }

@@ -215,23 +215,23 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 actorId,
                 nameof(AggregateActor));
 
-            // Get the current state from the actor as JSON
-            var stateJson = await aggregateActor.GetStateAsync();
+            // Get the current state from the actor as JSON string
+            var aggregateJson = await aggregateActor.GetStateAsync();
             
-            // Deserialize the JSON state using SerializableAggregate
-            var serializableAggregate = JsonSerializer.Deserialize<SerializableAggregate>(stateJson);
+            // Deserialize JSON directly to DaprSerializableAggregate
+            var serializableAggregate = JsonSerializer.Deserialize<DaprSerializableAggregate>(aggregateJson, _domainTypes.JsonSerializerOptions);
             if (serializableAggregate == null)
             {
                 return ResultBox<Aggregate>.FromException(
-                    new InvalidOperationException("Failed to deserialize aggregate state"));
+                    new InvalidOperationException("Failed to deserialize DaprSerializableAggregate from envelope"));
             }
             
-            // Convert SerializableAggregate to Aggregate
+            // Convert DaprSerializableAggregate to Aggregate
             var aggregateOptional = await serializableAggregate.ToAggregateAsync(_domainTypes);
             if (!aggregateOptional.HasValue)
             {
                 return ResultBox<Aggregate>.FromException(
-                    new InvalidOperationException("Failed to convert SerializableAggregate to Aggregate"));
+                    new InvalidOperationException("Failed to convert DaprSerializableAggregate to Aggregate"));
             }
             
             return ResultBox<Aggregate>.FromValue(aggregateOptional.Value!);
