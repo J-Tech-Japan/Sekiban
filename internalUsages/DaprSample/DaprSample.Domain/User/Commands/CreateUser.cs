@@ -13,7 +13,7 @@ public record CreateUser(
     string Email) : ICommandWithHandler<CreateUser, UserProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(CreateUser command) => 
-        PartitionKeys.Generate<UserProjector>();
+        PartitionKeys.Existing<UserProjector>(command.UserId);
 
     public ResultBox<EventOrNone> Handle(CreateUser command, ICommandContext<IAggregatePayload> context)
     {
