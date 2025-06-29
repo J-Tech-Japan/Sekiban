@@ -12,6 +12,8 @@ public class UserProjector : IAggregateProjector
             unconfirmedUser.Name,
             unconfirmedUser.Email),
         (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(confirmedUser.Name, confirmedUser.Email),
+        (ConfirmedUser confirmedUser, UserNameUpdated updated) => confirmedUser with { Name = updated.NewName },
+        (UnconfirmedUser unconfirmedUser, UserNameUpdated updated) => unconfirmedUser with { Name = updated.NewName },
         _ => payload
     };
     public string GetVersion() => "1.0.1";

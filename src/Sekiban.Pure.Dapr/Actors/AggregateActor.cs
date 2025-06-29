@@ -215,7 +215,12 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
         // Update current aggregate with new events
         _currentAggregate = repository.GetProjectedAggregate(result.Events).UnwrapBox();
-        _hasUnsavedChanges = true;
+        
+        // Only mark as changed if events were actually produced
+        if (result.Events.Count > 0)
+        {
+            _hasUnsavedChanges = true;
+        }
 
         return result;
     }
@@ -336,14 +341,23 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 // Create a new aggregate by projecting the delta events
                 var concreteAggregate = aggregate as Aggregate ??
                     throw new InvalidOperationException("Aggregate must be of type Aggregate");
-                var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
-                if (!projectedResult.IsSuccess)
+                
+                // Only project and mark as changed if there are delta events
+                if (deltaEvents.Count > 0)
                 {
-                    throw new InvalidOperationException(
-                        $"Failed to project delta events: {projectedResult.GetException().Message}");
+                    var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
+                    if (!projectedResult.IsSuccess)
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to project delta events: {projectedResult.GetException().Message}");
+                    }
+                    _currentAggregate = projectedResult.GetValue();
+                    _hasUnsavedChanges = true;
                 }
-                _currentAggregate = projectedResult.GetValue();
-                _hasUnsavedChanges = true;
+                else
+                {
+                    _currentAggregate = concreteAggregate;
+                }
 
                 return _currentAggregate;
             }
