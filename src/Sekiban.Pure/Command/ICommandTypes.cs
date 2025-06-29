@@ -10,6 +10,14 @@ namespace Sekiban.Pure.Command;
 public interface ICommandTypes
 {
     public List<Type> GetCommandTypes();
+    
+    /// <summary>
+    /// コマンド型名から型を取得します。
+    /// </summary>
+    /// <param name="commandTypeName">コマンド型の名前</param>
+    /// <returns>見つかった型、または見つからない場合はnull</returns>
+    public Type? GetCommandTypeByName(string commandTypeName);
+    
     public Task<ResultBox<CommandResponse>> ExecuteGeneral(
         CommandExecutor executor,
         ICommandWithHandlerSerializable command,

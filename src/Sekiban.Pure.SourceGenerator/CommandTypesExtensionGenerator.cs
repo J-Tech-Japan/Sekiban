@@ -265,6 +265,25 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         }
         sb.AppendLine("            };");
         sb.AppendLine("        }");
+        
+        // Add GetCommandTypeByName implementation
+        sb.AppendLine();
+        sb.AppendLine("        public Type? GetCommandTypeByName(string commandTypeName)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return commandTypeName switch");
+        sb.AppendLine("            {");
+        
+        // Generate case statements for each command type
+        foreach (var type in commandTypes)
+        {
+            // Get the short name (without namespace)
+            var shortName = type.RecordName.Split('.').Last();
+            sb.AppendLine($"                \"{shortName}\" => typeof({type.RecordName}),");
+        }
+        
+        sb.AppendLine("                _ => null");
+        sb.AppendLine("            };");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
