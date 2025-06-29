@@ -1,6 +1,7 @@
 using DaprSample.Domain;
 using DaprSample.Domain.Generated;
 using DaprSample.Domain.User.Commands;
+using DaprSample.Domain.User.Queries;
 using ResultBoxes;
 using Sekiban.Pure.Command;
 using Sekiban.Pure.Dapr.Extensions;
@@ -258,6 +259,65 @@ app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor,
 .WithName("GetUser")
 .WithSummary("Get user by ID")
 .WithDescription("Retrieves user information by user ID")
+.WithTags("Users")
+.WithOpenApi();
+
+// Query endpoints
+app.MapGet("/api/users/list", async ([FromQuery] string? nameContains, [FromQuery] string? emailContains, [FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+{
+    var query = new UserListQuery(nameContains ?? "", emailContains ?? "")
+    {
+        WaitForSortableUniqueId = waitForSortableUniqueId
+    };
+    var result = await executor.QueryAsync(query);
+    
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { success = false, error = result.GetException().Message });
+    }
+    
+    var list = result.GetValue();
+    return Results.Ok(new { success = true, data = list.Items, totalCount = list.Items.Count() });
+})
+.WithName("GetUserList")
+.WithSummary("Get list of users")
+.WithDescription("Retrieves a filtered list of users by name and/or email")
+.WithTags("Users")
+.WithOpenApi();
+
+app.MapGet("/api/users/{userId}/details", async (Guid userId, [FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+{
+    var query = new UserQuery(userId)
+    {
+        WaitForSortableUniqueId = waitForSortableUniqueId
+    };
+    var result = await executor.QueryAsync(query);
+    
+    return result.IsSuccess 
+        ? Results.Ok(new { success = true, data = result.GetValue() })
+        : Results.NotFound(new { success = false, error = result.GetException().Message });
+})
+.WithName("GetUserDetails")
+.WithSummary("Get user details by ID")
+.WithDescription("Retrieves detailed user information by user ID using query projection")
+.WithTags("Users")
+.WithOpenApi();
+
+app.MapGet("/api/users/statistics", async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+{
+    var query = new UserStatisticsQuery()
+    {
+        WaitForSortableUniqueId = waitForSortableUniqueId
+    };
+    var result = await executor.QueryAsync(query);
+    
+    return result.IsSuccess 
+        ? Results.Ok(new { success = true, data = result.GetValue() })
+        : Results.BadRequest(new { success = false, error = result.GetException().Message });
+})
+.WithName("GetUserStatistics")
+.WithSummary("Get user statistics")
+.WithDescription("Retrieves aggregate statistics about all users in the system")
 .WithTags("Users")
 .WithOpenApi();
 
