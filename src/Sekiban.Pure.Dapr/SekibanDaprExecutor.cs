@@ -19,6 +19,7 @@ using Sekiban.Pure.Query;
 using Sekiban.Pure;
 using Sekiban.Pure.Dapr.Serialization;
 using System.Text.Json;
+using System.Linq;
 using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
@@ -118,7 +119,59 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // For now, delegate all queries to a service
+            // Check if this is a multi-projection query
+            var projectorResult = _domainTypes.QueryTypes.GetMultiProjector(query);
+            if (projectorResult.IsSuccess)
+            {
+                // Get the appropriate multi-projector name
+                var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
+                    projectorResult.GetValue());
+                
+                if (!projectorNameResult.IsSuccess)
+                {
+                    return ResultBox<T>.FromException(projectorNameResult.GetException());
+                }
+                
+                var projectorName = projectorNameResult.GetValue();
+                var actorId = new ActorId(projectorName);
+                var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
+                    actorId, 
+                    nameof(MultiProjectorActor));
+                
+                // Wait for sortable unique ID if needed
+                if (query is IWaitForSortableUniqueId waitForQuery && 
+                    !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+                {
+                    var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+                    var timeoutMs = 30000; // 30 seconds timeout
+                    var pollingIntervalMs = 100;
+                    
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+                    stopwatch.Start();
+                    
+                    while (stopwatch.ElapsedMilliseconds < timeoutMs)
+                    {
+                        var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
+                        if (isReceived)
+                        {
+                            break;
+                        }
+                        
+                        await Task.Delay(pollingIntervalMs);
+                    }
+                }
+                
+                var result = await actor.QueryAsync(query);
+                
+                if (!result.IsSuccess)
+                {
+                    return ResultBox<T>.FromException(result.GetException());
+                }
+                
+                return ResultBox<T>.FromValue((T)result.GetValue());
+            }
+            
+            // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IQueryCommon<T>, ResultBox<T>>(
                 _options.QueryServiceAppId,
                 "query",
@@ -137,6 +190,68 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
+            // Check if this is a multi-projection query
+            var projectorResult = _domainTypes.QueryTypes.GetMultiProjector(query);
+            if (projectorResult.IsSuccess)
+            {
+                // Get the appropriate multi-projector name
+                var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
+                    projectorResult.GetValue());
+                
+                if (!projectorNameResult.IsSuccess)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromException(projectorNameResult.GetException());
+                }
+                
+                var projectorName = projectorNameResult.GetValue();
+                var actorId = new ActorId(projectorName);
+                var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
+                    actorId, 
+                    nameof(MultiProjectorActor));
+                
+                // Wait for sortable unique ID if needed
+                if (query is IWaitForSortableUniqueId waitForQuery && 
+                    !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+                {
+                    var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+                    var timeoutMs = 30000; // 30 seconds timeout
+                    var pollingIntervalMs = 100;
+                    
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+                    stopwatch.Start();
+                    
+                    while (stopwatch.ElapsedMilliseconds < timeoutMs)
+                    {
+                        var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
+                        if (isReceived)
+                        {
+                            break;
+                        }
+                        
+                        await Task.Delay(pollingIntervalMs);
+                    }
+                }
+                
+                var result = await actor.QueryListAsync(query);
+                
+                if (!result.IsSuccess)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromException(result.GetException());
+                }
+                
+                // Convert IListQueryResult to ListQueryResult<TResult>
+                var listResult = result.GetValue();
+                if (listResult is ListQueryResult<TResult> typedResult)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromValue(typedResult);
+                }
+                
+                // If it's a generic result, convert it
+                var generalResult = listResult.ToGeneral(query);
+                return ListQueryResult<TResult>.FromGeneral(generalResult);
+            }
+            
+            // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IListQueryCommon<TResult>, ResultBox<ListQueryResult<TResult>>>(
                 _options.QueryServiceAppId,
                 "list-query",
