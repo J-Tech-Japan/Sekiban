@@ -11,6 +11,9 @@ using Dapr.Client;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Pure;
 using Microsoft.Extensions.Hosting;
+using Sekiban.Pure.CosmosDb;
+using Sekiban.Pure.Postgres;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,7 +28,9 @@ builder.AddServiceDefaults();
 // Add services to the container
 builder.Services.AddControllers().AddDapr();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+// Add OpenAPI services
+builder.Services.AddOpenApi();
 
 // Add memory cache for CachedDaprSerializationService - MUST be before AddSekibanWithDapr
 builder.Services.AddMemoryCache();
@@ -52,15 +57,27 @@ builder.Services.Configure<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Run
     // Any additional actor configuration can go here
 });
 
+if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
+{
+    // Cosmos settings
+    builder.AddSekibanCosmosDb();
+} else
+{
+    // Postgres settings
+    builder.AddSekibanPostgresDb();
+}
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-//app.MapDefaultEndpoints();
-
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference(options =>
+    {
+        options.Title = "DaprSample API";
+        options.Theme = ScalarTheme.Purple;
+        options.DefaultHttpClient = new(ScalarTarget.CSharp, ScalarClient.HttpClient);
+    });
 }
 
 app.UseRouting();
@@ -173,10 +190,14 @@ app.MapGet("/debug/env", () =>
     };
     
     return Results.Ok(envVars);
-});
+})
+.WithName("GetEnvironmentVariables")
+.WithSummary("Get environment variables")
+.WithDescription("Debug endpoint to check current environment variables")
+.WithTags("Debug");
 
 // Map API endpoints
-app.MapPost("/api/users/create", async (CreateUser command, ISekibanExecutor executor, ILogger<Program> logger) =>
+app.MapPost("/api/users/create", async ([FromBody]CreateUser command, [FromServices]ISekibanExecutor executor, [FromServices]ILogger<Program> logger) =>
 {
     logger.LogInformation("=== CreateUser API called with UserId: {UserId}, Name: {Name} ===", command.UserId, command.Name);
     
@@ -197,6 +218,9 @@ app.MapPost("/api/users/create", async (CreateUser command, ISekibanExecutor exe
     }
 })
 .WithName("CreateUser")
+.WithSummary("Create a new user")
+.WithDescription("Creates a new user with the specified ID and name")
+.WithTags("Users")
 .WithOpenApi();
 
 app.MapPost("/api/users/{userId}/update-name", async (Guid userId, UpdateUserNameRequest request, ISekibanExecutor executor) =>
@@ -208,6 +232,9 @@ app.MapPost("/api/users/{userId}/update-name", async (Guid userId, UpdateUserNam
         : Results.BadRequest(new { success = false, error = result.GetException().Message });
 })
 .WithName("UpdateUserName")
+.WithSummary("Update user name")
+.WithDescription("Updates the name of an existing user")
+.WithTags("Users")
 .WithOpenApi();
 
 app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor, [FromServices]SekibanDomainTypes domainTypes) =>
@@ -229,6 +256,9 @@ app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor,
     return Results.Ok(new { success = true, data = (dynamic) typed });
 })
 .WithName("GetUser")
+.WithSummary("Get user by ID")
+.WithDescription("Retrieves user information by user ID")
+.WithTags("Users")
 .WithOpenApi();
 
 // Map default endpoints for Aspire integration

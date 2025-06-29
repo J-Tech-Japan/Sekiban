@@ -62,9 +62,6 @@ public static class ServiceCollectionExtensions
             var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sekiban.Pure.Dapr.EventStore.DaprEventStore>>();
             return new Sekiban.Pure.Dapr.EventStore.DaprEventStore(daprClient, serialization, logger);
         });
-        services.AddSingleton<IEventWriter>(provider => (IEventWriter)provider.GetRequiredService<Repository>());
-        services.AddSingleton<IEventReader>(provider => (IEventReader)provider.GetRequiredService<Repository>());
-        
         services.AddScoped<ISekibanExecutor, SekibanDaprExecutor>();
 
         return services;
