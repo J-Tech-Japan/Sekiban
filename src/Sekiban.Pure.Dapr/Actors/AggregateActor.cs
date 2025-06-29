@@ -51,18 +51,18 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    // Interface implementation - returns AggregateEnvelope
-    public async Task<AggregateEnvelope> GetAggregateStateAsync()
+    // Interface implementation - returns SerializableAggregate
+    public async Task<SerializableAggregate> GetAggregateStateAsync()
     {
         var aggregate = await GetStateInternalAsync();
-        return await CreateAggregateEnvelopeAsync(aggregate);
+        return await SerializableAggregate.CreateFromAsync(aggregate, _sekibanDomainTypes.JsonSerializerOptions);
     }
 
     // New envelope-based RebuildStateAsync
-    async Task<AggregateEnvelope> IAggregateActor.RebuildStateAsync()
+    async Task<SerializableAggregate> IAggregateActor.RebuildStateAsync()
     {
         var aggregate = await RebuildStateAsync();
-        return await CreateAggregateEnvelopeAsync(aggregate);
+        return await SerializableAggregate.CreateFromAsync(aggregate, _sekibanDomainTypes.JsonSerializerOptions);
     }
 
     // New envelope-based ExecuteCommandAsync
@@ -432,38 +432,6 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         }
     }
 
-    /// <summary>
-    ///     Creates an AggregateEnvelope from an Aggregate.
-    ///     Similar to CommandEnvelope creation, this converts the aggregate to JSON→Binary format.
-    /// </summary>
-    private async Task<AggregateEnvelope> CreateAggregateEnvelopeAsync(Aggregate aggregate)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(aggregate.Payload,aggregate.Payload.GetType(), _sekibanDomainTypes.JsonSerializerOptions);
-            var payloadBytes = Encoding.UTF8.GetBytes(json);
-
-            return new AggregateEnvelope(
-                aggregate.Payload.GetType().AssemblyQualifiedName ?? "",
-                payloadBytes,
-                aggregate.PartitionKeys.AggregateId,
-                aggregate.PartitionKeys.Group,
-                aggregate.PartitionKeys.RootPartitionKey,
-                aggregate.Version,
-                aggregate.LastSortableUniqueId,
-                aggregate.ProjectorTypeName,
-                aggregate.ProjectorVersion,
-                new Dictionary<string, string>
-                {
-                    ["PayloadTypeName"] = aggregate.PayloadTypeName
-                });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create AggregateEnvelope from Aggregate");
-            throw;
-        }
-    }
 
     /// <summary>
     ///     Serializable partition info for state storage

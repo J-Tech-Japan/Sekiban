@@ -215,30 +215,19 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 actorId,
                 nameof(AggregateActor));
 
-            // Get the current state from the actor as AggregateEnvelope
-            var aggregateEnvelope = await aggregateActor.GetAggregateStateAsync();
+            // Get the current state from the actor as SerializableAggregate
+            var serializableAggregate = await aggregateActor.GetAggregateStateAsync();
             
-            // Extract DaprSerializableAggregate from envelope payload
-            var json = System.Text.Encoding.UTF8.GetString(aggregateEnvelope.AggregatePayload);
-            var type = Type.GetType(aggregateEnvelope.AggregateType);
-            var payload = JsonSerializer.Deserialize(json,type, _domainTypes.JsonSerializerOptions) as IAggregatePayload;
-            if (payload is null)
+            // Convert SerializableAggregate back to Aggregate
+            var aggregateOptional = await serializableAggregate.ToAggregateAsync(_domainTypes);
+            
+            if (!aggregateOptional.HasValue)
             {
                 return ResultBox<Aggregate>.FromException(
-                    new InvalidOperationException($"Failed to deserialize payload of type {aggregateEnvelope.AggregateType} from envelope"));
+                    new InvalidOperationException($"Failed to deserialize aggregate from SerializableAggregate"));
             }
-            var aggregate = new Aggregate(
-                payload,
-                new PartitionKeys(
-                    aggregateEnvelope.AggregateId,
-                    aggregateEnvelope.AggregateGroup,
-                    aggregateEnvelope.RootPartitionKey),
-                aggregateEnvelope.Version,
-                aggregateEnvelope.LastSortableUniqueId,
-                aggregateEnvelope.ProjectorVersion,
-                aggregateEnvelope.ProjectorTypeName,
-                payload.GetType().Name);
-            return ResultBox<Aggregate>.FromValue(aggregate);
+            
+            return ResultBox<Aggregate>.FromValue(aggregateOptional.Value!);
         }
         catch (Exception ex)
         {
