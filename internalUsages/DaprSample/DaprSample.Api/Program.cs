@@ -10,7 +10,7 @@ using DaprSample.Api;
 using Dapr.Client;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Pure;
-//using DaprSample.ServiceDefaults;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,8 +19,8 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-// Add service defaults
-//builder.AddServiceDefaults();
+// Add service defaults for Aspire integration
+builder.AddServiceDefaults();
 
 // Add services to the container
 builder.Services.AddControllers().AddDapr();
@@ -230,6 +230,9 @@ app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor,
 })
 .WithName("GetUser")
 .WithOpenApi();
+
+// Map default endpoints for Aspire integration
+app.MapDefaultEndpoints();
 
 app.Run();
 

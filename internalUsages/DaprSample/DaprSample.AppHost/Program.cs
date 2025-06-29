@@ -1,19 +1,24 @@
-using Aspire.Hosting.Dapr;
 
+using CommunityToolkit.Aspire.Hosting.Dapr;
 var builder = DistributedApplication.CreateBuilder(args);
-
-// Daprのデフォルトredisを使用せず、独自のRedisを6379ポートで起動
-var redis = builder.AddRedis("redis")
-    .WithDataVolume();
 
 // Add Dapr
 builder.AddDapr();
 
-// Add API project with Dapr sidecar
-var api = builder.AddProject<Projects.DaprSample_Api>("api")
+// Add API project with enhanced Dapr configuration
+builder.AddProject<Projects.DaprSample_Api>("api")
     .WithExternalHttpEndpoints()
-    .WithReference(redis)
-    .WaitFor(redis)
-    .WithDaprSidecar();
+    .WithDaprSidecar(new DaprSidecarOptions
+    {
+        AppId = "sekiban-api",
+        AppPort = 5010,
+        DaprHttpPort = 3501,
+        DaprGrpcPort = 50002,
+        PlacementHostAddress = "localhost:50005",
+        SchedulerHostAddress = "",
+        ResourcesPaths = [Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components")]
+    });
 
-builder.Build().Run();
+var app = builder.Build();
+
+app.Run();
