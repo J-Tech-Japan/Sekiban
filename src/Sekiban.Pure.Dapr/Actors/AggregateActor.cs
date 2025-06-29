@@ -11,8 +11,6 @@ using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Events;
 using System.Text;
 using System.Text.Json;
-using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
-using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
@@ -66,7 +64,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     }
 
     // New SerializableCommandAndMetadata-based ExecuteCommandAsync
-    public async Task<DaprCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
+    public async Task<SerializedCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
     {
         try
         {
@@ -74,9 +72,14 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             var result = await commandAndMetadata.ToCommandAndMetadataAsync(_sekibanDomainTypes);
             if (!result.HasValue)
             {
-                return DaprCommandResponse.Failure(
-                    JsonSerializer.Serialize(new { Message = $"Failed to deserialize command: {commandAndMetadata.CommandTypeName}" }),
-                    new Dictionary<string, string>());
+                return new SerializableCommandResponse
+                {
+                    AggregateId = Guid.Empty,
+                    Group = PartitionKeys.DefaultAggregateGroupName,
+                    RootPartitionKey = PartitionKeys.DefaultRootPartitionKey,
+                    Version = 0,
+                    Events = new List<SerializableCommandResponse.SerializableEvent>()
+                };
             }
 
             var (command, metadata) = result.Value;
@@ -84,44 +87,19 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             // Execute command using legacy method
             var response = await ExecuteCommandAsync(command, metadata);
 
-            // Convert response to envelope format
-            var eventPayloads = new List<byte[]>();
-            var eventTypes = new List<string>();
-
-            foreach (var @event in response.Events)
-            {
-                eventPayloads.Add(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(@event)));
-                eventTypes.Add(@event.GetType().FullName ?? @event.GetType().Name);
-            }
-
-            // Get the current aggregate state to include in response
-            byte[]? aggregateStatePayload = null;
-            string? aggregateStateType = null;
-
-            if (_currentAggregate != null && _currentAggregate != Aggregate.Empty)
-            {
-                aggregateStatePayload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(_currentAggregate));
-                aggregateStateType = _currentAggregate.GetType().FullName ?? _currentAggregate.GetType().Name;
-            }
-
-            return DaprCommandResponse.Success(
-                eventPayloads,
-                eventTypes,
-                response.Version,
-                aggregateStatePayload,
-                aggregateStateType,
-                new Dictionary<string, string>());
+            return await SerializableCommandResponse.CreateFromAsync(response, _sekibanDomainTypes.JsonSerializerOptions);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute command from envelope");
-            return DaprCommandResponse.Failure(
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        ex.Message
-                    }),
-                new Dictionary<string, string>());
+            return new SerializableCommandResponse
+            {
+                AggregateId = Guid.Empty,
+                Group = PartitionKeys.DefaultAggregateGroupName,
+                RootPartitionKey = PartitionKeys.DefaultRootPartitionKey,
+                Version = 0,
+                Events = new List<SerializableCommandResponse.SerializableEvent>()
+            };
         }
     }
 

@@ -1,5 +1,6 @@
 using Dapr.Actors;
 using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 
 namespace Sekiban.Pure.Dapr.Actors;
@@ -27,7 +28,7 @@ public interface IAggregateActor : IActor
     /// </summary>
     /// <param name="commandAndMetadata">Serializable command and metadata</param>
     /// <returns>Command response with state and generated events</returns>
-    Task<CommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
+    Task<SerializedCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
 
     /// <summary>
     /// Rebuilds state from scratch (for version upgrades or state corruption).
