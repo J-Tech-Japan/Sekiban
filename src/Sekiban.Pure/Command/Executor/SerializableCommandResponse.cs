@@ -154,9 +154,9 @@ public record SerializableCommandResponse
                 @event.SortableUniqueId,
                 compressedPayloadJson,
                 payloadAssemblyVersion,
-                @event.AggregateId,
-                @event.Group,
-                @event.RootPartitionKey,
+                @event.PartitionKeys.AggregateId,
+                @event.PartitionKeys.Group,
+                @event.PartitionKeys.RootPartitionKey,
                 @event.Version
             );
         }
@@ -187,11 +187,22 @@ public record SerializableCommandResponse
 
                 // Eventを再構築
                 var partitionKeys = new PartitionKeys(AggregateId, Group, RootPartitionKey);
-                var @event = Event.GenerateTypedEvent(
+                
+                // Get the Event type with the correct payload type
+                var genericEventType = typeof(Event<>).MakeGenericType(payload.GetType());
+                var @event = Activator.CreateInstance(
+                    genericEventType,
+                    Guid.NewGuid(), // Id
                     payload,
                     partitionKeys,
                     SortableUniqueId,
-                    Version);
+                    Version,
+                    new EventMetadata(string.Empty, string.Empty, string.Empty)) as IEvent;
+
+                if (@event == null)
+                {
+                    return OptionalValue<IEvent>.Empty;
+                }
 
                 return new OptionalValue<IEvent>(@event);
             }

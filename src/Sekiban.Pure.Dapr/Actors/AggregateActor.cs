@@ -8,6 +8,7 @@ using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Dapr.Parts;
 using Sekiban.Pure.Dapr.Serialization;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using System.Text;
 using System.Text.Json;
@@ -64,7 +65,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     }
 
     // New SerializableCommandAndMetadata-based ExecuteCommandAsync
-    public async Task<SerializedCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
+    public async Task<SerializableCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
     {
         try
         {
@@ -145,7 +146,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     }
 
     // Legacy method - kept for compatibility
-    private async Task<SekibanCommandResponse> ExecuteCommandAsync(
+    private async Task<CommandResponse> ExecuteCommandAsync(
         ICommandWithHandlerSerializable command,
         CommandMetadata metadata)
     {

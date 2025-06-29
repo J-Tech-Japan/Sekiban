@@ -86,65 +86,16 @@ public class SekibanDaprExecutor : ISekibanExecutor
             // Execute command via SerializableCommandAndMetadata
             var envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
             
-            // Convert back to SekibanCommandResponse
-            if (!envelopeResponse.IsSuccess)
+            // Convert SerializableCommandResponse back to SekibanCommandResponse
+            var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
+            
+            if (!responseResult.HasValue)
             {
-                var errorMessage = "Command execution failed";
-                if (!string.IsNullOrEmpty(envelopeResponse.ErrorJson))
-                {
-                    try
-                    {
-                        var errorData = JsonSerializer.Deserialize<Dictionary<string, object>>(envelopeResponse.ErrorJson);
-                        errorMessage = errorData?.GetValueOrDefault("Message")?.ToString() ?? errorMessage;
-                    }
-                    catch
-                    {
-                        errorMessage = envelopeResponse.ErrorJson;
-                    }
-                }
-                
-                // For errors, we need to throw an exception as SekibanCommandResponse only contains success data
                 return ResultBox<SekibanCommandResponse>.FromException(
-                    new InvalidOperationException(errorMessage));
+                    new InvalidOperationException("Failed to deserialize command response"));
             }
             
-            // Extract events from payloads
-            var events = new List<IEvent>();
-            for (int i = 0; i < envelopeResponse.EventPayloads.Count; i++)
-            {
-                var eventJson = System.Text.Encoding.UTF8.GetString(envelopeResponse.EventPayloads[i]);
-                var eventType = Type.GetType(envelopeResponse.EventTypes[i]);
-                if (eventType != null)
-                {
-                    var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                    if (@event != null)
-                    {
-                        events.Add(@event);
-                    }
-                }
-            }
-            
-            // Extract aggregate state if present
-            Aggregate? aggregateState = null;
-            if (envelopeResponse.AggregateStatePayload != null && envelopeResponse.AggregateStateType != null)
-            {
-                try
-                {
-                    var json = System.Text.Encoding.UTF8.GetString(envelopeResponse.AggregateStatePayload);
-                    aggregateState = JsonSerializer.Deserialize<Aggregate>(json);
-                }
-                catch (Exception ex)
-                {
-                    // Log but don't fail
-                    Console.WriteLine($"Failed to deserialize aggregate state: {ex.Message}");
-                }
-            }
-            
-            return ResultBox<SekibanCommandResponse>.FromValue(
-                new SekibanCommandResponse(
-                    PartitionKeys: partitionKeys,
-                    Events: events,
-                    Version: envelopeResponse.AggregateVersion));
+            return ResultBox<SekibanCommandResponse>.FromValue(responseResult.Value);
         }
         catch (Exception ex)
         {

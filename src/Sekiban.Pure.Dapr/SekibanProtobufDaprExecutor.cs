@@ -17,7 +17,6 @@ using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Microsoft.Extensions.Logging;
 using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
-using DaprCommandResponse = Sekiban.Pure.Dapr.Actors.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
 
