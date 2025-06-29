@@ -28,7 +28,7 @@ public interface IAggregateActor : IActor
     /// </summary>
     /// <param name="commandAndMetadata">Serializable command and metadata</param>
     /// <returns>Command response with state and generated events</returns>
-    Task<SerializableCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
+    Task<string> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
 
     /// <summary>
     /// Rebuilds state from scratch (for version upgrades or state corruption).

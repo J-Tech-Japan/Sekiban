@@ -150,7 +150,7 @@ public record SerializableCommandResponse
             var compressedPayloadJson = await CompressAsync(payloadJson);
 
             return new SerializableEvent(
-                payloadType.FullName ?? payloadType.Name,
+                payloadType.Name,
                 @event.SortableUniqueId,
                 compressedPayloadJson,
                 payloadAssemblyVersion,
@@ -166,9 +166,9 @@ public record SerializableCommandResponse
         {
             try
             {
-                // イベントタイプを取得
-                var eventType = domainTypes.EventTypes.GetEventTypeByName(EventTypeName);
-                if (eventType == null)
+                // Get the payload type by name
+                var payloadType = domainTypes.EventTypes.GetEventTypeByName(EventTypeName);
+                if (payloadType == null)
                 {
                     return OptionalValue<IEvent>.Empty;
                 }
@@ -177,7 +177,7 @@ public record SerializableCommandResponse
                 var decompressedJson = await DecompressAsync(CompressedPayloadJson);
                 var payload = JsonSerializer.Deserialize(
                     decompressedJson,
-                    eventType,
+                    payloadType,
                     domainTypes.JsonSerializerOptions) as IEventPayload;
                 
                 if (payload == null)

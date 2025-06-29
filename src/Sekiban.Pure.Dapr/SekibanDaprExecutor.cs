@@ -84,7 +84,18 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 _domainTypes.JsonSerializerOptions);
             
             // Execute command via SerializableCommandAndMetadata
-            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
+            var jsonResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
+            
+            // Deserialize the JSON response
+            var envelopeResponse = JsonSerializer.Deserialize<SerializableCommandResponse>(
+                jsonResponse, 
+                Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
+                
+            if (envelopeResponse == null)
+            {
+                return ResultBox<SekibanCommandResponse>.FromException(
+                    new InvalidOperationException("Failed to deserialize command response"));
+            }
             
             // Convert SerializableCommandResponse back to SekibanCommandResponse
             var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
@@ -92,7 +103,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
             if (!responseResult.HasValue)
             {
                 return ResultBox<SekibanCommandResponse>.FromException(
-                    new InvalidOperationException("Failed to deserialize command response"));
+                    new InvalidOperationException("Failed to convert command response"));
             }
             
             return ResultBox<SekibanCommandResponse>.FromValue(responseResult.Value);

@@ -65,7 +65,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     }
 
     // New SerializableCommandAndMetadata-based ExecuteCommandAsync
-    public async Task<SerializableCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
+    public async Task<string> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
     {
         try
         {
@@ -73,7 +73,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             var result = await commandAndMetadata.ToCommandAndMetadataAsync(_sekibanDomainTypes);
             if (!result.HasValue)
             {
-                return new SerializableCommandResponse
+                var errorResponse = new SerializableCommandResponse
                 {
                     AggregateId = Guid.Empty,
                     Group = PartitionKeys.DefaultAggregateGroupName,
@@ -81,6 +81,9 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                     Version = 0,
                     Events = new List<SerializableCommandResponse.SerializableEvent>()
                 };
+                
+                // Serialize to JSON string for Dapr actor communication
+                return JsonSerializer.Serialize(errorResponse, DaprSerializationOptions.Default.JsonSerializerOptions);
             }
 
             var (command, metadata) = result.Value;
@@ -88,12 +91,16 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             // Execute command using legacy method
             var response = await ExecuteCommandAsync(command, metadata);
 
-            return await SerializableCommandResponse.CreateFromAsync(response, _sekibanDomainTypes.JsonSerializerOptions);
+            // Use Dapr serialization options instead of domain-specific options for framework types
+            var serializableResponse = await SerializableCommandResponse.CreateFromAsync(response, DaprSerializationOptions.Default.JsonSerializerOptions);
+            
+            // Serialize to JSON string for Dapr actor communication
+            return JsonSerializer.Serialize(serializableResponse, DaprSerializationOptions.Default.JsonSerializerOptions);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute command from envelope");
-            return new SerializableCommandResponse
+            var errorResponse = new SerializableCommandResponse
             {
                 AggregateId = Guid.Empty,
                 Group = PartitionKeys.DefaultAggregateGroupName,
@@ -101,6 +108,9 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 Version = 0,
                 Events = new List<SerializableCommandResponse.SerializableEvent>()
             };
+            
+            // Serialize to JSON string for Dapr actor communication
+            return JsonSerializer.Serialize(errorResponse, DaprSerializationOptions.Default.JsonSerializerOptions);
         }
     }
 

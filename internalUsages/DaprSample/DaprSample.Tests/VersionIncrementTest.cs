@@ -8,6 +8,8 @@ using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
 using Sekiban.Pure;
+using Sekiban.Pure.Repositories;
+using Sekiban.Pure.Command.Handlers;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -43,11 +45,12 @@ public class VersionIncrementTest : IAsyncLifetime
             DaprSample.Domain.DaprSampleEventsJsonContext.Default.Options);
         services.AddSingleton(domainTypes);
 
-        // Use in-memory executor for testing
-        services.AddSekibanInMemory();
-        
         _serviceProvider = services.BuildServiceProvider();
-        _executor = _serviceProvider.GetRequiredService<ISekibanExecutor>();
+        
+        // Create in-memory executor for testing
+        var repository = new Repository();
+        var metadataProvider = new FunctionCommandMetadataProvider(() => "test");
+        _executor = new InMemorySekibanExecutor(domainTypes, metadataProvider, repository, _serviceProvider);
         
         await Task.CompletedTask;
     }
