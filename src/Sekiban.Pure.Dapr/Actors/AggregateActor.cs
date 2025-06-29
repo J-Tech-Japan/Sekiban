@@ -345,8 +345,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 _currentAggregate = projectedResult.GetValue();
                 _hasUnsavedChanges = true;
 
-                return aggregate as Aggregate ??
-                    throw new InvalidOperationException("Aggregate must be of type Aggregate");
+                return _currentAggregate;
             }
         }
 
