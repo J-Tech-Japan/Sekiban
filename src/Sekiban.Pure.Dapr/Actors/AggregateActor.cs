@@ -213,13 +213,24 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 repository.Save)
             .UnwrapBox();
 
+        // Debug logging
+        _logger.LogDebug("Command execution completed. Events produced: {EventCount}, Version before: {VersionBefore}", 
+            result.Events.Count, _currentAggregate.Version);
+        
         // Update current aggregate with new events
         _currentAggregate = repository.GetProjectedAggregate(result.Events).UnwrapBox();
+        
+        _logger.LogDebug("After projection. Version after: {VersionAfter}", _currentAggregate.Version);
         
         // Only mark as changed if events were actually produced
         if (result.Events.Count > 0)
         {
             _hasUnsavedChanges = true;
+            _logger.LogDebug("Marked aggregate as having unsaved changes");
+        }
+        else
+        {
+            _logger.LogDebug("No events produced, not marking as changed");
         }
 
         return result;

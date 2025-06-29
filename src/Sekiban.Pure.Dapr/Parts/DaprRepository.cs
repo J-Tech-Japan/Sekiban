@@ -74,8 +74,9 @@ public class DaprRepository
                 return ResultBox<List<IEvent>>.FromException(new InvalidOperationException(response.ErrorMessage));
             }
 
-            // Update current aggregate with new events
-            _currentAggregate = _currentAggregate.Project(newEvents, _projector).UnwrapBox();
+            // Note: Unlike the previous implementation, we should NOT update _currentAggregate here
+            // The caller (AggregateActor) will handle the aggregate update via GetProjectedAggregate
+            Console.WriteLine($"[DaprRepository.Save] Events saved: {newEvents.Count}, current version: {_currentAggregate.Version}");
 
             return ResultBox<List<IEvent>>.FromValue(newEvents);
         }
@@ -124,7 +125,12 @@ public class DaprRepository
     {
         try
         {
+            Console.WriteLine($"[GetProjectedAggregate] Current version: {_currentAggregate.Version}, projecting {projectedEvents.Count} events");
+            
+            // Project the events onto the current aggregate to get a new aggregate
             var aggregate = _currentAggregate.Project(projectedEvents, _projector).UnwrapBox();
+            
+            Console.WriteLine($"[GetProjectedAggregate] After projection - version: {aggregate.Version}");
             return ResultBox<Aggregate>.FromValue(aggregate);
         }
         catch (Exception ex)
