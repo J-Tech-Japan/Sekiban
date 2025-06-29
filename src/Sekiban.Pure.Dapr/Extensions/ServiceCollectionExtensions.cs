@@ -244,7 +244,8 @@ public static class ServiceCollectionExtensions
         
         // Add envelope services
         services.AddSingleton<IProtobufTypeMapper, ProtobufTypeMapper>();
-        services.AddSingleton<IEnvelopeProtobufService, EnvelopeProtobufService>();
+        // TODO: Update EnvelopeProtobufService to use SerializableCommandAndMetadata instead of CommandEnvelope
+        // services.AddSingleton<IEnvelopeProtobufService, EnvelopeProtobufService>();
         
         // Note: AddActors is called only once in AddSekibanWithDapr to avoid conflicts
         // Envelope actors are already registered in the main AddSekibanWithDapr method

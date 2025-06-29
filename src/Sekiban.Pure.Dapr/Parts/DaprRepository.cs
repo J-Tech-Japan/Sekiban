@@ -56,35 +56,18 @@ public class DaprRepository
 
         try
         {
-            // Convert events to envelopes
-            var eventEnvelopes = new List<EventEnvelope>();
+            // Convert events to serializable documents
+            var eventDocuments = new List<SerializableEventDocument>();
             foreach (var @event in newEvents)
             {
-                // Get the actual event payload to serialize and get its type
-                var eventPayload = @event.GetPayload();
-                var eventPayloadType = eventPayload.GetType();
-                
-                var envelope = new EventEnvelope
-                {
-                    EventType = eventPayloadType.AssemblyQualifiedName ?? eventPayloadType.FullName ?? eventPayloadType.Name,
-                    EventPayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(eventPayload, eventPayloadType, _domainTypes.JsonSerializerOptions)),
-                    AggregateId = _partitionKeys.AggregateId.ToString(),
-                    PartitionId = _partitionKeys.AggregateId,
-                    RootPartitionKey = _partitionKeys.RootPartitionKey,
-                    Version = @event.Version,
-                    SortableUniqueId = @event.GetSortableUniqueId(),
-                    Timestamp = DateTime.UtcNow,
-                    Metadata = new Dictionary<string, string>(),
-                    CorrelationId = string.Empty,
-                    CausationId = string.Empty
-                };
-                eventEnvelopes.Add(envelope);
+                var document = await SerializableEventDocument.CreateFromEventAsync(@event, _domainTypes.JsonSerializerOptions);
+                eventDocuments.Add(document);
             }
             
             // Call the event handler actor to append events
             var response = await _eventHandlerActor.AppendEventsAsync(
                 lastSortableUniqueId,
-                eventEnvelopes);
+                eventDocuments);
                 
             if (!response.IsSuccess)
             {
@@ -107,26 +90,16 @@ public class DaprRepository
         try
         {
             // Get all events from the event handler
-            var eventEnvelopes = await _eventHandlerActor.GetAllEventsAsync();
+            var eventDocuments = await _eventHandlerActor.GetAllEventsAsync();
             
-            // Convert envelopes back to events
+            // Convert documents back to events
             var events = new List<IEvent>();
-            foreach (var envelope in eventEnvelopes)
+            foreach (var document in eventDocuments)
             {
-                var eventType = Type.GetType(envelope.EventType);
-                if (eventType != null)
+                var eventResult = await document.ToEventAsync(_domainTypes);
+                if (eventResult.HasValue)
                 {
-                    var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                    var payload = JsonSerializer.Deserialize(eventJson, eventType, _domainTypes.JsonSerializerOptions) as IEventPayload;
-                    if (payload == null)
-                    {
-                        continue; // Skip if payload deserialization failed
-                    }
-                    var ev = _domainTypes.EventTypes.GenerateTypedEvent(payload, _partitionKeys, envelope.SortableUniqueId, envelope.Version, new EventMetadata(envelope.CausationId,envelope.CausationId,""));
-                    if (ev.IsSuccess)
-                    {
-                        events.Add(ev.GetValue());
-                    }
+                    events.Add(eventResult.Value);
                 }
             }
             

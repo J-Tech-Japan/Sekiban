@@ -77,23 +77,14 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 CausationId: relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
                 CorrelationId: commandId.ToString(),
                 ExecutedUser: "system");
-            var serializedCommand = JsonSerializer.Serialize(command, command.GetType(), _domainTypes.JsonSerializerOptions);
-            // Create a command envelope for the new interface
-            var envelope = new CommandEnvelope(
-                commandType: command.GetType().AssemblyQualifiedName ?? command.GetType().FullName ?? command.GetType().Name,
-                commandPayload: System.Text.Encoding.UTF8.GetBytes(serializedCommand),
-                aggregateId: partitionKeys.AggregateId.ToString(),
-                partitionId: partitionKeys.AggregateId,
-                rootPartitionKey: partitionKeys.RootPartitionKey,
-                metadata: new Dictionary<string, string>
-                {
-                    ["CausationId"] = metadata.CausationId,
-                    ["ExecutedUser"] = metadata.ExecutedUser
-                },
-                correlationId: metadata.CorrelationId);
+            // Create SerializableCommandAndMetadata
+            var commandAndMetadata = await SerializableCommandAndMetadata.CreateFromAsync(
+                command,
+                metadata,
+                _domainTypes.JsonSerializerOptions);
             
-            // Execute command via envelope
-            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(envelope);
+            // Execute command via SerializableCommandAndMetadata
+            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
             
             // Convert back to SekibanCommandResponse
             if (!envelopeResponse.IsSuccess)

@@ -65,41 +65,21 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         return await SerializableAggregate.CreateFromAsync(aggregate, _sekibanDomainTypes.JsonSerializerOptions);
     }
 
-    // New envelope-based ExecuteCommandAsync
-    public async Task<DaprCommandResponse> ExecuteCommandAsync(CommandEnvelope envelope)
+    // New SerializableCommandAndMetadata-based ExecuteCommandAsync
+    public async Task<DaprCommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata)
     {
         try
         {
-            // Extract command from envelope
-            var commandType = Type.GetType(envelope.CommandType);
-            if (commandType == null)
+            // Convert back to command and metadata
+            var result = await commandAndMetadata.ToCommandAndMetadataAsync(_sekibanDomainTypes);
+            if (!result.HasValue)
             {
                 return DaprCommandResponse.Failure(
-                    JsonSerializer.Serialize(new { Message = $"Command type not found: {envelope.CommandType}" }),
-                    envelope.Metadata);
+                    JsonSerializer.Serialize(new { Message = $"Failed to deserialize command: {commandAndMetadata.CommandTypeName}" }),
+                    new Dictionary<string, string>());
             }
 
-            // Deserialize command from JSON payload
-            var commandJson = Encoding.UTF8.GetString(envelope.CommandPayload);
-            var command = JsonSerializer.Deserialize(
-                commandJson,
-                commandType,
-                _sekibanDomainTypes.JsonSerializerOptions) as ICommandWithHandlerSerializable;
-
-            if (command == null)
-            {
-                return DaprCommandResponse.Failure(
-                    JsonSerializer.Serialize(
-                        new { Message = $"Failed to deserialize command: {envelope.CommandType}" }),
-                    envelope.Metadata);
-            }
-
-            // Create command metadata from envelope
-            var metadata = new CommandMetadata(
-                Guid.Parse(envelope.CorrelationId),
-                envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
-                envelope.CorrelationId,
-                envelope.Metadata.GetValueOrDefault("ExecutedUser", "system"));
+            var (command, metadata) = result.Value;
 
             // Execute command using legacy method
             var response = await ExecuteCommandAsync(command, metadata);
@@ -141,7 +121,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                     {
                         ex.Message
                     }),
-                envelope.Metadata);
+                new Dictionary<string, string>());
         }
     }
 
@@ -338,23 +318,18 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 }
 
                 // Get delta events and project them
-                var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
+                var deltaEventDocuments = await eventHandlerActor.GetDeltaEventsAsync(
                     aggregate.LastSortableUniqueId,
                     -1);
 
-                // Convert envelopes back to events
+                // Convert documents back to events
                 var deltaEvents = new List<IEvent>();
-                foreach (var envelope in deltaEventEnvelopes)
+                foreach (var document in deltaEventDocuments)
                 {
-                    var eventType = Type.GetType(envelope.EventType);
-                    if (eventType != null)
+                    var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
+                    if (eventResult.HasValue)
                     {
-                        var eventJson = Encoding.UTF8.GetString(envelope.EventPayload);
-                        var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                        if (@event != null)
-                        {
-                            deltaEvents.Add(@event);
-                        }
+                        deltaEvents.Add(eventResult.Value);
                     }
                 }
 

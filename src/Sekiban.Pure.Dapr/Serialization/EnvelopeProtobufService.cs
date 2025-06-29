@@ -1,3 +1,5 @@
+// TODO: Update this file to use SerializableCommandAndMetadata instead of CommandEnvelope
+/*
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Sekiban.Pure.Aggregates;
@@ -268,3 +270,4 @@ public class EnvelopeProtobufService : IEnvelopeProtobufService
         }
     }
 }
+*/

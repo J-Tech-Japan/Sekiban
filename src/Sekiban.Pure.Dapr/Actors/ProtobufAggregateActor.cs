@@ -330,22 +330,17 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
                     if (lastEventId != aggregate.LastSortableUniqueId)
                     {
                         // Get delta events and project them
-                        var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
+                        var deltaEventDocuments = await eventHandlerActor.GetDeltaEventsAsync(
                             aggregate.LastSortableUniqueId, -1);
                         
-                        // Convert envelopes back to events
+                        // Convert documents back to events
                         var deltaEvents = new List<IEvent>();
-                        foreach (var envelope in deltaEventEnvelopes)
+                        foreach (var document in deltaEventDocuments)
                         {
-                            var eventType = Type.GetType(envelope.EventType);
-                            if (eventType != null)
+                            var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
+                            if (eventResult.HasValue)
                             {
-                                var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                                var @event = System.Text.Json.JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                                if (@event != null)
-                                {
-                                    deltaEvents.Add(@event);
-                                }
+                                deltaEvents.Add(eventResult.Value);
                             }
                         }
                         

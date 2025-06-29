@@ -23,8 +23,8 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
     
     // State key for persisting the last event information
     private const string StateKey = "aggregateEventHandler";
-    // State key for persisting event envelopes (for in-memory storage)
-    private const string EventEnvelopesStateKey = "aggregateEventEnvelopes";
+    // State key for persisting serializable event documents (for in-memory storage)
+    private const string EventDocumentsStateKey = "aggregateEventDocuments";
     
     public AggregateEventHandlerActor(
         ActorHost host,
@@ -109,61 +109,23 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
     // Legacy method - kept for compatibility
     public async Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
     {
-        // Convert from envelopes to maintain compatibility
-        var envelopes = await ((IAggregateEventHandlerActor)this).GetDeltaEventsAsync(fromSortableUniqueId, limit);
+        // Convert from serializable documents to maintain compatibility
+        var documents = await ((IAggregateEventHandlerActor)this).GetDeltaEventsAsync(fromSortableUniqueId, limit);
         
         var events = new List<IEvent>();
-        foreach (var envelope in envelopes)
+        foreach (var document in documents)
         {
             try
             {
-                var eventType = Type.GetType(envelope.EventType);
-                if (eventType == null)
+                var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
+                if (eventResult.HasValue)
                 {
-                    // Try to find type in loaded assemblies
-                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        eventType = assembly.GetType(envelope.EventType);
-                        if (eventType != null) break;
-                    }
-                }
-                
-                if (eventType != null)
-                {
-                    var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                    var eventPayload = JsonSerializer.Deserialize(eventJson, eventType) as IEventPayload;
-                    
-                    if (eventPayload != null)
-                    {
-                        // Create the Event<T> wrapper
-                        var eventWrapperType = typeof(Event<>).MakeGenericType(eventType);
-                        var partitionKeys = new PartitionKeys(
-                            Guid.Parse(envelope.AggregateId),
-                            string.Empty,
-                            envelope.RootPartitionKey);
-                        
-                        var @event = Activator.CreateInstance(
-                            eventWrapperType,
-                            Guid.NewGuid(),
-                            eventPayload,
-                            partitionKeys,
-                            envelope.SortableUniqueId,
-                            envelope.Version,
-                            new EventMetadata(
-                                envelope.CausationId,
-                                string.IsNullOrEmpty(envelope.CorrelationId) ? Guid.NewGuid().ToString() : envelope.CorrelationId,
-                                "system")) as IEvent;
-                        
-                        if (@event != null)
-                        {
-                            events.Add(@event);
-                        }
-                    }
+                    events.Add(eventResult.Value);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to convert envelope to event");
+                _logger.LogError(ex, "Failed to convert document to event");
             }
         }
         
@@ -189,105 +151,45 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         return Task.CompletedTask;
     }
     
-    // New envelope-based AppendEventsAsync
+    // New SerializableEventDocument-based AppendEventsAsync
     public async Task<EventHandlingResponse> AppendEventsAsync(
         string expectedLastSortableUniqueId,
-        List<EventEnvelope> newEvents)
+        List<SerializableEventDocument> newEventDocuments)
     {
         try
         {
-            // Convert envelopes to events
+            // Convert serializable event documents to events
             var events = new List<IEvent>();
-            foreach (var envelope in newEvents)
+            foreach (var eventDoc in newEventDocuments)
             {
                 try
                 {
-                    var eventType = Type.GetType(envelope.EventType);
-                    
-                    // If type resolution failed, try to resolve it from loaded assemblies
-                    if (eventType == null)
+                    var eventResult = await eventDoc.ToEventAsync(_sekibanDomainTypes);
+                    if (eventResult.HasValue)
                     {
-                        // Check if it's a generic type like Event`1
-                        if (envelope.EventType.Contains('`'))
-                        {
-                            // For generic types, we need to parse and construct the type
-                            var typeName = envelope.EventType;
-                            
-                            // Try to find the type in all loaded assemblies
-                            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                            {
-                                eventType = assembly.GetType(typeName);
-                                if (eventType != null) break;
-                                
-                                // Also try without assembly qualification
-                                var simpleTypeName = typeName.Split(',')[0];
-                                eventType = assembly.GetType(simpleTypeName);
-                                if (eventType != null) break;
-                            }
-                        }
-                        else
-                        {
-                            // For non-generic types, search in loaded assemblies
-                            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                            {
-                                eventType = assembly.GetType(envelope.EventType);
-                                if (eventType != null) break;
-                            }
-                        }
+                        events.Add(eventResult.Value);
                     }
-                    
-                    if (eventType == null)
+                    else
                     {
-                        _logger.LogWarning("Event type not found after extensive search: {EventType}", envelope.EventType);
-                        continue;
-                    }
-                    
-                    var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                    
-                    // Deserialize the event payload
-                    var eventPayload = JsonSerializer.Deserialize(eventJson, eventType, _sekibanDomainTypes.JsonSerializerOptions) as IEventPayload;
-                    
-                    if (eventPayload != null)
-                    {
-                        // Create the Event<T> wrapper
-                        var eventWrapperType = typeof(Event<>).MakeGenericType(eventType);
-
-                        var partitionKeys = PartitionKeys.FromPrimaryKeysString(this.Id.GetId()).UnwrapBox();
-                        
-                        var @event = Activator.CreateInstance(
-                            eventWrapperType,
-                            Guid.NewGuid(), // Event ID
-                            eventPayload,
-                            partitionKeys,
-                            envelope.SortableUniqueId,
-                            envelope.Version,
-                            new EventMetadata(
-                                envelope.CausationId,
-                                string.IsNullOrEmpty(envelope.CorrelationId) ? Guid.NewGuid().ToString() : envelope.CorrelationId,
-                                "system")) as IEvent;
-                        
-                        if (@event != null)
-                        {
-                            events.Add(@event);
-                        }
+                        _logger.LogWarning("Failed to convert SerializableEventDocument to event for type: {PayloadTypeName}", eventDoc.PayloadTypeName);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to deserialize event from envelope");
+                    _logger.LogError(ex, "Failed to deserialize event from document");
                 }
             }
             
-            // Store envelopes directly in actor state for in-memory storage
-            var existingEnvelopes = await StateManager.TryGetStateAsync<List<EventEnvelope>>(EventEnvelopesStateKey);
-            var envelopesList = existingEnvelopes.HasValue ? existingEnvelopes.Value : new List<EventEnvelope>();
-            envelopesList.AddRange(newEvents);
-            await StateManager.SetStateAsync(EventEnvelopesStateKey, envelopesList);
+            // Store serializable event documents directly in actor state for in-memory storage
+            var existingEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
+            var eventDocsList = existingEventDocs.HasValue ? existingEventDocs.Value : new List<SerializableEventDocument>();
+            eventDocsList.AddRange(newEventDocuments);
+            await StateManager.SetStateAsync(EventDocumentsStateKey, eventDocsList);
             
             // Use legacy method to append events
             var appendedEvents = await AppendEventsAsync(expectedLastSortableUniqueId, events);
             
-            var lastEventId = newEvents.Any() ? newEvents.Last().SortableUniqueId : expectedLastSortableUniqueId;
+            var lastEventId = newEventDocuments.Any() ? newEventDocuments.Last().SortableUniqueId : expectedLastSortableUniqueId;
             return EventHandlingResponse.Success(lastEventId);
         }
         catch (Exception ex)
@@ -297,72 +199,72 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         }
     }
     
-    // New envelope-based GetDeltaEventsAsync
-    async Task<List<EventEnvelope>> IAggregateEventHandlerActor.GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
+    // New SerializableEventDocument-based GetDeltaEventsAsync
+    async Task<List<SerializableEventDocument>> IAggregateEventHandlerActor.GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
     {
         try
         {
-            // First try to get envelopes from actor state (in-memory)
-            var storedEnvelopes = await StateManager.TryGetStateAsync<List<EventEnvelope>>(EventEnvelopesStateKey);
-            if (storedEnvelopes.HasValue && storedEnvelopes.Value.Any())
+            // First try to get event documents from actor state (in-memory)
+            var storedEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
+            if (storedEventDocs.HasValue && storedEventDocs.Value.Any())
             {
-                var allEnvelopes = storedEnvelopes.Value;
+                var allEventDocs = storedEventDocs.Value;
                 
                 if (string.IsNullOrWhiteSpace(fromSortableUniqueId))
                 {
                     return limit > 0 
-                        ? allEnvelopes.Take(limit).ToList() 
-                        : allEnvelopes;
+                        ? allEventDocs.Take(limit).ToList() 
+                        : allEventDocs;
                 }
 
-                var index = allEnvelopes.FindIndex(e => e.SortableUniqueId == fromSortableUniqueId);
+                var index = allEventDocs.FindIndex(e => e.SortableUniqueId == fromSortableUniqueId);
                 
                 if (index < 0)
                 {
-                    return new List<EventEnvelope>();
+                    return new List<SerializableEventDocument>();
                 }
 
-                var deltaEnvelopes = allEnvelopes.Skip(index + 1);
+                var deltaEventDocs = allEventDocs.Skip(index + 1);
                 return limit > 0 
-                    ? deltaEnvelopes.Take(limit).ToList() 
-                    : deltaEnvelopes.ToList();
+                    ? deltaEventDocs.Take(limit).ToList() 
+                    : deltaEventDocs.ToList();
             }
             
             // Fall back to converting from legacy events
             var events = await GetDeltaEventsAsync(fromSortableUniqueId, limit);
-            return await ConvertEventsToEnvelopes(events);
+            return await ConvertEventsToSerializableDocuments(events);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get delta events as envelopes");
-            return new List<EventEnvelope>();
+            _logger.LogError(ex, "Failed to get delta events as documents");
+            return new List<SerializableEventDocument>();
         }
     }
     
-    // New envelope-based GetAllEventsAsync
-    async Task<List<EventEnvelope>> IAggregateEventHandlerActor.GetAllEventsAsync()
+    // New SerializableEventDocument-based GetAllEventsAsync
+    async Task<List<SerializableEventDocument>> IAggregateEventHandlerActor.GetAllEventsAsync()
     {
         try
         {
-            // First try to get envelopes from actor state (in-memory)
-            var storedEnvelopes = await StateManager.TryGetStateAsync<List<EventEnvelope>>(EventEnvelopesStateKey);
-            if (storedEnvelopes.HasValue && storedEnvelopes.Value.Any())
+            // First try to get event documents from actor state (in-memory)
+            var storedEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
+            if (storedEventDocs.HasValue && storedEventDocs.Value.Any())
             {
-                return storedEnvelopes.Value;
+                return storedEventDocs.Value;
             }
             
             // Fall back to converting from legacy events
             var events = await GetAllEventsAsync();
-            return await ConvertEventsToEnvelopes(events);
+            return await ConvertEventsToSerializableDocuments(events);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get all events as envelopes");
-            return new List<EventEnvelope>();
+            _logger.LogError(ex, "Failed to get all events as documents");
+            return new List<SerializableEventDocument>();
         }
     }
     
-    private async Task<List<EventEnvelope>> ConvertEventsToEnvelopes(IReadOnlyList<IEvent> events)
+    private async Task<List<SerializableEventDocument>> ConvertEventsToSerializableDocuments(IReadOnlyList<IEvent> events)
     {
         // Extract partition keys from actor ID
         var actorId = Id.GetId();
@@ -374,33 +276,16 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
             .FromPrimaryKeysString(partitionKeysString)
             .UnwrapBox();
         
-        var envelopes = new List<EventEnvelope>();
+        var documents = new List<SerializableEventDocument>();
         
         foreach (var @event in events)
         {
-            // Get the actual event payload to serialize and get its type
-            var eventPayload = @event.GetPayload();
-            var eventPayloadType = eventPayload.GetType();
-            
-            var envelope = new EventEnvelope
-            {
-                EventType = eventPayloadType.AssemblyQualifiedName ?? eventPayloadType.FullName ?? eventPayloadType.Name,
-                EventPayload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(eventPayload, eventPayloadType)),
-                AggregateId = partitionKeys.AggregateId.ToString(),
-                PartitionId = partitionKeys.AggregateId,
-                RootPartitionKey = partitionKeys.RootPartitionKey,
-                Version = @event.Version,
-                SortableUniqueId = @event.GetSortableUniqueId(),
-                Timestamp = DateTime.UtcNow, // Could extract from sortableUniqueId
-                Metadata = new Dictionary<string, string>(),
-                CorrelationId = string.Empty,
-                CausationId = string.Empty
-            };
-            
-            envelopes.Add(envelope);
+            // Convert event to SerializableEventDocument
+            var document = await SerializableEventDocument.CreateFromEventAsync(@event, _sekibanDomainTypes.JsonSerializerOptions);
+            documents.Add(document);
         }
         
-        return envelopes;
+        return documents;
     }
 
     private EventRetrievalInfo GetEventRetrievalInfo()

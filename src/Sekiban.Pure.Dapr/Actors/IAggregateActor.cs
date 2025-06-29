@@ -1,5 +1,6 @@
 using Dapr.Actors;
 using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Handlers;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
@@ -20,13 +21,13 @@ public interface IAggregateActor : IActor
 
     /// <summary>
     /// Entry point for command execution.
-    /// Accepts a CommandEnvelope containing Protobuf-serialized command.
+    /// Accepts a SerializableCommandAndMetadata containing the command and metadata.
     /// Uses the current state and CommandHandler to generate events,
     /// then sends them to AggregateEventHandlerActor.
     /// </summary>
-    /// <param name="envelope">Command envelope with Protobuf payload</param>
+    /// <param name="commandAndMetadata">Serializable command and metadata</param>
     /// <returns>Command response with state and generated events</returns>
-    Task<CommandResponse> ExecuteCommandAsync(CommandEnvelope envelope);
+    Task<CommandResponse> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
 
     /// <summary>
     /// Rebuilds state from scratch (for version upgrades or state corruption).
