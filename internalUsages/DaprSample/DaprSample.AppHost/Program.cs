@@ -23,7 +23,7 @@ builder.AddProject<Projects.DaprSample_Api>("api")
         DaprHttpPort = 3501,
         DaprGrpcPort = 50002,
         PlacementHostAddress = "localhost:50005",
-        SchedulerHostAddress = "",
+        SchedulerHostAddress = "localhost:50006",
         ResourcesPaths = [Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components")]
     });
 
