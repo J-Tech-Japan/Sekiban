@@ -432,30 +432,12 @@ public class PostgresDocumentRepository(
         };
     }
 
-    private static IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands)
-    {
-        const int batchSize = 1000;
-        List<string> commandBatch = [];
-
-        foreach (var commandItem in commands)
-        {
-            var commandDocument = FromDbCommand(commandItem);
-            if (commandDocument is not null)
-            {
-                commandBatch.Add(JsonSerializer.Serialize(commandDocument));
-            }
-            if (commandBatch.Count >= batchSize)
-            {
-                yield return commandBatch;
-                commandBatch = [];
-            }
-        }
-
-        if (0 < commandBatch.Count)
-        {
-            yield return commandBatch;
-        }
-    }
+    private static IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands) =>
+        commands
+            .Select(x => FromDbCommand(x))
+            .Where(x => x is not null)
+            .Select(x => JsonSerializer.Serialize(x))
+            .Chunk(1000);
 
     private static CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand)
     {
@@ -486,27 +468,10 @@ public class PostgresDocumentRepository(
     }
 
 
-    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events)
-    {
-        const int batchSize = 1000;
-        List<IEvent> eventBatch = [];
-
-        foreach (var eventItem in events)
-        {
-            eventBatch.Add(FromDbEvent(eventItem)!);
-
-            if (eventBatch.Count >= batchSize)
-            {
-                yield return eventBatch;
-                eventBatch = [];
-            }
-        }
-
-        if (0 < eventBatch.Count)
-        {
-            yield return eventBatch;
-        }
-    }
+    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events) =>
+        events
+            .Select(x => FromDbEvent(x)!)
+            .Chunk(1000);
 
     private IEvent? FromDbEvent(IDbEvent dbEvent)
     {
