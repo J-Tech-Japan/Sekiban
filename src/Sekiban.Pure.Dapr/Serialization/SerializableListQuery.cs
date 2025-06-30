@@ -39,10 +39,22 @@ public record SerializableListQuery
         var queryType = query.GetType();
         var queryAssemblyVersion = queryType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
         
-        var queryJson = JsonSerializer.SerializeToUtf8Bytes(
-            query, 
-            queryType, 
-            options);
+        // Use default options if the provided options don't support the type
+        byte[] queryJson;
+        try
+        {
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                query, 
+                queryType, 
+                options);
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback to default serialization options for types not in source generation
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                query, 
+                queryType);
+        }
         
         var compressedQueryJson = await CompressAsync(queryJson);
 
@@ -63,7 +75,19 @@ public record SerializableListQuery
             Type? queryType = null;
             try
             {
-                queryType = domainTypes.QueryTypes.GetTypeByFullName(QueryTypeName);
+                // Try to get type directly from Type.GetType
+                queryType = Type.GetType(QueryTypeName);
+                
+                // If that fails, search in all loaded assemblies
+                if (queryType == null)
+                {
+                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        queryType = assembly.GetType(QueryTypeName);
+                        if (queryType != null) break;
+                    }
+                }
+                
                 if (queryType == null)
                 {
                     return ResultBox<IListQueryCommon>.FromException(
@@ -80,10 +104,21 @@ public record SerializableListQuery
             if (CompressedQueryJson.Length > 0)
             {
                 var decompressedJson = await DecompressAsync(CompressedQueryJson);
-                var query = JsonSerializer.Deserialize(
-                    decompressedJson, 
-                    queryType, 
-                    domainTypes.JsonSerializerOptions) as IListQueryCommon;
+                IListQueryCommon? query;
+                try
+                {
+                    query = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        queryType, 
+                        domainTypes.JsonSerializerOptions) as IListQueryCommon;
+                }
+                catch (NotSupportedException)
+                {
+                    // Fallback to default options
+                    query = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        queryType) as IListQueryCommon;
+                }
                 
                 if (query == null)
                 {

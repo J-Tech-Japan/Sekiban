@@ -347,53 +347,104 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 
     #region Public API (IMultiProjectorActor)
 
-    public async Task<ResultBox<object>> QueryAsync(IQueryCommon query)
+    public async Task<SerializableQueryResult> QueryAsync(SerializableQuery query)
     {
         try
         {
             await EnsureStateLoadedAsync();
             
+            // Deserialize the query
+            var queryResult = await query.ToQueryAsync(_domainTypes);
+            if (!queryResult.IsSuccess)
+            {
+                var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<object>.FromException(queryResult.GetException()),
+                    null,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
+            }
+            
+            var queryCommon = queryResult.GetValue();
+            
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                query, 
+                queryCommon, 
                 GetProjectorForQuery, 
                 new ServiceCollection().BuildServiceProvider());
             
             if (res == null)
             {
-                return ResultBox<object>.FromException(new ApplicationException("Query not found"));
+                var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<object>.FromException(new ApplicationException("Query not found")),
+                    queryCommon,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
             }
             
-            return res.Remap(v => v.ToGeneral(query));
+            var resultBox = res.Remap(v => v.ToGeneral(queryCommon));
+            var serializableResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                resultBox,
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
+            return serializableResult.GetValue();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing query {QueryType}", query.GetType().Name);
-            return ResultBox<object>.FromException(ex);
+            _logger.LogError(ex, "Error executing query");
+            var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                ResultBox<object>.FromException(ex),
+                null,
+                _domainTypes.JsonSerializerOptions);
+            return errorResult.GetValue();
         }
     }
 
-    public async Task<ResultBox<IListQueryResult>> QueryListAsync(IListQueryCommon query)
+    public async Task<SerializableListQueryResult> QueryListAsync(SerializableListQuery query)
     {
         try
         {
             await EnsureStateLoadedAsync();
             
+            // Deserialize the query
+            var queryResult = await query.ToListQueryAsync(_domainTypes);
+            if (!queryResult.IsSuccess)
+            {
+                var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<IListQueryResult>.FromException(queryResult.GetException()),
+                    null,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
+            }
+            
+            var queryCommon = queryResult.GetValue();
+            
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                query, 
+                queryCommon, 
                 GetProjectorForQuery, 
                 new ServiceCollection().BuildServiceProvider());
             
             if (res == null)
             {
-                return ResultBox<IListQueryResult>.FromException(new ApplicationException("Query not found"));
+                var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<IListQueryResult>.FromException(new ApplicationException("Query not found")),
+                    queryCommon,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
             }
             
-            return res;
+            var serializableResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                res,
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
+            return serializableResult.GetValue();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing list query {QueryType}", query.GetType().Name);
-            return ResultBox<IListQueryResult>.FromException(ex);
+            _logger.LogError(ex, "Error executing list query");
+            var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                ResultBox<IListQueryResult>.FromException(ex),
+                null,
+                _domainTypes.JsonSerializerOptions);
+            return errorResult.GetValue();
         }
     }
 
