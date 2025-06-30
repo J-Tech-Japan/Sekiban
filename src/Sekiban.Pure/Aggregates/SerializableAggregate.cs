@@ -7,8 +7,12 @@ namespace Sekiban.Pure.Aggregates;
 [Serializable]
 public record SerializableAggregate
 {
+    // PartitionKeysの個別プロパティ
+    public Guid AggregateId { get; init; } = Guid.Empty;
+    public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
+    public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
+    
     // 元のAggregateから直接コピーする値
-    public PartitionKeys PartitionKeys { get; init; } = PartitionKeys.Generate();
     public int Version { get; init; }
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public string ProjectorVersion { get; init; } = string.Empty;
@@ -24,9 +28,14 @@ public record SerializableAggregate
     // デフォルトコンストラクタ（シリアライザ用）
     public SerializableAggregate() { }
 
+    // PartitionKeysを取得するメソッド
+    public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
+
     // コンストラクタ（直接初期化用）
     private SerializableAggregate(
-        PartitionKeys partitionKeys,
+        Guid aggregateId,
+        string group,
+        string rootPartitionKey,
         int version,
         string lastSortableUniqueId,
         string projectorVersion,
@@ -35,7 +44,9 @@ public record SerializableAggregate
         byte[] compressedPayloadJson,
         string payloadAssemblyVersion)
     {
-        PartitionKeys = partitionKeys;
+        AggregateId = aggregateId;
+        Group = group;
+        RootPartitionKey = rootPartitionKey;
         Version = version;
         LastSortableUniqueId = lastSortableUniqueId;
         ProjectorVersion = projectorVersion;
@@ -68,7 +79,9 @@ public record SerializableAggregate
         }
 
         return new SerializableAggregate(
-            aggregate.PartitionKeys,
+            aggregate.PartitionKeys.AggregateId,
+            aggregate.PartitionKeys.Group,
+            aggregate.PartitionKeys.RootPartitionKey,
             aggregate.Version,
             aggregate.LastSortableUniqueId,
             aggregate.ProjectorVersion,
@@ -91,7 +104,7 @@ public record SerializableAggregate
                 // EmptyAggregatePayloadは直接作成可能
                 var emptyAggregate = new Aggregate(
                     new EmptyAggregatePayload(),
-                    PartitionKeys,
+                    GetPartitionKeys(),
                     Version,
                     LastSortableUniqueId,
                     ProjectorVersion,
@@ -155,7 +168,7 @@ public record SerializableAggregate
             // Aggregateを再構築
             var aggregate = new Aggregate(
                 payload,
-                PartitionKeys,
+                GetPartitionKeys(),
                 Version,
                 LastSortableUniqueId,
                 ProjectorVersion,

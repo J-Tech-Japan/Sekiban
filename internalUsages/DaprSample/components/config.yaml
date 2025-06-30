@@ -1,0 +1,21 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: dapr-config
+spec:
+  features:
+    - name: Actor.Reentrancy
+      enabled: true
+  actorConfig:
+    actorIdleTimeout: "1h"
+    actorScanInterval: "30s"
+    drainOngoingCallTimeout: "30s"
+    drainRebalancedActors: true
+    reentrancy:
+      enabled: true
+  httpPipeline:
+    handlers:
+      - name: cors
+        type: middleware.http.cors
+      - name: oauth2
+        type: middleware.http.oauth2

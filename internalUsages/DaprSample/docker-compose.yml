@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  placement:
+    image: "daprio/dapr"
+    command: ["./placement", "--port", "50005"]
+    ports:
+      - "50005:50005"
+
+  redis:
+    image: "redis:6.0"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  zipkin:
+    image: "openzipkin/zipkin"
+    ports:
+      - "9411:9411"
+
+volumes:
+  redis-data:

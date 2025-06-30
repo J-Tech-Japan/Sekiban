@@ -28,4 +28,6 @@ public class EmptyEventTypes : IEventTypes
         throw new NotImplementedException();
     }
     public List<Type> GetEventTypes() => throw new NotImplementedException();
+    
+    public Type? GetEventTypeByName(string eventTypeName) => null;
 }

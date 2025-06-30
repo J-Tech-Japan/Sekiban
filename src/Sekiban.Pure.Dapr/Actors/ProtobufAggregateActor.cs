@@ -200,7 +200,8 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            _currentAggregate);
+            _currentAggregate,
+            _sekibanDomainTypes);
         
         // Execute command
         var commandExecutor = new CommandExecutor(_serviceProvider) 
@@ -221,7 +222,12 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
         
         // Update current aggregate with new events
         _currentAggregate = repository.GetProjectedAggregate(result.Events).UnwrapBox();
-        _hasUnsavedChanges = true;
+        
+        // Only mark as changed if events were actually produced
+        if (result.Events.Count > 0)
+        {
+            _hasUnsavedChanges = true;
+        }
         
         return result;
     }
@@ -241,7 +247,7 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys));
+            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys),_sekibanDomainTypes);
         
         // Load all events and rebuild state
         var aggregate = await repository.Load().UnwrapBox();
@@ -329,34 +335,38 @@ public class ProtobufAggregateActor : Actor, IProtobufAggregateActor
                     if (lastEventId != aggregate.LastSortableUniqueId)
                     {
                         // Get delta events and project them
-                        var deltaEventEnvelopes = await eventHandlerActor.GetDeltaEventsAsync(
+                        var deltaEventDocuments = await eventHandlerActor.GetDeltaEventsAsync(
                             aggregate.LastSortableUniqueId, -1);
                         
-                        // Convert envelopes back to events
+                        // Convert documents back to events
                         var deltaEvents = new List<IEvent>();
-                        foreach (var envelope in deltaEventEnvelopes)
+                        foreach (var document in deltaEventDocuments)
                         {
-                            var eventType = Type.GetType(envelope.EventType);
-                            if (eventType != null)
+                            var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
+                            if (eventResult.HasValue)
                             {
-                                var eventJson = System.Text.Encoding.UTF8.GetString(envelope.EventPayload);
-                                var @event = System.Text.Json.JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                                if (@event != null)
-                                {
-                                    deltaEvents.Add(@event);
-                                }
+                                deltaEvents.Add(eventResult.Value);
                             }
                         }
                         
                         // Create a new aggregate by projecting the delta events
                         var concreteAggregate = aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");
-                        var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
-                        if (!projectedResult.IsSuccess)
+                        
+                        // Only project and mark as changed if there are delta events
+                        if (deltaEvents.Count > 0)
                         {
-                            throw new InvalidOperationException($"Failed to project delta events: {projectedResult.GetException().Message}");
+                            var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
+                            if (!projectedResult.IsSuccess)
+                            {
+                                throw new InvalidOperationException($"Failed to project delta events: {projectedResult.GetException().Message}");
+                            }
+                            _currentAggregate = projectedResult.GetValue();
+                            _hasUnsavedChanges = true;
                         }
-                        _currentAggregate = projectedResult.GetValue();
-                        _hasUnsavedChanges = true;
+                        else
+                        {
+                            _currentAggregate = concreteAggregate;
+                        }
                     }
                     
                     return aggregate as Aggregate ?? throw new InvalidOperationException("Aggregate must be of type Aggregate");

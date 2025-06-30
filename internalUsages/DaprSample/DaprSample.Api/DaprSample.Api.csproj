@@ -8,14 +8,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj" />
+    <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj" />
     <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" />
     <ProjectReference Include="..\DaprSample.Domain\DaprSample.Domain.csproj" />
     <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.6" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.5.3" />
   </ItemGroup>
 
 </Project>

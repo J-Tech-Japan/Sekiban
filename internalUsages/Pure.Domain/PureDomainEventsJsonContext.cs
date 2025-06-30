@@ -34,6 +34,8 @@ namespace Pure.Domain;
     [JsonSerializable(typeof(Pure.Domain.UserRegistered))]
     [JsonSerializable(typeof(EventDocument<Pure.Domain.UserUnconfirmed>))]
     [JsonSerializable(typeof(Pure.Domain.UserUnconfirmed))]
+    [JsonSerializable(typeof(EventDocument<Pure.Domain.UserNameUpdated>))]
+    [JsonSerializable(typeof(Pure.Domain.UserNameUpdated))]
     [JsonSerializable(typeof(Pure.Domain.Branch))]
     [JsonSerializable(typeof(Pure.Domain.BuyingShoppingCart))]
     [JsonSerializable(typeof(Pure.Domain.Client))]

@@ -240,6 +240,28 @@ public class EventTypesGenerator : IIncrementalGenerator
         }
         sb.AppendLine("            };");
         sb.AppendLine("        }");
+        
+        // Add GetEventTypeByName implementation
+        sb.AppendLine();
+        sb.AppendLine("        public Type? GetEventTypeByName(string eventTypeName)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return eventTypeName switch");
+        sb.AppendLine("            {");
+        
+        // Generate case statements for each event type
+        foreach (var type in eventTypes)
+        {
+            if (type.InterfaceName == "IEventPayload")
+            {
+                // Get the short name (without namespace)
+                var shortName = type.RecordName.Split('.').Last();
+                sb.AppendLine($"                \"{shortName}\" => typeof({type.RecordName}),");
+            }
+        }
+        
+        sb.AppendLine("                _ => null");
+        sb.AppendLine("            };");
+        sb.AppendLine("        }");
 
         sb.AppendLine("    }");
         sb.AppendLine("/***");

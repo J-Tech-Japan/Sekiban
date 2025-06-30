@@ -1,0 +1,16 @@
+# Dapr-specific files
+*.log
+scheduler.log
+dapr.log
+
+# Backup files
+*.bak
+
+# Test scripts (optional - include if you want to keep them in repo)
+# test-*.sh
+
+# Redis data directory
+data/
+
+# Temporary event store file (if created)
+eventstore.yaml

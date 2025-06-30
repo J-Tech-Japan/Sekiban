@@ -6,6 +6,7 @@ using ResultBoxes;
 using Sekiban.Pure.Command;
 using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Dapr.Configuration;
+using Sekiban.Pure.Dapr.Parts;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exceptions;
@@ -18,6 +19,7 @@ using Sekiban.Pure.Query;
 using Sekiban.Pure;
 using Sekiban.Pure.Dapr.Serialization;
 using System.Text.Json;
+using System.Linq;
 using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
@@ -50,20 +52,20 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // Get projector type from command
-            var projectorType = GetProjectorTypeFromCommand(command);
-            if (projectorType == null)
-            {
-                return ResultBox<SekibanCommandResponse>.FromException(
-                    new InvalidOperationException($"Could not determine projector type for command {command.GetType().Name}"));
-            }
-
             // Get partition keys
             var partitionKeys = GetPartitionKeys(command);
             
-            // Create actor ID with projector type
-            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
+            // Get projector from command (matching Orleans pattern)
+            var projector = command.GetProjector();
+            var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+            
+            // Create actor ID using the correct grain key format (matching Orleans pattern)
+            var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
+            
+            // Debug: Print actor ID for troubleshooting
+            Console.WriteLine($"[DEBUG] Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine($"[DEBUG] ProjectorType: {projector.GetType().Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine($"[DEBUG] AggregateId: {partitionKeys.AggregateId}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,
@@ -76,83 +78,36 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 CausationId: relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
                 CorrelationId: commandId.ToString(),
                 ExecutedUser: "system");
-
-            // Create a command envelope for the new interface
-            var envelope = new CommandEnvelope(
-                commandType: command.GetType().FullName ?? command.GetType().Name,
-                commandPayload: System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command)),
-                aggregateId: partitionKeys.AggregateId.ToString(),
-                partitionId: partitionKeys.AggregateId,
-                rootPartitionKey: partitionKeys.RootPartitionKey,
-                metadata: new Dictionary<string, string>
-                {
-                    ["CausationId"] = metadata.CausationId,
-                    ["ExecutedUser"] = metadata.ExecutedUser
-                },
-                correlationId: metadata.CorrelationId);
+            // Create SerializableCommandAndMetadata
+            var commandAndMetadata = await SerializableCommandAndMetadata.CreateFromAsync(
+                command,
+                metadata,
+                _domainTypes.JsonSerializerOptions);
             
-            // Execute command via envelope
-            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(envelope);
+            // Execute command via SerializableCommandAndMetadata
+            var jsonResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
             
-            // Convert back to SekibanCommandResponse
-            if (!envelopeResponse.IsSuccess)
-            {
-                var errorMessage = "Command execution failed";
-                if (!string.IsNullOrEmpty(envelopeResponse.ErrorJson))
-                {
-                    try
-                    {
-                        var errorData = JsonSerializer.Deserialize<Dictionary<string, object>>(envelopeResponse.ErrorJson);
-                        errorMessage = errorData?.GetValueOrDefault("Message")?.ToString() ?? errorMessage;
-                    }
-                    catch
-                    {
-                        errorMessage = envelopeResponse.ErrorJson;
-                    }
-                }
+            // Deserialize the JSON response
+            var envelopeResponse = JsonSerializer.Deserialize<SerializableCommandResponse>(
+                jsonResponse, 
+                Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
                 
-                // For errors, we need to throw an exception as SekibanCommandResponse only contains success data
+            if (envelopeResponse == null)
+            {
                 return ResultBox<SekibanCommandResponse>.FromException(
-                    new InvalidOperationException(errorMessage));
+                    new InvalidOperationException("Failed to deserialize command response"));
             }
             
-            // Extract events from payloads
-            var events = new List<IEvent>();
-            for (int i = 0; i < envelopeResponse.EventPayloads.Count; i++)
+            // Convert SerializableCommandResponse back to SekibanCommandResponse
+            var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
+            
+            if (!responseResult.HasValue)
             {
-                var eventJson = System.Text.Encoding.UTF8.GetString(envelopeResponse.EventPayloads[i]);
-                var eventType = Type.GetType(envelopeResponse.EventTypes[i]);
-                if (eventType != null)
-                {
-                    var @event = JsonSerializer.Deserialize(eventJson, eventType) as IEvent;
-                    if (@event != null)
-                    {
-                        events.Add(@event);
-                    }
-                }
+                return ResultBox<SekibanCommandResponse>.FromException(
+                    new InvalidOperationException("Failed to convert command response"));
             }
             
-            // Extract aggregate state if present
-            Aggregate? aggregateState = null;
-            if (envelopeResponse.AggregateStatePayload != null && envelopeResponse.AggregateStateType != null)
-            {
-                try
-                {
-                    var json = System.Text.Encoding.UTF8.GetString(envelopeResponse.AggregateStatePayload);
-                    aggregateState = JsonSerializer.Deserialize<Aggregate>(json);
-                }
-                catch (Exception ex)
-                {
-                    // Log but don't fail
-                    Console.WriteLine($"Failed to deserialize aggregate state: {ex.Message}");
-                }
-            }
-            
-            return ResultBox<SekibanCommandResponse>.FromValue(
-                new SekibanCommandResponse(
-                    PartitionKeys: partitionKeys,
-                    Events: events,
-                    Version: envelopeResponse.AggregateVersion));
+            return ResultBox<SekibanCommandResponse>.FromValue(responseResult.Value);
         }
         catch (Exception ex)
         {
@@ -164,7 +119,59 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // For now, delegate all queries to a service
+            // Check if this is a multi-projection query
+            var projectorResult = _domainTypes.QueryTypes.GetMultiProjector(query);
+            if (projectorResult.IsSuccess)
+            {
+                // Get the appropriate multi-projector name
+                var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
+                    projectorResult.GetValue());
+                
+                if (!projectorNameResult.IsSuccess)
+                {
+                    return ResultBox<T>.FromException(projectorNameResult.GetException());
+                }
+                
+                var projectorName = projectorNameResult.GetValue();
+                var actorId = new ActorId(projectorName);
+                var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
+                    actorId, 
+                    nameof(MultiProjectorActor));
+                
+                // Wait for sortable unique ID if needed
+                if (query is IWaitForSortableUniqueId waitForQuery && 
+                    !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+                {
+                    var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+                    var timeoutMs = 30000; // 30 seconds timeout
+                    var pollingIntervalMs = 100;
+                    
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+                    stopwatch.Start();
+                    
+                    while (stopwatch.ElapsedMilliseconds < timeoutMs)
+                    {
+                        var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
+                        if (isReceived)
+                        {
+                            break;
+                        }
+                        
+                        await Task.Delay(pollingIntervalMs);
+                    }
+                }
+                
+                var result = await actor.QueryAsync(query);
+                
+                if (!result.IsSuccess)
+                {
+                    return ResultBox<T>.FromException(result.GetException());
+                }
+                
+                return ResultBox<T>.FromValue((T)result.GetValue());
+            }
+            
+            // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IQueryCommon<T>, ResultBox<T>>(
                 _options.QueryServiceAppId,
                 "query",
@@ -183,6 +190,68 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
+            // Check if this is a multi-projection query
+            var projectorResult = _domainTypes.QueryTypes.GetMultiProjector(query);
+            if (projectorResult.IsSuccess)
+            {
+                // Get the appropriate multi-projector name
+                var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
+                    projectorResult.GetValue());
+                
+                if (!projectorNameResult.IsSuccess)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromException(projectorNameResult.GetException());
+                }
+                
+                var projectorName = projectorNameResult.GetValue();
+                var actorId = new ActorId(projectorName);
+                var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
+                    actorId, 
+                    nameof(MultiProjectorActor));
+                
+                // Wait for sortable unique ID if needed
+                if (query is IWaitForSortableUniqueId waitForQuery && 
+                    !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+                {
+                    var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+                    var timeoutMs = 30000; // 30 seconds timeout
+                    var pollingIntervalMs = 100;
+                    
+                    var stopwatch = new System.Diagnostics.Stopwatch();
+                    stopwatch.Start();
+                    
+                    while (stopwatch.ElapsedMilliseconds < timeoutMs)
+                    {
+                        var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
+                        if (isReceived)
+                        {
+                            break;
+                        }
+                        
+                        await Task.Delay(pollingIntervalMs);
+                    }
+                }
+                
+                var result = await actor.QueryListAsync(query);
+                
+                if (!result.IsSuccess)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromException(result.GetException());
+                }
+                
+                // Convert IListQueryResult to ListQueryResult<TResult>
+                var listResult = result.GetValue();
+                if (listResult is ListQueryResult<TResult> typedResult)
+                {
+                    return ResultBox<ListQueryResult<TResult>>.FromValue(typedResult);
+                }
+                
+                // If it's a generic result, convert it
+                var generalResult = listResult.ToGeneral(query);
+                return ListQueryResult<TResult>.FromGeneral(generalResult);
+            }
+            
+            // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IListQueryCommon<TResult>, ResultBox<ListQueryResult<TResult>>>(
                 _options.QueryServiceAppId,
                 "list-query",
@@ -199,27 +268,34 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         try
         {
-            // Create actor ID with projector type
-            var projectorType = typeof(TAggregateProjector);
-            var grainKey = $"{projectorType.Name}:{partitionKeys.ToPrimaryKeysString()}";
-            var actorId = new ActorId($"{_options.ActorIdPrefix}:{grainKey}");
+            // Create PartitionKeysAndProjector (matching Orleans pattern)
+            var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, new TAggregateProjector());
+            
+            // Create actor ID using the correct grain key format (matching Orleans pattern)
+            var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
+            
+            // Debug: Print actor ID for troubleshooting
+            Console.WriteLine($"[DEBUG] LoadAggregate - Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine($"[DEBUG] LoadAggregate - ProjectorType: {typeof(TAggregateProjector).Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine($"[DEBUG] LoadAggregate - AggregateId: {partitionKeys.AggregateId}");
             
             var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
                 actorId,
                 nameof(AggregateActor));
 
-            // Get the current state from the actor as JSON
-            var stateJson = await aggregateActor.GetStateAsync();
+            // Get the current state from the actor as SerializableAggregate
+            var serializableAggregate = await aggregateActor.GetAggregateStateAsync();
             
-            // Deserialize the JSON state
-            var aggregate = JsonSerializer.Deserialize<Aggregate>(stateJson);
-            if (aggregate == null)
+            // Convert SerializableAggregate back to Aggregate
+            var aggregateOptional = await serializableAggregate.ToAggregateAsync(_domainTypes);
+            
+            if (!aggregateOptional.HasValue)
             {
                 return ResultBox<Aggregate>.FromException(
-                    new InvalidOperationException("Failed to deserialize aggregate state"));
+                    new InvalidOperationException($"Failed to deserialize aggregate from SerializableAggregate"));
             }
             
-            return ResultBox<Aggregate>.FromValue(aggregate);
+            return ResultBox<Aggregate>.FromValue(aggregateOptional.Value!);
         }
         catch (Exception ex)
         {
@@ -239,36 +315,5 @@ public class SekibanDaprExecutor : ISekibanExecutor
         }
         
         return partitionKeys;
-    }
-
-    private Type? GetProjectorTypeFromCommand(ICommandWithHandlerSerializable command)
-    {
-        var commandType = command.GetType();
-        
-        // Look for ICommandWithHandler<TCommand, TProjector> interface
-        var commandInterface = commandType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && 
-                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,>));
-        
-        if (commandInterface != null)
-        {
-            // Get the projector type from the generic arguments
-            return commandInterface.GetGenericArguments()[1];
-        }
-
-        // Look for ICommandWithHandler<TCommand, TProjector, TPayload> interface
-        var commandWithPayloadInterface = commandType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && 
-                                i.GetGenericTypeDefinition() == typeof(ICommandWithHandler<,,>));
-        
-        if (commandWithPayloadInterface != null)
-        {
-            // Get the projector type from the generic arguments
-            return commandWithPayloadInterface.GetGenericArguments()[1];
-        }
-
-        return null;
     }
 }

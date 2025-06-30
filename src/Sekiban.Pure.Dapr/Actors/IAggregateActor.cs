@@ -1,5 +1,7 @@
 using Dapr.Actors;
 using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Command.Handlers;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
@@ -15,24 +17,24 @@ public interface IAggregateActor : IActor
     /// If state is not created or projector version has changed,
     /// it will be rebuilt from events.
     /// </summary>
-    /// <returns>Current aggregate state serialized as JSON</returns>
-    Task<string> GetStateAsync();
+    /// <returns>Current aggregate state as a serializable aggregate</returns>
+    Task<SerializableAggregate> GetAggregateStateAsync();
 
     /// <summary>
     /// Entry point for command execution.
-    /// Accepts a CommandEnvelope containing Protobuf-serialized command.
+    /// Accepts a SerializableCommandAndMetadata containing the command and metadata.
     /// Uses the current state and CommandHandler to generate events,
     /// then sends them to AggregateEventHandlerActor.
     /// </summary>
-    /// <param name="envelope">Command envelope with Protobuf payload</param>
+    /// <param name="commandAndMetadata">Serializable command and metadata</param>
     /// <returns>Command response with state and generated events</returns>
-    Task<CommandResponse> ExecuteCommandAsync(CommandEnvelope envelope);
+    Task<string> ExecuteCommandAsync(SerializableCommandAndMetadata commandAndMetadata);
 
     /// <summary>
     /// Rebuilds state from scratch (for version upgrades or state corruption).
     /// Retrieves all events from AggregateEventHandlerActor and reconstructs
     /// state through the Projector logic.
     /// </summary>
-    /// <returns>Newly rebuilt state serialized as JSON</returns>
-    Task<string> RebuildStateAsync();
+    /// <returns>Newly rebuilt state as a serializable aggregate</returns>
+    Task<SerializableAggregate> RebuildStateAsync();
 }
