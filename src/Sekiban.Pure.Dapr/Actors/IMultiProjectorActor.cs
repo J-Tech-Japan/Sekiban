@@ -7,8 +7,8 @@ namespace Sekiban.Pure.Dapr.Actors;
 
 public interface IMultiProjectorActor : IActor
 {
-    Task<ResultBox<object>> QueryAsync(IQueryCommon query);
-    Task<ResultBox<IListQueryResult>> QueryListAsync(IListQueryCommon query);
+    Task<SerializableQueryResult> QueryAsync(SerializableQuery query);
+    Task<SerializableListQueryResult> QueryListAsync(SerializableListQuery query);
     Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
     Task BuildStateAsync();
     Task RebuildStateAsync();
