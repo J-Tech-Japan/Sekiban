@@ -8,7 +8,7 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 
 public static class QueryFilterExtensions
 {
-    public static void AddSortableUniqueIdIfNull(this QueryFilter queryFilter, string? sinceSortableUniqueId)
+    public static void AddSortableUniqueIdIfExists(this QueryFilter queryFilter, string? sinceSortableUniqueId)
     {
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
@@ -16,7 +16,8 @@ public static class QueryFilterExtensions
         }
         queryFilter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
     }
-    public static void AddSortableUniqueIdIfNull(this QueryFilter queryFilter, EventRetrievalInfo eventRetrievalInfo)
+
+    public static void AddSortableUniqueIdIfExists(this QueryFilter queryFilter, EventRetrievalInfo eventRetrievalInfo)
     {
         switch (eventRetrievalInfo.SortableIdCondition)
         {
@@ -39,7 +40,8 @@ public static class QueryFilterExtensions
                 throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
         }
     }
-    public static void AddSortableUniqueIdIfNull(this ScanFilter scanFilter, ISortableIdCondition sortableIdCondition)
+
+    public static void AddSortableUniqueIdIfExists(this ScanFilter scanFilter, ISortableIdCondition sortableIdCondition)
     {
         switch (sortableIdCondition)
         {
@@ -63,7 +65,7 @@ public static class QueryFilterExtensions
         }
     }
 
-    public static void AddSortableUniqueIdIfNull(
+    public static void AddSortableUniqueIdIfExists(
         this ScanFilter scanFilter,
         OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
     {

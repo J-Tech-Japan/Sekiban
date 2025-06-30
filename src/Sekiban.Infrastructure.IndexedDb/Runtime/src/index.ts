@@ -73,12 +73,12 @@ const filterEvents = async (
 		.filter(
 			(x) =>
 				query.SortableIdStart === null ||
-				query.SortableIdStart <= x.SortableUniqueId,
+				query.SortableIdStart < x.SortableUniqueId,
 		)
 		.filter(
 			(x) =>
 				query.SortableIdEnd === null ||
-				x.SortableUniqueId <= query.SortableIdEnd,
+				x.SortableUniqueId < query.SortableIdEnd,
 		)
 		.toSorted(asc((x) => x.SortableUniqueId));
 
@@ -93,12 +93,13 @@ const filterBlobs = async (
 		| "multi-projection-events-blobs",
 	query: DbBlobQuery,
 ): Promise<DbBlob[]> => {
-	if (query.Name === null) {
-		const items = await idb.getAll(store);
-		return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
-	}
+	const shard =
+		query.Name !== null
+			? await idb.getAllFromIndex(store, "Name", query.Name)
+			: await idb.getAll(store);
 
-	const items = await idb.getAllFromIndex(store, "Name", query.Name);
+	const items = shard.toSorted(asc((x) => x.Id));
+
 	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 };
 
@@ -151,8 +152,9 @@ const operations = (idb: SekibanDb) => {
 			.filter(
 				(x) =>
 					query.SortableIdStart === null ||
-					query.SortableIdStart <= x.SortableUniqueId,
-			);
+					query.SortableIdStart < x.SortableUniqueId,
+			)
+			.toSorted(asc((x) => x.SortableUniqueId));
 
 		return items;
 	};

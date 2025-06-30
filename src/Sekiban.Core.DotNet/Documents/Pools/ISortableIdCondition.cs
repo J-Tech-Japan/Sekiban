@@ -7,6 +7,7 @@ namespace Sekiban.Core.Documents.Pools;
 public interface ISortableIdCondition
 {
     public static ISortableIdCondition None => new SortableIdConditionNone();
+    public bool InsideOfRange(SortableUniqueIdValue toCompare);
     public bool OutsideOfRange(SortableUniqueIdValue toCompare);
     public static ISortableIdCondition Since(SortableUniqueIdValue sinceSortableId) =>
         new SinceSortableIdCondition(sinceSortableId);

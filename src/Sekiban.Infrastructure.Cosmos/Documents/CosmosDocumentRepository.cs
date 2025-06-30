@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos.Linq;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
@@ -137,12 +138,13 @@ public class CosmosDocumentRepository(
                 var query = container
                     .GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
-                query = sinceSortableUniqueId is not null
-                    ? query
-                        .Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
-                        .OrderByDescending(m => m.SortableUniqueId)
-                    : query.OrderBy(m => m.SortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                if (sinceSortableUniqueId is not null)
+                {
+                    query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
+                }
+                query = query.OrderBy(m => m.SortableUniqueId);
+
+                var feedIterator = container.GetItemQueryIterator<CommandDocumentForJsonExport>(query.ToQueryDefinition(), null, options);
                 var commands = new List<string>();
                 while (feedIterator.HasMoreResults)
                 {

@@ -47,17 +47,17 @@ public class DynamoDocumentRepository(
                     rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
+                filter.AddSortableUniqueIdIfExists(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
                 var resultList = await FetchDocumentsAsync(search);
                 var commands = (from document in resultList
-                                let json = document.ToJson()
                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                where sinceSortableUniqueId is null ||
-                                    !new SortableUniqueIdValue(sortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
-                                select json).ToList();
+                                where
+                                    sinceSortableUniqueId is null ||
+                                    new SortableUniqueIdValue(sortableUniqueId).IsLaterThan(sinceSortableUniqueId)
+                                select document.ToJson()).ToList();
                 resultAction(commands);
             });
 
@@ -176,11 +176,8 @@ public class DynamoDocumentRepository(
                 var search = table.Query(config);
 
                 var resultList = await FetchDocumentsAsync(search);
-                var snapshots = (from document in resultList
-                                 let json = document.ToJson()
-                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                 select json).ToList();
-                var snapshotJson = snapshots.FirstOrDefault();
+                var snapshotJson = resultList.FirstOrDefault()?.ToJson();
+
                 if (string.IsNullOrEmpty(snapshotJson)) { return false; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
                 return snapshot is not null;
@@ -211,18 +208,21 @@ public class DynamoDocumentRepository(
                 var search = table.Query(config);
 
                 var resultList = await FetchDocumentsAsync(search);
-                var snapshots = (from document in resultList
-                                 let json = document.ToJson()
-                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                 select json).ToList();
+                var snapshots = resultList
+                    .Select(x => x.ToJson())
+                    .ToList();
+
                 if (snapshots.Count == 0) { return []; }
-                var snapshotDocuments
-                    = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
+                var snapshotDocuments = snapshots
+                    .Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m))
+                    .OfType<SnapshotDocument>()
+                    .ToList();
+
                 if (snapshotDocuments.Count == 0) { return []; }
                 var toReturn = new List<SnapshotDocument>();
+
                 foreach (var snapshotDocument in snapshotDocuments)
                 {
-                    if (snapshotDocument is null) { continue; }
                     var filledSnapshot
                         = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshotDocument);
                     if (filledSnapshot is null) { continue; }
@@ -255,11 +255,7 @@ public class DynamoDocumentRepository(
                 var search = table.Query(config);
 
                 var resultList = await FetchDocumentsAsync(search);
-                var snapshots = (from document in resultList
-                                 let json = document.ToJson()
-                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                 select json).ToList();
-                var snapshotJson = snapshots.FirstOrDefault();
+                var snapshotJson = resultList.FirstOrDefault()?.ToJson();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
                 return snapshot is null
@@ -281,7 +277,7 @@ public class DynamoDocumentRepository(
                     var filter = new QueryFilter();
                     var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
                     filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo);
+                    filter.AddSortableUniqueIdIfExists(eventRetrievalInfo);
                     var config = new QueryOperationConfig
                     {
                         Filter = filter, BackwardSearch = false
@@ -309,7 +305,7 @@ public class DynamoDocumentRepository(
                             ScanOperator.Equal,
                             eventRetrievalInfo.RootPartitionKey.GetValue());
                     }
-                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SortableIdCondition);
+                    filter.AddSortableUniqueIdIfExists(eventRetrievalInfo.SortableIdCondition);
                     var config = new ScanOperationConfig { Filter = filter };
                     var search = table.Scan(config);
 

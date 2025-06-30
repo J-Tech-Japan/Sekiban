@@ -34,9 +34,20 @@ public class PostgresDocumentRepository(
             async dbContext =>
             {
                 var partition = PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType, rootPartitionKey);
-                var query = dbContext.Commands.Where(m => m.AggregateContainerGroup == aggregateContainerGroup);
-                query = query.Where(m => m.PartitionKey == partition);
-                GetCommandsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
+                var query = dbContext.Commands
+                    .Where(m =>
+                        m.AggregateContainerGroup == aggregateContainerGroup &&
+                        m.PartitionKey == partition
+                    );
+
+                if (sinceSortableUniqueId is not null)
+                {
+                    query = query.Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0);
+                }
+
+                query = query.OrderBy(m => m.SortableUniqueId);
+                GetCommandsInBatches(query).ForEach(resultAction);
+
                 await Task.CompletedTask;
             });
     }
@@ -242,11 +253,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
@@ -276,11 +287,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
@@ -296,7 +307,8 @@ public class PostgresDocumentRepository(
                             }
                             break;
                     }
-                } else
+                }
+                else
                 {
                     switch (aggregateContainerGroup)
                     {
@@ -325,11 +337,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
@@ -370,11 +382,11 @@ public class PostgresDocumentRepository(
                                     .Where(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.Start.Value) >=
+                                                betweenSortableIdCondition.Start.Value) >
                                             0 &&
                                             string.Compare(
                                                 m.SortableUniqueId,
-                                                betweenSortableIdCondition.End.Value) <=
+                                                betweenSortableIdCondition.End.Value) <
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
@@ -396,7 +408,7 @@ public class PostgresDocumentRepository(
     }
 
 
-    private SnapshotDocument? GetSnapshotDocument(DbSingleProjectionSnapshotDocument dbSnapshot)
+    private static SnapshotDocument? GetSnapshotDocument(DbSingleProjectionSnapshotDocument dbSnapshot)
     {
         var payload = dbSnapshot.Snapshot is null
             ? null
@@ -420,42 +432,23 @@ public class PostgresDocumentRepository(
         };
     }
 
+    private static IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands) =>
+        commands
+            .Select(x => FromDbCommand(x))
+            .Where(x => x is not null)
+            .Select(x => JsonSerializer.Serialize(x))
+            .Chunk(1000);
 
-    private IEnumerable<IEnumerable<string>> GetCommandsInBatches(
-        IEnumerable<DbCommandDocument> commands,
-        string? sinceSortableUniqueId)
-    {
-        const int batchSize = 1000;
-        List<string> commandBatch = [];
-
-        foreach (var commandItem in commands)
-        {
-            var commandDocument = FromDbCommand(commandItem, sinceSortableUniqueId);
-            if (commandDocument is not null)
-            {
-                commandBatch.Add(JsonSerializer.Serialize(commandDocument));
-            }
-            if (commandBatch.Count >= batchSize)
-            {
-                yield return commandBatch;
-                commandBatch = [];
-            }
-        }
-
-        if (commandBatch.Any())
-        {
-            yield return commandBatch;
-        }
-    }
-    private CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand, string? sinceSortableUniqueId)
+    private static CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand)
     {
         var payload = SekibanJsonHelper.Deserialize(dbCommand.Payload, typeof(JsonElement));
         if (payload is null)
         {
             return null;
         }
-        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ??
-            new List<CallHistory>();
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ?? [];
+
         return new CommandDocumentForJsonExport
         {
             Id = dbCommand.Id,
@@ -475,27 +468,11 @@ public class PostgresDocumentRepository(
     }
 
 
-    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events)
-    {
-        const int batchSize = 1000;
-        List<IEvent> eventBatch = [];
+    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events) =>
+        events
+            .Select(x => FromDbEvent(x)!)
+            .Chunk(1000);
 
-        foreach (var eventItem in events)
-        {
-            eventBatch.Add(FromDbEvent(eventItem)!);
-
-            if (eventBatch.Count >= batchSize)
-            {
-                yield return eventBatch;
-                eventBatch = [];
-            }
-        }
-
-        if (eventBatch.Any())
-        {
-            yield return eventBatch;
-        }
-    }
     private IEvent? FromDbEvent(IDbEvent dbEvent)
     {
         if (string.IsNullOrEmpty(dbEvent.DocumentTypeName))
@@ -511,8 +488,9 @@ public class PostgresDocumentRepository(
         {
             return null;
         }
-        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbEvent.CallHistories) ??
-            new List<CallHistory>();
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbEvent.CallHistories) ?? [];
+
         return Event.GenerateIEvent(
             dbEvent.Id,
             dbEvent.AggregateId,
