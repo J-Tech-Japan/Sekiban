@@ -31,4 +31,26 @@ namespace DaprSample.Domain;
 [JsonSerializable(typeof(User.Commands.UpdateUserEmail))]
 // Aggregate payloads
 [JsonSerializable(typeof(User.User))]
+// WeatherForecast Event documents
+[JsonSerializable(typeof(EventDocument<Aggregates.WeatherForecasts.Events.WeatherForecastInputted>))]
+[JsonSerializable(typeof(EventDocument<Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated>))]
+[JsonSerializable(typeof(EventDocument<Aggregates.WeatherForecasts.Events.WeatherForecastDeleted>))]
+// WeatherForecast Event payloads
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Events.WeatherForecastInputted))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Events.WeatherForecastLocationUpdated))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Events.WeatherForecastDeleted))]
+// WeatherForecast Commands
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Commands.InputWeatherForecastCommand))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Commands.UpdateWeatherForecastLocationCommand))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Commands.DeleteWeatherForecastCommand))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Commands.RemoveWeatherForecastCommand))]
+// WeatherForecast Aggregate payloads
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Payloads.WeatherForecast))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Payloads.DeletedWeatherForecast))]
+// WeatherForecast Query and Response
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Queries.WeatherForecastQuery))]
+[JsonSerializable(typeof(Aggregates.WeatherForecasts.Queries.WeatherForecastResponse))]
+[JsonSerializable(typeof(Sekiban.Pure.Query.ListQueryResult<Aggregates.WeatherForecasts.Queries.WeatherForecastResponse>))]
+// WeatherForecast Value Objects
+[JsonSerializable(typeof(ValueObjects.TemperatureCelsius))]
 public partial class DaprSampleEventsJsonContext : JsonSerializerContext;

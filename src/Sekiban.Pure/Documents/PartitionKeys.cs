@@ -21,6 +21,8 @@ public record PartitionKeys(
         string group = DefaultAggregateGroupName,
         string rootPartitionKey = DefaultRootPartitionKey) =>
         new(GuidExtensions.CreateVersion7(), group, rootPartitionKey);
+    public static PartitionKeys Empty() =>
+        new(Guid.Empty, DefaultAggregateGroupName, DefaultRootPartitionKey);
     public static PartitionKeys Generate<TAggregateProjector>(string rootPartitionKey = DefaultRootPartitionKey)
         where TAggregateProjector : IAggregateProjector =>
         new(GuidExtensions.CreateVersion7(), typeof(TAggregateProjector).Name, rootPartitionKey);

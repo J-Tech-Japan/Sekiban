@@ -144,7 +144,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
-                    var pollingIntervalMs = 100;
+                    var pollingIntervalMs = 50; // Poll every 50ms for faster response
                     
                     var stopwatch = new System.Diagnostics.Stopwatch();
                     stopwatch.Start();
@@ -161,14 +161,19 @@ public class SekibanDaprExecutor : ISekibanExecutor
                     }
                 }
                 
-                var result = await actor.QueryAsync(query);
+                // Convert query to serializable format
+                var serializableQuery = await SerializableQuery.CreateFromAsync(query, _domainTypes.JsonSerializerOptions);
+                var serializableResult = await actor.QueryAsync(serializableQuery);
                 
-                if (!result.IsSuccess)
+                // Convert back to ResultBox<object>
+                var resultBox = await serializableResult.ToResultBoxAsync(_domainTypes);
+                
+                if (!resultBox.IsSuccess)
                 {
-                    return ResultBox<T>.FromException(result.GetException());
+                    return ResultBox<T>.FromException(resultBox.GetException());
                 }
                 
-                return ResultBox<T>.FromValue((T)result.GetValue());
+                return ResultBox<T>.FromValue((T)resultBox.GetValue());
             }
             
             // For other queries, delegate to a service
@@ -215,7 +220,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
-                    var pollingIntervalMs = 100;
+                    var pollingIntervalMs = 50; // Poll every 50ms for faster response
                     
                     var stopwatch = new System.Diagnostics.Stopwatch();
                     stopwatch.Start();
@@ -232,15 +237,20 @@ public class SekibanDaprExecutor : ISekibanExecutor
                     }
                 }
                 
-                var result = await actor.QueryListAsync(query);
+                // Convert query to serializable format
+                var serializableQuery = await SerializableListQuery.CreateFromAsync(query, _domainTypes.JsonSerializerOptions);
+                var serializableResult = await actor.QueryListAsync(serializableQuery);
                 
-                if (!result.IsSuccess)
+                // Convert back to ResultBox<IListQueryResult>
+                var resultBox = await serializableResult.ToResultBoxAsync(_domainTypes);
+                
+                if (!resultBox.IsSuccess)
                 {
-                    return ResultBox<ListQueryResult<TResult>>.FromException(result.GetException());
+                    return ResultBox<ListQueryResult<TResult>>.FromException(resultBox.GetException());
                 }
                 
                 // Convert IListQueryResult to ListQueryResult<TResult>
-                var listResult = result.GetValue();
+                var listResult = resultBox.GetValue();
                 if (listResult is ListQueryResult<TResult> typedResult)
                 {
                     return ResultBox<ListQueryResult<TResult>>.FromValue(typedResult);

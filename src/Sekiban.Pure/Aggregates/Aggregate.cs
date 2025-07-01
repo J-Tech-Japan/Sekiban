@@ -16,7 +16,7 @@ public record Aggregate(
 {
     public static Aggregate Empty => new(
         new EmptyAggregatePayload(),
-        PartitionKeys.Generate(),
+        PartitionKeys.Empty(),
         0,
         string.Empty,
         string.Empty,

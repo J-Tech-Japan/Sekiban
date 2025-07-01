@@ -64,21 +64,43 @@ public record SerializableListQueryResult
         string itemsAssemblyVersion = "0.0.0.0";
         
         // アイテムの型情報を取得（アイテムがある場合）
+        string recordTypeName = result.RecordType;
         if (result.Items.Any())
         {
             var firstItemType = result.Items.First().GetType();
             itemsAssemblyVersion = firstItemType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+            // Use AssemblyQualifiedName for cross-assembly type resolution
+            recordTypeName = firstItemType.AssemblyQualifiedName ?? result.RecordType;
         }
         
         // アイテムリストをシリアライズ
-        var itemsJson = JsonSerializer.SerializeToUtf8Bytes(
-            result.Items.ToList(), 
-            options);
+        byte[] itemsJson;
+        try
+        {
+            itemsJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Items.ToList(), 
+                options);
+        }
+        catch (NotSupportedException)
+        {
+            itemsJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Items.ToList());
+        }
         
-        var queryJson = JsonSerializer.SerializeToUtf8Bytes(
-            result.Query,
-            queryType,
-            options);
+        byte[] queryJson;
+        try
+        {
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Query,
+                queryType,
+                options);
+        }
+        catch (NotSupportedException)
+        {
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Query,
+                queryType);
+        }
         
         var compressedItemsJson = await CompressAsync(itemsJson);
         var compressedQueryJson = await CompressAsync(queryJson);
@@ -88,8 +110,8 @@ public record SerializableListQueryResult
             result.TotalPages,
             result.CurrentPage,
             result.PageSize,
-            result.RecordType,
-            queryType.FullName ?? queryType.Name,
+            recordTypeName,
+            queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
             compressedItemsJson,
             compressedQueryJson,
             itemsAssemblyVersion
@@ -102,7 +124,7 @@ public record SerializableListQueryResult
         IListQueryCommon originalQuery,
         JsonSerializerOptions options)
     {
-        if (resultBox.IsFailure)
+        if (!resultBox.IsSuccess)
         {
             return ResultBox<SerializableListQueryResult>.FromException(resultBox.GetException());
         }
@@ -126,7 +148,9 @@ public record SerializableListQueryResult
             {
                 try
                 {
-                    recordType = domainTypes.GetTypeByFullName(RecordTypeName);
+                    // Use GetPayloadTypeByName from QueryTypes for better type resolution
+                    recordType = domainTypes.QueryTypes.GetPayloadTypeByName(RecordTypeName);
+                    
                     if (recordType == null)
                     {
                         return ResultBox<ListQueryResultGeneral>.FromException(
@@ -144,7 +168,9 @@ public record SerializableListQueryResult
             Type? queryType = null;
             try
             {
-                queryType = domainTypes.QueryTypes.GetTypeByFullName(QueryTypeName);
+                // Use GetPayloadTypeByName from QueryTypes for better type resolution
+                queryType = domainTypes.QueryTypes.GetPayloadTypeByName(QueryTypeName);
+                
                 if (queryType == null)
                 {
                     return ResultBox<ListQueryResultGeneral>.FromException(
@@ -163,10 +189,21 @@ public record SerializableListQueryResult
             {
                 var decompressedJson = await DecompressAsync(CompressedItemsJson);
                 var listType = typeof(List<>).MakeGenericType(recordType);
-                var itemsList = JsonSerializer.Deserialize(
-                    decompressedJson, 
-                    listType, 
-                    domainTypes.JsonSerializerOptions) as IEnumerable<object>;
+                IEnumerable<object>? itemsList;
+                try
+                {
+                    itemsList = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        listType, 
+                        domainTypes.JsonSerializerOptions) as IEnumerable<object>;
+                }
+                catch (NotSupportedException)
+                {
+                    // Fallback to default options
+                    itemsList = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        listType) as IEnumerable<object>;
+                }
                 
                 if (itemsList == null)
                 {
@@ -182,10 +219,20 @@ public record SerializableListQueryResult
             if (CompressedQueryJson.Length > 0)
             {
                 var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
-                query = JsonSerializer.Deserialize(
-                    decompressedQueryJson,
-                    queryType,
-                    domainTypes.JsonSerializerOptions) as IListQueryCommon;
+                try
+                {
+                    query = JsonSerializer.Deserialize(
+                        decompressedQueryJson,
+                        queryType,
+                        domainTypes.JsonSerializerOptions) as IListQueryCommon;
+                }
+                catch (NotSupportedException)
+                {
+                    // Fallback to default options
+                    query = JsonSerializer.Deserialize(
+                        decompressedQueryJson,
+                        queryType) as IListQueryCommon;
+                }
                 
                 if (query == null)
                 {
@@ -222,7 +269,11 @@ public record SerializableListQueryResult
         SekibanDomainTypes domainTypes)
     {
         var listQueryResultBox = await ToListQueryResultAsync(domainTypes);
-        return listQueryResultBox.Conveyor<IListQueryResult>(lqr => ResultBox<IListQueryResult>.FromValue(lqr));
+        if (!listQueryResultBox.IsSuccess)
+        {
+            return ResultBox<IListQueryResult>.FromException(listQueryResultBox.GetException());
+        }
+        return ResultBox<IListQueryResult>.FromValue(listQueryResultBox.GetValue());
     }
 
     // GZip圧縮ヘルパーメソッド

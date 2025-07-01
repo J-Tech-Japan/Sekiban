@@ -73,20 +73,44 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         
         _logger.LogInformation("MultiProjectorActor {ActorId} activated", Id.GetId());
         
-        // Register reminders for periodic tasks
-        // Snapshot reminder for saving state periodically
-        await RegisterReminderAsync(
-            SnapshotReminderName,
-            null,
-            TimeSpan.FromMinutes(1), // Initial delay
-            PersistInterval);
+        try
+        {
+            // Register reminders for periodic tasks
+            // Snapshot reminder for saving state periodically
+            await RegisterReminderAsync(
+                SnapshotReminderName,
+                null,
+                TimeSpan.FromMinutes(1), // Initial delay
+                PersistInterval);
 
-        // Event check reminder for polling new events from PubSub
-        await RegisterReminderAsync(
-            EventCheckReminderName,
-            null,
-            TimeSpan.FromSeconds(30), // Initial delay
-            TimeSpan.FromSeconds(10)); // Check every 10 seconds
+            // Event check reminder for polling new events from PubSub
+            await RegisterReminderAsync(
+                EventCheckReminderName,
+                null,
+                TimeSpan.FromSeconds(5), // Initial delay
+                TimeSpan.FromSeconds(1)); // Check every 1 second
+                
+            _logger.LogInformation("Reminders registered successfully for {ActorId}", Id.GetId());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register reminders for {ActorId}. Falling back to timer-based approach.", Id.GetId());
+            
+            // Fallback to timers if reminders fail
+            await RegisterTimerAsync(
+                "SnapshotTimer",
+                nameof(HandleSnapshotTimerAsync),
+                Array.Empty<byte>(),
+                TimeSpan.FromMinutes(1),
+                PersistInterval);
+
+            await RegisterTimerAsync(
+                "EventCheckTimer",
+                nameof(HandleEventCheckTimerAsync),
+                Array.Empty<byte>(),
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(1));
+        }
             
         _bootstrapping = false;
     }
@@ -142,6 +166,26 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         // In a real Dapr implementation, this could be replaced with
         // actual PubSub subscription handling
         await CatchUpFromStoreAsync();
+    }
+
+    #endregion
+
+    #region Timer Fallback Methods
+
+    /// <summary>
+    /// Timer fallback for snapshot handling when reminders are not available
+    /// </summary>
+    public async Task HandleSnapshotTimerAsync(byte[] state)
+    {
+        await HandleSnapshotReminder();
+    }
+
+    /// <summary>
+    /// Timer fallback for event check handling when reminders are not available
+    /// </summary>
+    public async Task HandleEventCheckTimerAsync(byte[] state)
+    {
+        await HandleEventCheckReminder();
     }
 
     #endregion
@@ -347,53 +391,104 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 
     #region Public API (IMultiProjectorActor)
 
-    public async Task<ResultBox<object>> QueryAsync(IQueryCommon query)
+    public async Task<SerializableQueryResult> QueryAsync(SerializableQuery query)
     {
         try
         {
             await EnsureStateLoadedAsync();
             
+            // Deserialize the query
+            var queryResult = await query.ToQueryAsync(_domainTypes);
+            if (!queryResult.IsSuccess)
+            {
+                var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<object>.FromException(queryResult.GetException()),
+                    null!, // Null for failed deserialization
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
+            }
+            
+            var queryCommon = queryResult.GetValue();
+            
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                query, 
+                queryCommon, 
                 GetProjectorForQuery, 
                 new ServiceCollection().BuildServiceProvider());
             
             if (res == null)
             {
-                return ResultBox<object>.FromException(new ApplicationException("Query not found"));
+                var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<object>.FromException(new ApplicationException("Query not found")),
+                    queryCommon,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
             }
             
-            return res.Remap(v => v.ToGeneral(query));
+            var resultBox = res.Remap(v => v.ToGeneral(queryCommon));
+            var serializableResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                resultBox,
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
+            return serializableResult.GetValue();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing query {QueryType}", query.GetType().Name);
-            return ResultBox<object>.FromException(ex);
+            _logger.LogError(ex, "Error executing query");
+            var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
+                ResultBox<object>.FromException(ex),
+                null!, // Null for error case
+                _domainTypes.JsonSerializerOptions);
+            return errorResult.GetValue();
         }
     }
 
-    public async Task<ResultBox<IListQueryResult>> QueryListAsync(IListQueryCommon query)
+    public async Task<SerializableListQueryResult> QueryListAsync(SerializableListQuery query)
     {
         try
         {
             await EnsureStateLoadedAsync();
             
+            // Deserialize the query
+            var queryResult = await query.ToListQueryAsync(_domainTypes);
+            if (!queryResult.IsSuccess)
+            {
+                var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<IListQueryResult>.FromException(queryResult.GetException()),
+                    null!, // Null for failed deserialization
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
+            }
+            
+            var queryCommon = queryResult.GetValue();
+            
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                query, 
+                queryCommon, 
                 GetProjectorForQuery, 
                 new ServiceCollection().BuildServiceProvider());
             
             if (res == null)
             {
-                return ResultBox<IListQueryResult>.FromException(new ApplicationException("Query not found"));
+                var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                    ResultBox<IListQueryResult>.FromException(new ApplicationException("Query not found")),
+                    queryCommon,
+                    _domainTypes.JsonSerializerOptions);
+                return errorResult.GetValue();
             }
             
-            return res;
+            var serializableResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                res,
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
+            return serializableResult.GetValue();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing list query {QueryType}", query.GetType().Name);
-            return ResultBox<IListQueryResult>.FromException(ex);
+            _logger.LogError(ex, "Error executing list query");
+            var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
+                ResultBox<IListQueryResult>.FromException(ex),
+                null!, // Null for error case
+                _domainTypes.JsonSerializerOptions);
+            return errorResult.GetValue();
         }
     }
 
@@ -461,10 +556,11 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             {
                 _buffer.Add(@event);
                 
-                // Flush buffer if not bootstrapping
+                // Flush buffer immediately for real-time updates
                 if (!_bootstrapping)
                 {
                     FlushBuffer();
+                    _pendingSave = true; // Mark state as pending save
                 }
             }
         }

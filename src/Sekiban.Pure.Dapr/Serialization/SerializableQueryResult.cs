@@ -50,15 +50,36 @@ public record SerializableQueryResult
         var queryType = result.Query.GetType();
         var resultAssemblyVersion = resultType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
         
-        var resultJson = JsonSerializer.SerializeToUtf8Bytes(
-            result.Value, 
-            resultType, 
-            options);
+        // Use default options if the provided options don't support the type
+        byte[] resultJson;
+        try
+        {
+            resultJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Value, 
+                resultType, 
+                options);
+        }
+        catch (NotSupportedException)
+        {
+            resultJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Value, 
+                resultType);
+        }
         
-        var queryJson = JsonSerializer.SerializeToUtf8Bytes(
-            result.Query,
-            queryType,
-            options);
+        byte[] queryJson;
+        try
+        {
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Query,
+                queryType,
+                options);
+        }
+        catch (NotSupportedException)
+        {
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(
+                result.Query,
+                queryType);
+        }
         
         var compressedResultJson = await CompressAsync(resultJson);
         var compressedQueryJson = await CompressAsync(queryJson);
@@ -78,7 +99,7 @@ public record SerializableQueryResult
         IQueryCommon originalQuery,
         JsonSerializerOptions options)
     {
-        if (resultBox.IsFailure)
+        if (!resultBox.IsSuccess)
         {
             return ResultBox<SerializableQueryResult>.FromException(resultBox.GetException());
         }
@@ -101,7 +122,18 @@ public record SerializableQueryResult
             Type? resultType = null;
             try
             {
-                resultType = domainTypes.GetTypeByFullName(ResultTypeName);
+                // Try to get type directly from Type.GetType
+                resultType = Type.GetType(ResultTypeName);
+                
+                // If that fails, search in all loaded assemblies
+                if (resultType == null)
+                {
+                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        resultType = assembly.GetType(ResultTypeName);
+                        if (resultType != null) break;
+                    }
+                }
                 if (resultType == null)
                 {
                     return ResultBox<QueryResultGeneral>.FromException(
@@ -118,7 +150,18 @@ public record SerializableQueryResult
             Type? queryType = null;
             try
             {
-                queryType = domainTypes.QueryTypes.GetTypeByFullName(QueryTypeName);
+                // Try to get type directly from Type.GetType
+                queryType = Type.GetType(QueryTypeName);
+                
+                // If that fails, search in all loaded assemblies
+                if (queryType == null)
+                {
+                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        queryType = assembly.GetType(QueryTypeName);
+                        if (queryType != null) break;
+                    }
+                }
                 if (queryType == null)
                 {
                     return ResultBox<QueryResultGeneral>.FromException(
@@ -136,10 +179,20 @@ public record SerializableQueryResult
             if (CompressedResultJson.Length > 0)
             {
                 var decompressedJson = await DecompressAsync(CompressedResultJson);
-                result = JsonSerializer.Deserialize(
-                    decompressedJson, 
-                    resultType, 
-                    domainTypes.JsonSerializerOptions);
+                try
+                {
+                    result = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        resultType, 
+                        domainTypes.JsonSerializerOptions);
+                }
+                catch (NotSupportedException)
+                {
+                    // Fallback to default options
+                    result = JsonSerializer.Deserialize(
+                        decompressedJson, 
+                        resultType);
+                }
                 
                 if (result == null)
                 {
@@ -158,10 +211,20 @@ public record SerializableQueryResult
             if (CompressedQueryJson.Length > 0)
             {
                 var decompressedQueryJson = await DecompressAsync(CompressedQueryJson);
-                query = JsonSerializer.Deserialize(
-                    decompressedQueryJson,
-                    queryType,
-                    domainTypes.JsonSerializerOptions) as IQueryCommon;
+                try
+                {
+                    query = JsonSerializer.Deserialize(
+                        decompressedQueryJson,
+                        queryType,
+                        domainTypes.JsonSerializerOptions) as IQueryCommon;
+                }
+                catch (NotSupportedException)
+                {
+                    // Fallback to default options
+                    query = JsonSerializer.Deserialize(
+                        decompressedQueryJson,
+                        queryType) as IQueryCommon;
+                }
                 
                 if (query == null)
                 {

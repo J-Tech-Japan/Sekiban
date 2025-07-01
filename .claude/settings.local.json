@@ -5,7 +5,9 @@
       "Bash(git pull:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet build:*)"
     ],
     "deny": [
       "Bash(curl:*)"

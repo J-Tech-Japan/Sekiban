@@ -8,3 +8,9 @@ spec:
   metadata:
   - name: actorStateStore
     value: "true"
+  - name: actorReminders
+    value: "true"
+  - name: ttlInSeconds
+    value: "0"
+scopes:
+- sekiban-api

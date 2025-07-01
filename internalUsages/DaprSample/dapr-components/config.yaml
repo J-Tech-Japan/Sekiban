@@ -10,6 +10,8 @@ spec:
   features:
     - name: actorReentrancy
       enabled: true
+    - name: scheduleReminders
+      enabled: true
   httpPipeline:
     handlers:
       - name: ratelimit
@@ -23,3 +25,8 @@ spec:
     actorScanInterval: 30s
     drainOngoingCallTimeout: 60s
     drainRebalancedActors: true
+    reminders:
+      storagePartitions: 1  # インメモリでは1つで十分
+      storageType: "memory"
+    reentrancy:
+      enabled: true

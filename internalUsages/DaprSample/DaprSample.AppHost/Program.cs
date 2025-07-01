@@ -11,8 +11,12 @@ var postgres = builder
 // Add Dapr
 builder.AddDapr();
 
-// Add API project with enhanced Dapr configuration
-builder.AddProject<Projects.DaprSample_Api>("api")
+// Add API project with enhanced Dapr configuration + Scheduler support
+// Get absolute path to dapr-components directory
+var daprComponentsPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components"));
+var configPath = Path.Combine(daprComponentsPath, "config.yaml");
+
+var api = builder.AddProject<Projects.DaprSample_Api>("dapr-sample-api")
     .WithExternalHttpEndpoints()
     .WithReference(postgres)
     .WaitFor(postgres)
@@ -23,9 +27,16 @@ builder.AddProject<Projects.DaprSample_Api>("api")
         DaprHttpPort = 3501,
         DaprGrpcPort = 50002,
         PlacementHostAddress = "localhost:50005",
-        SchedulerHostAddress = "",
-        ResourcesPaths = [Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components")]
+        SchedulerHostAddress = "localhost:50006", // Enable scheduler for Actor Reminders
+        Config = configPath, // Use absolute path to config file
+        ResourcesPaths = [daprComponentsPath] // Use absolute path to components directory
     });
+
+// Add Blazor Web project
+builder.AddProject<Projects.DaprSample_Web>("dapr-sample-web")
+    .WithExternalHttpEndpoints()
+    .WithReference(api)
+    .WaitFor(api);
 
 var app = builder.Build();
 

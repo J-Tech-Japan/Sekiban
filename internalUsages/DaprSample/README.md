@@ -117,16 +117,23 @@ spec:
 | `./start-dapr-redis.sh` | Direct Redis start | Redis server |
 | `./start-dapr-with-placement.sh` | Legacy/debugging | None |
 
-### Option 1: Using .NET Aspire (Recommended)
+### Option 1: Using .NET Aspire (Recommended) 🎯
 
 ```bash
 dotnet run --project DaprSample.AppHost
 ```
 
 This will start:
-- Redis container for state store and pub/sub
-- Dapr sidecar for the API
-- DaprSample.Api with Swagger UI
+- **PostgreSQL container** for state store (with pgAdmin)
+- **Dapr sidecar** with Scheduler support enabled
+- **DaprSample.Api** with Swagger UI
+- **Actor Reminders** functionality via Dapr Scheduler
+
+**✨ Enhanced Features with Aspire:**
+- ✅ **Automatic Scheduler Configuration**: `SchedulerHostAddress = "localhost:50006"`
+- ✅ **Config File Integration**: Uses `config.yaml` with reminder features
+- ✅ **Health Monitoring**: Aspire dashboard shows all services
+- ✅ **PostgreSQL Integration**: Persistent storage with web admin interface
 
 ### Option 2: Direct Dapr Run
 
@@ -276,3 +283,18 @@ This sample implements the envelope-based design to solve Dapr's interface seria
 2. **EventEnvelope** - Wraps events with Protobuf payloads
 3. **EnvelopeAggregateActor** - Uses concrete envelope types for proper JSON serialization
 4. **Protobuf serialization** - Ensures efficient binary encoding and type safety
+
+## ✨ New: Scheduler Support
+
+This DaprSample now supports **Dapr Scheduler** for Actor Reminders! 🎯
+
+### Features
+- ✅ **Actor Reminders**: Periodic tasks and state snapshots
+- ✅ **In-Memory State**: No external dependencies for development
+- ✅ **Scheduler Integration**: Full Dapr 1.15+ scheduler support
+- ✅ **Error Handling**: Graceful fallback to timers if scheduler unavailable
+
+### Scheduler-Enabled Scripts
+- `./start-dapr-inmemory.sh` - In-memory with scheduler (recommended)
+- `./start-with-scheduler.sh` - Full scheduler configuration
+- `./start-dapr.sh` - Interactive launcher with scheduler options

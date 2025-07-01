@@ -2,8 +2,12 @@ using DaprSample.Domain;
 using DaprSample.Domain.Generated;
 using DaprSample.Domain.User.Commands;
 using DaprSample.Domain.User.Queries;
+using DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
+using DaprSample.Domain.Aggregates.WeatherForecasts.Queries;
+using DaprSample.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Command;
+using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Dapr.Extensions;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
@@ -321,9 +325,106 @@ app.MapGet("/api/users/statistics", async ([FromQuery] string? waitForSortableUn
 .WithTags("Users")
 .WithOpenApi();
 
+// Weather Forecast endpoints
+app.MapPost("/api/weatherforecast/input", async ([FromBody] InputWeatherForecastCommand command, [FromServices] ISekibanExecutor executor) =>
+{
+    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    return Results.Ok(result);
+})
+.WithName("InputWeatherForecast")
+.WithSummary("Input weather forecast")
+.WithDescription("Creates a new weather forecast")
+.WithTags("WeatherForecast");
+
+app.MapPost("/api/weatherforecast/{weatherForecastId}/update-location", async (Guid weatherForecastId, [FromBody] UpdateLocationRequest request, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
+{
+    logger.LogInformation("=== UpdateWeatherForecastLocation API called with WeatherForecastId: {WeatherForecastId}, Location: {Location} ===", weatherForecastId, request.Location);
+    var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, request.Location);
+    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    logger.LogInformation("UpdateWeatherForecastLocation result: {Result}", result);
+    return Results.Ok(result);
+})
+.WithName("UpdateWeatherForecastLocation")
+.WithSummary("Update weather forecast location")
+.WithDescription("Updates the location of an existing weather forecast")
+.WithTags("WeatherForecast");
+
+app.MapPost("/api/weatherforecast/{weatherForecastId}/delete", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor) =>
+{
+    var command = new DeleteWeatherForecastCommand(weatherForecastId);
+    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    return Results.Ok(result);
+})
+.WithName("DeleteWeatherForecast")
+.WithSummary("Delete weather forecast")
+.WithDescription("Marks a weather forecast as deleted")
+.WithTags("WeatherForecast");
+
+app.MapPost("/api/weatherforecast/{weatherForecastId}/remove", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
+{
+    logger.LogInformation("=== RemoveWeatherForecast API called with WeatherForecastId: {WeatherForecastId} ===", weatherForecastId);
+    var command = new RemoveWeatherForecastCommand(weatherForecastId);
+    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    logger.LogInformation("RemoveWeatherForecast result: {Result}", result);
+    return Results.Ok(result);
+})
+.WithName("RemoveWeatherForecast")
+.WithSummary("Remove weather forecast")
+.WithDescription("Permanently removes a deleted weather forecast")
+.WithTags("WeatherForecast");
+
+app.MapGet("/api/weatherforecast", async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+{
+    var query = new WeatherForecastQuery { WaitForSortableUniqueId = waitForSortableUniqueId };
+    var result = await executor.QueryAsync(query);
+    return result.UnwrapBox();
+})
+.WithName("GetWeatherForecasts")
+.WithSummary("Get all weather forecasts")
+.WithDescription("Retrieves all weather forecasts")
+.WithTags("WeatherForecast");
+
+// Helper endpoint to generate weather data
+app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecutor executor) =>
+{
+    var summaries = new[] { "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching" };
+    var random = new Random();
+    var commands = new List<InputWeatherForecastCommand>();
+
+    foreach (var city in new[] { "Seattle", "Tokyo", "Singapore", "Sydney", "London" })
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var date = DateOnly.FromDateTime(DateTime.Now.AddDays(i));
+            var temperatureC = new TemperatureCelsius(random.Next(-20, 55));
+            var command = new InputWeatherForecastCommand(
+                city,
+                date,
+                temperatureC,
+                summaries[random.Next(summaries.Length)]
+            );
+            commands.Add(command);
+        }
+    }
+
+    var results = new List<object>();
+    foreach (var command in commands)
+    {
+        var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+        results.Add(result);
+    }
+
+    return Results.Ok(new { message = "Sample weather data generated", count = results.Count });
+})
+.WithName("GenerateWeatherData")
+.WithSummary("Generate sample weather data")
+.WithDescription("Generates sample weather forecast data for testing")
+.WithTags("WeatherForecast");
+
 // Map default endpoints for Aspire integration
 app.MapDefaultEndpoints();
 
 app.Run();
 
 public record UpdateUserNameRequest(string NewName);
+public record UpdateLocationRequest(string Location);
