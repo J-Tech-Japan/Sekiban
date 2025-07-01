@@ -17,9 +17,14 @@ public class WeatherApiClient
         _httpClient = httpClient;
     }
 
-    public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync()
+    public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync(string? waitForSortableUniqueId = null)
     {
-        var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>("api/weatherforecast");
+        var url = "api/weatherforecast";
+        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
+        {
+            url += $"?waitForSortableUniqueId={waitForSortableUniqueId}";
+        }
+        var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>(url);
         return response?.Items?.ToList();
     }
 

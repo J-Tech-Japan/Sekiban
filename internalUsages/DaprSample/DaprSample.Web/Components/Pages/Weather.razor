@@ -153,9 +153,9 @@ else
         await LoadForecasts();
     }
 
-    private async Task LoadForecasts()
+    private async Task LoadForecasts(string? waitForSortableUniqueId = null)
     {
-        forecasts = await WeatherApi.GetWeatherForecastsAsync();
+        forecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId);
     }
 
     private async Task OpenAddForecastModal()
@@ -194,8 +194,12 @@ else
 
             if (result != null)
             {
-                await LoadForecasts();
+                // Load forecasts with the new event's sortable unique id to ensure it's included
+                await LoadForecasts(result.LastSortableUniqueId);
                 await CloseModal();
+                
+                // Reset form
+                forecastModel = new ForecastModel { Date = DateTime.Now };
             }
             else
             {
@@ -218,7 +222,7 @@ else
 
             if (result != null)
             {
-                await LoadForecasts();
+                await LoadForecasts(result.LastSortableUniqueId);
                 await CloseModal();
             }
             else
@@ -239,7 +243,7 @@ else
             var result = await WeatherApi.RemoveWeatherForecastAsync(forecastId);
             if (result != null)
             {
-                await LoadForecasts();
+                await LoadForecasts(result.LastSortableUniqueId);
             }
         }
         catch (Exception ex)
@@ -252,8 +256,17 @@ else
     {
         try
         {
-            await WeatherApi.GenerateSampleDataAsync();
-            await LoadForecasts();
+            var results = await WeatherApi.GenerateSampleDataAsync();
+            if (results != null && results.Count > 0)
+            {
+                // Use the last event's sortable unique ID to ensure all generated data is loaded
+                var lastResult = results.Last();
+                await LoadForecasts(lastResult.LastSortableUniqueId);
+            }
+            else
+            {
+                await LoadForecasts();
+            }
         }
         catch (Exception ex)
         {
