@@ -155,7 +155,17 @@ else
 
     private async Task LoadForecasts(string? waitForSortableUniqueId = null)
     {
+        Console.WriteLine($"Loading forecasts with waitForSortableUniqueId: {waitForSortableUniqueId}");
         forecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId);
+        Console.WriteLine($"Loaded {forecasts?.Count ?? 0} forecasts");
+        
+        if (forecasts != null)
+        {
+            foreach (var forecast in forecasts)
+            {
+                Console.WriteLine($"Forecast: {forecast.WeatherForecastId} - {forecast.Location} - {forecast.Date}");
+            }
+        }
     }
 
     private async Task OpenAddForecastModal()
@@ -218,23 +228,32 @@ else
     {
         try
         {
+            Console.WriteLine($"Updating location for WeatherForecastId: {editLocationModel.WeatherForecastId}, New Location: {editLocationModel.Location}");
+            
             var result = await WeatherApi.UpdateLocationAsync(
                 editLocationModel.WeatherForecastId,
                 editLocationModel.Location);
 
             if (result != null)
             {
-                await LoadForecasts(result.LastSortableUniqueId);
+                Console.WriteLine($"Update location successful. LastSortableUniqueId: {result.LastSortableUniqueId}");
+                
+                // Close modal first for better UX
                 await CloseModal();
+                
+                // Then reload with the new event's sortable unique id
+                await LoadForecasts(result.LastSortableUniqueId);
             }
             else
             {
                 editLocationModel.Error = "Failed to update location";
+                Console.WriteLine("Update location failed - result is null");
             }
         }
         catch (Exception ex)
         {
             editLocationModel.Error = ex.Message;
+            Console.WriteLine($"Error updating location: {ex.Message}");
         }
     }
 
@@ -242,15 +261,22 @@ else
     {
         try
         {
+            Console.WriteLine($"Removing WeatherForecastId: {forecastId}");
+            
             var result = await WeatherApi.RemoveWeatherForecastAsync(forecastId);
             if (result != null)
             {
+                Console.WriteLine($"Remove successful. LastSortableUniqueId: {result.LastSortableUniqueId}");
                 await LoadForecasts(result.LastSortableUniqueId);
+            }
+            else
+            {
+                Console.WriteLine("Remove failed - result is null");
             }
         }
         catch (Exception ex)
         {
-            // Log error
+            Console.WriteLine($"Error removing weather forecast: {ex.Message}");
         }
     }
 

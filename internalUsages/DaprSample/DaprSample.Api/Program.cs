@@ -336,10 +336,12 @@ app.MapPost("/api/weatherforecast/input", async ([FromBody] InputWeatherForecast
 .WithDescription("Creates a new weather forecast")
 .WithTags("WeatherForecast");
 
-app.MapPost("/api/weatherforecast/{aggregateId}/update-location", async (Guid aggregateId, [FromBody] UpdateLocationRequest request, [FromServices] ISekibanExecutor executor) =>
+app.MapPost("/api/weatherforecast/{weatherForecastId}/update-location", async (Guid weatherForecastId, [FromBody] UpdateLocationRequest request, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
 {
-    var command = new UpdateWeatherForecastLocationCommand(aggregateId, request.Location);
+    logger.LogInformation("=== UpdateWeatherForecastLocation API called with WeatherForecastId: {WeatherForecastId}, Location: {Location} ===", weatherForecastId, request.Location);
+    var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, request.Location);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    logger.LogInformation("UpdateWeatherForecastLocation result: {Result}", result);
     return Results.Ok(result);
 })
 .WithName("UpdateWeatherForecastLocation")
@@ -347,9 +349,9 @@ app.MapPost("/api/weatherforecast/{aggregateId}/update-location", async (Guid ag
 .WithDescription("Updates the location of an existing weather forecast")
 .WithTags("WeatherForecast");
 
-app.MapPost("/api/weatherforecast/{aggregateId}/delete", async (Guid aggregateId, [FromServices] ISekibanExecutor executor) =>
+app.MapPost("/api/weatherforecast/{weatherForecastId}/delete", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor) =>
 {
-    var command = new DeleteWeatherForecastCommand(aggregateId);
+    var command = new DeleteWeatherForecastCommand(weatherForecastId);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
     return Results.Ok(result);
 })
@@ -358,10 +360,12 @@ app.MapPost("/api/weatherforecast/{aggregateId}/delete", async (Guid aggregateId
 .WithDescription("Marks a weather forecast as deleted")
 .WithTags("WeatherForecast");
 
-app.MapPost("/api/weatherforecast/{aggregateId}/remove", async (Guid aggregateId, [FromServices] ISekibanExecutor executor) =>
+app.MapPost("/api/weatherforecast/{weatherForecastId}/remove", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
 {
-    var command = new RemoveWeatherForecastCommand(aggregateId);
+    logger.LogInformation("=== RemoveWeatherForecast API called with WeatherForecastId: {WeatherForecastId} ===", weatherForecastId);
+    var command = new RemoveWeatherForecastCommand(weatherForecastId);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
+    logger.LogInformation("RemoveWeatherForecast result: {Result}", result);
     return Results.Ok(result);
 })
 .WithName("RemoveWeatherForecast")
