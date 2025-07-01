@@ -59,7 +59,7 @@ public record SerializableQuery
         var compressedQueryJson = await CompressAsync(queryJson);
 
         return new SerializableQuery(
-            queryType.FullName ?? queryType.Name,
+            queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
             compressedQueryJson,
             queryAssemblyVersion
         );
@@ -76,10 +76,11 @@ public record SerializableQuery
             try
             {
                 // Try to get type directly from Type.GetType
+                // This will work with AssemblyQualifiedName
                 queryType = Type.GetType(QueryTypeName);
                 
-                // If that fails, search in all loaded assemblies
-                if (queryType == null)
+                // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
+                if (queryType == null && !QueryTypeName.Contains(","))
                 {
                     foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                     {

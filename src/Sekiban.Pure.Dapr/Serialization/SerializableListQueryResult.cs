@@ -64,10 +64,13 @@ public record SerializableListQueryResult
         string itemsAssemblyVersion = "0.0.0.0";
         
         // アイテムの型情報を取得（アイテムがある場合）
+        string recordTypeName = result.RecordType;
         if (result.Items.Any())
         {
             var firstItemType = result.Items.First().GetType();
             itemsAssemblyVersion = firstItemType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+            // Use AssemblyQualifiedName for cross-assembly type resolution
+            recordTypeName = firstItemType.AssemblyQualifiedName ?? result.RecordType;
         }
         
         // アイテムリストをシリアライズ
@@ -107,8 +110,8 @@ public record SerializableListQueryResult
             result.TotalPages,
             result.CurrentPage,
             result.PageSize,
-            result.RecordType,
-            queryType.FullName ?? queryType.Name,
+            recordTypeName,
+            queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
             compressedItemsJson,
             compressedQueryJson,
             itemsAssemblyVersion
@@ -146,10 +149,11 @@ public record SerializableListQueryResult
                 try
                 {
                     // Try to get type directly from Type.GetType
+                    // This will work with AssemblyQualifiedName
                     recordType = Type.GetType(RecordTypeName);
                     
-                    // If that fails, search in all loaded assemblies
-                    if (recordType == null)
+                    // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
+                    if (recordType == null && !RecordTypeName.Contains(","))
                     {
                         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                         {
@@ -175,10 +179,11 @@ public record SerializableListQueryResult
             try
             {
                 // Try to get type directly from Type.GetType
+                // This will work with AssemblyQualifiedName
                 queryType = Type.GetType(QueryTypeName);
                 
-                // If that fails, search in all loaded assemblies
-                if (queryType == null)
+                // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
+                if (queryType == null && !QueryTypeName.Contains(","))
                 {
                     foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                     {
