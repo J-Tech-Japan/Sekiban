@@ -4,9 +4,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Dapr.Parts;
 using ResultBoxes;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Sekiban.Pure;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
@@ -21,11 +19,12 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
     private readonly SekibanDomainTypes _sekibanDomainTypes;
     private readonly ILogger<AggregateEventHandlerActor> _logger;
     
-    // State key for persisting the last event information
     private const string StateKey = "aggregateEventHandler";
-    // State key for persisting serializable event documents (for in-memory storage)
     private const string EventDocumentsStateKey = "aggregateEventDocuments";
     
+    /// <summary>
+    /// Initializes a new instance of the AggregateEventHandlerActor class.
+    /// </summary>
     public AggregateEventHandlerActor(
         ActorHost host,
         IEventWriter eventWriter,
@@ -39,133 +38,34 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    // Legacy method - kept for compatibility
-    public async Task<IReadOnlyList<IEvent>> AppendEventsAsync(
-        string expectedLastSortableUniqueId,
-        IReadOnlyList<IEvent> newEvents)
-    {
-        if (newEvents == null || newEvents.Count == 0)
-        {
-            return Array.Empty<IEvent>();
-        }
-
-        // Get current state
-        var persistedState = await StateManager.TryGetStateAsync<AggregateEventHandlerState>(StateKey);
-        var currentState = persistedState.HasValue 
-            ? persistedState.Value 
-            : new AggregateEventHandlerState { LastSortableUniqueId = string.Empty };
-
-        // Optimistic concurrency check
-        if (!string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) && 
-            currentState.LastSortableUniqueId != expectedLastSortableUniqueId)
-        {
-            throw new InvalidOperationException(
-                $"Expected last event ID '{expectedLastSortableUniqueId}' does not match actual '{currentState.LastSortableUniqueId}'");
-        }
-
-        // Process events with timestamps
-        var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(_sekibanDomainTypes.EventTypes.GetEventTypes());
-        
-        // Validate event ordering
-        if (!string.IsNullOrWhiteSpace(currentState.LastSortableUniqueId) && 
-            toStoreEvents.Any() &&
-            string.Compare(
-                currentState.LastSortableUniqueId,
-                toStoreEvents.First().SortableUniqueId,
-                StringComparison.Ordinal) >= 0)
-        {
-            throw new InvalidOperationException(
-                "New events must have sortable unique IDs later than the current last event");
-        }
-
-        // Save events to persistent storage
-        if (toStoreEvents.Count > 0)
-        {
-            // Note: We store EventEnvelopes in the new AppendEventsAsync method
-            // Here we just try to save to external storage if available
-            try
-            {
-                await _eventWriter.SaveEvents(toStoreEvents);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to save events to external storage, using in-memory only");
-            }
-            
-            // Update state with last event information
-            var lastEvent = toStoreEvents.Last();
-            var newState = new AggregateEventHandlerState
-            {
-                LastSortableUniqueId = lastEvent.SortableUniqueId,
-                LastEventDate = new SortableUniqueIdValue(lastEvent.SortableUniqueId).GetTicks()
-            };
-            
-            await StateManager.SetStateAsync(StateKey, newState);
-        }
-
-        return toStoreEvents;
-    }
-
-    // Legacy method - kept for compatibility
-    public async Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
-    {
-        // Convert from serializable documents to maintain compatibility
-        var documents = await ((IAggregateEventHandlerActor)this).GetDeltaEventsAsync(fromSortableUniqueId, limit);
-        
-        var events = new List<IEvent>();
-        foreach (var document in documents)
-        {
-            try
-            {
-                var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
-                if (eventResult.HasValue)
-                {
-                    events.Add(eventResult.Value);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to convert document to event");
-            }
-        }
-        
-        return events;
-    }
-
-    // Legacy method - kept for compatibility
-    public async Task<IReadOnlyList<IEvent>> GetAllEventsAsync()
-    {
-        // Delegate to GetDeltaEventsAsync with no limit
-        return await GetDeltaEventsAsync(string.Empty, -1);
-    }
-
-    public async Task<string> GetLastSortableUniqueIdAsync()
-    {
-        var state = await StateManager.TryGetStateAsync<AggregateEventHandlerState>(StateKey);
-        return state.HasValue ? state.Value.LastSortableUniqueId : string.Empty;
-    }
-
-    public Task RegisterProjectorAsync(string projectorKey)
-    {
-        // No-op for now - could be extended to track projector registrations
-        return Task.CompletedTask;
-    }
-    
-    // New SerializableEventDocument-based AppendEventsAsync
+    /// <summary>
+    /// Appends new events to the aggregate stream with optimistic concurrency control.
+    /// </summary>
     public async Task<EventHandlingResponse> AppendEventsAsync(
         string expectedLastSortableUniqueId,
         List<SerializableEventDocument> newEventDocuments)
     {
         try
         {
-            // Convert serializable event documents to events
+            var persistedState = await StateManager.TryGetStateAsync<AggregateEventHandlerState>(StateKey);
+            var currentState = persistedState.HasValue 
+                ? persistedState.Value 
+                : new AggregateEventHandlerState { LastSortableUniqueId = string.Empty };
+
+            if (!string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) && 
+                currentState.LastSortableUniqueId != expectedLastSortableUniqueId)
+            {
+                throw new InvalidOperationException(
+                    $"Expected last event ID '{expectedLastSortableUniqueId}' does not match actual '{currentState.LastSortableUniqueId}'");
+            }
+
             var events = new List<IEvent>();
             foreach (var eventDoc in newEventDocuments)
             {
                 try
                 {
                     var eventResult = await eventDoc.ToEventAsync(_sekibanDomainTypes);
-                    if (eventResult.HasValue)
+                    if (eventResult.HasValue && eventResult.Value != null)
                     {
                         events.Add(eventResult.Value);
                     }
@@ -179,15 +79,34 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
                     _logger.LogError(ex, "Failed to deserialize event from document");
                 }
             }
+
+            var toStoreEvents = events.ToEventsAndReplaceTime(_sekibanDomainTypes.EventTypes.GetEventTypes());
             
-            // Store serializable event documents directly in actor state for in-memory storage
             var existingEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
             var eventDocsList = existingEventDocs.HasValue ? existingEventDocs.Value : new List<SerializableEventDocument>();
             eventDocsList.AddRange(newEventDocuments);
             await StateManager.SetStateAsync(EventDocumentsStateKey, eventDocsList);
-            
-            // Use legacy method to append events
-            var appendedEvents = await AppendEventsAsync(expectedLastSortableUniqueId, events);
+
+            if (toStoreEvents.Count > 0)
+            {
+                try
+                {
+                    await _eventWriter.SaveEvents(toStoreEvents);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to save events to external storage, using in-memory only");
+                }
+                
+                var lastEvent = toStoreEvents.Last();
+                var newState = new AggregateEventHandlerState
+                {
+                    LastSortableUniqueId = lastEvent.SortableUniqueId,
+                    LastEventDate = new SortableUniqueIdValue(lastEvent.SortableUniqueId).GetTicks()
+                };
+                
+                await StateManager.SetStateAsync(StateKey, newState);
+            }
             
             var lastEventId = newEventDocuments.Any() ? newEventDocuments.Last().SortableUniqueId : expectedLastSortableUniqueId;
             return EventHandlingResponse.Success(lastEventId);
@@ -199,12 +118,13 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         }
     }
     
-    // New SerializableEventDocument-based GetDeltaEventsAsync
-    async Task<List<SerializableEventDocument>> IAggregateEventHandlerActor.GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
+    /// <summary>
+    /// Gets delta events from a specific point in the stream.
+    /// </summary>
+    public async Task<List<SerializableEventDocument>> GetDeltaEventsAsync(string fromSortableUniqueId, int limit)
     {
         try
         {
-            // First try to get event documents from actor state (in-memory)
             var storedEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
             if (storedEventDocs.HasValue && storedEventDocs.Value.Any())
             {
@@ -230,9 +150,40 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
                     : deltaEventDocs.ToList();
             }
             
-            // Fall back to converting from legacy events
-            var events = await GetDeltaEventsAsync(fromSortableUniqueId, limit);
-            return await ConvertEventsToSerializableDocuments(events);
+            try
+            {
+                var eventRetrievalInfo = GetEventRetrievalInfo();
+                var eventsResult = await _eventReader.GetEvents(eventRetrievalInfo);
+                
+                if (!eventsResult.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to retrieve events from external storage: {Error}", eventsResult.GetException().Message);
+                    return new List<SerializableEventDocument>();
+                }
+
+                var events = eventsResult.GetValue();
+                
+                var filteredEvents = events.AsEnumerable();
+                
+                if (!string.IsNullOrWhiteSpace(fromSortableUniqueId))
+                {
+                    filteredEvents = filteredEvents
+                        .SkipWhile(e => e.SortableUniqueId != fromSortableUniqueId)
+                        .Skip(1);
+                }
+                
+                if (limit > 0)
+                {
+                    filteredEvents = filteredEvents.Take(limit);
+                }
+                
+                return await ConvertEventsToSerializableDocuments(filteredEvents.ToList());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to retrieve events from external storage, returning empty list");
+                return new List<SerializableEventDocument>();
+            }
         }
         catch (Exception ex)
         {
@@ -241,21 +192,20 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         }
     }
     
-    // New SerializableEventDocument-based GetAllEventsAsync
-    async Task<List<SerializableEventDocument>> IAggregateEventHandlerActor.GetAllEventsAsync()
+    /// <summary>
+    /// Gets all events for the aggregate stream.
+    /// </summary>
+    public async Task<List<SerializableEventDocument>> GetAllEventsAsync()
     {
         try
         {
-            // First try to get event documents from actor state (in-memory)
             var storedEventDocs = await StateManager.TryGetStateAsync<List<SerializableEventDocument>>(EventDocumentsStateKey);
             if (storedEventDocs.HasValue && storedEventDocs.Value.Any())
             {
                 return storedEventDocs.Value;
             }
             
-            // Fall back to converting from legacy events
-            var events = await GetAllEventsAsync();
-            return await ConvertEventsToSerializableDocuments(events);
+            return await GetDeltaEventsAsync(string.Empty, -1);
         }
         catch (Exception ex)
         {
@@ -263,24 +213,30 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
             return new List<SerializableEventDocument>();
         }
     }
+
+    /// <summary>
+    /// Gets the last sortable unique ID in the stream.
+    /// </summary>
+    public async Task<string> GetLastSortableUniqueIdAsync()
+    {
+        var state = await StateManager.TryGetStateAsync<AggregateEventHandlerState>(StateKey);
+        return state.HasValue ? state.Value.LastSortableUniqueId : string.Empty;
+    }
+
+    /// <summary>
+    /// Registers a projector with this event handler (optional).
+    /// </summary>
+    public Task RegisterProjectorAsync(string projectorKey)
+    {
+        return Task.CompletedTask;
+    }
     
     private async Task<List<SerializableEventDocument>> ConvertEventsToSerializableDocuments(IReadOnlyList<IEvent> events)
     {
-        // Extract partition keys from actor ID
-        var actorId = Id.GetId();
-        var partitionKeysString = actorId.Contains(':') 
-            ? actorId.Substring(actorId.IndexOf(':') + 1) 
-            : actorId;
-        
-        var partitionKeys = PartitionKeys
-            .FromPrimaryKeysString(partitionKeysString)
-            .UnwrapBox();
-        
         var documents = new List<SerializableEventDocument>();
         
         foreach (var @event in events)
         {
-            // Convert event to SerializableEventDocument
             var document = await SerializableEventDocument.CreateFromEventAsync(@event, _sekibanDomainTypes.JsonSerializerOptions);
             documents.Add(document);
         }
@@ -290,7 +246,6 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
 
     private EventRetrievalInfo GetEventRetrievalInfo()
     {
-        // Extract partition keys from actor ID
         var actorId = Id.GetId();
         var partitionKeysString = actorId.Contains(':') 
             ? actorId.Substring(actorId.IndexOf(':') + 1) 

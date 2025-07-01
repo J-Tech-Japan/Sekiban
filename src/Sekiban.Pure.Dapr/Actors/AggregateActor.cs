@@ -10,7 +10,6 @@ using Sekiban.Pure.Dapr.Parts;
 using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using System.Text;
 using System.Text.Json;
 
 namespace Sekiban.Pure.Dapr.Actors;
@@ -160,7 +159,6 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         ICommandWithHandlerSerializable command,
         CommandMetadata metadata)
     {
-        // Ensure initialization on first use (deferred from OnActivateAsync)
         await EnsureInitializedAsync();
 
         if (_partitionInfo == null)
@@ -170,8 +168,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
         var eventHandlerActor = GetEventHandlerActor();
 
-        // Ensure we have the latest state
-        if (_currentAggregate == null || _currentAggregate == Aggregate.Empty)
+        if (_currentAggregate == Aggregate.Empty)
         {
             _currentAggregate = await LoadStateInternalAsync(eventHandlerActor);
         }
@@ -225,7 +222,9 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         return result;
     }
 
-    // Legacy method - kept for compatibility
+    /// <summary>
+    /// Rebuilds the aggregate state from all events without calling LoadStateInternalAsync to prevent infinite loops
+    /// </summary>
     public async Task<Aggregate> RebuildStateAsync()
     {
         // Ensure initialization on first use
@@ -238,18 +237,20 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
         var eventHandlerActor = GetEventHandlerActor();
 
-        // Create repository for rebuilding
+        // Create repository for rebuilding with empty aggregate
+        var emptyAggregate = Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys);
         var repository = new DaprRepository(
             eventHandlerActor,
             _partitionInfo.PartitionKeys,
             _partitionInfo.Projector,
             _sekibanDomainTypes.EventTypes,
-            Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys),
+            emptyAggregate,
             _sekibanDomainTypes);
 
-        // Load all events and rebuild state
+        // Load all events and rebuild state directly from repository
         var aggregate = await repository.Load().UnwrapBox();
         _currentAggregate = aggregate;
+        _hasUnsavedChanges = true;
 
         // Save the rebuilt state
         await SaveStateAsync();
@@ -305,7 +306,6 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             throw new InvalidOperationException("Partition info not initialized");
         }
 
-        // Try to get saved state
         var savedState = await StateManager.TryGetStateAsync<DaprAggregateSurrogate>(StateKey);
 
         if (savedState.HasValue)
@@ -313,36 +313,40 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             var aggregate = await _serialization.DeserializeAggregateAsync(savedState.Value);
             if (aggregate != null)
             {
-
-                // Check if projector version matches
                 if (_partitionInfo.Projector.GetVersion() != aggregate.ProjectorVersion)
                 {
-                    // Projector version changed, rebuild
+                    var emptyAggregate = Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys);
+                    var repository = new DaprRepository(
+                        eventHandlerActor,
+                        _partitionInfo.PartitionKeys,
+                        _partitionInfo.Projector,
+                        _sekibanDomainTypes.EventTypes,
+                        emptyAggregate,
+                        _sekibanDomainTypes);
+
+                    var rebuiltAggregate = await repository.Load().UnwrapBox();
+                    _currentAggregate = rebuiltAggregate;
                     _hasUnsavedChanges = true;
-                    return await RebuildStateAsync();
+                    return rebuiltAggregate;
                 }
 
-                // Get delta events and project them
                 var deltaEventDocuments = await eventHandlerActor.GetDeltaEventsAsync(
                     aggregate.LastSortableUniqueId,
                     -1);
 
-                // Convert documents back to events
                 var deltaEvents = new List<IEvent>();
                 foreach (var document in deltaEventDocuments)
                 {
                     var eventResult = await document.ToEventAsync(_sekibanDomainTypes);
-                    if (eventResult.HasValue)
+                    if (eventResult.HasValue && eventResult.Value != null)
                     {
                         deltaEvents.Add(eventResult.Value);
                     }
                 }
 
-                // Create a new aggregate by projecting the delta events
                 var concreteAggregate = aggregate as Aggregate ??
                     throw new InvalidOperationException("Aggregate must be of type Aggregate");
                 
-                // Only project and mark as changed if there are delta events
                 if (deltaEvents.Count > 0)
                 {
                     var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
@@ -363,9 +367,19 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             }
         }
 
-        // No valid state found, rebuild from events
+        var emptyAggregateForNewLoad = Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys);
+        var repositoryForNewLoad = new DaprRepository(
+            eventHandlerActor,
+            _partitionInfo.PartitionKeys,
+            _partitionInfo.Projector,
+            _sekibanDomainTypes.EventTypes,
+            emptyAggregateForNewLoad,
+            _sekibanDomainTypes);
+
+        var newAggregate = await repositoryForNewLoad.Load().UnwrapBox();
+        _currentAggregate = newAggregate;
         _hasUnsavedChanges = true;
-        return await RebuildStateAsync();
+        return newAggregate;
     }
 
     private new async Task SaveStateAsync()
@@ -389,7 +403,7 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
     /// </summary>
     private async Task EnsureInitializedAsync()
     {
-        if (_partitionInfo != null && _currentAggregate != Aggregate.Empty)
+        if (_partitionInfo != null)
         {
             return; // Already initialized
         }
@@ -398,18 +412,8 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
         {
             _logger.LogDebug("Initializing AggregateActor {ActorId} on first use", Id.GetId());
 
-            // Initialize partition info
-            if (_partitionInfo == null)
-            {
-                _partitionInfo = await GetPartitionInfoAsync();
-            }
-
-            // Get event handler actor and load initial state
-            if (_currentAggregate == Aggregate.Empty)
-            {
-                var eventHandlerActor = GetEventHandlerActor();
-                _currentAggregate = await LoadStateInternalAsync(eventHandlerActor);
-            }
+            // Initialize partition info only
+            _partitionInfo = await GetPartitionInfoAsync();
 
             _logger.LogDebug("AggregateActor {ActorId} initialization completed", Id.GetId());
         }
