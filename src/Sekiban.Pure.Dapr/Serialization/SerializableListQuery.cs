@@ -75,19 +75,8 @@ public record SerializableListQuery
             Type? queryType = null;
             try
             {
-                // Try to get type directly from Type.GetType
-                // This will work with AssemblyQualifiedName
-                queryType = Type.GetType(QueryTypeName);
-                
-                // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
-                if (queryType == null && !QueryTypeName.Contains(","))
-                {
-                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        queryType = assembly.GetType(QueryTypeName);
-                        if (queryType != null) break;
-                    }
-                }
+                // Use GetPayloadTypeByName from QueryTypes for better type resolution
+                queryType = domainTypes.QueryTypes.GetPayloadTypeByName(QueryTypeName);
                 
                 if (queryType == null)
                 {

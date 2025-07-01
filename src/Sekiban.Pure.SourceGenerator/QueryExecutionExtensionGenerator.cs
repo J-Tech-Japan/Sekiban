@@ -181,19 +181,43 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("            if (string.IsNullOrEmpty(payloadTypeName))");
         sb.AppendLine("                return null;");
         sb.AppendLine();
+        sb.AppendLine("            // First try to get type directly using Type.GetType (works with AssemblyQualifiedName)");
+        sb.AppendLine("            var type = Type.GetType(payloadTypeName);");
+        sb.AppendLine("            if (type != null)");
+        sb.AppendLine("                return type;");
+        sb.AppendLine();
         sb.AppendLine("            // Query types");
         foreach (var type in queryTypes)
         {
-            sb.AppendLine($"            if (payloadTypeName == \"{type.RecordName}\" || payloadTypeName == typeof({type.RecordName}).Name)");
+            sb.AppendLine($"            if (payloadTypeName == \"{type.RecordName}\" || ");
+            sb.AppendLine($"                payloadTypeName == typeof({type.RecordName}).Name || ");
+            sb.AppendLine($"                payloadTypeName == typeof({type.RecordName}).FullName || ");
+            sb.AppendLine($"                payloadTypeName.EndsWith(\"+\" + typeof({type.RecordName}).Name))");
             sb.AppendLine($"                return typeof({type.RecordName});");
         }
         sb.AppendLine();
         sb.AppendLine("            // Query response types");
         foreach (var type in queryTypes.Where(t => !string.IsNullOrEmpty(t.Generic3Name)))
         {
-            sb.AppendLine($"            if (payloadTypeName == \"{type.Generic3Name}\" || payloadTypeName == typeof({type.Generic3Name}).Name)");
+            sb.AppendLine($"            if (payloadTypeName == \"{type.Generic3Name}\" || ");
+            sb.AppendLine($"                payloadTypeName == typeof({type.Generic3Name}).Name || ");
+            sb.AppendLine($"                payloadTypeName == typeof({type.Generic3Name}).FullName || ");
+            sb.AppendLine($"                payloadTypeName.EndsWith(\"+\" + typeof({type.Generic3Name}).Name))");
             sb.AppendLine($"                return typeof({type.Generic3Name});");
         }
+        sb.AppendLine();
+        sb.AppendLine("            // Check for nested types in all query types");
+        sb.AppendLine("            foreach (var queryType in GetQueryTypes())");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var nestedTypes = queryType.GetNestedTypes();");
+        sb.AppendLine("                foreach (var nestedType in nestedTypes)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    if (payloadTypeName == nestedType.Name || ");
+        sb.AppendLine("                        payloadTypeName == nestedType.FullName || ");
+        sb.AppendLine("                        payloadTypeName.EndsWith(\"+\" + nestedType.Name))");
+        sb.AppendLine("                        return nestedType;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            return null;");
         sb.AppendLine("        }");

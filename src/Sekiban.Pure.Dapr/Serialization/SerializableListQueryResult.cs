@@ -148,19 +148,9 @@ public record SerializableListQueryResult
             {
                 try
                 {
-                    // Try to get type directly from Type.GetType
-                    // This will work with AssemblyQualifiedName
-                    recordType = Type.GetType(RecordTypeName);
+                    // Use GetPayloadTypeByName from QueryTypes for better type resolution
+                    recordType = domainTypes.QueryTypes.GetPayloadTypeByName(RecordTypeName);
                     
-                    // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
-                    if (recordType == null && !RecordTypeName.Contains(","))
-                    {
-                        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                        {
-                            recordType = assembly.GetType(RecordTypeName);
-                            if (recordType != null) break;
-                        }
-                    }
                     if (recordType == null)
                     {
                         return ResultBox<ListQueryResultGeneral>.FromException(
@@ -178,19 +168,9 @@ public record SerializableListQueryResult
             Type? queryType = null;
             try
             {
-                // Try to get type directly from Type.GetType
-                // This will work with AssemblyQualifiedName
-                queryType = Type.GetType(QueryTypeName);
+                // Use GetPayloadTypeByName from QueryTypes for better type resolution
+                queryType = domainTypes.QueryTypes.GetPayloadTypeByName(QueryTypeName);
                 
-                // If that fails and it's not an AssemblyQualifiedName, search in all loaded assemblies
-                if (queryType == null && !QueryTypeName.Contains(","))
-                {
-                    foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        queryType = assembly.GetType(QueryTypeName);
-                        if (queryType != null) break;
-                    }
-                }
                 if (queryType == null)
                 {
                     return ResultBox<ListQueryResultGeneral>.FromException(
