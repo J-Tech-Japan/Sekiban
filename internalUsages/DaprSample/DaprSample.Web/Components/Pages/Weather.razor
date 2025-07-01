@@ -194,12 +194,14 @@ else
 
             if (result != null)
             {
-                // Load forecasts with the new event's sortable unique id to ensure it's included
-                await LoadForecasts(result.LastSortableUniqueId);
+                // Reset form first
+                forecastModel = new ForecastModel { Date = DateTime.Now };
+                
+                // Close modal immediately for better UX
                 await CloseModal();
                 
-                // Reset form
-                forecastModel = new ForecastModel { Date = DateTime.Now };
+                // Then load forecasts with the new event's sortable unique id
+                await LoadForecasts(result.LastSortableUniqueId);
             }
             else
             {

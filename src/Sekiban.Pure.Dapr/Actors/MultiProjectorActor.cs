@@ -87,8 +87,8 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             await RegisterReminderAsync(
                 EventCheckReminderName,
                 null,
-                TimeSpan.FromSeconds(30), // Initial delay
-                TimeSpan.FromSeconds(10)); // Check every 10 seconds
+                TimeSpan.FromSeconds(5), // Initial delay
+                TimeSpan.FromSeconds(1)); // Check every 1 second
                 
             _logger.LogInformation("Reminders registered successfully for {ActorId}", Id.GetId());
         }
@@ -108,8 +108,8 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 "EventCheckTimer",
                 nameof(HandleEventCheckTimerAsync),
                 Array.Empty<byte>(),
-                TimeSpan.FromSeconds(30),
-                TimeSpan.FromSeconds(10));
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromSeconds(1));
         }
             
         _bootstrapping = false;
@@ -556,10 +556,11 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             {
                 _buffer.Add(@event);
                 
-                // Flush buffer if not bootstrapping
+                // Flush buffer immediately for real-time updates
                 if (!_bootstrapping)
                 {
                     FlushBuffer();
+                    _pendingSave = true; // Mark state as pending save
                 }
             }
         }

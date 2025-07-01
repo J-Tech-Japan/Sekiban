@@ -144,7 +144,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
-                    var pollingIntervalMs = 100;
+                    var pollingIntervalMs = 50; // Poll every 50ms for faster response
                     
                     var stopwatch = new System.Diagnostics.Stopwatch();
                     stopwatch.Start();
@@ -220,7 +220,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
-                    var pollingIntervalMs = 100;
+                    var pollingIntervalMs = 50; // Poll every 50ms for faster response
                     
                     var stopwatch = new System.Diagnostics.Stopwatch();
                     stopwatch.Start();

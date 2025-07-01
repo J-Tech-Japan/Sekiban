@@ -23,9 +23,19 @@
             modal.show();
         };
         window.hideModal = (modalId) => {
-            const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
+            const modalElement = document.getElementById(modalId);
+            const modal = bootstrap.Modal.getInstance(modalElement);
             if (modal) {
                 modal.hide();
+                // Ensure backdrop is removed
+                setTimeout(() => {
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                    document.body.classList.remove('modal-open');
+                    document.body.style = '';
+                }, 200);
             }
         };
     </script>

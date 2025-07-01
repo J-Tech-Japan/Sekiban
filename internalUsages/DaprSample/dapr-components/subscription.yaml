@@ -3,9 +3,9 @@ kind: Subscription
 metadata:
   name: domain-events-subscription
 spec:
-  topic: domain-events
+  topic: events.all
   routes:
-    default: /events
+    default: /pubsub/events
   pubsubname: sekiban-pubsub
 scopes:
-- sekiban-api
+- dapr-sample-api
