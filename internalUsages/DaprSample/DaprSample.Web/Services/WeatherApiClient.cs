@@ -4,6 +4,7 @@ using DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
 using DaprSample.Domain.Aggregates.WeatherForecasts.Queries;
 using DaprSample.Domain.ValueObjects;
 using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Query;
 
 namespace DaprSample.Web.Services;
 
@@ -18,23 +19,8 @@ public class WeatherApiClient
 
     public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync()
     {
-        var response = await _httpClient.GetFromJsonAsync<List<object>>("api/weatherforecast");
-        if (response == null) return null;
-
-        // Convert the response to WeatherForecastResponse objects
-        var forecasts = new List<WeatherForecastResponse>();
-        foreach (var item in response)
-        {
-            if (item is System.Text.Json.JsonElement jsonElement)
-            {
-                var forecast = jsonElement.Deserialize<WeatherForecastResponse>();
-                if (forecast != null)
-                {
-                    forecasts.Add(forecast);
-                }
-            }
-        }
-        return forecasts;
+        var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>("api/weatherforecast");
+        return response?.Items?.ToList();
     }
 
     public async Task<CommandResponseSimple?> AddWeatherForecastAsync(InputWeatherForecastCommand command)

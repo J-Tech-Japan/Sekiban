@@ -50,6 +50,7 @@ namespace DaprSample.Domain;
 // WeatherForecast Query and Response
 [JsonSerializable(typeof(Aggregates.WeatherForecasts.Queries.WeatherForecastQuery))]
 [JsonSerializable(typeof(Aggregates.WeatherForecasts.Queries.WeatherForecastResponse))]
+[JsonSerializable(typeof(Sekiban.Pure.Query.ListQueryResult<Aggregates.WeatherForecasts.Queries.WeatherForecastResponse>))]
 // WeatherForecast Value Objects
 [JsonSerializable(typeof(ValueObjects.TemperatureCelsius))]
 public partial class DaprSampleEventsJsonContext : JsonSerializerContext;
