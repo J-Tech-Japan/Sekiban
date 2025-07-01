@@ -14,11 +14,19 @@ namespace DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
 [GenerateSerializer]
 public record UpdateWeatherForecastLocationCommand(
     [property: Id(0)] Guid WeatherForecastId,
-    [property: Id(1)] string Location) : ICommandWithHandler<UpdateWeatherForecastLocationCommand, WeatherForecastProjector, WeatherForecast>
+    [property: Id(1)] string Location) : ICommandWithHandler<UpdateWeatherForecastLocationCommand, WeatherForecastProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(UpdateWeatherForecastLocationCommand command) => 
         PartitionKeys.Existing<WeatherForecastProjector>(command.WeatherForecastId);
 
-    public ResultBox<EventOrNone> Handle(UpdateWeatherForecastLocationCommand command, ICommandContext<WeatherForecast> context) =>
-        EventOrNone.Event(new WeatherForecastLocationUpdated(command.Location));
+    public ResultBox<EventOrNone> Handle(UpdateWeatherForecastLocationCommand command, ICommandContext<IAggregatePayload> context)
+    {
+        // Only allow updates on existing WeatherForecast aggregates
+        if (context.GetPayload() is not WeatherForecast)
+        {
+            return EventOrNone.None;
+        }
+        
+        return EventOrNone.Event(new WeatherForecastLocationUpdated(command.Location));
+    }
 }

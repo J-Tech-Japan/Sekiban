@@ -12,11 +12,19 @@ using Sekiban.Pure.Events;
 namespace DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
 
 [GenerateSerializer]
-public record RemoveWeatherForecastCommand([property: Id(0)] Guid WeatherForecastId) : ICommandWithHandler<RemoveWeatherForecastCommand, WeatherForecastProjector, WeatherForecast>
+public record RemoveWeatherForecastCommand([property: Id(0)] Guid WeatherForecastId) : ICommandWithHandler<RemoveWeatherForecastCommand, WeatherForecastProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(RemoveWeatherForecastCommand command) => 
         PartitionKeys.Existing<WeatherForecastProjector>(command.WeatherForecastId);
 
-    public ResultBox<EventOrNone> Handle(RemoveWeatherForecastCommand command, ICommandContext<WeatherForecast> context) =>
-        EventOrNone.Event(new WeatherForecastDeleted());
+    public ResultBox<EventOrNone> Handle(RemoveWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
+    {
+        // Only allow removal on existing WeatherForecast aggregates (not already deleted)
+        if (context.GetPayload() is not WeatherForecast)
+        {
+            return EventOrNone.None;
+        }
+        
+        return EventOrNone.Event(new WeatherForecastDeleted());
+    }
 }

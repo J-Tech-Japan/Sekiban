@@ -14,11 +14,19 @@ namespace DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
 [GenerateSerializer]
 public record DeleteWeatherForecastCommand(
     [property: Id(0)] Guid WeatherForecastId
-) : ICommandWithHandler<DeleteWeatherForecastCommand, WeatherForecastProjector, WeatherForecast>
+) : ICommandWithHandler<DeleteWeatherForecastCommand, WeatherForecastProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(DeleteWeatherForecastCommand command) => 
         PartitionKeys.Existing<WeatherForecastProjector>(command.WeatherForecastId);
 
-    public ResultBox<EventOrNone> Handle(DeleteWeatherForecastCommand command, ICommandContext<WeatherForecast> context) =>
-        EventOrNone.Event(WeatherForecastDeleted.Instance);
+    public ResultBox<EventOrNone> Handle(DeleteWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
+    {
+        // Only allow deletion on existing WeatherForecast aggregates
+        if (context.GetPayload() is not WeatherForecast)
+        {
+            return EventOrNone.None;
+        }
+        
+        return EventOrNone.Event(WeatherForecastDeleted.Instance);
+    }
 }
