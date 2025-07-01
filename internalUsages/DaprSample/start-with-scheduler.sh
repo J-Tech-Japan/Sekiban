@@ -1,18 +1,13 @@
 #!/bin/bash
 
-# Start the Dapr application with In-Memory state store + Scheduler support
-# No external dependencies required - perfect for development and testing
+echo "🚀 Starting Sekiban with Dapr Scheduler enabled (In-Memory state)..."
 
 # Get the script directory for absolute paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DAPR_COMPONENTS_DIR="${SCRIPT_DIR}/dapr-components"
 PROJECT_PATH="${SCRIPT_DIR}/DaprSample.Api/DaprSample.Api.csproj"
 
-# Kill any existing process on port 5010
-echo "🛑 Stopping any existing process on port 5010..."
-lsof -ti:5010 | xargs kill -9 2>/dev/null || true
-
-echo "🚀 Starting Dapr application with In-Memory state store + Scheduler..."
+echo "📁 Working directory: $SCRIPT_DIR"
 
 # Ensure Dapr services are running
 echo "📋 Checking Dapr status..."
@@ -22,17 +17,28 @@ if ! docker ps | grep -q "dapr_scheduler"; then
     sleep 5
 fi
 
-echo "🎯 Starting application with scheduler enabled..."
+echo "🔍 Checking configuration files..."
+if [ ! -f "${DAPR_COMPONENTS_DIR}/config.yaml" ]; then
+    echo "❌ Config file not found: ${DAPR_COMPONENTS_DIR}/config.yaml"
+    exit 1
+fi
+
+if [ ! -f "${DAPR_COMPONENTS_DIR}/statestore.yaml" ]; then
+    echo "❌ Statestore file not found: ${DAPR_COMPONENTS_DIR}/statestore.yaml"
+    exit 1
+fi
+
+echo "✅ Configuration files found"
 echo "📁 Using config from: ${DAPR_COMPONENTS_DIR}"
 echo "🔗 Project path: ${PROJECT_PATH}"
-echo "No external dependencies required."
-echo
 
+# Start with scheduler enabled and explicit connection
+echo "🎯 Starting application with scheduler enabled..."
 dapr run \
   --app-id sekiban-api \
   --app-port 5010 \
-  --dapr-http-port 3501 \
-  --dapr-grpc-port 50002 \
+  --dapr-http-port 3500 \
+  --dapr-grpc-port 50001 \
   --placement-host-address "localhost:50005" \
   --scheduler-host-address "localhost:50006" \
   --config "${DAPR_COMPONENTS_DIR}/config.yaml" \

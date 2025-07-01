@@ -73,20 +73,44 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         
         _logger.LogInformation("MultiProjectorActor {ActorId} activated", Id.GetId());
         
-        // Register reminders for periodic tasks
-        // Snapshot reminder for saving state periodically
-        await RegisterReminderAsync(
-            SnapshotReminderName,
-            null,
-            TimeSpan.FromMinutes(1), // Initial delay
-            PersistInterval);
+        try
+        {
+            // Register reminders for periodic tasks
+            // Snapshot reminder for saving state periodically
+            await RegisterReminderAsync(
+                SnapshotReminderName,
+                null,
+                TimeSpan.FromMinutes(1), // Initial delay
+                PersistInterval);
 
-        // Event check reminder for polling new events from PubSub
-        await RegisterReminderAsync(
-            EventCheckReminderName,
-            null,
-            TimeSpan.FromSeconds(30), // Initial delay
-            TimeSpan.FromSeconds(10)); // Check every 10 seconds
+            // Event check reminder for polling new events from PubSub
+            await RegisterReminderAsync(
+                EventCheckReminderName,
+                null,
+                TimeSpan.FromSeconds(30), // Initial delay
+                TimeSpan.FromSeconds(10)); // Check every 10 seconds
+                
+            _logger.LogInformation("Reminders registered successfully for {ActorId}", Id.GetId());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register reminders for {ActorId}. Falling back to timer-based approach.", Id.GetId());
+            
+            // Fallback to timers if reminders fail
+            await RegisterTimerAsync(
+                "SnapshotTimer",
+                nameof(HandleSnapshotTimerAsync),
+                Array.Empty<byte>(),
+                TimeSpan.FromMinutes(1),
+                PersistInterval);
+
+            await RegisterTimerAsync(
+                "EventCheckTimer",
+                nameof(HandleEventCheckTimerAsync),
+                Array.Empty<byte>(),
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(10));
+        }
             
         _bootstrapping = false;
     }
@@ -142,6 +166,26 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         // In a real Dapr implementation, this could be replaced with
         // actual PubSub subscription handling
         await CatchUpFromStoreAsync();
+    }
+
+    #endregion
+
+    #region Timer Fallback Methods
+
+    /// <summary>
+    /// Timer fallback for snapshot handling when reminders are not available
+    /// </summary>
+    public async Task HandleSnapshotTimerAsync(byte[] state)
+    {
+        await HandleSnapshotReminder();
+    }
+
+    /// <summary>
+    /// Timer fallback for event check handling when reminders are not available
+    /// </summary>
+    public async Task HandleEventCheckTimerAsync(byte[] state)
+    {
+        await HandleEventCheckReminder();
     }
 
     #endregion
@@ -359,7 +403,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             {
                 var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
                     ResultBox<object>.FromException(queryResult.GetException()),
-                    null,
+                    null!, // Null for failed deserialization
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.GetValue();
             }
@@ -392,7 +436,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             _logger.LogError(ex, "Error executing query");
             var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
                 ResultBox<object>.FromException(ex),
-                null,
+                null!, // Null for error case
                 _domainTypes.JsonSerializerOptions);
             return errorResult.GetValue();
         }
@@ -410,7 +454,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             {
                 var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
                     ResultBox<IListQueryResult>.FromException(queryResult.GetException()),
-                    null,
+                    null!, // Null for failed deserialization
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.GetValue();
             }
@@ -442,7 +486,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             _logger.LogError(ex, "Error executing list query");
             var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
                 ResultBox<IListQueryResult>.FromException(ex),
-                null,
+                null!, // Null for error case
                 _domainTypes.JsonSerializerOptions);
             return errorResult.GetValue();
         }
