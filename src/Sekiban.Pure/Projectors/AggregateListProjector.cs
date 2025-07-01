@@ -31,7 +31,9 @@ public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<Pa
                         payload.Aggregates.SetItem(partitionKeys, success))),
             ResultBox<AggregateListProjector<TAggregateProjector>>.Error);
     }
-    public static string GetMultiProjectorName() => typeof(AggregateListProjector<TAggregateProjector>).Name +
-        "+" +
-        typeof(TAggregateProjector).Name;
+    public static string GetMultiProjectorName() 
+    {
+        var projectorName = typeof(TAggregateProjector).Name.ToLowerInvariant();
+        return $"aggregatelistprojector-{projectorName}";
+    }
 }
