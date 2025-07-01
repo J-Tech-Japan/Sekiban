@@ -11,8 +11,5 @@
     <ProjectReference Include="..\DaprSample.Domain\DaprSample.Domain.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Orleans.Serialization.SystemTextJson" Version="8.2.0" />
-  </ItemGroup>
 
 </Project>

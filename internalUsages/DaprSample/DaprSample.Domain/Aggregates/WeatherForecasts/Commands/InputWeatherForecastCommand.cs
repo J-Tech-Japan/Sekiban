@@ -1,9 +1,13 @@
 using Orleans;
 using DaprSample.Domain.Aggregates.WeatherForecasts.Events;
-using DaprSample.Domain.Aggregates.WeatherForecasts.Payloads;
 using DaprSample.Domain.ValueObjects;
+using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command;
+using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
 
 namespace DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
 
@@ -12,13 +16,16 @@ public record InputWeatherForecastCommand(
     [property: Id(0)] string Location,
     [property: Id(1)] DateOnly Date,
     [property: Id(2)] TemperatureCelsius TemperatureC,
-    [property: Id(3)] string? Summary) : ICommandWithHandlerWithoutLoadingAggregateAsync<InputWeatherForecastCommand, WeatherForecastProjector>
+    [property: Id(3)] string? Summary) : ICommandWithHandlerAsync<InputWeatherForecastCommand, WeatherForecastProjector>
 {
-    public static Task<EventOrNone<WeatherForecastInputted>> HandleCommandAsync(
+    public PartitionKeys SpecifyPartitionKeys(InputWeatherForecastCommand command) => 
+        PartitionKeys.Generate<WeatherForecastProjector>();
+
+    public Task<ResultBox<EventOrNone>> HandleAsync(
         InputWeatherForecastCommand command,
-        IServiceProvider serviceProvider) =>
+        ICommandContext<IAggregatePayload> context) =>
         Task.FromResult(
-            EventOrNone<WeatherForecastInputted>.Event(
+            EventOrNone.Event(
                 new WeatherForecastInputted(
                     command.Location,
                     command.Date,

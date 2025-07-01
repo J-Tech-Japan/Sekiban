@@ -1,11 +1,12 @@
 ﻿@page "/weather"
-@attribute [StreamRendering(true)]
-@attribute [OutputCache(Duration = 5)]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 @using DaprSample.Domain
 @using System.ComponentModel.DataAnnotations
 @using DaprSample.Domain.Aggregates.WeatherForecasts.Commands
+@using DaprSample.Domain.Aggregates.WeatherForecasts.Queries
 @using DaprSample.Domain.ValueObjects
+@using DaprSample.Web.Services
 @using Sekiban.Pure.Aggregates
 @using Sekiban.Pure.Command.Executor
 
@@ -46,7 +47,7 @@ else
                 <tr>
                     <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC.Value</td>
+                    <td>@forecast.TemperatureC</td>
                     <td>@forecast.TemperatureF</td>
                     <td>@forecast.Summary</td>
                     <td>
@@ -183,11 +184,13 @@ else
     {
         try
         {
-            var result = await WeatherApi.AddWeatherForecastAsync(
+            var temperatureC = new TemperatureCelsius(forecastModel.TemperatureC);
+            var command = new InputWeatherForecastCommand(
                 forecastModel.Location,
-                forecastModel.Date,
-                forecastModel.TemperatureC,
+                DateOnly.FromDateTime(forecastModel.Date),
+                temperatureC,
                 forecastModel.Summary);
+            var result = await WeatherApi.AddWeatherForecastAsync(command);
 
             if (result != null)
             {
@@ -233,7 +236,7 @@ else
     {
         try
         {
-            var result = await WeatherApi.RemoveForecastAsync(forecastId);
+            var result = await WeatherApi.RemoveWeatherForecastAsync(forecastId);
             if (result != null)
             {
                 await LoadForecasts();

@@ -8,12 +8,18 @@ using Sekiban.Pure.Projectors;
 namespace DaprSample.Domain.Aggregates.WeatherForecasts;
 
 [GenerateSerializer]
-public class WeatherForecastProjector : ISingleProjector<WeatherForecast, DeletedWeatherForecast>
+public class WeatherForecastProjector : IAggregateProjector
 {
-    public IAggregatePayload? Project(Event ev, IAggregatePayload? currentState) =>
-        (ev.Payload, currentState) switch
+    public Type[] PayloadTypes => new[]
+    {
+        typeof(WeatherForecast),
+        typeof(DeletedWeatherForecast)
+    };
+
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) =>
+        (payload, ev.GetPayload()) switch
         {
-            (WeatherForecastInputted inputted, _) =>
+            (EmptyAggregatePayload, WeatherForecastInputted inputted) =>
                 new WeatherForecast
                 {
                     Location = inputted.Location,
@@ -21,9 +27,9 @@ public class WeatherForecastProjector : ISingleProjector<WeatherForecast, Delete
                     TemperatureC = inputted.TemperatureC,
                     Summary = inputted.Summary
                 },
-            (WeatherForecastLocationUpdated locationUpdated, WeatherForecast state) =>
-                state with { Location = locationUpdated.Location },
-            (WeatherForecastDeleted, _) => DeletedWeatherForecast.Instance,
-            _ => currentState
+            (WeatherForecast forecast, WeatherForecastLocationUpdated locationUpdated) =>
+                forecast with { Location = locationUpdated.Location },
+            (WeatherForecast forecast, WeatherForecastDeleted) => DeletedWeatherForecast.Instance,
+            _ => payload
         };
 }

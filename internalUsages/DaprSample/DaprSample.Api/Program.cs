@@ -3,9 +3,11 @@ using DaprSample.Domain.Generated;
 using DaprSample.Domain.User.Commands;
 using DaprSample.Domain.User.Queries;
 using DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
+using DaprSample.Domain.Aggregates.WeatherForecasts.Queries;
 using DaprSample.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Command;
+using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Dapr.Extensions;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
@@ -336,10 +338,7 @@ app.MapPost("/api/weatherforecast/input", async ([FromBody] InputWeatherForecast
 
 app.MapPost("/api/weatherforecast/{aggregateId}/update-location", async (Guid aggregateId, [FromBody] UpdateLocationRequest request, [FromServices] ISekibanExecutor executor) =>
 {
-    var command = new UpdateWeatherForecastLocationCommand(request.Location)
-    {
-        PartitionKeys = PartitionKeys.Existing<DaprSample.Domain.Aggregates.WeatherForecasts.WeatherForecastProjector>(aggregateId)
-    };
+    var command = new UpdateWeatherForecastLocationCommand(aggregateId, request.Location);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
     return Results.Ok(result);
 })
@@ -350,10 +349,7 @@ app.MapPost("/api/weatherforecast/{aggregateId}/update-location", async (Guid ag
 
 app.MapPost("/api/weatherforecast/{aggregateId}/delete", async (Guid aggregateId, [FromServices] ISekibanExecutor executor) =>
 {
-    var command = new DeleteWeatherForecastCommand
-    {
-        PartitionKeys = PartitionKeys.Existing<DaprSample.Domain.Aggregates.WeatherForecasts.WeatherForecastProjector>(aggregateId)
-    };
+    var command = new DeleteWeatherForecastCommand(aggregateId);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
     return Results.Ok(result);
 })
@@ -364,10 +360,7 @@ app.MapPost("/api/weatherforecast/{aggregateId}/delete", async (Guid aggregateId
 
 app.MapPost("/api/weatherforecast/{aggregateId}/remove", async (Guid aggregateId, [FromServices] ISekibanExecutor executor) =>
 {
-    var command = new RemoveWeatherForecastCommand
-    {
-        PartitionKeys = PartitionKeys.Existing<DaprSample.Domain.Aggregates.WeatherForecasts.WeatherForecastProjector>(aggregateId)
-    };
+    var command = new RemoveWeatherForecastCommand(aggregateId);
     var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
     return Results.Ok(result);
 })

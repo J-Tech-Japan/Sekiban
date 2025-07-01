@@ -1,5 +1,6 @@
 using DaprSample.Web;
 using DaprSample.Web.Components;
+using DaprSample.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
