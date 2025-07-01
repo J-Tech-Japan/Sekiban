@@ -22,7 +22,8 @@ public record UpdateWeatherForecastLocationCommand(
     public ResultBox<EventOrNone> Handle(UpdateWeatherForecastLocationCommand command, ICommandContext<IAggregatePayload> context)
     {
         // Only allow updates on existing WeatherForecast aggregates
-        if (context.GetPayload() is not WeatherForecast)
+        var aggregate = context.GetAggregate();
+        if (!aggregate.IsSuccess || aggregate.GetValue().Payload is not WeatherForecast)
         {
             return EventOrNone.None;
         }

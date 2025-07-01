@@ -20,7 +20,8 @@ public record RemoveWeatherForecastCommand([property: Id(0)] Guid WeatherForecas
     public ResultBox<EventOrNone> Handle(RemoveWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
     {
         // Only allow removal on existing WeatherForecast aggregates (not already deleted)
-        if (context.GetPayload() is not WeatherForecast)
+        var aggregate = context.GetAggregate();
+        if (!aggregate.IsSuccess || aggregate.GetValue().Payload is not WeatherForecast)
         {
             return EventOrNone.None;
         }

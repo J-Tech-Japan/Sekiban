@@ -22,7 +22,8 @@ public record DeleteWeatherForecastCommand(
     public ResultBox<EventOrNone> Handle(DeleteWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
     {
         // Only allow deletion on existing WeatherForecast aggregates
-        if (context.GetPayload() is not WeatherForecast)
+        var aggregate = context.GetAggregate();
+        if (!aggregate.IsSuccess || aggregate.GetValue().Payload is not WeatherForecast)
         {
             return EventOrNone.None;
         }
