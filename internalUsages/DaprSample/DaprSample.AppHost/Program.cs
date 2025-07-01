@@ -16,7 +16,7 @@ builder.AddDapr();
 var daprComponentsPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components"));
 var configPath = Path.Combine(daprComponentsPath, "config.yaml");
 
-builder.AddProject<Projects.DaprSample_Api>("api")
+var api = builder.AddProject<Projects.DaprSample_Api>("dapr-sample-api")
     .WithExternalHttpEndpoints()
     .WithReference(postgres)
     .WaitFor(postgres)
@@ -31,6 +31,12 @@ builder.AddProject<Projects.DaprSample_Api>("api")
         Config = configPath, // Use absolute path to config file
         ResourcesPaths = [daprComponentsPath] // Use absolute path to components directory
     });
+
+// Add Blazor Web project
+builder.AddProject<Projects.DaprSample_Web>("dapr-sample-web")
+    .WithExternalHttpEndpoints()
+    .WithReference(api)
+    .WaitFor(api);
 
 var app = builder.Build();
 
