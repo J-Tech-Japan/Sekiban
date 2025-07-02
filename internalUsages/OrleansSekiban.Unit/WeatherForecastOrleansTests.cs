@@ -1,9 +1,9 @@
-using OrleansSekiban.Domain;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
-using OrleansSekiban.Domain.Generated;
-using OrleansSekiban.Domain.ValueObjects;
+using SharedDomain;
+using SharedDomain.Aggregates.WeatherForecasts;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Payloads;
+using SharedDomain.Generated;
+using SharedDomain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Orleans.xUnit;
@@ -14,7 +14,7 @@ namespace OrleansSekiban.Unit;
 public class WeatherForecastOrleansTests : SekibanOrleansTestBase<WeatherForecastOrleansTests>
 {
     public override SekibanDomainTypes GetDomainTypes() => 
-        OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options);
+        SharedDomain.Generated.SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
     [Fact]
     public void OrleansTest_CreateAndQueryWeatherForecast() =>

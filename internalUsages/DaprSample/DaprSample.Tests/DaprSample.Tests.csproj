@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DaprSample.Domain\DaprSample.Domain.csproj" />
+    <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj" />
     <ProjectReference Include="..\..\..\src\Sekiban.Pure\Sekiban.Pure.csproj" />
     <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj" />
   </ItemGroup>

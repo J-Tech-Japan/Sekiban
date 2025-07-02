@@ -1,6 +1,6 @@
-using DaprSample.Domain;
-using DaprSample.Domain.Generated;
-using DaprSample.Domain.User.Queries;
+using SharedDomain;
+using SharedDomain.Generated;
+using SharedDomain.Aggregates.User.Queries;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Dapr.Serialization;
@@ -16,8 +16,8 @@ public class QuerySerializationTests
 
     public QuerySerializationTests()
     {
-        _jsonOptions = DaprSampleEventsJsonContext.Default.Options;
-        _domainTypes = DaprSampleDomainDomainTypes.Generate(_jsonOptions);
+        _jsonOptions = SharedDomainEventsJsonContext.Default.Options;
+        _domainTypes = SharedDomain.Generated.SharedDomainDomainTypes.Generate(_jsonOptions);
         // Use the domain types' JsonSerializerOptions which includes all types
         _jsonOptions = _domainTypes.JsonSerializerOptions;
     }

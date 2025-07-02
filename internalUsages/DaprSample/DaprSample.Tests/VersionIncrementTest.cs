@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using DaprSample.Domain.User;
-using DaprSample.Domain.User.Commands;
+using SharedDomain.Aggregates.User;
+using SharedDomain.Aggregates.User.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
@@ -41,8 +41,8 @@ public class VersionIncrementTest : IAsyncLifetime
         services.AddMemoryCache();
         
         // Generate domain types
-        var domainTypes = DaprSample.Domain.Generated.DaprSampleDomainDomainTypes.Generate(
-            DaprSample.Domain.DaprSampleEventsJsonContext.Default.Options);
+        var domainTypes = SharedDomain.Generated.SharedDomainDomainTypes.Generate(
+            SharedDomain.SharedDomainEventsJsonContext.Default.Options);
         services.AddSingleton(domainTypes);
 
         _serviceProvider = services.BuildServiceProvider();
