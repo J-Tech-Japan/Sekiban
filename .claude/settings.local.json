@@ -9,7 +9,11 @@
       "Bash(dotnet test:*)",
       "Bash(dotnet build:*)",
       "mcp__chatgpt__ask_chatgpt",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(echo \"Exit code: $?\")"
     ],
     "deny": [
       "Bash(curl:*)"
