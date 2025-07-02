@@ -115,8 +115,8 @@ public class WeatherForecastTests : SekibanInMemoryTestBase
         // When - Query for all forecasts
         var queryResult = ThenQuery(new WeatherForecastQuery());
         
-        // Then - Verify both forecasts are returned
-        Assert.Equal(2, queryResult.Items.Count());
+        // Then - Verify all three forecasts are returned
+        Assert.Equal(3, queryResult.Items.Count());
         var sanFranciscoResult = queryResult.Items.FirstOrDefault(f => f.Location == "San Francisco");
         Assert.NotNull(sanFranciscoResult);
         Assert.Equal(sanFrancisco.PartitionKeys.AggregateId, sanFranciscoResult.WeatherForecastId);
