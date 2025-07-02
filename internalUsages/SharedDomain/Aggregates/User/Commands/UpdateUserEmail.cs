@@ -1,3 +1,4 @@
+using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
@@ -8,9 +9,10 @@ using SharedDomain.Aggregates.User.Events;
 
 namespace SharedDomain.Aggregates.User.Commands;
 
+[GenerateSerializer]
 public record UpdateUserEmail(
-    Guid UserId,
-    string NewEmail) : ICommandWithHandler<UpdateUserEmail, UserProjector>
+    [property: Id(0)] Guid UserId,
+    [property: Id(1)] string NewEmail) : ICommandWithHandler<UpdateUserEmail, UserProjector>
 {
     public PartitionKeys SpecifyPartitionKeys(UpdateUserEmail command) => 
         PartitionKeys.Existing<UserProjector>(command.UserId);

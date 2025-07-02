@@ -1,3 +1,4 @@
+using Orleans;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
@@ -21,7 +22,8 @@ public class UserProjector : IAggregateProjector
     }
 }
 
+[GenerateSerializer]
 public record User(
-    Guid UserId,
-    string Name,
-    string Email) : IAggregatePayload;
+    [property: Id(0)] Guid UserId,
+    [property: Id(1)] string Name,
+    [property: Id(2)] string Email) : IAggregatePayload;
