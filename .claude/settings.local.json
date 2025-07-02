@@ -13,7 +13,8 @@
       "Bash(mkdir:*)",
       "Bash(ls:*)",
       "Bash(git check-ignore:*)",
-      "Bash(echo \"Exit code: $?\")"
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(mv:*)"
     ],
     "deny": [
       "Bash(curl:*)"
