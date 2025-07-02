@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\DaprSample.Domain\DaprSample.Domain.csproj" />
+    <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj" />
   </ItemGroup>
 
 
