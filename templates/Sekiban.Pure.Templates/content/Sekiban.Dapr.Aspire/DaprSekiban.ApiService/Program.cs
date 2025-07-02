@@ -41,7 +41,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
 
 // Generate domain types
-var domainTypes = DaprSekiban.DomainDomainTypes.Generate(DaprSekiban.DomainEventsJsonContext.Default.Options);
+var domainTypes = DaprSekiban.Domain.Generated.DaprSekibanDomainDomainTypes.Generate(DaprSekiban.Domain.DaprSekibanDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
 builder.Services.AddSekibanWithDapr(domainTypes, options =>

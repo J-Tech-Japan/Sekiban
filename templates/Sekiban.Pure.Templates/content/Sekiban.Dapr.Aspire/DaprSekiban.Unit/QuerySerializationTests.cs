@@ -17,7 +17,7 @@ public class QuerySerializationTests
     public QuerySerializationTests()
     {
         _jsonOptions = DaprSekibanDomainEventsJsonContext.Default.Options;
-        _domainTypes = SharedDomain.Generated.DaprSekibanDomainDomainTypes.Generate(_jsonOptions);
+        _domainTypes = DaprSekibanDomainDomainTypes.Generate(_jsonOptions);
         // Use the domain types' JsonSerializerOptions which includes all types
         _jsonOptions = _domainTypes.JsonSerializerOptions;
     }

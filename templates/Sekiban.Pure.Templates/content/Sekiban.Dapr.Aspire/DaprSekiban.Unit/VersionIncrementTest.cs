@@ -41,8 +41,8 @@ public class VersionIncrementTest : IAsyncLifetime
         services.AddMemoryCache();
         
         // Generate domain types
-        var domainTypes = SharedDomain.Generated.DaprSekibanDomainDomainTypes.Generate(
-            SharedDomain.DaprSekibanDomainEventsJsonContext.Default.Options);
+        var domainTypes = DaprSekiban.Domain.Generated.DaprSekibanDomainDomainTypes.Generate(
+            DaprSekiban.Domain.DaprSekibanDomainEventsJsonContext.Default.Options);
         services.AddSingleton(domainTypes);
 
         _serviceProvider = services.BuildServiceProvider();

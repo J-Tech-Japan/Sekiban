@@ -1,6 +1,6 @@
-using DaprSample.Web;
-using DaprSample.Web.Components;
-using DaprSample.Web.Services;
+using DaprSekiban.Web;
+using DaprSekiban.Web.Components;
+using DaprSekiban.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +15,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
     // The service name will be resolved by Aspire service discovery
-    client.BaseAddress = new Uri("http://dapr-sample-api");
+    client.BaseAddress = new Uri("http://dapr-sekiban-api");
 });
 
 var app = builder.Build();

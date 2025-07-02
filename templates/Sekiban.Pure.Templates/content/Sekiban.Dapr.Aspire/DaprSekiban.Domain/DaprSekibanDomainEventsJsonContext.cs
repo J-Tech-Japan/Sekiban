@@ -32,7 +32,7 @@ namespace DaprSekiban.Domain;
 [JsonSerializable(typeof(IEvent))]
 [JsonSerializable(typeof(TemperatureCelsius))]
 // User domain
-[JsonSerializable(typeof(SharedDomain.Aggregates.User.User))]
+[JsonSerializable(typeof(DaprSekiban.Domain.Aggregates.User.User))]
 [JsonSerializable(typeof(CreateUser))]
 [JsonSerializable(typeof(UpdateUserName))]
 [JsonSerializable(typeof(UpdateUserEmail))]

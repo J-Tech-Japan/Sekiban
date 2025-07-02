@@ -45,8 +45,8 @@ public class DaprSerializationTests : IAsyncLifetime
         services.AddMemoryCache();
         
         // Generate domain types
-        _domainTypes = SharedDomain.Generated.DaprSekibanDomainDomainTypes.Generate(
-            SharedDomain.DaprSekibanDomainEventsJsonContext.Default.Options);
+        _domainTypes = DaprSekiban.Domain.Generated.DaprSekibanDomainDomainTypes.Generate(
+            DaprSekiban.Domain.DaprSekibanDomainEventsJsonContext.Default.Options);
         services.AddSingleton(_domainTypes);
 
         _serviceProvider = services.BuildServiceProvider();
