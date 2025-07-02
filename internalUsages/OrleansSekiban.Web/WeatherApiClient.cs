@@ -1,5 +1,6 @@
-using OrleansSekiban.Domain;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Queries;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 
@@ -7,14 +8,14 @@ namespace OrleansSekiban.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
 {
-    public async Task<WeatherForecastQuery.WeatherForecastRecord[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
+    public async Task<WeatherForecastResponse[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
     {
-        List<WeatherForecastQuery.WeatherForecastRecord>? forecasts = null;
+        List<WeatherForecastResponse>? forecasts = null;
         var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
             ? "/api/weatherforecast"
             : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
             
-        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastQuery.WeatherForecastRecord>(requestUri, cancellationToken))
+        await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastResponse>(requestUri, cancellationToken))
         {
             if (forecasts?.Count >= maxItems)
             {
