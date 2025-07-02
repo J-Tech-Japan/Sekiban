@@ -29,7 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sekiban.Pure.Orleans.xUnit\Sekiban.Pure.Orleans.xUnit.csproj" />
     <ProjectReference Include="..\..\src\Sekiban.Pure.xUnit\Sekiban.Pure.xUnit.csproj" />
-    <ProjectReference Include="..\OrleansSekiban.Domain\OrleansSekiban.Domain.csproj" />
+    <ProjectReference Include="..\SharedDomain\SharedDomain.csproj" />
   </ItemGroup>
 
 </Project>

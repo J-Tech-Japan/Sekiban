@@ -5,7 +5,7 @@ namespace SharedDomain.ValueObjects;
 [GenerateSerializer]
 public record TemperatureCelsius
 {
-    public int Value { get; init; }
+    [Id(0)] public int Value { get; init; }
 
     public TemperatureCelsius(int value)
     {

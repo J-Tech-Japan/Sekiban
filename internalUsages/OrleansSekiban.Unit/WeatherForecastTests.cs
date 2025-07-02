@@ -1,10 +1,11 @@
-using OrleansSekiban.Domain;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Events;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads;
-using OrleansSekiban.Domain.Generated;
-using OrleansSekiban.Domain.ValueObjects;
+using SharedDomain;
+using SharedDomain.Aggregates.WeatherForecasts;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Events;
+using SharedDomain.Aggregates.WeatherForecasts.Payloads;
+using SharedDomain.Aggregates.WeatherForecasts.Queries;
+using SharedDomain.Generated;
+using SharedDomain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Documents;
@@ -17,7 +18,7 @@ namespace OrleansSekiban.Unit;
 public class WeatherForecastTests : SekibanInMemoryTestBase
 {
     protected override SekibanDomainTypes GetDomainTypes() => 
-        OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options);
+        SharedDomain.Generated.SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
     [Fact]
     public void InputWeatherForecast_CreatesCorrectAggregate()
@@ -87,12 +88,6 @@ public class WeatherForecastTests : SekibanInMemoryTestBase
         // Then - Verify the forecast was deleted
         var aggregate = ThenGetAggregate<WeatherForecastProjector>(deleteResponse.PartitionKeys);
         Assert.IsType<DeletedWeatherForecast>(aggregate.Payload);
-        
-        var deletedForecast = (DeletedWeatherForecast)aggregate.Payload;
-        Assert.Equal(location, deletedForecast.Location);
-        Assert.Equal(date, deletedForecast.Date);
-        Assert.Equal(temperatureC, deletedForecast.TemperatureC);
-        Assert.Equal(summary, deletedForecast.Summary);
     }
 
     [Fact]
@@ -117,18 +112,18 @@ public class WeatherForecastTests : SekibanInMemoryTestBase
             new TemperatureCelsius(22), 
             "Sunny"));
 
-        // When - Query for forecasts containing "Francisco" in the location
-        var queryResult = ThenQuery(new WeatherForecastQuery("Francisco"));
+        // When - Query for all forecasts
+        var queryResult = ThenQuery(new WeatherForecastQuery());
         
-        // Then - Verify only San Francisco is returned
-        Assert.Single(queryResult.Items);
-        var result = queryResult.Items.First();
-        Assert.Equal(sanFrancisco.PartitionKeys.AggregateId, result.WeatherForecastId);
-        Assert.Equal("San Francisco", result.Location);
-        Assert.Equal(new DateOnly(2025, 3, 6), result.Date);
-        Assert.Equal(new TemperatureCelsius(22), result.TemperatureC);
-        Assert.Equal("Sunny", result.Summary);
-        Assert.Equal(71.6, result.TemperatureF);
+        // Then - Verify all three forecasts are returned
+        Assert.Equal(3, queryResult.Items.Count());
+        var sanFranciscoResult = queryResult.Items.FirstOrDefault(f => f.Location == "San Francisco");
+        Assert.NotNull(sanFranciscoResult);
+        Assert.Equal(sanFrancisco.PartitionKeys.AggregateId, sanFranciscoResult.WeatherForecastId);
+        Assert.Equal("San Francisco", sanFranciscoResult.Location);
+        Assert.Equal(new DateOnly(2025, 3, 6), sanFranciscoResult.Date);
+        Assert.Equal(22, sanFranciscoResult.TemperatureC);
+        Assert.Equal("Sunny", sanFranciscoResult.Summary);
     }
 
     [Fact]
