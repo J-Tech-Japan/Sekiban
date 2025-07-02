@@ -1,0 +1,51 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.ApiService", "DaprSekiban.ApiService\DaprSekiban.ApiService.csproj", "{E5B5A5A5-1111-1111-1111-111111111111}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.AppHost", "DaprSekiban.AppHost\DaprSekiban.AppHost.csproj", "{E5B5A5A5-2222-2222-2222-222222222222}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.Domain", "DaprSekiban.Domain\DaprSekiban.Domain.csproj", "{E5B5A5A5-3333-3333-3333-333333333333}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.ServiceDefaults", "DaprSekiban.ServiceDefaults\DaprSekiban.ServiceDefaults.csproj", "{E5B5A5A5-4444-4444-4444-444444444444}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.Web", "DaprSekiban.Web\DaprSekiban.Web.csproj", "{E5B5A5A5-5555-5555-5555-555555555555}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaprSekiban.Unit", "DaprSekiban.Unit\DaprSekiban.Unit.csproj", "{E5B5A5A5-6666-6666-6666-666666666666}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E5B5A5A5-1111-1111-1111-111111111111}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-1111-1111-1111-111111111111}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-1111-1111-1111-111111111111}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-1111-1111-1111-111111111111}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5B5A5A5-2222-2222-2222-222222222222}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-2222-2222-2222-222222222222}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-2222-2222-2222-222222222222}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-2222-2222-2222-222222222222}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5B5A5A5-3333-3333-3333-333333333333}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-3333-3333-3333-333333333333}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-3333-3333-3333-333333333333}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-3333-3333-3333-333333333333}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5B5A5A5-4444-4444-4444-444444444444}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-4444-4444-4444-444444444444}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-4444-4444-4444-444444444444}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-4444-4444-4444-444444444444}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5B5A5A5-5555-5555-5555-555555555555}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-5555-5555-5555-555555555555}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-5555-5555-5555-555555555555}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-5555-5555-5555-555555555555}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5B5A5A5-6666-6666-6666-666666666666}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5B5A5A5-6666-6666-6666-666666666666}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5B5A5A5-6666-6666-6666-666666666666}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5B5A5A5-6666-6666-6666-666666666666}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
