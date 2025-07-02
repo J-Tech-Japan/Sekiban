@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package SharedDomain.Commands;
+
+option csharp_namespace = "SharedDomain.Commands";
+
+// Command to create a new account
+message CreateAccount {
+    string account_id = 1;
+    string account_name = 2;
+    string account_type = 3;
+    double initial_balance = 4;
+    string currency = 5;
+}
+
+// Command to deposit money to an account
+message DepositMoney {
+    string account_id = 1;
+    double amount = 2;
+    string description = 3;
+    string reference_number = 4;
+}
+
+// Command to withdraw money from an account
+message WithdrawMoney {
+    string account_id = 1;
+    double amount = 2;
+    string description = 3;
+    string reference_number = 4;
+}
+
+// Command to transfer money between accounts
+message TransferMoney {
+    string from_account_id = 1;
+    string to_account_id = 2;
+    double amount = 3;
+    string description = 4;
+    string reference_number = 5;
+}
+
+// Command to close an account
+message CloseAccount {
+    string account_id = 1;
+    string reason = 2;
+    string closed_by = 3;
+}

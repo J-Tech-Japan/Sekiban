@@ -9,7 +9,7 @@
     <Title>Sekiban Event Sourcing Templates</Title>
     <Authors>J-Tech Japan</Authors>
     <Description>Templates for starting Sekiban Projects</Description>
-    <PackageTags>Event Sourcing, CQRS, Orleans, Sekiban</PackageTags>
+    <PackageTags>Event Sourcing, CQRS, Orleans, Dapr, Sekiban, Aspire</PackageTags>
     <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
 

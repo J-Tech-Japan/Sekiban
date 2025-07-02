@@ -1,0 +1,32 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprConfig
+spec:
+  tracing:
+    sampling: "1"
+  metric:
+    enabled: true
+  features:
+    - name: actorReentrancy
+      enabled: true
+    - name: scheduleReminders
+      enabled: true
+  httpPipeline:
+    handlers:
+      - name: ratelimit
+        type: middleware.http.ratelimit
+  accessControl:
+    defaultAction: allow
+  components:
+    deny: []
+  actors:
+    actorIdleTimeout: 1h
+    actorScanInterval: 30s
+    drainOngoingCallTimeout: 60s
+    drainRebalancedActors: true
+    reminders:
+      storagePartitions: 1  # インメモリでは1つで十分
+      storageType: "memory"
+    reentrancy:
+      enabled: true
