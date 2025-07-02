@@ -4,11 +4,21 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <PackageId>Sekiban.Pure.Dapr</PackageId>
+    <Version>1.0.1-preview15</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>Sekiban.Pure.Dapr</Title>
     <Description>Event Sourcing and CQRS Framework with Dapr integration</Description>
+    <PackageDescription>Sekiban - Pure Event Sourcing Framework Dapr Integration</PackageDescription>
     <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageVersion>1.0.1-preview15</PackageVersion>
+    <AssemblyName>Sekiban.Pure.Dapr</AssemblyName>
+    <RootNamespace>Sekiban.Pure.Dapr</RootNamespace>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateSBOM>true</GenerateSBOM>
     <!-- <PackageIcon>icon.png</PackageIcon> -->
     <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
     <PackageTags>event-sourcing;cqrs;.net;dapr;microservices</PackageTags>
@@ -26,6 +36,10 @@
     <PackageReference Include="Grpc.Tools" Version="2.72.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 

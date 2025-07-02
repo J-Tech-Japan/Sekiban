@@ -48,6 +48,9 @@ jobs:
     - name: Pack Pure Orleans xUnit
       run: |
         dotnet nuget push "src/Sekiban.Pure.Orleans.xUnit/bin/Release/Sekiban.Pure.Orleans.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Pure Dapr C#
+      run: |
+        dotnet nuget push "src/Sekiban.Pure.Dapr/bin/Release/Sekiban.Pure.Dapr.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
     - name: Pack Pure Postgres
       run: |
         dotnet nuget push "src/Sekiban.Pure.Postgres/bin/Release/Sekiban.Pure.Postgres.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
