@@ -1,11 +1,11 @@
 ﻿@page "/weather"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-@using DaprSample.Domain
+@using SharedDomain
 @using System.ComponentModel.DataAnnotations
-@using DaprSample.Domain.Aggregates.WeatherForecasts.Commands
-@using DaprSample.Domain.Aggregates.WeatherForecasts.Queries
-@using DaprSample.Domain.ValueObjects
+@using SharedDomain.Aggregates.WeatherForecasts.Commands
+@using SharedDomain.Aggregates.WeatherForecasts.Queries
+@using SharedDomain.ValueObjects
 @using DaprSample.Web.Services
 @using Sekiban.Pure.Aggregates
 @using Sekiban.Pure.Command.Executor

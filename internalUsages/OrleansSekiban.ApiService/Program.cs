@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
 using Orleans.Storage;
 using OrleansSekiban.ApiService;
-using OrleansSekiban.Domain;
-using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
-using OrleansSekiban.Domain.Generated;
+using SharedDomain;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Generated;
 using OrleansSekiban.ServiceDefaults;
 using ResultBoxes;
 using Scalar.AspNetCore;
@@ -240,10 +240,10 @@ builder.UseOrleans(config =>
 });
 
 builder.Services.AddSingleton(
-    OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
+    SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options));
 
 SekibanSerializationTypesChecker.CheckDomainSerializability(
-    OrleansSekibanDomainDomainTypes.Generate(OrleansSekibanDomainEventsJsonContext.Default.Options));
+    SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options));
 
 builder.Services.AddTransient<ICommandMetadataProvider, CommandMetadataProvider>();
 builder.Services.AddTransient<IExecutingUserProvider, HttpExecutingUserProvider>();
@@ -296,7 +296,7 @@ apiRoute
         "/weatherforecast",
         async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
         {
-            var query = new WeatherForecastQuery("")
+            var query = new SharedDomain.Aggregates.WeatherForecasts.Queries.WeatherForecastQuery()
             {
                 WaitForSortableUniqueId = waitForSortableUniqueId
             };

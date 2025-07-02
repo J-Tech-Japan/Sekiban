@@ -1,8 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
-using DaprSample.Domain.Aggregates.WeatherForecasts.Queries;
-using DaprSample.Domain.ValueObjects;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Queries;
+using SharedDomain.ValueObjects;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Query;
 

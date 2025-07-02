@@ -2,10 +2,11 @@
 @attribute [StreamRendering(true)]
 @attribute [OutputCache(Duration = 5)]
 
-@using OrleansSekiban.Domain
+@using SharedDomain
 @using System.ComponentModel.DataAnnotations
-@using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands
-@using OrleansSekiban.Domain.ValueObjects
+@using SharedDomain.Aggregates.WeatherForecasts.Commands
+@using SharedDomain.Aggregates.WeatherForecasts.Queries
+@using SharedDomain.ValueObjects
 @using Sekiban.Pure.Aggregates
 @using Sekiban.Pure.Command.Executor
 
@@ -45,7 +46,7 @@ else
                 <tr>
                     <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC.Value</td>
+                    <td>@forecast.TemperatureC</td>
                     <td>@forecast.TemperatureF</td>
                     <td>@forecast.Summary</td>
                     <td>
@@ -150,7 +151,7 @@ else
 </script>
 
 @code {
-    private WeatherForecastQuery.WeatherForecastRecord[]? forecasts;
+    private WeatherForecastResponse[]? forecasts;
     private WeatherForecastModel forecastModel = new();
     private EditLocationModel editLocationModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
@@ -209,7 +210,7 @@ else
         await JsRuntime.InvokeVoidAsync("DisplayAddModal", "show");
     }
 
-    private async Task OpenEditLocationModal(WeatherForecastQuery.WeatherForecastRecord forecast)
+    private async Task OpenEditLocationModal(WeatherForecastResponse forecast)
     {
         editLocationModel = new EditLocationModel
         {
