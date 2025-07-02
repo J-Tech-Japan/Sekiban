@@ -9,13 +9,26 @@ using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 using SharedDomain.Aggregates.WeatherForecasts.Queries;
 using SharedDomain.ValueObjects;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Query;
 
 namespace SharedDomain;
 
 [JsonSourceGenerationOptions(
     GenerationMode = JsonSourceGenerationMode.Serialization,
     WriteIndented = true,
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+// Core Sekiban types
+[JsonSerializable(typeof(EventDocumentCommon))]
+[JsonSerializable(typeof(EventDocumentCommon[]))]
+[JsonSerializable(typeof(EmptyAggregatePayload))]
+[JsonSerializable(typeof(IMultiProjectorCommon))]
+[JsonSerializable(typeof(PartitionKeys))]
+[JsonSerializable(typeof(SerializableAggregateListProjector))]
+[JsonSerializable(typeof(SerializableAggregate))]
 [JsonSerializable(typeof(IEvent))]
 [JsonSerializable(typeof(TemperatureCelsius))]
 // User domain
@@ -41,4 +54,13 @@ namespace SharedDomain;
 [JsonSerializable(typeof(WeatherForecastDeleted))]
 [JsonSerializable(typeof(WeatherForecastQuery))]
 [JsonSerializable(typeof(WeatherForecastResponse))]
+[JsonSerializable(typeof(ListQueryResult<WeatherForecastResponse>))]
+// Event documents for User
+[JsonSerializable(typeof(EventDocument<UserCreated>))]
+[JsonSerializable(typeof(EventDocument<UserNameChanged>))]
+[JsonSerializable(typeof(EventDocument<UserEmailChanged>))]
+// Event documents for WeatherForecast
+[JsonSerializable(typeof(EventDocument<WeatherForecastInputted>))]
+[JsonSerializable(typeof(EventDocument<WeatherForecastLocationUpdated>))]
+[JsonSerializable(typeof(EventDocument<WeatherForecastDeleted>))]
 public partial class SharedDomainEventsJsonContext : JsonSerializerContext;
