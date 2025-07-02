@@ -12,7 +12,7 @@
     <ProjectReference Include="..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj" />
     <ProjectReference Include="..\..\src\Sekiban.Pure.Orleans\Sekiban.Pure.Orleans.csproj" />
     <ProjectReference Include="..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj" />
-    <ProjectReference Include="..\OrleansSekiban.Domain\OrleansSekiban.Domain.csproj" />
+    <ProjectReference Include="..\SharedDomain\SharedDomain.csproj" />
     <ProjectReference Include="..\OrleansSekiban.ServiceDefaults\OrleansSekiban.ServiceDefaults.csproj" />
   </ItemGroup>
 

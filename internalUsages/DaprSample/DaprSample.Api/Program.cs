@@ -1,10 +1,10 @@
-using DaprSample.Domain;
-using DaprSample.Domain.Generated;
-using DaprSample.Domain.User.Commands;
-using DaprSample.Domain.User.Queries;
-using DaprSample.Domain.Aggregates.WeatherForecasts.Commands;
-using DaprSample.Domain.Aggregates.WeatherForecasts.Queries;
-using DaprSample.Domain.ValueObjects;
+using SharedDomain;
+using SharedDomain.Generated;
+using SharedDomain.Aggregates.User.Commands;
+using SharedDomain.Aggregates.User.Queries;
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Queries;
+using SharedDomain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Command;
 using Sekiban.Pure.Command.Executor;
@@ -41,7 +41,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
 
 // Generate domain types
-var domainTypes = DaprSampleDomainDomainTypes.Generate(DaprSampleEventsJsonContext.Default.Options);
+var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
 builder.Services.AddSekibanWithDapr(domainTypes, options =>
@@ -244,8 +244,8 @@ app.MapPost("/api/users/{userId}/update-name", async (Guid userId, UpdateUserNam
 
 app.MapGet("/api/users/{userId}", async (Guid userId, ISekibanExecutor executor, [FromServices]SekibanDomainTypes domainTypes) =>
 {
-    var result = await executor.LoadAggregateAsync<DaprSample.Domain.User.UserProjector>(
-        PartitionKeys.Existing<DaprSample.Domain.User.UserProjector>(userId));
+    var result = await executor.LoadAggregateAsync<SharedDomain.Aggregates.User.UserProjector>(
+        PartitionKeys.Existing<SharedDomain.Aggregates.User.UserProjector>(userId));
     if (!result.IsSuccess)
     {
         return Results.BadRequest(new { success = false, error = result.GetException().Message });

@@ -11,7 +11,7 @@
     <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj" />
     <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj" />
     <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\DaprSample.Domain\DaprSample.Domain.csproj" />
+    <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj" />
     <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj" />
   </ItemGroup>
 
