@@ -46,6 +46,11 @@ export interface MigrationStore {
    * Check if a migration has been applied
    */
   hasMigrationBeenApplied(migrationId: string): Promise<boolean>
+  
+  /**
+   * Remove a migration from the history (for rollback)
+   */
+  removeMigration(migrationId: string): Promise<void>
 }
 
 /**
@@ -90,5 +95,9 @@ export class InMemoryMigrationStore implements MigrationStore {
 
   async hasMigrationBeenApplied(migrationId: string): Promise<boolean> {
     return this.migrations.some(m => m.id === migrationId)
+  }
+  
+  async removeMigration(migrationId: string): Promise<void> {
+    this.migrations = this.migrations.filter(m => m.id !== migrationId)
   }
 }

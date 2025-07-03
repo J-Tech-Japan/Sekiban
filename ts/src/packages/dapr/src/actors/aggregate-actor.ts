@@ -1,316 +1,354 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import type { 
-  IAggregatePayload, 
-  IProjector, 
-  EventDocument, 
+  IProjector,
+  Aggregate,
+  EventDocument,
+  ICommandExecutor,
   IEventStore,
-  PartitionKeys
+  PartitionKeys,
+  CommandExecutionResult
 } from '@sekiban/core';
 import { Result, ok, err } from 'neverthrow';
-import type { AggregateSnapshot, SnapshotLoadResult } from '../snapshot/types';
-import { SnapshotError, SnapshotErrorCode } from '../snapshot/types';
-import type { ISnapshotStrategy } from '../snapshot/strategies';
+import type { 
+  IAggregateActor,
+  IAggregateEventHandlerActor,
+  SerializableAggregate,
+  SerializableCommandAndMetadata,
+  ActorPartitionInfo
+} from './interfaces';
 
 /**
- * Base class for Dapr actors that manage aggregate state with snapshot support
+ * Main actor for handling aggregate state management and command execution
+ * Mirrors C# AggregateActor implementation
  */
-export abstract class DaprAggregateActor<TPayload extends IAggregatePayload> extends AbstractActor {
-  private snapshot?: AggregateSnapshot<TPayload>;
-  private currentState?: SnapshotLoadResult<TPayload>;
+export class AggregateActor extends AbstractActor implements IAggregateActor {
+  private initialized = false;
+  private hasUnsavedChanges = false;
+  private saveTimer?: NodeJS.Timer;
+  private aggregateState?: Aggregate;
+  private lastSortableUniqueId?: string;
+  private partitionInfo?: ActorPartitionInfo;
+  
+  // State keys
+  private readonly AGGREGATE_STATE_KEY = "aggregateState";
+  private readonly PARTITION_INFO_KEY = "partitionInfo";
+  
+  // Save interval (10 seconds)
+  private readonly SAVE_INTERVAL_MS = 10000;
   
   constructor(
     daprClient: DaprClient,
     id: ActorId,
-    private readonly eventStore: IEventStore,
-    private readonly projector: IProjector<TPayload>,
-    private readonly snapshotStrategy: ISnapshotStrategy
+    private readonly projector: IProjector<any>,
+    private readonly commandExecutor: ICommandExecutor,
+    private readonly eventHandlerActorProxy: IAggregateEventHandlerActor
   ) {
     super(daprClient, id);
   }
-
+  
   /**
-   * Get the aggregate ID from the actor ID
-   */
-  protected get aggregateId(): string {
-    return (this as any).id.toString();
-  }
-
-  /**
-   * Called when the actor is activated
+   * Actor activation - set up periodic save timer
    */
   async onActivate(): Promise<void> {
-    try {
-      // Load snapshot from Dapr state
-      const [hasSnapshot, snapshotData] = await (this as any).stateManager.tryGetState<AggregateSnapshot<TPayload>>('snapshot');
-      if (snapshotData && this.isValidSnapshot(snapshotData)) {
-        this.snapshot = snapshotData;
-      }
-    } catch (error) {
-      // Log error but continue - we can rebuild from events
-      console.error('Failed to load snapshot:', error);
-      this.snapshot = undefined;
-    }
-  }
-
-  /**
-   * Get the current aggregate state
-   */
-  async getState(): Promise<Result<SnapshotLoadResult<TPayload>, SnapshotError>> {
-    const startTime = Date.now();
-
-    try {
-      if (!this.snapshot) {
-        // Rebuild entirely from events
-        const result = await this.rebuildFromEvents();
-        return result;
-      }
-
-      // Load new events since snapshot
-      const newEventsResult = await this.loadEventsSince(this.snapshot.lastEventId);
-      if (newEventsResult.isErr()) {
-        return err(newEventsResult.error);
-      }
-
-      const newEvents = newEventsResult.value;
-      if (newEvents.length === 0) {
-        // Snapshot is up to date
-        this.currentState = {
-          payload: this.snapshot.payload,
-          version: this.snapshot.version,
-          fromSnapshot: true,
-          eventsReplayed: 0,
-          loadTimeMs: Date.now() - startTime,
-        };
-        return ok(this.currentState);
-      }
-
-      // Apply new events to snapshot
-      const updatedState = this.applyEventsToSnapshot(this.snapshot, newEvents);
-      this.currentState = {
-        ...updatedState,
-        fromSnapshot: true,
-        eventsReplayed: newEvents.length,
-        loadTimeMs: Date.now() - startTime,
-      };
-
-      return ok(this.currentState);
-    } catch (error) {
-      return err(new SnapshotError(
-        `Failed to get aggregate state: ${error}`,
-        SnapshotErrorCode.STORAGE_ERROR
-      ));
-    }
-  }
-
-  /**
-   * Apply new events to the aggregate
-   */
-  async applyEvents(events: EventDocument[]): Promise<Result<void, SnapshotError>> {
-    try {
-      // Get current state
-      const stateResult = await this.getState();
-      if (stateResult.isErr()) {
-        return err(stateResult.error);
-      }
-
-      const currentState = stateResult.value;
-      
-      // Apply events
-      let newPayload = currentState.payload;
-      let newVersion = currentState.version;
-      
-      for (const event of events) {
-        newPayload = this.projector.applyEvent(newPayload, event);
-        newVersion = event.version;
-      }
-
-      // Update current state
-      this.currentState = {
-        payload: newPayload,
-        version: newVersion,
-        fromSnapshot: currentState.fromSnapshot,
-        eventsReplayed: currentState.eventsReplayed + events.length,
-        loadTimeMs: currentState.loadTimeMs,
-      };
-
-      // Check if we should take a snapshot
-      const lastSnapshotVersion = this.snapshot?.version || 0;
-      const lastSnapshotTime = this.snapshot?.snapshotTimestamp || null;
-      
-      if (this.snapshotStrategy.shouldTakeSnapshot(
-        newVersion,
-        lastSnapshotVersion,
-        lastSnapshotTime
-      )) {
-        const snapshotResult = await this.createSnapshot();
-        if (snapshotResult.isErr()) {
-          // Log but don't fail - snapshot is optimization
-          console.error('Failed to create snapshot:', snapshotResult.error);
-        }
-      }
-
-      return ok(undefined);
-    } catch (error) {
-      return err(new SnapshotError(
-        `Failed to apply events: ${error}`,
-        SnapshotErrorCode.STORAGE_ERROR
-      ));
-    }
-  }
-
-  /**
-   * Force creation of a snapshot
-   */
-  async createSnapshot(): Promise<Result<void, SnapshotError>> {
-    try {
-      const stateResult = await this.getState();
-      if (stateResult.isErr()) {
-        return err(stateResult.error);
-      }
-
-      const currentState = stateResult.value;
-      
-      // Get the last event to determine snapshot position
-      const eventsResult = await this.loadEventsSince(null);
-      if (eventsResult.isErr()) {
-        return err(eventsResult.error);
-      }
-
-      const events = eventsResult.value;
-      if (events.length === 0) {
-        return ok(undefined); // No events to snapshot
-      }
-
-      const lastEvent = events[events.length - 1];
-      
-      this.snapshot = {
-        aggregateId: this.aggregateId,
-        partitionKey: lastEvent.partitionKeys,
-        payload: currentState.payload,
-        version: currentState.version,
-        lastEventId: lastEvent.id,
-        lastEventTimestamp: lastEvent.createdAt,
-        snapshotTimestamp: new Date(),
-      };
-
-      // Save to Dapr state
-      await (this as any).stateManager.setState('snapshot', this.snapshot);
-      
-      return ok(undefined);
-    } catch (error) {
-      return err(new SnapshotError(
-        `Failed to save snapshot: ${error}`,
-        SnapshotErrorCode.STORAGE_ERROR
-      ));
-    }
-  }
-
-  /**
-   * Rebuild aggregate state entirely from events
-   */
-  private async rebuildFromEvents(): Promise<Result<SnapshotLoadResult<TPayload>, SnapshotError>> {
-    const startTime = Date.now();
-    
-    try {
-      const eventsResult = await this.loadEventsSince(null);
-      if (eventsResult.isErr()) {
-        return err(eventsResult.error);
-      }
-
-      const events = eventsResult.value;
-      let payload = this.projector.initialState();
-      let version = 0;
-
-      for (const event of events) {
-        payload = this.projector.applyEvent(payload, event);
-        version = event.version;
-      }
-
-      return ok({
-        payload,
-        version,
-        fromSnapshot: false,
-        eventsReplayed: events.length,
-        loadTimeMs: Date.now() - startTime,
-      });
-    } catch (error) {
-      return err(new SnapshotError(
-        `Failed to rebuild from events: ${error}`,
-        SnapshotErrorCode.STORAGE_ERROR
-      ));
-    }
-  }
-
-  /**
-   * Load events after a specific event ID
-   */
-  private async loadEventsSince(
-    afterEventId: string | null
-  ): Promise<Result<EventDocument[], SnapshotError>> {
-    try {
-      const events = await this.eventStore.loadEventsSince(
-        this.aggregateId,
-        afterEventId
-      );
-      return ok(events);
-    } catch (error) {
-      return err(new SnapshotError(
-        `Failed to load events: ${error}`,
-        SnapshotErrorCode.STORAGE_ERROR
-      ));
-    }
-  }
-
-  /**
-   * Apply events to an existing snapshot
-   */
-  private applyEventsToSnapshot(
-    snapshot: AggregateSnapshot<TPayload>,
-    events: EventDocument[]
-  ): SnapshotLoadResult<TPayload> {
-    let payload = snapshot.payload;
-    let version = snapshot.version;
-
-    for (const event of events) {
-      payload = this.projector.applyEvent(payload, event);
-      version = event.version;
-    }
-
-    return {
-      payload,
-      version,
-      fromSnapshot: true,
-      eventsReplayed: events.length,
-      loadTimeMs: 0, // Will be set by caller
-    };
-  }
-
-  /**
-   * Validate snapshot data structure
-   */
-  private isValidSnapshot(data: any): data is AggregateSnapshot<TPayload> {
-    return (
-      data &&
-      typeof data.aggregateId === 'string' &&
-      data.partitionKey &&
-      data.payload &&
-      typeof data.version === 'number' &&
-      typeof data.lastEventId === 'string' &&
-      data.lastEventTimestamp &&
-      data.snapshotTimestamp
+    // Set up periodic save timer
+    this.saveTimer = setInterval(
+      () => this.saveStateCallbackAsync(),
+      this.SAVE_INTERVAL_MS
     );
   }
-}
-
-/**
- * Extension to IEventStore for actor-specific needs
- */
-export interface IActorEventStore extends IEventStore {
+  
   /**
-   * Load events for a specific aggregate after a given event ID
+   * Actor deactivation - clean up and save state
    */
-  loadEventsSince(
-    aggregateId: string,
-    afterEventId: string | null
-  ): Promise<EventDocument[]>;
+  async onDeactivate(): Promise<void> {
+    if (this.saveTimer) {
+      clearInterval(this.saveTimer);
+      this.saveTimer = undefined;
+    }
+    
+    // Save any pending changes
+    if (this.hasUnsavedChanges) {
+      await this.saveStateAsync();
+    }
+  }
+  
+  /**
+   * Get current aggregate state
+   */
+  async getAggregateStateAsync(): Promise<SerializableAggregate> {
+    await this.ensureInitializedAsync();
+    
+    if (!this.aggregateState || !this.partitionInfo) {
+      throw new Error('Aggregate state not initialized');
+    }
+    
+    return {
+      partitionKeys: this.partitionInfo.partitionKeys,
+      aggregate: this.aggregateState,
+      lastSortableUniqueId: this.lastSortableUniqueId || ''
+    };
+  }
+  
+  /**
+   * Execute command and return response as JSON string
+   */
+  async executeCommandAsync(
+    command: SerializableCommandAndMetadata
+  ): Promise<string> {
+    try {
+      await this.ensureInitializedAsync();
+      
+      // Get current state
+      const currentState = await this.getStateInternalAsync();
+      
+      // Execute command through command executor
+      const result = await this.commandExecutor.execute(
+        command.command,
+        currentState,
+        this.projector
+      );
+      
+      if (result.isOk()) {
+        const executionResult = result.value;
+        
+        // Append events if any were produced
+        if (executionResult.events.length > 0) {
+          const appendResult = await this.eventHandlerActorProxy.appendEventsAsync(
+            this.lastSortableUniqueId || '',
+            executionResult.events.map(e => this.serializeEvent(e))
+          );
+          
+          if (!appendResult.isSuccess) {
+            return JSON.stringify({
+              isSuccess: false,
+              error: appendResult.error || 'Failed to append events'
+            });
+          }
+          
+          // Update local state
+          for (const event of executionResult.events) {
+            this.aggregateState = this.projector.applyEvent(
+              this.aggregateState!,
+              event
+            );
+            this.lastSortableUniqueId = event.sortableUniqueId;
+          }
+          
+          this.hasUnsavedChanges = true;
+        }
+        
+        return JSON.stringify({
+          isSuccess: true,
+          events: executionResult.events,
+          aggregate: this.aggregateState
+        });
+      } else {
+        return JSON.stringify({
+          isSuccess: false,
+          error: result.error.message
+        });
+      }
+    } catch (error) {
+      return JSON.stringify({
+        isSuccess: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+  
+  /**
+   * Rebuild state from all events
+   */
+  async rebuildStateAsync(): Promise<void> {
+    const events = await this.eventHandlerActorProxy.getAllEventsAsync();
+    
+    // Reset state
+    this.aggregateState = {
+      payload: this.projector.initialState(),
+      version: 0,
+      lastSortableUniqueId: ''
+    } as Aggregate;
+    
+    // Apply all events
+    for (const event of events) {
+      this.aggregateState = this.projector.applyEvent(
+        this.aggregateState,
+        this.deserializeEvent(event)
+      );
+      this.lastSortableUniqueId = event.sortableUniqueId;
+    }
+    
+    this.hasUnsavedChanges = true;
+    await this.saveStateAsync();
+  }
+  
+  /**
+   * Timer callback for periodic saving
+   */
+  async saveStateCallbackAsync(state?: any): Promise<void> {
+    if (this.hasUnsavedChanges) {
+      await this.saveStateAsync();
+    }
+  }
+  
+  /**
+   * Reminder handling (IRemindable)
+   */
+  async receiveReminderAsync(
+    reminderName: string,
+    state: Buffer,
+    dueTime: string,
+    period: string
+  ): Promise<void> {
+    // Handle reminders if needed
+    switch (reminderName) {
+      case 'save':
+        await this.saveStateCallbackAsync();
+        break;
+    }
+  }
+  
+  /**
+   * Ensure actor is initialized
+   */
+  private async ensureInitializedAsync(): Promise<void> {
+    if (!this.initialized) {
+      await this.loadStateInternalAsync();
+      this.initialized = true;
+    }
+  }
+  
+  /**
+   * Get internal state
+   */
+  private async getStateInternalAsync(): Promise<Aggregate | undefined> {
+    await this.ensureInitializedAsync();
+    return this.aggregateState;
+  }
+  
+  /**
+   * Load state with snapshot + delta pattern
+   */
+  private async loadStateInternalAsync(): Promise<void> {
+    // Load partition info
+    const [hasPartitionInfo, partitionInfo] = await (this as any).stateManager.tryGetState<ActorPartitionInfo>(
+      this.PARTITION_INFO_KEY
+    );
+    
+    if (!hasPartitionInfo) {
+      // Extract from actor ID
+      this.partitionInfo = this.getPartitionInfoFromActorId();
+      await this.savePartitionInfoAsync();
+    } else {
+      this.partitionInfo = partitionInfo!;
+    }
+    
+    // Try to load snapshot
+    const [hasSnapshot, snapshot] = await (this as any).stateManager.tryGetState<SerializableAggregate>(
+      this.AGGREGATE_STATE_KEY
+    );
+    
+    if (hasSnapshot && snapshot) {
+      // Load delta events since snapshot
+      const deltaEvents = await this.eventHandlerActorProxy.getDeltaEventsAsync(
+        snapshot.lastSortableUniqueId,
+        1000
+      );
+      
+      // Start with snapshot state
+      this.aggregateState = snapshot.aggregate;
+      this.lastSortableUniqueId = snapshot.lastSortableUniqueId;
+      
+      // Apply delta events
+      for (const event of deltaEvents) {
+        this.aggregateState = this.projector.applyEvent(
+          this.aggregateState,
+          this.deserializeEvent(event)
+        );
+        this.lastSortableUniqueId = event.sortableUniqueId;
+      }
+    } else {
+      // No snapshot - rebuild from all events
+      await this.rebuildStateAsync();
+    }
+  }
+  
+  /**
+   * Save current state as snapshot
+   */
+  private async saveStateAsync(): Promise<void> {
+    if (!this.aggregateState || !this.partitionInfo) {
+      return;
+    }
+    
+    const snapshot: SerializableAggregate = {
+      partitionKeys: this.partitionInfo.partitionKeys,
+      aggregate: this.aggregateState,
+      lastSortableUniqueId: this.lastSortableUniqueId || ''
+    };
+    
+    await (this as any).stateManager.setState(
+      this.AGGREGATE_STATE_KEY,
+      snapshot
+    );
+    
+    this.hasUnsavedChanges = false;
+  }
+  
+  /**
+   * Save partition info
+   */
+  private async savePartitionInfoAsync(): Promise<void> {
+    if (this.partitionInfo) {
+      await (this as any).stateManager.setState(
+        this.PARTITION_INFO_KEY,
+        this.partitionInfo
+      );
+    }
+  }
+  
+  /**
+   * Extract partition info from actor ID
+   */
+  private getPartitionInfoFromActorId(): ActorPartitionInfo {
+    // Actor ID format: "aggregateType:aggregateId:rootPartition"
+    const idParts = (this as any).id.toString().split(':');
+    
+    return {
+      partitionKeys: {
+        aggregateId: idParts[1] || '',
+        group: idParts[0] || '',
+        rootPartitionKey: idParts[2] || 'default'
+      } as PartitionKeys,
+      aggregateType: idParts[0] || '',
+      projectorType: this.projector.constructor.name
+    };
+  }
+  
+  /**
+   * Serialize event for storage
+   */
+  private serializeEvent(event: EventDocument): SerializableEventDocument {
+    return {
+      id: event.id,
+      sortableUniqueId: event.sortableUniqueId,
+      payload: event.payload,
+      eventType: event.payload.constructor.name,
+      aggregateId: event.aggregateId,
+      partitionKeys: event.partitionKeys,
+      version: event.version,
+      createdAt: event.createdAt.toISOString(),
+      metadata: event.metadata
+    };
+  }
+  
+  /**
+   * Deserialize event from storage
+   */
+  private deserializeEvent(serialized: SerializableEventDocument): EventDocument {
+    return {
+      ...serialized,
+      createdAt: new Date(serialized.createdAt)
+    } as EventDocument;
+  }
 }

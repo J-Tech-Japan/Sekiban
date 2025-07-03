@@ -56,6 +56,8 @@ export interface MigrationStatus {
  * Migration runner
  */
 export class MigrationRunner {
+  private migrations: Migration[] = []
+  
   constructor(private config: MigrationConfig) {}
 
   /**
@@ -67,6 +69,9 @@ export class MigrationRunner {
       migrationStore: this.config.migrationStore,
       dryRun: this.config.dryRun || false
     }
+
+    // Store migrations for later use in down()
+    this.migrations = [...this.migrations, ...migrations]
 
     for (const migration of migrations) {
       const isApplied = await this.config.migrationStore.hasMigrationBeenApplied(migration.id)
@@ -131,8 +136,7 @@ export class MigrationRunner {
 
     for (const record of toRollback) {
       // Find the migration definition
-      // Note: In a real implementation, we'd need to load migrations from a registry
-      // For now, we'll skip migrations without down methods
+      const migration = this.migrations.find(m => m.id === record.id)
       
       this.reportProgress({
         migrationId: record.id,
@@ -140,21 +144,32 @@ export class MigrationRunner {
         progress: 0
       })
 
-      // In a real implementation, we would:
-      // 1. Find the migration by ID
-      // 2. Call its down() method if it exists
-      // 3. Remove it from the migration history
-      
-      if (!this.config.dryRun) {
-        // Remove from history (this would need to be implemented in MigrationStore)
-        // For now, we'll just report completion
-      }
+      try {
+        // Execute down method if available
+        if (migration?.down) {
+          await migration.down(context)
+          
+          // Only remove from history if we successfully rolled back
+          if (!this.config.dryRun) {
+            await this.config.migrationStore.removeMigration(record.id)
+          }
+        }
+        // If no down method, skip rollback and keep in history
 
-      this.reportProgress({
-        migrationId: record.id,
-        status: 'completed',
-        progress: 100
-      })
+        this.reportProgress({
+          migrationId: record.id,
+          status: 'completed',
+          progress: 100
+        })
+      } catch (error) {
+        this.reportProgress({
+          migrationId: record.id,
+          status: 'failed',
+          progress: 0,
+          error: error instanceof Error ? error : new Error(String(error))
+        })
+        throw error
+      }
     }
   }
 

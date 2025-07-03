@@ -1,8 +1,8 @@
 # Sekiban TypeScript Implementation Progress
 
 ## Overall Progress
-- **Total Tests Passing**: 449 ✅ (415 + 34 from Phase 12)
-- **Phases Completed**: 12/20 (60%)
+- **Total Tests Passing**: 506 ✅ (449 + 57 from Phase 13)
+- **Phases Completed**: 13/20 (65%)
 - **Packages Created**: 16
 
 ## Phase Breakdown
@@ -94,20 +94,51 @@
 
 ### ✅ Phase 12: Snapshot Management with Dapr Actors (34 tests)
 **Completed on**: 2025-07-03
+**Major Update on**: 2025-07-03 - Refactored to match C# implementation exactly
 
 #### Package Created:
-**@sekiban/dapr** (34 tests)
-- Dapr actor-based snapshot state management
-- Configurable snapshot strategies (count-based, time-based, hybrid)
-- DaprAggregateActor base class with automatic snapshots
-- Event replay optimization with snapshots
-- No separate storage needed (uses Dapr state)
-- Comprehensive test coverage for all snapshot scenarios
+**@sekiban/dapr** (34 tests + new actor implementations)
+- Complete Dapr actor implementation matching C# Sekiban.Pure.Dapr
+- Three core actors:
+  - **AggregateActor**: Manages aggregate state with snapshot + delta pattern
+  - **AggregateEventHandlerActor**: Handles event persistence and retrieval
+  - **MultiProjectorActor**: Cross-aggregate projections with safe/unsafe state
+- Key features:
+  - Snapshot + delta event loading for performance
+  - Optimistic concurrency control
+  - Safe state window (7 seconds) for eventual consistency
+  - Event buffering and ordering
+  - Reminder/timer fallback pattern
+  - Lazy initialization
+- Exactly mirrors C# implementation for full compatibility
 
-### 📋 Phase 13: Event Versioning & Schema Evolution (Planned)
-- Schema registry
-- Advanced upcasting/downcasting
-- Migration tools enhancement
+### ✅ Phase 13: Event Versioning & Schema Evolution (57 tests)
+**Completed on**: 2025-07-03
+
+#### Features Implemented:
+1. **Schema Registry** (17 tests)
+   - Event schema registration with Zod validation
+   - Version management and history tracking
+   - Compatibility checking (BACKWARD, FORWARD, FULL modes)
+   - Schema deprecation support
+   - Migration guide generation
+   - Field evolution tracking
+
+2. **Event Versioning System** (13 tests)
+   - Integration of schema registry with upcasters
+   - Multiple versioning strategies:
+     - KEEP_ORIGINAL: Maintain original event versions
+     - UPCAST_TO_LATEST: Always upcast to newest version
+     - UPCAST_TO_VERSION: Upcast to specific target version
+   - Batch event processing
+   - Migration code generation
+   - Schema changelog tracking
+
+3. **Enhanced Migration Features** (57 total tests)
+   - Updated upcaster system with async support
+   - Improved migration runner with rollback capability
+   - Better error handling and validation
+   - Progress tracking for long-running migrations
 
 ### 📋 Phase 14: Testing Framework & DevEx Tools (Planned)
 - Test utilities and helpers
@@ -187,4 +218,4 @@ ts/src/packages/
 - Established migration patterns for event evolution
 
 ---
-*Last Updated: 2025-07-03*
+*Last Updated: 2025-07-03 - Phase 13 Completed*

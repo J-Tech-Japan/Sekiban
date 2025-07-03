@@ -870,4 +870,9 @@ describe('UserProjector', () => {
 - TDDサイクルの練習に最適
 - モック作成が容易
 
-Phase 1-10は完了済みのため、**Phase 11.1 PostgreSQL Storage Provider**から継続することを推奨します。
+Phase 1-12は完了済みのため、**Phase 13: イベントバージョニング＆スキーマ進化**から継続することを推奨します。
+
+## 完了済みフェーズ
+- Phase 1-10: 基盤実装完了
+- Phase 11: 永続ストレージ実装（PostgreSQL、CosmosDB）完了
+- Phase 12: スナップショット管理（Dapr Actors統合）完了

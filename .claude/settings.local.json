@@ -28,7 +28,8 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npx vitest run:*)"
     ],
     "deny": [
       "Bash(curl:*)"
