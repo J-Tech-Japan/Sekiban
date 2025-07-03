@@ -105,7 +105,30 @@ Successfully implemented using t_wada's TDD approach (Red-Green-Refactor).
 - Composable guards
 - Full test coverage (13 tests)
 
-**Total Tests: 187 passing** ✅
+### Phase 6: Aggregates and Projectors ✅
+
+#### 6.1 Aggregate System ✓
+- `IAggregate` interface with version tracking
+- `Aggregate` class with immutability
+- Empty aggregate support
+- Version management and event tracking
+- Full test coverage (8 tests)
+
+#### 6.2 Projector System ✓
+- `IAggregateProjector` - Pure projection functions
+- `IProjector` - Extended with type information
+- Pattern matching for state transitions
+- Event-driven state updates
+- Full test coverage (9 tests)
+
+#### 6.3 Aggregate Projector ✓
+- Wrapper for applying projectors to aggregates
+- Sequential event application
+- Initial aggregate creation
+- Error handling
+- Full test coverage (6 tests)
+
+**Total Tests: 210 passing** ✅
 
 ## Usage
 
@@ -165,6 +188,30 @@ if (result.isErr()) {
     console.error('Event store error:', result.error.operation);
   }
 }
+
+// Aggregates and Projectors
+import { 
+  IProjector, 
+  IAggregatePayload, 
+  IEventPayload,
+  AggregateProjector,
+  createEmptyAggregate
+} from '@sekiban/core';
+
+// Define your projector
+class AccountProjector implements IProjector<IAggregatePayload> {
+  getTypeName() { return 'AccountProjector'; }
+  getVersion() { return 1; }
+  
+  project(state: IAggregatePayload, event: IEventPayload): IAggregatePayload {
+    // Pattern matching logic here
+    return state;
+  }
+}
+
+// Use the projector
+const projector = new AggregateProjector(new AccountProjector());
+const aggregate = projector.getInitialAggregate(partitionKeys, 'Account');
 ```
 
 ## Testing

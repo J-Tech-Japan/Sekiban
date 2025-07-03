@@ -104,11 +104,22 @@ export {
  * Export aggregate types
  */
 export type { 
-  IAggregatePayload
+  IAggregatePayload,
+  IAggregate,
+  IAggregateProjector,
+  IProjector
 } from './aggregates'
 
 export {
-  isAggregatePayload
+  isAggregatePayload,
+  Aggregate,
+  EmptyAggregatePayload,
+  createEmptyAggregate,
+  isEmptyAggregate,
+  ProjectionResult,
+  EventOrNone,
+  createProjector,
+  AggregateProjector
 } from './aggregates'
 
 /**

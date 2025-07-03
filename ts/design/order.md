@@ -208,14 +208,145 @@ const mockDateProducer: ISekibanDateProducer = {
 };
 ```
 
-## 次のフェーズ予定
+## Phase 6: 集約とプロジェクター（第6週）
+**イベントソーシングの中核**
 
-Phase 6以降で以下を実装予定:
-- **Phase 6**: 集約プロジェクター
-- **Phase 7**: コマンドハンドリング
-- **Phase 8**: クエリ処理
-- **Phase 9**: SekibanExecutor
-- **Phase 10**: ストレージプロバイダー統合
+### 6.1 Aggregate基本型
+**優先度: 最高**
+- `Aggregates/IAggregatePayload.cs` - マーカーインターフェース（Phase 3で実装済み）
+- `Aggregates/IAggregate.cs` - 集約の基本インターフェース
+  - Version: 集約のバージョン番号
+  - LastSortableUniqueId: 最後に適用されたイベントのID
+  - PartitionKeys: 集約の識別子
+  - ProjectorVersion: プロジェクターのバージョン
+  - ProjectorTypeName: プロジェクターの型名
+  - PayloadTypeName: ペイロードの型名
+
+### 6.2 Aggregate実装
+**優先度: 最高**
+- `Aggregates/Aggregate.cs` - 集約の具体実装
+  - Record型による不変性
+  - Projectメソッド: イベントを適用して新しい状態を生成
+  - 型安全なペイロード変換
+  - EmptyAggregateの定義
+
+### 6.3 プロジェクター基本型
+**優先度: 最高**
+- `Projectors/IAggregateProjector.cs` - プロジェクターインターフェース
+  - Project(payload, event): イベントを適用して新しいペイロードを返す
+  - GetVersion(): プロジェクターのバージョンを返す
+  - **重要**: プロジェクターはステートレスで純粋関数的
+
+### 6.4 プロジェクターの実装パターン
+**優先度: 高**
+プロジェクターは以下のパターンでイベントを処理:
+```csharp
+public class UserProjector : IAggregateProjector
+{
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) => 
+        (payload, ev.GetPayload()) switch
+        {
+            // 初期状態からのイベント適用
+            (EmptyAggregatePayload, UserRegistered registered) => 
+                new UnconfirmedUser(registered.Name, registered.Email),
+            
+            // 状態遷移
+            (UnconfirmedUser unconfirmed, UserConfirmed) => 
+                new ConfirmedUser(unconfirmed.Name, unconfirmed.Email),
+            
+            // 状態内の更新
+            (ConfirmedUser confirmed, UserNameUpdated updated) => 
+                confirmed with { Name = updated.NewName },
+            
+            // デフォルト（未処理のイベントは状態を変更しない）
+            _ => payload
+        };
+}
+```
+
+### 6.5 マルチプロジェクター
+**優先度: 中**
+- `Projectors/IMultiProjector.cs` - 複数の集約を横断するプロジェクター
+- `Projectors/MultiProjectionState.cs` - マルチプロジェクションの状態管理
+- 複数の集約からのイベントを統合して読み取りモデルを構築
+
+## Phase 7: コマンドハンドリング（第7週）
+**コマンド処理とイベント生成**
+
+### 7.1 コマンド基本型
+**優先度: 最高**
+- `Command/ICommand.cs` - コマンドマーカーインターフェース
+- `Command/Handlers/ICommandHandler.cs` - コマンドハンドラー
+  - Handle(command, context): EventOrNoneを返す
+  - コンテキストから現在の集約状態を取得
+
+### 7.2 CommandWithHandler
+**優先度: 最高**
+- `Command/Handlers/ICommandWithHandler.cs` - コマンドとハンドラーの統合インターフェース
+  - SpecifyPartitionKeys: コマンドからPartitionKeysを生成
+  - Handle: コマンドを処理してイベントを生成
+  - GetProjector: 関連するプロジェクターを返す
+
+### 7.3 EventOrNone
+**優先度: 高**
+- イベント生成結果の表現
+- イベントが生成される場合とされない場合の両方をサポート
+- ResultBoxとの統合
+
+## Phase 8: クエリ処理（第8週）
+**読み取りモデルとクエリ**
+
+## Phase 9: SekibanExecutor（第9週）
+**実行エンジン**
+
+## Phase 10: ストレージプロバイダー統合（第10週）
+**永続化層**
+
+## 実装のポイント（Phase 6）
+
+### TypeScript実装での考慮事項
+
+1. **パターンマッチング**
+   - C#のswitch式 → TypeScriptのif-else チェーンまたはパターンマッチングライブラリ
+   - 型ガードを活用した安全な型判定
+
+2. **不変性**
+   - C#のrecord with式 → TypeScriptのspread演算子とreadonly
+   - Immerライブラリの活用検討
+
+3. **プロジェクターの純粋性**
+   - 副作用なし
+   - 同じ入力に対して常に同じ出力
+   - テストが容易
+
+4. **集約の状態遷移**
+   - 型レベルで有効な状態遷移を表現
+   - 無効な状態遷移はコンパイル時エラー
+
+### テスト戦略（Phase 6）
+
+```typescript
+describe('UserProjector', () => {
+  it('should create unconfirmed user from UserRegistered event', () => {
+    const projector = new UserProjector();
+    const event = createEvent(new UserRegistered('John', 'john@example.com'));
+    
+    const result = projector.project(EmptyAggregatePayload, event);
+    
+    expect(result).toEqual(new UnconfirmedUser('John', 'john@example.com'));
+  });
+  
+  it('should transition from unconfirmed to confirmed', () => {
+    const projector = new UserProjector();
+    const unconfirmed = new UnconfirmedUser('John', 'john@example.com');
+    const event = createEvent(new UserConfirmed());
+    
+    const result = projector.project(unconfirmed, event);
+    
+    expect(result).toEqual(new ConfirmedUser('John', 'john@example.com'));
+  });
+});
+```
 
 ## 推奨開始点
 
