@@ -2,7 +2,7 @@
 
 ## Overall Progress
 - **Total Tests Passing**: 633 ✅ (557 + 76 from Phase 15)
-- **Phases Completed**: 15/20 (75%)
+- **Phases Completed**: 15/21 (71%)
 - **Packages Created**: 18
 
 ## Phase Breakdown
@@ -212,27 +212,83 @@ Enterprise-grade process managers and sagas for managing long-running business p
 
 **Impact**: Provides enterprise-grade support for complex, long-running business processes with proper persistence, error handling, and monitoring capabilities.
 
-### 📋 Phase 16: Monitoring & Observability (Planned)
+### 📋 Phase 16: TypeScript Dapr Sample Application (Planned)
+**Goal**: Create a comprehensive TypeScript sample application demonstrating Sekiban with Dapr integration
+
+#### Features to Implement:
+1. **Domain Layer** (@sekiban/dapr-domain)
+   - User aggregate (CreateUser, UpdateUserEmail, UpdateUserName)
+   - WeatherForecast aggregate (InputWeatherForecast, UpdateLocation, Delete)
+   - Event handlers and projectors using @sekiban/core
+   - Multi-projections for statistics and analytics
+
+2. **API Service** (sekiban-dapr-api)
+   - Express.js with Dapr SDK integration
+   - Command/Query endpoints with @sekiban/core
+   - PostgreSQL EventStore for event persistence (via @sekiban/postgres)
+   - In-memory Dapr state store for local development
+   - In-memory Dapr pub/sub for event distribution
+   - Dapr actors for aggregate management
+   - Health checks and monitoring endpoints
+
+3. **Web Frontend** (sekiban-dapr-web)
+   - React/Next.js application
+   - BFF pattern calling the API service
+   - User management interface
+   - Weather forecast dashboard
+   - Real-time updates via Dapr pub/sub
+
+4. **Infrastructure & DevOps**
+   - Docker Compose for local development (PostgreSQL only)
+   - Dapr components (in-memory state store and pub/sub for local dev)
+   - PostgreSQL EventStore for event persistence
+   - Configuration management with @sekiban/config
+   - Development and deployment scripts
+
+#### Technical Stack:
+- **Backend**: Node.js, Express.js, TypeScript, Dapr SDK
+- **Frontend**: React, Next.js, TypeScript
+- **Dapr**: In-memory state management, in-memory pub/sub, actors
+- **Event Store**: PostgreSQL (via @sekiban/postgres)
+- **Local Development**: Docker Compose (PostgreSQL only)
+- **Testing**: Vitest, @sekiban/testing, Testcontainers
+
+#### Project Structure:
+```
+ts/samples/dapr-sample/
+├── sekiban-dapr-api/          # Node.js/Express API service with Dapr
+├── sekiban-dapr-web/          # React/Next.js frontend (BFF pattern)
+├── sekiban-dapr-domain/       # Domain models using @sekiban/* packages
+├── sekiban-dapr-shared/       # Shared types and utilities
+├── dapr-components/           # Dapr component configurations
+├── docker-compose.yml         # Local development orchestration
+├── package.json              # Workspace configuration
+└── README.md                 # Getting started guide
+```
+
+**Impact**: Provides a real-world example of building distributed event-sourced applications with TypeScript, Dapr, and Sekiban, serving as a template for enterprise applications.
+
+### 📋 Phase 17: Monitoring & Observability (Planned)
 - Metrics collection
 - Distributed tracing (OpenTelemetry)
 - Health checks and alerts
 
-### 📋 Phase 17: Multi-tenancy & Security (Planned)
+### 📋 Phase 18: Multi-tenancy & Security (Planned)
 - Tenant isolation
 - Encryption and security features
 - Compliance tools (GDPR)
 
-### 📋 Phase 18: Integration & Messaging (Planned)
+### 📋 Phase 19: Integration & Messaging (Planned)
 - Message bus integration (Kafka/RabbitMQ)
 - REST/GraphQL APIs
 - External system connectors
 
-### 📋 Phase 19: Performance & Scalability (Planned)
+### 📋 Phase 20: Performance & Scalability (Planned)
 - Batch processing optimization
 - Horizontal scaling
 - Advanced caching strategies
 
-### 📋 Phase 20: Production Readiness (Planned)
+### 📋 Phase 21: Production Readiness (Planned)
 - Zero-downtime deployment
 - Comprehensive documentation
 - Community and ecosystem building
@@ -268,10 +324,10 @@ ts/src/packages/
 - **Monorepo Structure**: Organized packages
 
 ## Next Steps
-1. Begin Phase 12: Snapshot Management
+1. Begin Phase 16: TypeScript Dapr Sample Application
 2. Performance benchmarking of storage providers
 3. Documentation improvements
-4. Example applications
+4. Community building and adoption
 
 ## Recent Achievements
 - Successfully implemented all planned storage providers
@@ -280,4 +336,4 @@ ts/src/packages/
 - Established migration patterns for event evolution
 
 ---
-*Last Updated: 2025-07-03 - Phase 14 Completed*
+*Last Updated: 2025-07-03 - Phase 15 Completed, Phase 16 Planned*

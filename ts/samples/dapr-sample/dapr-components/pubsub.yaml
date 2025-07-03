@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.in-memory
+  version: v1
+  metadata:
+    - name: consumerID
+      value: "sekiban-dapr-sample"
