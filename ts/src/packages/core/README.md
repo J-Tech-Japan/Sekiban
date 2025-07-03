@@ -2,113 +2,69 @@
 
 Core event sourcing and CQRS framework for TypeScript.
 
-## Installation
+## Phase 1 Implementation Status ✅
 
-```bash
-npm install @sekiban/core
-```
+Successfully implemented using t_wada's TDD approach (Red-Green-Refactor):
 
-## Features
+### 1.1 Date Producer ✓
+- `ISekibanDateProducer` interface
+- `SekibanDateProducer` implementation with singleton pattern
+- Mock implementations for testing
+- Full test coverage
 
-- **Event Sourcing**: Store domain events as the source of truth
-- **CQRS**: Separate command and query responsibilities
-- **Type-Safe**: Full TypeScript support with strong typing
-- **Flexible**: Pluggable storage backends and serialization
-- **Testing**: Built-in in-memory implementations for testing
+### 1.2 UUID Extensions ✓
+- `createVersion7()` - Time-ordered UUID v7 implementation
+- `createNamespacedUuid()` - Deterministic UUID generation
+- `generateUuid()` - Standard UUID v4
+- `isValidUuid()` - UUID validation
+- Full test coverage including edge cases
 
-## Quick Start
+### 1.3 Validation Utilities ✓
+- Zod-based validation framework
+- `createValidator()` - Create validators from Zod schemas
+- `isValid()`, `getErrors()`, `validateOrThrow()` helper functions
+- Support for complex validation scenarios
+- Full test coverage
+
+## Usage
 
 ```typescript
 import { 
-  IEventPayload, 
-  IAggregatePayload,
-  AggregateProjector,
-  CommandHandler,
-  InMemorySekibanExecutor,
-  ok
+  SekibanDateProducer,
+  createVersion7,
+  createValidator,
+  z
 } from '@sekiban/core';
 
-// Define events
-class UserCreated implements IEventPayload {
-  readonly eventType = 'UserCreated';
-  constructor(public readonly name: string, public readonly email: string) {}
-}
+// Date producer
+const dateProducer = SekibanDateProducer.getRegistered();
+const now = dateProducer.now();
 
-// Define aggregate state
-class User implements IAggregatePayload {
-  readonly aggregateType = 'User';
-  constructor(
-    public readonly name: string,
-    public readonly email: string,
-    public readonly createdAt: Date
-  ) {}
-}
+// UUID v7 (time-ordered)
+const aggregateId = createVersion7();
 
-// Define projector
-class UserProjector extends AggregateProjector<User> {
-  constructor() {
-    super('User');
-    
-    this.on(UserCreated, (aggregate, event) => ({
-      ...aggregate,
-      payload: new User(event.name, event.email, new Date())
-    }));
-  }
-
-  getInitialState(partitionKeys) {
-    return {
-      partitionKeys,
-      aggregateType: 'User',
-      version: 0,
-      payload: new User('', '', new Date())
-    };
-  }
-}
-
-// Define command
-class CreateUser {
-  readonly commandType = 'CreateUser';
-  constructor(public readonly name: string, public readonly email: string) {}
-}
-
-// Define command handler
-const createUserHandler = new CommandHandler('CreateUser', 'User', {
-  handle: (command: CreateUser) => ok([new UserCreated(command.name, command.email)])
+// Validation
+const userSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email()
 });
 
-// Create executor
-const executor = new InMemorySekibanExecutor();
-executor.registerProjector(new UserProjector());
-// Register handler...
+const validator = createValidator(userSchema);
+const result = validator.validate({ name: 'John', email: 'john@example.com' });
 
-// Execute command
-const result = await executor.executeCommand(
-  new CreateUser('John Doe', 'john@example.com'),
-  PartitionKeys.generate()
-);
+if (result.success) {
+  console.log('Valid user:', result.data);
+}
 ```
 
-## Core Concepts
+## Testing
 
-### Events
-Events represent facts that have happened in your domain. They are immutable and stored in sequence.
+```bash
+pnpm test
+```
 
-### Aggregates
-Aggregates are domain objects that encapsulate business logic and state. State is derived from events.
+## Building
 
-### Commands
-Commands represent intentions to change the system state. They are validated and produce events.
-
-### Queries
-Queries retrieve data without modifying state. They can read from aggregates or projections.
-
-### Projections
-Projections build read models from events, optimized for specific query patterns.
-
-## API Reference
-
-See the [API documentation](https://github.com/J-Tech-Japan/Sekiban-ts) for detailed reference.
-
-## License
-
-MIT
+```bash
+pnpm build
+```

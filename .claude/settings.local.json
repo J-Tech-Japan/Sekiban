@@ -14,7 +14,12 @@
       "Bash(ls:*)",
       "Bash(git check-ignore:*)",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm build)",
+      "Bash(touch:*)"
     ],
     "deny": [
       "Bash(curl:*)"
