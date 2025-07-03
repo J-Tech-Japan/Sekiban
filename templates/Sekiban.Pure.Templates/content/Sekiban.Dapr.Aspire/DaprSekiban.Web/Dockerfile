@@ -4,12 +4,13 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-COPY *.sln ./
+# Copy only the project files needed for the Web project
 COPY DaprSekiban.Web/*.csproj ./DaprSekiban.Web/
 COPY DaprSekiban.Domain/*.csproj ./DaprSekiban.Domain/
 COPY DaprSekiban.ServiceDefaults/*.csproj ./DaprSekiban.ServiceDefaults/
 
-RUN dotnet restore
+# Restore only the Web project and its dependencies
+RUN dotnet restore DaprSekiban.Web/DaprSekiban.Web.csproj
 
 COPY . .
 RUN dotnet publish DaprSekiban.Web/DaprSekiban.Web.csproj -c Release -o /app/publish --self-contained false

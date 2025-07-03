@@ -13,7 +13,22 @@ az login --tenant contoso.onmicrosoft.com
 az login --tenant <tenant-id> --use-device-code
 ```
 
-2. Create Setting File
+2. Register Required Azure Resource Providers
+
+Before deploying, you need to register the required Azure resource providers:
+
+```bash
+chmod +x ./register_providers.sh
+./register_providers.sh
+```
+
+This script registers:
+- `Microsoft.App` (for Container Apps)
+- `Microsoft.ContainerService` (for Container Apps Environment)
+- `Microsoft.OperationalInsights` (for Log Analytics)
+- `Microsoft.ServiceBus` (for Service Bus)
+
+3. Create Setting File
 
 create your deploy file as mydeploy.local.json
 Use only lower case and '-' and number in your resource group name
@@ -21,15 +36,15 @@ Use only lower case and '-' and number in your resource group name
 {
     "resourceGroupName": "your-resource-888",
     "location": "japaneast",
-    "backendRelativePath": "../../MyProject.ApiService",
-    "frontendRelativePath": "../../MyProject.Web",
+    "backendRelativePath": "../../DaprSekiban.ApiService",
+    "frontendRelativePath": "../../DaprSekiban.Web",
     "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
 }
 ```
 
 remember file name 'mydeploy' and use in following step
 
-3. Create Resource Group
+4. Create Resource Group
 
 You might need to install jq library to your environment.
 
@@ -42,7 +57,7 @@ chmod +x ./create_resource_group.sh
 ./create_resource_group.sh mydeploy   
 ```
 
-4. Purge Key Vault (if needed)
+5. Purge Key Vault (if needed)
 
 If you've previously deleted a Key Vault with the same name and are encountering issues recreating it, you may need to purge the soft-deleted Key Vault first:
 
@@ -53,31 +68,31 @@ chmod +x ./purge_keyvault.sh
 
 Note: This script should only be used when a Key Vault has been deleted but is still in a "soft-deleted" state, preventing you from creating a new Key Vault with the same name.
 
-5. Create Log analytics workspace
+6. Create Log analytics workspace
 ```bash
 chmod +x ./create_log-analytics.sh
 ./create_log-analytics.sh mydeploy
 ```
 
-6. Create Container Registry
+7. Create Container Registry
 ```bash
 chmod +x ./create_container_registry.sh
 ./create_container_registry.sh mydeploy
 ```
 
-7. Deploy backend image to ACR
+8. Deploy backend image to ACR
 ```bash
 chmod +x ./code_deploy_backend.sh
 ./code_deploy_backend.sh mydeploy   
 ```
 
-8. Deploy frontend image to ACR
+9. Deploy frontend image to ACR
 ```bash
 chmod +x ./code_deploy_frontend.sh
 ./code_deploy_frontend.sh mydeploy   
 ```
 
-9. Deploy bicep file (all or each)
+10. Deploy bicep file (all or each)
 
 a. Deploy All
 
@@ -98,14 +113,14 @@ chmod +x ./runbicep.sh
 
 ```
 
-10. Give yourself access to KeyVault (optional)
+11. Give yourself access to KeyVault (optional)
 
 ```bash
 chmod +x ./user_access_keyvault.sh
 ./user_access_keyvault.sh mydeploy   
 ```
 
-11. Setup Github Actions (Optional) - Create Azure Credentials
+12. Setup Github Actions (Optional) - Create Azure Credentials
 
 ```bash
 chmod +x ./generate_azure_credentials.sh
@@ -114,7 +129,7 @@ chmod +x ./generate_azure_credentials.sh
 
 json will print on the screen, you will keep that json as AZURE_CREDENTIALS_MYDEPLOY in github secrets.
 
-12. Setup Github Actions
+13. Setup Github Actions
 
 you need to include mydeploy.local.json to the git
 deploy-backend.yml
@@ -127,7 +142,9 @@ on:
     branches:
       - main
     paths:
-      - "src/MyProject/**"
+      - "DaprSekiban.ApiService/**"
+      - "DaprSekiban.Domain/**"
+      - "DaprSekiban.ServiceDefaults/**"
 env:
   DOTNET_VERSION: 9.0.x
   RESOUCE_GROUP_NAME: <resouce_group_name>
@@ -166,7 +183,7 @@ jobs:
         with:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-          file: MyProject.ApiService/Dockerfile
+          file: DaprSekiban.ApiService/Dockerfile
 
       - name: Update ACA image
         run: |
@@ -186,7 +203,9 @@ on:
     branches:
       - main
     paths:
-      - "src/MyProject/**"
+      - "DaprSekiban.Web/**"
+      - "DaprSekiban.Domain/**"
+      - "DaprSekiban.ServiceDefaults/**"
 env:
   DOTNET_VERSION: 9.0.x
   RESOUCE_GROUP_NAME: <resouce_group_name>
@@ -225,7 +244,7 @@ jobs:
         with:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-          file: MyProject.Web/Dockerfile
+          file: DaprSekiban.Web/Dockerfile
 
       - name: Update ACA image
         run: |

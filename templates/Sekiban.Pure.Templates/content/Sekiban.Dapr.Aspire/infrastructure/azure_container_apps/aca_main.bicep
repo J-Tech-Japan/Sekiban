@@ -78,32 +78,7 @@ module appInsightsCreate '5.applicationinsights/1.application-insights.bicep' = 
   params: {}
 }
 
-// 6. Dapr Components
-module daprStateStoreComponent '6.dapr-components/1.statestore-component.bicep' = {
-  name: 'daprStateStoreComponentDeployment'
-  params: {
-    daprStateStoreType: daprStateStoreType
-  }
-  dependsOn: [
-    keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
-  ]
-}
-
-module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
-  name: 'daprPubSubComponentDeployment'
-  params: {
-    daprPubSubType: daprPubSubType
-  }
-  dependsOn: [
-    keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
-  ]
-}
-
-// 7. Backend App Container with Dapr
+// 6. Managed Environment (must be created before Dapr components)
 module managedEnv '7.backend/1.managed-env.bicep' = {
   name: 'managedEnvDeployment'
   params: {
@@ -117,6 +92,34 @@ module managedEnv '7.backend/1.managed-env.bicep' = {
   ]
 }
 
+// 7. Dapr Components (deployed after managed environment)
+module daprStateStoreComponent '6.dapr-components/1.statestore-component.bicep' = {
+  name: 'daprStateStoreComponentDeployment'
+  params: {
+    daprStateStoreType: daprStateStoreType
+  }
+  dependsOn: [
+    keyVaultCreate
+    storageCreate
+    storageSaveKeyVault
+    managedEnv
+  ]
+}
+
+module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
+  name: 'daprPubSubComponentDeployment'
+  params: {
+    daprPubSubType: daprPubSubType
+  }
+  dependsOn: [
+    keyVaultCreate
+    storageCreate
+    storageSaveKeyVault
+    managedEnv
+  ]
+}
+
+// 8. Backend App Container with Dapr
 module backendContainerApp '7.backend/2.container-app.bicep' = {
   name: 'backendContainerAppDeployment'
   params: {
@@ -147,7 +150,7 @@ module backendDiagnosticSettings '7.backend/4.diagnostic-settings.bicep' = {
   ]
 }
 
-// 8. Frontend App Container
+// 9. Frontend App Container
 module blazorContainerApp '8.blazor/1.container-app.bicep' = {
   name: 'blazorContainerAppDeployment'
   params: {}
