@@ -1,6 +1,3 @@
-@secure()
-param logAnalyticsSharedKey string
-
 param managedEnvName string = 'env-${resourceGroup().name}'
 param location string = resourceGroup().location
 param logAnalyticsWorkspaceResourceId string = 'law-${resourceGroup().name}'
@@ -22,7 +19,7 @@ resource managedEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalyticsWorkspace.properties.customerId
-        sharedKey: logAnalyticsSharedKey
+        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
       }
     }
     vnetConfiguration: {

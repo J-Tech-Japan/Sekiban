@@ -92,25 +92,53 @@ chmod +x ./code_deploy_frontend.sh
 ./code_deploy_frontend.sh mydeploy   
 ```
 
-10. Deploy bicep file (all or each)
+10. Deploy Infrastructure First (Staged Deployment)
 
-a. Deploy All
+Due to the dependency between Container Apps and container images, we use a staged deployment approach:
+
+a. Deploy Infrastructure Only (excluding Container Apps)
 
 ```bash
-
 chmod +x ./runbicep.sh
-./runbicep.sh mydeploy aca_main.bicep
+./runbicep.sh mydeploy aca_infrastructure.bicep
 ```
 
-b. Deploy Each Bicep
+This deploys:
+- Key Vault
+- Storage Account
+- Cosmos DB
+- Virtual Network
+- Application Insights & Log Analytics
+- Container Apps Environment (Managed Environment)
+- Dapr Components
+- Service Bus (if using for pub/sub)
+
+b. Build and Push Container Images
+
+After infrastructure is deployed, build and push images:
 
 ```bash
+# Deploy backend image to ACR (if not already done in step 8)
+./code_deploy_backend.sh mydeploy
 
-chmod +x ./runbicep.sh
-./runbicep mydeploy bicep_you_want
-# for example
-./runbicep mydeploy 1.keyvault/create.bicep
+# Deploy frontend image to ACR (if not already done in step 9)
+./code_deploy_frontend.sh mydeploy
+```
 
+c. Deploy Container Apps
+
+Finally, deploy the Container Apps:
+
+```bash
+./runbicep.sh mydeploy aca_apps.bicep
+```
+
+Alternative: Deploy Everything at Once (if images already exist)
+
+If you've already pushed images to ACR, you can use the all-in-one deployment:
+
+```bash
+./runbicep.sh mydeploy aca_main.bicep
 ```
 
 11. Give yourself access to KeyVault (optional)

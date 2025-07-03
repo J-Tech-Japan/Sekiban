@@ -26,21 +26,6 @@ LOCATION=$(jq -r '.location' "$CONFIG_FILE")
 
 echo "Deploying to resource group: $RESOURCE_GROUP in location: $LOCATION"
 
-if [ "$BICEP_FILE" = "aca_main.bicep" ]; then
-  SHARED_KEY=$(az monitor log-analytics workspace get-shared-keys \
-    --resource-group $RESOURCE_GROUP \
-    --workspace-name law-$RESOURCE_GROUP \
-    --query primarySharedKey -o tsv)
-  PARAMS="logAnalyticsSharedKey=$SHARED_KEY"
-
-  az deployment group create \
-    --resource-group "$RESOURCE_GROUP" \
-    --template-file "$BICEP_FILE" \
-    --parameters "$PARAMS"
-else
-  echo "No set logAnalyticsSharedKey"
-
-  az deployment group create \
-    --resource-group "$RESOURCE_GROUP" \
-    --template-file "$BICEP_FILE"
-fi
+az deployment group create \
+  --resource-group "$RESOURCE_GROUP" \
+  --template-file "$BICEP_FILE"

@@ -1,5 +1,6 @@
-// Main Bicep file to deploy all resources for Sekiban Dapr Aspire on Azure Container Apps
-// This file orchestrates the deployment of various modules.
+// Infrastructure-only Bicep file to deploy base resources for Sekiban Dapr Aspire on Azure Container Apps
+// This file deploys everything except the Container Apps themselves
+// Use this first, then push images, then deploy aca_apps.bicep
 
 targetScope = 'resourceGroup'
 
@@ -9,7 +10,7 @@ param daprStateStoreType string = 'azureblobstorage'
 
 @description('The type of Dapr pub/sub to use')
 @allowed(['azurestoragequeues', 'azureservicebus'])
-param daprPubSubType string = 'azurestoragequeues'
+param daprPubSubType string = 'azureservicebus'
 
 // Remove the logAnalyticsSharedKey parameter as it will be retrieved within the module
 
@@ -77,7 +78,7 @@ module appInsightsCreate '5.applicationinsights/1.application-insights.bicep' = 
   params: {}
 }
 
-// 6. Managed Environment (must be created before Dapr components)
+// 6. Managed Environment (Container Apps Environment)
 module managedEnv '7.backend/1.managed-env.bicep' = {
   name: 'managedEnvDeployment'
   params: {}
@@ -116,58 +117,18 @@ module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
   ]
 }
 
-// 8. Backend App Container with Dapr
-module backendContainerApp '7.backend/2.container-app.bicep' = {
-  name: 'backendContainerAppDeployment'
-  params: {
-    daprStateStoreType: daprStateStoreType
-    daprPubSubType: daprPubSubType
-  }
+// Create Service Bus if using it for pub/sub
+module serviceBus '6.dapr-components/pubsub-servicebus.bicep' = if (daprPubSubType == 'azureservicebus') {
+  name: 'serviceBusDeployment'
+  params: {}
   dependsOn: [
     managedEnv
-    cosmosSaveKeyVault
-    daprStateStoreComponent
-    daprPubSubComponent
-  ]
-}
-
-module backendKeyVaultAccess '7.backend/3.key-vault-access.bicep' = {
-  name: 'backendKeyVaultAccessDeployment'
-  params: {}
-  dependsOn: [
-    backendContainerApp
-  ]
-}
-
-module backendDiagnosticSettings '7.backend/4.diagnostic-settings.bicep' = {
-  name: 'backendDiagnosticSettingsDeployment'
-  params: {}
-  dependsOn: [
-    backendContainerApp
-  ]
-}
-
-// 9. Frontend App Container
-module blazorContainerApp '8.blazor/1.container-app.bicep' = {
-  name: 'blazorContainerAppDeployment'
-  params: {}
-  dependsOn: [
-    appInsightsCreate
-    vnetCreate
-    backendContainerApp
-  ]
-}
-
-module blazorDiagnosticSettings '8.blazor/2.diagnositic-settings.bicep' = {
-  name: 'blazorDiagnosticSettingsDeployment'
-  params: {}
-  dependsOn: [
-    blazorContainerApp
   ]
 }
 
 // Outputs
-output backendUrl string = backendContainerApp.outputs.url
-output blazorUrl string = blazorContainerApp.outputs.url
 output keyVaultName string = keyVaultCreate.outputs.keyVaultName
 output managedEnvironmentId string = managedEnv.outputs.id
+output managedEnvironmentName string = managedEnv.outputs.name
+output acrName string = replace(toLower('acr-${resourceGroup().name}'), '-', '')
+output acrLoginServer string = '${replace(toLower('acr-${resourceGroup().name}'), '-', '')}.azurecr.io'
