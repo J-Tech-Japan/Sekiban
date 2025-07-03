@@ -1,0 +1,21 @@
+{
+  "name": "@sekiban/test-utils",
+  "version": "0.1.0",
+  "description": "Test utilities and helpers for Sekiban event sourcing",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "test:watch": "vitest watch"
+  },
+  "dependencies": {
+    "@sekiban/core": "workspace:*",
+    "neverthrow": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,9 +1,9 @@
 # Sekiban TypeScript Implementation Progress
 
 ## Overall Progress
-- **Total Tests Passing**: 506 ✅ (449 + 57 from Phase 13)
-- **Phases Completed**: 13/20 (65%)
-- **Packages Created**: 16
+- **Total Tests Passing**: 557 ✅ (506 + 51 from Phase 14)
+- **Phases Completed**: 14/20 (70%)
+- **Packages Created**: 17
 
 ## Phase Breakdown
 
@@ -140,10 +140,46 @@
    - Better error handling and validation
    - Progress tracking for long-running migrations
 
-### 📋 Phase 14: Testing Framework & DevEx Tools (Planned)
-- Test utilities and helpers
-- Debugging tools
-- Developer templates and CLI
+### ✅ Phase 14: Testing Framework & DevEx Tools (51 tests)
+**Completed on**: 2025-07-03
+
+#### Package Created:
+**@sekiban/test-utils** (51 tests)
+
+Test utilities and helpers for event sourcing development:
+
+1. **Test Builders** (29 tests)
+   - **EventBuilder**: Fluent API for creating test events
+   - **CommandBuilder**: Fluent API for creating test commands  
+   - **AggregateBuilder**: Fluent API for creating test aggregates
+   - Support for batch creation and modification
+   - Validation and error handling
+
+2. **Scenario DSL** (7 tests)
+   - BDD-style test scenarios (Given-When-Then)
+   - Command execution testing
+   - Event expectation assertions
+   - Aggregate state verification
+   - Time-travel scenarios
+   - Support for event sequences
+
+3. **Event Stream Debugger** (15 tests)
+   - Timeline analysis of event streams
+   - Event ordering validation
+   - Timestamp anomaly detection
+   - Event filtering and searching
+   - Statistics calculation
+   - Event replay capabilities
+   - Diff generation between events
+   - Export formats (Markdown, CSV, JSON)
+   - ASCII timeline visualization
+
+#### Key Features:
+- **Fluent Builder Pattern**: Intuitive API for creating test data
+- **Scenario Testing**: Comprehensive DSL for behavior-driven tests
+- **Debugging Tools**: Powerful utilities for analyzing event streams
+- **Type Safety**: Full TypeScript support with generics
+- **Flexibility**: Support for partial updates and customization
 
 ### 📋 Phase 15: Process Managers & Sagas (Planned)
 - Long-running process coordination
@@ -218,4 +254,4 @@ ts/src/packages/
 - Established migration patterns for event evolution
 
 ---
-*Last Updated: 2025-07-03 - Phase 13 Completed*
+*Last Updated: 2025-07-03 - Phase 14 Completed*
