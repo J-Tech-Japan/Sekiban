@@ -1,0 +1,7 @@
+{
+    "resourceGroupName": "dapr-2025-0702",
+    "location": "japaneast",
+    "backendRelativePath": "../../MyProject.ApiService",
+    "frontendRelativePath": "../../MyProject.Web",
+    "logincommand": "az login --tenant tomohisatakaokagmail.onmicrosoft.com --use-device-code"
+}

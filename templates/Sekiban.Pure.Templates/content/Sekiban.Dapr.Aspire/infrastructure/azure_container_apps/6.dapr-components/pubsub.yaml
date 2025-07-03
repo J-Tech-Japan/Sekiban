@@ -3,20 +3,24 @@ kind: Component
 metadata:
   name: pubsub
 spec:
-  type: bindings.azure.storagequeues
+  type: pubsub.azure.servicebus.queues
   version: v1
   metadata:
-  - name: accountName
-    value: "[STORAGE_ACCOUNT_NAME]"
-  - name: accountKey
+  - name: connectionString
     secretKeyRef:
-      name: storage-key
-      key: key
+      name: servicebus-connectionstring
+      key: connectionString
   - name: queueName
     value: "daprpubsub"
-  - name: decodeBase64
-    value: "true"
-  - name: ttlInSeconds
-    value: "300"
+  - name: maxActiveMessages
+    value: "100"
+  - name: maxConcurrentHandlers
+    value: "10"
+  - name: lockDurationInSec
+    value: "60"
+  - name: autoDeleteOnIdleInSec
+    value: "0"
+  - name: defaultMessageTimeToLiveInSec
+    value: "604800"
   scopes:
   - daprsekiban-apiservice

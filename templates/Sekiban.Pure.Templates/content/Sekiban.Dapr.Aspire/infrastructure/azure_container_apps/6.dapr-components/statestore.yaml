@@ -18,5 +18,7 @@ spec:
     value: "10"
   - name: concurrency
     value: first-write
+  - name: actorStateStore
+    value: "true"
   scopes:
   - daprsekiban-apiservice
