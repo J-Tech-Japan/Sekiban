@@ -1,0 +1,22 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.azure.blobstorage
+  version: v2
+  metadata:
+  - name: accountName
+    value: "[STORAGE_ACCOUNT_NAME]"
+  - name: containerName
+    value: "daprstate"
+  - name: accountKey
+    secretKeyRef:
+      name: storage-key
+      key: key
+  - name: timeoutInSeconds
+    value: "10"
+  - name: concurrency
+    value: first-write
+  scopes:
+  - daprsekiban-apiservice

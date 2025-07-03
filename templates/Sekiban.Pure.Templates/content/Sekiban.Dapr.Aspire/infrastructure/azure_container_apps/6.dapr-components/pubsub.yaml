@@ -1,0 +1,22 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: bindings.azure.storagequeues
+  version: v1
+  metadata:
+  - name: accountName
+    value: "[STORAGE_ACCOUNT_NAME]"
+  - name: accountKey
+    secretKeyRef:
+      name: storage-key
+      key: key
+  - name: queueName
+    value: "daprpubsub"
+  - name: decodeBase64
+    value: "true"
+  - name: ttlInSeconds
+    value: "300"
+  scopes:
+  - daprsekiban-apiservice
