@@ -12,3 +12,8 @@ export * from './base';
  * Export in-memory executor implementation
  */
 export * from './in-memory';
+
+/**
+ * Export Sekiban executor implementation
+ */
+export * from './sekiban-executor';

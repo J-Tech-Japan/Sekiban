@@ -20,7 +20,8 @@ describe('@sekiban/core', () => {
 
   it('should export utility functions', () => {
     expect(Sekiban.generateUuid).toBeDefined();
-    expect(Sekiban.getCurrentUtcTimestamp).toBeDefined();
+    expect(Sekiban.createVersion7).toBeDefined();
+    expect(Sekiban.isValidUuid).toBeDefined();
   });
 
   it('should export document utilities', () => {
@@ -30,8 +31,9 @@ describe('@sekiban/core', () => {
   });
 
   it('should export event types', () => {
-    expect(Sekiban.EventBuilder).toBeDefined();
-    expect(Sekiban.InMemoryEventStream).toBeDefined();
+    expect(Sekiban.Event).toBeDefined();
+    expect(Sekiban.createEvent).toBeDefined();
+    expect(Sekiban.InMemoryEventStore).toBeDefined();
   });
 
   it('should export aggregate types', () => {
@@ -40,18 +42,24 @@ describe('@sekiban/core', () => {
   });
 
   it('should export command types', () => {
-    expect(Sekiban.CommandHandler).toBeDefined();
-    expect(Sekiban.CommandHandlerRegistry).toBeDefined();
+    expect(Sekiban.validateCommand).toBeDefined();
+    expect(Sekiban.required).toBeDefined();
+    expect(Sekiban.email).toBeDefined();
   });
 
   it('should export query types', () => {
-    expect(Sekiban.QueryHandler).toBeDefined();
-    expect(Sekiban.QueryHandlerRegistry).toBeDefined();
-    expect(Sekiban.MultiProjection).toBeDefined();
+    expect(Sekiban.MultiProjectionState).toBeDefined();
+    expect(Sekiban.AggregateListProjector).toBeDefined();
+    expect(Sekiban.createAggregateListProjector).toBeDefined();
   });
 
   it('should export executor types', () => {
     expect(Sekiban.InMemorySekibanExecutor).toBeDefined();
-    expect(Sekiban.InMemorySekibanExecutorBuilder).toBeDefined();
+  });
+
+  it('should export storage provider types', () => {
+    expect(Sekiban.StorageProviderType).toBeDefined();
+    expect(Sekiban.StorageProviderFactory).toBeDefined();
+    expect(Sekiban.InMemoryStorageProvider).toBeDefined();
   });
 });

@@ -21,7 +21,10 @@
       "Bash(pnpm build)",
       "Bash(touch:*)",
       "Bash(pnpm vitest run:*)",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [
       "Bash(curl:*)"

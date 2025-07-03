@@ -112,6 +112,21 @@ C#のSekiban.Pureコードを分析した結果、**依存関係の少ない基�
 - `Commands/CommandHandler.cs`
 - EventOrNone パターン
 
+## Phase 8: クエリ処理（第8週）
+**読み取りモデルの実装**
+
+### 8.1 Query インターフェース
+**優先度: 高**
+- `Queries/IQuery.cs`
+- `Queries/IQueryHandler.cs`
+- 型安全なクエリ定義
+
+### 8.2 Query Handler
+**優先度: 高**
+- `Queries/QueryHandler.cs`
+- Aggregate読み取り
+- Multi-Projection対応
+
 ## 実装戦略の利点
 
 ### 1. **段階的検証**
@@ -327,10 +342,82 @@ public class UserProjector : IAggregateProjector
 **読み取りモデルとクエリ**
 
 ## Phase 9: SekibanExecutor（第9週）
-**実行エンジン**
+**実行エンジン - コマンドとクエリの実行**
+
+### 9.1 Executor基本インターフェース
+**優先度: 最高**
+- `ISekibanExecutor` - 統合実行インターフェース
+  - CommandAsync: コマンドを実行してイベントを生成
+  - QueryAsync: クエリを実行して結果を返す
+  - 型安全なコマンド/クエリ実行
+  - エラーハンドリングとリトライ
+
+### 9.2 Command Executor
+**優先度: 最高**
+- `ICommandExecutor` - コマンド実行専用インターフェース
+  - ExecuteCommand: コマンドハンドラーとプロジェクターの連携
+  - バージョン一貫性の確保
+  - 楽観的並行性制御
+  - イベント保存とアグリゲート更新
+
+### 9.3 Query Executor
+**優先度: 高**
+- `IQueryExecutor` - クエリ実行専用インターフェース
+  - ExecuteQuery: 単一アグリゲートクエリ
+  - ExecuteMultiProjectionQuery: マルチプロジェクションクエリ
+  - ExecuteListQuery: リストクエリとページネーション
+  - 読み取り専用操作
+
+### 9.4 In-Memory Executor
+**優先度: 高**
+- `InMemorySekibanExecutor` - メモリ内実行エンジン
+- テストとプロトタイピング用途
+- 完全な機能実装
+- 高速実行
 
 ## Phase 10: ストレージプロバイダー統合（第10週）
 **永続化層**
+
+### 10.1 Storage Provider インターフェース
+**優先度: 最高**
+- `IEventStorageProvider` - ストレージプロバイダーの基本インターフェース
+  - SaveEvents: イベントの永続化
+  - LoadEvents: イベントの読み込み
+  - LoadEventsByPartitionKey: パーティションキーによるイベント読み込み
+  - GetLatestSnapshot: 最新スナップショットの取得
+  - SaveSnapshot: スナップショットの保存
+
+### 10.2 Storage Configuration
+**優先度: 最高**
+- `StorageProviderConfig` - ストレージプロバイダーの設定
+  - ConnectionString: 接続文字列
+  - DatabaseName: データベース名
+  - ContainerName/TableName: コンテナー/テーブル名
+  - RetryPolicy: リトライポリシー
+  - TimeoutSettings: タイムアウト設定
+
+### 10.3 Cosmos DB Provider
+**優先度: 高**
+- `CosmosDbEventStorageProvider` - Azure Cosmos DB実装
+  - パーティションキー戦略
+  - 変更フィード対応
+  - 楽観的並行性制御
+  - バッチ書き込み最適化
+
+### 10.4 PostgreSQL Provider
+**優先度: 高**
+- `PostgresEventStorageProvider` - PostgreSQL実装
+  - JSONBを使用したイベント保存
+  - インデックス戦略
+  - トランザクション管理
+  - イベントストリーミング対応
+
+### 10.5 Storage Provider Factory
+**優先度: 中**
+- `StorageProviderFactory` - プロバイダーのファクトリー
+  - 設定に基づくプロバイダー選択
+  - プロバイダーの登録と解決
+  - デフォルトプロバイダーの設定
 
 ## 実装のポイント（Phase 6）
 

@@ -1,14 +1,37 @@
 /**
- * Export query types and interfaces
+ * Export query interfaces
  */
-export * from './types';
+export type {
+  IQuery,
+  IQueryContext,
+  IMultiProjectionQuery,
+  IMultiProjectionListQuery,
+  IQueryPagingParameter,
+  QueryResult,
+  ListQueryResult
+} from './query'
+
+export {
+  createQueryResult,
+  createListQueryResult
+} from './query'
 
 /**
- * Export query handler types and implementations
+ * Export multi-projection interfaces
  */
-export * from './handler';
+export type {
+  IMultiProjector
+} from './multi-projection'
+
+export {
+  MultiProjectionState
+} from './multi-projection'
 
 /**
- * Export projection types and implementations
+ * Export aggregate list projector
  */
-export * from './projections';
+export {
+  AggregateListProjector,
+  AggregateListPayload,
+  createAggregateListProjector
+} from './aggregate-list-projector'

@@ -151,6 +151,69 @@ export {
 } from './commands'
 
 /**
+ * Export query types
+ */
+export type {
+  IQuery,
+  IQueryContext,
+  IMultiProjectionQuery,
+  IMultiProjectionListQuery,
+  IQueryPagingParameter,
+  QueryResult,
+  ListQueryResult,
+  IMultiProjector
+} from './queries'
+
+export {
+  createQueryResult,
+  createListQueryResult,
+  MultiProjectionState,
+  AggregateListProjector,
+  AggregateListPayload,
+  createAggregateListProjector
+} from './queries'
+
+/**
+ * Export executor types
+ */
+export type {
+  ISekibanExecutor,
+  ICommandExecutor,
+  IQueryExecutor,
+  CommandResponse,
+  QueryResponse,
+  ExecutorConfig
+} from './executors/sekiban-executor'
+
+export {
+  InMemorySekibanExecutor
+} from './executors/sekiban-executor'
+
+/**
+ * Export storage provider types
+ */
+export type {
+  IEventStorageProvider,
+  StorageProviderConfig,
+  EventBatch,
+  SnapshotData
+} from './storage'
+
+export {
+  StorageProviderType
+} from './storage'
+
+export {
+  StorageError,
+  ConnectionError,
+  ConcurrencyError as StorageConcurrencyError,
+  StorageProviderFactory,
+  InMemoryStorageProvider,
+  CosmosStorageProvider,
+  PostgresStorageProvider
+} from './storage'
+
+/**
  * Version information
  */
 export const VERSION = '0.0.1';
