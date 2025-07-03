@@ -27,7 +27,8 @@
       "Bash(npm run build:*)",
       "Bash(npm init:*)",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)"
     ],
     "deny": [
       "Bash(curl:*)"
