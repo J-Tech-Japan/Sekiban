@@ -128,7 +128,23 @@ Successfully implemented using t_wada's TDD approach (Red-Green-Refactor).
 - Error handling
 - Full test coverage (6 tests)
 
-**Total Tests: 210 passing** ✅
+### Phase 7: Command Handling ✅
+
+#### 7.1 Command Interfaces ✓
+- `ICommand` marker interface
+- `ICommandHandler` for command processing
+- `ICommandWithHandler` combining command and handler
+- Command context with aggregate access
+- Full test coverage (7 tests)
+
+#### 7.2 Command Validation ✓
+- Declarative validation rules
+- Built-in validators (required, minLength, email, etc.)
+- Custom validation support
+- Validation error collection
+- Full test coverage (9 tests)
+
+**Total Tests: 226 passing** ✅
 
 ## Usage
 
@@ -212,6 +228,37 @@ class AccountProjector implements IProjector<IAggregatePayload> {
 // Use the projector
 const projector = new AggregateProjector(new AccountProjector());
 const aggregate = projector.getInitialAggregate(partitionKeys, 'Account');
+
+// Commands
+import { 
+  ICommandWithHandler,
+  validateCommand,
+  required,
+  email as emailValidator
+} from '@sekiban/core';
+
+class CreateUserCommand implements ICommandWithHandler<CreateUserCommand, UserProjector> {
+  constructor(
+    public readonly name: string,
+    public readonly email: string
+  ) {}
+  
+  validate() {
+    return validateCommand(this, {
+      name: [required('Name is required')],
+      email: [required('Email is required'), emailValidator('Invalid email')]
+    });
+  }
+  
+  getPartitionKeys() {
+    return PartitionKeys.generate('users');
+  }
+  
+  handle(command: CreateUserCommand, context: ICommandContextWithoutState) {
+    const event = new UserCreated(command.name, command.email);
+    return ok(EventOrNone.event(context.createEvent(event)));
+  }
+}
 ```
 
 ## Testing

@@ -82,6 +82,36 @@ C#のSekiban.Pureコードを分析した結果、**依存関係の少ない基�
 - `Exceptions/`配下の各例外クラス
 - neverthrowとの統合
 
+## Phase 6: Aggregate と Projector（第6週）
+**状態管理の中核**
+
+### 6.1 Aggregate基盤
+**優先度: 最高**
+- `Aggregates/IAggregate.cs`
+- `Aggregates/Aggregate.cs`
+- 不変性とバージョン管理
+
+### 6.2 Projector システム
+**優先度: 最高**
+- `Aggregates/IAggregateProjector.cs`
+- `Aggregates/IProjector.cs`
+- パターンマッチングによる状態遷移
+
+## Phase 7: コマンドハンドリング（第7週）
+**ビジネスロジックの実装**
+
+### 7.1 Command インターフェース
+**優先度: 高**
+- `Commands/ICommand.cs`
+- `Commands/ICommandWithHandler.cs`
+- コマンドバリデーション
+
+### 7.2 Command Handler
+**優先度: 高**
+- `Commands/ICommandHandler.cs`
+- `Commands/CommandHandler.cs`
+- EventOrNone パターン
+
 ## 実装戦略の利点
 
 ### 1. **段階的検証**

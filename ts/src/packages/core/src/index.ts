@@ -123,6 +123,34 @@ export {
 } from './aggregates'
 
 /**
+ * Export command types
+ */
+export type {
+  ICommand,
+  ICommandHandler,
+  ICommandContext,
+  ICommandContextWithoutState,
+  ICommandWithHandler,
+  CommandResponse,
+  ValidationRule,
+  CommandValidator,
+  ValidationRules
+} from './commands'
+
+export {
+  createCommandResponse,
+  createCommandValidator,
+  validateCommand,
+  required,
+  minLength,
+  maxLength,
+  email,
+  range,
+  pattern,
+  custom
+} from './commands'
+
+/**
  * Version information
  */
 export const VERSION = '0.0.1';
