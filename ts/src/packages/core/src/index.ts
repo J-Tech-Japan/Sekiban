@@ -8,6 +8,22 @@
 export { Result, Ok, Err, ok, err, ResultAsync, okAsync, errAsync } from 'neverthrow';
 
 /**
+ * Export error types
+ */
+export { 
+  SekibanError,
+  ValidationError,
+  AggregateNotFoundError,
+  CommandValidationError,
+  EventApplicationError,
+  QueryExecutionError,
+  SerializationError,
+  EventStoreError,
+  ConcurrencyError,
+  UnsupportedOperationError
+} from './result/errors';
+
+/**
  * Export date producer utilities
  */
 export type { ISekibanDateProducer } from './date-producer'
@@ -34,6 +50,28 @@ export {
   getErrors,
   validateOrThrow
 } from './validation'
+
+/**
+ * Export document types
+ */
+export { 
+  SortableUniqueId,
+  SortableUniqueIdUtils,
+  type ISortableUniqueId 
+} from './documents/sortable-unique-id'
+
+export { 
+  PartitionKeys,
+  PartitionKeysBuilder,
+  PartitionKeysUtils,
+  type IPartitionKeys 
+} from './documents/partition-keys'
+
+export { 
+  Metadata,
+  MetadataBuilder,
+  type Metadata as IMetadata 
+} from './documents/metadata'
 
 /**
  * Version information

@@ -97,3 +97,14 @@ export class UnsupportedOperationError extends SekibanError {
     super(`Unsupported operation: ${operation}`);
   }
 }
+
+/**
+ * Error thrown when validation fails
+ */
+export class ValidationError extends SekibanError {
+  readonly code = 'VALIDATION_ERROR';
+  
+  constructor(message: string) {
+    super(message);
+  }
+}
