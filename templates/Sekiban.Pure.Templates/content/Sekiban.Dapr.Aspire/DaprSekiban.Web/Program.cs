@@ -14,8 +14,9 @@ builder.Services.AddRazorComponents()
 // Add HttpClient for API communication
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
-    // The service name will be resolved by Aspire service discovery
-    client.BaseAddress = new Uri("http://dapr-sekiban-api");
+    // This URL uses "https+http://" to indicate HTTPS is preferred over HTTP.
+    // Learn more about service discovery scheme resolution at https://aka.ms/dotnet/sdschemes.
+    client.BaseAddress = new("https+http://apiservice");
 });
 
 var app = builder.Build();

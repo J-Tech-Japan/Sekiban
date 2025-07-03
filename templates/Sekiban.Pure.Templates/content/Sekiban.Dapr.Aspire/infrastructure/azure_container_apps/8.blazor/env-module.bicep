@@ -37,6 +37,10 @@ var envVars = [
     name: 'services__apiservice__https__0'
     value: 'https://${containerAppBackend.properties.configuration.ingress.fqdn}'
   }
+  {
+    name: 'services__apiservice__https__1'
+    value: 'http://${containerAppBackend.properties.configuration.ingress.fqdn}'
+  }
 ]
 
 output envVars array = envVars

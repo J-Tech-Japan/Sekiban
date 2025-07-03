@@ -1,4 +1,4 @@
-param managedEnvName string = 'aca-${resourceGroup().name}'
+param managedEnvName string = 'env-${resourceGroup().name}'
 param containerAppName string = 'frontend-${resourceGroup().name}'
 param location string = resourceGroup().location
 var acrName = replace(toLower('acr-${resourceGroup().name}'), '-', '')

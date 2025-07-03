@@ -7,9 +7,17 @@ resource managedEnv 'Microsoft.App/managedEnvironments@2023-05-01' existing = {
   name: managedEnvName
 }
 
-// Reference to existing Service Bus Namespace
-resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
+// Create Service Bus Namespace with Basic tier
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   name: serviceBusNamespaceName
+  location: resourceGroup().location
+  sku: {
+    name: 'Basic'
+    tier: 'Basic'
+  }
+  properties: {
+    minimumTlsVersion: '1.2'
+  }
 }
 
 // Create Service Bus Queue
@@ -27,8 +35,14 @@ resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-prev
   }
 }
 
+// Get the default authorization rule that's created with the namespace
+resource serviceBusAuthRule 'Microsoft.ServiceBus/namespaces/authorizationRules@2022-10-01-preview' existing = {
+  parent: serviceBusNamespace
+  name: 'RootManageSharedAccessKey'
+}
+
 // Get Service Bus connection string
-var serviceBusConnectionString = serviceBusNamespace.listKeys().primaryConnectionString
+var serviceBusConnectionString = serviceBusAuthRule.listKeys().primaryConnectionString
 
 // Create Dapr Component for PubSub
 resource daprPubSubComponent 'Microsoft.App/managedEnvironments/daprComponents@2023-05-01' = {

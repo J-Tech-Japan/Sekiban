@@ -104,6 +104,7 @@ module daprStateStoreComponent '6.dapr-components/1.statestore-component.bicep' 
   ]
 }
 
+// Create Dapr pub/sub component based on type
 module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
   name: 'daprPubSubComponentDeployment'
   params: {
