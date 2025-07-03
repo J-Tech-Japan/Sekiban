@@ -90,8 +90,8 @@ export const SortableUniqueIdUtils = {
     }
     
     return {
-      timestamp: parseInt(match[1], 10),
-      uniqueId: match[2],
+      timestamp: parseInt(match[1]!, 10),
+      uniqueId: match[2]!,
     };
   },
 

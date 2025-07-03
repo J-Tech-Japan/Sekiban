@@ -158,7 +158,7 @@ export const PartitionKeysUtils = {
   fromCompositeKey(compositeKey: string): IPartitionKeys {
     const parts = compositeKey.split(':');
     return {
-      aggregateId: parts[0],
+      aggregateId: parts[0]!,
       group: parts[1] || undefined,
       rootPartitionKey: parts[2] || undefined,
     };

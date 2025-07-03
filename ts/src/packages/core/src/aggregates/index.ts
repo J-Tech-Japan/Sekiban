@@ -1,4 +1,5 @@
 /**
  * Export aggregate payload types
  */
-export { IAggregatePayload, isAggregatePayload } from './aggregate-payload'
+export type { IAggregatePayload } from './aggregate-payload'
+export { isAggregatePayload } from './aggregate-payload'

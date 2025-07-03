@@ -1,19 +1,23 @@
 /**
  * Export event payload types
  */
-export { IEventPayload, isEventPayload } from './event-payload'
+export type { IEventPayload } from './event-payload'
+export { isEventPayload } from './event-payload'
 
 /**
  * Export event types and utilities
  */
-export {
+export type {
   IEvent,
+  CreateEventOptions,
+  CreateEventMetadataOptions
+} from './event'
+
+export {
   Event,
   EventMetadata,
   createEvent,
-  createEventMetadata,
-  type CreateEventOptions,
-  type CreateEventMetadataOptions
+  createEventMetadata
 } from './event'
 
 /**

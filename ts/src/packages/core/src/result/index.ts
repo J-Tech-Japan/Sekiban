@@ -2,7 +2,6 @@
  * Re-export neverthrow for Result type and utilities
  */
 export { Result, Ok, Err, ok, err, ResultAsync, okAsync, errAsync } from 'neverthrow';
-export type { ResultBox } from 'neverthrow';
 
 /**
  * Export all error types

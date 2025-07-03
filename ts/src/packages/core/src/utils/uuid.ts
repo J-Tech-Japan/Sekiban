@@ -23,10 +23,10 @@ export function createVersion7(): string {
   const randomBytes = crypto.randomBytes(10)
   
   // Set version (0111 = 7) in bits 48-51
-  randomBytes[0] = (randomBytes[0] & 0x0f) | 0x70
+  randomBytes[0] = (randomBytes[0]! & 0x0f) | 0x70
   
   // Set variant (10) in bits 64-65
-  randomBytes[2] = (randomBytes[2] & 0x3f) | 0x80
+  randomBytes[2] = (randomBytes[2]! & 0x3f) | 0x80
   
   // Format as UUID
   const uuid = [

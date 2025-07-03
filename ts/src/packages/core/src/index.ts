@@ -43,7 +43,7 @@ export {
 /**
  * Export validation utilities
  */
-export type { ValidationError, ValidationResult, Validator, ZodSchema } from './validation'
+export type { ValidationResult, Validator, ZodSchema } from './validation'
 export { 
   createValidator,
   isValid,
@@ -76,32 +76,38 @@ export {
 /**
  * Export event types
  */
-export { 
+export type { 
   IEventPayload,
-  isEventPayload,
   IEvent,
+  CreateEventOptions,
+  CreateEventMetadataOptions,
+  IEventReader,
+  IEventWriter
+} from './events'
+
+export { 
+  isEventPayload,
   Event,
   EventMetadata,
   createEvent,
   createEventMetadata,
-  type CreateEventOptions,
-  type CreateEventMetadataOptions,
   EventDocument,
   SerializableEventDocument,
   toSerializableEventDocument,
   fromSerializableEventDocument,
   InMemoryEventStore,
   InMemoryEventReader,
-  InMemoryEventWriter,
-  IEventReader,
-  IEventWriter
+  InMemoryEventWriter
 } from './events'
 
 /**
  * Export aggregate types
  */
-export { 
-  IAggregatePayload,
+export type { 
+  IAggregatePayload
+} from './aggregates'
+
+export {
   isAggregatePayload
 } from './aggregates'
 
