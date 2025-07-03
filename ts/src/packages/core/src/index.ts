@@ -74,6 +74,38 @@ export {
 } from './documents/metadata'
 
 /**
+ * Export event types
+ */
+export { 
+  IEventPayload,
+  isEventPayload,
+  IEvent,
+  Event,
+  EventMetadata,
+  createEvent,
+  createEventMetadata,
+  type CreateEventOptions,
+  type CreateEventMetadataOptions,
+  EventDocument,
+  SerializableEventDocument,
+  toSerializableEventDocument,
+  fromSerializableEventDocument,
+  InMemoryEventStore,
+  InMemoryEventReader,
+  InMemoryEventWriter,
+  IEventReader,
+  IEventWriter
+} from './events'
+
+/**
+ * Export aggregate types
+ */
+export { 
+  IAggregatePayload,
+  isAggregatePayload
+} from './aggregates'
+
+/**
  * Version information
  */
 export const VERSION = '0.0.1';

@@ -10,6 +10,16 @@ export type { ResultBox } from 'neverthrow';
 export * from './errors';
 
 /**
+ * Export error utilities
+ */
+export * from './error-utils';
+
+/**
+ * Export error type guards
+ */
+export * from './error-guards';
+
+/**
  * Type alias for Result with SekibanError
  */
 import { Result } from 'neverthrow';

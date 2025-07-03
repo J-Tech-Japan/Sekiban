@@ -19,7 +19,8 @@
       "Bash(pnpm install:*)",
       "Bash(pnpm add:*)",
       "Bash(pnpm build)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(pnpm vitest run:*)"
     ],
     "deny": [
       "Bash(curl:*)"

@@ -1,9 +1,4 @@
 /**
- * Export aggregate types and interfaces
+ * Export aggregate payload types
  */
-export * from './types';
-
-/**
- * Export projector implementations
- */
-export * from './projector';
+export { IAggregatePayload, isAggregatePayload } from './aggregate-payload'

@@ -1,14 +1,38 @@
 /**
- * Export event types and interfaces
+ * Export event payload types
  */
-export * from './types';
+export { IEventPayload, isEventPayload } from './event-payload'
 
 /**
- * Export event store interface and types
+ * Export event types and utilities
  */
-export * from './store';
+export {
+  IEvent,
+  Event,
+  EventMetadata,
+  createEvent,
+  createEventMetadata,
+  type CreateEventOptions,
+  type CreateEventMetadataOptions
+} from './event'
 
 /**
- * Export event stream interface and implementations
+ * Export event document types
  */
-export * from './stream';
+export {
+  EventDocument,
+  SerializableEventDocument,
+  toSerializableEventDocument,
+  fromSerializableEventDocument
+} from './event-document'
+
+/**
+ * Export in-memory event store
+ */
+export {
+  InMemoryEventStore,
+  InMemoryEventReader,
+  InMemoryEventWriter,
+  IEventReader,
+  IEventWriter
+} from './in-memory-event-store'

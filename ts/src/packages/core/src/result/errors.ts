@@ -7,6 +7,18 @@ export abstract class SekibanError extends Error {
   constructor(message: string) {
     super(message);
     this.name = this.constructor.name;
+    
+    // Make message enumerable for JSON serialization
+    Object.defineProperty(this, 'message', {
+      enumerable: true,
+      value: message
+    });
+    
+    // Make name enumerable for JSON serialization
+    Object.defineProperty(this, 'name', {
+      enumerable: true,
+      value: this.constructor.name
+    });
   }
 }
 

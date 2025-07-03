@@ -51,7 +51,61 @@ Successfully implemented using t_wada's TDD approach (Red-Green-Refactor).
 - Builder pattern implementation
 - Full test coverage (24 tests)
 
-**Total Tests: 90 passing** ✅
+### Phase 3: Basic Interfaces ✅
+
+#### 3.1 Event Basic Types ✓
+- `IEventPayload` - Marker interface for event payloads
+- `IAggregatePayload` - Marker interface for aggregate states
+- Type guards for runtime validation
+- Full test coverage (17 tests)
+
+#### 3.2 Event Type Definitions ✓
+- `IEvent<TPayload>` - Core event interface
+- `Event` class with immutability
+- `EventMetadata` with correlation/causation support
+- Event creation helpers
+- Full test coverage (10 tests)
+
+### Phase 4: Event Management ✅
+
+#### 4.1 Event Document ✓
+- `EventDocument` - Wrapper for events with convenience accessors
+- `SerializableEventDocument` - JSON-serializable event representation
+- Serialization/deserialization utilities
+- Full test coverage (9 tests)
+
+#### 4.2 In-Memory Event Store ✓
+- `InMemoryEventStore` - Event storage implementation
+- `IEventReader` & `IEventWriter` interfaces
+- Version consistency enforcement
+- Multi-tenant support
+- Full test coverage (13 tests)
+
+### Phase 5: Exception and Error Handling ✅
+
+#### 5.1 Sekiban Error Classes ✓
+- Base `SekibanError` class with serialization support
+- Domain-specific error types (10 error classes)
+- Full error inheritance hierarchy
+- JSON serialization support
+- Full test coverage (20 tests)
+
+#### 5.2 Error Utilities ✓
+- `toResult()` - Convert promises to Results
+- `fromThrowable()` - Wrap throwing functions
+- `mapError()` - Transform error types
+- `collectErrors()` - Gather errors from Results
+- `chainErrors()` - Create error cause chains
+- Full test coverage (15 tests)
+
+#### 5.3 Error Type Guards ✓
+- Type-safe error checking functions
+- Support for all Sekiban error types
+- TypeScript type narrowing
+- Composable guards
+- Full test coverage (13 tests)
+
+**Total Tests: 187 passing** ✅
 
 ## Usage
 
@@ -101,6 +155,16 @@ const metadata = new MetadataBuilder()
   .withCorrelationId('request-456')
   .withCustom('source', 'web-api')
   .build();
+
+// Error handling with neverthrow
+import { toResult, isEventStoreError } from '@sekiban/core';
+
+const result = await toResult(fetchData());
+if (result.isErr()) {
+  if (isEventStoreError(result.error)) {
+    console.error('Event store error:', result.error.operation);
+  }
+}
 ```
 
 ## Testing
