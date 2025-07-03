@@ -4,7 +4,6 @@ import { PartitionKeys } from '../documents/partition-keys'
 import { SekibanError } from '../result/errors'
 import { InMemoryStorageProvider } from './in-memory-storage-provider'
 import { CosmosStorageProvider } from './cosmos-storage-provider'
-import { PostgresStorageProvider } from './postgres-storage-provider'
 
 /**
  * Storage provider types
@@ -172,14 +171,8 @@ export class StorageProviderFactory {
       return ResultAsync.fromSafePromise(Promise.resolve(new InMemoryStorageProvider(config)))
     })
 
-    // Register CosmosDB provider
-    this.register(StorageProviderType.CosmosDB, (config) => {
-      return ResultAsync.fromSafePromise(Promise.resolve(new CosmosStorageProvider(config)))
-    })
+    // CosmosDB provider should be registered by the @sekiban/cosmos package
 
-    // Register PostgreSQL provider
-    this.register(StorageProviderType.PostgreSQL, (config) => {
-      return ResultAsync.fromSafePromise(Promise.resolve(new PostgresStorageProvider(config)))
-    })
+    // PostgreSQL provider should be registered by the @sekiban/postgres package
   }
 }

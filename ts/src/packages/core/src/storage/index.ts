@@ -8,12 +8,6 @@ export * from './storage-provider'
  */
 export * from './in-memory-storage-provider'
 
-/**
- * Export Cosmos DB storage provider
- */
-export * from './cosmos-storage-provider'
+// CosmosDB storage provider is provided by @sekiban/cosmos package
 
-/**
- * Export PostgreSQL storage provider
- */
-export * from './postgres-storage-provider'
+// PostgreSQL storage provider is provided by @sekiban/postgres package

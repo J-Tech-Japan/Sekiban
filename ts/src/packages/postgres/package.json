@@ -1,0 +1,53 @@
+{
+  "name": "@sekiban/postgres",
+  "version": "0.0.1",
+  "description": "PostgreSQL storage provider for Sekiban Event Sourcing framework",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch"
+  },
+  "keywords": [
+    "sekiban",
+    "event-sourcing",
+    "cqrs",
+    "postgres",
+    "postgresql"
+  ],
+  "author": "Sekiban Team",
+  "license": "MIT",
+  "dependencies": {
+    "@sekiban/core": "file:../core",
+    "neverthrow": "^8.0.0",
+    "pg": "^8.11.3",
+    "pg-pool": "^3.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@sekiban/testing": "file:../testing",
+    "testcontainers": "^10.5.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "rimraf": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
