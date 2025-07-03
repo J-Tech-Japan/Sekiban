@@ -1,0 +1,16 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: sekiban-eventstore
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+  - name: actorStateStore
+    value: "true"
+  - name: actorReminders
+    value: "true"
+  - name: ttlInSeconds
+    value: "0"
+scopes:
+- sekiban-api
