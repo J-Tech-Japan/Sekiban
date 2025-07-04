@@ -2,15 +2,18 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@sekiban/core": ["../../src/packages/core/src"],
+      "@sekiban/dapr": ["../../src/packages/dapr/src"]
     },
     "types": ["vitest/globals", "node"]
   },
   "include": [
     "src/**/*",
+    "packages/**/*",
     "tests/**/*"
   ],
   "exclude": [

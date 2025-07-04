@@ -1,245 +1,250 @@
-import { describe, it, expect } from 'vitest'
-import { AggregateProjector } from './aggregate-projector'
-import { IProjector } from './projector-interface'
-import { IAggregatePayload } from './aggregate-payload'
-import { IEventPayload } from '../events/event-payload'
-import { IEvent, createEvent } from '../events/event'
-import { Aggregate, createEmptyAggregate } from './aggregate'
-import { PartitionKeys } from '../documents/partition-keys'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
+import { describe, it, expect } from 'vitest';
+import { ok, err } from 'neverthrow';
+import { AggregateProjector, type ITypedAggregatePayload, type EmptyAggregatePayload } from './aggregate-projector.js';
+import type { IEventPayload } from '../events/event-payload.js';
+import type { Aggregate } from './aggregate.js';
+import type { SekibanError } from '../errors/sekiban-error.js';
+
+// Test domain - User aggregate with multiple states
+interface UnconfirmedUserPayload extends ITypedAggregatePayload {
+  readonly aggregateType: 'UnconfirmedUser';
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+interface ConfirmedUserPayload extends ITypedAggregatePayload {
+  readonly aggregateType: 'ConfirmedUser';
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  confirmedAt: string;
+}
+
+type UserPayloadUnion = UnconfirmedUserPayload | ConfirmedUserPayload;
 
 // Test events
-class AccountOpened implements IEventPayload {
-  constructor(
-    public readonly owner: string,
-    public readonly initialBalance: number
-  ) {}
+interface UserRegisteredEvent extends IEventPayload {
+  readonly eventType: 'UserRegistered';
+  userId: string;
+  name: string;
+  email: string;
 }
 
-class MoneyDeposited implements IEventPayload {
-  constructor(public readonly amount: number) {}
-}
-
-class MoneyWithdrawn implements IEventPayload {
-  constructor(public readonly amount: number) {}
-}
-
-// Test payloads
-import { EmptyAggregatePayload } from './aggregate'
-
-class Account implements IAggregatePayload {
-  constructor(
-    public readonly owner: string,
-    public readonly balance: number,
-    public readonly isOpen: boolean = true
-  ) {}
+interface UserConfirmedEvent extends IEventPayload {
+  readonly eventType: 'UserConfirmed';
+  userId: string;
+  confirmedAt: string;
 }
 
 // Test projector
-class AccountProjector implements IProjector<IAggregatePayload> {
-  getTypeName(): string {
-    return 'AccountProjector'
+class TestUserProjector extends AggregateProjector<UserPayloadUnion> {
+  readonly aggregateTypeName = 'User';
+  
+  project(
+    aggregate: Aggregate<UserPayloadUnion | EmptyAggregatePayload>,
+    event: IEventPayload
+  ) {
+    switch (event.eventType) {
+      case 'UserRegistered': {
+        if (!this.isEmpty(aggregate.payload)) {
+          return err({
+            type: 'ProjectionError',
+            message: 'User already exists'
+          } as SekibanError);
+        }
+        
+        const userEvent = event as UserRegisteredEvent;
+        const newPayload: UnconfirmedUserPayload = {
+          aggregateType: 'UnconfirmedUser',
+          id: userEvent.userId,
+          name: userEvent.name,
+          email: userEvent.email,
+          createdAt: new Date().toISOString()
+        };
+        
+        return ok(this.createUpdatedAggregate(aggregate, newPayload, event));
+      }
+      
+      case 'UserConfirmed': {
+        if (!this.isPayloadType<UnconfirmedUserPayload>(aggregate.payload, 'UnconfirmedUser')) {
+          return err({
+            type: 'ProjectionError',
+            message: 'Can only confirm unconfirmed users'
+          } as SekibanError);
+        }
+        
+        const confirmEvent = event as UserConfirmedEvent;
+        const newPayload: ConfirmedUserPayload = {
+          aggregateType: 'ConfirmedUser',
+          id: aggregate.payload.id,
+          name: aggregate.payload.name,
+          email: aggregate.payload.email,
+          createdAt: aggregate.payload.createdAt,
+          confirmedAt: confirmEvent.confirmedAt
+        };
+        
+        return ok(this.createUpdatedAggregate(aggregate, newPayload, event));
+      }
+      
+      default:
+        return ok(aggregate);
+    }
   }
   
-  getVersion(): number {
-    return 1
+  canHandle(eventType: string): boolean {
+    return ['UserRegistered', 'UserConfirmed'].includes(eventType);
   }
   
-  project(payload: IAggregatePayload, event: IEventPayload): IAggregatePayload {
-    if (payload instanceof EmptyAggregatePayload && event instanceof AccountOpened) {
-      return new Account(event.owner, event.initialBalance)
-    }
-    
-    if (payload instanceof Account && event instanceof MoneyDeposited) {
-      return new Account(payload.owner, payload.balance + event.amount)
-    }
-    
-    if (payload instanceof Account && event instanceof MoneyWithdrawn) {
-      return new Account(payload.owner, payload.balance - event.amount)
-    }
-    
-    return payload
+  getSupportedPayloadTypes(): string[] {
+    return ['UnconfirmedUser', 'ConfirmedUser'];
   }
 }
 
-describe('AggregateProjector', () => {
-  let projector: AggregateProjector<IAggregatePayload>
-  let accountProjector: AccountProjector
-  let partitionKeys: PartitionKeys
-  
-  beforeEach(() => {
-    accountProjector = new AccountProjector()
-    projector = new AggregateProjector(accountProjector)
-    partitionKeys = PartitionKeys.create('account-123', 'accounts')
-  })
-  
-  describe('projectEvent', () => {
-    it('should project single event onto empty aggregate', () => {
+describe('MultiPayloadProjector', () => {
+  describe('State Machine Pattern', () => {
+    it('should create UnconfirmedUser from Empty state when UserRegistered', () => {
       // Arrange
-      const aggregate = createEmptyAggregate(
-        partitionKeys,
-        'Account',
-        'AccountProjector',
-        1
-      )
+      const projector = new TestUserProjector();
+      const partitionKeys = {
+        aggregateId: 'user-123',
+        partitionKey: 'User',
+        rootPartitionKey: 'default'
+      };
+      const emptyAggregate = projector.getInitialState(partitionKeys);
       
-      const event = createEvent({
-        partitionKeys,
-        aggregateType: 'Account',
-        version: 1,
-        payload: new AccountOpened('John Doe', 1000)
-      })
+      const userRegisteredEvent: UserRegisteredEvent = {
+        eventType: 'UserRegistered',
+        userId: 'user-123',
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
       
       // Act
-      const result = projector.projectEvent(aggregate, event)
+      const result = projector.project(emptyAggregate, userRegisteredEvent);
       
       // Assert
-      expect(result.version).toBe(1)
-      expect(result.lastSortableUniqueId).toBe(event.id)
-      expect(result.payload).toBeInstanceOf(Account)
-      
-      const account = result.payload as Account
-      expect(account.owner).toBe('John Doe')
-      expect(account.balance).toBe(1000)
-      expect(account.isOpen).toBe(true)
-    })
-    
-    it('should project event onto existing aggregate', () => {
-      // Arrange
-      const existingAggregate = new Aggregate(
-        partitionKeys,
-        'Account',
-        1,
-        new Account('Jane Smith', 500),
-        SortableUniqueId.generate(),
-        'AccountProjector',
-        1
-      )
-      
-      const depositEvent = createEvent({
-        partitionKeys,
-        aggregateType: 'Account',
-        version: 2,
-        payload: new MoneyDeposited(250)
-      })
-      
-      // Act
-      const result = projector.projectEvent(existingAggregate, depositEvent)
-      
-      // Assert
-      expect(result.version).toBe(2)
-      expect(result.lastSortableUniqueId).toBe(depositEvent.id)
-      
-      const account = result.payload as Account
-      expect(account.owner).toBe('Jane Smith')
-      expect(account.balance).toBe(750)
-    })
-  })
-  
-  describe('projectEvents', () => {
-    it('should project multiple events in sequence', () => {
-      // Arrange
-      const aggregate = createEmptyAggregate(
-        partitionKeys,
-        'Account',
-        'AccountProjector',
-        1
-      )
-      
-      const events = [
-        createEvent({
-          partitionKeys,
-          aggregateType: 'Account',
-          version: 1,
-          payload: new AccountOpened('Alice', 100)
-        }),
-        createEvent({
-          partitionKeys,
-          aggregateType: 'Account',
-          version: 2,
-          payload: new MoneyDeposited(200)
-        }),
-        createEvent({
-          partitionKeys,
-          aggregateType: 'Account',
-          version: 3,
-          payload: new MoneyWithdrawn(50)
-        })
-      ]
-      
-      // Act
-      const result = projector.projectEvents(aggregate, events)
-      
-      // Assert
-      expect(result.version).toBe(3)
-      expect(result.lastSortableUniqueId).toBe(events[2]!.id)
-      
-      const account = result.payload as Account
-      expect(account.owner).toBe('Alice')
-      expect(account.balance).toBe(250) // 100 + 200 - 50
-    })
-    
-    it('should handle empty events array', () => {
-      // Arrange
-      const aggregate = new Aggregate(
-        partitionKeys,
-        'Account',
-        5,
-        new Account('Bob', 1000),
-        SortableUniqueId.generate(),
-        'AccountProjector',
-        1
-      )
-      
-      // Act
-      const result = projector.projectEvents(aggregate, [])
-      
-      // Assert
-      expect(result).toBe(aggregate) // Should return same instance
-    })
-  })
-  
-  describe('getInitialAggregate', () => {
-    it('should create initial empty aggregate', () => {
-      // Act
-      const aggregate = projector.getInitialAggregate(partitionKeys, 'Account')
-      
-      // Assert
-      expect(aggregate.version).toBe(0)
-      expect(aggregate.partitionKeys).toEqual(partitionKeys)
-      expect(aggregate.aggregateType).toBe('Account')
-      expect(aggregate.payload).toBeInstanceOf(EmptyAggregatePayload)
-      expect(aggregate.projectorTypeName).toBe('AccountProjector')
-      expect(aggregate.projectorVersion).toBe(1)
-    })
-  })
-  
-  describe('error handling', () => {
-    it('should handle projection errors gracefully', () => {
-      // Arrange
-      class ErrorProjector implements IProjector<IAggregatePayload> {
-        getTypeName(): string { return 'ErrorProjector' }
-        getVersion(): number { return 1 }
-        project(payload: IAggregatePayload, event: IEventPayload): IAggregatePayload {
-          if (event instanceof MoneyWithdrawn) {
-            throw new Error('Projection error')
-          }
-          return payload
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        const updatedAggregate = result.value;
+        expect(updatedAggregate.payload.aggregateType).toBe('UnconfirmedUser');
+        expect(projector.isPayloadType<UnconfirmedUserPayload>(updatedAggregate.payload, 'UnconfirmedUser')).toBe(true);
+        
+        if (projector.isPayloadType<UnconfirmedUserPayload>(updatedAggregate.payload, 'UnconfirmedUser')) {
+          expect(updatedAggregate.payload.id).toBe('user-123');
+          expect(updatedAggregate.payload.name).toBe('John Doe');
+          expect(updatedAggregate.payload.email).toBe('john@example.com');
         }
       }
+    });
+    
+    it('should transition from UnconfirmedUser to ConfirmedUser when UserConfirmed', () => {
+      // Arrange
+      const projector = new TestUserProjector();
+      const partitionKeys = {
+        aggregateId: 'user-123',
+        partitionKey: 'User',
+        rootPartitionKey: 'default'
+      };
       
-      const errorProjector = new AggregateProjector(new ErrorProjector())
-      const aggregate = createEmptyAggregate(partitionKeys, 'Account', 'ErrorProjector', 1)
+      // Create UnconfirmedUser state
+      const unconfirmedUser: UnconfirmedUserPayload = {
+        aggregateType: 'UnconfirmedUser',
+        id: 'user-123',
+        name: 'John Doe',
+        email: 'john@example.com',
+        createdAt: '2025-07-03T10:00:00.000Z'
+      };
       
-      const event = createEvent({
+      const aggregateWithUnconfirmedUser: Aggregate<UnconfirmedUserPayload> = {
         partitionKeys,
-        aggregateType: 'Account',
+        payload: unconfirmedUser,
         version: 1,
-        payload: new MoneyWithdrawn(100)
-      })
+        lastEventId: 'event-1',
+        appliedEvents: []
+      };
+      
+      const userConfirmedEvent: UserConfirmedEvent = {
+        eventType: 'UserConfirmed',
+        userId: 'user-123',
+        confirmedAt: '2025-07-03T11:00:00.000Z'
+      };
+      
+      // Act
+      const result = projector.project(aggregateWithUnconfirmedUser, userConfirmedEvent);
+      
+      // Assert
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        const updatedAggregate = result.value;
+        expect(updatedAggregate.payload.aggregateType).toBe('ConfirmedUser');
+        expect(projector.isPayloadType<ConfirmedUserPayload>(updatedAggregate.payload, 'ConfirmedUser')).toBe(true);
+        
+        if (projector.isPayloadType<ConfirmedUserPayload>(updatedAggregate.payload, 'ConfirmedUser')) {
+          expect(updatedAggregate.payload.id).toBe('user-123');
+          expect(updatedAggregate.payload.name).toBe('John Doe');
+          expect(updatedAggregate.payload.email).toBe('john@example.com');
+          expect(updatedAggregate.payload.createdAt).toBe('2025-07-03T10:00:00.000Z');
+          expect(updatedAggregate.payload.confirmedAt).toBe('2025-07-03T11:00:00.000Z');
+        }
+      }
+    });
+    
+    it('should fail when trying to confirm already confirmed user', () => {
+      // Arrange
+      const projector = new TestUserProjector();
+      const partitionKeys = {
+        aggregateId: 'user-123',
+        partitionKey: 'User',
+        rootPartitionKey: 'default'
+      };
+      
+      // Create ConfirmedUser state
+      const confirmedUser: ConfirmedUserPayload = {
+        aggregateType: 'ConfirmedUser',
+        id: 'user-123',
+        name: 'John Doe',
+        email: 'john@example.com',
+        createdAt: '2025-07-03T10:00:00.000Z',
+        confirmedAt: '2025-07-03T11:00:00.000Z'
+      };
+      
+      const aggregateWithConfirmedUser: Aggregate<ConfirmedUserPayload> = {
+        partitionKeys,
+        payload: confirmedUser,
+        version: 2,
+        lastEventId: 'event-2',
+        appliedEvents: []
+      };
+      
+      const userConfirmedEvent: UserConfirmedEvent = {
+        eventType: 'UserConfirmed',
+        userId: 'user-123',
+        confirmedAt: '2025-07-03T12:00:00.000Z'
+      };
+      
+      // Act
+      const result = projector.project(aggregateWithConfirmedUser, userConfirmedEvent);
+      
+      // Assert
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain('Can only confirm unconfirmed users');
+      }
+    });
+    
+    it('should provide correct metadata about supported types', () => {
+      // Arrange
+      const projector = new TestUserProjector();
       
       // Act & Assert
-      expect(() => errorProjector.projectEvent(aggregate, event)).toThrow('Projection error')
-    })
-  })
-})
+      expect(projector.aggregateTypeName).toBe('User');
+      expect(projector.getSupportedPayloadTypes()).toEqual(['UnconfirmedUser', 'ConfirmedUser']);
+      expect(projector.canHandle('UserRegistered')).toBe(true);
+      expect(projector.canHandle('UserConfirmed')).toBe(true);
+      expect(projector.canHandle('UnknownEvent')).toBe(false);
+    });
+  });
+});

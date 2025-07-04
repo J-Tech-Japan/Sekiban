@@ -1,25 +1,24 @@
 import express from 'express';
 import type { Application } from 'express';
-import type { SekibanConfig } from './infrastructure/simple-sekiban-executor';
-import { createUserRoutes } from './routes/user-routes';
-import { createSekibanExecutor } from './infrastructure/create-sekiban-executor';
-import { errorHandler } from './middleware/error-handler';
-import { requestLogger } from './middleware/request-logger';
-import { createMetricsMiddleware } from './middleware/metrics-middleware';
-import { traceMiddleware } from './middleware/trace-middleware';
-import { MetricsStore } from './observability/metrics-store';
-import { HealthChecker } from './observability/health-checker';
+import { DaprClient } from '@dapr/dapr';
+import { SekibanDaprExecutor } from '@sekiban/dapr';
+import type { DaprSekibanConfiguration } from '@sekiban/dapr';
+import { createWeatherForecastRoutes } from './routes/weather-forecast-routes.js';
+import { DomainProjectors } from '../packages/domain/src/index.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { requestLogger } from './middleware/request-logger.js';
+import { createMetricsMiddleware } from './middleware/metrics-middleware.js';
+import { traceMiddleware } from './middleware/trace-middleware.js';
+import { MetricsStore } from './observability/metrics-store.js';
+import { HealthChecker } from './observability/health-checker.js';
 
 export interface AppDependencies {
-  daprClient?: any; // MockDaprClient or real DaprClient
+  daprClient?: DaprClient;
   metricsStore?: MetricsStore;
   healthChecker?: HealthChecker;
 }
 
-export async function createApp(
-  config: SekibanConfig, 
-  dependencies: AppDependencies = {}
-): Promise<Application> {
+export async function createApp(dependencies: AppDependencies = {}): Promise<Application> {
   const app = express();
   
   // Create observability components
@@ -35,17 +34,32 @@ export async function createApp(
   app.use(requestLogger);
   app.use(createMetricsMiddleware(metricsStore));
   
-  // Create Sekiban executor with dependencies
-  const executor = await createSekibanExecutor(config, {
-    ...dependencies,
-    metricsStore
+  // Create Dapr client
+  const daprClient = dependencies.daprClient || new DaprClient({
+    daprHost: process.env.DAPR_HOST || 'localhost',
+    daprPort: process.env.DAPR_HTTP_PORT || '3500'
   });
+  
+  // Configure Sekiban Dapr Executor
+  const daprConfig: DaprSekibanConfiguration = {
+    stateStoreName: process.env.DAPR_STATE_STORE || 'sekiban-eventstore',
+    pubSubName: process.env.DAPR_PUBSUB || 'sekiban-pubsub',
+    eventTopicName: process.env.DAPR_EVENT_TOPIC || 'domain-events',
+    actorType: 'AggregateActor',
+    projectors: [...DomainProjectors],
+    actorIdPrefix: 'dapr-sample',
+    retryAttempts: 3,
+    requestTimeoutMs: 30000
+  };
+  
+  // Create Sekiban executor
+  const executor = new SekibanDaprExecutor(daprClient, daprConfig);
   
   // Make executor available for test helpers
   (app as any).sekibanExecutor = executor;
   
-  // Routes
-  app.use('/users', createUserRoutes(executor));
+  // Routes - Weather Forecast API (matching C# template)
+  app.use('/api/weatherforecast', createWeatherForecastRoutes(executor));
   
   // Health and observability endpoints
   app.get('/healthz', async (req, res) => {
@@ -64,20 +78,27 @@ export async function createApp(
     res.send(metricsStore.getPrometheusFormat());
   });
   
-  // Dapr pub/sub event handlers
-  app.post('/events/users', (req, res) => {
-    const event = req.body;
-    console.log('Received user event:', JSON.stringify(event, null, 2));
-    
-    // Process the event (in real implementation, this would update read models, etc.)
-    // For now, just log it
-    
-    res.status(200).json({ success: true });
+  // Debug endpoint for environment variables
+  app.get('/debug/env', (req, res) => {
+    const envVars = {
+      DAPR_HOST: process.env.DAPR_HOST || 'localhost',
+      DAPR_HTTP_PORT: process.env.DAPR_HTTP_PORT || '3500',
+      DAPR_GRPC_PORT: process.env.DAPR_GRPC_PORT || '50001',
+      DAPR_STATE_STORE: process.env.DAPR_STATE_STORE || 'sekiban-eventstore',
+      DAPR_PUBSUB: process.env.DAPR_PUBSUB || 'sekiban-pubsub',
+      DAPR_EVENT_TOPIC: process.env.DAPR_EVENT_TOPIC || 'domain-events',
+      APP_ID: process.env.APP_ID || 'dapr-sample'
+    };
+    res.json(envVars);
   });
   
-  // Health check (legacy endpoint)
-  app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  // Dapr pub/sub event handlers
+  app.post('/events/weather-forecasts', (req, res) => {
+    const event = req.body;
+    console.log('Received weather forecast event:', JSON.stringify(event, null, 2));
+    
+    // Process the event (in real implementation, this would update read models, etc.)
+    res.status(200).json({ success: true });
   });
   
   // Error handling

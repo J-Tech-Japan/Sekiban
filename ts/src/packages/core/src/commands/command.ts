@@ -1,127 +1,132 @@
-import { Result } from 'neverthrow'
-import { PartitionKeys } from '../documents/partition-keys'
-import { IAggregatePayload } from '../aggregates/aggregate-payload'
-import { IAggregate } from '../aggregates/aggregate'
-import { IProjector } from '../aggregates/projector-interface'
-import { IEventPayload } from '../events/event-payload'
-import { IEvent } from '../events/event'
-import { EventOrNone } from '../aggregates/projector-interface'
-import { ValidationError } from '../result/errors'
+import type { Result } from 'neverthrow';
+import type { IEventPayload } from '../events/event-payload.js';
+import type { Aggregate } from '../aggregates/aggregate.js';
+import type { PartitionKeys } from '../partition-keys/partition-keys.js';
+import type { CommandValidationError, SekibanError } from '../errors/sekiban-error.js';
+import type { ITypedAggregatePayload, EmptyAggregatePayload } from '../aggregates/aggregate-projector.js';
 
 /**
- * Marker interface for commands
+ * Command that can be applied to any payload type in the union
  */
-export interface ICommand {}
-
-/**
- * Command handler interface
- */
-export interface ICommandHandler<TCommand extends ICommand, TAggregatePayload extends IAggregatePayload> {
+export interface ICommand<TPayloadUnion extends ITypedAggregatePayload> {
+  readonly commandType: string;
+  
   /**
-   * Handle the command and produce events
+   * Specify partition keys for the command
+   */
+  specifyPartitionKeys(): PartitionKeys;
+  
+  /**
+   * Validate the command before execution
+   */
+  validate(): Result<void, CommandValidationError>;
+  
+  /**
+   * Handle the command and return events
    */
   handle(
-    command: TCommand,
-    context: ICommandContext<TAggregatePayload>
-  ): Result<EventOrNone, Error>
+    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>
+  ): Result<IEventPayload[], SekibanError>;
 }
 
 /**
- * Command context with access to aggregate state
+ * Command that can only be applied to a specific payload type
  */
-export interface ICommandContext<TAggregatePayload extends IAggregatePayload> {
-  /**
-   * Get the current aggregate
-   */
-  getAggregate(): IAggregate<TAggregatePayload>
+export interface IConstrainedPayloadCommand<
+  TPayloadUnion extends ITypedAggregatePayload,
+  TRequiredPayload extends TPayloadUnion
+> extends ICommand<TPayloadUnion> {
   
   /**
-   * Create an event with proper metadata
+   * Get the required payload type for this command
    */
-  createEvent(payload: IEventPayload): IEvent
+  getRequiredPayloadType(): string;
+  
+  /**
+   * Handle the command with type-safe payload
+   */
+  handleTyped(
+    aggregate: Aggregate<TRequiredPayload>
+  ): Result<IEventPayload[], SekibanError>;
 }
 
 /**
- * Command context without aggregate state (for new aggregates)
+ * Command that can only be applied to empty aggregates (creation commands)
  */
-export interface ICommandContextWithoutState {
+export interface ICreationCommand<TPayloadUnion extends ITypedAggregatePayload> 
+  extends ICommand<TPayloadUnion> {
+  
   /**
-   * Create an event with proper metadata
+   * Handle creation command
    */
-  createEvent(payload: IEventPayload): IEvent
+  handleCreation(
+    aggregate: Aggregate<EmptyAggregatePayload>
+  ): Result<IEventPayload[], SekibanError>;
 }
 
 /**
- * Combined command and handler interface
+ * Abstract base class for creation commands
  */
-export interface ICommandWithHandler<
-  TCommand extends ICommand,
-  TProjector extends IProjector<any>
-> extends ICommand {
-  /**
-   * Validate the command
-   */
-  validate(): Result<void, ValidationError[]>
+export abstract class CreationCommand<TPayloadUnion extends ITypedAggregatePayload> 
+  implements ICreationCommand<TPayloadUnion> {
   
-  /**
-   * Get partition keys for this command
-   */
-  getPartitionKeys(): PartitionKeys
+  abstract readonly commandType: string;
   
-  /**
-   * Handle the command
-   */
-  handle(
-    command: TCommand,
-    context: ICommandContextWithoutState | ICommandContext<any>
-  ): Result<EventOrNone, Error>
+  abstract specifyPartitionKeys(): PartitionKeys;
+  abstract validate(): Result<void, CommandValidationError>;
+  abstract handleCreation(aggregate: Aggregate<EmptyAggregatePayload>): Result<IEventPayload[], SekibanError>;
+  
+  handle(aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>): Result<IEventPayload[], SekibanError> {
+    if (aggregate.payload.aggregateType !== 'Empty') {
+      return {
+        isOk: () => false,
+        isErr: () => true,
+        error: {
+          type: 'DomainError',
+          message: 'Creation command can only be applied to empty aggregates',
+          details: { currentType: aggregate.payload.aggregateType }
+        }
+      } as Result<IEventPayload[], SekibanError>;
+    }
+    
+    return this.handleCreation(aggregate as Aggregate<EmptyAggregatePayload>);
+  }
 }
 
 /**
- * Command response
+ * Abstract base class for constrained payload commands
  */
-export interface CommandResponse {
-  /**
-   * Whether the command succeeded
-   */
-  success: boolean
+export abstract class ConstrainedPayloadCommand<
+  TPayloadUnion extends ITypedAggregatePayload,
+  TRequiredPayload extends TPayloadUnion
+> implements IConstrainedPayloadCommand<TPayloadUnion, TRequiredPayload> {
   
-  /**
-   * The aggregate ID (if successful)
-   */
-  aggregateId?: string
+  abstract readonly commandType: string;
   
-  /**
-   * The new version (if successful)
-   */
-  version?: number
+  abstract specifyPartitionKeys(): PartitionKeys;
+  abstract validate(): Result<void, CommandValidationError>;
+  abstract getRequiredPayloadType(): string;
+  abstract handleTyped(aggregate: Aggregate<TRequiredPayload>): Result<IEventPayload[], SekibanError>;
   
-  /**
-   * The event ID (if successful)
-   */
-  eventId?: string
-  
-  /**
-   * Error message (if failed)
-   */
-  error?: string
-}
-
-/**
- * Create a command response
- */
-export function createCommandResponse(options: {
-  success: boolean
-  aggregateId?: string
-  version?: number
-  eventId?: string
-  error?: string
-}): CommandResponse {
-  return {
-    success: options.success,
-    aggregateId: options.aggregateId,
-    version: options.version,
-    eventId: options.eventId,
-    error: options.error
+  handle(aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>): Result<IEventPayload[], SekibanError> {
+    const requiredType = this.getRequiredPayloadType();
+    
+    if (aggregate.payload.aggregateType !== requiredType) {
+      return {
+        isOk: () => false,
+        isErr: () => true,
+        error: {
+          type: 'DomainError',
+          message: `Command requires payload type '${requiredType}' but found '${aggregate.payload.aggregateType}'`,
+          details: { 
+            required: requiredType, 
+            found: aggregate.payload.aggregateType,
+            commandType: this.commandType
+          }
+        }
+      } as Result<IEventPayload[], SekibanError>;
+    }
+    
+    return this.handleTyped(aggregate as Aggregate<TRequiredPayload>);
   }
 }

@@ -1,66 +1,116 @@
-import { IProjector } from './projector-interface'
-import { IAggregatePayload } from './aggregate-payload'
-import { IEvent } from '../events/event'
-import { Aggregate, createEmptyAggregate, EmptyAggregatePayload } from './aggregate'
-import { PartitionKeys } from '../documents/partition-keys'
+import type { Result } from 'neverthrow';
+import type { IEventPayload } from '../events/event-payload.js';
+import type { IAggregatePayload } from './aggregate-payload.js';
+import type { Aggregate } from './aggregate.js';
+import type { PartitionKeys } from '../partition-keys/partition-keys.js';
+import type { SekibanError } from '../errors/sekiban-error.js';
 
 /**
- * Wrapper class that uses a projector to apply events to aggregates
+ * Base interface for aggregate payloads with discriminated union support
  */
-export class AggregateProjector<TPayload extends IAggregatePayload> {
-  constructor(
-    private readonly projector: IProjector<TPayload>
-  ) {}
+export interface ITypedAggregatePayload extends IAggregatePayload {
+  readonly aggregateType: string;
+}
+
+/**
+ * Empty aggregate payload for initial state
+ */
+export interface EmptyAggregatePayload extends ITypedAggregatePayload {
+  readonly aggregateType: 'Empty';
+}
+
+/**
+ * Aggregate projector interface that can handle multiple payload types
+ * This supports state machine patterns where aggregates transition between different payload types
+ */
+export interface IAggregateProjector<TPayloadUnion extends ITypedAggregatePayload> {
+  readonly aggregateTypeName: string;
   
   /**
-   * Project a single event onto an aggregate
+   * Get the initial empty state for a new aggregate
    */
-  projectEvent(
-    aggregate: Aggregate<TPayload>,
-    event: IEvent
-  ): Aggregate<TPayload> {
-    // Apply the event to get new payload
-    const newPayload = this.projector.project(aggregate.payload, event.payload)
-    
-    // Create new aggregate with updated state
-    return aggregate.withNewVersion(
-      newPayload,
-      event.version,
-      event.id
-    )
-  }
+  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload>;
   
   /**
-   * Project multiple events onto an aggregate
+   * Project an event to update the aggregate state
+   * Can transition between different payload types
    */
-  projectEvents(
-    aggregate: Aggregate<TPayload>,
-    events: IEvent[]
-  ): Aggregate<TPayload> {
-    // If no events, return the same aggregate
-    if (events.length === 0) {
-      return aggregate
-    }
-    
-    // Apply events sequentially
-    return events.reduce(
-      (currentAggregate, event) => this.projectEvent(currentAggregate, event),
-      aggregate
-    )
-  }
+  project(
+    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>, 
+    event: IEventPayload
+  ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
   
   /**
-   * Get initial empty aggregate
+   * Check if this projector can handle the given event type
    */
-  getInitialAggregate(
-    partitionKeys: PartitionKeys,
-    aggregateType: string
-  ): Aggregate<EmptyAggregatePayload> {
-    return createEmptyAggregate(
+  canHandle(eventType: string): boolean;
+  
+  /**
+   * Get supported payload types
+   */
+  getSupportedPayloadTypes(): string[];
+}
+
+/**
+ * Base abstract class for aggregate projectors
+ */
+export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePayload> 
+  implements IAggregateProjector<TPayloadUnion> {
+  
+  abstract readonly aggregateTypeName: string;
+  
+  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
+    return {
       partitionKeys,
-      aggregateType,
-      this.projector.getTypeName(),
-      this.projector.getVersion()
-    )
+      payload: {
+        aggregateType: 'Empty'
+      } as EmptyAggregatePayload,
+      version: 0,
+      lastEventId: null,
+      appliedEvents: []
+    };
+  }
+  
+  abstract project(
+    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>, 
+    event: IEventPayload
+  ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
+  
+  abstract canHandle(eventType: string): boolean;
+  
+  abstract getSupportedPayloadTypes(): string[];
+  
+  /**
+   * Helper method to create a new aggregate with updated payload
+   */
+  protected createUpdatedAggregate<TNewPayload extends TPayloadUnion>(
+    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>,
+    newPayload: TNewPayload,
+    event: IEventPayload
+  ): Aggregate<TNewPayload> {
+    return {
+      partitionKeys: aggregate.partitionKeys,
+      payload: newPayload,
+      version: aggregate.version + 1,
+      lastEventId: event.eventId || null,
+      appliedEvents: [...aggregate.appliedEvents, event]
+    };
+  }
+  
+  /**
+   * Helper method to check payload type
+   */
+  protected isPayloadType<T extends TPayloadUnion>(
+    payload: TPayloadUnion | EmptyAggregatePayload,
+    aggregateType: string
+  ): payload is T {
+    return payload.aggregateType === aggregateType;
+  }
+  
+  /**
+   * Helper method to check if payload is empty
+   */
+  protected isEmpty(payload: TPayloadUnion | EmptyAggregatePayload): payload is EmptyAggregatePayload {
+    return payload.aggregateType === 'Empty';
   }
 }

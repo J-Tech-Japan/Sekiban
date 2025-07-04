@@ -1,54 +1,60 @@
-# Sekiban TypeScript Dapr Sample
+# Weather Forecast Dapr Sample - Sekiban TypeScript
 
-A comprehensive TypeScript sample application demonstrating Sekiban event sourcing with Dapr integration, built using Test-Driven Development (TDD) following Takuto Wada's methodology.
+A production-ready weather forecast management application demonstrating **Sekiban's multi-payload projector pattern** with Dapr integration, matching the C# template functionality exactly.
 
-## Features
+## 🌟 Key Features
+
+✅ **Multi-Payload Aggregate Projectors**
+- Single projector handling multiple payload types (`WeatherForecast` ↔ `DeletedWeatherForecast`)
+- State machine patterns for domain modeling
+- Proper aggregate lifecycle management
 
 ✅ **Event Sourcing & CQRS**
-- User aggregate with commands, events, and projections
-- Command/Query separation with proper validation
-- Event-driven architecture with pub/sub integration
+- Complete weather forecast domain with commands, events, and queries
+- Input, update location, and soft-delete operations
+- Event-driven architecture with Dapr pub/sub
 
 ✅ **Dapr Integration**
-- Real-time event streaming with Dapr pub/sub
-- In-memory components for local development  
-- CloudEvents specification compliance
-- Graceful fallback when pub/sub is unavailable
+- Production-ready SekibanDaprExecutor with retry logic and error handling
+- Dapr Actor model for distributed aggregate management
+- In-memory state store and pub/sub for local development
+
+✅ **TypeScript & Type Safety**
+- Full TypeScript implementation with strong typing
+- Value objects (TemperatureCelsius) with validation
+- Zod schemas for input validation
 
 ✅ **Production-Ready Patterns**
-- Comprehensive test suite (17 passing tests)
-- Contract testing with mock Dapr client
-- Input validation with Zod
-- Proper error handling and HTTP status codes
+- Health endpoints (/healthz, /readyz) for Kubernetes
+- Prometheus metrics collection
+- Distributed tracing and request logging
+- Proper error handling with Result patterns
 
-✅ **Health & Observability**
-- Kubernetes-ready health endpoints (/healthz, /readyz)
-- Prometheus metrics with counters and histograms
-- Distributed tracing context propagation
-- Dependency health checking
-
-✅ **Developer Experience**
-- Hot-reloading development setup
-- Clear separation of concerns
-- Dependency injection for testability
-
-✅ **Time-Travel Debugging** (NEW)
-- Historical state reconstruction at any point in time
-- Event replay with metadata tracking
-- Performance-optimized for large event streams
-- REST API support with `asOf` query parameter
-
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - pnpm
-- Dapr CLI (optional, for production-like testing)
+- Dapr CLI (for production-like testing)
 
 ### Installation
 
 ```bash
+# Install dependencies
 pnpm install
+
+# Build the application
+pnpm build
+```
+
+### Local Development
+
+```bash
+# Development mode (hot reload)
+pnpm dev
+
+# With Dapr sidecar (recommended)
+pnpm dapr:run
 ```
 
 ### Running Tests
@@ -57,72 +63,72 @@ pnpm install
 # Run all tests
 pnpm test
 
-# Run only acceptance tests  
-pnpm test:acceptance
-
-# Watch mode
+# Watch mode for development
 pnpm test:watch
+
+# Type checking
+pnpm typecheck
 ```
 
-### Local Development
+## 🌤️ API Endpoints
 
-```bash
-# Start PostgreSQL (optional - tests use in-memory)
-pnpm docker:up
-
-# Run the API server
-pnpm dev:api
-
-# Or with Dapr sidecar
-pnpm dapr:start
-```
-
-## API Endpoints
-
-### User Management
-- `POST /users` - Create a new user
-- `GET /users/:id` - Retrieve user by ID
-- `GET /users/:id?asOf=2025-07-03T10:30:00.000Z` - Retrieve user state at a specific point in time
+### Weather Forecast Management
+- `POST /api/weatherforecast/input` - Create a new weather forecast
+- `POST /api/weatherforecast/{id}/update-location` - Update forecast location
+- `POST /api/weatherforecast/{id}/delete` - Soft delete a forecast
+- `GET /api/weatherforecast` - Get all active forecasts
+- `POST /api/weatherforecast/generate` - Generate sample data
 
 ### Health & Observability
-- `GET /healthz` - Liveness probe (always returns 200 when process is alive)
-- `GET /readyz` - Readiness probe (checks dependencies, returns 503 if not ready)
-- `GET /metrics` - Prometheus metrics endpoint
-- `GET /health` - Legacy health check
+- `GET /healthz` - Liveness probe (Kubernetes ready)
+- `GET /readyz` - Readiness probe (dependency health)
+- `GET /metrics` - Prometheus metrics
+- `GET /debug/env` - Environment variables (debug)
 
 ### Event Handling (Dapr)
-- `POST /events/users` - Receive user events from Dapr pub/sub
+- `POST /events/weather-forecasts` - Receive weather events from Dapr pub/sub
 
-## Example Usage
+## 📝 Example Usage
 
-### Create a User
+### Create a Weather Forecast
 ```bash
-curl -X POST http://localhost:3000/users \\
-  -H "Content-Type: application/json" \\
-  -d '{"name": "Alice Johnson", "email": "alice@example.com"}'
+curl -X POST http://localhost:5000/api/weatherforecast/input \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location": "Tokyo",
+    "date": "2025-07-04",
+    "temperatureC": 25,
+    "summary": "Warm and sunny"
+  }'
 ```
 
-### Get a User
+### Update Location
 ```bash
-curl http://localhost:3000/users/{user-id}
+curl -X POST http://localhost:5000/api/weatherforecast/{forecast-id}/update-location \
+  -H "Content-Type: application/json" \
+  -d '{"location": "Osaka"}'
 ```
 
-### Time-Travel Query
+### Get All Forecasts
 ```bash
-# Get user state as it was at a specific time
-curl "http://localhost:3000/users/{user-id}?asOf=2025-07-03T10:30:00.000Z"
+curl http://localhost:5000/api/weatherforecast
+```
+
+### Generate Sample Data
+```bash
+curl -X POST http://localhost:5000/api/weatherforecast/generate
 ```
 
 ### Check Health & Metrics
 ```bash
-# Liveness probe
-curl http://localhost:3000/healthz
+# Kubernetes liveness probe
+curl http://localhost:5000/healthz
 
-# Readiness probe
-curl http://localhost:3000/readyz
+# Kubernetes readiness probe  
+curl http://localhost:5000/readyz
 
 # Prometheus metrics
-curl http://localhost:3000/metrics
+curl http://localhost:5000/metrics
 ```
 
 ## Architecture

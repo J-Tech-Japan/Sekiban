@@ -1,322 +1,268 @@
-import { describe, it, expect } from 'vitest'
-import {
-  ICommand,
-  ICommandHandler,
-  ICommandWithHandler,
-  ICommandContext,
-  ICommandContextWithoutState,
-  CommandResponse,
-  createCommandResponse
-} from './command'
-import { PartitionKeys } from '../documents/partition-keys'
-import { IAggregatePayload } from '../aggregates/aggregate-payload'
-import { IProjector } from '../aggregates/projector-interface'
-import { IEventPayload } from '../events/event-payload'
-import { EventOrNone } from '../aggregates/projector-interface'
-import { Result, ok, err } from 'neverthrow'
-import { ValidationError, CommandValidationError } from '../result/errors'
-import { Aggregate } from '../aggregates/aggregate'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
+import { describe, it, expect } from 'vitest';
+import { ok, err } from 'neverthrow';
+import { v4 as uuidv4 } from 'uuid';
+import { CreationCommand, ConstrainedPayloadCommand } from './command.js';
+import type { ITypedAggregatePayload, EmptyAggregatePayload } from '../aggregates/aggregate-projector.js';
+import type { Aggregate } from '../aggregates/aggregate.js';
+import type { IEventPayload } from '../events/event-payload.js';
+import type { PartitionKeys } from '../partition-keys/partition-keys.js';
+import type { CommandValidationError, SekibanError } from '../errors/sekiban-error.js';
 
-// Test payloads
-class UserPayload implements IAggregatePayload {
-  constructor(
-    public readonly name: string,
-    public readonly email: string,
-    public readonly isActive: boolean = true
-  ) {}
+// Test domain payloads
+interface UnconfirmedUserPayload extends ITypedAggregatePayload {
+  readonly aggregateType: 'UnconfirmedUser';
+  id: string;
+  name: string;
+  email: string;
 }
 
-// Test events
-class UserCreated implements IEventPayload {
+interface ConfirmedUserPayload extends ITypedAggregatePayload {
+  readonly aggregateType: 'ConfirmedUser';
+  id: string;
+  name: string;
+  email: string;
+  confirmedAt: string;
+}
+
+type UserPayloadUnion = UnconfirmedUserPayload | ConfirmedUserPayload;
+
+// Test creation command
+class CreateUserCommand extends CreationCommand<UserPayloadUnion> {
+  readonly commandType = 'CreateUser';
+  
   constructor(
     public readonly name: string,
     public readonly email: string
-  ) {}
-}
-
-class UserUpdated implements IEventPayload {
-  constructor(
-    public readonly name?: string,
-    public readonly email?: string
-  ) {}
-}
-
-// Test projector
-class UserProjector implements IProjector<IAggregatePayload> {
-  getTypeName(): string { return 'UserProjector' }
-  getVersion(): number { return 1 }
+  ) {
+    super();
+  }
   
-  project(payload: IAggregatePayload, event: IEventPayload): IAggregatePayload {
-    if (event instanceof UserCreated) {
-      return new UserPayload(event.name, event.email)
+  specifyPartitionKeys(): PartitionKeys {
+    return {
+      aggregateId: uuidv4(),
+      partitionKey: 'User',
+      rootPartitionKey: 'default'
+    };
+  }
+  
+  validate() {
+    if (!this.name || !this.email) {
+      return err({
+        type: 'CommandValidationError',
+        message: 'Name and email are required'
+      } as CommandValidationError);
     }
-    if (payload instanceof UserPayload && event instanceof UserUpdated) {
-      return new UserPayload(
-        event.name ?? payload.name,
-        event.email ?? payload.email,
-        payload.isActive
-      )
-    }
-    return payload
+    return ok(undefined);
+  }
+  
+  handleCreation(aggregate: Aggregate<EmptyAggregatePayload>) {
+    const event: IEventPayload = {
+      eventType: 'UserRegistered',
+      userId: aggregate.partitionKeys.aggregateId,
+      name: this.name,
+      email: this.email
+    };
+    return ok([event]);
   }
 }
 
-describe('Command Interfaces', () => {
-  describe('ICommand', () => {
-    it('should be a marker interface', () => {
-      // Arrange
-      class CreateUser implements ICommand {
-        constructor(
-          public readonly name: string,
-          public readonly email: string
-        ) {}
-      }
-      
-      // Act
-      const command = new CreateUser('John', 'john@example.com')
-      
-      // Assert
-      expect(command).toBeDefined()
-      expect(command.name).toBe('John')
-      expect(command.email).toBe('john@example.com')
-    })
-  })
+// Test constrained command
+class ConfirmUserCommand extends ConstrainedPayloadCommand<UserPayloadUnion, UnconfirmedUserPayload> {
+  readonly commandType = 'ConfirmUser';
   
-  describe('ICommandHandler', () => {
-    it('should define handler interface', () => {
+  constructor(public readonly userId: string) {
+    super();
+  }
+  
+  specifyPartitionKeys(): PartitionKeys {
+    return {
+      aggregateId: this.userId,
+      partitionKey: 'User',
+      rootPartitionKey: 'default'
+    };
+  }
+  
+  validate() {
+    if (!this.userId) {
+      return err({
+        type: 'CommandValidationError',
+        message: 'User ID is required'
+      } as CommandValidationError);
+    }
+    return ok(undefined);
+  }
+  
+  getRequiredPayloadType(): string {
+    return 'UnconfirmedUser';
+  }
+  
+  handleTyped(aggregate: Aggregate<UnconfirmedUserPayload>) {
+    const event: IEventPayload = {
+      eventType: 'UserConfirmed',
+      userId: aggregate.payload.id,
+      confirmedAt: new Date().toISOString()
+    };
+    return ok([event]);
+  }
+}
+
+describe('Multi-Payload Commands', () => {
+  describe('CreationCommand', () => {
+    it('should execute successfully on empty aggregate', () => {
       // Arrange
-      class UpdateUser implements ICommand {
-        constructor(
-          public readonly userId: string,
-          public readonly name?: string,
-          public readonly email?: string
-        ) {}
-      }
-      
-      class UpdateUserHandler implements ICommandHandler<UpdateUser, UserPayload> {
-        handle(
-          command: UpdateUser,
-          context: ICommandContext<UserPayload>
-        ): Result<EventOrNone, Error> {
-          // Business logic validation
-          if (!command.name && !command.email) {
-            return err(new ValidationError('At least one field must be provided'))
-          }
-          
-          // Create event
-          const event = new UserUpdated(command.name, command.email)
-          return ok(EventOrNone.event(context.createEvent(event)))
-        }
-      }
+      const command = new CreateUserCommand('John Doe', 'john@example.com');
+      const partitionKeys = command.specifyPartitionKeys();
+      const emptyAggregate: Aggregate<EmptyAggregatePayload> = {
+        partitionKeys,
+        payload: { aggregateType: 'Empty' },
+        version: 0,
+        lastEventId: null,
+        appliedEvents: []
+      };
       
       // Act
-      const handler = new UpdateUserHandler()
-      const aggregate = new Aggregate(
-        PartitionKeys.create('user-123'),
-        'User',
-        1,
-        new UserPayload('Current', 'current@test.com'),
-        SortableUniqueId.generate(),
-        'UserProjector',
-        1
-      )
-      
-      // Create mock context
-      const context: ICommandContext<UserPayload> = {
-        getAggregate: () => aggregate,
-        createEvent: (payload: IEventPayload) => ({
-          id: SortableUniqueId.generate(),
-          partitionKeys: aggregate.partitionKeys,
-          aggregateType: aggregate.aggregateType,
-          version: aggregate.version + 1,
-          payload,
-          metadata: {
-            correlationId: 'test-correlation',
-            causationId: 'test-causation',
-            timestamp: new Date(),
-            userId: 'test-user'
-          }
-        })
-      }
-      
-      const result = handler.handle(
-        new UpdateUser('user-123', 'Updated Name'),
-        context
-      )
+      const result = command.handle(emptyAggregate);
       
       // Assert
-      expect(result.isOk()).toBe(true)
+      expect(result.isOk()).toBe(true);
       if (result.isOk()) {
-        expect(result.value.hasEvent).toBe(true)
-        expect(result.value.event?.payload).toBeInstanceOf(UserUpdated)
+        const events = result.value;
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('UserRegistered');
+        expect((events[0] as any).name).toBe('John Doe');
+        expect((events[0] as any).email).toBe('john@example.com');
       }
-    })
-  })
-  
-  describe('ICommandWithHandler', () => {
-    it('should combine command and handler', () => {
-      // Arrange
-      class CreateUser implements ICommandWithHandler<CreateUser, UserProjector> {
-        constructor(
-          public readonly name: string,
-          public readonly email: string
-        ) {}
-        
-        validate(): Result<void, ValidationError[]> {
-          const errors: ValidationError[] = []
-          
-          if (!this.name || this.name.length < 2) {
-            errors.push(new ValidationError('Name must be at least 2 characters'))
-          }
-          
-          if (!this.email || !this.email.includes('@')) {
-            errors.push(new ValidationError('Invalid email format'))
-          }
-          
-          return errors.length > 0 ? err(errors) : ok(undefined)
-        }
-        
-        getPartitionKeys(): PartitionKeys {
-          // Generate new partition keys for new aggregate
-          return PartitionKeys.generate('users')
-        }
-        
-        handle(
-          command: CreateUser,
-          context: ICommandContextWithoutState
-        ): Result<EventOrNone, Error> {
-          const event = new UserCreated(command.name, command.email)
-          return ok(EventOrNone.event(context.createEvent(event)))
-        }
-      }
-      
-      // Act
-      const command = new CreateUser('Alice', 'alice@example.com')
-      const validation = command.validate()
-      
-      // Assert
-      expect(validation.isOk()).toBe(true)
-      expect(command.getPartitionKeys().group).toBe('users')
-    })
+    });
     
-    it('should validate command properties', () => {
+    it('should fail when applied to non-empty aggregate', () => {
       // Arrange
-      class InvalidCommand implements ICommandWithHandler<InvalidCommand, UserProjector> {
-        constructor(
-          public readonly name: string,
-          public readonly email: string
-        ) {}
-        
-        validate(): Result<void, ValidationError[]> {
-          const errors: ValidationError[] = []
-          
-          if (!this.name) {
-            errors.push(new ValidationError('Name is required'))
-          }
-          
-          if (!this.email.includes('@')) {
-            errors.push(new ValidationError('Invalid email'))
-          }
-          
-          return errors.length > 0 ? err(errors) : ok(undefined)
-        }
-        
-        getPartitionKeys(): PartitionKeys {
-          return PartitionKeys.generate('users')
-        }
-        
-        handle(
-          command: InvalidCommand,
-          context: ICommandContextWithoutState
-        ): Result<EventOrNone, Error> {
-          return ok(EventOrNone.none())
-        }
-      }
+      const command = new CreateUserCommand('John Doe', 'john@example.com');
+      const partitionKeys = command.specifyPartitionKeys();
+      const nonEmptyAggregate: Aggregate<UnconfirmedUserPayload> = {
+        partitionKeys,
+        payload: {
+          aggregateType: 'UnconfirmedUser',
+          id: 'user-123',
+          name: 'Existing User',
+          email: 'existing@example.com'
+        },
+        version: 1,
+        lastEventId: 'event-1',
+        appliedEvents: []
+      };
       
       // Act
-      const command = new InvalidCommand('', 'invalid-email')
-      const validation = command.validate()
+      const result = command.handle(nonEmptyAggregate as any);
       
       // Assert
-      expect(validation.isErr()).toBe(true)
-      if (validation.isErr()) {
-        expect(validation.error).toHaveLength(2)
-        expect(validation.error[0]!.message).toBe('Name is required')
-        expect(validation.error[1]!.message).toBe('Invalid email')
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain('Creation command can only be applied to empty aggregates');
       }
-    })
-  })
+    });
+    
+    it('should validate command data', () => {
+      // Arrange
+      const invalidCommand = new CreateUserCommand('', ''); // Invalid data
+      
+      // Act
+      const result = invalidCommand.validate();
+      
+      // Assert
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain('Name and email are required');
+      }
+    });
+  });
   
-  describe('CommandResponse', () => {
-    it('should create success response', () => {
-      // Arrange & Act
-      const response = createCommandResponse({
-        success: true,
-        aggregateId: 'user-123',
+  describe('ConstrainedPayloadCommand', () => {
+    it('should execute successfully on correct payload type', () => {
+      // Arrange
+      const command = new ConfirmUserCommand('user-123');
+      const partitionKeys = command.specifyPartitionKeys();
+      const unconfirmedUserAggregate: Aggregate<UnconfirmedUserPayload> = {
+        partitionKeys,
+        payload: {
+          aggregateType: 'UnconfirmedUser',
+          id: 'user-123',
+          name: 'John Doe',
+          email: 'john@example.com'
+        },
+        version: 1,
+        lastEventId: 'event-1',
+        appliedEvents: []
+      };
+      
+      // Act
+      const result = command.handle(unconfirmedUserAggregate as any);
+      
+      // Assert
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        const events = result.value;
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('UserConfirmed');
+        expect((events[0] as any).userId).toBe('user-123');
+      }
+    });
+    
+    it('should fail on incorrect payload type', () => {
+      // Arrange
+      const command = new ConfirmUserCommand('user-123');
+      const partitionKeys = command.specifyPartitionKeys();
+      const confirmedUserAggregate: Aggregate<ConfirmedUserPayload> = {
+        partitionKeys,
+        payload: {
+          aggregateType: 'ConfirmedUser',
+          id: 'user-123',
+          name: 'John Doe',
+          email: 'john@example.com',
+          confirmedAt: '2025-07-03T10:00:00.000Z'
+        },
         version: 2,
-        eventId: 'event-456'
-      })
-      
-      // Assert
-      expect(response.success).toBe(true)
-      expect(response.aggregateId).toBe('user-123')
-      expect(response.version).toBe(2)
-      expect(response.eventId).toBe('event-456')
-      expect(response.error).toBeUndefined()
-    })
-    
-    it('should create error response', () => {
-      // Arrange & Act
-      const response = createCommandResponse({
-        success: false,
-        error: 'Validation failed'
-      })
-      
-      // Assert
-      expect(response.success).toBe(false)
-      expect(response.error).toBe('Validation failed')
-      expect(response.aggregateId).toBeUndefined()
-    })
-  })
-  
-  describe('Command Context', () => {
-    it('should provide access to aggregate state', () => {
-      // Arrange
-      const aggregate = new Aggregate(
-        PartitionKeys.create('test-123'),
-        'Test',
-        3,
-        new UserPayload('Test User', 'test@test.com'),
-        SortableUniqueId.generate(),
-        'TestProjector',
-        1
-      )
-      
-      const context: ICommandContext<UserPayload> = {
-        getAggregate: () => aggregate,
-        createEvent: (payload: IEventPayload) => ({
-          id: SortableUniqueId.generate(),
-          partitionKeys: aggregate.partitionKeys,
-          aggregateType: aggregate.aggregateType,
-          version: aggregate.version + 1,
-          payload,
-          metadata: {
-            correlationId: 'ctx-correlation',
-            causationId: 'ctx-causation',
-            timestamp: new Date(),
-            userId: 'ctx-user'
-          }
-        })
-      }
+        lastEventId: 'event-2',
+        appliedEvents: []
+      };
       
       // Act
-      const retrievedAggregate = context.getAggregate()
+      const result = command.handle(confirmedUserAggregate as any);
       
       // Assert
-      expect(retrievedAggregate).toBe(aggregate)
-      expect(retrievedAggregate.version).toBe(3)
-      expect(retrievedAggregate.payload).toBeInstanceOf(UserPayload)
-    })
-  })
-})
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain("Command requires payload type 'UnconfirmedUser' but found 'ConfirmedUser'");
+      }
+    });
+    
+    it('should fail on empty aggregate', () => {
+      // Arrange
+      const command = new ConfirmUserCommand('user-123');
+      const partitionKeys = command.specifyPartitionKeys();
+      const emptyAggregate: Aggregate<EmptyAggregatePayload> = {
+        partitionKeys,
+        payload: { aggregateType: 'Empty' },
+        version: 0,
+        lastEventId: null,
+        appliedEvents: []
+      };
+      
+      // Act
+      const result = command.handle(emptyAggregate as any);
+      
+      // Assert
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain("Command requires payload type 'UnconfirmedUser' but found 'Empty'");
+      }
+    });
+    
+    it('should provide correct required payload type', () => {
+      // Arrange
+      const command = new ConfirmUserCommand('user-123');
+      
+      // Act & Assert
+      expect(command.getRequiredPayloadType()).toBe('UnconfirmedUser');
+    });
+  });
+});
