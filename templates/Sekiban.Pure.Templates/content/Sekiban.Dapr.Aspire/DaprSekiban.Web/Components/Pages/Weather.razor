@@ -47,8 +47,8 @@ else
                 <tr>
                     <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
+                    <td>@forecast.TemperatureC.ToString("F1")°C</td>
+                    <td>@forecast.TemperatureF.ToString("F1")°F</td>
                     <td>@forecast.Summary</td>
                     <td>
                         <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
@@ -82,7 +82,7 @@ else
                     </div>
                     <div class="mb-3">
                         <label for="temperatureC" class="form-label">Temperature (°C)</label>
-                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC" />
+                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC" step="0.1" />
                     </div>
                     <div class="mb-3">
                         <label for="summary" class="form-label">Summary</label>
@@ -310,8 +310,8 @@ else
         [Required(ErrorMessage = "Date is required")]
         public DateTime Date { get; set; } = DateTime.Now;
 
-        [Range(-273, 100, ErrorMessage = "Temperature must be between -273 and 100")]
-        public int TemperatureC { get; set; } = 20;
+        [Range(-273.15, 100.0, ErrorMessage = "Temperature must be between -273.15 and 100")]
+        public double TemperatureC { get; set; } = 20.0;
 
         [Required(ErrorMessage = "Summary is required")]
         public string? Summary { get; set; }

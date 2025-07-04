@@ -389,7 +389,7 @@ app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecu
         for (var i = 0; i < 3; i++)
         {
             var date = DateOnly.FromDateTime(DateTime.Now.AddDays(i));
-            var temperatureC = new TemperatureCelsius(random.Next(-20, 55));
+            var temperatureC = new TemperatureCelsius(random.Next(-20, 55) + random.NextDouble());
             var command = new InputWeatherForecastCommand(
                 city,
                 date,

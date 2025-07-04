@@ -85,24 +85,7 @@ chmod +x ./create_container_registry.sh
 ./create_container_registry.sh mydeploy
 ```
 
-8. Deploy backend image to ACR
-```bash
-chmod +x ./code_deploy_backend.sh
-./code_deploy_backend.sh mydeploy   
-```
-
-9. Deploy frontend image to ACR
-```bash
-chmod +x ./code_deploy_frontend.sh
-./code_deploy_frontend.sh mydeploy   
-```
-
-10. Deploy Infrastructure First (Staged Deployment)
-
-Due to the dependency between Container Apps and container images, we use a staged deployment approach:
-
-a. Deploy Infrastructure Only (excluding Container Apps)
-
+8. Deploy Infrastructure
 ```bash
 chmod +x ./runbicep.sh
 ./runbicep.sh mydeploy aca_infrastructure.bicep
@@ -117,42 +100,67 @@ This deploys:
 - Container Apps Environment (Managed Environment)
 - Dapr Components (Cosmos DB State Store + Service Bus Pub/Sub)
 
-b. Build and Push Container Images
+**Note:** This deployment may take 5-10 minutes as Container Apps Environment creation can take time.
 
-After infrastructure is deployed, build and push images:
-
+9. Deploy backend image to ACR
 ```bash
-# Deploy backend image to ACR (if not already done in step 8)
-./code_deploy_backend.sh mydeploy
-
-# Deploy frontend image to ACR (if not already done in step 9)
-./code_deploy_frontend.sh mydeploy
+chmod +x ./code_deploy_backend.sh
+./code_deploy_backend.sh mydeploy   
 ```
 
-c. Deploy Container Apps
+**Note:** On first deployment, you may see an error "The containerapp 'backend-xxx' does not exist". This is expected as the Container App hasn't been created yet. The script will build and push the image to ACR successfully, but the automatic container update will fail. This is normal for initial deployment.
 
-Finally, deploy the Container Apps:
+10. Deploy frontend image to ACR
+```bash
+chmod +x ./code_deploy_frontend.sh
+./code_deploy_frontend.sh mydeploy   
+```
+
+**Note:** Similar to the backend, you may see an error "The containerapp 'frontend-xxx' does not exist" on first deployment. This is expected and normal. The image will be successfully pushed to ACR.
+
+11. Deploy Container Apps
+
+After infrastructure and images are ready, deploy the Container Apps:
 
 ```bash
 ./runbicep.sh mydeploy aca_apps.bicep
 ```
 
-Alternative: Deploy Everything at Once (if images already exist)
+This creates:
+- Backend Container App (internal access only, with Dapr enabled)
+- Frontend Container App (public access)
 
-If you've already pushed images to ACR, you can use the all-in-one deployment:
+**Important Notes:**
+- The backend is configured with internal access only for security
+- The backend uses Dapr app ID: `daprsekiban-apiservice`
+- The frontend communicates with backend via internal URL
+- Dapr components are automatically scoped to the backend app
 
-```bash
-./runbicep.sh mydeploy aca_main.bicep
-```
-
-11. Give yourself access to KeyVault (optional)
+12. Give yourself access to KeyVault (optional)
 
 ```bash
 chmod +x ./user_access_keyvault.sh
 ./user_access_keyvault.sh mydeploy   
 ```
 
-12. Setup Github Actions (Optional) - Create Azure Credentials
+13. Updating Deployed Applications
+
+After initial deployment, you can update your applications easily:
+
+```bash
+# Update backend
+./code_deploy_backend.sh mydeploy
+
+# Update frontend  
+./code_deploy_frontend.sh mydeploy
+```
+
+These scripts will:
+- Build new Docker images
+- Push to ACR
+- Automatically update the running Container Apps
+
+14. Setup Github Actions (Optional) - Create Azure Credentials
 
 ```bash
 chmod +x ./generate_azure_credentials.sh
@@ -161,7 +169,7 @@ chmod +x ./generate_azure_credentials.sh
 
 json will print on the screen, you will keep that json as AZURE_CREDENTIALS_MYDEPLOY in github secrets.
 
-13. Setup Github Actions
+15. Setup Github Actions
 
 you need to include mydeploy.local.json to the git
 deploy-backend.yml
@@ -285,3 +293,50 @@ jobs:
             --resource-group ${{ env.RESOUCE_GROUP_NAME }} \
             --image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
 ```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Dapr state store error: "the state store is not configured to use the actor runtime"**
+   - This occurs when Dapr components are not properly loaded
+   - Solution: Ensure the backend app ID matches the Dapr component scopes (`daprsekiban-apiservice`)
+   - You may need to restart the backend container app
+
+2. **Frontend cannot connect to backend**
+   - Check that the backend is using internal ingress (not external)
+   - Verify the frontend environment variable points to the internal URL
+   - The internal URL format should be: `https://backend-{resource-group}.internal.{environment-domain}.azurecontainerapps.io`
+
+3. **Container Apps Environment takes long to create**
+   - This is normal and can take 5-10 minutes
+   - Be patient during the infrastructure deployment step
+
+4. **"Container app does not exist" errors during first deployment**
+   - This is expected behavior
+   - The scripts build and push images first, then try to update non-existent apps
+   - Simply continue with the deployment steps
+
+5. **Key Vault already exists error**
+   - Use the purge_keyvault.sh script to remove soft-deleted vaults
+   - Key Vaults have a 90-day retention period by default
+
+### Viewing Logs
+
+```bash
+# View backend logs
+az containerapp logs show --name backend-{resource-group} --resource-group {resource-group} --tail 50
+
+# View Dapr sidecar logs
+az containerapp logs show --name backend-{resource-group} --resource-group {resource-group} --container daprd --tail 50
+
+# View frontend logs  
+az containerapp logs show --name frontend-{resource-group} --resource-group {resource-group} --tail 50
+```
+
+### Accessing Your Application
+
+After successful deployment:
+- Frontend URL: `https://frontend-{resource-group}.{region}.azurecontainerapps.io`
+- Backend is internal only and not directly accessible from internet
+- Navigate to the frontend URL and click on "Weather" to test the application
