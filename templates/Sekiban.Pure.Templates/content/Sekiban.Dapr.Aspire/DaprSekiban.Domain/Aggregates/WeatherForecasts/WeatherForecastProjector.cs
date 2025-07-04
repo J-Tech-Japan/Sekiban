@@ -28,7 +28,7 @@ public class WeatherForecastProjector : IAggregateProjector
                     Summary = inputted.Summary
                 },
             (WeatherForecast forecast, WeatherForecastLocationUpdated locationUpdated) =>
-                forecast with { Location = locationUpdated.Location },
+                forecast with { Location = locationUpdated.NewLocation },
             (WeatherForecast forecast, WeatherForecastDeleted) => DeletedWeatherForecast.Instance,
             _ => payload
         };

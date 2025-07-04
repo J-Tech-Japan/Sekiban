@@ -5,4 +5,4 @@ namespace DaprSekiban.Domain.Aggregates.WeatherForecasts.Events;
 
 [GenerateSerializer]
 public record WeatherForecastLocationUpdated(
-    [property: Id(0)] string Location) : IEventPayload;
+    [property: Id(0)] string NewLocation) : IEventPayload;

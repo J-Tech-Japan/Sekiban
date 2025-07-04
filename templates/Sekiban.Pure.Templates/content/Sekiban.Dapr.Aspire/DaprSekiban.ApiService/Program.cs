@@ -4,6 +4,7 @@ using DaprSekiban.Domain.Aggregates.User.Commands;
 using DaprSekiban.Domain.Aggregates.User.Queries;
 using DaprSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries;
+using DaprSekiban.Domain.Projections.Count;
 using DaprSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Command;

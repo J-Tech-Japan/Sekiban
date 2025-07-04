@@ -54,4 +54,15 @@ else
     exit 1
 fi
 
+# Update the container app with the new image
+echo "Updating backend container in Azure Container Apps..."
+az containerapp update --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest"
+
+if [ $? -eq 0 ]; then
+    echo "Backend container updated successfully."
+else
+    echo "Error: Failed to update backend container"
+    exit 1
+fi
+
 echo "Deployment process completed."
