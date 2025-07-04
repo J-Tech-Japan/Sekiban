@@ -4,16 +4,9 @@ param location string = resourceGroup().location
 var acrName = replace(toLower('acr-${resourceGroup().name}'), '-', '')
 var containerImage string = '${acrName}.azurecr.io/${containerAppName}:latest'
 
-@description('The params provided by aca_main.bicep.')
-param cosmosAccountName string = 'cosmos-${resourceGroup().name}'
-param serviceBusNamespace string = 'sb-${resourceGroup().name}'
-
 module envModule 'env-module.bicep' = {
   name: 'envVarsModule'
-  params: {
-    cosmosAccountName: cosmosAccountName
-    serviceBusNamespace: serviceBusNamespace
-  }
+  params: {}
 }
 
 // Reference to existing App Container Managed Environment

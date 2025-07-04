@@ -5,21 +5,10 @@
 
 targetScope = 'resourceGroup'
 
-@description('The type of Dapr state store to use')
-@allowed(['azureblobstorage', 'azuretablestorage'])
-param daprStateStoreType string = 'azureblobstorage'
-
-@description('The type of Dapr pub/sub to use')
-@allowed(['azurestoragequeues', 'azureservicebus'])
-param daprPubSubType string = 'azureservicebus'
-
 // Backend Container App with Dapr
 module backendContainerApp '7.backend/2.container-app.bicep' = {
   name: 'backendContainerAppDeployment'
-  params: {
-    daprStateStoreType: daprStateStoreType
-    daprPubSubType: daprPubSubType
-  }
+  params: {}
 }
 
 module backendKeyVaultAccess '7.backend/3.key-vault-access.bicep' = {

@@ -4,7 +4,6 @@ using DaprSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 using DaprSekiban.Domain.ValueObjects;
 using Sekiban.Pure.Command.Executor;
-using Sekiban.Pure.Query;
 
 namespace DaprSekiban.Web.Services;
 
@@ -34,9 +33,9 @@ public class WeatherApiClient
             _logger.LogInformation("Request URL: {Url}", url);
             _logger.LogInformation("Full Request URL: {FullUrl}", new Uri(_httpClient.BaseAddress!, url));
             
-            var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>(url);
+            var response = await _httpClient.GetFromJsonAsync<List<WeatherForecastResponse>>(url);
             _logger.LogInformation("API request successful");
-            return response?.Items?.ToList();
+            return response;
         }
         catch (Exception ex)
         {

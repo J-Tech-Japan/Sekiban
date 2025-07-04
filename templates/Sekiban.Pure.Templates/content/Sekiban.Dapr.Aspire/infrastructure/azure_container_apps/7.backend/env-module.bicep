@@ -7,11 +7,6 @@ param keyVaultName string = 'kv-${resourceGroup().name}'
 @allowed(['cosmos', 'postgres'])
 param databaseType string = 'cosmos'
 
-@description('Cosmos DB account name for Dapr state store')
-param cosmosAccountName string = 'cosmos-${resourceGroup().name}'
-
-@description('Service Bus namespace for Dapr pub/sub')
-param serviceBusNamespace string = 'sb-${resourceGroup().name}'
 
 param aspNetCoreEnvironment string = 'Production'
 
@@ -45,16 +40,6 @@ var secretVars = [
   {
     name: 'database-connection-string-name'
     keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/${databaseConnectionStringSecretName}'
-    identity: 'System'
-  }
-  {
-    name: 'cosmos-master-key'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/CosmosDbMasterKey'
-    identity: 'System'
-  }
-  {
-    name: 'servicebus-connectionstring'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/ServiceBusConnectionString'
     identity: 'System'
   }
 ]
