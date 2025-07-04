@@ -1,0 +1,137 @@
+import { Result, ok, err, ResultAsync } from 'neverthrow';
+import {
+  Aggregate,
+  IEvent,
+  PartitionKeys,
+  AggregateProjector,
+  SekibanError,
+  SortableUniqueId,
+  EmptyAggregatePayload
+} from '@sekiban/core';
+import type { IAggregateEventHandlerActor, SerializableEventDocument } from '../actors/interfaces.js';
+import type { SekibanDomainTypes } from '../types/domain-types.js';
+
+/**
+ * Repository implementation for Dapr actors, bridging between AggregateActor and AggregateEventHandlerActor.
+ * This is the Dapr equivalent of Orleans' OrleansRepository and C#'s DaprRepository.
+ */
+export class DaprRepository {
+  private currentAggregate: Aggregate;
+
+  constructor(
+    private readonly eventHandlerActor: IAggregateEventHandlerActor,
+    private readonly partitionKeys: PartitionKeys,
+    private readonly projector: AggregateProjector<any>,
+    private readonly domainTypes: SekibanDomainTypes,
+    currentAggregate: Aggregate
+  ) {
+    this.currentAggregate = currentAggregate;
+  }
+
+  getAggregate(): Result<Aggregate, never> {
+    return ok(this.currentAggregate);
+  }
+
+  async save(
+    lastSortableUniqueId: string,
+    newEvents: IEvent[]
+  ): Promise<Result<IEvent[], SekibanError>> {
+    if (!newEvents || newEvents.length === 0) {
+      return ok([]);
+    }
+
+    try {
+      // Convert events to serializable documents
+      const eventDocuments: SerializableEventDocument[] = newEvents.map(event => ({
+        id: event.id.toString(),
+        sortableUniqueId: event.id.toString(),
+        payload: event.payload,
+        eventType: event.eventType,
+        aggregateId: event.partitionKeys.aggregateId,
+        partitionKeys: event.partitionKeys,
+        version: event.version,
+        createdAt: event.metadata.timestamp.toISOString(),
+        metadata: event.metadata
+      }));
+
+      // Call the event handler actor to append events
+      const response = await this.eventHandlerActor.appendEventsAsync(
+        lastSortableUniqueId,
+        eventDocuments
+      );
+
+      if (!response.isSuccess) {
+        return err(new SekibanError(response.errorMessage || 'Failed to append events'));
+      }
+
+      // Note: Unlike the previous implementation, we should NOT update currentAggregate here
+      // The caller (AggregateActor) will handle the aggregate update via getProjectedAggregate
+      console.log(`[DaprRepository.save] Events saved: ${newEvents.length}, current version: ${this.currentAggregate.version}`);
+
+      return ok(newEvents);
+    } catch (error) {
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
+    }
+  }
+
+  async load(): Promise<Result<Aggregate, SekibanError>> {
+    try {
+      // Get all events from the event handler
+      const eventDocuments = await this.eventHandlerActor.getAllEventsAsync();
+
+      // Convert documents back to events
+      const events: IEvent[] = eventDocuments.map(doc => ({
+        id: SortableUniqueId.fromString(doc.sortableUniqueId).unwrapOr(SortableUniqueId.generate()),
+        partitionKeys: doc.partitionKeys,
+        aggregateType: doc.partitionKeys.group || '',
+        eventType: doc.eventType,
+        version: doc.version,
+        payload: doc.payload,
+        metadata: {
+          ...doc.metadata,
+          timestamp: new Date(doc.createdAt)
+        }
+      }));
+
+      // Start with empty aggregate
+      let aggregate = Aggregate.emptyFromPartitionKeys(this.partitionKeys);
+
+      // Project all events
+      for (const event of events) {
+        const projectResult = this.projector.project(aggregate, event);
+        if (projectResult.isErr()) {
+          return err(projectResult.error);
+        }
+        aggregate = projectResult.value;
+      }
+
+      // Update current aggregate
+      this.currentAggregate = aggregate;
+
+      return ok(aggregate);
+    } catch (error) {
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
+    }
+  }
+
+  getProjectedAggregate(projectedEvents: IEvent[]): Result<Aggregate, SekibanError> {
+    try {
+      console.log(`[getProjectedAggregate] Current version: ${this.currentAggregate.version}, projecting ${projectedEvents.length} events`);
+
+      // Project the events onto the current aggregate to get a new aggregate
+      let aggregate = this.currentAggregate;
+      for (const event of projectedEvents) {
+        const projectResult = this.projector.project(aggregate, event);
+        if (projectResult.isErr()) {
+          return err(projectResult.error);
+        }
+        aggregate = projectResult.value;
+      }
+
+      console.log(`[getProjectedAggregate] After projection - version: ${aggregate.version}`);
+      return ok(aggregate);
+    } catch (error) {
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
+    }
+  }
+}

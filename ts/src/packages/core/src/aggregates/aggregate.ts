@@ -104,6 +104,36 @@ export class Aggregate<TPayload extends IAggregatePayload = IAggregatePayload>
       this.projectorVersion
     )
   }
+
+  /**
+   * Create an empty aggregate (singleton instance)
+   */
+  static empty(): Aggregate<EmptyAggregatePayload> {
+    return new Aggregate(
+      PartitionKeys.create('', 'Unknown'),
+      'Unknown',
+      0,
+      new EmptyAggregatePayload(),
+      null,
+      'Unknown',
+      0
+    )
+  }
+
+  /**
+   * Create an empty aggregate from partition keys
+   */
+  static emptyFromPartitionKeys(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
+    return new Aggregate(
+      partitionKeys,
+      partitionKeys.group || 'Unknown',
+      0,
+      new EmptyAggregatePayload(),
+      null,
+      'Unknown',
+      0
+    )
+  }
 }
 
 /**

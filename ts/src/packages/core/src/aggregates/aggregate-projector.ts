@@ -41,6 +41,14 @@ export interface IAggregateProjector<TPayloadUnion extends ITypedAggregatePayloa
   ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
   
   /**
+   * Project an event payload to update the aggregate state (alternative signature)
+   */
+  projectPayload?(
+    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>, 
+    eventPayload: IEventPayload
+  ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
+  
+  /**
    * Check if this projector can handle the given event type
    */
   canHandle(eventType: string): boolean;
@@ -59,6 +67,20 @@ export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePa
   
   abstract readonly aggregateTypeName: string;
   
+  /**
+   * Get the projector version
+   */
+  getVersion(): number {
+    return 1;
+  }
+  
+  /**
+   * Get the projector type name
+   */
+  getTypeName(): string {
+    return this.constructor.name;
+  }
+  
   getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyPayload> {
     return new Aggregate(
       partitionKeys,
@@ -75,6 +97,28 @@ export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePa
     aggregate: Aggregate<TPayloadUnion | EmptyPayload>, 
     event: IEvent
   ): Result<Aggregate<TPayloadUnion | EmptyPayload>, SekibanError>;
+  
+  /**
+   * Project an event payload - default implementation calls project with a minimal event
+   */
+  projectPayload(
+    aggregate: Aggregate<TPayloadUnion | EmptyPayload>, 
+    eventPayload: IEventPayload
+  ): Result<Aggregate<TPayloadUnion | EmptyPayload>, SekibanError> {
+    // Create a minimal event for backwards compatibility
+    const minimalEvent: IEvent = {
+      id: aggregate.lastSortableUniqueId || ({ toString: () => '' } as any),
+      partitionKeys: aggregate.partitionKeys,
+      aggregateType: aggregate.aggregateType,
+      eventType: eventPayload.constructor.name,
+      version: aggregate.version + 1,
+      payload: eventPayload,
+      metadata: {
+        timestamp: new Date()
+      }
+    };
+    return this.project(aggregate, minimalEvent);
+  }
   
   abstract canHandle(eventType: string): boolean;
   

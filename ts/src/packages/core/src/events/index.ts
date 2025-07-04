@@ -27,19 +27,8 @@ export {
   EventDocument
 } from './event-document.js';
 
-/**
- * Export event store interfaces
- */
-export type {
-  IEventStore,
-  EventStoreOptions,
-  EventStoreStats
-} from './store.js';
-
-/**
- * Export in-memory event store
- */
-export { InMemoryEventStore } from './in-memory-event-store.js';
+// Event store interfaces are exported from storage module
+// to avoid conflicts
 
 /**
  * Export event stream types
@@ -61,3 +50,27 @@ export type {
 } from './types.js';
 
 export { EventBuilder } from './types.js';
+
+/**
+ * Export event reader and writer interfaces
+ */
+export type { IEventReader } from './event-reader.js';
+export type { IEventWriter } from './event-writer.js';
+
+/**
+ * Export event retrieval info and related types
+ */
+export {
+  EventRetrievalInfo,
+  OptionalValue,
+  SortableIdCondition,
+  SortableIdConditionNone,
+  SinceSortableIdCondition,
+  BetweenSortableIdCondition,
+  AggregateGroupStream
+} from './event-retrieval-info.js';
+
+export type {
+  ISortableIdCondition,
+  IAggregatesStream
+} from './event-retrieval-info.js';

@@ -1,165 +1,97 @@
-import { CosmosClient, Database } from '@azure/cosmos'
-import { ResultAsync, okAsync, errAsync } from 'neverthrow'
+import { CosmosClient, Database } from '@azure/cosmos';
+import { ResultAsync, okAsync, errAsync } from 'neverthrow';
 import {
-  IEventStorageProvider,
+  IEventStore,
   StorageProviderConfig,
-  EventBatch,
-  SnapshotData,
   StorageError,
   ConnectionError,
-  IEvent,
-  PartitionKeys
-} from '@sekiban/core'
-import { CosmosEventStore } from './cosmos-event-store'
+  EventStoreFactory
+} from '@sekiban/core';
+import { CosmosEventStore } from './cosmos-event-store.js';
 
 /**
- * CosmosDB storage provider
+ * Creates a CosmosDB event store
  */
-export class CosmosStorageProvider implements IEventStorageProvider {
-  private client: CosmosClient | null = null
-  private database: Database | null = null
-  private eventStore: CosmosEventStore | null = null
-
-  constructor(private config: StorageProviderConfig) {
-    if (!config.connectionString) {
-      throw new Error('Connection string is required for CosmosDB provider')
-    }
-    if (!config.databaseName) {
-      throw new Error('Database name is required for CosmosDB provider')
-    }
+export function createCosmosEventStore(config: StorageProviderConfig): ResultAsync<IEventStore, StorageError> {
+  if (!config.connectionString) {
+    return errAsync(new StorageError('Connection string is required for CosmosDB provider', 'INVALID_CONFIG'));
+  }
+  if (!config.databaseName) {
+    return errAsync(new StorageError('Database name is required for CosmosDB provider', 'INVALID_CONFIG'));
   }
 
-  /**
-   * Initialize the storage provider
-   */
-  initialize(): ResultAsync<void, StorageError> {
-    return ResultAsync.fromPromise(
-      (async () => {
-        try {
-          // Parse connection string to extract endpoint and key
-          const connectionString = this.config.connectionString!
-          const endpoint = this.extractEndpoint(connectionString)
-          const key = this.extractKey(connectionString)
+  return ResultAsync.fromPromise(
+    (async () => {
+      try {
+        // Parse connection string to extract endpoint and key
+        const connectionString = config.connectionString;
+        const endpoint = extractEndpoint(connectionString);
+        const key = extractKey(connectionString);
 
-          // Create CosmosDB client
-          this.client = new CosmosClient({
-            endpoint,
-            key,
-            connectionPolicy: {
-              requestTimeout: this.config.timeoutMs || 30000,
-              enableEndpointDiscovery: true,
-              retryOptions: {
-                maxRetryAttemptCount: this.config.maxRetries || 3,
-                fixedRetryIntervalInMilliseconds: 1000,
-                maxWaitTimeInSeconds: 30
-              }
+        // Create CosmosDB client
+        const client = new CosmosClient({
+          endpoint,
+          key,
+          connectionPolicy: {
+            requestTimeout: config.timeoutMs || 30000,
+            enableEndpointDiscovery: true,
+            retryOptions: {
+              maxRetryAttemptCount: config.maxRetries || 3,
+              fixedRetryIntervalInMilliseconds: 1000,
+              maxWaitTimeInSeconds: 30
             }
-          })
+          }
+        });
 
-          // Create or get database
-          const { database } = await this.client.databases.createIfNotExists({
-            id: this.config.databaseName!
-          })
-          this.database = database
+        // Create or get database
+        const { database } = await client.databases.createIfNotExists({
+          id: config.databaseName
+        });
 
-          // Create event store
-          this.eventStore = new CosmosEventStore(this.database)
+        // Create event store
+        const eventStore = new CosmosEventStore(database);
 
-          // Initialize database containers
-          return await this.eventStore.initialize()
-        } catch (error) {
-          throw new ConnectionError(
-            `Failed to initialize CosmosDB provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            error instanceof Error ? error : undefined
-          )
-        }
-      })(),
-      (error) => error instanceof StorageError ? error : new ConnectionError(
-        `Failed to initialize CosmosDB provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        error instanceof Error ? error : undefined
-      )
-    ).andThen(() => okAsync(undefined))
+        // Initialize the event store
+        await eventStore.initialize();
+
+        return eventStore;
+      } catch (error) {
+        throw new ConnectionError(
+          `Failed to create CosmosDB event store: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          error instanceof Error ? error : undefined
+        );
+      }
+    })(),
+    (error) => error instanceof StorageError ? error : new ConnectionError(
+      `Failed to create CosmosDB event store: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error instanceof Error ? error : undefined
+    )
+  );
+}
+
+/**
+ * Extract endpoint from connection string
+ */
+function extractEndpoint(connectionString: string): string {
+  const match = connectionString.match(/AccountEndpoint=([^;]+);/);
+  if (!match) {
+    throw new Error('Invalid connection string: missing AccountEndpoint');
   }
+  return match[1];
+}
 
-  /**
-   * Save events to storage
-   */
-  saveEvents(batch: EventBatch): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.saveEvents(batch)
+/**
+ * Extract key from connection string
+ */
+function extractKey(connectionString: string): string {
+  const match = connectionString.match(/AccountKey=([^;]+);/);
+  if (!match) {
+    throw new Error('Invalid connection string: missing AccountKey');
   }
+  return match[1];
+}
 
-  /**
-   * Load all events for a partition key
-   */
-  loadEventsByPartitionKey(partitionKeys: PartitionKeys): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.loadEventsByPartitionKey(partitionKeys)
-  }
-
-  /**
-   * Load events starting after a specific event ID
-   */
-  loadEvents(partitionKeys: PartitionKeys, afterEventId?: string): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.loadEvents(partitionKeys, afterEventId)
-  }
-
-  /**
-   * Get the latest snapshot for an aggregate
-   */
-  getLatestSnapshot(partitionKeys: PartitionKeys): ResultAsync<SnapshotData | null, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.getLatestSnapshot(partitionKeys)
-  }
-
-  /**
-   * Save a snapshot
-   */
-  saveSnapshot(snapshot: SnapshotData): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.saveSnapshot(snapshot)
-  }
-
-  /**
-   * Close the storage provider
-   */
-  close(): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return okAsync(undefined)
-    }
-    return this.eventStore.close()
-  }
-
-  /**
-   * Extract endpoint from connection string
-   */
-  private extractEndpoint(connectionString: string): string {
-    const match = connectionString.match(/AccountEndpoint=([^;]+);/)
-    if (!match) {
-      throw new Error('Invalid connection string: missing AccountEndpoint')
-    }
-    return match[1]
-  }
-
-  /**
-   * Extract key from connection string
-   */
-  private extractKey(connectionString: string): string {
-    const match = connectionString.match(/AccountKey=([^;]+);/)
-    if (!match) {
-      throw new Error('Invalid connection string: missing AccountKey')
-    }
-    return match[1]
-  }
+// Register the CosmosDB provider with the factory
+if (typeof EventStoreFactory !== 'undefined') {
+  EventStoreFactory.register('CosmosDB', createCosmosEventStore);
 }

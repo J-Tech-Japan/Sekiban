@@ -7,6 +7,7 @@ export {
 
 export * from './commands/command.js';
 export * from './events/event-payload.js';
+export * from './events/index.js';
 
 export {
   Aggregate,
@@ -19,6 +20,7 @@ export {
 export * from './documents/partition-keys.js';
 export { SortableUniqueId } from './documents/sortable-unique-id.js';
 export * from './result/errors.js';
+export * from './storage/index.js';
 
 // Re-export commonly used utilities
 export { ok, err, type Result } from 'neverthrow';

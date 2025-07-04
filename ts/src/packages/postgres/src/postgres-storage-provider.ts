@@ -1,120 +1,59 @@
-import { Pool } from 'pg'
-import { ResultAsync, okAsync, errAsync } from 'neverthrow'
+import { Pool } from 'pg';
+import { ResultAsync, okAsync, errAsync } from 'neverthrow';
 import {
-  IEventStorageProvider,
+  IEventStore,
   StorageProviderConfig,
-  EventBatch,
-  SnapshotData,
   StorageError,
   ConnectionError,
-  IEvent,
-  PartitionKeys
-} from '@sekiban/core'
-import { PostgresEventStore } from './postgres-event-store-v2'
+  EventStoreFactory
+} from '@sekiban/core';
+import { PostgresEventStore } from './postgres-event-store.js';
 
 /**
- * PostgreSQL storage provider
+ * Creates a PostgreSQL event store
  */
-export class PostgresStorageProvider implements IEventStorageProvider {
-  private pool: Pool | null = null
-  private eventStore: PostgresEventStore | null = null
-
-  constructor(private config: StorageProviderConfig) {
-    if (!config.connectionString) {
-      throw new Error('Connection string is required for PostgreSQL provider')
-    }
+export function createPostgresEventStore(config: StorageProviderConfig): ResultAsync<IEventStore, StorageError> {
+  if (!config.connectionString) {
+    return errAsync(new StorageError('Connection string is required for PostgreSQL provider', 'INVALID_CONFIG'));
   }
 
-  /**
-   * Initialize the storage provider
-   */
-  async initialize(): ResultAsync<void, StorageError> {
-    try {
-      // Create connection pool
-      this.pool = new Pool({
-        connectionString: this.config.connectionString,
-        max: this.config.maxRetries || 10,
-        connectionTimeoutMillis: this.config.timeoutMs || 30000,
-        idleTimeoutMillis: 30000,
-        allowExitOnIdle: true
-      })
+  return ResultAsync.fromPromise(
+    (async () => {
+      try {
+        // Create PostgreSQL pool
+        const pool = new Pool({
+          connectionString: config.connectionString,
+          max: 10, // Maximum number of clients in the pool
+          idleTimeoutMillis: 30000, // How long a client is allowed to remain idle
+          connectionTimeoutMillis: config.timeoutMs || 2000
+        });
 
-      // Test connection
-      const client = await this.pool.connect()
-      client.release()
+        // Test the connection
+        const client = await pool.connect();
+        client.release();
 
-      // Create event store
-      this.eventStore = new PostgresEventStore(this.pool)
+        // Create event store
+        const eventStore = new PostgresEventStore(pool);
 
-      // Initialize database schema
-      return this.eventStore.initialize()
-    } catch (error) {
-      return errAsync(
-        new ConnectionError(
-          `Failed to initialize PostgreSQL provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        // Initialize the event store
+        await eventStore.initialize();
+
+        return eventStore;
+      } catch (error) {
+        throw new ConnectionError(
+          `Failed to create PostgreSQL event store: ${error instanceof Error ? error.message : 'Unknown error'}`,
           error instanceof Error ? error : undefined
-        )
-      )
-    }
-  }
+        );
+      }
+    })(),
+    (error) => error instanceof StorageError ? error : new ConnectionError(
+      `Failed to create PostgreSQL event store: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error instanceof Error ? error : undefined
+    )
+  );
+}
 
-  /**
-   * Save events to storage
-   */
-  saveEvents(batch: EventBatch): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.saveEvents(batch)
-  }
-
-  /**
-   * Load all events for a partition key
-   */
-  loadEventsByPartitionKey(partitionKeys: PartitionKeys): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.loadEventsByPartitionKey(partitionKeys)
-  }
-
-  /**
-   * Load events starting after a specific event ID
-   */
-  loadEvents(partitionKeys: PartitionKeys, afterEventId?: string): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.loadEvents(partitionKeys, afterEventId)
-  }
-
-  /**
-   * Get the latest snapshot for an aggregate
-   */
-  getLatestSnapshot(partitionKeys: PartitionKeys): ResultAsync<SnapshotData | null, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.getLatestSnapshot(partitionKeys)
-  }
-
-  /**
-   * Save a snapshot
-   */
-  saveSnapshot(snapshot: SnapshotData): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return errAsync(new ConnectionError('Storage provider not initialized'))
-    }
-    return this.eventStore.saveSnapshot(snapshot)
-  }
-
-  /**
-   * Close the storage provider
-   */
-  async close(): ResultAsync<void, StorageError> {
-    if (!this.eventStore) {
-      return okAsync(undefined)
-    }
-    return this.eventStore.close()
-  }
+// Register the PostgreSQL provider with the factory
+if (typeof EventStoreFactory !== 'undefined') {
+  EventStoreFactory.register('PostgreSQL', createPostgresEventStore);
 }

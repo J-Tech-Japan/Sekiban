@@ -1,12 +1,15 @@
 /**
  * Export storage provider types and interfaces
  */
-export * from './storage-provider'
+export * from './storage-provider.js';
 
 /**
- * Export in-memory storage provider
+ * Export in-memory event store
  */
-export * from './in-memory-storage-provider'
+export * from './in-memory-event-store.js';
+
+// Legacy in-memory storage provider has been removed
+// Use InMemoryEventStore instead
 
 // CosmosDB storage provider is provided by @sekiban/cosmos package
 

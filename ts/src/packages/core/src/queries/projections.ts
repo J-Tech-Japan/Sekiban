@@ -217,7 +217,7 @@ export class InMemoryProjectionStore implements IProjectionStore {
  */
 export class ProjectionReplayer {
   constructor(
-    private eventStore: import('../events').IEventStore,
+    private eventStore: import('../storage').IEventStore,
     private projectionStore: IProjectionStore
   ) {}
 

@@ -4,13 +4,14 @@ import { ISekibanTransaction, SekibanExecutorConfig } from './types';
 import { CommandExecutorBase, CommandHandlerRegistry } from '../commands/index.js';
 import { QueryHandlerRegistry } from '../queries/index.js';
 import { 
-  IEventStore, 
-  EventStoreOptions, 
   InMemoryEventStream,
   Event,
   IEventPayload,
   EventFilter
 } from '../events/index.js';
+import {
+  IEventStore
+} from '../storage/index.js';
 import { 
   IAggregateLoader, 
   IAggregateProjector,

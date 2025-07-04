@@ -4,6 +4,9 @@ import { generateUuid } from '../utils/index.js';
  * Represents the partition keys for an aggregate
  */
 export class PartitionKeys {
+  static readonly DEFAULT_ROOT_PARTITION_KEY = 'default';
+  static readonly DEFAULT_AGGREGATE_GROUP = 'default';
+  
   readonly partitionKey: string;
   
   constructor(
@@ -109,7 +112,12 @@ export class PartitionKeys {
     if (parts.length !== 3) {
       throw new Error(`Invalid primary key string: ${primaryKeyString}`);
     }
-    return new PartitionKeys(parts[2], parts[1], parts[0]);
+    // parts[0] = rootPartitionKey, parts[1] = group, parts[2] = aggregateId
+    const aggregateId = parts[2]!; // We know it exists because we checked length === 3
+    const group = parts[1] === 'default' ? undefined : parts[1];
+    const rootPartitionKey = parts[0] === 'default' ? undefined : parts[0];
+    
+    return new PartitionKeys(aggregateId, group, rootPartitionKey);
   }
 }
 

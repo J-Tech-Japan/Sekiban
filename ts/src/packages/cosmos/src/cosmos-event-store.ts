@@ -1,299 +1,189 @@
-import { Database, Container, CosmosClient, PartitionKeyDefinition } from '@azure/cosmos'
-import { ResultAsync, okAsync, errAsync } from 'neverthrow'
+import { Database, Container, SqlQuerySpec } from '@azure/cosmos';
+import { ResultAsync, okAsync, errAsync } from 'neverthrow';
 import {
-  IEventStorageProvider,
-  EventBatch,
-  SnapshotData,
+  IEvent,
+  IEventReader,
+  IEventWriter,
+  IEventStore,
+  EventRetrievalInfo,
   StorageError,
   ConnectionError,
-  ConcurrencyError,
-  IEvent,
-  PartitionKeys
-} from '@sekiban/core'
+  SortableUniqueId
+} from '@sekiban/core';
 
 /**
- * CosmosDB event store implementation
+ * CosmosDB implementation of IEventStore
+ * Implements both IEventReader and IEventWriter interfaces
  */
-export class CosmosEventStore implements IEventStorageProvider {
-  private eventsContainer?: Container
-  private snapshotsContainer?: Container
+export class CosmosEventStore implements IEventStore {
+  private eventsContainer: Container | null = null;
 
   constructor(private database: Database) {}
 
   /**
-   * Initialize the database containers
+   * Initialize the storage provider
    */
   initialize(): ResultAsync<void, StorageError> {
     return ResultAsync.fromPromise(
       (async () => {
-        // Create events container with aggregateId as partition key
-        const { container: events } = await this.database.containers.createIfNotExists({
-          id: 'events',
-          partitionKey: {
-            paths: ['/aggregateId'],
-            kind: 'Hash'
-          } as PartitionKeyDefinition,
-          indexingPolicy: {
-            indexingMode: 'consistent',
-            automatic: true,
-            includedPaths: [{ path: '/*' }],
-            excludedPaths: [{ path: '/"_etag"/?' }]
-          }
-        })
-        this.eventsContainer = events
-
-        // Create snapshots container
-        const { container: snapshots } = await this.database.containers.createIfNotExists({
-          id: 'snapshots',
-          partitionKey: {
-            paths: ['/aggregateId'],
-            kind: 'Hash'
-          } as PartitionKeyDefinition
-        })
-        this.snapshotsContainer = snapshots
-      })(),
-      (error) => this.toStorageError(error, 'INITIALIZATION_FAILED', 'Failed to initialize CosmosDB')
-    )
-  }
-
-  /**
-   * Save events to the database
-   */
-  saveEvents(batch: EventBatch): ResultAsync<void, StorageError> {
-    if (!this.eventsContainer) {
-      return errAsync(new ConnectionError('Event store not initialized'))
-    }
-
-    if (batch.events.length === 0) {
-      return okAsync(undefined)
-    }
-
-    return ResultAsync.fromPromise(
-      (async () => {
-        const container = this.eventsContainer!
-
-        // Check current version
-        const query = {
-          query: 'SELECT VALUE MAX(c.seq) FROM c WHERE c.aggregateId = @aggregateId',
-          parameters: [{ name: '@aggregateId', value: batch.partitionKeys.aggregateId }]
-        }
-        const { resources } = await container.items.query(query).fetchAll()
-        const currentVersion = resources[0] || 0
-
-        if (currentVersion !== batch.expectedVersion) {
-          throw new ConcurrencyError(
-            `Expected version ${batch.expectedVersion} but current version is ${currentVersion}`,
-            batch.expectedVersion,
-            currentVersion
-          )
-        }
-
-        // Use TransactionalBatch for multiple events
-        if (batch.events.length === 1) {
-          // Single event - direct create
-          const event = batch.events[0]
-          const document = this.eventToDocument(event, currentVersion + 1, batch.partitionKeys)
-          await container.items.create(document)
-        } else {
-          // Multiple events - use batch
-          const batchOps = container.items.batch(batch.partitionKeys.aggregateId)
-          
-          batch.events.forEach((event, index) => {
-            const seq = currentVersion + index + 1
-            const document = this.eventToDocument(event, seq, batch.partitionKeys)
-            batchOps.create(document)
-          })
-
-          const response = await batchOps.execute()
-          
-          if (!response.result) {
-            throw new StorageError('Batch operation failed', 'BATCH_FAILED')
-          }
-        }
-      })(),
-      (error) => {
-        if (error instanceof ConcurrencyError) {
-          return error
-        }
-        return this.toStorageError(error, 'SAVE_FAILED', 'Failed to save events')
-      }
-    )
-  }
-
-  /**
-   * Load all events for a partition key
-   */
-  loadEventsByPartitionKey(partitionKeys: PartitionKeys): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventsContainer) {
-      return errAsync(new ConnectionError('Event store not initialized'))
-    }
-
-    return ResultAsync.fromPromise(
-      (async () => {
-        const query = {
-          query: 'SELECT * FROM c WHERE c.aggregateId = @aggregateId ORDER BY c.seq',
-          parameters: [{ name: '@aggregateId', value: partitionKeys.aggregateId }]
-        }
-        
-        const { resources } = await this.eventsContainer!.items
-          .query(query, { partitionKey: partitionKeys.aggregateId })
-          .fetchAll()
-
-        return resources.map(doc => this.documentToEvent(doc))
-      })(),
-      (error) => this.toStorageError(error, 'LOAD_FAILED', 'Failed to load events')
-    )
-  }
-
-  /**
-   * Load events starting after a specific event ID
-   */
-  loadEvents(partitionKeys: PartitionKeys, afterEventId?: string): ResultAsync<IEvent[], StorageError> {
-    if (!this.eventsContainer) {
-      return errAsync(new ConnectionError('Event store not initialized'))
-    }
-
-    if (!afterEventId) {
-      return this.loadEventsByPartitionKey(partitionKeys)
-    }
-
-    return ResultAsync.fromPromise(
-      (async () => {
-        const query = {
-          query: 'SELECT * FROM c WHERE c.aggregateId = @aggregateId AND c.sortableUniqueId > @afterEventId ORDER BY c.seq',
-          parameters: [
-            { name: '@aggregateId', value: partitionKeys.aggregateId },
-            { name: '@afterEventId', value: afterEventId }
-          ]
-        }
-        
-        const { resources } = await this.eventsContainer!.items
-          .query(query, { partitionKey: partitionKeys.aggregateId })
-          .fetchAll()
-
-        return resources.map(doc => this.documentToEvent(doc))
-      })(),
-      (error) => this.toStorageError(error, 'LOAD_FAILED', 'Failed to load events')
-    )
-  }
-
-  /**
-   * Get the latest snapshot for an aggregate
-   */
-  getLatestSnapshot(partitionKeys: PartitionKeys): ResultAsync<SnapshotData | null, StorageError> {
-    if (!this.snapshotsContainer) {
-      return errAsync(new ConnectionError('Event store not initialized'))
-    }
-
-    return ResultAsync.fromPromise(
-      (async () => {
         try {
-          const { resource } = await this.snapshotsContainer!.item(
-            partitionKeys.aggregateId,
-            partitionKeys.aggregateId
-          ).read()
-
-          if (!resource) {
-            return null
-          }
-
-          return {
-            partitionKeys,
-            version: resource.version,
-            aggregateType: resource.aggregateType,
-            payload: resource.payload,
-            createdAt: new Date(resource.createdAt),
-            lastEventId: resource.lastEventId
-          }
-        } catch (error: any) {
-          if (error.code === 404) {
-            return null
-          }
-          throw error
+          // Create events container if it doesn't exist
+          const { container } = await this.database.containers.createIfNotExists({
+            id: 'events',
+            partitionKey: { paths: ['/partitionKey'] }
+          });
+          this.eventsContainer = container;
+        } catch (error) {
+          throw new ConnectionError(
+            `Failed to initialize CosmosDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error instanceof Error ? error : undefined
+          );
         }
       })(),
-      (error) => this.toStorageError(error, 'LOAD_FAILED', 'Failed to load snapshot')
-    )
+      (error) => error instanceof StorageError ? error : new ConnectionError(
+        `Failed to initialize CosmosDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error : undefined
+      )
+    );
   }
 
   /**
-   * Save a snapshot
+   * Get events based on retrieval information
    */
-  saveSnapshot(snapshot: SnapshotData): ResultAsync<void, StorageError> {
-    if (!this.snapshotsContainer) {
-      return errAsync(new ConnectionError('Event store not initialized'))
+  getEvents(eventRetrievalInfo: EventRetrievalInfo): ResultAsync<readonly IEvent[], Error> {
+    if (!this.eventsContainer) {
+      return errAsync(new ConnectionError('Event store not initialized'));
     }
 
     return ResultAsync.fromPromise(
-      (async () => {
-        const document = {
-          id: snapshot.partitionKeys.aggregateId,
-          aggregateId: snapshot.partitionKeys.aggregateId,
-          version: snapshot.version,
-          aggregateType: snapshot.aggregateType,
-          payload: snapshot.payload,
-          createdAt: snapshot.createdAt.toISOString(),
-          lastEventId: snapshot.lastEventId
-        }
+      this.doGetEvents(eventRetrievalInfo),
+      (error) => new StorageError(
+        `Failed to query events: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'QUERY_FAILED',
+        error instanceof Error ? error : undefined
+      )
+    );
+  }
 
-        await this.snapshotsContainer!.items.upsert(document)
-      })(),
-      (error) => this.toStorageError(error, 'SAVE_FAILED', 'Failed to save snapshot')
-    )
+  private async doGetEvents(eventRetrievalInfo: EventRetrievalInfo): Promise<readonly IEvent[]> {
+    const query = this.buildQuery(eventRetrievalInfo);
+    const { resources } = await this.eventsContainer!.items
+      .query<IEvent>(query)
+      .fetchAll();
+
+    // Apply sortable ID conditions in memory since Cosmos doesn't support complex ID comparisons
+    let filteredEvents = resources;
+    if (eventRetrievalInfo.sortableIdCondition) {
+      filteredEvents = filteredEvents.filter(e => 
+        !eventRetrievalInfo.sortableIdCondition.outsideOfRange(e.id)
+      );
+    }
+
+    // Sort by sortable ID
+    filteredEvents.sort((a, b) => SortableUniqueId.compare(a.id, b.id));
+
+    return filteredEvents;
+  }
+
+  private buildQuery(eventRetrievalInfo: EventRetrievalInfo): SqlQuerySpec {
+    const conditions: string[] = [];
+    const parameters: any[] = [];
+
+    // Always select from events container
+    let query = 'SELECT';
+    
+    // Add TOP clause if max count is specified
+    if (eventRetrievalInfo.maxCount.hasValueProperty) {
+      query += ` TOP ${eventRetrievalInfo.maxCount.getValue()}`;
+    }
+    
+    query += ' * FROM c';
+
+    // Filter by root partition key
+    if (eventRetrievalInfo.rootPartitionKey.hasValueProperty) {
+      conditions.push('c.partitionKeys.rootPartitionKey = @rootPartitionKey');
+      parameters.push({
+        name: '@rootPartitionKey',
+        value: eventRetrievalInfo.rootPartitionKey.getValue()
+      });
+    }
+
+    // Filter by aggregate stream (group)
+    if (eventRetrievalInfo.aggregateStream.hasValueProperty) {
+      const streamNames = eventRetrievalInfo.aggregateStream.getValue().getStreamNames();
+      if (streamNames.length === 1) {
+        conditions.push('c.partitionKeys.group = @group');
+        parameters.push({
+          name: '@group',
+          value: streamNames[0]
+        });
+      } else if (streamNames.length > 1) {
+        const placeholders = streamNames.map((_, i) => `@group${i}`).join(', ');
+        conditions.push(`c.partitionKeys.group IN (${placeholders})`);
+        streamNames.forEach((name, i) => {
+          parameters.push({
+            name: `@group${i}`,
+            value: name
+          });
+        });
+      }
+    }
+
+    // Filter by aggregate ID
+    if (eventRetrievalInfo.aggregateId.hasValueProperty) {
+      conditions.push('c.partitionKeys.aggregateId = @aggregateId');
+      parameters.push({
+        name: '@aggregateId',
+        value: eventRetrievalInfo.aggregateId.getValue()
+      });
+    }
+
+    // Add WHERE clause if there are conditions
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    // Order by sortable ID
+    query += ' ORDER BY c.id ASC';
+
+    return {
+      query,
+      parameters
+    };
   }
 
   /**
-   * Close the connection (no-op for CosmosDB)
+   * Save events to storage
+   */
+  async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+    if (!this.eventsContainer) {
+      throw new ConnectionError('Event store not initialized');
+    }
+
+    try {
+      // Save events with proper partition key
+      for (const event of events) {
+        const eventWithPartitionKey = {
+          ...event,
+          partitionKey: event.partitionKeys.partitionKey
+        };
+        await this.eventsContainer.items.create(eventWithPartitionKey);
+      }
+    } catch (error) {
+      throw new StorageError(
+        `Failed to save events: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'SAVE_FAILED',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  /**
+   * Close the storage provider
    */
   close(): ResultAsync<void, StorageError> {
-    return okAsync(undefined)
-  }
-
-  /**
-   * Convert an event to a CosmosDB document
-   */
-  private eventToDocument(event: IEvent, seq: number, partitionKeys: PartitionKeys): any {
-    return {
-      id: `${partitionKeys.aggregateId}_${seq}`,
-      aggregateId: partitionKeys.aggregateId,
-      aggregateType: partitionKeys.aggregate,
-      seq,
-      eventType: event.eventType,
-      payload: event.payload,
-      sortableUniqueId: event.sortableUniqueId,
-      meta: {
-        partitionKeys: event.partitionKeys,
-        version: event.version
-      },
-      ts: new Date().toISOString()
-    }
-  }
-
-  /**
-   * Convert a CosmosDB document to an event
-   */
-  private documentToEvent(doc: any): IEvent {
-    return {
-      sortableUniqueId: doc.sortableUniqueId,
-      eventType: doc.eventType,
-      payload: doc.payload,
-      aggregateId: doc.aggregateId,
-      partitionKeys: doc.meta.partitionKeys,
-      version: doc.meta.version
-    }
-  }
-
-  /**
-   * Convert an error to a StorageError
-   */
-  private toStorageError(error: unknown, code: string, message: string): StorageError {
-    if (error instanceof StorageError) {
-      return error
-    }
-    return new StorageError(
-      `${message}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      code,
-      error instanceof Error ? error : undefined
-    )
+    // Nothing to close for CosmosDB
+    this.eventsContainer = null;
+    return okAsync(undefined);
   }
 }

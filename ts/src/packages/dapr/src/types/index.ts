@@ -106,3 +106,5 @@ export class ActorIdFactory {
     }
   }
 }
+
+export * from './domain-types.js';
