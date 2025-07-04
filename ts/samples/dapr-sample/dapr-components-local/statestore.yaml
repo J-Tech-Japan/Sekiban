@@ -3,12 +3,8 @@ kind: Component
 metadata:
   name: sekiban-eventstore
 spec:
-  type: state.redis
+  type: state.in-memory
   version: v1
   metadata:
-    - name: redisHost
-      value: "redis:6379"
-    - name: redisPassword
-      value: ""
     - name: actorStateStore
       value: "true"

@@ -5,9 +5,10 @@ import {
   InputWeatherForecastCommand,
   UpdateWeatherForecastLocationCommand,
   DeleteWeatherForecastCommand,
+  RemoveWeatherForecastCommand,
   WeatherForecastQuery,
   TemperatureCelsius
-} from '../../packages/domain/src/index.js';
+} from '@sekiban/dapr-sample-domain';
 
 interface InputWeatherForecastRequest {
   location: string;
@@ -68,6 +69,15 @@ export function createWeatherForecastRoutes(executor: ISekibanDaprExecutor): Rou
       }
 
       const response = result.value;
+      
+      // Check if command execution failed
+      if (!response.success) {
+        return res.status(400).json({
+          success: false,
+          error: response.errorMessage || 'Command execution failed'
+        });
+      }
+      
       return res.status(200).json({
         success: response.success,
         aggregateId: response.aggregateId,
@@ -129,6 +139,15 @@ export function createWeatherForecastRoutes(executor: ISekibanDaprExecutor): Rou
       }
 
       const response = result.value;
+      
+      // Check if command execution failed
+      if (!response.success) {
+        return res.status(400).json({
+          success: false,
+          error: response.errorMessage || 'Command execution failed'
+        });
+      }
+      
       return res.status(200).json({
         success: response.success,
         aggregateId: response.aggregateId,
@@ -181,6 +200,15 @@ export function createWeatherForecastRoutes(executor: ISekibanDaprExecutor): Rou
       }
 
       const response = result.value;
+      
+      // Check if command execution failed
+      if (!response.success) {
+        return res.status(400).json({
+          success: false,
+          error: response.errorMessage || 'Command execution failed'
+        });
+      }
+      
       return res.status(200).json({
         success: response.success,
         aggregateId: response.aggregateId,
@@ -189,6 +217,67 @@ export function createWeatherForecastRoutes(executor: ISekibanDaprExecutor): Rou
 
     } catch (error) {
       console.error('Error in DeleteWeatherForecast:', error);
+      return res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  /**
+   * POST /:weatherForecastId/remove - Remove weather forecast (hard delete)
+   * Matches C# RemoveWeatherForecast endpoint
+   */
+  router.post('/:weatherForecastId/remove', async (
+    req: Request<{ weatherForecastId: string }>, 
+    res: Response
+  ) => {
+    try {
+      const { weatherForecastId } = req.params;
+
+      // Create command using static factory
+      const commandResult = RemoveWeatherForecastCommand.create({
+        weatherForecastId
+      });
+
+      if (commandResult.isErr()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid command data',
+          details: commandResult.error.details
+        });
+      }
+
+      const command = commandResult.value;
+      
+      // Execute command through Dapr executor
+      const result = await executor.executeCommandAsync(command);
+
+      if (result.isErr()) {
+        return res.status(400).json({
+          success: false,
+          error: result.error.message
+        });
+      }
+
+      const response = result.value;
+      
+      // Check if command execution failed
+      if (!response.success) {
+        return res.status(400).json({
+          success: false,
+          error: response.errorMessage || 'Command execution failed'
+        });
+      }
+      
+      return res.status(200).json({
+        success: response.success,
+        aggregateId: response.aggregateId,
+        lastSortableUniqueId: response.lastSortableUniqueId
+      });
+
+    } catch (error) {
+      console.error('Error in RemoveWeatherForecast:', error);
       return res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

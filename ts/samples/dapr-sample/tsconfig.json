@@ -1,24 +1,18 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
       "@sekiban/core": ["../../src/packages/core/src"],
-      "@sekiban/dapr": ["../../src/packages/dapr/src"]
-    },
-    "types": ["vitest/globals", "node"]
+      "@sekiban/dapr": ["../../src/packages/dapr/src"],
+      "@sekiban/dapr-sample-domain": ["./packages/domain/src"]
+    }
   },
-  "include": [
-    "src/**/*",
-    "packages/**/*",
-    "tests/**/*"
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" }
   ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.d.ts"
-  ]
+  "include": [],
+  "exclude": ["node_modules", "dist"]
 }

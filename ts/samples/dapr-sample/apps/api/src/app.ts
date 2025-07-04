@@ -4,13 +4,14 @@ import { DaprClient } from '@dapr/dapr';
 import { SekibanDaprExecutor } from '@sekiban/dapr';
 import type { DaprSekibanConfiguration } from '@sekiban/dapr';
 import { createWeatherForecastRoutes } from './routes/weather-forecast-routes.js';
-import { DomainProjectors } from '../packages/domain/src/index.js';
+import { DomainProjectors } from '@sekiban/dapr-sample-domain';
 import { errorHandler } from './middleware/error-handler.js';
 import { requestLogger } from './middleware/request-logger.js';
 import { createMetricsMiddleware } from './middleware/metrics-middleware.js';
 import { traceMiddleware } from './middleware/trace-middleware.js';
 import { MetricsStore } from './observability/metrics-store.js';
 import { HealthChecker } from './observability/health-checker.js';
+import { configureDaprActors } from './startup/dapr-actors.js';
 
 export interface AppDependencies {
   daprClient?: DaprClient;
@@ -91,6 +92,9 @@ export async function createApp(dependencies: AppDependencies = {}): Promise<App
     };
     res.json(envVars);
   });
+  
+  // Configure Dapr actors
+  configureDaprActors(app);
   
   // Dapr pub/sub event handlers
   app.post('/events/weather-forecasts', (req, res) => {

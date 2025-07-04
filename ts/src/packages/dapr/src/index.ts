@@ -1,3 +1,7 @@
+// Executor implementation
+export * from './executor/sekiban-dapr-executor.js';
+export * from './executor/interfaces.js';
+
 // Snapshot types and strategies
 export * from './snapshot';
 

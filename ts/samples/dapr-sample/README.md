@@ -1,250 +1,232 @@
-# Weather Forecast Dapr Sample - Sekiban TypeScript
+# Sekiban TypeScript Dapr Sample
 
-A production-ready weather forecast management application demonstrating **Sekiban's multi-payload projector pattern** with Dapr integration, matching the C# template functionality exactly.
+This sample demonstrates how to use Sekiban with Dapr for distributed event sourcing in TypeScript, implementing a Weather Forecast domain that matches the C# template functionality.
 
-## 🌟 Key Features
+## Architecture
 
-✅ **Multi-Payload Aggregate Projectors**
-- Single projector handling multiple payload types (`WeatherForecast` ↔ `DeletedWeatherForecast`)
-- State machine patterns for domain modeling
-- Proper aggregate lifecycle management
+The sample implements a Weather Forecast domain using:
+- **Multi-payload projectors**: One projector handling multiple aggregate states
+- **State machine pattern**: WeatherForecast → DeletedWeatherForecast transitions
+- **Value objects**: TemperatureCelsius with validation
+- **CQRS**: Separate command and query models
+- **Dapr integration**: Actors, state management, and pub/sub
 
-✅ **Event Sourcing & CQRS**
-- Complete weather forecast domain with commands, events, and queries
-- Input, update location, and soft-delete operations
-- Event-driven architecture with Dapr pub/sub
+## Project Structure
 
-✅ **Dapr Integration**
-- Production-ready SekibanDaprExecutor with retry logic and error handling
-- Dapr Actor model for distributed aggregate management
-- In-memory state store and pub/sub for local development
+```
+dapr-sample/
+├── packages/
+│   └── domain/          # Domain logic (commands, events, projectors)
+├── apps/
+│   ├── api/            # Backend API server
+│   └── web/            # Frontend application (placeholder)
+├── dapr-components/     # Dapr component configurations for Docker
+├── dapr-components-local/ # Dapr component configurations for local development
+└── dapr-config/        # Dapr configuration files
+```
 
-✅ **TypeScript & Type Safety**
-- Full TypeScript implementation with strong typing
-- Value objects (TemperatureCelsius) with validation
-- Zod schemas for input validation
+## Prerequisites
 
-✅ **Production-Ready Patterns**
-- Health endpoints (/healthz, /readyz) for Kubernetes
-- Prometheus metrics collection
-- Distributed tracing and request logging
-- Proper error handling with Result patterns
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - pnpm
-- Dapr CLI (for production-like testing)
+- Dapr CLI installed
+- Docker and Docker Compose (for full deployment)
 
-### Installation
+## Local Development
+
+### 1. Install dependencies
 
 ```bash
-# Install dependencies
 pnpm install
+```
 
-# Build the application
+### 2. Build the packages
+
+```bash
 pnpm build
 ```
 
-### Local Development
-
-```bash
-# Development mode (hot reload)
-pnpm dev
-
-# With Dapr sidecar (recommended)
-pnpm dapr:run
-```
-
-### Running Tests
+### 3. Run tests
 
 ```bash
 # Run all tests
 pnpm test
 
-# Watch mode for development
+# Run tests in watch mode
 pnpm test:watch
-
-# Type checking
-pnpm typecheck
 ```
 
-## 🌤️ API Endpoints
+### 4. Run with Dapr (local development)
+
+```bash
+# Terminal 1: Start the API with Dapr sidecar
+cd apps/api
+pnpm dapr:run
+
+# The API will be available at:
+# - Direct: http://localhost:3000
+# - Via Dapr: http://localhost:3500
+```
+
+## Docker Deployment
+
+### 1. Build and run with Docker Compose
+
+```bash
+# Build and start all services
+docker-compose up --build
+
+# Stop all services
+docker-compose down
+```
+
+This will start:
+- PostgreSQL database
+- Redis for Dapr state and pub/sub
+- Weather Forecast API with Dapr sidecar
+
+## API Endpoints
 
 ### Weather Forecast Management
+
 - `POST /api/weatherforecast/input` - Create a new weather forecast
-- `POST /api/weatherforecast/{id}/update-location` - Update forecast location
-- `POST /api/weatherforecast/{id}/delete` - Soft delete a forecast
-- `GET /api/weatherforecast` - Get all active forecasts
+  ```json
+  {
+    "location": "Tokyo",
+    "date": "2024-01-15",
+    "temperatureC": 25,
+    "summary": "Warm"
+  }
+  ```
+
+- `POST /api/weatherforecast/:id/update-location` - Update location
+  ```json
+  {
+    "location": "Osaka"
+  }
+  ```
+
+- `POST /api/weatherforecast/:id/delete` - Soft delete (mark as deleted)
+- `POST /api/weatherforecast/:id/remove` - Hard delete (remove from system)
+- `GET /api/weatherforecast` - Get all weather forecasts
 - `POST /api/weatherforecast/generate` - Generate sample data
 
-### Health & Observability
-- `GET /healthz` - Liveness probe (Kubernetes ready)
-- `GET /readyz` - Readiness probe (dependency health)
+### Health and Observability
+
+- `GET /healthz` - Liveness check
+- `GET /readyz` - Readiness check
 - `GET /metrics` - Prometheus metrics
 - `GET /debug/env` - Environment variables (debug)
 
-### Event Handling (Dapr)
-- `POST /events/weather-forecasts` - Receive weather events from Dapr pub/sub
+### Dapr Actor Endpoints
 
-## 📝 Example Usage
+- `GET /dapr/config` - Dapr configuration
+- `GET /actors/AggregateActor/health` - Actor health check
 
-### Create a Weather Forecast
+## Development Tips
+
+### Running individual services
+
 ```bash
-curl -X POST http://localhost:5000/api/weatherforecast/input \
-  -H "Content-Type: application/json" \
-  -d '{
-    "location": "Tokyo",
-    "date": "2025-07-04",
-    "temperatureC": 25,
-    "summary": "Warm and sunny"
-  }'
+# Run only the API server (without Dapr)
+cd apps/api
+pnpm dev
+
+# Run domain tests
+cd packages/domain
+pnpm test
 ```
 
-### Update Location
+### Debugging with Dapr Dashboard
+
 ```bash
-curl -X POST http://localhost:5000/api/weatherforecast/{forecast-id}/update-location \
-  -H "Content-Type: application/json" \
-  -d '{"location": "Osaka"}'
+# Start Dapr dashboard
+dapr dashboard
+
+# Access at http://localhost:8080
 ```
 
-### Get All Forecasts
+### Environment Variables
+
+- `DAPR_HOST` - Dapr sidecar host (default: localhost)
+- `DAPR_HTTP_PORT` - Dapr HTTP port (default: 3500)
+- `DAPR_GRPC_PORT` - Dapr gRPC port (default: 50001)
+- `DAPR_STATE_STORE` - State store component name (default: sekiban-eventstore)
+- `DAPR_PUBSUB` - Pub/sub component name (default: sekiban-pubsub)
+- `DAPR_EVENT_TOPIC` - Event topic name (default: domain-events)
+
+## Testing
+
+The sample includes comprehensive test suites:
+
+- **Unit tests**: Domain logic, commands, events, projectors
+- **Acceptance tests**: Full command/query lifecycle testing
+- **Integration tests**: API endpoint testing
+
+Run specific test suites:
+
 ```bash
-curl http://localhost:5000/api/weatherforecast
+# Domain tests only
+cd packages/domain && pnpm test
+
+# API tests only
+cd apps/api && pnpm test
 ```
 
-### Generate Sample Data
-```bash
-curl -X POST http://localhost:5000/api/weatherforecast/generate
+## Architecture Notes
+
+### Multi-Payload Projector Pattern
+
+The `WeatherForecastProjector` demonstrates Sekiban's powerful pattern where one projector handles multiple aggregate states:
+
+```typescript
+type WeatherForecastPayloadUnion = 
+  | WeatherForecast 
+  | DeletedWeatherForecast;
+
+class WeatherForecastProjector extends AggregateProjector<WeatherForecastPayloadUnion> {
+  // Handles state transitions between different payload types
+}
 ```
 
-### Check Health & Metrics
-```bash
-# Kubernetes liveness probe
-curl http://localhost:5000/healthz
+### State Machine
 
-# Kubernetes readiness probe  
-curl http://localhost:5000/readyz
+The weather forecast follows these state transitions:
+1. Empty → WeatherForecast (via InputWeatherForecastCommand)
+2. WeatherForecast → WeatherForecast (via UpdateLocationCommand)
+3. WeatherForecast → DeletedWeatherForecast (via DeleteCommand)
+4. Any → Empty (via RemoveCommand)
 
-# Prometheus metrics
-curl http://localhost:5000/metrics
-```
+### Event Sourcing
 
-## Architecture
+All state changes are captured as events:
+- `WeatherForecastInputted`
+- `WeatherForecastLocationUpdated`
+- `WeatherForecastDeleted`
 
-### Domain Layer
-```
-src/domain/user/
-├── commands/           # CreateUserCommand
-├── events/            # UserRegisteredEvent  
-└── queries/           # GetUserQuery
-```
+These events are stored in the event store and can be replayed to reconstruct aggregate state.
 
-### Infrastructure Layer
-```
-src/infrastructure/
-├── simple-sekiban-executor.ts    # Core event sourcing logic
-└── create-sekiban-executor.ts    # Factory function
-```
+## Troubleshooting
 
-### API Layer
-```
-src/
-├── app.ts             # Express application setup
-├── routes/            # HTTP route handlers
-├── validators/        # Input validation with Zod
-└── middleware/        # Logging and error handling
-```
+### Dapr sidecar not starting
 
-### Dapr Components
-```
-dapr-components/
-├── pubsub.yaml        # In-memory pub/sub component
-├── statestore.yaml    # In-memory state store  
-├── subscription.yaml  # Event subscription config
-└── config.yaml        # Dapr configuration
-```
+1. Ensure Dapr is installed: `dapr --version`
+2. Initialize Dapr: `dapr init`
+3. Check Dapr status: `dapr status`
 
-## Event Flow
+### Port conflicts
 
-1. **Command** → `POST /users` with user data
-2. **Validation** → Zod schema validation
-3. **Event Creation** → `UserRegistered` event generated
-4. **Persistence** → Event stored in event store
-5. **Projection Update** → User read model updated
-6. **Event Publishing** → CloudEvent published to Dapr pub/sub
-7. **Event Consumption** → Event received at `/events/users` endpoint
+The sample uses these ports:
+- 3000: API server
+- 3500: Dapr HTTP
+- 50001: Dapr gRPC
+- 5432: PostgreSQL
+- 6379: Redis
 
-## Testing Strategy
+Ensure these ports are available or modify the configuration.
 
-Following modern TDD practices with outside-in approach:
+### Build errors
 
-### Acceptance Tests (23 tests)
-- **User Sign-up Flow** (4 tests)
-  - ✅ Complete user registration and retrieval  
-  - ✅ Input validation and error handling
-  - ✅ Duplicate email prevention
-  - ✅ Non-existent user handling
-
-- **Pub/Sub Integration** (4 tests)  
-  - ✅ CloudEvent publishing on user registration
-  - ✅ CloudEvent metadata and specification compliance
-  - ✅ No publishing on failed registration
-  - ✅ Graceful handling of pub/sub failures
-
-- **Health & Observability** (9 tests)
-  - ✅ Liveness and readiness endpoints
-  - ✅ Prometheus metrics format and collection
-  - ✅ User registration counter tracking
-  - ✅ HTTP request duration histograms
-  - ✅ Dependency health checking
-  - ✅ Trace context propagation
-
-- **Time-Travel Debugging** (6 tests) **NEW**
-  - ✅ Historical state reconstruction at specific timestamps
-  - ✅ Event filtering by time boundaries  
-  - ✅ Edge case handling (future timestamps, non-existent entities)
-  - ✅ Current state retrieval without time parameters
-  - ✅ Performance optimization for large event streams
-  - ✅ Replay metadata tracking
-
-### Contract Testing
-- Mock Dapr client for reliable, fast feedback
-- CloudEvents schema validation
-- Message boundary testing
-
-## Development Principles
-
-Built following **Takuto Wada's TDD methodology**:
-
-1. **Outside-in Development** - Start with acceptance tests
-2. **Thin Vertical Slices** - Complete features end-to-end  
-3. **Red-Green-Refactor** - Fail fast, make it work, make it better
-4. **Baby Steps** - Small, focused changes with fast feedback
-
-## Next Steps
-
-This sample demonstrates the foundation. Potential next iterations:
-
-- [ ] WeatherForecast aggregate (following C# template)
-- [ ] Real PostgreSQL integration with @sekiban/postgres
-- [ ] React frontend with real-time updates
-- [ ] Full OpenTelemetry integration (spans, logs)
-- [ ] Multi-projection queries and analytics
-- [ ] Production deployment with Docker Compose
-
-## Technology Stack
-
-- **Framework**: Express.js + TypeScript
-- **Event Sourcing**: Custom Sekiban implementation
-- **Validation**: Zod
-- **Testing**: Vitest + Supertest  
-- **Error Handling**: neverthrow Result pattern
-- **Pub/Sub**: Dapr with in-memory broker
-- **Observability**: Prometheus metrics, health checks, distributed tracing
-- **Development**: Hot-reload with pnpm workspaces
-
----
-
-*Generated with ❤️ using Test-Driven Development and Claude Code*
+1. Clear build artifacts: `pnpm clean`
+2. Reinstall dependencies: `pnpm install`
+3. Rebuild: `pnpm build`

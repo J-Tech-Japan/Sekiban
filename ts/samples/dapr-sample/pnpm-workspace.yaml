@@ -1,6 +1,4 @@
 packages:
   - '../../src/packages/*'
-  - 'sekiban-dapr-domain'
-  - 'sekiban-dapr-api'
-  - 'sekiban-dapr-web'
-  - 'sekiban-dapr-shared'
+  - 'packages/*'
+  - 'apps/*'

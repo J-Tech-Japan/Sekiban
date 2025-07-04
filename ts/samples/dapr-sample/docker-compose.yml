@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     environment:
@@ -17,6 +18,64 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dapr-network
+
+  # Redis for Dapr pub/sub and state store
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - dapr-network
+
+  # Weather Forecast API
+  weather-forecast-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DAPR_HTTP_PORT: 3500
+      DAPR_GRPC_PORT: 50001
+      APP_ID: weather-forecast-api
+      DAPR_STATE_STORE: sekiban-eventstore
+      DAPR_PUBSUB: sekiban-pubsub
+      DAPR_EVENT_TOPIC: domain-events
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dapr-network
+
+  # Dapr sidecar for Weather Forecast API
+  weather-forecast-api-dapr:
+    image: "daprio/daprd:1.12.0"
+    command: [
+      "./daprd",
+      "-app-id", "weather-forecast-api",
+      "-app-port", "3000",
+      "-dapr-http-port", "3500",
+      "-dapr-grpc-port", "50001",
+      "-components-path", "/components",
+      "-config", "/config/config.yaml",
+      "-log-level", "info",
+      "-app-protocol", "http"
+    ]
+    volumes:
+      - ./dapr-components:/components
+      - ./dapr-config:/config
+    depends_on:
+      - weather-forecast-api
+      - redis
+    network_mode: "service:weather-forecast-api"
 
 volumes:
   postgres_data:
+
+networks:
+  dapr-network:
+    driver: bridge
