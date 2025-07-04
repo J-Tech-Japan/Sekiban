@@ -24,9 +24,14 @@ chmod +x ./register_providers.sh
 
 This script registers:
 - `Microsoft.App` (for Container Apps)
-- `Microsoft.ContainerService` (for Container Apps Environment)
+- `Microsoft.ContainerService` (for Container Apps Environment)  
 - `Microsoft.OperationalInsights` (for Log Analytics)
-- `Microsoft.ServiceBus` (for Service Bus)
+- `Microsoft.ServiceBus` (for Service Bus - required for Dapr pub/sub)
+
+**Important for Dapr deployment:**
+- This template uses **Cosmos DB** as the Dapr actor state store (supports transactions)
+- **Service Bus** is used for Dapr pub/sub messaging
+- **Azure Storage** is NOT used (replaced with Cosmos DB + Service Bus for better Dapr compatibility)
 
 3. Create Setting File
 
@@ -105,13 +110,12 @@ chmod +x ./runbicep.sh
 
 This deploys:
 - Key Vault
-- Storage Account
-- Cosmos DB
+- Cosmos DB (for Sekiban Event Store and Dapr Actor State Store)
+- Service Bus (for Dapr Pub/Sub messaging)
 - Virtual Network
 - Application Insights & Log Analytics
 - Container Apps Environment (Managed Environment)
-- Dapr Components
-- Service Bus (if using for pub/sub)
+- Dapr Components (Cosmos DB State Store + Service Bus Pub/Sub)
 
 b. Build and Push Container Images
 

@@ -34,9 +34,7 @@ resource actorsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
         ]
       }
     }
-    options: {
-      throughput: 400
-    }
+    // Note: No throughput options for serverless Cosmos DB accounts
   }
 }
 

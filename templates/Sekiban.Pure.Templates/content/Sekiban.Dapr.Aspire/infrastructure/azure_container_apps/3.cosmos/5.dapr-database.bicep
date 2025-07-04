@@ -11,9 +11,7 @@ resource daprDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-0
     resource: {
       id: 'sekiban-dapr'
     }
-    options: {
-      throughput: 400
-    }
+    // Note: No throughput options for serverless Cosmos DB accounts
   }
 }
 

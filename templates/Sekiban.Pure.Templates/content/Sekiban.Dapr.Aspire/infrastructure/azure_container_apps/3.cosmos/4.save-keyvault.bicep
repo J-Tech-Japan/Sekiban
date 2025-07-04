@@ -32,7 +32,17 @@ resource sekibanDbEndpointSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' 
   }
 }
 
+// Store Cosmos DB Master Key in Key Vault (for Dapr state store)
+resource cosmosDbMasterKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'CosmosDbMasterKey'
+  properties: {
+    value: sekibanDbAccount.listKeys().primaryMasterKey
+  }
+}
+
 // Outputs
 output cosmosDbConnectionStringSecretName string = sekibanDbConnectionStringSecret.name
 output cosmosDbEndpointSecretName string = sekibanDbEndpointSecret.name
+output cosmosDbMasterKeySecretName string = cosmosDbMasterKeySecret.name
 output keyVaultName string = keyVault.name
