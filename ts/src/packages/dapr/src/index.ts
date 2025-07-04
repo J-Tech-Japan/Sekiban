@@ -40,6 +40,9 @@ export {
 // Types
 export * from './types';
 
+// Parts
+export { PartitionKeysAndProjector } from './parts';
+
 // Re-export commonly used types from core
 export type {
   IAggregatePayload,

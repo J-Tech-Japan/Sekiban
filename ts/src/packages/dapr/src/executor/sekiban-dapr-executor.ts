@@ -17,6 +17,7 @@ import type {
   IDaprAggregateActorProxy,
   SerializableCommandAndMetadata
 } from './interfaces.js';
+import { PartitionKeysAndProjector } from '../parts/index.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -45,11 +46,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     }
   }
   
-  private generateActorId(partitionKeys: PartitionKeys, aggregateTypeName: string): string {
-    // Create actor ID using partition keys - similar to C# ActorId generation
-    const prefix = this.configuration.actorIdPrefix || 'sekiban';
-    return `${prefix}.${partitionKeys.rootPartitionKey}.${aggregateTypeName}.${partitionKeys.aggregateId}`;
-  }
   
   private createActorProxy(actorId: string): IDaprAggregateActorProxy {
     // Create a simple wrapper that uses HTTP client directly
@@ -135,16 +131,22 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       // Get partition keys for the command
       const partitionKeys = command.specifyPartitionKeys();
       
-      // Verify we have a projector for this aggregate type
-      if (!this.hasProjector(partitionKeys.partitionKey)) {
+      // Get the projector for this aggregate type (using group as aggregate type name)
+      const aggregateTypeName = partitionKeys.group || 'default';
+      const projector = this.projectorRegistry.get(aggregateTypeName);
+      
+      if (!projector) {
         return err({
           type: 'ProjectorNotFound',
-          message: `No projector registered for aggregate type: ${partitionKeys.partitionKey}`
+          message: `No projector registered for aggregate type: ${aggregateTypeName}`
         } as SekibanError);
       }
       
-      // Generate actor ID and create proxy
-      const actorId = this.generateActorId(partitionKeys, partitionKeys.partitionKey);
+      // Create PartitionKeysAndProjector (matching C# pattern)
+      const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+      
+      // Generate actor ID using the projector grain key format
+      const actorId = partitionKeyAndProjector.toProjectorGrainKey();
       const actorProxy = this.createActorProxy(actorId);
       
       // Prepare command with metadata
@@ -209,16 +211,19 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     partitionKeys: PartitionKeys
   ): Promise<Result<Aggregate<TPayload>, SekibanError>> {
     try {
-      // Verify we have a projector for this aggregate type
-      if (!this.hasProjector(projector.aggregateTypeName)) {
+      // Verify the projector is registered
+      if (!this.projectorRegistry.has(projector.aggregateTypeName)) {
         return err({
           type: 'ProjectorNotFound',
           message: `No projector registered for aggregate type: ${projector.aggregateTypeName}`
         } as SekibanError);
       }
       
-      // Generate actor ID and create proxy
-      const actorId = this.generateActorId(partitionKeys, projector.aggregateTypeName);
+      // Create PartitionKeysAndProjector (matching C# pattern)
+      const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+      
+      // Generate actor ID using the projector grain key format
+      const actorId = partitionKeyAndProjector.toProjectorGrainKey();
       const actorProxy = this.createActorProxy(actorId);
       
       // Load aggregate through actor with retry
@@ -250,9 +255,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     return Array.from(this.projectorRegistry.values());
   }
   
-  hasProjector(aggregateTypeName: string): boolean {
-    return this.projectorRegistry.has(aggregateTypeName);
-  }
   
   getStateStoreName(): string {
     return this.configuration.stateStoreName;

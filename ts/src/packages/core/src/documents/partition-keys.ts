@@ -88,6 +88,29 @@ export class PartitionKeys {
     }
     return parts.join(':');
   }
+  
+  /**
+   * Converts to primary keys string format
+   * Matches C# PartitionKeys.ToPrimaryKeysString()
+   * Format: {RootPartitionKey}@{Group}@{AggregateId}
+   */
+  toPrimaryKeysString(): string {
+    const rootPartition = this.rootPartitionKey || 'default';
+    const group = this.group || 'default';
+    return `${rootPartition}@${group}@${this.aggregateId}`;
+  }
+  
+  /**
+   * Creates PartitionKeys from primary keys string
+   * Matches C# PartitionKeys.FromPrimaryKeysString()
+   */
+  static fromPrimaryKeysString(primaryKeyString: string): PartitionKeys {
+    const parts = primaryKeyString.split('@');
+    if (parts.length !== 3) {
+      throw new Error(`Invalid primary key string: ${primaryKeyString}`);
+    }
+    return new PartitionKeys(parts[2], parts[1], parts[0]);
+  }
 }
 
 /**
