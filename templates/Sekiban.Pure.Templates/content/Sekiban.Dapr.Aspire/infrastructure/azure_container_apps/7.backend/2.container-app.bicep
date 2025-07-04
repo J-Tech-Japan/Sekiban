@@ -5,14 +5,14 @@ var acrName = replace(toLower('acr-${resourceGroup().name}'), '-', '')
 var containerImage string = '${acrName}.azurecr.io/${containerAppName}:latest'
 
 @description('The params provided by aca_main.bicep.')
-param daprStateStoreType string
-param daprPubSubType string
+param cosmosAccountName string = 'cosmos-${resourceGroup().name}'
+param serviceBusNamespace string = 'sb-${resourceGroup().name}'
 
 module envModule 'env-module.bicep' = {
   name: 'envVarsModule'
   params: {
-    daprStateStoreType: daprStateStoreType
-    daprPubSubType: daprPubSubType
+    cosmosAccountName: cosmosAccountName
+    serviceBusNamespace: serviceBusNamespace
   }
 }
 

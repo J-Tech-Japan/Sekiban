@@ -7,11 +7,11 @@ param keyVaultName string = 'kv-${resourceGroup().name}'
 @allowed(['cosmos', 'postgres'])
 param databaseType string = 'cosmos'
 
-@description('The type of Dapr state store to use')
-param daprStateStoreType string
+@description('Cosmos DB account name for Dapr state store')
+param cosmosAccountName string = 'cosmos-${resourceGroup().name}'
 
-@description('The type of Dapr pub/sub to use')
-param daprPubSubType string
+@description('Service Bus namespace for Dapr pub/sub')
+param serviceBusNamespace string = 'sb-${resourceGroup().name}'
 
 param aspNetCoreEnvironment string = 'Production'
 
@@ -48,23 +48,13 @@ var secretVars = [
     identity: 'System'
   }
   {
-    name: 'dapr-state-store-connection-string'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/DaprStateStoreConnectionString'
+    name: 'cosmos-master-key'
+    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/CosmosDbMasterKey'
     identity: 'System'
   }
   {
-    name: 'dapr-state-store-account-name'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/DaprStateStoreAccountName'
-    identity: 'System'
-  }
-  {
-    name: 'dapr-state-store-account-key'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/DaprStateStoreAccountKey'
-    identity: 'System'
-  }
-  {
-    name: 'dapr-pubsub-connection-string'
-    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/DaprPubSubConnectionString'
+    name: 'servicebus-connectionstring'
+    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/ServiceBusConnectionString'
     identity: 'System'
   }
 ]
@@ -94,22 +84,6 @@ var envVars = [
   {
     name: 'Sekiban__Database'
     value: databaseType
-  }
-  {
-    name: 'DAPR_HTTP_PORT'
-    value: '3500'
-  }
-  {
-    name: 'DAPR_GRPC_PORT'
-    value: '50001'
-  }
-  {
-    name: 'DAPR_STATE_STORE_TYPE'
-    value: daprStateStoreType
-  }
-  {
-    name: 'DAPR_PUBSUB_TYPE'
-    value: daprPubSubType
   }
 ]
 

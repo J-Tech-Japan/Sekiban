@@ -3,13 +3,11 @@
 
 targetScope = 'resourceGroup'
 
-@description('The type of Dapr state store to use')
-@allowed(['azureblobstorage', 'azuretablestorage'])
-param daprStateStoreType string = 'azureblobstorage'
+@description('Cosmos DB account name for Dapr state store')
+param cosmosAccountName string = 'cosmos-${resourceGroup().name}'
 
-@description('The type of Dapr pub/sub to use')
-@allowed(['azurestoragequeues', 'azureservicebus'])
-param daprPubSubType string = 'azurestoragequeues'
+@description('Service Bus namespace for Dapr pub/sub')
+param serviceBusNamespace string = 'sb-${resourceGroup().name}'
 
 // Remove the logAnalyticsSharedKey parameter as it will be retrieved within the module
 
@@ -19,18 +17,22 @@ module keyVaultCreate '1.keyvault/create.bicep' = {
   params: {}
 }
 
-// 2. Storages (for Dapr State Store and Pub/Sub)
-module storageCreate '2.storages/1.create.bicep' = {
-  name: 'storageCreateDeployment'
-  params: {}
+// 2. Service Bus (for Dapr Pub/Sub)
+module serviceBusCreate '2.servicebus/1.create.bicep' = {
+  name: 'serviceBusCreateDeployment'
+  params: {
+    serviceBusNamespace: serviceBusNamespace
+  }
 }
 
-module storageSaveKeyVault '2.storages/2.save-keyvault.bicep' = {
-  name: 'storageSaveKeyVaultDeployment'
-  params: {}
+module servicebusSaveKeyVault '2.servicebus/2.save-keyvault.bicep' = {
+  name: 'servicebusSaveKeyVaultDeployment'
+  params: {
+    serviceBusNamespace: serviceBusNamespace
+  }
   dependsOn: [
     keyVaultCreate
-    storageCreate
+    serviceBusCreate
   ]
 }
 
@@ -53,6 +55,22 @@ module cosmosContainer '3.cosmos/3.container.bicep' = {
   params: {}
   dependsOn: [
     cosmosDatabase
+  ]
+}
+
+module cosmosDaprDatabase '3.cosmos/5.dapr-database.bicep' = {
+  name: 'cosmosDaprDatabaseDeployment'
+  params: {}
+  dependsOn: [
+    cosmosCreate
+  ]
+}
+
+module cosmosDaprContainer '3.cosmos/6.dapr-container.bicep' = {
+  name: 'cosmosDaprContainerDeployment'
+  params: {}
+  dependsOn: [
+    cosmosDaprDatabase
   ]
 }
 
@@ -82,7 +100,7 @@ module managedEnv '7.backend/1.managed-env.bicep' = {
   name: 'managedEnvDeployment'
   params: {}
   dependsOn: [
-    storageCreate
+    serviceBusCreate
     cosmosCreate
     appInsightsCreate
     vnetCreate
@@ -90,28 +108,29 @@ module managedEnv '7.backend/1.managed-env.bicep' = {
 }
 
 // 7. Dapr Components (deployed after managed environment)
-module daprStateStoreComponent '6.dapr-components/1.statestore-component.bicep' = {
-  name: 'daprStateStoreComponentDeployment'
+module daprCosmosStateStoreComponent '6.dapr-components/1.cosmos-statestore-component.bicep' = {
+  name: 'daprCosmosStateStoreComponentDeployment'
   params: {
-    daprStateStoreType: daprStateStoreType
+    cosmosAccountName: cosmosAccountName
   }
   dependsOn: [
     keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
+    cosmosCreate
+    cosmosSaveKeyVault
+    cosmosDaprContainer
     managedEnv
   ]
 }
 
-module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
-  name: 'daprPubSubComponentDeployment'
+module daprServiceBusPubSubComponent '6.dapr-components/2.servicebus-pubsub-component.bicep' = {
+  name: 'daprServiceBusPubSubComponentDeployment'
   params: {
-    daprPubSubType: daprPubSubType
+    serviceBusNamespace: serviceBusNamespace
   }
   dependsOn: [
     keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
+    serviceBusCreate
+    servicebusSaveKeyVault
     managedEnv
   ]
 }
@@ -120,14 +139,15 @@ module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
 module backendContainerApp '7.backend/2.container-app.bicep' = {
   name: 'backendContainerAppDeployment'
   params: {
-    daprStateStoreType: daprStateStoreType
-    daprPubSubType: daprPubSubType
+    cosmosAccountName: cosmosAccountName
+    serviceBusNamespace: serviceBusNamespace
   }
   dependsOn: [
     managedEnv
     cosmosSaveKeyVault
-    daprStateStoreComponent
-    daprPubSubComponent
+    servicebusSaveKeyVault
+    daprCosmosStateStoreComponent
+    daprServiceBusPubSubComponent
   ]
 }
 
