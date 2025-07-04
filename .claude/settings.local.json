@@ -32,7 +32,8 @@
       "Bash(npx tsc:*)",
       "Bash(grep:*)",
       "Bash(npx vitest run:*)",
-      "Bash(az containerapp show:*)"
+      "Bash(az containerapp show:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": [
       "Bash(curl:*)"
