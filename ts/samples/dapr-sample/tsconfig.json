@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@sekiban/core": ["../../src/packages/core/src"],
+      "@sekiban/dapr": ["../../src/packages/dapr/src"],
+      "@sekiban/dapr-sample-domain": ["./packages/domain/src"]
+    }
+  },
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" }
+  ],
+  "include": [],
+  "exclude": ["node_modules", "dist"]
+}

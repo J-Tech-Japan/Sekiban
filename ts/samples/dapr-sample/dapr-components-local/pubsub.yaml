@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: sekiban-pubsub
+spec:
+  type: pubsub.in-memory
+  version: v1
+  metadata:
+    - name: consumerID
+      value: "weather-forecast-api"
