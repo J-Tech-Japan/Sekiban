@@ -10,7 +10,7 @@ using Sekiban.Pure.Query;
 namespace DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
 [GenerateSerializer]
-public record WeatherForecastQuery : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastResponse>, IWaitForSortableUniqueId
+public record WeatherForecastQuery(string LocationContains) : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastResponse>, IWaitForSortableUniqueId
 {
     public string? WaitForSortableUniqueId { get; set; }
     
@@ -19,6 +19,8 @@ public record WeatherForecastQuery : IMultiProjectionListQuery<AggregateListProj
         return projection.Payload.Aggregates
             .Where(m => m.Value.GetPayload() is WeatherForecast)
             .Select(m => ((WeatherForecast)m.Value.GetPayload(), m.Value.PartitionKeys))
+            .Where(tuple => string.IsNullOrEmpty(query.LocationContains) ||
+                            tuple.Item1.Location.Contains(query.LocationContains, StringComparison.OrdinalIgnoreCase))
             .Select(tuple => WeatherForecastResponse.FromWeatherForecast(tuple.PartitionKeys.AggregateId, tuple.Item1))
             .ToResultBox();
     }

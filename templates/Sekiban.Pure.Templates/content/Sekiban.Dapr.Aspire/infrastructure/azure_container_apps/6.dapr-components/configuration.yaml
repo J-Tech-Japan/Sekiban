@@ -1,0 +1,45 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprsekiban-config
+spec:
+  tracing:
+    sampling: "1.0"
+    otel:
+      endpointAddress: "http://localhost:4317"
+      isSecure: false
+      protocol: "grpc"
+  metric:
+    enabled: true
+  mtls:
+    enabled: true
+    workloadCertTTL: "24h"
+    allowedClockSkew: "15m"
+  features:
+    - name: resiliency
+      enabled: true
+    - name: actors
+      enabled: true
+  actor:
+    idleTimeout: "10m"
+    scanInterval: "30s"
+    drainOngoingCallTimeout: "60s"
+    drainRebalancedActors: true
+    reentrancy:
+      enabled: false
+  httpPipeline:
+    handlers:
+      - name: retry
+        type: middleware.http.retry
+        retry:
+          policy: exponential
+          maxRetries: 3
+          initialRetryDelay: 100
+  appHttpPipeline:
+    handlers:
+      - name: retry
+        type: middleware.http.retry
+        retry:
+          policy: exponential
+          maxRetries: 3
+          initialRetryDelay: 100
