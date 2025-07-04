@@ -5,9 +5,16 @@ resource managedEnv 'Microsoft.App/managedEnvironments@2023-05-01' existing = {
   name: managedEnvName
 }
 
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' existing = {
+  name: cosmosAccountName
+}
+
+// Get the Cosmos DB master key
+var cosmosMasterKey = cosmosAccount.listKeys().primaryMasterKey
+
 resource stateStoreComponent 'Microsoft.App/managedEnvironments/daprComponents@2023-05-01' = {
   parent: managedEnv
-  name: 'statestore'
+  name: 'sekiban-eventstore'
   properties: {
     componentType: 'state.azure.cosmosdb'
     version: 'v1'
@@ -39,8 +46,7 @@ resource stateStoreComponent 'Microsoft.App/managedEnvironments/daprComponents@2
     secrets: [
       {
         name: 'cosmos-master-key'
-        keyVaultUrl: 'https://kv-${resourceGroup().name}${environment().suffixes.keyvaultDns}/secrets/CosmosDbMasterKey'
-        identity: 'system'
+        value: cosmosMasterKey
       }
     ]
   }
