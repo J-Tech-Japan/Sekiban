@@ -47,7 +47,7 @@ public class WeatherApiClient
 
     public async Task<CommandResponseSimple?> AddWeatherForecastAsync(InputWeatherForecastCommand command)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/weatherforecast/input", command);
+        var response = await _httpClient.PostAsJsonAsync("api/inputweatherforecast", command);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();
@@ -57,8 +57,8 @@ public class WeatherApiClient
 
     public async Task<CommandResponseSimple?> UpdateLocationAsync(Guid weatherForecastId, string location)
     {
-        var request = new { Location = location };
-        var response = await _httpClient.PostAsJsonAsync($"api/weatherforecast/{weatherForecastId}/update-location", request);
+        var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, location);
+        var response = await _httpClient.PostAsJsonAsync("api/updateweatherforecastlocation", command);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();
@@ -78,7 +78,8 @@ public class WeatherApiClient
 
     public async Task<CommandResponseSimple?> RemoveWeatherForecastAsync(Guid weatherForecastId)
     {
-        var response = await _httpClient.PostAsync($"api/weatherforecast/{weatherForecastId}/remove", null);
+        var command = new RemoveWeatherForecastCommand(weatherForecastId);
+        var response = await _httpClient.PostAsJsonAsync("api/removeweatherforecast", command);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();

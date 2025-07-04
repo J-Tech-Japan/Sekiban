@@ -1,7 +1,0 @@
-{
-    "resourceGroupName": "dapr-2025-0702",
-    "location": "japaneast",
-    "backendRelativePath": "../../DaprSekiban.ApiService",
-    "frontendRelativePath": "../../DaprSekiban.Web",
-    "logincommand": "az login --tenant tomohisatakaokagmail.onmicrosoft.com --use-device-code"
-}
