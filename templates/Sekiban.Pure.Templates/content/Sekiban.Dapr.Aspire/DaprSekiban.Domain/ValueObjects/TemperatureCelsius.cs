@@ -1,23 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using Orleans;
 
 namespace DaprSekiban.Domain.ValueObjects;
 
 [GenerateSerializer]
-public record TemperatureCelsius
+public record TemperatureCelsius([property:Id(0)][property:Range(-273.15, 1000000.0, ErrorMessage = "Temperature cannot be below absolute zero (-273.15°C)")] double Value)
 {
-    [Id(0)] public int Value { get; init; }
-
-    public TemperatureCelsius(int value)
-    {
-        if (value < -273)
-        {
-            throw new ArgumentException("Temperature cannot be below absolute zero.");
-        }
-        Value = value;
-    }
-
-    public static implicit operator TemperatureCelsius(int value) => new(value);
-    public static implicit operator int(TemperatureCelsius temperature) => temperature.Value;
-
-    public int ToFahrenheit() => 32 + (int)(Value / 0.5556);
+    public double GetFahrenheit() => Value * 9 / 5 + 32;
 }

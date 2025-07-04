@@ -54,15 +54,20 @@ else
     exit 1
 fi
 
-# Update the container app with the new image
+# Update the container app with the new image (or show message if first deployment)
 echo "Updating frontend container in Azure Container Apps..."
-az containerapp update --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest"
-
-if [ $? -eq 0 ]; then
-    echo "Frontend container updated successfully."
+if az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+    az containerapp update --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest"
+    if [ $? -eq 0 ]; then
+        echo "Frontend container updated successfully."
+    else
+        echo "Error: Failed to update frontend container"
+        exit 1
+    fi
 else
-    echo "Error: Failed to update frontend container"
-    exit 1
+    echo "Container app '$CONTAINER_APP_NAME' does not exist yet."
+    echo "Please run './runbicep.sh $1 aca_apps.bicep' first to create the container apps."
+    echo "The Docker image has been pushed successfully and is ready for deployment."
 fi
 
 echo "Deployment process completed."

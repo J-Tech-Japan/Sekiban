@@ -20,18 +20,18 @@ module keyVaultCreate '1.keyvault/create.bicep' = {
   params: {}
 }
 
-// 2. Storages (for Dapr State Store and Pub/Sub)
-module storageCreate '2.storages/1.create.bicep' = {
-  name: 'storageCreateDeployment'
+// 2. Service Bus (for Dapr Pub/Sub)
+module serviceBusCreate '2.servicebus/1.create.bicep' = {
+  name: 'serviceBusCreateDeployment'
   params: {}
 }
 
-module storageSaveKeyVault '2.storages/2.save-keyvault.bicep' = {
-  name: 'storageSaveKeyVaultDeployment'
+module serviceBusSaveKeyVault '2.servicebus/2.save-keyvault.bicep' = {
+  name: 'serviceBusSaveKeyVaultDeployment'
   params: {}
   dependsOn: [
     keyVaultCreate
-    storageCreate
+    serviceBusCreate
   ]
 }
 
@@ -66,6 +66,23 @@ module cosmosSaveKeyVault '3.cosmos/4.save-keyvault.bicep' = {
   ]
 }
 
+// 3.5 Dapr-specific Cosmos DB resources
+module cosmosDaprDatabase '3.cosmos/5.dapr-database.bicep' = {
+  name: 'cosmosDaprDatabaseDeployment'
+  params: {}
+  dependsOn: [
+    cosmosCreate
+  ]
+}
+
+module cosmosDaprContainer '3.cosmos/6.dapr-container.bicep' = {
+  name: 'cosmosDaprContainerDeployment'
+  params: {}
+  dependsOn: [
+    cosmosDaprDatabase
+  ]
+}
+
 // 4. VNet
 module vnetCreate '4.vnet/1.create.bicep' = {
   name: 'vnetCreateDeployment'
@@ -83,7 +100,7 @@ module managedEnv '7.backend/1.managed-env.bicep' = {
   name: 'managedEnvDeployment'
   params: {}
   dependsOn: [
-    storageCreate
+    serviceBusCreate
     cosmosCreate
     appInsightsCreate
     vnetCreate
@@ -91,38 +108,25 @@ module managedEnv '7.backend/1.managed-env.bicep' = {
 }
 
 // 7. Dapr Components (deployed after managed environment)
-module daprStateStoreComponent '6.dapr-components/1.statestore-component.bicep' = {
+module daprStateStoreComponent '6.dapr-components/1.cosmos-statestore-component.bicep' = {
   name: 'daprStateStoreComponentDeployment'
-  params: {
-    daprStateStoreType: daprStateStoreType
-  }
-  dependsOn: [
-    keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
-    managedEnv
-  ]
-}
-
-// Create Dapr pub/sub component based on type
-module daprPubSubComponent '6.dapr-components/2.pubsub-component.bicep' = {
-  name: 'daprPubSubComponentDeployment'
-  params: {
-    daprPubSubType: daprPubSubType
-  }
-  dependsOn: [
-    keyVaultCreate
-    storageCreate
-    storageSaveKeyVault
-    managedEnv
-  ]
-}
-
-// Create Service Bus if using it for pub/sub
-module serviceBus '6.dapr-components/pubsub-servicebus.bicep' = if (daprPubSubType == 'azureservicebus') {
-  name: 'serviceBusDeployment'
   params: {}
   dependsOn: [
+    keyVaultCreate
+    cosmosCreate
+    cosmosSaveKeyVault
+    managedEnv
+  ]
+}
+
+// Create Dapr pub/sub component
+module daprPubSubComponent '6.dapr-components/2.servicebus-pubsub-component.bicep' = {
+  name: 'daprPubSubComponentDeployment'
+  params: {}
+  dependsOn: [
+    keyVaultCreate
+    serviceBusCreate
+    serviceBusSaveKeyVault
     managedEnv
   ]
 }
