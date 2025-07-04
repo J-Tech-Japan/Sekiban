@@ -14,7 +14,9 @@
       "Bash(cp:*)",
       "Bash(ls:*)",
       "Bash(chmod:*)",
-      "Bash(az containerapp show:*)"
+      "Bash(az containerapp show:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(rg:*)"
     ],
     "deny": [
       "Bash(curl:*)"
