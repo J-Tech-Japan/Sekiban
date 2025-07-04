@@ -13,9 +13,9 @@ import {
   ICommandExecutor 
 } from '../commands/index.js';
 import { 
-  IQuery, 
+  IBaseQuery as IQuery, 
   QueryContext, 
-  QueryResult, 
+  IQueryResult as QueryResult, 
   QueryExecutionOptions,
   IQueryHandler,
   QueryHandlerRegistry 

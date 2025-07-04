@@ -1,6 +1,7 @@
 import type { Result } from 'neverthrow';
 import { ok, err } from 'neverthrow';
 import type { DaprClient } from '@dapr/dapr';
+import { HttpMethod } from '@dapr/dapr';
 import type { 
   ICommand,
   IAggregateProjector,
@@ -51,25 +52,44 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   }
   
   private createActorProxy(actorId: string): IDaprAggregateActorProxy {
-    // Create strongly-typed actor proxy
-    const rawProxy = this.daprClient.actors.getActor(this.configuration.actorType, actorId);
+    // Create a simple wrapper that uses HTTP client directly
+    // The Dapr SDK's actor API seems to have changed
+    const actorType = this.configuration.actorType;
     
-    // Wrap with our interface for type safety
     return {
-      executeCommandAsync: <TPayload extends ITypedAggregatePayload>(
+      executeCommandAsync: async <TPayload extends ITypedAggregatePayload>(
         commandAndMetadata: SerializableCommandAndMetadata<TPayload>
       ): Promise<SekibanCommandResponse> => {
-        return rawProxy.executeCommandAsync(commandAndMetadata);
+        // Use Dapr's HTTP API directly
+        const response = await this.daprClient.invoker.invoke(
+          this.configuration.actorIdPrefix || 'sekiban',
+          `actors/${actorType}/${actorId}/method/executeCommandAsync`,
+          HttpMethod.POST,
+          commandAndMetadata
+        );
+        return response as SekibanCommandResponse;
       },
       
-      queryAsync: <T>(query: any): Promise<T> => {
-        return rawProxy.queryAsync(query);
+      queryAsync: async <T>(query: any): Promise<T> => {
+        const response = await this.daprClient.invoker.invoke(
+          this.configuration.actorIdPrefix || 'sekiban',
+          `actors/${actorType}/${actorId}/method/queryAsync`,
+          HttpMethod.POST,
+          query
+        );
+        return response as T;
       },
       
-      loadAggregateAsync: <TPayload extends ITypedAggregatePayload>(
+      loadAggregateAsync: async <TPayload extends ITypedAggregatePayload>(
         partitionKeys: PartitionKeys
       ): Promise<Aggregate<TPayload>> => {
-        return rawProxy.loadAggregateAsync(partitionKeys);
+        const response = await this.daprClient.invoker.invoke(
+          this.configuration.actorIdPrefix || 'sekiban',
+          `actors/${actorType}/${actorId}/method/loadAggregateAsync`,
+          HttpMethod.POST,
+          partitionKeys
+        );
+        return response as Aggregate<TPayload>;
       }
     };
   }
@@ -250,3 +270,5 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     this.configuration = { ...this.configuration, ...updates };
   }
 }
+
+export type { DaprSekibanConfiguration };

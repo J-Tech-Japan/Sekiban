@@ -3,7 +3,7 @@ import { IEvent } from '../events/event.js'
 import { PartitionKeys } from '../documents/partition-keys.js'
 import { SekibanError } from '../result/errors.js'
 import { InMemoryStorageProvider } from './in-memory-storage-provider'
-import { CosmosStorageProvider } from './cosmos-storage-provider'
+// import { CosmosStorageProvider } from './cosmos-storage-provider'
 
 /**
  * Storage provider types
@@ -54,13 +54,15 @@ export interface SnapshotData {
  * Base storage error
  */
 export class StorageError extends SekibanError {
+  readonly innerError?: Error
+  
   constructor(
     message: string,
     public readonly code: string,
     innerError?: Error
   ) {
-    super('StorageError', message, innerError)
-    this.message = message // Ensure message is set correctly
+    super(message)
+    this.innerError = innerError
   }
 }
 
@@ -129,18 +131,18 @@ export interface IEventStorageProvider {
 /**
  * Factory function type for creating storage providers
  */
-export type StorageProviderFactory = (config: StorageProviderConfig) => ResultAsync<IEventStorageProvider, StorageError>
+export type StorageProviderFactoryFunction = (config: StorageProviderConfig) => ResultAsync<IEventStorageProvider, StorageError>
 
 /**
  * Storage provider factory
  */
 export class StorageProviderFactory {
-  private static providers = new Map<string, StorageProviderFactory>()
+  private static providers = new Map<string, StorageProviderFactoryFunction>()
 
   /**
    * Register a storage provider factory
    */
-  static register(type: string, factory: StorageProviderFactory): void {
+  static register(type: string, factory: StorageProviderFactoryFunction): void {
     this.providers.set(type, factory)
   }
 

@@ -17,6 +17,7 @@ export {
 } from './aggregates/aggregate.js';
 
 export * from './documents/partition-keys.js';
+export { SortableUniqueId } from './documents/sortable-unique-id.js';
 export * from './result/errors.js';
 
 // Re-export commonly used utilities

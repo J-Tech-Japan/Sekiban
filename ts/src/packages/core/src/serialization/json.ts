@@ -45,7 +45,15 @@ export class DefaultJsonSerializer implements IJsonSerializer {
       
       if (type && !(parsed instanceof type)) {
         // Try to construct the type if it's not already an instance
-        return ok(Object.assign(new type(), parsed));
+        try {
+          const instance = new type();
+          if (typeof instance === 'object' && instance !== null) {
+            return ok(Object.assign(instance, parsed) as T);
+          }
+        } catch {
+          // If construction fails, just return the parsed value
+          return ok(parsed as T);
+        }
       }
       
       return ok(parsed);
@@ -152,7 +160,7 @@ export class TypedJsonSerializer extends DefaultJsonSerializer {
     this.schemas.set(typeName, schema);
   }
 
-  serialize<T>(value: T): Result<string, SerializationError> {
+  override serialize<T>(value: T): Result<string, SerializationError> {
     // Add runtime type checking if needed
     const result = super.serialize(value);
     
@@ -163,7 +171,7 @@ export class TypedJsonSerializer extends DefaultJsonSerializer {
     return result;
   }
 
-  deserialize<T>(json: string, type?: new(...args: any[]) => T): Result<T, SerializationError> {
+  override deserialize<T>(json: string, type?: new(...args: any[]) => T): Result<T, SerializationError> {
     const result = super.deserialize(json, type);
     
     if (result.isOk() && type) {

@@ -2,6 +2,7 @@ import { Event, IEventPayload } from '../events/index.js';
 import { IJsonSerializer, defaultJsonSerializer } from './json';
 import { Result, ok, err } from 'neverthrow';
 import { SerializationError } from '../result/index.js';
+import { SortableUniqueId, SortableUniqueIdUtils, PartitionKeys, Metadata } from '../documents/index.js';
 
 /**
  * Serialized event format for storage
@@ -81,11 +82,11 @@ export class EventSerializer {
     }
 
     return ok({
-      id: `${event.id.timestamp}-${event.id.uniqueId}`,
+      id: event.id.toString(),
       aggregateId: event.partitionKeys.aggregateId,
       aggregateType: event.aggregateType,
       version: event.version,
-      eventType: event.payload.eventType,
+      eventType: event.eventType,
       payload: payloadResult.value,
       metadata: metadataResult.value,
       partitionKeys: partitionKeysResult.value,
@@ -124,17 +125,23 @@ export class EventSerializer {
       return err(new SerializationError('deserialize', 'Invalid event ID format'));
     }
 
-    const timestamp = parseInt(idParts[0], 10);
+    const timestamp = parseInt(idParts[0]!, 10);
     const uniqueId = idParts.slice(1).join('-');
 
+    const idResult = SortableUniqueId.fromString(serialized.id);
+    if (idResult.isErr()) {
+      return err(new SerializationError('deserialize', 'Invalid event ID format'));
+    }
+
     return ok({
-      id: { timestamp, uniqueId },
-      partitionKeys: partitionKeysResult.value,
+      id: idResult.value,
+      partitionKeys: partitionKeysResult.value as PartitionKeys,
       aggregateType: serialized.aggregateType,
+      eventType: serialized.eventType,
       version: serialized.version,
       payload: payloadResult.value,
-      metadata: metadataResult.value,
-    });
+      metadata: metadataResult.value as Metadata,
+    } as Event<TPayload>);
   }
 
   /**

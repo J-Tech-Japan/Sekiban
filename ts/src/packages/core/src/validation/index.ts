@@ -4,4 +4,4 @@ export {
   isValid,
   getErrors,
   validateOrThrow
-} from './validation/index.js'
+} from './validation.js'

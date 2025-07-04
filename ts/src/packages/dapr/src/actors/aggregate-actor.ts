@@ -1,20 +1,22 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
+import { SortableUniqueId, Aggregate } from '@sekiban/core';
 import type { 
   IProjector,
-  Aggregate,
   EventDocument,
   ICommandExecutor,
   IEventStore,
   PartitionKeys,
-  CommandExecutionResult
+  CommandExecutionResult,
+  IEvent
 } from '@sekiban/core';
 import { Result, ok, err } from 'neverthrow';
 import type { 
   IAggregateActor,
   IAggregateEventHandlerActor,
   SerializableAggregate,
-  SerializableCommandAndMetadata,
-  ActorPartitionInfo
+  ActorSerializableCommandAndMetadata,
+  ActorPartitionInfo,
+  SerializableEventDocument
 } from './interfaces';
 
 /**
@@ -24,7 +26,7 @@ import type {
 export class AggregateActor extends AbstractActor implements IAggregateActor {
   private initialized = false;
   private hasUnsavedChanges = false;
-  private saveTimer?: NodeJS.Timer;
+  private saveTimer?: NodeJS.Timeout;
   private aggregateState?: Aggregate;
   private lastSortableUniqueId?: string;
   private partitionInfo?: ActorPartitionInfo;
@@ -93,7 +95,7 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
    * Execute command and return response as JSON string
    */
   async executeCommandAsync(
-    command: SerializableCommandAndMetadata
+    command: ActorSerializableCommandAndMetadata
   ): Promise<string> {
     try {
       await this.ensureInitializedAsync();
@@ -115,7 +117,7 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
         if (executionResult.events.length > 0) {
           const appendResult = await this.eventHandlerActorProxy.appendEventsAsync(
             this.lastSortableUniqueId || '',
-            executionResult.events.map(e => this.serializeEvent(e))
+            executionResult.events.map((e: EventDocument) => this.serializeEvent(e))
           );
           
           if (!appendResult.isSuccess) {
@@ -127,9 +129,16 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
           
           // Update local state
           for (const event of executionResult.events) {
-            this.aggregateState = this.projector.applyEvent(
-              this.aggregateState!,
-              event
+            // Update the aggregate with the new event data
+            const updatedPayload = event.payload;
+            this.aggregateState = new Aggregate(
+              this.aggregateState!.partitionKeys,
+              this.aggregateState!.aggregateType,
+              event.version,
+              updatedPayload,
+              SortableUniqueId.fromString(event.sortableUniqueId).unwrapOr(null),
+              this.projector.getTypeName(),
+              this.projector.getVersion()
             );
             this.lastSortableUniqueId = event.sortableUniqueId;
           }
@@ -162,18 +171,30 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
   async rebuildStateAsync(): Promise<void> {
     const events = await this.eventHandlerActorProxy.getAllEventsAsync();
     
-    // Reset state
-    this.aggregateState = {
-      payload: this.projector.initialState(),
-      version: 0,
-      lastSortableUniqueId: ''
-    } as Aggregate;
+    // Reset state - create proper initial aggregate
+    this.aggregateState = new Aggregate(
+      this.partitionInfo?.partitionKeys || ({} as PartitionKeys),
+      this.projector.getTypeName(),
+      0,
+      this.projector.getInitialState(this.partitionInfo?.partitionKeys || ({} as PartitionKeys)).payload,
+      null,
+      this.projector.getTypeName(),
+      this.projector.getVersion()
+    );
     
     // Apply all events
     for (const event of events) {
-      this.aggregateState = this.projector.applyEvent(
-        this.aggregateState,
-        this.deserializeEvent(event)
+      const deserializedEvent = this.deserializeEvent(event);
+      // Update the aggregate with the new event data
+      const updatedPayload = deserializedEvent.payload;
+      this.aggregateState = new Aggregate(
+        this.aggregateState.partitionKeys,
+        this.aggregateState.aggregateType,
+        deserializedEvent.version,
+        updatedPayload,
+        deserializedEvent.id,
+        this.projector.getTypeName(),
+        this.projector.getVersion()
       );
       this.lastSortableUniqueId = event.sortableUniqueId;
     }
@@ -231,22 +252,27 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
    */
   private async loadStateInternalAsync(): Promise<void> {
     // Load partition info
-    const [hasPartitionInfo, partitionInfo] = await (this as any).stateManager.tryGetState<ActorPartitionInfo>(
+    const stateManager = await this.getStateManager();
+    const partitionInfoResult = await stateManager.tryGetState(
       this.PARTITION_INFO_KEY
     );
+    const hasPartitionInfo = partitionInfoResult[0];
+    const partitionInfo = partitionInfoResult[1] as ActorPartitionInfo | null;
     
     if (!hasPartitionInfo) {
       // Extract from actor ID
       this.partitionInfo = this.getPartitionInfoFromActorId();
       await this.savePartitionInfoAsync();
     } else {
-      this.partitionInfo = partitionInfo!;
+      this.partitionInfo = partitionInfo as ActorPartitionInfo;
     }
     
     // Try to load snapshot
-    const [hasSnapshot, snapshot] = await (this as any).stateManager.tryGetState<SerializableAggregate>(
+    const snapshotResult = await stateManager.tryGetState(
       this.AGGREGATE_STATE_KEY
     );
+    const hasSnapshot = snapshotResult[0];
+    const snapshot = snapshotResult[1] as SerializableAggregate | null;
     
     if (hasSnapshot && snapshot) {
       // Load delta events since snapshot
@@ -256,14 +282,24 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
       );
       
       // Start with snapshot state
-      this.aggregateState = snapshot.aggregate;
-      this.lastSortableUniqueId = snapshot.lastSortableUniqueId;
+      if (snapshot) {
+        this.aggregateState = snapshot.aggregate;
+        this.lastSortableUniqueId = snapshot.lastSortableUniqueId;
+      }
       
       // Apply delta events
       for (const event of deltaEvents) {
-        this.aggregateState = this.projector.applyEvent(
-          this.aggregateState,
-          this.deserializeEvent(event)
+        const deserializedEvent = this.deserializeEvent(event);
+        // Update the aggregate with the new event data
+        const updatedPayload = deserializedEvent.payload;
+        this.aggregateState = new Aggregate(
+          this.aggregateState!.partitionKeys,
+          this.aggregateState!.aggregateType,
+          deserializedEvent.version,
+          updatedPayload,
+          deserializedEvent.id,
+          this.projector.getTypeName(),
+          this.projector.getVersion()
         );
         this.lastSortableUniqueId = event.sortableUniqueId;
       }
@@ -287,7 +323,8 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
       lastSortableUniqueId: this.lastSortableUniqueId || ''
     };
     
-    await (this as any).stateManager.setState(
+    const stateManager = await this.getStateManager();
+    await stateManager.setState(
       this.AGGREGATE_STATE_KEY,
       snapshot
     );
@@ -300,7 +337,8 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
    */
   private async savePartitionInfoAsync(): Promise<void> {
     if (this.partitionInfo) {
-      await (this as any).stateManager.setState(
+      const stateManager = await this.getStateManager();
+      await stateManager.setState(
         this.PARTITION_INFO_KEY,
         this.partitionInfo
       );
@@ -346,9 +384,35 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
    * Deserialize event from storage
    */
   private deserializeEvent(serialized: SerializableEventDocument): EventDocument {
+    // Create a proper EventDocument with IEvent structure
+    const event: IEvent = {
+      id: SortableUniqueId.fromString(serialized.sortableUniqueId).unwrapOr(
+        SortableUniqueId.generate()
+      ),
+      partitionKeys: serialized.partitionKeys,
+      aggregateType: serialized.partitionKeys.group || '',
+      eventType: serialized.eventType,
+      version: serialized.version,
+      payload: serialized.payload,
+      metadata: {
+        timestamp: new Date(serialized.createdAt),
+        ...serialized.metadata
+      }
+    };
+    
+    // Return a duck-typed EventDocument that matches the interface
     return {
-      ...serialized,
-      createdAt: new Date(serialized.createdAt)
+      event: event,
+      id: event.id,
+      partitionKeys: event.partitionKeys,
+      aggregateId: event.partitionKeys.aggregateId,
+      aggregateType: event.aggregateType,
+      eventType: event.eventType,
+      version: event.version,
+      payload: event.payload,
+      metadata: event.metadata,
+      timestamp: event.metadata.timestamp,
+      sortableId: event.id.toString()
     } as EventDocument;
   }
 }

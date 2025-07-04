@@ -9,6 +9,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
-    "strict": false
+    "strict": false,
+    "moduleResolution": "node"
   }
 }

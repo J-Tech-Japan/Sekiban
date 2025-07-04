@@ -40,6 +40,13 @@ export class EventDocument<TPayload extends IEventPayload = IEventPayload> {
   }
   
   /**
+   * Event type
+   */
+  get eventType(): string {
+    return this.event.eventType
+  }
+  
+  /**
    * Event version
    */
   get version(): number {
@@ -93,6 +100,11 @@ export interface SerializableEventDocument {
    * Aggregate type
    */
   aggregateType: string
+  
+  /**
+   * Event type
+   */
+  eventType: string
   
   /**
    * Event version
@@ -155,6 +167,7 @@ export function toSerializableEventDocument<TPayload extends IEventPayload>(
     id: event.id.toString(),
     aggregateId: event.partitionKeys.aggregateId,
     aggregateType: event.aggregateType,
+    eventType: event.eventType,
     version: event.version,
     payload: JSON.stringify(event.payload),
     payloadTypeName,
@@ -221,6 +234,7 @@ export function fromSerializableEventDocument(
       idResult.value,
       partitionKeys,
       serializable.aggregateType,
+      serializable.eventType,
       serializable.version,
       payload,
       metadata

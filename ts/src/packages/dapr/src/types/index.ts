@@ -1,4 +1,4 @@
-import type { ActorId } from '@dapr/dapr';
+import { ActorId } from '@dapr/dapr';
 import type { IAggregatePayload, PartitionKeys } from '@sekiban/core';
 import type { Result } from 'neverthrow';
 import type { SnapshotError, SnapshotLoadResult } from '../snapshot/types';

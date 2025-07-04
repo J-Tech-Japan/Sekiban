@@ -1,6 +1,7 @@
 import { IAggregatePayload } from './aggregate-payload.js'
 import { IEventPayload } from '../events/event-payload.js'
 import { IEvent } from '../events/event.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
 
 /**
  * Interface for aggregate projectors - pure functions that apply events to aggregates
@@ -26,6 +27,11 @@ export interface IProjector<TPayload extends IAggregatePayload> extends IAggrega
    * Get the type name of this projector
    */
   getTypeName(): string
+  
+  /**
+   * Get the initial state for a new aggregate
+   */
+  getInitialState(partitionKeys: PartitionKeys): TPayload
 }
 
 /**
@@ -49,7 +55,7 @@ export class ProjectionResult<TPayload extends IAggregatePayload> {
    * Create a failed projection result
    */
   static error<T extends IAggregatePayload>(error: string): ProjectionResult<T> {
-    return new ProjectionResult(false, undefined, error)
+    return new ProjectionResult<T>(false, undefined, error)
   }
 }
 
@@ -91,11 +97,13 @@ export class EventOrNone {
 export function createProjector<TPayload extends IAggregatePayload>(
   typeName: string,
   version: number,
-  projectFn: (payload: TPayload, event: IEventPayload) => TPayload
+  projectFn: (payload: TPayload, event: IEventPayload) => TPayload,
+  getInitialStateFn: (partitionKeys: PartitionKeys) => TPayload
 ): IProjector<TPayload> {
   return {
     getTypeName: () => typeName,
     getVersion: () => version,
-    project: projectFn
+    project: projectFn,
+    getInitialState: getInitialStateFn
   }
 }

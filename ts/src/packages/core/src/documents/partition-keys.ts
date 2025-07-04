@@ -74,6 +74,20 @@ export class PartitionKeys {
       this.rootPartitionKey === other.rootPartitionKey
     );
   }
+  
+  /**
+   * Converts to a composite key string
+   */
+  static toCompositeKey(keys: PartitionKeys): string {
+    const parts = [keys.aggregateId];
+    if (keys.group) {
+      parts.push(keys.group);
+    }
+    if (keys.rootPartitionKey) {
+      parts.push(keys.rootPartitionKey);
+    }
+    return parts.join(':');
+  }
 }
 
 /**

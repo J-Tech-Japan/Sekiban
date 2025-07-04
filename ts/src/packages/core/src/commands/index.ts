@@ -2,7 +2,7 @@
  * Export command interfaces from command.ts
  */
 export type {
-  ICommand,
+  ICommand as ITypedCommand,
   IConstrainedPayloadCommand,
   ICreationCommand
 } from './command.js'
@@ -16,7 +16,7 @@ export {
  * Export command interfaces from types.ts
  */
 export type {
-  ICommand as IBaseCommand,
+  ICommand,
   ICommandWithHandler,
   CommandContext,
   CommandResult,
@@ -29,6 +29,11 @@ export type {
  */
 export type {
   ICommandHandler
+} from './handler.js'
+
+export {
+  CommandHandlerRegistry,
+  createCommandHandler
 } from './handler.js'
 
 /**

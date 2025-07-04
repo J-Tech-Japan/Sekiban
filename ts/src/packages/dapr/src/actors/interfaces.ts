@@ -17,9 +17,9 @@ export interface SerializableAggregate {
 }
 
 /**
- * Serializable command with metadata
+ * Actor-specific serializable command with metadata
  */
-export interface SerializableCommandAndMetadata {
+export interface ActorSerializableCommandAndMetadata {
   command: any; // JSON serializable command
   metadata: {
     commandType: string;
@@ -119,7 +119,7 @@ export interface IAggregateActor {
   /**
    * Execute command and return response as JSON string
    */
-  executeCommandAsync(command: SerializableCommandAndMetadata): Promise<string>;
+  executeCommandAsync(command: ActorSerializableCommandAndMetadata): Promise<string>;
   
   /**
    * Rebuild state from all events

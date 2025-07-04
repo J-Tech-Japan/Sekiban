@@ -13,9 +13,11 @@ import {
 } from '../events/index.js';
 import { 
   IAggregateLoader, 
+  IAggregateProjector,
   IProjector,
   Aggregate,
-  IAggregatePayload 
+  IAggregatePayload,
+  ITypedAggregatePayload 
 } from '../aggregates/index.js';
 import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
 import { EventStoreError, ConcurrencyError } from '../result/index.js';
@@ -54,6 +56,7 @@ export class InMemoryEventStore implements IEventStore {
         id: SortableUniqueId.create(),
         partitionKeys,
         aggregateType,
+        eventType: payload.constructor.name,
         version,
         payload,
         metadata: metadata ? Metadata.merge(Metadata.create(), metadata) : Metadata.create(),
@@ -181,7 +184,7 @@ export class InMemoryEventStore implements IEventStore {
       return false;
     }
     
-    if (filter.eventTypes && !filter.eventTypes.includes(event.payload.eventType)) {
+    if (filter.eventTypes && !filter.eventTypes.includes(event.eventType)) {
       return false;
     }
     
@@ -253,7 +256,7 @@ export class InMemoryAggregateLoader implements IAggregateLoader {
 /**
  * In-memory command executor
  */
-class InMemoryCommandExecutor extends CommandExecutorBase {
+export class InMemoryCommandExecutor extends CommandExecutorBase {
   constructor(
     handlerRegistry: CommandHandlerRegistry,
     eventStore: IEventStore,
@@ -316,10 +319,10 @@ export class InMemorySekibanExecutor extends SekibanExecutorBase {
   /**
    * Registers a projector
    */
-  registerProjector<TPayload extends IAggregatePayload>(
+  registerProjector<TPayload extends ITypedAggregatePayload>(
     projector: IProjector<TPayload>
   ): void {
-    this.projectorRegistry.set(projector.aggregateType, projector);
+    this.projectorRegistry.set(projector.getTypeName(), projector);
   }
 
   /**

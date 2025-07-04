@@ -67,7 +67,7 @@ export abstract class MultiProjection<TState> implements IMultiProjection<TState
    * Applies an event to the projection
    */
   apply(event: Event): void {
-    const handler = this.eventHandlers.get(event.payload.eventType);
+    const handler = this.eventHandlers.get(event.eventType);
     if (handler) {
       this.state = handler(this.state, event);
       this.version = event.version;
@@ -113,9 +113,12 @@ export class ProjectionBuilder<TState> {
    * Builds the projection
    */
   build(): IMultiProjection<TState> {
+    const projectionType = this.projectionType;
+    const initialState = this.initialState;
+    
     class DynamicProjection extends MultiProjection<TState> {
       constructor(handlers: Map<string, (state: TState, event: Event) => TState>) {
-        super(this.projectionType, this.initialState);
+        super(projectionType, initialState);
         
         // Register all handlers
         handlers.forEach((handler, eventType) => {
@@ -124,7 +127,7 @@ export class ProjectionBuilder<TState> {
       }
 
       getInitialState(): TState {
-        return this.initialState;
+        return initialState;
       }
     }
 

@@ -31,7 +31,9 @@ export {
  * Export event store interfaces
  */
 export type {
-  IEventStore
+  IEventStore,
+  EventStoreOptions,
+  EventStoreStats
 } from './store.js';
 
 /**
@@ -46,13 +48,16 @@ export type {
   IEventStream
 } from './stream.js';
 
+export {
+  InMemoryEventStream
+} from './stream.js';
+
 /**
  * Export event types including Event and EventFilter
  */
 export type {
   Event as IEventType,
-  EventFilter,
-  IEventPayload as IEventPayloadBase
+  EventFilter
 } from './types.js';
 
 export { EventBuilder } from './types.js';

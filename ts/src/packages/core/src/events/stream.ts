@@ -1,4 +1,5 @@
-import { Event, EventFilter, EventHandler, EventSubscription, IEventPayload } from './types';
+import { Event, EventFilter, EventHandler, EventSubscription } from './types.js';
+import { IEventPayload } from './event-payload.js';
 
 /**
  * Interface for event stream implementations
@@ -134,7 +135,7 @@ export class InMemoryEventStream implements IEventStream {
       return false;
     }
     
-    if (filter.eventTypes && !filter.eventTypes.includes(event.payload.eventType)) {
+    if (filter.eventTypes && !filter.eventTypes.includes(event.eventType)) {
       return false;
     }
     

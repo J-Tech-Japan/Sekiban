@@ -1,6 +1,6 @@
 import { Result } from 'neverthrow';
 import { ICommand, CommandContext, CommandResult, CommandExecutionOptions } from '../commands/index.js';
-import { IQuery, QueryContext, QueryResult, QueryExecutionOptions } from '../queries/index.js';
+import { IBaseQuery as IQuery, QueryContext, IQueryResult as QueryResult, QueryExecutionOptions } from '../queries/index.js';
 import { IEventPayload } from '../events/index.js';
 import { PartitionKeys } from '../documents/index.js';
 import { SekibanError } from '../result/index.js';

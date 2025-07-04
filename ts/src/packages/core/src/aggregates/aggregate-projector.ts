@@ -15,6 +15,7 @@ export interface ITypedAggregatePayload extends IAggregatePayload {
 
 /**
  * Use EmptyAggregatePayload from aggregate.js
+ * Note: EmptyPayload now includes aggregateType = 'Empty'
  */
 export type EmptyAggregatePayload = EmptyPayload;
 

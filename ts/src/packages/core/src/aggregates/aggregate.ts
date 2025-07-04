@@ -52,6 +52,11 @@ export interface IAggregate<TPayload extends IAggregatePayload = IAggregatePaylo
  */
 export class EmptyAggregatePayload implements IAggregatePayload {
   private readonly _empty = true
+  
+  /**
+   * Type discriminator for empty aggregates
+   */
+  readonly aggregateType = 'Empty' as const
 }
 
 /**

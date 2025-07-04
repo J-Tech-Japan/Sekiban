@@ -1,12 +1,41 @@
 // Executor implementation
 export * from './executor/sekiban-dapr-executor.js';
-export * from './executor/interfaces.js';
+export {
+  SerializableCommandAndMetadata,
+  SekibanCommandResponse,
+  IDaprAggregateActorProxy,
+  DaprSekibanConfiguration,
+  ISekibanDaprExecutor
+} from './executor/interfaces.js';
 
 // Snapshot types and strategies
 export * from './snapshot';
 
 // Actor implementations
-export * from './actors';
+export {
+  // Actors
+  AggregateActor,
+  AggregateEventHandlerActor,
+  MultiProjectorActor,
+  
+  // Interfaces - avoid duplicate exports
+  SerializableAggregate,
+  ActorSerializableCommandAndMetadata,
+  SerializableEventDocument,
+  EventHandlingResponse,
+  SerializableQuery,
+  SerializableListQuery,
+  QueryResponse,
+  ListQueryResponse,
+  MultiProjectionState,
+  DaprEventEnvelope,
+  IAggregateActor,
+  IAggregateEventHandlerActor,
+  IMultiProjectorActor,
+  ActorPartitionInfo,
+  AggregateEventHandlerState,
+  BufferedEvent
+} from './actors';
 
 // Types
 export * from './types';

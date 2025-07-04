@@ -48,6 +48,11 @@ export interface IEvent<TPayload extends IEventPayload = IEventPayload> {
   aggregateType: string
   
   /**
+   * Type of this event
+   */
+  eventType: string
+  
+  /**
    * Version number of the aggregate after this event
    */
   version: number
@@ -71,6 +76,7 @@ export class Event<TPayload extends IEventPayload = IEventPayload> implements IE
     public readonly id: SortableUniqueId,
     public readonly partitionKeys: PartitionKeys,
     public readonly aggregateType: string,
+    public readonly eventType: string,
     public readonly version: number,
     public readonly payload: TPayload,
     public readonly metadata: EventMetadata
@@ -142,6 +148,11 @@ export interface CreateEventOptions<TPayload extends IEventPayload> {
   aggregateType: string
   
   /**
+   * Type of the event
+   */
+  eventType: string
+  
+  /**
    * Version number of the aggregate
    */
   version: number
@@ -167,6 +178,7 @@ export function createEvent<TPayload extends IEventPayload>(
     options.id ?? SortableUniqueId.generate(),
     options.partitionKeys,
     options.aggregateType,
+    options.eventType,
     options.version,
     options.payload,
     options.metadata ?? createEventMetadata()

@@ -47,7 +47,8 @@ export class AggregateEventHandlerActor extends AbstractActor
   ): Promise<EventHandlingResponse> {
     try {
       // Load current state
-      const [hasState, handlerState] = await (this as any).stateManager.tryGetState<AggregateEventHandlerState>(
+      const stateManager = await this.getStateManager();
+      const [hasState, handlerState] = await stateManager.tryGetState<AggregateEventHandlerState>(
         this.HANDLER_STATE_KEY
       );
       
@@ -68,7 +69,7 @@ export class AggregateEventHandlerActor extends AbstractActor
       const allEvents = [...currentEvents, ...events];
       
       // Save to actor state
-      await (this as any).stateManager.setState(this.EVENTS_KEY, allEvents);
+      await stateManager.setState(this.EVENTS_KEY, allEvents);
       
       // Save to external storage
       if (this.partitionInfo) {
@@ -85,7 +86,7 @@ export class AggregateEventHandlerActor extends AbstractActor
         eventCount: allEvents.length
       };
       
-      await (this as any).stateManager.setState(this.HANDLER_STATE_KEY, newState);
+      await stateManager.setState(this.HANDLER_STATE_KEY, newState);
       
       return {
         isSuccess: true,
@@ -133,7 +134,8 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Get last event ID
    */
   async getLastSortableUniqueIdAsync(): Promise<string> {
-    const [hasState, handlerState] = await (this as any).stateManager.tryGetState<AggregateEventHandlerState>(
+    const stateManager = await this.getStateManager();
+    const [hasState, handlerState] = await stateManager.tryGetState<AggregateEventHandlerState>(
       this.HANDLER_STATE_KEY
     );
     
@@ -151,7 +153,8 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Load events from state with external storage fallback
    */
   private async loadEventsFromStateAsync(): Promise<SerializableEventDocument[]> {
-    const [hasEvents, events] = await (this as any).stateManager.tryGetState<SerializableEventDocument[]>(
+    const stateManager = await this.getStateManager();
+    const [hasEvents, events] = await stateManager.tryGetState<SerializableEventDocument[]>(
       this.EVENTS_KEY
     );
     
@@ -162,11 +165,11 @@ export class AggregateEventHandlerActor extends AbstractActor
           this.partitionInfo.partitionKeys
         );
         
-        const serializedEvents = externalEvents.map(e => this.serializeEvent(e));
+        const serializedEvents = externalEvents.map((e: any) => this.serializeEvent(e));
         
         // Cache in state for next time
         if (serializedEvents.length > 0) {
-          await (this as any).stateManager.setState(this.EVENTS_KEY, serializedEvents);
+          await stateManager.setState(this.EVENTS_KEY, serializedEvents);
           
           // Update metadata
           const lastEvent = serializedEvents[serializedEvents.length - 1];
@@ -174,7 +177,7 @@ export class AggregateEventHandlerActor extends AbstractActor
             lastSortableUniqueId: lastEvent.sortableUniqueId,
             eventCount: serializedEvents.length
           };
-          await (this as any).stateManager.setState(this.HANDLER_STATE_KEY, state);
+          await stateManager.setState(this.HANDLER_STATE_KEY, state);
         }
         
         return serializedEvents;
@@ -190,7 +193,8 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Load partition info from state or actor ID
    */
   private async loadPartitionInfoAsync(): Promise<void> {
-    const [hasPartitionInfo, partitionInfo] = await (this as any).stateManager.tryGetState<ActorPartitionInfo>(
+    const stateManager = await this.getStateManager();
+    const [hasPartitionInfo, partitionInfo] = await stateManager.tryGetState<ActorPartitionInfo>(
       this.PARTITION_INFO_KEY
     );
     
@@ -199,7 +203,7 @@ export class AggregateEventHandlerActor extends AbstractActor
     } else {
       // Extract from actor ID
       this.partitionInfo = this.getPartitionInfoFromActorId();
-      await (this as any).stateManager.setState(
+      await stateManager.setState(
         this.PARTITION_INFO_KEY,
         this.partitionInfo
       );

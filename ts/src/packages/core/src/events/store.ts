@@ -1,5 +1,6 @@
 import { Result } from 'neverthrow';
-import { Event, EventFilter, IEventPayload } from './types.js';
+import { Event, EventFilter } from './types.js';
+import { IEventPayload } from './event-payload.js';
 import { EventStoreError, ConcurrencyError } from '../result/index.js';
 import { PartitionKeys } from '../documents/index.js';
 

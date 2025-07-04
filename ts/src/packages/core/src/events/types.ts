@@ -1,14 +1,5 @@
 import { PartitionKeys, SortableUniqueId, Metadata, MetadataBuilder } from '../documents/index.js';
-
-/**
- * Base interface for all event payloads
- */
-export interface IEventPayload {
-  /**
-   * The type identifier for the event
-   */
-  readonly eventType: string;
-}
+import { IEventPayload } from './event-payload.js';
 
 /**
  * Represents a domain event with its metadata
@@ -28,6 +19,11 @@ export interface Event<TPayload extends IEventPayload = IEventPayload> {
    * The aggregate type this event belongs to
    */
   aggregateType: string;
+  
+  /**
+   * The type of this event
+   */
+  eventType: string;
   
   /**
    * The version of the aggregate after this event
@@ -143,6 +139,14 @@ export class EventBuilder<TPayload extends IEventPayload> {
   }
 
   /**
+   * Sets the event type
+   */
+  withEventType(eventType: string): EventBuilder<TPayload> {
+    this.event.eventType = eventType;
+    return this;
+  }
+
+  /**
    * Sets the version
    */
   withVersion(version: number): EventBuilder<TPayload> {
@@ -177,9 +181,9 @@ export class EventBuilder<TPayload extends IEventPayload> {
       this.event.metadata = new MetadataBuilder().build();
     }
     
-    const { id, partitionKeys, aggregateType, version, payload, metadata } = this.event;
+    const { id, partitionKeys, aggregateType, eventType, version, payload, metadata } = this.event;
     
-    if (!partitionKeys || !aggregateType || version === undefined || !payload) {
+    if (!partitionKeys || !aggregateType || !eventType || version === undefined || !payload) {
       throw new Error('Missing required event properties');
     }
     
@@ -187,6 +191,7 @@ export class EventBuilder<TPayload extends IEventPayload> {
       id,
       partitionKeys,
       aggregateType,
+      eventType,
       version,
       payload,
       metadata,

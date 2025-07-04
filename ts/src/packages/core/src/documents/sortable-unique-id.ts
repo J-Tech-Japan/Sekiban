@@ -10,6 +10,13 @@ export class SortableUniqueId {
   private constructor(readonly value: string) {}
 
   /**
+   * Creates a new sortable unique ID (alias for generate)
+   */
+  static create(): SortableUniqueId {
+    return SortableUniqueId.generate();
+  }
+
+  /**
    * Generates a new sortable unique ID
    */
   static generate(): SortableUniqueId {

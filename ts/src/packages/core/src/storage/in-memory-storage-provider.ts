@@ -76,7 +76,7 @@ export class InMemoryStorageProvider implements IEventStorageProvider {
     }
 
     // Find the index of the event after which to start
-    const index = events.findIndex(e => e.id === afterEventId)
+    const index = events.findIndex(e => e.id.value === afterEventId)
     if (index === -1) {
       return events // If not found, return all events
     }

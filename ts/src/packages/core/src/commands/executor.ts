@@ -131,9 +131,10 @@ export abstract class CommandExecutorBase implements ICommandExecutor {
     await this.eventStream.publishMany(storedEvents);
 
     // Return result
+    const lastEvent = storedEvents[storedEvents.length - 1];
     return ok({
       aggregateId: context.partitionKeys.aggregateId,
-      version: storedEvents[storedEvents.length - 1].version,
+      version: lastEvent?.version ?? 0,
       events,
       metadata,
     });
@@ -175,7 +176,7 @@ export abstract class CommandExecutorBase implements ICommandExecutor {
  * Command executor with retry logic
  */
 export class RetryCommandExecutor extends CommandExecutorBase {
-  async execute<TCommand extends ICommand>(
+  override async execute<TCommand extends ICommand>(
     command: TCommand,
     context: CommandContext,
     options?: CommandExecutionOptions
@@ -206,5 +207,17 @@ export class RetryCommandExecutor extends CommandExecutorBase {
     }
 
     return err(lastError!);
+  }
+
+  protected getInitialAggregate(
+    partitionKeys: PartitionKeys,
+    aggregateType: string
+  ): any {
+    // Return empty aggregate for retry executor
+    return {
+      aggregateId: partitionKeys.aggregateId,
+      version: 0,
+      payload: null,
+    };
   }
 }
