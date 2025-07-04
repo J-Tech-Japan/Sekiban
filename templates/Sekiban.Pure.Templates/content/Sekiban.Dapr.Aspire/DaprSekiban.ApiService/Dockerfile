@@ -27,4 +27,7 @@ COPY --from=build /app/publish .
 # Expose the port that Dapr will use to communicate with the app
 EXPOSE 8080
 
+# Set ASP.NET Core to listen on port 8080 on all interfaces (0.0.0.0)
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+
 ENTRYPOINT ["dotnet", "DaprSekiban.ApiService.dll"]

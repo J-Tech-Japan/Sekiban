@@ -11,10 +11,12 @@ namespace DaprSekiban.Web.Services;
 public class WeatherApiClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<WeatherApiClient> _logger;
 
-    public WeatherApiClient(HttpClient httpClient)
+    public WeatherApiClient(HttpClient httpClient, ILogger<WeatherApiClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync(string? waitForSortableUniqueId = null)
@@ -24,8 +26,23 @@ public class WeatherApiClient
         {
             url += $"?waitForSortableUniqueId={waitForSortableUniqueId}";
         }
-        var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>(url);
-        return response?.Items?.ToList();
+        
+        try
+        {
+            _logger.LogInformation("=== MAKING API REQUEST ===");
+            _logger.LogInformation("HttpClient BaseAddress: {BaseAddress}", _httpClient.BaseAddress);
+            _logger.LogInformation("Request URL: {Url}", url);
+            _logger.LogInformation("Full Request URL: {FullUrl}", new Uri(_httpClient.BaseAddress!, url));
+            
+            var response = await _httpClient.GetFromJsonAsync<ListQueryResult<WeatherForecastResponse>>(url);
+            _logger.LogInformation("API request successful");
+            return response?.Items?.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error making API request to {Url}", url);
+            throw;
+        }
     }
 
     public async Task<CommandResponseSimple?> AddWeatherForecastAsync(InputWeatherForecastCommand command)
