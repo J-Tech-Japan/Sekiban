@@ -1,19 +1,29 @@
 /**
  * Export aggregate payload types
  */
-export type { IAggregatePayload } from './aggregate-payload'
-export { isAggregatePayload } from './aggregate-payload'
+export type { IAggregatePayload } from './aggregate-payload.js'
+export { isAggregatePayload } from './aggregate-payload.js'
+
+/**
+ * Export types from types.ts
+ */
+export type { 
+  IAggregateFactory,
+  IAggregateLoader,
+  IProjector as IBaseProjector
+} from './types.js'
+export { AggregateFactory } from './types.js'
 
 /**
  * Export aggregate types
  */
-export type { IAggregate } from './aggregate'
+export type { IAggregate } from './aggregate.js'
 export { 
   Aggregate,
   EmptyAggregatePayload,
   createEmptyAggregate,
   isEmptyAggregate
-} from './aggregate'
+} from './aggregate.js'
 
 /**
  * Export projector interfaces
@@ -21,15 +31,24 @@ export {
 export type { 
   IAggregateProjector,
   IProjector
-} from './projector-interface'
+} from './projector-interface.js'
 
 export {
   ProjectionResult,
   EventOrNone,
   createProjector
-} from './projector-interface'
+} from './projector-interface.js'
 
 /**
  * Export aggregate projector
  */
-export { AggregateProjector } from './aggregate-projector'
+export { AggregateProjector } from './aggregate-projector.js'
+
+/**
+ * Export typed aggregate payload types
+ */
+export type {
+  ITypedAggregatePayload,
+  EmptyAggregatePayload as IEmptyAggregatePayload,
+  IAggregateProjector as ITypedAggregateProjector
+} from './aggregate-projector.js'

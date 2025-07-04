@@ -1,9 +1,10 @@
 import type { Result } from 'neverthrow';
 import type { IEventPayload } from '../events/event-payload.js';
+import type { IEvent } from '../events/event.js';
 import type { IAggregatePayload } from './aggregate-payload.js';
-import type { Aggregate } from './aggregate.js';
-import type { PartitionKeys } from '../partition-keys/partition-keys.js';
-import type { SekibanError } from '../errors/sekiban-error.js';
+import { Aggregate, EmptyAggregatePayload as EmptyPayload } from './aggregate.js';
+import type { PartitionKeys } from '../documents/partition-keys.js';
+import type { SekibanError } from '../result/errors.js';
 
 /**
  * Base interface for aggregate payloads with discriminated union support
@@ -13,11 +14,9 @@ export interface ITypedAggregatePayload extends IAggregatePayload {
 }
 
 /**
- * Empty aggregate payload for initial state
+ * Use EmptyAggregatePayload from aggregate.js
  */
-export interface EmptyAggregatePayload extends ITypedAggregatePayload {
-  readonly aggregateType: 'Empty';
-}
+export type EmptyAggregatePayload = EmptyPayload;
 
 /**
  * Aggregate projector interface that can handle multiple payload types
@@ -37,7 +36,7 @@ export interface IAggregateProjector<TPayloadUnion extends ITypedAggregatePayloa
    */
   project(
     aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>, 
-    event: IEventPayload
+    event: IEvent
   ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
   
   /**
@@ -59,22 +58,22 @@ export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePa
   
   abstract readonly aggregateTypeName: string;
   
-  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
-    return {
+  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyPayload> {
+    return new Aggregate(
       partitionKeys,
-      payload: {
-        aggregateType: 'Empty'
-      } as EmptyAggregatePayload,
-      version: 0,
-      lastEventId: null,
-      appliedEvents: []
-    };
+      this.aggregateTypeName,
+      0,
+      new EmptyPayload(),
+      null,
+      this.aggregateTypeName,
+      1
+    );
   }
   
   abstract project(
-    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>, 
-    event: IEventPayload
-  ): Result<Aggregate<TPayloadUnion | EmptyAggregatePayload>, SekibanError>;
+    aggregate: Aggregate<TPayloadUnion | EmptyPayload>, 
+    event: IEvent
+  ): Result<Aggregate<TPayloadUnion | EmptyPayload>, SekibanError>;
   
   abstract canHandle(eventType: string): boolean;
   
@@ -84,33 +83,31 @@ export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePa
    * Helper method to create a new aggregate with updated payload
    */
   protected createUpdatedAggregate<TNewPayload extends TPayloadUnion>(
-    aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>,
+    aggregate: Aggregate<TPayloadUnion | EmptyPayload>,
     newPayload: TNewPayload,
-    event: IEventPayload
+    event: IEvent
   ): Aggregate<TNewPayload> {
-    return {
-      partitionKeys: aggregate.partitionKeys,
-      payload: newPayload,
-      version: aggregate.version + 1,
-      lastEventId: event.eventId || null,
-      appliedEvents: [...aggregate.appliedEvents, event]
-    };
+    return aggregate.withNewVersion(
+      newPayload,
+      aggregate.version + 1,
+      event.id
+    ) as Aggregate<TNewPayload>;
   }
   
   /**
    * Helper method to check payload type
    */
   protected isPayloadType<T extends TPayloadUnion>(
-    payload: TPayloadUnion | EmptyAggregatePayload,
+    payload: TPayloadUnion | EmptyPayload,
     aggregateType: string
   ): payload is T {
-    return payload.aggregateType === aggregateType;
+    return 'aggregateType' in payload && payload.aggregateType === aggregateType;
   }
   
   /**
    * Helper method to check if payload is empty
    */
-  protected isEmpty(payload: TPayloadUnion | EmptyAggregatePayload): payload is EmptyAggregatePayload {
-    return payload.aggregateType === 'Empty';
+  protected isEmpty(payload: TPayloadUnion | EmptyPayload): payload is EmptyPayload {
+    return payload instanceof EmptyPayload;
   }
 }

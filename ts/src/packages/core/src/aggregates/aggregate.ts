@@ -1,6 +1,6 @@
-import { PartitionKeys } from '../documents/partition-keys'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { IAggregatePayload } from './aggregate-payload'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { IAggregatePayload } from './aggregate-payload.js'
 
 /**
  * Interface for aggregate entities

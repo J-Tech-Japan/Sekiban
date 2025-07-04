@@ -1,5 +1,5 @@
 import { Result, ok, err } from 'neverthrow';
-import { SerializationError } from '../result';
+import { SerializationError } from '../result/index.js';
 
 /**
  * Interface for JSON serializers

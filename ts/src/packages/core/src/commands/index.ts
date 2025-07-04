@@ -1,18 +1,35 @@
 /**
- * Export command interfaces
+ * Export command interfaces from command.ts
  */
 export type {
   ICommand,
-  ICommandHandler,
-  ICommandContext,
-  ICommandContextWithoutState,
-  ICommandWithHandler,
-  CommandResponse
-} from './command'
+  IConstrainedPayloadCommand,
+  ICreationCommand
+} from './command.js'
 
 export {
-  createCommandResponse
-} from './command'
+  ConstrainedPayloadCommand,
+  CreationCommand
+} from './command.js'
+
+/**
+ * Export command interfaces from types.ts
+ */
+export type {
+  ICommand as IBaseCommand,
+  ICommandWithHandler,
+  CommandContext,
+  CommandResult,
+  CommandExecutionOptions,
+  CommandEnvelope
+} from './types.js'
+
+/**
+ * Export command handler interfaces
+ */
+export type {
+  ICommandHandler
+} from './handler.js'
 
 /**
  * Export validation utilities
@@ -21,7 +38,7 @@ export type {
   ValidationRule,
   CommandValidator,
   ValidationRules
-} from './validation'
+} from './validation.js'
 
 export {
   createCommandValidator,
@@ -33,4 +50,15 @@ export {
   range,
   pattern,
   custom
-} from './validation'
+} from './validation.js'
+
+/**
+ * Export command executor
+ */
+export type {
+  ICommandExecutor
+} from './executor.js'
+
+export {
+  CommandExecutorBase
+} from './executor.js'

@@ -1,4 +1,4 @@
-import { IEventPayload } from '../events/event-payload'
+import { IEventPayload } from '../events/event-payload.js'
 
 /**
  * Test event for user creation

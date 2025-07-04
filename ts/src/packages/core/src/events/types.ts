@@ -1,4 +1,4 @@
-import { PartitionKeys, SortableUniqueId, Metadata } from '../documents';
+import { PartitionKeys, SortableUniqueId, Metadata, MetadataBuilder } from '../documents/index.js';
 
 /**
  * Base interface for all event payloads
@@ -171,10 +171,10 @@ export class EventBuilder<TPayload extends IEventPayload> {
    */
   build(): Event<TPayload> {
     if (!this.event.id) {
-      this.event.id = SortableUniqueId.create();
+      this.event.id = SortableUniqueId.generate();
     }
     if (!this.event.metadata) {
-      this.event.metadata = Metadata.create();
+      this.event.metadata = new MetadataBuilder().build();
     }
     
     const { id, partitionKeys, aggregateType, version, payload, metadata } = this.event;

@@ -1,4 +1,4 @@
-import { IEventPayload } from '../events/event-payload'
+import { IEventPayload } from '../events/event-payload.js'
 
 /**
  * Interface for multi-projectors that handle events from multiple aggregates

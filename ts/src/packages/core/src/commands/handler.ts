@@ -1,9 +1,9 @@
 import { Result, ok, err } from 'neverthrow';
 import { ICommand, ICommandWithHandler, CommandContext, CommandResult } from './types';
-import { IEventPayload } from '../events';
-import { IAggregatePayload, Aggregate, IProjector } from '../aggregates';
-import { SekibanError, CommandValidationError } from '../result';
-import { Metadata } from '../documents';
+import { IEventPayload } from '../events/index.js';
+import { IAggregatePayload, Aggregate, IProjector } from '../aggregates/index.js';
+import { SekibanError, CommandValidationError } from '../result/index.js';
+import { Metadata } from '../documents/index.js';
 
 /**
  * Interface for command handlers

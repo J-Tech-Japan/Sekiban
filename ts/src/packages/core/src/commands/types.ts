@@ -1,8 +1,8 @@
 import { Result } from 'neverthrow';
-import { PartitionKeys, Metadata } from '../documents';
-import { IEventPayload } from '../events';
-import { IAggregatePayload, Aggregate } from '../aggregates';
-import { CommandValidationError, SekibanError } from '../result';
+import { PartitionKeys, Metadata } from '../documents/index.js';
+import { IEventPayload } from '../events/index.js';
+import { IAggregatePayload, Aggregate } from '../aggregates/index.js';
+import { CommandValidationError, SekibanError } from '../result/index.js';
 
 /**
  * Base interface for all commands

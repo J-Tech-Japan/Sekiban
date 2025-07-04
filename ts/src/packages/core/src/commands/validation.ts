@@ -1,6 +1,7 @@
 import { Result, ok, err } from 'neverthrow'
-import { ValidationError } from '../result/errors'
-import { ICommand } from './command'
+import { ValidationError } from '../result/errors.js'
+import { ICommand } from './command.js'
+import { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js'
 
 /**
  * Validation rule function
@@ -10,7 +11,7 @@ export type ValidationRule<T> = (value: T) => boolean | string
 /**
  * Command validator
  */
-export interface CommandValidator<TCommand extends ICommand> {
+export interface CommandValidator<TCommand extends ICommand<any>> {
   validate(command: TCommand): Result<void, ValidationError[]>
 }
 
@@ -24,7 +25,7 @@ export type ValidationRules<TCommand> = {
 /**
  * Create a command validator
  */
-export function createCommandValidator<TCommand extends ICommand>(
+export function createCommandValidator<TCommand extends ICommand<any>>(
   rules: ValidationRules<TCommand>
 ): CommandValidator<TCommand> {
   return {
@@ -53,7 +54,7 @@ export function createCommandValidator<TCommand extends ICommand>(
 /**
  * Validate a command with rules
  */
-export function validateCommand<TCommand extends ICommand>(
+export function validateCommand<TCommand extends ICommand<any>>(
   command: TCommand,
   rules: ValidationRules<TCommand>
 ): Result<void, ValidationError[]> {

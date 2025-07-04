@@ -1,8 +1,9 @@
-import type { Result } from 'neverthrow';
+import { Result, err } from 'neverthrow';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { Aggregate } from '../aggregates/aggregate.js';
-import type { PartitionKeys } from '../partition-keys/partition-keys.js';
-import type { CommandValidationError, SekibanError } from '../errors/sekiban-error.js';
+import type { PartitionKeys } from '../documents/partition-keys.js';
+import type { CommandValidationError, SekibanError } from '../result/errors.js';
+import { ValidationError } from '../result/errors.js';
 import type { ITypedAggregatePayload, EmptyAggregatePayload } from '../aggregates/aggregate-projector.js';
 
 /**
@@ -78,15 +79,9 @@ export abstract class CreationCommand<TPayloadUnion extends ITypedAggregatePaylo
   
   handle(aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>): Result<IEventPayload[], SekibanError> {
     if (aggregate.payload.aggregateType !== 'Empty') {
-      return {
-        isOk: () => false,
-        isErr: () => true,
-        error: {
-          type: 'DomainError',
-          message: 'Creation command can only be applied to empty aggregates',
-          details: { currentType: aggregate.payload.aggregateType }
-        }
-      } as Result<IEventPayload[], SekibanError>;
+      return err(new ValidationError(
+        `Creation command can only be applied to empty aggregates, found: ${aggregate.payload.aggregateType}`
+      ));
     }
     
     return this.handleCreation(aggregate as Aggregate<EmptyAggregatePayload>);
@@ -112,19 +107,9 @@ export abstract class ConstrainedPayloadCommand<
     const requiredType = this.getRequiredPayloadType();
     
     if (aggregate.payload.aggregateType !== requiredType) {
-      return {
-        isOk: () => false,
-        isErr: () => true,
-        error: {
-          type: 'DomainError',
-          message: `Command requires payload type '${requiredType}' but found '${aggregate.payload.aggregateType}'`,
-          details: { 
-            required: requiredType, 
-            found: aggregate.payload.aggregateType,
-            commandType: this.commandType
-          }
-        }
-      } as Result<IEventPayload[], SekibanError>;
+      return err(new ValidationError(
+        `Command '${this.commandType}' requires payload type '${requiredType}' but found '${aggregate.payload.aggregateType}'`
+      ));
     }
     
     return this.handleTyped(aggregate as Aggregate<TRequiredPayload>);

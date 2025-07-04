@@ -7,17 +7,17 @@ import {
   CommandEnvelope 
 } from './types';
 import { ICommandHandler, CommandHandlerRegistry } from './handler';
-import { IEventStore } from '../events/store';
-import { IEventStream } from '../events/stream';
-import { IAggregateLoader, IProjector } from '../aggregates';
+import { IEventStore } from '../events/store.js';
+import { IEventStream } from '../events/stream.js';
+import { IAggregateLoader, IProjector } from '../aggregates/index.js';
 import { 
   SekibanError, 
   CommandValidationError, 
   AggregateNotFoundError,
   UnsupportedOperationError 
-} from '../result';
-import { PartitionKeys, Metadata } from '../documents';
-import { Event, EventBuilder } from '../events';
+} from '../result/index.js';
+import { PartitionKeys, Metadata } from '../documents/index.js';
+import { Event, EventBuilder } from '../events/index.js';
 
 /**
  * Interface for command executors

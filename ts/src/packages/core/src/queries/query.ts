@@ -1,5 +1,5 @@
 import { Result } from 'neverthrow'
-import { QueryExecutionError } from '../result/errors'
+import { QueryExecutionError } from '../result/errors.js'
 
 /**
  * Base interface for all queries

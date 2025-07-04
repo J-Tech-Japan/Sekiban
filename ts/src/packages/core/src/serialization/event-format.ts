@@ -1,7 +1,7 @@
-import { Event, IEventPayload } from '../events';
+import { Event, IEventPayload } from '../events/index.js';
 import { IJsonSerializer, defaultJsonSerializer } from './json';
 import { Result, ok, err } from 'neverthrow';
-import { SerializationError } from '../result';
+import { SerializationError } from '../result/index.js';
 
 /**
  * Serialized event format for storage

@@ -1,10 +1,10 @@
 import { Result, ok, err, ResultAsync } from 'neverthrow'
 import { IEvent } from './event'
 import { IEventPayload } from './event-payload'
-import { PartitionKeys } from '../documents/partition-keys'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { EventStoreError, ConcurrencyError } from '../result/errors'
-import { IAggregatePayload } from '../aggregates/aggregate-payload'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { EventStoreError, ConcurrencyError } from '../result/errors.js'
+import { IAggregatePayload } from '../aggregates/aggregate-payload.js'
 
 /**
  * Interface for reading events from the store

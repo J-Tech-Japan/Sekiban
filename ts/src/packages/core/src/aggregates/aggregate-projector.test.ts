@@ -3,7 +3,7 @@ import { ok, err } from 'neverthrow';
 import { AggregateProjector, type ITypedAggregatePayload, type EmptyAggregatePayload } from './aggregate-projector.js';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { Aggregate } from './aggregate.js';
-import type { SekibanError } from '../errors/sekiban-error.js';
+import type { SekibanError } from '../result/errors.js';
 
 // Test domain - User aggregate with multiple states
 interface UnconfirmedUserPayload extends ITypedAggregatePayload {

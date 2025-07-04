@@ -1,8 +1,21 @@
 // Core interfaces and types
-export * from './aggregates/aggregate-projector.js';
+export {
+  AggregateProjector,
+  type IAggregateProjector,
+  type ITypedAggregatePayload
+} from './aggregates/aggregate-projector.js';
+
 export * from './commands/command.js';
 export * from './events/event-payload.js';
-export * from './aggregates/aggregate.js';
+
+export {
+  Aggregate,
+  EmptyAggregatePayload,
+  createEmptyAggregate,
+  isEmptyAggregate,
+  type IAggregate
+} from './aggregates/aggregate.js';
+
 export * from './documents/partition-keys.js';
 export * from './result/errors.js';
 

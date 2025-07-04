@@ -1,7 +1,7 @@
-import { IEventPayload } from './event-payload'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { PartitionKeys } from '../documents/partition-keys'
-import { Metadata, MetadataBuilder } from '../documents/metadata'
+import { IEventPayload } from './event-payload.js'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { Metadata, MetadataBuilder } from '../documents/metadata.js'
 
 /**
  * Metadata specific to events, extending the base Metadata type

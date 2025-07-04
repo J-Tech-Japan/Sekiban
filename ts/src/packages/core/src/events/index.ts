@@ -1,42 +1,58 @@
 /**
- * Export event payload types
+ * Export event payload interfaces
  */
-export type { IEventPayload } from './event-payload'
-export { isEventPayload } from './event-payload'
+export type { IEventPayload } from './event-payload.js';
+export { isEventPayload } from './event-payload.js';
 
 /**
- * Export event types and utilities
+ * Export event interfaces and classes
  */
-export type {
+export type { 
   IEvent,
-  CreateEventOptions,
-  CreateEventMetadataOptions
-} from './event'
+  EventMetadata,
+  CreateEventMetadataOptions,
+  CreateEventOptions
+} from './event.js';
 
 export {
   Event,
-  EventMetadata,
-  createEvent,
-  createEventMetadata
-} from './event'
+  createEventMetadata,
+  createEvent
+} from './event.js';
 
 /**
  * Export event document types
  */
 export {
-  EventDocument,
-  SerializableEventDocument,
-  toSerializableEventDocument,
-  fromSerializableEventDocument
-} from './event-document'
+  EventDocument
+} from './event-document.js';
+
+/**
+ * Export event store interfaces
+ */
+export type {
+  IEventStore
+} from './store.js';
 
 /**
  * Export in-memory event store
  */
-export {
-  InMemoryEventStore,
-  InMemoryEventReader,
-  InMemoryEventWriter,
-  IEventReader,
-  IEventWriter
-} from './in-memory-event-store'
+export { InMemoryEventStore } from './in-memory-event-store.js';
+
+/**
+ * Export event stream types
+ */
+export type {
+  IEventStream
+} from './stream.js';
+
+/**
+ * Export event types including Event and EventFilter
+ */
+export type {
+  Event as IEventType,
+  EventFilter,
+  IEventPayload as IEventPayloadBase
+} from './types.js';
+
+export { EventBuilder } from './types.js';

@@ -1,6 +1,6 @@
 import { Result } from 'neverthrow';
-import { SortableUniqueId } from '../documents';
-import { QueryExecutionError } from '../result';
+import { SortableUniqueId } from '../documents/index.js';
+import { QueryExecutionError } from '../result/index.js';
 
 /**
  * Base interface for all queries

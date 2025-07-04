@@ -1,8 +1,8 @@
 import { Result, ok, err } from 'neverthrow';
 import { SekibanExecutorBase, SimpleTransaction } from './base';
 import { ISekibanTransaction, SekibanExecutorConfig } from './types';
-import { CommandExecutorBase, CommandHandlerRegistry } from '../commands';
-import { QueryHandlerRegistry } from '../queries';
+import { CommandExecutorBase, CommandHandlerRegistry } from '../commands/index.js';
+import { QueryHandlerRegistry } from '../queries/index.js';
 import { 
   IEventStore, 
   EventStoreOptions, 
@@ -10,16 +10,16 @@ import {
   Event,
   IEventPayload,
   EventFilter
-} from '../events';
+} from '../events/index.js';
 import { 
   IAggregateLoader, 
   IProjector,
   Aggregate,
   IAggregatePayload 
-} from '../aggregates';
-import { PartitionKeys, Metadata, SortableUniqueId } from '../documents';
-import { EventStoreError, ConcurrencyError } from '../result';
-import { ICommand } from '../commands';
+} from '../aggregates/index.js';
+import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
+import { EventStoreError, ConcurrencyError } from '../result/index.js';
+import { ICommand } from '../commands/index.js';
 
 /**
  * In-memory implementation of event store

@@ -1,7 +1,7 @@
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from 'neverthrow'
-import { IEvent } from '../events/event'
-import { PartitionKeys } from '../documents/partition-keys'
-import { SekibanError } from '../result/errors'
+import { IEvent } from '../events/event.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { SekibanError } from '../result/errors.js'
 import { InMemoryStorageProvider } from './in-memory-storage-provider'
 import { CosmosStorageProvider } from './cosmos-storage-provider'
 

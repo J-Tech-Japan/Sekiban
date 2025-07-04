@@ -1,7 +1,7 @@
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from 'neverthrow'
 import { IEventStorageProvider, StorageProviderConfig, EventBatch, SnapshotData, StorageError, ConcurrencyError } from './storage-provider'
-import { IEvent } from '../events/event'
-import { PartitionKeys } from '../documents/partition-keys'
+import { IEvent } from '../events/event.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
 
 /**
  * In-memory storage provider for testing and development

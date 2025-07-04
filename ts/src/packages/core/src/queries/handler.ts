@@ -1,7 +1,7 @@
 import { Result, ok, err } from 'neverthrow';
 import { IQuery, QueryContext, QueryResult, IWaitForSortableUniqueId } from './types';
-import { QueryExecutionError } from '../result';
-import { SortableUniqueId } from '../documents';
+import { QueryExecutionError } from '../result/index.js';
+import { SortableUniqueId } from '../documents/index.js';
 
 /**
  * Interface for query handlers

@@ -1,4 +1,4 @@
-import { generateUuid } from '../utils';
+import { generateUuid } from '../utils/index.js';
 
 /**
  * Represents the partition keys for an aggregate

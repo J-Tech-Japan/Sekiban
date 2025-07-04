@@ -1,9 +1,9 @@
 import { Result } from 'neverthrow';
-import { ICommand, CommandContext, CommandResult, CommandExecutionOptions } from '../commands';
-import { IQuery, QueryContext, QueryResult, QueryExecutionOptions } from '../queries';
-import { IEventPayload } from '../events';
-import { PartitionKeys } from '../documents';
-import { SekibanError } from '../result';
+import { ICommand, CommandContext, CommandResult, CommandExecutionOptions } from '../commands/index.js';
+import { IQuery, QueryContext, QueryResult, QueryExecutionOptions } from '../queries/index.js';
+import { IEventPayload } from '../events/index.js';
+import { PartitionKeys } from '../documents/index.js';
+import { SekibanError } from '../result/index.js';
 
 /**
  * Interface for Sekiban executors

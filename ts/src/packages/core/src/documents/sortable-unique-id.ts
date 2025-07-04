@@ -1,6 +1,6 @@
-import { generateUuid, getUnixTimestamp, createVersion7 } from '../utils';
+import { generateUuid, getUnixTimestamp, createVersion7 } from '../utils/index.js';
 import { Result, ok, err } from 'neverthrow';
-import { ValidationError } from '../result';
+import { ValidationError } from '../result/errors.js';
 
 /**
  * Represents a sortable unique identifier for events

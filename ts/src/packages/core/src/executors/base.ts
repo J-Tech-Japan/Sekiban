@@ -11,7 +11,7 @@ import {
   CommandResult, 
   CommandExecutionOptions,
   ICommandExecutor 
-} from '../commands';
+} from '../commands/index.js';
 import { 
   IQuery, 
   QueryContext, 
@@ -19,16 +19,16 @@ import {
   QueryExecutionOptions,
   IQueryHandler,
   QueryHandlerRegistry 
-} from '../queries';
-import { IEventPayload, IEventStore } from '../events';
-import { PartitionKeys, Metadata } from '../documents';
+} from '../queries/index.js';
+import { IEventPayload, IEventStore } from '../events/index.js';
+import { PartitionKeys, Metadata } from '../documents/index.js';
 import { 
   SekibanError, 
   UnsupportedOperationError,
   EventStoreError,
   QueryExecutionError 
-} from '../result';
-import { IAggregateLoader } from '../aggregates';
+} from '../result/index.js';
+import { IAggregateLoader } from '../aggregates/index.js';
 
 /**
  * Base implementation of Sekiban executor

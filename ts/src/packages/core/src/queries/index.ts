@@ -9,29 +9,58 @@ export type {
   IQueryPagingParameter,
   QueryResult,
   ListQueryResult
-} from './query'
+} from './query.js'
 
 export {
   createQueryResult,
   createListQueryResult
-} from './query'
+} from './query.js'
 
 /**
  * Export multi-projection interfaces
  */
 export type {
   IMultiProjector
-} from './multi-projection'
+} from './multi-projection.js'
 
 export {
   MultiProjectionState
-} from './multi-projection'
+} from './multi-projection.js'
 
 /**
  * Export aggregate list projector
  */
+// TODO: Fix aggregate-list-projector to work with new patterns
+// export {
+//   AggregateListProjector,
+//   AggregateListPayload,
+//   createAggregateListProjector
+// } from './aggregate-list-projector.js'
+
+/**
+ * Export query handler types
+ */
+export type {
+  IQuery as IBaseQuery,
+  QueryContext,
+  QueryResult as IQueryResult,
+  QueryExecutionOptions,
+  IWaitForSortableUniqueId
+} from './types.js'
+
+/**
+ * Export handler interfaces
+ */
+export type {
+  IQueryHandler
+} from './handler.js'
+
+/**
+ * Export handler utilities
+ */
 export {
-  AggregateListProjector,
-  AggregateListPayload,
-  createAggregateListProjector
-} from './aggregate-list-projector'
+  QueryHandler,
+  QueryHandler as BaseQueryHandler, // alias for compatibility
+  QueryHandlerRegistry,
+  createQueryHandler
+} from './handler.js'

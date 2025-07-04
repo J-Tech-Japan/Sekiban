@@ -1,9 +1,9 @@
 import { Result, ok, err } from 'neverthrow'
 import { IEvent, Event, createEventMetadata } from './event'
 import { IEventPayload } from './event-payload'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { PartitionKeys } from '../documents/partition-keys'
-import { SerializationError, ValidationError } from '../result/errors'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { SerializationError, ValidationError } from '../result/errors.js'
 
 /**
  * Document wrapper for events, providing convenient access to event properties
