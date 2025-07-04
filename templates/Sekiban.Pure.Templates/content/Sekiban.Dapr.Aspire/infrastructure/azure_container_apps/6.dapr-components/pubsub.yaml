@@ -1,0 +1,26 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.azure.servicebus.queues
+  version: v1
+  metadata:
+  - name: connectionString
+    secretKeyRef:
+      name: servicebus-connectionstring
+      key: connectionString
+  - name: queueName
+    value: "daprpubsub"
+  - name: maxActiveMessages
+    value: "100"
+  - name: maxConcurrentHandlers
+    value: "10"
+  - name: lockDurationInSec
+    value: "60"
+  - name: autoDeleteOnIdleInSec
+    value: "0"
+  - name: defaultMessageTimeToLiveInSec
+    value: "604800"
+  scopes:
+  - daprsekiban-apiservice

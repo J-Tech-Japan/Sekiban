@@ -11,7 +11,9 @@
       "mcp__chatgpt__ask_chatgpt",
       "Bash(find:*)",
       "Bash(mkdir:*)",
+      "Bash(cp:*)",
       "Bash(ls:*)",
+      "Bash(chmod:*)",
       "Bash(git check-ignore:*)",
       "Bash(echo \"Exit code: $?\")",
       "Bash(mv:*)",
@@ -29,7 +31,8 @@
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
       "Bash(grep:*)",
-      "Bash(npx vitest run:*)"
+      "Bash(npx vitest run:*)",
+      "Bash(az containerapp show:*)"
     ],
     "deny": [
       "Bash(curl:*)"

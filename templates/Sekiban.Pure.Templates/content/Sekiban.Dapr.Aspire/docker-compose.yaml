@@ -1,0 +1,85 @@
+version: '3.9'
+
+services:
+  # Redis for Dapr state store and pub/sub
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - dapr-network
+
+  # Placement service for Dapr (required for actors)
+  placement:
+    image: "daprio/dapr:1.13.0"
+    command: ["./placement", "-port", "50006"]
+    ports:
+      - "50006:50006"
+    networks:
+      - dapr-network
+
+  # API Service with Dapr sidecar
+  daprsekiban-apiservice:
+    build:
+      context: .
+      dockerfile: DaprSekiban.ApiService/Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    networks:
+      - dapr-network
+    depends_on:
+      - redis
+      - placement
+
+  daprsekiban-apiservice-dapr:
+    image: "daprio/daprd:1.13.0"
+    command: ["./daprd",
+      "-app-id", "daprsekiban-apiservice",
+      "-app-port", "8080",
+      "-log-level", "info",
+      "-placement-host-address", "placement:50006",
+      "-components-path", "./dapr-components"]
+    volumes:
+      - "./dapr-components:/dapr-components"
+    depends_on:
+      - daprsekiban-apiservice
+    network_mode: "service:daprsekiban-apiservice"
+
+  # Web Service with Dapr sidecar
+  daprsekiban-web:
+    build:
+      context: .
+      dockerfile: DaprSekiban.Web/Dockerfile
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - WeatherApi__BaseAddress=http://localhost:3500/v1.0/invoke/daprsekiban-apiservice/method/
+    networks:
+      - dapr-network
+    depends_on:
+      - redis
+      - placement
+      - daprsekiban-apiservice
+
+  daprsekiban-web-dapr:
+    image: "daprio/daprd:1.13.0"
+    command: ["./daprd",
+      "-app-id", "daprsekiban-web",
+      "-app-port", "8080",
+      "-log-level", "info",
+      "-placement-host-address", "placement:50006",
+      "-components-path", "./dapr-components"]
+    volumes:
+      - "./dapr-components:/dapr-components"
+    depends_on:
+      - daprsekiban-web
+    network_mode: "service:daprsekiban-web"
+
+networks:
+  dapr-network:
+    driver: bridge

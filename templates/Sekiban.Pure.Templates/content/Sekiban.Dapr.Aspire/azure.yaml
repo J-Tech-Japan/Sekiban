@@ -1,0 +1,22 @@
+# azure.yaml
+# The Azure Developer CLI configuration file that enables `azd` commands
+# Reference: https://learn.microsoft.com/azure/developer/azure-developer-cli/
+
+name: DaprSekiban
+services:
+  api:
+    project: ./DaprSekiban.ApiService
+    language: dotnet
+    host: containerapp
+    docker:
+      path: .
+      context: ../..
+      dockerfile: ./DaprSekiban.ApiService/Dockerfile
+  web:
+    project: ./DaprSekiban.Web
+    language: dotnet
+    host: containerapp
+    docker:
+      path: .
+      context: ../..
+      dockerfile: ./DaprSekiban.Web/Dockerfile

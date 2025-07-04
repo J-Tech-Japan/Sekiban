@@ -4,6 +4,7 @@ using DaprSekiban.Domain.Aggregates.User.Commands;
 using DaprSekiban.Domain.Aggregates.User.Queries;
 using DaprSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries;
+using DaprSekiban.Domain.Projections.Count;
 using DaprSekiban.Domain.ValueObjects;
 using ResultBoxes;
 using Sekiban.Pure.Command;
@@ -326,63 +327,55 @@ app.MapGet("/api/users/statistics", async ([FromQuery] string? waitForSortableUn
 .WithOpenApi();
 
 // Weather Forecast endpoints
-app.MapPost("/api/weatherforecast/input", async ([FromBody] InputWeatherForecastCommand command, [FromServices] ISekibanExecutor executor) =>
-{
-    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
-    return Results.Ok(result);
-})
-.WithName("InputWeatherForecast")
-.WithSummary("Input weather forecast")
-.WithDescription("Creates a new weather forecast")
-.WithTags("WeatherForecast");
+app.MapGet("/api/weatherforecast", 
+        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new WeatherForecastQuery("")
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var list = await executor.QueryAsync(query).UnwrapBox();
+            return list.Items;
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecast");
 
-app.MapPost("/api/weatherforecast/{weatherForecastId}/update-location", async (Guid weatherForecastId, [FromBody] UpdateLocationRequest request, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
-{
-    logger.LogInformation("=== UpdateWeatherForecastLocation API called with WeatherForecastId: {WeatherForecastId}, Location: {Location} ===", weatherForecastId, request.Location);
-    var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, request.Location);
-    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
-    logger.LogInformation("UpdateWeatherForecastLocation result: {Result}", result);
-    return Results.Ok(result);
-})
-.WithName("UpdateWeatherForecastLocation")
-.WithSummary("Update weather forecast location")
-.WithDescription("Updates the location of an existing weather forecast")
-.WithTags("WeatherForecast");
+app
+    .MapPost(
+        "/api/inputweatherforecast",
+        async (
+                [FromBody] InputWeatherForecastCommand command,
+                [FromServices] ISekibanExecutor executor) =>
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+    .WithName("InputWeatherForecast")
+    .WithOpenApi();
 
-app.MapPost("/api/weatherforecast/{weatherForecastId}/delete", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor) =>
-{
-    var command = new DeleteWeatherForecastCommand(weatherForecastId);
-    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
-    return Results.Ok(result);
-})
-.WithName("DeleteWeatherForecast")
-.WithSummary("Delete weather forecast")
-.WithDescription("Marks a weather forecast as deleted")
-.WithTags("WeatherForecast");
+app
+    .MapPost(
+        "/api/removeweatherforecast",
+        async (
+                [FromBody] RemoveWeatherForecastCommand command,
+                [FromServices] ISekibanExecutor executor) =>
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+    .WithName("RemoveWeatherForecast")
+    .WithOpenApi();
 
-app.MapPost("/api/weatherforecast/{weatherForecastId}/remove", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
-{
-    logger.LogInformation("=== RemoveWeatherForecast API called with WeatherForecastId: {WeatherForecastId} ===", weatherForecastId);
-    var command = new RemoveWeatherForecastCommand(weatherForecastId);
-    var result = await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox();
-    logger.LogInformation("RemoveWeatherForecast result: {Result}", result);
-    return Results.Ok(result);
-})
-.WithName("RemoveWeatherForecast")
-.WithSummary("Remove weather forecast")
-.WithDescription("Permanently removes a deleted weather forecast")
-.WithTags("WeatherForecast");
+app
+    .MapPost(
+        "/api/updateweatherforecastlocation",
+        async (
+                [FromBody] UpdateWeatherForecastLocationCommand command,
+                [FromServices] ISekibanExecutor executor) =>
+            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+    .WithName("UpdateWeatherForecastLocation")
+    .WithOpenApi();
 
-app.MapGet("/api/weatherforecast", async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
-{
-    var query = new WeatherForecastQuery { WaitForSortableUniqueId = waitForSortableUniqueId };
-    var result = await executor.QueryAsync(query);
-    return result.UnwrapBox();
-})
-.WithName("GetWeatherForecasts")
-.WithSummary("Get all weather forecasts")
-.WithDescription("Retrieves all weather forecasts")
-.WithTags("WeatherForecast");
+app.MapGet("/api/weatherCountByLocation/{location}",
+        async ([FromRoute] string location, [FromServices] ISekibanExecutor executor) =>
+        await executor.QueryAsync(new WeatherCountQuery(location)).UnwrapBox()).WithOpenApi()
+    .WithName("GetWeatherCountByLocation")
+    .WithDescription("Get the count of weather forecasts by location");
+
 
 // Helper endpoint to generate weather data
 app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecutor executor) =>
