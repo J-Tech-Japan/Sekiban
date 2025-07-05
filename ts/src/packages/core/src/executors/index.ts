@@ -29,6 +29,15 @@ export {
 } from './in-memory';
 
 /**
+ * Export domain-types based executor implementation
+ */
+export {
+  InMemorySekibanExecutorWithDomainTypes,
+  createInMemorySekibanExecutor,
+  InMemorySekibanExecutorBuilder as InMemorySekibanExecutorWithDomainTypesBuilder
+} from './in-memory-with-domain-types';
+
+/**
  * Export Sekiban executor implementation
  */
 export type {

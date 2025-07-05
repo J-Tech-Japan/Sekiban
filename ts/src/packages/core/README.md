@@ -1,6 +1,141 @@
 # @sekiban/core
 
-Core event sourcing and CQRS framework for TypeScript.
+Core event sourcing and CQRS framework for TypeScript, featuring a modern schema-based type registry system with runtime validation.
+
+## Features
+
+- **Schema-Based Type System**: Define events, commands, and projectors using Zod schemas
+- **Runtime Validation**: Automatic validation at serialization boundaries
+- **Type Safety**: Full TypeScript inference from schema definitions
+- **Centralized Registry**: All executors use the same SekibanDomainTypes interface
+- **Multiple Storage Options**: In-memory, Cosmos DB, PostgreSQL support
+- **Distributed Systems Ready**: Dapr integration for actors and pub/sub
+
+## Quick Start (Schema-Based Approach)
+
+### 1. Define Events
+
+```typescript
+import { z } from 'zod';
+import { defineEvent } from '@sekiban/core';
+
+const UserCreated = defineEvent({
+  type: 'UserCreated',
+  schema: z.object({
+    userId: z.string().uuid(),
+    name: z.string().min(1),
+    email: z.string().email(),
+    createdAt: z.string().datetime()
+  })
+});
+```
+
+### 2. Define Commands
+
+```typescript
+import { defineCommand, PartitionKeys, ok, err } from '@sekiban/core';
+
+const CreateUser = defineCommand({
+  type: 'CreateUser',
+  schema: z.object({
+    name: z.string().min(1),
+    email: z.string().email()
+  }),
+  aggregateType: 'User', // Explicit aggregate type for routing
+  handlers: {
+    specifyPartitionKeys: () => PartitionKeys.generate('User'),
+    validate: (data) => {
+      // Business validation beyond schema
+      if (data.email.endsWith('@test.com')) {
+        return err({ type: 'ValidationError', message: 'Test emails not allowed' });
+      }
+      return ok(undefined);
+    },
+    handle: (data, aggregate) => {
+      if (aggregate.payload.aggregateType !== 'Empty') {
+        return err({ type: 'AggregateAlreadyExists', message: 'User already exists' });
+      }
+      return ok([
+        UserCreated.create({
+          userId: crypto.randomUUID(),
+          name: data.name,
+          email: data.email,
+          createdAt: new Date().toISOString()
+        })
+      ]);
+    }
+  }
+});
+```
+
+### 3. Define Projectors
+
+```typescript
+import { defineProjector, EmptyAggregatePayload } from '@sekiban/core';
+
+interface UserPayload {
+  aggregateType: 'User';
+  userId: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+const userProjector = defineProjector<UserPayload | EmptyAggregatePayload>({
+  aggregateType: 'User',
+  initialState: () => ({ aggregateType: 'Empty' as const }),
+  projections: {
+    UserCreated: (state, event: ReturnType<typeof UserCreated.create>) => ({
+      aggregateType: 'User' as const,
+      userId: event.userId,
+      name: event.name,
+      email: event.email,
+      createdAt: event.createdAt
+    }),
+    UserUpdated: (state, event) => {
+      if (state.aggregateType !== 'User') return state;
+      return {
+        ...state,
+        name: event.name || state.name,
+        email: event.email || state.email
+      };
+    }
+  }
+});
+```
+
+### 4. Register Types and Create Executor
+
+```typescript
+import { 
+  globalRegistry, 
+  createSchemaDomainTypes,
+  createInMemorySekibanExecutor 
+} from '@sekiban/core';
+
+// Register all domain types
+globalRegistry.registerEvent(UserCreated);
+globalRegistry.registerCommand(CreateUser);
+globalRegistry.registerProjector(userProjector);
+
+// Create SekibanDomainTypes instance
+const domainTypes = createSchemaDomainTypes(globalRegistry);
+
+// Create executor with domain types
+const executor = createInMemorySekibanExecutor(domainTypes);
+
+// Execute commands
+const command = CreateUser.create({
+  name: 'John Doe',
+  email: 'john@example.com'
+});
+
+const result = await executor.executeCommand(command);
+```
+
+## Migration from Class-Based System
+
+See [Migration Guide](../../docs/migration-guide.md) for detailed instructions on migrating from the previous class-based system.
 
 ## Implementation Status
 

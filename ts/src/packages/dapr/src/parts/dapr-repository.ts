@@ -41,18 +41,23 @@ export class DaprRepository {
     }
 
     try {
-      // Convert events to serializable documents
-      const eventDocuments: SerializableEventDocument[] = newEvents.map(event => ({
-        id: event.id.toString(),
-        sortableUniqueId: event.id.toString(),
-        payload: event.payload,
-        eventType: event.eventType,
-        aggregateId: event.partitionKeys.aggregateId,
-        partitionKeys: event.partitionKeys,
-        version: event.version,
-        createdAt: event.metadata.timestamp.toISOString(),
-        metadata: event.metadata
-      }));
+      // Convert events to serializable documents using domain types
+      const eventDocuments: SerializableEventDocument[] = newEvents.map(event => {
+        // Use domain types to serialize the event
+        const eventDocument = this.domainTypes.eventTypes.serializeEvent(event);
+        
+        return {
+          id: event.id.toString(),
+          sortableUniqueId: event.id.toString(),
+          payload: eventDocument.payload,
+          eventType: eventDocument.eventType,
+          aggregateId: eventDocument.aggregateId,
+          partitionKeys: event.partitionKeys,
+          version: eventDocument.version,
+          createdAt: eventDocument.timestamp.toISOString(),
+          metadata: eventDocument.metadata
+        };
+      });
 
       // Call the event handler actor to append events
       const response = await this.eventHandlerActor.appendEventsAsync(
@@ -79,19 +84,26 @@ export class DaprRepository {
       // Get all events from the event handler
       const eventDocuments = await this.eventHandlerActor.getAllEventsAsync();
 
-      // Convert documents back to events
-      const events: IEvent[] = eventDocuments.map(doc => ({
-        id: SortableUniqueId.fromString(doc.sortableUniqueId).unwrapOr(SortableUniqueId.generate()),
-        partitionKeys: doc.partitionKeys,
-        aggregateType: doc.partitionKeys.group || '',
-        eventType: doc.eventType,
-        version: doc.version,
-        payload: doc.payload,
-        metadata: {
-          ...doc.metadata,
-          timestamp: new Date(doc.createdAt)
+      // Convert documents back to events using domain types for proper deserialization
+      const events: IEvent[] = [];
+      for (const doc of eventDocuments) {
+        const eventDocument = {
+          id: doc.id,
+          eventType: doc.eventType,
+          aggregateId: doc.aggregateId,
+          aggregateType: doc.partitionKeys.group || '',
+          payload: doc.payload,
+          metadata: doc.metadata || {},
+          timestamp: new Date(doc.createdAt),
+          version: doc.version
+        };
+        
+        const deserializedResult = this.domainTypes.eventTypes.deserializeEvent(eventDocument);
+        if (deserializedResult.isErr()) {
+          throw deserializedResult.error;
         }
-      }));
+        events.push(deserializedResult.value);
+      }
 
       // Start with empty aggregate
       let aggregate = Aggregate.emptyFromPartitionKeys(this.partitionKeys);
