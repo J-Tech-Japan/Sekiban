@@ -25,5 +25,8 @@ export * from './storage/index.js';
 // Schema Registry (modern schema-first approach)
 export * from './schema-registry/index.js';
 
+// Domain Types Registry
+export * from './domain-types/index.js';
+
 // Re-export commonly used utilities
 export { ok, err, type Result } from 'neverthrow';

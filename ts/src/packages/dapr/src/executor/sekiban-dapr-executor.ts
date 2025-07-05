@@ -18,31 +18,25 @@ import type {
   SerializableCommandAndMetadata
 } from './interfaces.js';
 import { PartitionKeysAndProjector } from '../parts/index.js';
+import type { SekibanDomainTypes } from '@sekiban/core';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
  * Equivalent to C# SekibanDaprExecutor
  */
 export class SekibanDaprExecutor implements ISekibanDaprExecutor {
-  private projectorRegistry: Map<string, IAggregateProjector<any>> = new Map();
-  
   constructor(
     private readonly daprClient: DaprClient,
+    private readonly domainTypes: SekibanDomainTypes,
     private configuration: DaprSekibanConfiguration
   ) {
     this.validateConfiguration(configuration);
-    this.registerProjectors(configuration.projectors);
   }
   
   private validateConfiguration(config: DaprSekibanConfiguration): void {
-    if (!config.projectors || config.projectors.length === 0) {
-      throw new Error('At least one projector must be provided');
-    }
-  }
-  
-  private registerProjectors(projectors: IAggregateProjector<any>[]): void {
-    for (const projector of projectors) {
-      this.projectorRegistry.set(projector.aggregateTypeName, projector);
+    // Configuration validation can be extended as needed
+    if (!config.actorType) {
+      config.actorType = 'AggregateActor';
     }
   }
   
@@ -133,14 +127,17 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       
       // Get the projector for this aggregate type (using group as aggregate type name)
       const aggregateTypeName = partitionKeys.group || 'default';
-      const projector = this.projectorRegistry.get(aggregateTypeName);
+      const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateTypeName);
       
-      if (!projector) {
+      if (!projectorConstructor) {
         return err({
           type: 'ProjectorNotFound',
           message: `No projector registered for aggregate type: ${aggregateTypeName}`
         } as SekibanError);
       }
+      
+      // Create projector instance
+      const projector = new projectorConstructor() as IAggregateProjector<any>;
       
       // Create PartitionKeysAndProjector (matching C# pattern)
       const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
@@ -212,7 +209,8 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   ): Promise<Result<Aggregate<TPayload>, SekibanError>> {
     try {
       // Verify the projector is registered
-      if (!this.projectorRegistry.has(projector.aggregateTypeName)) {
+      const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(projector.aggregateTypeName);
+      if (!projectorConstructor) {
         return err({
           type: 'ProjectorNotFound',
           message: `No projector registered for aggregate type: ${projector.aggregateTypeName}`
@@ -252,7 +250,13 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   }
   
   getRegisteredProjectors(): IAggregateProjector<any>[] {
-    return Array.from(this.projectorRegistry.values());
+    // Get all projector types from domain types
+    const projectorInfos = this.domainTypes.projectorTypes.getProjectorTypes();
+    return projectorInfos.map(info => new info.constructor() as IAggregateProjector<any>);
+  }
+  
+  getDomainTypes(): SekibanDomainTypes {
+    return this.domainTypes;
   }
   
   

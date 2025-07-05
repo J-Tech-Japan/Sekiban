@@ -107,4 +107,5 @@ export class ActorIdFactory {
   }
 }
 
-export * from './domain-types.js';
+// Domain types are now imported from core package
+export type { SekibanDomainTypes } from '@sekiban/core';

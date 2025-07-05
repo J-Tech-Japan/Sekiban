@@ -1,0 +1,211 @@
+import { Result, ok, err } from 'neverthrow';
+import { SekibanExecutorBase, SimpleTransaction } from './base';
+import { ISekibanTransaction, SekibanExecutorConfig } from './types';
+import { CommandExecutorBase, CommandHandlerRegistry } from '../commands/index.js';
+import { QueryHandlerRegistry } from '../queries/index.js';
+import { 
+  InMemoryEventStream,
+  Event,
+  IEventPayload,
+  EventFilter
+} from '../events/index.js';
+import {
+  IEventStore
+} from '../storage/index.js';
+import { 
+  IAggregateLoader, 
+  IAggregateProjector,
+  IProjector,
+  Aggregate,
+  IAggregatePayload,
+  ITypedAggregatePayload 
+} from '../aggregates/index.js';
+import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
+import { EventStoreError, ConcurrencyError } from '../result/index.js';
+import { ICommand } from '../commands/index.js';
+import type { SekibanDomainTypes } from '../domain-types/interfaces.js';
+import { InMemoryEventStore } from './in-memory.js';
+
+/**
+ * Domain-aware aggregate loader that uses SekibanDomainTypes
+ */
+export class DomainAwareAggregateLoader implements IAggregateLoader {
+  constructor(
+    private eventStore: IEventStore,
+    private domainTypes: SekibanDomainTypes
+  ) {}
+
+  async load<TPayload extends IAggregatePayload>(
+    partitionKeys: PartitionKeys,
+    aggregateType: string
+  ): Promise<Aggregate<TPayload> | null> {
+    // Get projector from domain types
+    const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateType);
+    if (!projectorConstructor) {
+      return null;
+    }
+
+    // Create projector instance
+    const projector = new projectorConstructor() as IProjector<TPayload>;
+
+    const eventsResult = await this.eventStore.getEvents(partitionKeys, aggregateType);
+    if (eventsResult.isErr()) {
+      throw eventsResult.error;
+    }
+
+    const events = eventsResult.value;
+    if (events.length === 0) {
+      return null;
+    }
+
+    return projector.project(events, partitionKeys);
+  }
+
+  async loadMany<TPayload extends IAggregatePayload>(
+    keys: Array<{ partitionKeys: PartitionKeys; aggregateType: string }>
+  ): Promise<Array<Aggregate<TPayload> | null>> {
+    const results: Array<Aggregate<TPayload> | null> = [];
+    
+    for (const { partitionKeys, aggregateType } of keys) {
+      const aggregate = await this.load<TPayload>(partitionKeys, aggregateType);
+      results.push(aggregate);
+    }
+    
+    return results;
+  }
+}
+
+/**
+ * Domain-aware command executor that uses SekibanDomainTypes
+ */
+export class DomainAwareCommandExecutor extends CommandExecutorBase {
+  constructor(
+    handlerRegistry: CommandHandlerRegistry,
+    eventStore: IEventStore,
+    eventStream: InMemoryEventStream,
+    aggregateLoader: IAggregateLoader,
+    private domainTypes: SekibanDomainTypes
+  ) {
+    super(handlerRegistry, eventStore, eventStream, aggregateLoader);
+  }
+
+  protected getInitialAggregate(
+    partitionKeys: PartitionKeys,
+    aggregateType: string
+  ): any {
+    const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateType);
+    if (!projectorConstructor) {
+      throw new Error(`No projector registered for aggregate type: ${aggregateType}`);
+    }
+    const projector = new projectorConstructor() as IProjector<any>;
+    return projector.getInitialState(partitionKeys);
+  }
+}
+
+/**
+ * In-memory Sekiban executor that uses SekibanDomainTypes
+ * This is the new standard implementation that all executors should follow
+ */
+export class InMemorySekibanExecutorWithDomainTypes extends SekibanExecutorBase {
+  constructor(
+    private domainTypes: SekibanDomainTypes,
+    config: SekibanExecutorConfig = {}
+  ) {
+    const eventStore = new InMemoryEventStore(config);
+    const eventStream = new InMemoryEventStream();
+    const commandHandlerRegistry = new CommandHandlerRegistry();
+    const queryHandlerRegistry = new QueryHandlerRegistry();
+    
+    // Create domain-aware aggregate loader
+    const aggregateLoader = new DomainAwareAggregateLoader(eventStore, domainTypes);
+    
+    // Create domain-aware command executor
+    const commandExecutor = new DomainAwareCommandExecutor(
+      commandHandlerRegistry,
+      eventStore,
+      eventStream,
+      aggregateLoader,
+      domainTypes
+    );
+
+    super(
+      commandExecutor,
+      queryHandlerRegistry,
+      eventStore,
+      aggregateLoader,
+      config
+    );
+  }
+
+  protected getAggregateTypeForCommand(command: ICommand): string {
+    // Check if command types has the new method
+    const commandTypes = this.domainTypes.commandTypes as any;
+    if (commandTypes.getAggregateTypeForCommand) {
+      const aggregateType = commandTypes.getAggregateTypeForCommand(command.commandType);
+      if (aggregateType) {
+        return aggregateType;
+      }
+    }
+
+    // Fallback: Use domain types to resolve command to aggregate type
+    const commandType = this.domainTypes.commandTypes.getCommandTypeByName(command.commandType);
+    if (!commandType) {
+      throw new Error(`Unknown command type: ${command.commandType}`);
+    }
+
+    // Fallback: extract from command type name
+    // e.g., "CreateUserCommand" -> "User"
+    const match = command.commandType.match(/^(Create|Update|Delete)(.+)Command$/);
+    if (match) {
+      return match[2];
+    }
+
+    throw new Error(`Cannot determine aggregate type for command: ${command.commandType}`);
+  }
+
+  /**
+   * Creates a transaction
+   */
+  async beginTransaction(): Promise<ISekibanTransaction> {
+    return new SimpleTransaction(this);
+  }
+
+  /**
+   * Get the domain types used by this executor
+   */
+  getDomainTypes(): SekibanDomainTypes {
+    return this.domainTypes;
+  }
+}
+
+/**
+ * Builder for creating InMemorySekibanExecutor with domain types
+ */
+export class InMemorySekibanExecutorBuilder {
+  private config: SekibanExecutorConfig = {};
+
+  constructor(private domainTypes: SekibanDomainTypes) {}
+
+  withConfig(config: SekibanExecutorConfig): this {
+    this.config = { ...this.config, ...config };
+    return this;
+  }
+
+  withSnapshotting(frequency: number): this {
+    this.config.enableSnapshots = true;
+    this.config.snapshotFrequency = frequency;
+    return this;
+  }
+
+  build(): InMemorySekibanExecutorWithDomainTypes {
+    return new InMemorySekibanExecutorWithDomainTypes(this.domainTypes, this.config);
+  }
+}
+
+// Export factory function for convenience
+export function createInMemorySekibanExecutor(
+  domainTypes: SekibanDomainTypes,
+  config?: SekibanExecutorConfig
+): InMemorySekibanExecutorWithDomainTypes {
+  return new InMemorySekibanExecutorWithDomainTypes(domainTypes, config);
+}

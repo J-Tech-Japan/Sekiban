@@ -41,6 +41,7 @@ export interface CommandSchemaDefinition<
 > {
   type: TName;
   schema: TSchema;
+  aggregateType: string; // Explicitly specify which aggregate type this command targets
   handlers: CommandHandlers<z.infer<TSchema>, TPayloadUnion>;
 }
 
@@ -86,6 +87,7 @@ export function defineCommand<
   return {
     type: definition.type,
     schema: definition.schema,
+    aggregateType: definition.aggregateType,
     handlers: definition.handlers,
     
     /**

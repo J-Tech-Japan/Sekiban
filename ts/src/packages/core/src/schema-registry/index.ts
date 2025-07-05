@@ -14,6 +14,9 @@ export { defineProjector } from './projector-schema.js';
 export { SchemaRegistry } from './registry.js';
 export { SchemaExecutor } from './schema-executor.js';
 
+// Schema-based SekibanDomainTypes implementation
+export { createSchemaDomainTypes, createSekibanDomainTypesFromGlobalRegistry } from './schema-domain-types.js';
+
 // Type exports for advanced usage
 export type {
   EventSchemaDefinition,

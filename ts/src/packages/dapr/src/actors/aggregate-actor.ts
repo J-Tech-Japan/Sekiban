@@ -17,7 +17,7 @@ import type {
 } from './interfaces.js';
 import { PartitionKeysAndProjector } from '../parts/partition-keys-and-projector.js';
 import { DaprRepository } from '../parts/dapr-repository.js';
-import type { SekibanDomainTypes } from '../types/domain-types.js';
+import type { SekibanDomainTypes } from '@sekiban/core';
 import type { IActorProxyFactory } from '../types/index.js';
 
 /**

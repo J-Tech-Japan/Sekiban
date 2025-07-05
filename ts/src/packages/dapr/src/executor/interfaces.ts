@@ -64,7 +64,6 @@ export interface DaprSekibanConfiguration {
   pubSubName: string;
   eventTopicName: string;
   actorType: string;
-  projectors: IAggregateProjector<any>[];
   
   // Optional configuration
   actorIdPrefix?: string;

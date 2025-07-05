@@ -9,7 +9,7 @@ import {
   EmptyAggregatePayload
 } from '@sekiban/core';
 import type { IAggregateEventHandlerActor, SerializableEventDocument } from '../actors/interfaces.js';
-import type { SekibanDomainTypes } from '../types/domain-types.js';
+import type { SekibanDomainTypes } from '@sekiban/core';
 
 /**
  * Repository implementation for Dapr actors, bridging between AggregateActor and AggregateEventHandlerActor.

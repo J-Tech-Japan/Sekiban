@@ -57,6 +57,9 @@ export class CodeGenerator {
       sections.push(this.generateAdvancedTypes());
     }
 
+    // Add schema registry registration
+    sections.push(this.generateSchemaRegistryRegistration(scannedSchema));
+
     // Add generation metadata
     if (this.config.includeComments) {
       sections.push(this.generateMetadataComments(scannedSchema));
@@ -197,6 +200,58 @@ export type ProjectorTypes = typeof projectors;`;
   commands,
   projectors,
 } as const;`;
+  }
+
+  /**
+   * Generate schema registry registration code
+   */
+  private generateSchemaRegistryRegistration(scannedSchema: ScannedSchema): string {
+    const registrations: string[] = [];
+    
+    // Add header comment
+    registrations.push('// Register all domain types with schema registry');
+    registrations.push('import { globalRegistry, createSchemaDomainTypes } from \'@sekiban/core\';');
+    registrations.push('');
+    
+    // Register events
+    if (scannedSchema.events.length > 0) {
+      registrations.push('// Register events with schema registry');
+      for (const event of scannedSchema.events) {
+        registrations.push(`globalRegistry.registerEvent(${event.name});`);
+      }
+      registrations.push('');
+    }
+    
+    // Register commands
+    if (scannedSchema.commands.length > 0) {
+      registrations.push('// Register commands with schema registry');
+      for (const command of scannedSchema.commands) {
+        registrations.push(`globalRegistry.registerCommand(${command.name});`);
+      }
+      registrations.push('');
+    }
+    
+    // Register projectors
+    if (scannedSchema.projectors.length > 0) {
+      registrations.push('// Register projectors with schema registry');
+      for (const projector of scannedSchema.projectors) {
+        registrations.push(`globalRegistry.registerProjector(${projector.name});`);
+      }
+      registrations.push('');
+    }
+    
+    // Export functions for both schema registry and SekibanDomainTypes
+    registrations.push('// Export function to get the schema registry');
+    registrations.push('export function getSchemaRegistry() {');
+    registrations.push('  return globalRegistry;');
+    registrations.push('}');
+    registrations.push('');
+    registrations.push('// Export function to create SekibanDomainTypes from registered schemas');
+    registrations.push('export function createSekibanDomainTypes() {');
+    registrations.push('  return createSchemaDomainTypes(globalRegistry);');
+    registrations.push('}');
+    
+    return registrations.join('\n');
   }
 
   /**

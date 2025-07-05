@@ -223,6 +223,252 @@ Location: `packages/core/src/schema-registry/tests/compatibility.test.ts`
 - [ ] Write migration guide
 - [ ] Create codemods
 
+## Phase 5: Package Updates (Week 4)
+
+### Package Impact Analysis (2025-07-05)
+Based on analysis of the type registry design changes, the following packages require updates:
+
+#### Minimal Impact (No changes needed):
+- **@sekiban/cosmos** - Uses IEventStore interface, type-agnostic storage
+- **@sekiban/postgres** - Uses IEventStore interface, type-agnostic storage  
+- **@sekiban/testing** - Works with stable interfaces
+
+#### Moderate Impact:
+- **@sekiban/config** - May need updates for dynamic imports if constructor signatures change
+
+#### Significant Impact:
+- **@sekiban/dapr** - Needs updates to:
+  - [ ] Update SekibanDomainTypes interface to match new core registry
+  - [ ] Modify SekibanDaprExecutor for new registry
+  - [ ] Update actor implementations for new serialization
+  - [ ] Consider removing duplicate SekibanDomainTypes
+
+- **@sekiban/codegen** - Needs updates to:
+  - [x] Update scanner for new schema registry patterns (scanner already works with defineEvent/defineCommand/defineProjector)
+  - [x] Modify code generator for new registry API (updated to use globalRegistry instead of GlobalRegistry)
+  - [x] Update generated code templates (now generates schema registry registration)
+  - [ ] Add aggregate and query type scanning (optional - schema approach doesn't use these)
+  - [x] Generate proper schema registry registration code
+
+### Implementation Order:
+1. Start with @sekiban/codegen updates (critical for schema-first approach) ✅
+2. Then update @sekiban/dapr (main runtime impact)
+3. Finally update @sekiban/config if needed
+
+### Implementation Status (2025-07-05)
+
+#### Completed:
+1. **@sekiban/codegen** - Updated to work with schema-based approach:
+   - Generator now imports from `@sekiban/core` schema registry
+   - Generates registration code for `globalRegistry` (schema-based)
+   - Scanner already compatible with `defineEvent`, `defineCommand`, `defineProjector`
+
+#### Decision Made: Schema-Based with SekibanDomainTypes
+We will keep the SekibanDomainTypes interface as the central type registry that ALL executors must use. However, we'll implement it using the Zod-based SchemaRegistry approach instead of class-based registration. This provides better type safety, runtime validation, and ensures all components use the same type system.
+
+## Phase 6: Integrate Schema-Based System with SekibanDomainTypes (Week 5)
+
+### Important Context
+SekibanDomainTypes was recently created to standardize type registration across all executors. Previously, executors were using their own internal registries, which led to inconsistency. Going forward, ALL executors (InMemory, Dapr, etc.) MUST use SekibanDomainTypes.
+
+### Core Package Updates
+1. **Create Schema-Based SekibanDomainTypes Implementation**:
+   - [x] Keep `/domain-types/interfaces.ts` (SekibanDomainTypes interface)
+   - [x] Create new schema-based implementations of IEventTypes, ICommandTypes, etc. (`schema-domain-types.ts`)
+   - [x] Build adapter that wraps SchemaRegistry to provide SekibanDomainTypes interface
+   - [ ] Remove GlobalRegistry but keep the interface structure
+   - [x] Update serializer to use Zod schemas for validation
+
+2. **Update ALL Executors to Use SekibanDomainTypes**:
+   - [x] Create new `InMemorySekibanExecutorWithDomainTypes` that accepts `SekibanDomainTypes`
+   - [x] Update constructor to require `SekibanDomainTypes` parameter
+   - [x] Remove internal projectorRegistry and commandTypeToAggregateType maps
+   - [x] Use SekibanDomainTypes for all type lookups and command routing
+   - [ ] Update tests to provide SekibanDomainTypes
+   - [ ] Deprecate old `InMemorySekibanExecutor` and migrate to new one
+
+3. **Schema Registry Integration**:
+   - [x] Create `createSchemaDomainTypes(registry: SchemaRegistry): SekibanDomainTypes` function
+   - [x] Implement schema-based versions of all domain type interfaces
+   - [x] Ensure compatibility with existing SekibanDomainTypes consumers
+   - [x] Add schema validation to all type operations
+
+### Dapr Package Updates
+1. **Remove Duplicate Types**:
+   - [x] Delete `/dapr/src/types/domain-types.ts` (duplicate SekibanDomainTypes)
+   - [x] Update all imports to use core SekibanDomainTypes
+
+2. **Update Dapr Components to Use SekibanDomainTypes**:
+   - [x] Modify `SekibanDaprExecutor` constructor to accept `SekibanDomainTypes` instead of projector array
+   - [x] Remove internal projectorRegistry - use SekibanDomainTypes.projectorTypes instead
+   - [x] Update `AggregateActor` to use SekibanDomainTypes for all type operations
+   - [ ] Update `DaprRepository` to properly use the passed SekibanDomainTypes
+   - [x] Ensure all type lookups go through SekibanDomainTypes
+
+3. **Standardize Type Usage**:
+   - [ ] Use SekibanDomainTypes.eventTypes for event deserialization
+   - [ ] Use SekibanDomainTypes.commandTypes for command routing
+   - [x] Use SekibanDomainTypes.projectorTypes for aggregate projection
+   - [ ] Use SekibanDomainTypes.serializer for all serialization needs
+
+### Migration Path
+1. **Bridge Schema and SekibanDomainTypes**:
+   - [ ] Create schema-based implementations of IEventTypes, ICommandTypes, etc.
+   - [ ] Build factory function to create SekibanDomainTypes from SchemaRegistry
+   - [ ] Ensure all existing interfaces remain compatible
+
+2. **Update Codegen**:
+   - [x] Modify generator to create SekibanDomainTypes factory function
+   - [x] Generate code that bridges schema definitions to SekibanDomainTypes
+   - [x] Updated generator to import `createSchemaDomainTypes` and generate factory function
+
+3. **Update Examples and Tests**:
+   - [ ] Update all executors to accept SekibanDomainTypes
+   - [ ] Add examples showing how to create SekibanDomainTypes from schemas
+   - [ ] Ensure all tests provide proper SekibanDomainTypes instances
+
+### Benefits of Schema-Based SekibanDomainTypes
+1. **Centralized Type System**: All executors use the same type registry
+2. **Runtime Validation**: Zod schemas provide validation at boundaries
+3. **Type Safety**: Full TypeScript inference from schemas
+4. **Consistency**: Single source of truth for all domain types
+5. **Compatibility**: Maintains existing SekibanDomainTypes interface
+
+### Implementation Order
+1. **Step 1**: Create schema-based SekibanDomainTypes implementation
+2. **Step 2**: Update InMemorySekibanExecutor to use SekibanDomainTypes
+3. **Step 3**: Update Dapr package to use core SekibanDomainTypes
+4. **Step 4**: Update codegen to generate proper factory code
+5. **Step 5**: Migrate examples and documentation
+
+### Current Architecture Understanding
+- **SekibanDomainTypes**: Central type registry interface (keep this!)
+- **SchemaRegistry**: Zod-based type definitions (use this as implementation)
+- **GlobalRegistry**: Class-based registration (phase out gradually)
+- **Executors**: Must ALL use SekibanDomainTypes for consistency
+
+## Implementation Progress (2025-07-05 Update)
+
+### Work Completed Today:
+
+1. **Created Schema-Based SekibanDomainTypes Bridge**:
+   - Implemented `schema-domain-types.ts` that provides SekibanDomainTypes interface using SchemaRegistry
+   - Created adapter classes: `SchemaEventTypes`, `SchemaCommandTypes`, `SchemaProjectorTypes`, etc.
+   - Added `createSchemaDomainTypes()` function to create SekibanDomainTypes from SchemaRegistry
+   - Exported from schema-registry module for easy access
+
+2. **Updated InMemorySekibanExecutor**:
+   - Created new `InMemorySekibanExecutorWithDomainTypes` that accepts SekibanDomainTypes
+   - Removed internal registries in favor of using SekibanDomainTypes
+   - Created `DomainAwareAggregateLoader` and `DomainAwareCommandExecutor`
+   - Added builder pattern and factory function for ease of use
+
+3. **Updated Codegen**:
+   - Modified generator to import `createSchemaDomainTypes` from `@sekiban/core`
+   - Now generates `createSekibanDomainTypes()` function in output
+   - Maintains compatibility with schema-based approach
+
+### Key Architectural Decisions:
+
+1. **Keep SekibanDomainTypes Interface**: This is the contract all executors must use
+2. **Schema-Based Implementation**: Use SchemaRegistry as the underlying implementation
+3. **Compatibility Shims**: Created placeholder constructors since schemas don't have classes
+4. **Gradual Migration**: Old executors continue to work while new ones use SekibanDomainTypes
+
+### Next Steps:
+
+1. ~~Update Dapr package to use core SekibanDomainTypes~~ ✅
+2. ~~Migrate examples to use new executor~~ ✅
+3. Add proper command-to-aggregate-type resolution
+4. Complete removal of GlobalRegistry once all components migrated
+5. Update documentation with new patterns
+
+## Continuation Progress (2025-07-05 - Part 2)
+
+### Additional Work Completed:
+
+1. **Dapr Package Updates**:
+   - Removed duplicate `SekibanDomainTypes` from dapr package
+   - Updated `SekibanDaprExecutor` to accept and use core `SekibanDomainTypes`
+   - Removed internal `projectorRegistry` in favor of using `domainTypes.projectorTypes`
+   - Updated all imports to use `@sekiban/core` for `SekibanDomainTypes`
+   - Modified `DaprSekibanConfiguration` to remove projectors array
+
+2. **Created Example**:
+   - Added `schema-based-example.ts` demonstrating:
+     - How to define events, commands, and projectors using schemas
+     - How to register them with `globalRegistry`
+     - How to create `SekibanDomainTypes` using `createSchemaDomainTypes()`
+     - How to use the new `InMemorySekibanExecutor` with domain types
+     - Complete workflow from command execution to aggregate loading
+
+### Remaining Tasks:
+
+1. **Command-to-Aggregate Resolution** ✅:
+   - Added `aggregateType` field to `CommandSchemaDefinition`
+   - Updated `SchemaCommandTypes` to provide `getAggregateTypeForCommand()` method
+   - Updated executor to use aggregate type from command definition
+   - Example updated to show explicit aggregate type specification
+
+2. **GlobalRegistry Removal**:
+   - Still exists in core package
+   - Need to remove decorators that depend on it
+   - Update any remaining references
+
+3. **Event/Command Serialization**:
+   - Update to use `domainTypes.serializer` throughout
+   - Ensure schema validation happens at serialization boundaries
+
+4. **Testing**:
+   - Update all tests to provide `SekibanDomainTypes`
+   - Add tests for schema-based approach
+   - Ensure backward compatibility during migration
+
+5. **Documentation**:
+   - Create migration guide from class-based to schema-based
+   - Update README with new patterns
+   - Add API documentation for new functions
+
+## Summary of Schema-Based Type Registry Implementation
+
+### Architecture Decisions:
+1. **SekibanDomainTypes as Central Interface**: All executors must use this interface for type consistency
+2. **SchemaRegistry as Implementation**: Zod-based schemas provide runtime validation and type safety
+3. **No Direct Class Usage**: Schema definitions don't use classes, but provide compatibility shims
+
+### Key Components Implemented:
+
+1. **Schema-Domain Bridge** (`schema-domain-types.ts`):
+   - Adapts SchemaRegistry to SekibanDomainTypes interface
+   - Provides compatibility with existing code expecting classes
+   - Handles type lookups and validation
+
+2. **Updated Executors**:
+   - `InMemorySekibanExecutorWithDomainTypes`: New standard executor using SekibanDomainTypes
+   - Removed internal registries in favor of centralized type system
+   - All type operations go through SekibanDomainTypes
+
+3. **Updated Dapr Package**:
+   - Uses core SekibanDomainTypes instead of duplicate interface
+   - SekibanDaprExecutor now accepts domainTypes parameter
+   - All projector lookups use domainTypes.projectorTypes
+
+4. **Improved Command Routing**:
+   - Commands now explicitly declare their aggregate type
+   - No more reliance on naming conventions
+   - Clear mapping from command to aggregate
+
+5. **Code Generation**:
+   - Generates code that creates SekibanDomainTypes instances
+   - Supports both schema registry and domain types APIs
+   - Maintains backward compatibility
+
+### Benefits Achieved:
+- **Consistency**: All executors use the same type system
+- **Type Safety**: Full TypeScript inference with Zod validation
+- **Flexibility**: Schema-based approach allows runtime validation
+- **Migration Path**: Gradual migration from class-based to schema-based
+
 ## Key Decisions Made
 
 ### 1. Pure Functions Over Classes
