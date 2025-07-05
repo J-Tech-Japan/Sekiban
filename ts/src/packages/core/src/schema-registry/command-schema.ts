@@ -130,7 +130,7 @@ export function defineCommand<
 /**
  * Type helper to extract the command type from a defineCommand result
  */
-export type CommandDefinition<T> = T extends ReturnType<typeof defineCommand<infer TName, infer TSchema, infer TPayload>>
+export type CommandDefinition<T> = T extends ReturnType<typeof defineCommand<infer TName extends string, infer TSchema extends z.ZodTypeAny, infer TPayload extends ITypedAggregatePayload>>
   ? ReturnType<typeof defineCommand<TName, TSchema, TPayload>>
   : never;
 

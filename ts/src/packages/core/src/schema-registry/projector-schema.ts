@@ -127,7 +127,7 @@ export function defineProjector<TPayloadUnion extends ITypedAggregatePayload>(
 /**
  * Type helper to extract the projector type from a defineProjector result
  */
-export type ProjectorDefinitionType<T> = T extends ReturnType<typeof defineProjector<infer TPayload>>
+export type ProjectorDefinitionType<T> = T extends ReturnType<typeof defineProjector<infer TPayload extends ITypedAggregatePayload>>
   ? ReturnType<typeof defineProjector<TPayload>>
   : never;
 

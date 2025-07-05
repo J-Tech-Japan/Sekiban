@@ -1,10 +1,42 @@
 import type { IEventPayload } from '../events/event-payload.js';
 import type { ICommand } from '../commands/command.js';
 import type { IAggregatePayload } from '../aggregates/aggregate-payload.js';
-import type { IProjector } from '../aggregates/aggregate-projector.js';
+import type { IProjector } from '../aggregates/projector-interface.js';
 import type { IEvent } from '../events/event.js';
 import type { Result } from 'neverthrow';
-import type { SekibanError } from '../errors/sekiban-error.js';
+import type { SekibanError } from '../result/errors.js';
+import type { ICommandExecutor } from '../commands/executor.js';
+import type { Metadata } from '../documents/metadata.js';
+
+// Type aliases for compatibility
+export type EventTypeInfo = { name: string; constructor: any };
+export type CommandTypeInfo = { name: string; constructor: any };
+export type ProjectorTypeInfo = { name: string; constructor: any; aggregateTypeName: string };
+export type AggregateTypeInfo = { name: string; constructor: any };
+export type QueryTypeInfo = { name: string; constructor: any };
+
+// Event document type
+export interface EventDocument {
+  id: string;
+  eventType: string;
+  aggregateId: string;
+  aggregateType: string;
+  rootPartitionKey?: string;
+  payload: any;
+  metadata: any;
+  timestamp: string;
+  version: number;
+}
+
+// Command metadata and result types
+export type CommandMetadata = Partial<Metadata>;
+
+export interface CommandResult {
+  success: boolean;
+  aggregateId: string;
+  version: number;
+  eventIds: any[];
+}
 
 /**
  * Interface for event type operations
@@ -24,6 +56,8 @@ export interface ICommandTypes {
   getCommandTypes(): Array<{ name: string; constructor: any }>;
   getCommandTypeByName(name: string): { name: string; constructor: any } | undefined;
   createCommand(type: string, payload: any): ICommand<any>;
+  executeCommand?(executor: ICommandExecutor, command: any, metadata: CommandMetadata): Promise<Result<CommandResult, SekibanError>>;
+  getAggregateTypeForCommand?(commandType: string): string | undefined;
 }
 
 /**

@@ -78,7 +78,7 @@ export function defineEvent<TName extends string, TSchema extends z.ZodTypeAny>(
 /**
  * Type helper to extract the event type from a defineEvent result
  */
-export type EventDefinition<T> = T extends ReturnType<typeof defineEvent<infer TName, infer TSchema>>
+export type EventDefinition<T> = T extends ReturnType<typeof defineEvent<infer TName extends string, infer TSchema extends z.ZodTypeAny>>
   ? ReturnType<typeof defineEvent<TName, TSchema>>
   : never;
 

@@ -1,5 +1,5 @@
 import { Result, ResultAsync, ok, err } from 'neverthrow';
-import type { CommandDefinitionType } from './command-schema.js';
+import type { CommandDefinition } from './command-schema.js';
 import type { ProjectorDefinitionType } from './projector-schema.js';
 import type { SchemaRegistry } from './registry.js';
 import type { IEvent } from '../events/event.js';
@@ -66,7 +66,7 @@ export class SchemaExecutor {
   /**
    * Execute a schema-based command
    */
-  async executeCommand<T extends CommandDefinitionType<any, any>>(
+  async executeCommand<T extends CommandDefinition<any>>(
     commandDef: T,
     commandData: any
   ): Promise<Result<CommandResponse, SekibanError>> {
@@ -105,18 +105,16 @@ export class SchemaExecutor {
       
       for (const eventPayload of eventsResult.value) {
         const sortableId = SortableUniqueId.generate();
-        eventIds.push(sortableId);
+        eventIds.push(sortableId.toString());
         
         const event: IEvent = {
           id: sortableId,
           partitionKeys,
-          aggregateType: partitionKeys.group,
+          aggregateType: commandDef.aggregateType || partitionKeys.group || 'Unknown',
           version: aggregate.version + events.length + 1,
-          eventType: eventPayload.type || eventPayload.constructor.name,
-          eventVersion: 1,
+          eventType: (eventPayload as any).type || eventPayload.constructor.name,
           payload: eventPayload,
-          metadata: {},
-          sortableUniqueId: sortableId
+          metadata: { timestamp: new Date() }
         };
         
         events.push(event);
@@ -147,10 +145,10 @@ export class SchemaExecutor {
    */
   private async loadAggregate<TPayloadUnion extends ITypedAggregatePayload>(
     partitionKeys: PartitionKeys,
-    commandDef: CommandDefinitionType<any, TPayloadUnion>
+    commandDef: CommandDefinition<any>
   ): Promise<Aggregate<TPayloadUnion | EmptyAggregatePayload>> {
     // Find the projector for this aggregate type
-    const projectorDef = this.registry.getProjector(partitionKeys.group);
+    const projectorDef = this.registry.getProjector(commandDef.aggregateType || partitionKeys.group || 'Unknown');
     if (!projectorDef) {
       // Create a default projector if none found
       const defaultProjector = {
@@ -177,7 +175,7 @@ export class SchemaExecutor {
     }
 
     // Project events to build current state
-    let aggregate = projectorDef.getInitialState(partitionKeys);
+    let aggregate: any = projectorDef.getInitialState(partitionKeys);
     
     for (const event of eventsResult.value) {
       const projectionResult = projectorDef.project(aggregate, event);
@@ -198,21 +196,32 @@ export class SchemaExecutor {
   ): Promise<Result<QueryResponse<Aggregate<TPayloadUnion | EmptyAggregatePayload>>, QueryExecutionError>> {
     try {
       // Use provided projector or look it up from registry
-      const projector = projectorDef || this.registry.getProjector(partitionKeys.group);
-      if (!projector) {
-        return err(new QueryExecutionError(
-          'queryAggregate',
-          `No projector found for aggregate type: ${partitionKeys.group}`
-        ));
-      }
+      if (projectorDef) {
+        const aggregate = await this.loadAggregateWithProjector(partitionKeys, projectorDef);
+        
+        return ok({
+          data: aggregate as Aggregate<TPayloadUnion | EmptyAggregatePayload>,
+          version: aggregate.version,
+          lastEventId: aggregate.lastSortableUniqueId?.toString()
+        });
+      } else {
+        // Fallback to registry lookup with 'any' type
+        const projector = this.registry.getProjector(partitionKeys.group || 'Unknown');
+        if (!projector) {
+          return err(new QueryExecutionError(
+            'queryAggregate',
+            `No projector found for aggregate type: ${partitionKeys.group}`
+          ));
+        }
 
-      const aggregate = await this.loadAggregateWithProjector(partitionKeys, projector);
-      
-      return ok({
-        data: aggregate,
-        version: aggregate.version,
-        lastEventId: aggregate.lastSortableUniqueId?.toString()
-      });
+        const aggregate = await this.loadAggregateWithProjector(partitionKeys, projector);
+        
+        return ok({
+          data: aggregate as Aggregate<TPayloadUnion | EmptyAggregatePayload>,
+          version: aggregate.version,
+          lastEventId: aggregate.lastSortableUniqueId?.toString()
+        });
+      }
     } catch (error) {
       return err(new QueryExecutionError(
         'queryAggregate',
@@ -233,13 +242,12 @@ export class SchemaExecutor {
       
       // Execute the query with the events
       try {
-        const result = await query.query(events);
-        
-        return ok({
-          data: result,
-          version: events.length,
-          lastEventId: events[events.length - 1]?.sortableUniqueId
-        });
+        // MultiProjection queries need a different execution approach
+        // For now, return an error
+        return err(new QueryExecutionError(
+          'queryMultiProjection',
+          'MultiProjection queries not yet implemented in schema executor'
+        ));
       } catch (queryError) {
         throw queryError;
       }
@@ -263,10 +271,10 @@ export class SchemaExecutor {
   /**
    * Load aggregate with specific projector
    */
-  private async loadAggregateWithProjector<TPayloadUnion extends ITypedAggregatePayload>(
+  private async loadAggregateWithProjector(
     partitionKeys: PartitionKeys,
-    projectorDef: ProjectorDefinitionType<TPayloadUnion>
-  ): Promise<Aggregate<TPayloadUnion | EmptyAggregatePayload>> {
+    projectorDef: any
+  ): Promise<Aggregate<ITypedAggregatePayload | EmptyAggregatePayload>> {
     // Load events for this aggregate
     const eventsResult = await this.eventReader.getEventsByPartitionKeys(partitionKeys);
     
@@ -275,7 +283,7 @@ export class SchemaExecutor {
     }
 
     // Project events to build current state
-    let aggregate = projectorDef.getInitialState(partitionKeys);
+    let aggregate: Aggregate<ITypedAggregatePayload | EmptyAggregatePayload> = projectorDef.getInitialState(partitionKeys);
     
     for (const event of eventsResult.value) {
       const projectionResult = projectorDef.project(aggregate, event);

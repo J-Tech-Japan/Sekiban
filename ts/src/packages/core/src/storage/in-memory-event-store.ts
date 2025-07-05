@@ -74,19 +74,6 @@ export class InMemoryEventStore implements IEventStore {
   }
 
   /**
-   * Save events to storage
-   */
-  async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    if (this.closed) {
-      throw new StorageError('Event store is closed', 'STORE_CLOSED');
-    }
-
-    // In-memory implementation doesn't need to check for conflicts
-    // Just append the events
-    this.events.push(...events);
-  }
-
-  /**
    * Initialize the storage provider
    */
   initialize(): ResultAsync<void, StorageError> {
@@ -101,5 +88,18 @@ export class InMemoryEventStore implements IEventStore {
     this.closed = true;
     this.events = [];
     return okAsync(undefined);
+  }
+
+  /**
+   * Save events to storage
+   */
+  async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+    if (this.closed) {
+      throw new StorageError('Event store is closed', 'STORE_CLOSED');
+    }
+
+    // In-memory implementation doesn't need to check for conflicts
+    // Just append the events
+    this.events.push(...events);
   }
 }

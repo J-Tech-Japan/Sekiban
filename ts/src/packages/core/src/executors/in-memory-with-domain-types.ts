@@ -9,9 +9,9 @@ import {
   IEventPayload,
   EventFilter
 } from '../events/index.js';
-import {
-  IEventStore
-} from '../storage/index.js';
+// Use the in-memory event store implementation
+import { EventsInMemoryStore } from './events-in-memory-store.js';
+import type { IEventStore } from '../events/store.js';
 import { 
   IAggregateLoader, 
   IAggregateProjector,
@@ -24,7 +24,6 @@ import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js
 import { EventStoreError, ConcurrencyError } from '../result/index.js';
 import { ICommand } from '../commands/index.js';
 import type { SekibanDomainTypes } from '../domain-types/interfaces.js';
-import { InMemoryEventStore } from './in-memory.js';
 
 /**
  * Domain-aware aggregate loader that uses SekibanDomainTypes
@@ -40,13 +39,10 @@ export class DomainAwareAggregateLoader implements IAggregateLoader {
     aggregateType: string
   ): Promise<Aggregate<TPayload> | null> {
     // Get projector from domain types
-    const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateType);
-    if (!projectorConstructor) {
+    const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(aggregateType) as IProjector<TPayload> | undefined;
+    if (!projector) {
       return null;
     }
-
-    // Create projector instance
-    const projector = new projectorConstructor() as IProjector<TPayload>;
 
     const eventsResult = await this.eventStore.getEvents(partitionKeys, aggregateType);
     if (eventsResult.isErr()) {
@@ -58,7 +54,18 @@ export class DomainAwareAggregateLoader implements IAggregateLoader {
       return null;
     }
 
-    return projector.project(events, partitionKeys);
+    // Get initial state and apply events one by one
+    let aggregate = projector.getInitialState(partitionKeys) as any;
+    
+    for (const event of events) {
+      const projectionResult = (projector as any).project(aggregate, event);
+      if (projectionResult && projectionResult.isErr && projectionResult.isErr()) {
+        throw projectionResult.error;
+      }
+      aggregate = projectionResult && projectionResult.value ? projectionResult.value : projectionResult;
+    }
+    
+    return aggregate as Aggregate<TPayload>;
   }
 
   async loadMany<TPayload extends IAggregatePayload>(
@@ -93,11 +100,10 @@ export class DomainAwareCommandExecutor extends CommandExecutorBase {
     partitionKeys: PartitionKeys,
     aggregateType: string
   ): any {
-    const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateType);
-    if (!projectorConstructor) {
+    const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(aggregateType);
+    if (!projector) {
       throw new Error(`No projector registered for aggregate type: ${aggregateType}`);
     }
-    const projector = new projectorConstructor() as IProjector<any>;
     return projector.getInitialState(partitionKeys);
   }
 }
@@ -111,7 +117,7 @@ export class InMemorySekibanExecutorWithDomainTypes extends SekibanExecutorBase 
     private domainTypes: SekibanDomainTypes,
     config: SekibanExecutorConfig = {}
   ) {
-    const eventStore = new InMemoryEventStore(config);
+    const eventStore = new EventsInMemoryStore(config);
     const eventStream = new InMemoryEventStream();
     const commandHandlerRegistry = new CommandHandlerRegistry();
     const queryHandlerRegistry = new QueryHandlerRegistry();
@@ -156,7 +162,7 @@ export class InMemorySekibanExecutorWithDomainTypes extends SekibanExecutorBase 
     // Fallback: extract from command type name
     // e.g., "CreateUserCommand" -> "User"
     const match = command.commandType.match(/^(Create|Update|Delete)(.+)Command$/);
-    if (match) {
+    if (match && match[2]) {
       return match[2];
     }
 

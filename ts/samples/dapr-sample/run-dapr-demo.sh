@@ -9,11 +9,11 @@ if ! docker ps | grep -q dapr-sample-postgres; then
     sleep 5
 fi
 
-# Run with Dapr using simple server
+# Run with Dapr using demo server
 echo "🎭 Starting API with Dapr..."
 cd packages/api && dapr run \
     --app-id sekiban-api \
     --app-port 3000 \
     --resources-path ../../dapr-components-local \
     --config ../../dapr-config/config.yaml \
-    -- npx tsx src/simple-server.ts
+    -- npm run demo

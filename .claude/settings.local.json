@@ -37,7 +37,13 @@
       "Bash(dapr run:*)",
       "Bash(node:*)",
       "Bash(/Users/tomohisa/dev/GitHub/Sekiban-ts/ts/samples/dapr-sample/run-dapr-demo.sh)",
-      "Bash(./run-dapr-demo.sh:*)"
+      "Bash(./run-dapr-demo.sh:*)",
+      "Bash(pnpm tsup:*)",
+      "Bash(pnpm build:types:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(cat:*)"
     ],
     "deny": [
       "Bash(curl:*)"

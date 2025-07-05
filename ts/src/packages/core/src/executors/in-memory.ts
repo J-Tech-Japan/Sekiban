@@ -9,9 +9,8 @@ import {
   IEventPayload,
   EventFilter
 } from '../events/index.js';
-import {
-  IEventStore
-} from '../storage/index.js';
+import { EventsInMemoryStore } from './events-in-memory-store.js';
+import type { IEventStore as IEventsEventStore, EventStoreOptions } from '../events/store.js';
 import { 
   IAggregateLoader, 
   IAggregateProjector,
@@ -26,8 +25,9 @@ import { ICommand } from '../commands/index.js';
 
 /**
  * In-memory implementation of event store
+ * @deprecated Use EventsInMemoryStore instead
  */
-export class InMemoryEventStore implements IEventStore {
+export class InMemoryEventStore implements IEventsEventStore {
   private events = new Map<string, Event[]>();
   private snapshots = new Map<string, Map<number, any>>();
   private versions = new Map<string, number>();
@@ -214,7 +214,7 @@ export class InMemoryEventStore implements IEventStore {
  */
 export class InMemoryAggregateLoader implements IAggregateLoader {
   constructor(
-    private eventStore: IEventStore,
+    private eventStore: IEventsEventStore,
     private projectorRegistry: Map<string, IProjector<any>>
   ) {}
 
@@ -227,7 +227,7 @@ export class InMemoryAggregateLoader implements IAggregateLoader {
       return null;
     }
 
-    const eventsResult = await this.eventStore.getEvents(partitionKeys, aggregateType);
+    const eventsResult = await this.eventStore.getEvents(partitionKeys, aggregateType, undefined);
     if (eventsResult.isErr()) {
       throw eventsResult.error;
     }
@@ -260,7 +260,7 @@ export class InMemoryAggregateLoader implements IAggregateLoader {
 export class InMemoryCommandExecutor extends CommandExecutorBase {
   constructor(
     handlerRegistry: CommandHandlerRegistry,
-    eventStore: IEventStore,
+    eventStore: IEventsEventStore,
     eventStream: InMemoryEventStream,
     aggregateLoader: IAggregateLoader,
     private projectorRegistry: Map<string, IProjector<any>>
@@ -290,7 +290,7 @@ export class InMemorySekibanExecutor extends SekibanExecutorBase {
   constructor(
     config: SekibanExecutorConfig = {}
   ) {
-    const eventStore = new InMemoryEventStore(config);
+    const eventStore = new EventsInMemoryStore(config);
     const eventStream = new InMemoryEventStream();
     const commandHandlerRegistry = new CommandHandlerRegistry();
     const queryHandlerRegistry = new QueryHandlerRegistry();

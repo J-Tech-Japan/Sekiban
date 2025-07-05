@@ -21,10 +21,13 @@ import type { IEvent } from '../events/event.js';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { ICommand } from '../commands/command.js';
 import type { IAggregatePayload } from '../aggregates/aggregate-payload.js';
-import type { AggregateProjector } from '../aggregates/aggregate-projector.js';
-import type { CommandExecutor } from '../executors/command-executor.js';
-import type { SekibanError } from '../errors/sekiban-error.js';
+import type { AggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
+import type { ICommandExecutor } from '../commands/executor.js';
+import type { IProjector } from '../aggregates/projector-interface.js';
+import { PartitionKeys } from '../documents/partition-keys.js';
+import { SortableUniqueId } from '../documents/sortable-unique-id.js';
 import { SchemaRegistry } from './registry.js';
+import { SekibanError, EventStoreError } from '../result/errors.js';
 import type { EventDefinition } from './event-schema.js';
 import type { CommandDefinition } from './command-schema.js';
 import type { ProjectorDefinitionType } from './projector-schema.js';
@@ -66,40 +69,42 @@ class SchemaEventTypes implements IEventTypes {
     }
   }
 
-  deserializeEvent(document: EventDocument): Result<IEvent, Error> {
+  deserializeEvent(document: EventDocument): Result<IEvent, SekibanError> {
     try {
       const deserialized = this.registry.deserializeEvent(document.eventType, document.payload);
       
-      const event: IEvent = {
-        aggregateId: document.aggregateId,
-        partitionKeys: {
-          aggregateId: document.aggregateId,
-          group: document.aggregateType,
-          rootPartitionKey: ''
-        },
-        sortableUniqueId: document.id,
+      const event: IEvent<IEventPayload> = {
+        id: SortableUniqueId.fromString(document.id).unwrapOr(SortableUniqueId.generate()),
+        partitionKeys: PartitionKeys.create(
+          document.aggregateId,
+          document.aggregateType,
+          document.rootPartitionKey || ''
+        ),
         eventType: document.eventType,
-        eventPayload: deserialized,
+        payload: deserialized,
         aggregateType: document.aggregateType,
         version: document.version,
-        appendedAt: document.timestamp
+        metadata: {
+          timestamp: new Date(document.timestamp),
+          ...document.metadata
+        }
       };
       
       return ok(event);
     } catch (error) {
-      return err(error instanceof Error ? error : new Error('Event deserialization failed'));
+      return err(error instanceof SekibanError ? error : new EventStoreError('deserialize', error instanceof Error ? error.message : 'Event deserialization failed'));
     }
   }
 
-  serializeEvent(event: IEvent): EventDocument {
+  serializeEvent(event: IEvent<IEventPayload>): any {
     return {
-      id: event.sortableUniqueId,
+      id: event.id.toString(),
       eventType: event.eventType,
-      aggregateId: event.aggregateId,
+      aggregateId: event.partitionKeys.aggregateId,
       aggregateType: event.aggregateType,
-      payload: event.eventPayload as Record<string, any>,
-      metadata: {},
-      timestamp: event.appendedAt,
+      payload: event.payload,
+      metadata: event.metadata,
+      timestamp: event.metadata.timestamp,
       version: event.version
     };
   }
@@ -118,24 +123,32 @@ class SchemaCommandTypes implements ICommandTypes {
     }));
   }
 
-  getCommandTypeByName(name: string): (new (...args: any[]) => ICommand<IAggregatePayload>) | undefined {
+  getCommandTypeByName(name: string): { name: string; constructor: any } | undefined {
     if (this.registry.hasCommandType(name)) {
-      return class {} as any;
+      return {
+        name,
+        constructor: class {} as any
+      };
     }
     return undefined;
   }
 
+  createCommand(type: string, payload: any): ICommand<any> {
+    const commandDef = this.registry.getCommand(type);
+    if (!commandDef || !('create' in commandDef)) {
+      throw new Error(`Unknown command type: ${type}`);
+    }
+    return commandDef.create(payload);
+  }
+
   async executeCommand(
-    executor: CommandExecutor,
+    executor: ICommandExecutor,
     command: unknown,
     metadata: CommandMetadata
   ): Promise<Result<CommandResult, SekibanError>> {
     // This would need to be implemented based on schema command execution
     // For now, return an error indicating this needs implementation
-    return err({
-      type: 'NotImplemented',
-      message: 'Schema-based command execution not yet implemented'
-    } as SekibanError);
+    return err(new EventStoreError('command', 'Schema-based command execution not yet implemented'));
   }
 
   /**
@@ -156,27 +169,26 @@ class SchemaCommandTypes implements ICommandTypes {
 class SchemaProjectorTypes implements IProjectorTypes {
   constructor(private registry: SchemaRegistry) {}
 
-  getProjectorTypes(): Array<ProjectorTypeInfo> {
-    return this.registry.getProjectorTypes().map(type => ({
-      name: type,
-      constructor: class {} as any,
-      aggregateTypeName: type
-    }));
+  getProjectorTypes(): Array<{ aggregateTypeName: string; projector: IProjector<any> }> {
+    return this.registry.getProjectorTypes().map(type => {
+      const projector = this.registry.getProjector(type);
+      return {
+        aggregateTypeName: type,
+        projector: projector as IProjector<any>
+      };
+    });
   }
 
-  getProjectorByName(name: string): (new (...args: any[]) => AggregateProjector<IAggregatePayload>) | undefined {
+  getProjectorByName(name: string): (new (...args: any[]) => AggregateProjector<ITypedAggregatePayload>) | undefined {
     if (this.registry.hasProjectorType(name)) {
       return class {} as any;
     }
     return undefined;
   }
 
-  getProjectorForAggregate(aggregateType: string): (new (...args: any[]) => AggregateProjector<IAggregatePayload>) | undefined {
+  getProjectorByAggregateType(aggregateType: string): IProjector<any> | undefined {
     const projector = this.registry.getProjector(aggregateType);
-    if (projector) {
-      return class {} as any;
-    }
-    return undefined;
+    return projector as any;
   }
 }
 

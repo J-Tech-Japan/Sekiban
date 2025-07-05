@@ -21,7 +21,8 @@ import {
   QueryHandlerRegistry 
 } from '../queries/index.js';
 import { IEventPayload, EventRetrievalInfo, OptionalValue, SortableIdCondition, AggregateGroupStream } from '../events/index.js';
-import { IEventStore } from '../storage/index.js';
+import type { IEventStore as IStorageEventStore } from '../storage/index.js';
+import type { IEventStore } from '../events/store.js';
 import { PartitionKeys, Metadata } from '../documents/index.js';
 import { 
   SekibanError, 
@@ -126,18 +127,10 @@ export abstract class SekibanExecutorBase implements ISekibanExecutor {
     aggregateType: string,
     fromVersion?: number
   ): Promise<Result<IEventPayload[], SekibanError>> {
-    // Create EventRetrievalInfo from partition keys
-    const eventRetrievalInfo = new EventRetrievalInfo(
-      OptionalValue.fromValue(partitionKeys.rootPartitionKey || 'default'),
-      OptionalValue.fromValue(new AggregateGroupStream(partitionKeys.group || aggregateType)),
-      OptionalValue.fromValue(partitionKeys.aggregateId),
-      fromVersion ? SortableIdCondition.none() : SortableIdCondition.none() // TODO: Implement version-based filtering
-    );
-
-    const eventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
+    const eventsResult = await this.eventStore.getEvents(partitionKeys, aggregateType, fromVersion);
 
     if (eventsResult.isErr()) {
-      return err(new EventStoreError(eventsResult.error.message));
+      return err(new EventStoreError('read', eventsResult.error.message));
     }
 
     return ok(eventsResult.value.map((e: any) => e.payload));
