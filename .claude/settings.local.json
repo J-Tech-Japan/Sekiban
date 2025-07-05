@@ -33,7 +33,11 @@
       "Bash(grep:*)",
       "Bash(npx vitest run:*)",
       "Bash(az containerapp show:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(dapr run:*)",
+      "Bash(node:*)",
+      "Bash(/Users/tomohisa/dev/GitHub/Sekiban-ts/ts/samples/dapr-sample/run-dapr-demo.sh)",
+      "Bash(./run-dapr-demo.sh:*)"
     ],
     "deny": [
       "Bash(curl:*)"

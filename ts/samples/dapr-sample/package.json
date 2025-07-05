@@ -1,28 +1,28 @@
 {
-  "name": "@sekiban/dapr-sample",
-  "version": "0.1.0",
+  "name": "dapr-sample",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Weather Forecast Dapr sample demonstrating Sekiban multi-payload projectors with TypeScript",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "pnpm -r build",
-    "dev:api": "pnpm --filter @sekiban/dapr-sample-api dev",
-    "dev:web": "pnpm --filter @sekiban/dapr-sample-web dev",
+    "dev": "pnpm -r --parallel dev",
     "test": "pnpm -r test",
     "clean": "pnpm -r clean",
-    "typecheck": "pnpm -r typecheck",
-    "format": "prettier --write .",
-    "lint": "eslint . --ext .ts,.tsx --fix"
+    "dapr:api": "dapr run --app-id sekiban-api --app-port 3000 --components-path ./dapr-components-local --config ./dapr-config/config.yaml -- pnpm --filter @dapr-sample/api dev",
+    "dapr:postgres": "docker-compose up -d postgres",
+    "dapr:stop": "docker-compose down",
+    "setup": "pnpm install && pnpm build"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0",
-    "eslint-config-prettier": "^9.0.0",
-    "prettier": "^3.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
   }
 }

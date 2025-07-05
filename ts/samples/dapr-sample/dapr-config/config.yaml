@@ -5,14 +5,12 @@ metadata:
 spec:
   tracing:
     samplingRate: "1"
-    zipkin:
-      endpointAddress: "http://zipkin:9411/api/v2/spans"
+    otel:
+      endpointAddress: "localhost:4318"
+      isSecure: false
+      protocol: http
   metric:
     enabled: true
-  mtls:
-    enabled: false
   features:
-    - name: resiliency
-      enabled: true
-    - name: proxy
+    - name: proxy.grpc
       enabled: true

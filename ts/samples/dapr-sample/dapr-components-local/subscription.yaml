@@ -1,11 +1,11 @@
 apiVersion: dapr.io/v2alpha1
 kind: Subscription
 metadata:
-  name: domain-events-subscription
+  name: events-subscription
 spec:
-  topic: domain-events
+  topic: events
   routes:
-    default: /events/weather-forecasts
-  pubsubname: sekiban-pubsub
+    default: /events
+  pubsubname: pubsub
 scopes:
-- weather-forecast-api
+  - sekiban-api

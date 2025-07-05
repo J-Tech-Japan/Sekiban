@@ -1,18 +1,22 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@sekiban/core": ["../../src/packages/core/src"],
-      "@sekiban/dapr": ["../../src/packages/dapr/src"],
-      "@sekiban/dapr-sample-domain": ["./packages/domain/src"]
-    }
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "allowJs": false
   },
   "references": [
     { "path": "./packages/domain" },
-    { "path": "./apps/api" },
-    { "path": "./apps/web" }
-  ],
-  "include": [],
-  "exclude": ["node_modules", "dist"]
+    { "path": "./packages/workflows" },
+    { "path": "./packages/api" }
+  ]
 }

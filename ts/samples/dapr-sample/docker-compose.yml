@@ -1,81 +1,32 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     environment:
-      POSTGRES_DB: sekiban_dapr_sample
       POSTGRES_USER: sekiban
-      POSTGRES_PASSWORD: sekiban
+      POSTGRES_PASSWORD: sekiban_password
+      POSTGRES_DB: sekiban_events
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sekiban -d sekiban_dapr_sample"]
+      test: ["CMD-SHELL", "pg_isready -U sekiban"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - dapr-network
 
-  # Redis for Dapr pub/sub and state store
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    networks:
-      - dapr-network
-
-  # Weather Forecast API
-  weather-forecast-api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DAPR_HTTP_PORT: 3500
-      DAPR_GRPC_PORT: 50001
-      APP_ID: weather-forecast-api
-      DAPR_STATE_STORE: sekiban-eventstore
-      DAPR_PUBSUB: sekiban-pubsub
-      DAPR_EVENT_TOPIC: domain-events
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - dapr-network
-
-  # Dapr sidecar for Weather Forecast API
-  weather-forecast-api-dapr:
-    image: "daprio/daprd:1.12.0"
-    command: [
-      "./daprd",
-      "-app-id", "weather-forecast-api",
-      "-app-port", "3000",
-      "-dapr-http-port", "3500",
-      "-dapr-grpc-port", "50001",
-      "-components-path", "/components",
-      "-config", "/config/config.yaml",
-      "-log-level", "info",
-      "-app-protocol", "http"
-    ]
-    volumes:
-      - ./dapr-components:/components
-      - ./dapr-config:/config
-    depends_on:
-      - weather-forecast-api
-      - redis
-    network_mode: "service:weather-forecast-api"
+    command: redis-server --save 20 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
-
-networks:
-  dapr-network:
-    driver: bridge
