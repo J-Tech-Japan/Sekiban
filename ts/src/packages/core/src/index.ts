@@ -22,5 +22,8 @@ export { SortableUniqueId } from './documents/sortable-unique-id.js';
 export * from './result/errors.js';
 export * from './storage/index.js';
 
+// Schema Registry (modern schema-first approach)
+export * from './schema-registry/index.js';
+
 // Re-export commonly used utilities
 export { ok, err, type Result } from 'neverthrow';
