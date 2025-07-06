@@ -4,7 +4,6 @@ import type {
   EventDocument,
   CommandExecutionResult,
   IEventPayload,
-  IAggregatePayload,
   ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,

@@ -119,7 +119,7 @@ export class SchemaExecutor {
         const event: IEvent = {
           id: sortableId,
           partitionKeys,
-          aggregateType: commandDef.aggregateType || partitionKeys.group || 'Unknown',
+          aggregateType: commandDef.projector.aggregateTypeName || partitionKeys.group || 'Unknown',
           version: aggregate.version + events.length + 1,
           eventType: (eventPayload as any).type || eventPayload.constructor.name,
           payload: eventPayload,
@@ -157,7 +157,7 @@ export class SchemaExecutor {
     commandDef: CommandDefinition<any>
   ): Promise<Aggregate<TPayloadUnion | EmptyAggregatePayload>> {
     // Find the projector for this aggregate type
-    const projectorDef = this.registry.getProjector(commandDef.aggregateType || partitionKeys.group || 'Unknown');
+    const projectorDef = this.registry.getProjector(commandDef.projector.aggregateTypeName || partitionKeys.group || 'Unknown');
     if (!projectorDef) {
       // Create a default projector if none found
       const defaultProjector = {

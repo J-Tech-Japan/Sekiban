@@ -15,6 +15,11 @@ export type {
 export { AggregateFactory } from './types.js'
 
 /**
+ * Re-export IAggregateLoader from loader module for backwards compatibility
+ */
+export type { IAggregateLoader as IAggregateLoaderFromLoader } from './types.js'
+
+/**
  * Export aggregate types
  */
 export type { IAggregate } from './aggregate.js'

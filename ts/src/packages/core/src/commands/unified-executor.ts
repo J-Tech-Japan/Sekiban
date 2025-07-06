@@ -17,7 +17,6 @@ import {
   ConcurrencyError 
 } from '../result/errors.js';
 import type { PartitionKeys, Metadata } from '../documents/index.js';
-import { EventBuilder } from '../events/event.js';
 import { SortableUniqueId } from '../documents/sortable-unique-id.js';
 
 /**
@@ -133,7 +132,8 @@ export class UnifiedCommandExecutor {
     if (events.length > 0) {
       const storeResult = await this.eventStore.appendEvents(
         partitionKeys,
-        events,
+        aggregate.aggregateType,
+        events.map(e => e.payload),
         aggregate.version
       );
       
@@ -147,7 +147,7 @@ export class UnifiedCommandExecutor {
       aggregateId: partitionKeys.aggregateId,
       version: aggregate.version + events.length,
       events,
-      metadata: options?.metadata || { timestamp: new Date() }
+      metadata: { timestamp: new Date(), ...options?.metadata }
     });
   }
   
@@ -264,19 +264,8 @@ export class UnifiedCommandExecutor {
       return ok(initialAggregate);
     }
     
-    // Project events to build aggregate state
-    let currentAggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload> = 
-      projector.getInitialState(partitionKeys);
-    
-    for (const event of loadResult.events || []) {
-      const projectionResult = projector.project(currentAggregate, event);
-      if (projectionResult.isErr()) {
-        return err(projectionResult.error);
-      }
-      currentAggregate = projectionResult.value;
-    }
-    
-    return ok(currentAggregate);
+    // If loadResult is already an aggregate, return it
+    return ok(loadResult as Aggregate<TPayloadUnion | EmptyAggregatePayload>);
   }
   
   /**

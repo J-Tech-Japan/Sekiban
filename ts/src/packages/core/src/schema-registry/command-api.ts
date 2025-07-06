@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { ok, type Result } from 'neverthrow';
-import { defineCommand } from './command-schema.js';
+import { ok, err, type Result } from 'neverthrow';
+import { defineCommand, CommandSchemaDefinition, CommandSchemaDefinitionWithPayload } from './command-schema.js';
 import { TypedPartitionKeys, type PartitionKeys } from '../documents/index.js';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector.js';
 import type { SekibanError } from '../result/errors.js';
+import { CommandValidationError } from '../result/errors.js';
 import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
 import type { ICommandContext } from './command-schema.js';
 
@@ -118,14 +119,24 @@ export const command = {
     type: TName,
     options: CreateCommandOptions<TSchema, TProjector, TPayloadUnion>
   ) {
-    return defineCommand({
+    const definition: CommandSchemaDefinition<TName, TSchema, TProjector, TPayloadUnion> = {
       type,
       schema: options.schema,
       projector: options.projector,
       handlers: {
         specifyPartitionKeys: options.partitionKeys,
-        validate: options.validate,
-        handle: (data, context) => {
+        validate: options.validate ? (data) => {
+          const result = options.validate!(data);
+          if (result.isErr()) {
+            const error = result.error;
+            if (error instanceof CommandValidationError) {
+              return err(error);
+            }
+            return err(new CommandValidationError(type, [error.message]));
+          }
+          return ok(undefined);
+        } : undefined,
+        handle: (data: z.infer<TSchema>, context: ICommandContext<TPayloadUnion | EmptyAggregatePayload>) => {
           const events: IEventPayload[] = [];
           const simplifiedContext: SimplifiedContext<EmptyAggregatePayload> = {
             aggregateId: context.getPartitionKeys().aggregateId,
@@ -141,7 +152,8 @@ export const command = {
           return ok(events);
         }
       }
-    });
+    };
+    return defineCommand(definition as any);
   },
   
   /**
@@ -174,14 +186,24 @@ export const command = {
     type: TName,
     options: UpdateCommandOptions<TSchema, TProjector, TPayloadUnion>
   ) {
-    return defineCommand({
+    const definition: CommandSchemaDefinition<TName, TSchema, TProjector, TPayloadUnion> = {
       type,
       schema: options.schema,
       projector: options.projector,
       handlers: {
         specifyPartitionKeys: options.partitionKeys,
-        validate: options.validate,
-        handle: (data, context) => {
+        validate: options.validate ? (data) => {
+          const result = options.validate!(data);
+          if (result.isErr()) {
+            const error = result.error;
+            if (error instanceof CommandValidationError) {
+              return err(error);
+            }
+            return err(new CommandValidationError(type, [error.message]));
+          }
+          return ok(undefined);
+        } : undefined,
+        handle: (data: z.infer<TSchema>, context: ICommandContext<TPayloadUnion | EmptyAggregatePayload>) => {
           const events: IEventPayload[] = [];
           const aggregateResult = context.getAggregate();
           const aggregate = aggregateResult.isOk() ? aggregateResult.value : null;
@@ -200,7 +222,8 @@ export const command = {
           return ok(events);
         }
       }
-    });
+    };
+    return defineCommand(definition as any);
   },
   
   /**
@@ -237,15 +260,25 @@ export const command = {
     type: TName,
     options: TransitionCommandOptions<TSchema, TProjector, TPayloadUnion, TFromState>
   ) {
-    return defineCommand({
+    const definition: CommandSchemaDefinitionWithPayload<TName, TSchema, TProjector, TPayloadUnion, TFromState> = {
       type,
       schema: options.schema,
       projector: options.projector,
       requiredPayloadType: options.fromState,
       handlers: {
         specifyPartitionKeys: options.partitionKeys,
-        validate: options.validate,
-        handle: (data, context: ICommandContext<TFromState>) => {
+        validate: options.validate ? (data) => {
+          const result = options.validate!(data);
+          if (result.isErr()) {
+            const error = result.error;
+            if (error instanceof CommandValidationError) {
+              return err(error);
+            }
+            return err(new CommandValidationError(type, [error.message]));
+          }
+          return ok(undefined);
+        } : undefined,
+        handle: (data: z.infer<TSchema>, context: ICommandContext<TFromState>) => {
           const events: IEventPayload[] = [];
           const aggregateResult = context.getAggregate();
           const aggregate = aggregateResult.isOk() ? aggregateResult.value : null;
@@ -264,6 +297,7 @@ export const command = {
           return ok(events);
         }
       }
-    });
+    };
+    return defineCommand(definition as any);
   }
 };

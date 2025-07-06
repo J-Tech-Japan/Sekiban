@@ -14,6 +14,11 @@ export type {
   CreateEventOptions
 } from './event.js';
 
+/**
+ * Re-export IEvent from event.js for backwards compatibility
+ */
+export type { IEvent as IEventFromEventJs } from './event.js';
+
 export {
   Event,
   createEventMetadata,

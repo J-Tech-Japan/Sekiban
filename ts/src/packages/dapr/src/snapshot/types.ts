@@ -1,9 +1,9 @@
-import type { IAggregatePayload, PartitionKeys } from '@sekiban/core';
+import type { ITypedAggregatePayload, PartitionKeys } from '@sekiban/core';
 
 /**
  * Represents a snapshot of an aggregate at a specific point in time
  */
-export interface AggregateSnapshot<TPayload extends IAggregatePayload> {
+export interface AggregateSnapshot<TPayload extends ITypedAggregatePayload> {
   /** The unique identifier of the aggregate */
   aggregateId: string;
   
@@ -84,7 +84,7 @@ export interface SnapshotConfiguration {
 /**
  * Result of loading an aggregate with snapshot optimization
  */
-export interface SnapshotLoadResult<TPayload extends IAggregatePayload> {
+export interface SnapshotLoadResult<TPayload extends ITypedAggregatePayload> {
   /** The current aggregate state */
   payload: TPayload;
   

@@ -7,5 +7,5 @@ export default defineConfig({
   clean: false,
   sourcemap: true,
   external: ['@sekiban/core', '@dapr/dapr', 'neverthrow'],
-  onSuccess: 'echo "Build completed"'
+  onSuccess: 'echo "Build completed successfully"'
 });

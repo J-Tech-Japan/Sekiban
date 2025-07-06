@@ -1,12 +1,12 @@
 import { ActorId } from '@dapr/dapr';
-import type { IAggregatePayload, PartitionKeys } from '@sekiban/core';
+import type { ITypedAggregatePayload, PartitionKeys } from '@sekiban/core';
 import type { Result } from 'neverthrow';
 import type { SnapshotError, SnapshotLoadResult } from '../snapshot/types';
 
 /**
  * Interface for aggregate actors
  */
-export interface IAggregateActor<TPayload extends IAggregatePayload> {
+export interface IAggregateActor<TPayload extends ITypedAggregatePayload> {
   /**
    * Get the current state of the aggregate
    */

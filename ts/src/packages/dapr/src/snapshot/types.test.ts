@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { AggregateSnapshot, SnapshotMetadata } from './types';
-import type { IAggregatePayload } from '@sekiban/core';
+import type { ITypedAggregatePayload } from '@sekiban/core';
 import { PartitionKeys } from '@sekiban/core';
 
 // Test payload type
-interface UserPayload extends IAggregatePayload {
+interface UserPayload extends ITypedAggregatePayload {
   name: string;
   email: string;
   version: number;
