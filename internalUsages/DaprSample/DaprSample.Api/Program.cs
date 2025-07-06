@@ -48,7 +48,7 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
 {
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
-    options.EventTopicName = "domain-events";
+    options.EventTopicName = "events.all";  // Changed to match subscription.yaml
     options.ActorIdPrefix = "dapr-sample";
 });
 
@@ -420,6 +420,13 @@ app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecu
 .WithSummary("Generate sample weather data")
 .WithDescription("Generates sample weather forecast data for testing")
 .WithTags("WeatherForecast");
+
+// Health check endpoint for Dapr
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+.WithName("HealthCheck")
+.WithSummary("Health check endpoint")
+.WithDescription("Returns the health status of the application")
+.WithTags("Health");
 
 // Map default endpoints for Aspire integration
 app.MapDefaultEndpoints();
