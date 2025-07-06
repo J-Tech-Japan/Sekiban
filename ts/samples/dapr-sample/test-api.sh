@@ -1,55 +1,46 @@
-#!/bin/bash
+#\!/bin/bash
 
-echo "🧪 Testing Dapr Sample API..."
-echo
+echo "Testing Dapr Sample API"
+echo "======================"
 
-# Health check
-echo "1. Health Check:"
-curl -s http://localhost:3000/health | json_pp
-echo
+# Test health endpoint
+echo -e "\n1. Testing health endpoint:"
+curl -s http://localhost:3000/api/health | jq
 
 # Create a task
-echo "2. Creating a task:"
-RESPONSE=$(curl -s -X POST http://localhost:3000/api/tasks \
+echo -e "\n2. Creating a new task:"
+TASK_RESPONSE=$(curl -s -X POST http://localhost:3000/api/tasks \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Complete Sekiban TypeScript Implementation",
-    "description": "Implement schema-based type registry with Dapr integration",
-    "priority": "high",
-    "assignedTo": "dev@example.com"
-  }')
-echo "$RESPONSE" | json_pp
-TASK_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*' | grep -o '[^"]*$')
-echo
-
-# Get the task
-echo "3. Getting the task:"
-curl -s http://localhost:3000/api/tasks/$TASK_ID | json_pp
-echo
-
-# List all tasks
-echo "4. Listing all tasks:"
-curl -s http://localhost:3000/api/tasks | json_pp
-echo
-
-# Update the task
-echo "5. Updating the task:"
-curl -s -X PATCH http://localhost:3000/api/tasks/$TASK_ID \
-  -H "Content-Type: application/json" \
-  -d '{
-    "description": "Successfully implemented schema-based type registry!",
+    "title": "Test Sekiban with Dapr",
+    "description": "Verify that the event sourcing system works correctly",
+    "assignedTo": "developer@example.com",
+    "dueDate": "2025-07-15T00:00:00Z",
     "priority": "medium"
-  }' | json_pp
-echo
+  }')
 
-# Complete the task
-echo "6. Completing the task:"
-curl -s -X POST http://localhost:3000/api/tasks/$TASK_ID/complete | json_pp
-echo
+echo $TASK_RESPONSE | jq
 
-# Get the completed task
-echo "7. Getting the completed task:"
-curl -s http://localhost:3000/api/tasks/$TASK_ID | json_pp
-echo
+# Extract task ID
+TASK_ID=$(echo $TASK_RESPONSE | jq -r '.id')
 
-echo "✅ Test completed!"
+if [ "$TASK_ID" \!= "null" ]; then
+  # Get the created task
+  echo -e "\n3. Getting the created task:"
+  curl -s http://localhost:3000/api/tasks/$TASK_ID | jq
+  
+  # Try to assign the task
+  echo -e "\n4. Assigning the task to another user:"
+  curl -s -X PUT http://localhost:3000/api/tasks/$TASK_ID/assign \
+    -H "Content-Type: application/json" \
+    -d '{
+      "assignedTo": "manager@example.com"
+    }' | jq
+    
+  # Get updated task
+  echo -e "\n5. Getting the updated task:"
+  curl -s http://localhost:3000/api/tasks/$TASK_ID | jq
+else
+  echo "Failed to create task - no ID returned"
+fi
+EOF < /dev/null

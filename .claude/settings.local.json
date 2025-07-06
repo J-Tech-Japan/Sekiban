@@ -43,7 +43,13 @@
       "Bash(npm run typecheck:*)",
       "Bash(tsc:*)",
       "Bash(npm run:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(npx tsx:*)",
+      "Bash(pnpm tsx:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm dev:*)"
     ],
     "deny": [
       "Bash(curl:*)"

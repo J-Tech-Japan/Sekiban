@@ -7,6 +7,7 @@ import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
 import type { SekibanError } from '../result/errors.js';
 import { CommandValidationError } from '../result/errors.js';
 import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
+import type { ICommand } from '../commands/command.js';
 
 /**
  * Command handlers for business logic
@@ -91,12 +92,31 @@ export function defineCommand<
     handlers: definition.handlers,
     
     /**
-     * Create a new command instance with commandType property
+     * Create a new command instance that implements ICommand interface
      */
-    create: (data: InferredType): CommandType => ({
-      commandType: definition.type,
-      ...data
-    } as CommandType),
+    create: (data: InferredType): ICommand<TPayloadUnion> => {
+      // Validate data upfront
+      const validatedData = definition.schema.parse(data) as InferredType;
+      
+      // Return an object that implements ICommand
+      return {
+        commandType: definition.type,
+        ...validatedData,
+        
+        specifyPartitionKeys(): PartitionKeys {
+          return definition.handlers.specifyPartitionKeys(validatedData);
+        },
+        
+        validate(): Result<void, CommandValidationError> {
+          // Schema validation already done in create, just run business validation
+          return definition.handlers.validate(validatedData);
+        },
+        
+        handle(aggregate: Aggregate<TPayloadUnion | EmptyAggregatePayload>): Result<IEventPayload[], SekibanError> {
+          return definition.handlers.handle(validatedData, aggregate);
+        }
+      } as ICommand<TPayloadUnion>;
+    },
     
     /**
      * Validate command data (schema + business rules)

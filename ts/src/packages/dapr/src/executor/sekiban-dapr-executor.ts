@@ -127,17 +127,14 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       
       // Get the projector for this aggregate type (using group as aggregate type name)
       const aggregateTypeName = partitionKeys.group || 'default';
-      const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(aggregateTypeName);
+      const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(aggregateTypeName);
       
-      if (!projectorConstructor) {
+      if (!projector) {
         return err({
           type: 'ProjectorNotFound',
           message: `No projector registered for aggregate type: ${aggregateTypeName}`
         } as SekibanError);
       }
-      
-      // Create projector instance
-      const projector = new projectorConstructor() as IAggregateProjector<any>;
       
       // Create PartitionKeysAndProjector (matching C# pattern)
       const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
