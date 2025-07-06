@@ -4,7 +4,12 @@ import type {
   EventDocument,
   CommandExecutionResult,
   IEventPayload,
-  IAggregatePayload
+  IAggregatePayload,
+  ICommandWithHandler,
+  IAggregateProjector,
+  ITypedAggregatePayload,
+  EmptyAggregatePayload,
+  Metadata
 } from '@sekiban/core';
 
 /**
@@ -18,14 +23,18 @@ export interface SerializableAggregate {
 
 /**
  * Actor-specific serializable command with metadata
+ * Updated to work with ICommandWithHandler pattern
  */
-export interface ActorSerializableCommandAndMetadata {
-  command: any; // JSON serializable command
-  metadata: {
-    commandType: string;
-    aggregateType: string;
-    version?: number;
-  };
+export interface ActorSerializableCommandAndMetadata<
+  TCommand = any,
+  TProjector extends IAggregateProjector<TPayloadUnion> = any,
+  TPayloadUnion extends ITypedAggregatePayload = any,
+  TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+> {
+  command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+  commandData: TCommand;
+  partitionKeys: PartitionKeys;
+  metadata?: Metadata;
 }
 
 /**

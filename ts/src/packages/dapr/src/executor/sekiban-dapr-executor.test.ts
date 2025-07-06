@@ -1,14 +1,19 @@
 import { describe, it, expect, beforeEach, vi, MockedFunction } from 'vitest';
 import { ok, err, Result } from 'neverthrow';
 import type { DaprClient } from '@dapr/dapr';
+import { HttpMethod } from '@dapr/dapr';
 import type { 
-  ICommand,
+  ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,
   EmptyAggregatePayload,
-  PartitionKeys,
-  Aggregate
+  Aggregate,
+  ICommandContext,
+  IEventPayload,
+  Metadata,
+  SekibanDomainTypes
 } from '@sekiban/core';
+import { PartitionKeys } from '@sekiban/core';
 import { SekibanDaprExecutor, type DaprSekibanConfiguration } from './sekiban-dapr-executor.js';
 
 // Mock types for testing
@@ -19,10 +24,41 @@ interface TestUserPayload extends ITypedAggregatePayload {
   email: string;
 }
 
-interface TestCreateUserCommand extends ICommand<TestUserPayload> {
-  readonly commandType: 'CreateTestUser';
+interface TestCreateUserCommandData {
   name: string;
   email: string;
+}
+
+class TestCreateUserCommand implements ICommandWithHandler<
+  TestCreateUserCommandData,
+  MockUserProjector,
+  TestUserPayload,
+  EmptyAggregatePayload
+> {
+  readonly commandType = 'CreateTestUser';
+  
+  specifyPartitionKeys(data: TestCreateUserCommandData): PartitionKeys {
+    return new PartitionKeys('user-123', 'TestUser', 'default');
+  }
+  
+  validate(data: TestCreateUserCommandData): Result<void, Error> {
+    if (!data.name || !data.email) {
+      return err(new Error('Invalid command data'));
+    }
+    return ok(undefined);
+  }
+  
+  async handle(
+    context: ICommandContext,
+    data: TestCreateUserCommandData,
+    aggregate: Aggregate<EmptyAggregatePayload>
+  ): Promise<Result<IEventPayload[], Error>> {
+    return ok([]);
+  }
+  
+  getProjector(): MockUserProjector {
+    return new MockUserProjector();
+  }
 }
 
 class MockUserProjector implements IAggregateProjector<TestUserPayload> {
@@ -42,6 +78,10 @@ class MockUserProjector implements IAggregateProjector<TestUserPayload> {
   
   getSupportedPayloadTypes(): string[] {
     return ['TestUser'];
+  }
+  
+  getVersion(): number {
+    return 1;
   }
 }
 
@@ -63,39 +103,53 @@ class MockOrderProjector implements IAggregateProjector<any> {
   getSupportedPayloadTypes(): string[] {
     return ['TestOrder'];
   }
+  
+  getVersion(): number {
+    return 1;
+  }
 }
 
 describe('SekibanDaprExecutor', () => {
-  let daprClient: MockedFunction<DaprClient>;
+  let daprClient: any;
   let configuration: DaprSekibanConfiguration;
   let executor: SekibanDaprExecutor;
   let mockProjector: MockUserProjector;
+  let mockDomainTypes: SekibanDomainTypes;
 
   beforeEach(() => {
     // Mock Dapr client
     daprClient = {
-      actors: {
-        getActor: vi.fn(),
+      invoker: {
         invoke: vi.fn()
       },
       pubsub: {
         publish: vi.fn()
       }
-    } as any;
+    };
 
     // Configuration matching C# implementation
     configuration = {
       stateStoreName: 'sekiban-eventstore',
       pubSubName: 'sekiban-pubsub', 
       eventTopicName: 'domain-events',
-      actorType: 'AggregateActor',
-      projectors: []
+      actorType: 'AggregateActor'
     };
 
     mockProjector = new MockUserProjector();
-    configuration.projectors = [mockProjector];
 
-    executor = new SekibanDaprExecutor(daprClient, configuration);
+    // Mock domain types
+    mockDomainTypes = {
+      projectorTypes: {
+        getProjectorByAggregateType: vi.fn().mockReturnValue(MockUserProjector),
+        getProjectorTypes: vi.fn().mockReturnValue([{
+          projector: MockUserProjector,
+          aggregateTypeName: 'TestUser'
+        }])
+      },
+      projectorRegistry: new Map([['MockUserProjector', MockUserProjector]])
+    } as any;
+
+    executor = new SekibanDaprExecutor(daprClient, mockDomainTypes, configuration);
   });
 
   describe('Construction', () => {
@@ -106,47 +160,46 @@ describe('SekibanDaprExecutor', () => {
       expect(executor.getConfiguration()).toEqual(configuration);
     });
 
-    it('should throw error when no projectors provided', () => {
+    it('should use default actor type when not provided', () => {
       // Arrange
-      const emptyConfig = { ...configuration, projectors: [] };
-
-      // Act & Assert
-      expect(() => new SekibanDaprExecutor(daprClient, emptyConfig))
-        .toThrow('At least one projector must be provided');
-    });
-
-    it('should register all provided projectors', () => {
-      // Arrange
-      const orderProjector = new MockOrderProjector();
-      const configWithMultipleProjectors = {
-        ...configuration,
-        projectors: [mockProjector, orderProjector]
-      };
+      const configWithoutActorType = { ...configuration };
+      delete configWithoutActorType.actorType;
 
       // Act
-      const executorWithMultiple = new SekibanDaprExecutor(daprClient, configWithMultipleProjectors);
+      const executorWithDefault = new SekibanDaprExecutor(daprClient, mockDomainTypes, configWithoutActorType);
+
+      // Assert
+      expect(executorWithDefault.getConfiguration().actorType).toBe('AggregateActor');
+    });
+
+    it('should get registered projectors from domain types', () => {
+      // Arrange
+      const mockDomainTypesWithMultiple = {
+        ...mockDomainTypes,
+        projectorTypes: {
+          getProjectorByAggregateType: vi.fn(),
+          getProjectorTypes: vi.fn().mockReturnValue([
+            { projector: MockUserProjector, aggregateTypeName: 'TestUser' },
+            { projector: MockOrderProjector, aggregateTypeName: 'TestOrder' }
+          ])
+        }
+      } as any;
+
+      // Act
+      const executorWithMultiple = new SekibanDaprExecutor(daprClient, mockDomainTypesWithMultiple, configuration);
 
       // Assert
       expect(executorWithMultiple.getRegisteredProjectors()).toHaveLength(2);
-      expect(executorWithMultiple.hasProjector('TestUser')).toBe(true);
-      expect(executorWithMultiple.hasProjector('TestOrder')).toBe(true);
     });
   });
 
   describe('Command Execution', () => {
     it('should execute command through Dapr AggregateActor', async () => {
       // Arrange
-      const mockCommand: TestCreateUserCommand = {
-        commandType: 'CreateTestUser',
+      const mockCommand = new TestCreateUserCommand();
+      const commandData: TestCreateUserCommandData = {
         name: 'John Doe',
-        email: 'john@example.com',
-        specifyPartitionKeys: () => ({
-          aggregateId: 'user-123',
-          partitionKey: 'TestUser',
-          rootPartitionKey: 'default'
-        }),
-        validate: () => ok(undefined),
-        handle: () => ok([])
+        email: 'john@example.com'
       };
 
       const expectedResponse = {
@@ -155,15 +208,11 @@ describe('SekibanDaprExecutor', () => {
         success: true
       };
 
-      // Mock actor response
-      const mockActorProxy = {
-        executeCommandAsync: vi.fn().mockResolvedValue(expectedResponse)
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      // Mock Dapr response
+      daprClient.invoker.invoke.mockResolvedValue(expectedResponse);
 
       // Act
-      const result = await executor.executeCommandAsync(mockCommand);
+      const result = await executor.executeCommandAsync(mockCommand, commandData);
 
       // Assert
       expect(result.isOk()).toBe(true);
@@ -171,39 +220,29 @@ describe('SekibanDaprExecutor', () => {
         expect(result.value).toEqual(expectedResponse);
       }
 
-      // Verify Dapr actor was called correctly
-      expect(daprClient.actors.getActor).toHaveBeenCalledWith(
-        'AggregateActor',
-        expect.stringContaining('user-123')
-      );
-      expect(mockActorProxy.executeCommandAsync).toHaveBeenCalledWith(
+      // Verify Dapr was called correctly
+      expect(daprClient.invoker.invoke).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining('actors/AggregateActor'),
+        HttpMethod.POST,
         expect.objectContaining({
           command: mockCommand,
-          partitionKeys: mockCommand.specifyPartitionKeys()
+          commandData: commandData,
+          partitionKeys: mockCommand.specifyPartitionKeys(commandData)
         })
       );
     });
 
     it('should return error when command validation fails', async () => {
       // Arrange
-      const invalidCommand: TestCreateUserCommand = {
-        commandType: 'CreateTestUser',
+      const mockCommand = new TestCreateUserCommand();
+      const invalidData: TestCreateUserCommandData = {
         name: '',
-        email: 'invalid-email',
-        specifyPartitionKeys: () => ({
-          aggregateId: 'user-123',
-          partitionKey: 'TestUser',
-          rootPartitionKey: 'default'
-        }),
-        validate: () => err({
-          type: 'CommandValidationError',
-          message: 'Invalid command data'
-        }),
-        handle: () => ok([])
+        email: ''
       };
 
       // Act
-      const result = await executor.executeCommandAsync(invalidCommand);
+      const result = await executor.executeCommandAsync(mockCommand, invalidData);
 
       // Assert
       expect(result.isErr()).toBe(true);
@@ -212,39 +251,55 @@ describe('SekibanDaprExecutor', () => {
       }
 
       // Verify no actor call was made
-      expect(daprClient.actors.getActor).not.toHaveBeenCalled();
+      expect(daprClient.invoker.invoke).not.toHaveBeenCalled();
     });
 
     it('should handle Dapr actor communication errors', async () => {
       // Arrange
-      const mockCommand: TestCreateUserCommand = {
-        commandType: 'CreateTestUser',
+      const mockCommand = new TestCreateUserCommand();
+      const commandData: TestCreateUserCommandData = {
         name: 'John Doe',
-        email: 'john@example.com',
-        specifyPartitionKeys: () => ({
-          aggregateId: 'user-123',
-          partitionKey: 'TestUser',
-          rootPartitionKey: 'default'
-        }),
-        validate: () => ok(undefined),
-        handle: () => ok([])
+        email: 'john@example.com'
       };
 
       // Mock actor communication failure
-      const mockActorProxy = {
-        executeCommandAsync: vi.fn().mockRejectedValue(new Error('Dapr actor unavailable'))
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      daprClient.invoker.invoke.mockRejectedValue(new Error('Dapr actor unavailable'));
 
       // Act
-      const result = await executor.executeCommandAsync(mockCommand);
+      const result = await executor.executeCommandAsync(mockCommand, commandData);
 
       // Assert
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         expect(result.error.message).toContain('Dapr actor unavailable');
       }
+    });
+
+    it('should retry on transient failures', async () => {
+      // Arrange
+      const mockCommand = new TestCreateUserCommand();
+      const commandData: TestCreateUserCommandData = {
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+
+      const expectedResponse = {
+        aggregateId: 'user-123',
+        lastSortableUniqueId: '20250703T160000Z.123456.user-123',
+        success: true
+      };
+
+      // Mock transient failure then success
+      daprClient.invoker.invoke
+        .mockRejectedValueOnce(new Error('Temporary failure'))
+        .mockResolvedValueOnce(expectedResponse);
+
+      // Act
+      const result = await executor.executeCommandAsync(mockCommand, commandData);
+
+      // Assert
+      expect(result.isOk()).toBe(true);
+      expect(daprClient.invoker.invoke).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -263,12 +318,8 @@ describe('SekibanDaprExecutor', () => {
         email: 'john@example.com'
       };
 
-      // Mock actor response
-      const mockActorProxy = {
-        queryAsync: vi.fn().mockResolvedValue(expectedUser)
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      // Mock Dapr response
+      daprClient.invoker.invoke.mockResolvedValue(expectedUser);
 
       // Act
       const result = await executor.queryAsync(mockQuery);
@@ -280,9 +331,11 @@ describe('SekibanDaprExecutor', () => {
       }
 
       // Verify correct actor was called
-      expect(daprClient.actors.getActor).toHaveBeenCalledWith(
-        'AggregateActor',
-        expect.any(String)
+      expect(daprClient.invoker.invoke).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining('actors/AggregateActor'),
+        HttpMethod.POST,
+        mockQuery
       );
     });
 
@@ -294,11 +347,7 @@ describe('SekibanDaprExecutor', () => {
       };
 
       // Mock actor response for non-existent entity
-      const mockActorProxy = {
-        queryAsync: vi.fn().mockRejectedValue(new Error('Entity not found'))
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      daprClient.invoker.invoke.mockRejectedValue(new Error('Entity not found'));
 
       // Act
       const result = await executor.queryAsync(mockQuery);
@@ -314,14 +363,11 @@ describe('SekibanDaprExecutor', () => {
   describe('Aggregate Loading', () => {
     it('should load aggregate through Dapr actor', async () => {
       // Arrange
-      const partitionKeys: PartitionKeys = {
-        aggregateId: 'user-123',
-        partitionKey: 'TestUser',
-        rootPartitionKey: 'default'
-      };
+      const partitionKeys = new PartitionKeys('user-123', 'TestUser', 'default');
 
       const expectedAggregate: Aggregate<TestUserPayload> = {
         partitionKeys,
+        aggregateType: 'TestUser',
         payload: {
           aggregateType: 'TestUser',
           id: 'user-123',
@@ -329,16 +375,13 @@ describe('SekibanDaprExecutor', () => {
           email: 'john@example.com'
         },
         version: 2,
-        lastEventId: 'event-456',
-        appliedEvents: []
-      };
+        lastSortableUniqueId: null,
+        projectorName: 'MockUserProjector',
+        projectorVersion: 1
+      } as any;
 
-      // Mock actor response
-      const mockActorProxy = {
-        loadAggregateAsync: vi.fn().mockResolvedValue(expectedAggregate)
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      // Mock Dapr response
+      daprClient.invoker.invoke.mockResolvedValue(expectedAggregate);
 
       // Act
       const result = await executor.loadAggregateAsync(mockProjector, partitionKeys);
@@ -350,44 +393,32 @@ describe('SekibanDaprExecutor', () => {
       }
 
       // Verify actor was called with correct parameters
-      expect(daprClient.actors.getActor).toHaveBeenCalledWith(
-        'AggregateActor',
-        expect.stringContaining('user-123')
+      expect(daprClient.invoker.invoke).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.stringContaining('actors/AggregateActor'),
+        HttpMethod.POST,
+        partitionKeys
       );
-      expect(mockActorProxy.loadAggregateAsync).toHaveBeenCalledWith(partitionKeys);
     });
 
-    it('should return empty aggregate for non-existent partition', async () => {
+    it('should return error for unregistered projector', async () => {
       // Arrange
-      const partitionKeys: PartitionKeys = {
-        aggregateId: 'non-existent',
-        partitionKey: 'TestUser',
-        rootPartitionKey: 'default'
-      };
+      const partitionKeys = new PartitionKeys('non-existent', 'UnknownType', 'default');
 
-      const emptyAggregate: Aggregate<EmptyAggregatePayload> = {
-        partitionKeys,
-        payload: { aggregateType: 'Empty' },
-        version: 0,
-        lastEventId: null,
-        appliedEvents: []
-      };
+      const unknownProjector = {
+        aggregateTypeName: 'UnknownType'
+      } as any;
 
-      // Mock actor response
-      const mockActorProxy = {
-        loadAggregateAsync: vi.fn().mockResolvedValue(emptyAggregate)
-      };
-      
-      daprClient.actors.getActor = vi.fn().mockReturnValue(mockActorProxy);
+      // Mock domain types to return null for unknown projector
+      mockDomainTypes.projectorTypes.getProjectorByAggregateType = vi.fn().mockReturnValue(null);
 
       // Act
-      const result = await executor.loadAggregateAsync(mockProjector, partitionKeys);
+      const result = await executor.loadAggregateAsync(unknownProjector, partitionKeys);
 
       // Assert
-      expect(result.isOk()).toBe(true);
-      if (result.isOk()) {
-        expect(result.value.payload.aggregateType).toBe('Empty');
-        expect(result.value.version).toBe(0);
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).toContain('No projector registered');
       }
     });
   });
@@ -414,6 +445,14 @@ describe('SekibanDaprExecutor', () => {
       expect(executor.getStateStoreName()).toBe('new-eventstore');
       expect(executor.getEventTopicName()).toBe('new-events');
       expect(executor.getPubSubName()).toBe('sekiban-pubsub'); // Unchanged
+    });
+
+    it('should return domain types', () => {
+      // Act
+      const domainTypes = executor.getDomainTypes();
+
+      // Assert
+      expect(domainTypes).toBe(mockDomainTypes);
     });
   });
 });

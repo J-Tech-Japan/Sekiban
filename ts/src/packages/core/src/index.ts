@@ -33,6 +33,13 @@ export * from './storage/index.js';
 // Schema Registry (modern schema-first approach)
 export * from './schema-registry/index.js';
 
+// Re-export ICommandContext types for convenience
+export type {
+  ICommandContext,
+  ICommandContextWithoutState,
+  ICommandWithHandler
+} from './schema-registry/index.js';
+
 // Domain Types Registry - selectively export to avoid conflicts
 export { 
   type SekibanDomainTypes,

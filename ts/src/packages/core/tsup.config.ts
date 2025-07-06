@@ -3,13 +3,8 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['cjs', 'esm'],
-  dts: {
-    resolve: true,
-    entry: {
-      index: 'src/index.ts'
-    }
-  },
-  clean: true,
+  dts: true, // Simple dts generation
+  clean: false, // Don't clean to preserve JS files
   sourcemap: true,
   splitting: false,
   minify: false,
@@ -19,4 +14,5 @@ export default defineConfig({
   target: 'node18',
   platform: 'node',
   shims: false,
+  onSuccess: 'echo "Build completed"'
 });

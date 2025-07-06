@@ -5,7 +5,11 @@ import {
   EmptyAggregatePayload,
   AggregateProjector,
   SekibanError,
-  IEvent
+  IEvent,
+  ICommandWithHandler,
+  ITypedAggregatePayload,
+  ICommandContext,
+  Metadata
 } from '@sekiban/core';
 import { Result, ok, err } from 'neverthrow';
 import type { 
@@ -135,7 +139,12 @@ export class AggregateActor extends Actor implements IAggregateActor {
     };
   }
 
-  async executeCommandAsync(commandAndMetadata: ActorSerializableCommandAndMetadata): Promise<string> {
+  async executeCommandAsync<
+    TCommand,
+    TProjector extends AggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+  >(commandAndMetadata: ActorSerializableCommandAndMetadata): Promise<string> {
     try {
       await this.ensureInitializedAsync();
       
@@ -158,31 +167,43 @@ export class AggregateActor extends Actor implements IAggregateActor {
         this.currentAggregate
       );
 
-      // Execute command - simplified for now, real implementation would use command executor
-      const command = commandAndMetadata.command;
-      const metadata = commandAndMetadata.metadata;
+      // Execute command with new ICommandWithHandler pattern
+      const command = commandAndMetadata.command as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+      const commandData = commandAndMetadata.commandData;
+      const metadata = commandAndMetadata.metadata || {
+        timestamp: new Date(),
+        requestId: crypto.randomUUID()
+      };
       
       // Validate command
-      const validateResult = command.validate();
+      const validateResult = command.validate(commandData);
       if (validateResult.isErr()) {
         return JSON.stringify({
           aggregateId: this.partitionInfo.partitionKeys.aggregateId,
           group: this.partitionInfo.partitionKeys.group || 'default',
           rootPartitionKey: this.partitionInfo.partitionKeys.rootPartitionKey || 'default',
           version: this.currentAggregate.version,
-          events: []
+          events: [],
+          error: validateResult.error
         });
       }
 
-      // Handle command
-      const handleResult = command.handle(this.currentAggregate);
+      // Create command context
+      const context: ICommandContext = {
+        repository,
+        metadata
+      };
+
+      // Handle command with context
+      const handleResult = await command.handle(context, commandData, this.currentAggregate as Aggregate<TAggregatePayload>);
       if (handleResult.isErr()) {
         return JSON.stringify({
           aggregateId: this.partitionInfo.partitionKeys.aggregateId,
           group: this.partitionInfo.partitionKeys.group || 'default',
           rootPartitionKey: this.partitionInfo.partitionKeys.rootPartitionKey || 'default',
           version: this.currentAggregate.version,
-          events: []
+          events: [],
+          error: handleResult.error
         });
       }
 

@@ -1,21 +1,30 @@
 import type { Result } from 'neverthrow';
 import type { 
-  ICommand,
+  ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,
+  EmptyAggregatePayload,
   PartitionKeys,
   Aggregate,
-  SekibanError
+  SekibanError,
+  Metadata
 } from '@sekiban/core';
 
 /**
  * Command and metadata wrapper for Dapr actor communication
  * Equivalent to C# SerializableCommandAndMetadata
+ * Updated to work with ICommandWithHandler
  */
-export interface SerializableCommandAndMetadata<TPayload extends ITypedAggregatePayload> {
-  command: ICommand<TPayload>;
+export interface SerializableCommandAndMetadata<
+  TCommand,
+  TProjector extends IAggregateProjector<TPayloadUnion>,
+  TPayloadUnion extends ITypedAggregatePayload,
+  TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+> {
+  command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+  commandData: TCommand;
   partitionKeys: PartitionKeys;
-  metadata?: Record<string, any>;
+  metadata?: Metadata;
 }
 
 /**
@@ -38,8 +47,13 @@ export interface IDaprAggregateActorProxy {
   /**
    * Execute command through the actor
    */
-  executeCommandAsync<TPayload extends ITypedAggregatePayload>(
-    commandAndMetadata: SerializableCommandAndMetadata<TPayload>
+  executeCommandAsync<
+    TCommand,
+    TProjector extends IAggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+  >(
+    commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
   ): Promise<SekibanCommandResponse>;
   
   /**
@@ -81,8 +95,15 @@ export interface ISekibanDaprExecutor {
   /**
    * Execute command through Dapr AggregateActor
    */
-  executeCommandAsync<TPayload extends ITypedAggregatePayload>(
-    command: ICommand<TPayload>
+  executeCommandAsync<
+    TCommand,
+    TProjector extends IAggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+  >(
+    command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>,
+    commandData: TCommand,
+    metadata?: Metadata
   ): Promise<Result<SekibanCommandResponse, SekibanError>>;
   
   /**

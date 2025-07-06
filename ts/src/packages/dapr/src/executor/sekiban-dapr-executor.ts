@@ -3,13 +3,15 @@ import { ok, err } from 'neverthrow';
 import type { DaprClient } from '@dapr/dapr';
 import { HttpMethod } from '@dapr/dapr';
 import type { 
-  ICommand,
+  ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,
+  EmptyAggregatePayload,
   PartitionKeys,
   Aggregate,
-  SekibanError
+  Metadata
 } from '@sekiban/core';
+import { SekibanError } from '@sekiban/core';
 import type { 
   DaprSekibanConfiguration,
   SekibanCommandResponse,
@@ -47,8 +49,13 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     const actorType = this.configuration.actorType;
     
     return {
-      executeCommandAsync: async <TPayload extends ITypedAggregatePayload>(
-        commandAndMetadata: SerializableCommandAndMetadata<TPayload>
+      executeCommandAsync: async <
+        TCommand,
+        TProjector extends IAggregateProjector<TPayloadUnion>,
+        TPayloadUnion extends ITypedAggregatePayload,
+        TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+      >(
+        commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
         // Use Dapr's HTTP API directly
         const response = await this.daprClient.invoker.invoke(
@@ -112,29 +119,28 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   /**
    * Execute command through Dapr AggregateActor
    */
-  async executeCommandAsync<TPayload extends ITypedAggregatePayload>(
-    command: ICommand<TPayload>
+  async executeCommandAsync<
+    TCommand,
+    TProjector extends IAggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
+  >(
+    command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>,
+    commandData: TCommand,
+    metadata?: Metadata
   ): Promise<Result<SekibanCommandResponse, SekibanError>> {
     try {
       // Validate command first
-      const validationResult = command.validate();
+      const validationResult = command.validate(commandData);
       if (validationResult.isErr()) {
         return err(validationResult.error as SekibanError);
       }
       
       // Get partition keys for the command
-      const partitionKeys = command.specifyPartitionKeys();
+      const partitionKeys = command.specifyPartitionKeys(commandData);
       
-      // Get the projector for this aggregate type (using group as aggregate type name)
-      const aggregateTypeName = partitionKeys.group || 'default';
-      const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(aggregateTypeName);
-      
-      if (!projector) {
-        return err({
-          type: 'ProjectorNotFound',
-          message: `No projector registered for aggregate type: ${aggregateTypeName}`
-        } as SekibanError);
-      }
+      // Get the projector from the command
+      const projector = command.getProjector();
       
       // Create PartitionKeysAndProjector (matching C# pattern)
       const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
@@ -144,12 +150,15 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorProxy = this.createActorProxy(actorId);
       
       // Prepare command with metadata
-      const commandWithMetadata: SerializableCommandAndMetadata<TPayload> = {
+      const commandWithMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload> = {
         command,
+        commandData,
         partitionKeys,
-        metadata: {
-          timestamp: new Date().toISOString(),
-          requestId: crypto.randomUUID()
+        metadata: metadata || {
+          timestamp: new Date(),
+          custom: {
+            requestId: crypto.randomUUID()
+          }
         }
       };
       
@@ -162,10 +171,11 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      return err({
-        type: 'DaprActorError',
-        message: error instanceof Error ? error.message : 'Unknown actor error'
-      } as SekibanError);
+      // Create a custom error class for Dapr actor errors
+      class DaprActorError extends SekibanError {
+        readonly code = 'DAPR_ACTOR_ERROR';
+      }
+      return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
   
@@ -190,10 +200,11 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      return err({
-        type: 'DaprActorError',
-        message: error instanceof Error ? error.message : 'Unknown actor error'
-      } as SekibanError);
+      // Create a custom error class for Dapr actor errors
+      class DaprActorError extends SekibanError {
+        readonly code = 'DAPR_ACTOR_ERROR';
+      }
+      return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
   
@@ -206,12 +217,13 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   ): Promise<Result<Aggregate<TPayload>, SekibanError>> {
     try {
       // Verify the projector is registered
-      const projectorConstructor = this.domainTypes.projectorTypes.getProjectorForAggregate(projector.aggregateTypeName);
+      const projectorConstructor = this.domainTypes.projectorTypes.getProjectorByAggregateType(projector.aggregateTypeName);
       if (!projectorConstructor) {
-        return err({
-          type: 'ProjectorNotFound',
-          message: `No projector registered for aggregate type: ${projector.aggregateTypeName}`
-        } as SekibanError);
+        // Create a custom error class for projector not found
+        class ProjectorNotFoundError extends SekibanError {
+          readonly code = 'PROJECTOR_NOT_FOUND';
+        }
+        return err(new ProjectorNotFoundError(`No projector registered for aggregate type: ${projector.aggregateTypeName}`));
       }
       
       // Create PartitionKeysAndProjector (matching C# pattern)
@@ -230,10 +242,11 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      return err({
-        type: 'DaprActorError',
-        message: error instanceof Error ? error.message : 'Unknown actor error'
-      } as SekibanError);
+      // Create a custom error class for Dapr actor errors
+      class DaprActorError extends SekibanError {
+        readonly code = 'DAPR_ACTOR_ERROR';
+      }
+      return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
   
@@ -249,7 +262,10 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   getRegisteredProjectors(): IAggregateProjector<any>[] {
     // Get all projector types from domain types
     const projectorInfos = this.domainTypes.projectorTypes.getProjectorTypes();
-    return projectorInfos.map(info => new info.constructor() as IAggregateProjector<any>);
+    // The projector property contains the actual projector instance
+    // We need to handle the type mismatch between IProjector and IAggregateProjector
+    // In practice, the projector instances should implement IAggregateProjector
+    return projectorInfos.map(info => info.projector as unknown as IAggregateProjector<any>);
   }
   
   getDomainTypes(): SekibanDomainTypes {
@@ -271,6 +287,11 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   
   updateConfiguration(updates: Partial<DaprSekibanConfiguration>): void {
     this.configuration = { ...this.configuration, ...updates };
+  }
+  
+  hasProjector(aggregateTypeName: string): boolean {
+    const projectorConstructor = this.domainTypes.projectorTypes.getProjectorByAggregateType(aggregateTypeName);
+    return projectorConstructor !== null && projectorConstructor !== undefined;
   }
 }
 

@@ -44,13 +44,21 @@ export * from './types';
 export { PartitionKeysAndProjector } from './parts';
 
 // Re-export commonly used types from core
-export type {
-  IAggregatePayload,
-  IProjector,
-  EventDocument,
-  IEventStore,
+export {
   PartitionKeys,
-  ICommandCommon,
-  IQueryCommon,
+  SekibanError
+} from '@sekiban/core';
+
+export type {
+  ITypedAggregatePayload,
+  IAggregateProjector,
+  IProjector,
+  IEvent,
+  IEventPayload,
+  ICommandWithHandler,
+  ICommandContext,
   CommandExecutionResult,
+  Metadata,
+  EmptyAggregatePayload,
+  Aggregate
 } from '@sekiban/core';
