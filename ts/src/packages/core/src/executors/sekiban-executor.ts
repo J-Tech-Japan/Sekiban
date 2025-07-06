@@ -1,3 +1,9 @@
+/**
+ * @deprecated This executor uses legacy command patterns.
+ * For new development, use UnifiedCommandExecutor with schema-based commands.
+ * See schema-registry/MIGRATION_GUIDE.md for migration instructions.
+ */
+
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from 'neverthrow'
 import { ITypedCommand, ICommandWithHandler } from '../commands/index.js'
 import { IQuery, IMultiProjectionQuery } from '../queries/query.js'
@@ -9,7 +15,6 @@ import { PartitionKeys } from '../documents/partition-keys.js'
 import { EventOrNone } from '../aggregates/projector-interface.js'
 import { AggregateProjector } from '../aggregates/aggregate-projector.js'
 import { createEmptyAggregate } from '../aggregates/aggregate.js'
-// import { createAggregateListProjector } from '../queries/aggregate-list-projector.js'
 import { EventDocument } from '../events/event-document.js'
 import { createEvent, IEvent } from '../events/event.js'
 import { SortableUniqueId } from '../documents/sortable-unique-id.js'

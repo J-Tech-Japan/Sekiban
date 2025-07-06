@@ -27,15 +27,8 @@ export {
   MultiProjectionState
 } from './multi-projection.js'
 
-/**
- * Export aggregate list projector
- */
-// TODO: Fix aggregate-list-projector to work with new patterns
-// export {
-//   AggregateListProjector,
-//   AggregateListPayload,
-//   createAggregateListProjector
-// } from './aggregate-list-projector.js'
+// Note: aggregate-list-projector has been removed.
+// For list queries, use IMultiProjectionListQuery instead.
 
 /**
  * Export query handler types

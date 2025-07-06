@@ -15,7 +15,8 @@ export interface ICommand {
 }
 
 /**
- * Interface for commands with built-in handlers
+ * @deprecated Use ICommandWithHandler from schema-registry instead
+ * This interface is kept for backward compatibility only
  */
 export interface ICommandWithHandler<
   TCommand extends ICommand,

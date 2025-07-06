@@ -17,7 +17,7 @@ export {
  */
 export type {
   ICommand,
-  ICommandWithHandler,
+  ICommandWithHandler, // @deprecated - Use ICommandWithHandler from schema-registry instead
   CommandContext,
   CommandResult,
   CommandExecutionOptions,

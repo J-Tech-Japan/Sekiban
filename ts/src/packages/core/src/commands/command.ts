@@ -1,3 +1,9 @@
+/**
+ * @deprecated This file contains legacy command interfaces.
+ * For new commands, use defineCommand from schema-registry package instead.
+ * See MIGRATION_GUIDE.md in schema-registry for migration instructions.
+ */
+
 import { Result, err } from 'neverthrow';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { Aggregate } from '../aggregates/aggregate.js';
@@ -8,6 +14,7 @@ import type { ITypedAggregatePayload, EmptyAggregatePayload } from '../aggregate
 
 /**
  * Command that can be applied to any payload type in the union
+ * @deprecated Use defineCommand from schema-registry for new commands
  */
 export interface ICommand<TPayloadUnion extends ITypedAggregatePayload> {
   readonly commandType: string;
