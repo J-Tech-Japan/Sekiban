@@ -21,7 +21,7 @@ export interface SerializableCommandAndMetadata<
   TPayloadUnion extends ITypedAggregatePayload,
   TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
 > {
-  command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+  commandType: string;
   commandData: TCommand;
   partitionKeys: PartitionKeys;
   metadata?: Metadata;

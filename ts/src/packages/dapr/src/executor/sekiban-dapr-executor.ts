@@ -118,6 +118,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   
   /**
    * Execute command through Dapr AggregateActor
+   * Overloaded to accept either a command instance or command with data
    */
   async executeCommandAsync<
     TCommand,
@@ -125,19 +126,34 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     TPayloadUnion extends ITypedAggregatePayload,
     TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
   >(
-    command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>,
-    commandData: TCommand,
+    commandOrInstance: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload> | any,
+    commandData?: TCommand,
     metadata?: Metadata
   ): Promise<Result<SekibanCommandResponse, SekibanError>> {
+    // Handle case where command is passed as a single object (from defineCommand)
+    let command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+    let data: TCommand;
+    
+    if (commandData === undefined) {
+      // Command instance from defineCommand
+      command = commandOrInstance;
+      // Extract data from the command instance
+      // The command instance has a 'data' property
+      data = (commandOrInstance as any).data || {} as TCommand;
+    } else {
+      // Separate command and data
+      command = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+      data = commandData!;
+    }
     try {
       // Validate command first
-      const validationResult = command.validate(commandData);
+      const validationResult = command.validate(data);
       if (validationResult.isErr()) {
         return err(validationResult.error as SekibanError);
       }
       
       // Get partition keys for the command
-      const partitionKeys = command.specifyPartitionKeys(commandData);
+      const partitionKeys = command.specifyPartitionKeys(data);
       
       // Get the projector from the command
       const projector = command.getProjector();
@@ -149,10 +165,10 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorId = partitionKeyAndProjector.toProjectorGrainKey();
       const actorProxy = this.createActorProxy(actorId);
       
-      // Prepare command with metadata
-      const commandWithMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload> = {
-        command,
-        commandData,
+      // Prepare command with metadata - ensure command type is included
+      const commandWithMetadata = {
+        commandType: command.commandType || (command as any).type,
+        commandData: data,
         partitionKeys,
         metadata: metadata || {
           timestamp: new Date(),
@@ -164,7 +180,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       
       // Execute command through actor with retry
       const response = await this.executeWithRetry(
-        () => actorProxy.executeCommandAsync(commandWithMetadata),
+        () => actorProxy.executeCommandAsync(commandWithMetadata as any),
         'Command execution'
       );
       
