@@ -25,19 +25,22 @@ export class PostgresEventStore implements IEventStore {
     return ResultAsync.fromPromise(
       (async () => {
         try {
-          // Create events table if it doesn't exist
+          // Create events table if it doesn't exist (matching C# DbEvent structure)
           await this.pool.query(`
             CREATE TABLE IF NOT EXISTS events (
-              id VARCHAR(255) PRIMARY KEY,
-              partition_key VARCHAR(255) NOT NULL,
-              data JSONB NOT NULL,
-              root_partition_key VARCHAR(255) NOT NULL,
-              aggregate_group VARCHAR(255) NOT NULL,
-              aggregate_id VARCHAR(255) NOT NULL,
-              aggregate_type VARCHAR(255) NOT NULL,
-              event_type VARCHAR(255) NOT NULL,
+              id UUID PRIMARY KEY,
+              payload JSON NOT NULL,
+              sortable_unique_id VARCHAR(255) NOT NULL,
               version INTEGER NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              aggregate_id UUID NOT NULL,
+              root_partition_key VARCHAR(255) NOT NULL,
+              "timestamp" TIMESTAMP NOT NULL,
+              partition_key VARCHAR(255) NOT NULL,
+              aggregate_group VARCHAR(255) NOT NULL,
+              payload_type_name VARCHAR(255) NOT NULL,
+              causation_id VARCHAR(255) NOT NULL DEFAULT '',
+              correlation_id VARCHAR(255) NOT NULL DEFAULT '',
+              executed_user VARCHAR(255) NOT NULL DEFAULT ''
             )
           `);
 
@@ -58,8 +61,13 @@ export class PostgresEventStore implements IEventStore {
           `);
           
           await this.pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_events_created_at 
-            ON events(created_at)
+            CREATE INDEX IF NOT EXISTS idx_events_timestamp 
+            ON events("timestamp")
+          `);
+          
+          await this.pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_events_sortable_unique_id 
+            ON events(sortable_unique_id)
           `);
         } catch (error) {
           throw new ConnectionError(
@@ -93,8 +101,8 @@ export class PostgresEventStore implements IEventStore {
     const { query, params } = this.buildQuery(eventRetrievalInfo);
     const result = await this.pool.query(query, params);
     
-    // Parse events from JSON
-    let events = result.rows.map(row => JSON.parse(row.data) as IEvent);
+    // Parse events from JSON payload (matching C# structure)
+    let events = result.rows.map(row => JSON.parse(row.payload) as IEvent);
     
     // Apply sortable ID conditions in memory since PostgreSQL doesn't understand our custom ID format
     if (eventRetrievalInfo.sortableIdCondition) {
@@ -114,8 +122,8 @@ export class PostgresEventStore implements IEventStore {
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Base query
-    let query = 'SELECT data FROM events';
+    // Base query - select all columns to match C# structure
+    let query = 'SELECT * FROM events';
 
     // Filter by root partition key
     if (eventRetrievalInfo.rootPartitionKey.hasValueProperty) {
@@ -172,24 +180,36 @@ export class PostgresEventStore implements IEventStore {
       await client.query('BEGIN');
       
       try {
-        // Insert each event
+        // Insert each event (matching C# DbEvent structure)
         for (const event of events) {
+          // Extract metadata with defaults
+          const metadata = event.metadata || {};
+          const causationId = metadata.causationId || '';
+          const correlationId = metadata.correlationId || '';
+          const executedUser = metadata.executedUser || '';
+          
           await client.query(
             `INSERT INTO events (
-              id, partition_key, data, 
-              root_partition_key, aggregate_group, aggregate_id,
-              aggregate_type, event_type, version
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              id, payload, sortable_unique_id,
+              version, aggregate_id, root_partition_key,
+              "timestamp", partition_key, aggregate_group,
+              payload_type_name, causation_id, correlation_id,
+              executed_user
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
             [
               event.id.toString(),
-              event.partitionKeys.partitionKey,
-              JSON.stringify(event),
-              event.partitionKeys.rootPartitionKey || 'default',
-              event.partitionKeys.group || 'default',
-              event.partitionKeys.aggregateId,
-              event.aggregateType,
-              event.eventType,
-              event.version
+              JSON.stringify(event.eventData || event),  // Store the event data as payload
+              event.sortableUniqueId.toString(),
+              event.version,
+              event.aggregateId,
+              event.partitionKeys?.rootPartitionKey || 'default',
+              event.timestamp || new Date(),
+              event.partitionKeys?.partitionKey || event.partitionKey,
+              event.partitionKeys?.group || event.aggregateGroup || 'default',
+              event.eventType,  // payload_type_name
+              causationId,
+              correlationId,
+              executedUser
             ]
           );
         }

@@ -23,6 +23,11 @@ export interface Metadata {
   timestamp: Date;
   
   /**
+   * The user who executed the action (for C# compatibility)
+   */
+  executedUser?: string;
+  
+  /**
    * Additional custom metadata
    */
   custom?: Record<string, unknown>;
@@ -69,6 +74,14 @@ export class MetadataBuilder {
    */
   withTimestamp(timestamp: Date): MetadataBuilder {
     this.metadata.timestamp = timestamp;
+    return this;
+  }
+
+  /**
+   * Sets the executed user (for C# compatibility)
+   */
+  withExecutedUser(executedUser: string): MetadataBuilder {
+    this.metadata.executedUser = executedUser;
     return this;
   }
 
@@ -161,6 +174,7 @@ export const Metadata = {
       if (base.correlationId) builder.withCorrelationId(base.correlationId);
       if (base.causationId) builder.withCausationId(base.causationId);
       if (base.timestamp) builder.withTimestamp(base.timestamp);
+      if (base.executedUser) builder.withExecutedUser(base.executedUser);
       if (base.custom) builder.withCustomData(base.custom);
     }
     return builder;

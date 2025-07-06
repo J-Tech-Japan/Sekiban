@@ -23,6 +23,11 @@ export interface EventMetadata extends Metadata {
   userId?: string
   
   /**
+   * The user who executed the event (for C# compatibility)
+   */
+  executedUser?: string
+  
+  /**
    * Custom metadata specific to the event
    */
   custom?: Record<string, unknown>
@@ -66,12 +71,49 @@ export interface IEvent<TPayload extends IEventPayload = IEventPayload> {
    * Metadata about the event
    */
   metadata: EventMetadata
+  
+  /**
+   * Aggregate ID (for C# compatibility)
+   */
+  aggregateId: string
+  
+  /**
+   * Sortable unique ID string (for C# compatibility)
+   */
+  sortableUniqueId: SortableUniqueId
+  
+  /**
+   * Timestamp when the event occurred
+   */
+  timestamp: Date
+  
+  /**
+   * Partition key string (for C# compatibility)
+   */
+  partitionKey: string
+  
+  /**
+   * Aggregate group (for C# compatibility)
+   */
+  aggregateGroup: string
+  
+  /**
+   * The actual event data (for C# compatibility)
+   */
+  eventData?: unknown
 }
 
 /**
  * Concrete implementation of IEvent
  */
 export class Event<TPayload extends IEventPayload = IEventPayload> implements IEvent<TPayload> {
+  public readonly aggregateId: string
+  public readonly sortableUniqueId: SortableUniqueId
+  public readonly timestamp: Date
+  public readonly partitionKey: string
+  public readonly aggregateGroup: string
+  public readonly eventData?: unknown
+  
   constructor(
     public readonly id: SortableUniqueId,
     public readonly partitionKeys: PartitionKeys,
@@ -81,6 +123,14 @@ export class Event<TPayload extends IEventPayload = IEventPayload> implements IE
     public readonly payload: TPayload,
     public readonly metadata: EventMetadata
   ) {
+    // Set C# compatibility properties
+    this.aggregateId = partitionKeys.aggregateId
+    this.sortableUniqueId = id
+    this.timestamp = metadata.timestamp || new Date()
+    this.partitionKey = partitionKeys.partitionKey
+    this.aggregateGroup = partitionKeys.group || 'default'
+    this.eventData = payload
+    
     // Freeze the event to ensure immutability
     Object.freeze(this)
     Object.freeze(this.payload)
