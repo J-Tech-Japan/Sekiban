@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { ok, err } from 'neverthrow';
 import { AggregateProjector, type ITypedAggregatePayload, type EmptyAggregatePayload } from './aggregate-projector.js';
 import type { IEventPayload } from '../events/event-payload.js';
-import type { Aggregate } from './aggregate.js';
+import { Aggregate } from './aggregate.js';
 import type { SekibanError } from '../result/errors.js';
+import { SortableUniqueId } from '../documents/sortable-unique-id.js';
+import { PartitionKeys } from '../documents/partition-keys.js';
 
 // Test domain - User aggregate with multiple states
 interface UnconfirmedUserPayload extends ITypedAggregatePayload {
@@ -108,11 +110,7 @@ describe('MultiPayloadProjector', () => {
     it('should create UnconfirmedUser from Empty state when UserRegistered', () => {
       // Arrange
       const projector = new TestUserProjector();
-      const partitionKeys = {
-        aggregateId: 'user-123',
-        partitionKey: 'User',
-        rootPartitionKey: 'default'
-      };
+      const partitionKeys = new PartitionKeys('user-123', 'User', 'default');
       const emptyAggregate = projector.getInitialState(partitionKeys);
       
       const userRegisteredEvent: UserRegisteredEvent = {
@@ -143,11 +141,7 @@ describe('MultiPayloadProjector', () => {
     it('should transition from UnconfirmedUser to ConfirmedUser when UserConfirmed', () => {
       // Arrange
       const projector = new TestUserProjector();
-      const partitionKeys = {
-        aggregateId: 'user-123',
-        partitionKey: 'User',
-        rootPartitionKey: 'default'
-      };
+      const partitionKeys = new PartitionKeys('user-123', 'User', 'default');
       
       // Create UnconfirmedUser state
       const unconfirmedUser: UnconfirmedUserPayload = {
@@ -158,13 +152,15 @@ describe('MultiPayloadProjector', () => {
         createdAt: '2025-07-03T10:00:00.000Z'
       };
       
-      const aggregateWithUnconfirmedUser: Aggregate<UnconfirmedUserPayload> = {
+      const aggregateWithUnconfirmedUser = new Aggregate<UnconfirmedUserPayload>(
         partitionKeys,
-        payload: unconfirmedUser,
-        version: 1,
-        lastEventId: 'event-1',
-        appliedEvents: []
-      };
+        'User',
+        1,
+        unconfirmedUser,
+        new SortableUniqueId('event-1'),
+        'TestUserProjector',
+        1
+      );
       
       const userConfirmedEvent: UserConfirmedEvent = {
         eventType: 'UserConfirmed',
@@ -195,11 +191,7 @@ describe('MultiPayloadProjector', () => {
     it('should fail when trying to confirm already confirmed user', () => {
       // Arrange
       const projector = new TestUserProjector();
-      const partitionKeys = {
-        aggregateId: 'user-123',
-        partitionKey: 'User',
-        rootPartitionKey: 'default'
-      };
+      const partitionKeys = new PartitionKeys('user-123', 'User', 'default');
       
       // Create ConfirmedUser state
       const confirmedUser: ConfirmedUserPayload = {
@@ -211,13 +203,15 @@ describe('MultiPayloadProjector', () => {
         confirmedAt: '2025-07-03T11:00:00.000Z'
       };
       
-      const aggregateWithConfirmedUser: Aggregate<ConfirmedUserPayload> = {
+      const aggregateWithConfirmedUser = new Aggregate<ConfirmedUserPayload>(
         partitionKeys,
-        payload: confirmedUser,
-        version: 2,
-        lastEventId: 'event-2',
-        appliedEvents: []
-      };
+        'User',
+        2,
+        confirmedUser,
+        new SortableUniqueId('event-2'),
+        'TestUserProjector',
+        1
+      );
       
       const userConfirmedEvent: UserConfirmedEvent = {
         eventType: 'UserConfirmed',

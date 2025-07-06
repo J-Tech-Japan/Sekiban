@@ -12,6 +12,9 @@ import { ValidationError, CommandValidationError, QueryExecutionError } from '..
 import { SortableUniqueId } from '../documents/sortable-unique-id.js';
 import { InMemoryEventStore, InMemoryEventReader, InMemoryEventWriter } from '../events/in-memory-event-store.js';
 import type { IMultiProjectionQuery } from '../queries/query.js';
+import type { ICommandContext } from './command-schema.js';
+import type { IEventPayload } from '../events/event-payload.js';
+import type { Metadata } from '../documents/metadata.js';
 
 /**
  * Configuration for schema-based executor
@@ -77,14 +80,20 @@ export class SchemaExecutor {
         return err(validationResult.error);
       }
 
+      // Create command instance
+      const commandInstance = commandDef.create(commandData);
+      
       // Get partition keys
-      const partitionKeys = commandDef.handlers.specifyPartitionKeys(commandData);
+      const partitionKeys = commandInstance.specifyPartitionKeys(commandData);
       
       // Load current aggregate state
       const aggregate = await this.loadAggregate(partitionKeys, commandDef);
       
+      // Create command context
+      const context = this.createCommandContext(aggregate);
+      
       // Execute command handler
-      const eventsResult = commandDef.handlers.handle(commandData, aggregate);
+      const eventsResult = commandInstance.handle(commandData, context);
       if (eventsResult.isErr()) {
         return err(eventsResult.error);
       }
@@ -293,5 +302,58 @@ export class SchemaExecutor {
     }
 
     return aggregate;
+  }
+
+  /**
+   * Create command context for handler execution
+   */
+  private createCommandContext<TAggregatePayload extends ITypedAggregatePayload | EmptyAggregatePayload>(
+    aggregate: Aggregate<TAggregatePayload>
+  ): ICommandContext<TAggregatePayload> {
+    const events: IEvent[] = [];
+    const metadata: Metadata = { timestamp: new Date() };
+    
+    return {
+      originalSortableUniqueId: aggregate.lastSortableUniqueId?.toString() || '',
+      events,
+      partitionKeys: aggregate.partitionKeys,
+      metadata,
+      
+      getPartitionKeys(): PartitionKeys {
+        return aggregate.partitionKeys;
+      },
+      
+      getNextVersion(): number {
+        return aggregate.version + events.length + 1;
+      },
+      
+      getCurrentVersion(): number {
+        return aggregate.version + events.length;
+      },
+      
+      appendEvent(eventPayload: IEventPayload): Result<IEvent, SekibanError> {
+        const sortableId = SortableUniqueId.generate();
+        const event: IEvent = {
+          id: sortableId,
+          partitionKeys: aggregate.partitionKeys,
+          aggregateType: aggregate.aggregateType,
+          version: this.getNextVersion(),
+          eventType: (eventPayload as any).type || eventPayload.constructor.name,
+          payload: eventPayload,
+          metadata: this.metadata
+        };
+        
+        events.push(event);
+        return ok(event);
+      },
+      
+      getService<T>(_serviceType: new (...args: any[]) => T): Result<T, SekibanError> {
+        return err(new CommandValidationError('Service', ['Service resolution not implemented in schema executor']));
+      },
+      
+      getAggregate(): Result<Aggregate<TAggregatePayload>, SekibanError> {
+        return ok(aggregate);
+      }
+    };
   }
 }

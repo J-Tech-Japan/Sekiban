@@ -1,16 +1,10 @@
 # Commands Module
 
-This module contains command-related functionality for Sekiban TypeScript.
+This module contains command execution utilities for Sekiban TypeScript.
 
-## ⚠️ Important: Use Schema-Based Commands
+## Command Definition
 
-**For new development, please use the schema-based command approach from the `schema-registry` module.**
-
-The interfaces and classes in this directory are maintained for backward compatibility but are considered legacy.
-
-## Recommended Approach
-
-Use `defineCommand` from schema-registry:
+Commands are defined using the schema-based approach from the `schema-registry` module:
 
 ```typescript
 import { defineCommand } from '@sekiban/core/schema-registry';
@@ -33,18 +27,13 @@ const CreateUser = defineCommand({
 });
 ```
 
-## Migration
+## Module Contents
 
-See `/src/schema-registry/MIGRATION_GUIDE.md` for detailed migration instructions.
+- `unified-executor.ts` - Command executor that works with schema-based commands
+- `validation.ts` - Validation utilities for command input
+- `types.ts` - Basic types for command execution options
 
-## Legacy Interfaces (Deprecated)
+## See Also
 
-- `ICommand<TPayloadUnion>` - Old command interface without projector
-- `ICommandWithHandler<TCommand, TPayload>` - Old handler interface without context
-- These are kept for backward compatibility only
-
-## Current Module Contents
-
-- `unified-executor.ts` - New executor that works with schema-based commands
-- `executor-adapter.ts` - Adapter for backward compatibility
-- Legacy files maintained for existing code
+- `/src/schema-registry/` - For command definition
+- `/src/schema-registry/examples/` - For usage examples

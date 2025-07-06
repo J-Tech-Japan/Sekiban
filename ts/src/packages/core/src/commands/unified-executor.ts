@@ -252,16 +252,16 @@ export class UnifiedCommandExecutor {
     }
     
     // Load existing aggregate
+    const aggregateType = (projector as any).aggregateTypeName || (projector as any).aggregateType || partitionKeys.group;
     const loadResult = await this.aggregateLoader.load(
       partitionKeys,
-      projector.aggregateTypeName
+      aggregateType
     );
     
     if (!loadResult) {
-      return err(new AggregateNotFoundError(
-        partitionKeys.aggregateId,
-        projector.aggregateTypeName
-      ));
+      // No events found - this is a new aggregate
+      const initialAggregate = projector.getInitialState(partitionKeys);
+      return ok(initialAggregate);
     }
     
     // Project events to build aggregate state
@@ -297,7 +297,7 @@ export class UnifiedCommandExecutor {
         id: SortableUniqueId.generate(),
         partitionKeys,
         aggregateType: aggregate.aggregateType,
-        eventType: payload.constructor.name || 'UnknownEvent',
+        eventType: (payload as any).type || payload.constructor.name || 'UnknownEvent',
         version,
         payload,
         metadata: {

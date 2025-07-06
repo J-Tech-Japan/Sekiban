@@ -1,40 +1,9 @@
 /**
- * Export command interfaces from command.ts
+ * Export command types
  */
 export type {
-  ICommand as ITypedCommand,
-  IConstrainedPayloadCommand,
-  ICreationCommand
-} from './command.js'
-
-export {
-  ConstrainedPayloadCommand,
-  CreationCommand
-} from './command.js'
-
-/**
- * Export command interfaces from types.ts
- */
-export type {
-  ICommand,
-  ICommandWithHandler, // @deprecated - Use ICommandWithHandler from schema-registry instead
-  CommandContext,
-  CommandResult,
-  CommandExecutionOptions,
-  CommandEnvelope
+  CommandExecutionOptions
 } from './types.js'
-
-/**
- * Export command handler interfaces
- */
-export type {
-  ICommandHandler
-} from './handler.js'
-
-export {
-  CommandHandlerRegistry,
-  createCommandHandler
-} from './handler.js'
 
 /**
  * Export validation utilities
@@ -58,17 +27,6 @@ export {
 } from './validation.js'
 
 /**
- * Export command executor
- */
-export type {
-  ICommandExecutor
-} from './executor.js'
-
-export {
-  CommandExecutorBase
-} from './executor.js'
-
-/**
  * Export unified command executor
  */
 export type {
@@ -81,11 +39,3 @@ export {
   UnifiedCommandExecutor,
   createUnifiedExecutor
 } from './unified-executor.js'
-
-/**
- * Export executor adapter
- */
-export {
-  CommandExecutorAdapter,
-  createExecutorAdapter
-} from './executor-adapter.js'

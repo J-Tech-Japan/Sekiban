@@ -17,16 +17,6 @@ export {
   SimpleTransaction
 } from './base';
 
-/**
- * Export in-memory executor implementation
- */
-export {
-  InMemoryEventStore,
-  InMemoryAggregateLoader,
-  InMemoryCommandExecutor,
-  InMemorySekibanExecutor,
-  InMemorySekibanExecutorBuilder
-} from './in-memory';
 
 /**
  * Export domain-types based executor implementation
@@ -37,16 +27,3 @@ export {
   InMemorySekibanExecutorBuilder as InMemorySekibanExecutorWithDomainTypesBuilder
 } from './in-memory-with-domain-types';
 
-/**
- * Export Sekiban executor implementation
- */
-export type {
-  CommandResponse,
-  QueryResponse,
-  ISekibanExecutor as ISekibanExecutorInterface,
-  ExecutorConfig
-} from './sekiban-executor';
-
-export {
-  InMemorySekibanExecutor as SekibanExecutor
-} from './sekiban-executor';

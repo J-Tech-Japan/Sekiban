@@ -1,117 +1,9 @@
-import { Result } from 'neverthrow';
-import { PartitionKeys, Metadata } from '../documents/index.js';
-import { IEventPayload } from '../events/index.js';
-import { IAggregatePayload, Aggregate } from '../aggregates/index.js';
-import { CommandValidationError, SekibanError } from '../result/index.js';
-
 /**
- * Base interface for all commands
+ * This file is kept minimal for basic types that might be used across the system.
+ * For command definitions, use schema-registry/command-schema.ts
  */
-export interface ICommand {
-  /**
-   * The type identifier for the command
-   */
-  readonly commandType: string;
-}
 
-/**
- * @deprecated Use ICommandWithHandler from schema-registry instead
- * This interface is kept for backward compatibility only
- */
-export interface ICommandWithHandler<
-  TCommand extends ICommand,
-  TPayload extends IAggregatePayload
-> extends ICommand {
-  /**
-   * Validates the command
-   */
-  validate?(): Result<void, CommandValidationError>;
-  
-  /**
-   * Handles the command and produces events
-   */
-  handle(aggregate: Aggregate<TPayload>): Result<IEventPayload[], SekibanError>;
-}
-
-/**
- * Command context containing metadata and partition keys
- */
-export interface CommandContext {
-  /**
-   * The partition keys for the target aggregate
-   */
-  partitionKeys: PartitionKeys;
-  
-  /**
-   * Command metadata
-   */
-  metadata: Metadata;
-  
-  /**
-   * The aggregate type
-   */
-  aggregateType: string;
-}
-
-/**
- * Result of command execution
- */
-export interface CommandResult {
-  /**
-   * The aggregate ID affected
-   */
-  aggregateId: string;
-  
-  /**
-   * The new version after command execution
-   */
-  version: number;
-  
-  /**
-   * The events produced
-   */
-  events: IEventPayload[];
-  
-  /**
-   * Command execution metadata
-   */
-  metadata: Metadata;
-}
-
-/**
- * Command envelope containing command and context
- */
-export interface CommandEnvelope<TCommand extends ICommand = ICommand> {
-  /**
-   * The command to execute
-   */
-  command: TCommand;
-  
-  /**
-   * The command context
-   */
-  context: CommandContext;
-}
-
-/**
- * Interface for command validators
- */
-export interface ICommandValidator<TCommand extends ICommand> {
-  /**
-   * Validates a command
-   */
-  validate(command: TCommand): Result<void, CommandValidationError>;
-}
-
-/**
- * Interface for command preprocessors
- */
-export interface ICommandPreprocessor<TCommand extends ICommand> {
-  /**
-   * Preprocesses a command before execution
-   */
-  preprocess(command: TCommand, context: CommandContext): Result<TCommand, SekibanError>;
-}
+import { Metadata } from '../documents/index.js';
 
 /**
  * Command execution options
@@ -123,21 +15,7 @@ export interface CommandExecutionOptions {
   skipValidation?: boolean;
   
   /**
-   * Whether to use snapshots for loading aggregates
-   */
-  useSnapshots?: boolean;
-  
-  /**
    * Custom metadata to merge with command metadata
    */
   metadata?: Partial<Metadata>;
-  
-  /**
-   * Retry options for transient failures
-   */
-  retry?: {
-    maxAttempts: number;
-    delayMs: number;
-    backoffMultiplier?: number;
-  };
 }

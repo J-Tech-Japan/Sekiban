@@ -1,14 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ok, err } from 'neverthrow';
-import { defineCommand } from '../command-schema.js';
+import { defineCommand, createCommandContext } from '../command-schema.js';
 import { defineEvent } from '../event-schema.js';
+import { defineProjector } from '../projector-schema.js';
 import { PartitionKeys } from '../../documents/partition-keys.js';
 import { Aggregate } from '../../aggregates/aggregate.js';
 import { EmptyAggregatePayload } from '../../aggregates/aggregate.js';
 import { CommandValidationError } from '../../result/errors.js';
 import { ValidationError } from '../../result/errors.js';
-import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector.js';
+import type { ITypedAggregatePayload, IAggregateProjector } from '../../aggregates/aggregate-projector.js';
 
 // Test aggregate payload types
 interface UserPayload extends ITypedAggregatePayload {
@@ -22,7 +23,7 @@ interface DeletedUserPayload extends ITypedAggregatePayload {
   readonly aggregateType: 'DeletedUser';
 }
 
-type UserPayloadUnion = UserPayload | DeletedUserPayload;
+type UserPayloadUnion = UserPayload | DeletedUserPayload | EmptyAggregatePayload;
 
 // Test event
 const UserCreated = defineEvent({
@@ -34,25 +35,38 @@ const UserCreated = defineEvent({
   })
 });
 
+// Test projector
+const UserProjector = defineProjector({
+  aggregateType: 'User',
+  initialState: () => ({ aggregateType: 'Empty' as const }),
+  projections: {
+    UserCreated: (_state, event) => ({
+      aggregateType: 'User' as const,
+      userId: event.userId,
+      name: event.name,
+      email: event.email
+    })
+  }
+}) as IAggregateProjector<UserPayloadUnion>;
+
 describe('defineCommand', () => {
   // Test 1: Basic command definition
   it('creates command definition with type property', () => {
-    // Arrange
-    const definition = {
-      type: 'CreateUser' as const,
+    // Arrange & Act
+    const CreateUser = defineCommand({
+      type: 'CreateUser',
       schema: z.object({ name: z.string() }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
         handle: () => ok([])
       }
-    };
-
-    // Act
-    const result = defineCommand<'CreateUser', typeof definition.schema, UserPayloadUnion>(definition);
+    });
 
     // Assert
-    expect(result.type).toBe('CreateUser');
+    expect(CreateUser.type).toBe('CreateUser');
+    expect(CreateUser.projector).toBe(UserProjector);
   });
 
   // Test 2: Schema validation for correct data
@@ -64,6 +78,7 @@ describe('defineCommand', () => {
         name: z.string().min(1),
         email: z.string().email()
       }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
@@ -85,6 +100,7 @@ describe('defineCommand', () => {
     const CreateUser = defineCommand({
       type: 'CreateUser',
       schema: z.object({ name: z.string() }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User', 'default'),
         validate: () => ok(undefined),
@@ -94,7 +110,8 @@ describe('defineCommand', () => {
     const data = { name: 'John' };
 
     // Act
-    const partitionKeys = CreateUser.handlers.specifyPartitionKeys(data);
+    const command = CreateUser.create(data);
+    const partitionKeys = command.specifyPartitionKeys(data);
 
     // Assert
     expect(partitionKeys.group).toBe('User');
@@ -107,6 +124,7 @@ describe('defineCommand', () => {
     const CreateUser = defineCommand({
       type: 'CreateUser',
       schema: z.object({ email: z.string().email() }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: (data) => {
@@ -120,8 +138,10 @@ describe('defineCommand', () => {
     });
 
     // Act
-    const validResult = CreateUser.handlers.validate({ email: 'john@example.com' });
-    const invalidResult = CreateUser.handlers.validate({ email: 'john@test.com' });
+    const command1 = CreateUser.create({ email: 'john@example.com' });
+    const command2 = CreateUser.create({ email: 'john@test.com' });
+    const validResult = command1.validate({ email: 'john@example.com' });
+    const invalidResult = command2.validate({ email: 'john@test.com' });
 
     // Assert
     expect(validResult.isOk()).toBe(true);
@@ -140,10 +160,16 @@ describe('defineCommand', () => {
         name: z.string(),
         email: z.string().email()
       }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
-        handle: (data, aggregate) => {
+        handle: (data, context) => {
+          const aggregateResult = context.getAggregate();
+          if (aggregateResult.isErr()) {
+            return err(aggregateResult.error);
+          }
+          const aggregate = aggregateResult.value;
           if (aggregate.payload.aggregateType !== 'Empty') {
             return err(new ValidationError('User already exists'));
           }
@@ -167,9 +193,11 @@ describe('defineCommand', () => {
     );
 
     // Act
-    const result = CreateUser.handlers.handle(
+    const command = CreateUser.create({ name: 'John', email: 'john@example.com' });
+    const context = createCommandContext(emptyAggregate);
+    const result = command.handle(
       { name: 'John', email: 'john@example.com' },
-      emptyAggregate
+      context
     );
 
     // Assert
@@ -186,6 +214,7 @@ describe('defineCommand', () => {
     const CreateUser = defineCommand({
       type: 'CreateUser',
       schema: z.object({ name: z.string() }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
@@ -199,7 +228,7 @@ describe('defineCommand', () => {
 
     // Assert
     expect(command.commandType).toBe('CreateUser');
-    expect(command.name).toBe('John');
+    expect(command.getProjector()).toBe(UserProjector);
   });
 
   // Test 7: Validate combines schema and business validation
@@ -211,6 +240,7 @@ describe('defineCommand', () => {
         name: z.string().min(1),
         email: z.string().email()
       }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: (data) => {
@@ -238,10 +268,10 @@ describe('defineCommand', () => {
     expect(success.isOk()).toBe(true);
   });
 
-  // Test 8: Execute calls handler with typed data
-  it('execute calls handler with typed data', () => {
+  // Test 8: Command handle method with typed data
+  it('command handle method with typed data', () => {
     // Arrange
-    const handleMock = vi.fn((data, aggregate) => ok([
+    const handleMock = vi.fn((data, context) => ok([
       UserCreated.create({
         userId: '123',
         name: data.name,
@@ -255,6 +285,7 @@ describe('defineCommand', () => {
         name: z.string(),
         email: z.string().email()
       }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
@@ -262,7 +293,7 @@ describe('defineCommand', () => {
       }
     });
 
-    const aggregate = new Aggregate<UserPayloadUnion | EmptyAggregatePayload>(
+    const aggregate = new Aggregate<EmptyAggregatePayload>(
       PartitionKeys.generate('User'),
       'User',
       0,
@@ -275,10 +306,12 @@ describe('defineCommand', () => {
     const data = { name: 'John', email: 'john@example.com' };
 
     // Act
-    const result = CreateUser.execute(data, aggregate);
+    const command = CreateUser.create(data);
+    const context = createCommandContext(aggregate);
+    const result = command.handle(data, context);
 
     // Assert
-    expect(handleMock).toHaveBeenCalledWith(data, aggregate);
+    expect(handleMock).toHaveBeenCalledWith(data, context);
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value).toHaveLength(1);
@@ -307,8 +340,9 @@ describe('defineCommand', () => {
           zipCode: z.string()
         })
       }),
+      projector: UserProjector, // Using UserProjector for test
       handlers: {
-        specifyPartitionKeys: (data) => PartitionKeys.generate('Order'),
+        specifyPartitionKeys: (_data) => PartitionKeys.generate('Order'),
         validate: (data) => {
           const total = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
           if (total > 10000) {
@@ -342,7 +376,6 @@ describe('defineCommand', () => {
 
     // Assert
     expect(command.commandType).toBe('CreateOrder');
-    expect(command.customer.name).toBe('John Doe');
     expect(validation.isOk()).toBe(true);
   });
 
@@ -356,6 +389,7 @@ describe('defineCommand', () => {
         name: z.string().optional(),
         email: z.string().email().optional()
       }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: (data) => PartitionKeys.existing(data.userId, 'User'),
         validate: () => ok(undefined),
@@ -371,14 +405,9 @@ describe('defineCommand', () => {
 
     // Assert - TypeScript compile-time check
     const commandType: 'UpdateUser' = command.commandType;
-    const userId: string = command.userId;
-    const name: string | undefined = command.name;
-    const email: string | undefined = command.email;
-
+    
     expect(commandType).toBe('UpdateUser');
-    expect(userId).toBe('123');
-    expect(name).toBe('Updated Name');
-    expect(email).toBeUndefined();
+    expect(command.getProjector()).toBe(UserProjector);
   });
 
   // Test 11: Error handling in handlers
@@ -387,10 +416,16 @@ describe('defineCommand', () => {
     const CreateUser = defineCommand({
       type: 'CreateUser',
       schema: z.object({ name: z.string() }),
+      projector: UserProjector,
       handlers: {
         specifyPartitionKeys: () => PartitionKeys.generate('User'),
         validate: () => ok(undefined),
-        handle: (data, aggregate) => {
+        handle: (_data, context) => {
+          const aggregateResult = context.getAggregate();
+          if (aggregateResult.isErr()) {
+            return err(aggregateResult.error);
+          }
+          const aggregate = aggregateResult.value;
           if (aggregate.payload.aggregateType !== 'Empty') {
             return err(new ValidationError('Aggregate must be empty'));
           }
@@ -415,7 +450,9 @@ describe('defineCommand', () => {
     );
 
     // Act
-    const result = CreateUser.execute({ name: 'John' }, nonEmptyAggregate);
+    const command = CreateUser.create({ name: 'John' });
+    const context = createCommandContext(nonEmptyAggregate);
+    const result = command.handle({ name: 'John' }, context);
 
     // Assert
     expect(result.isErr()).toBe(true);

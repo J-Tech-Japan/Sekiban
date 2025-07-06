@@ -49,17 +49,9 @@ describe('@sekiban/core', () => {
 
   it('should export query types', () => {
     expect(Sekiban.MultiProjectionState).toBeDefined();
-    expect(Sekiban.AggregateListProjector).toBeDefined();
-    expect(Sekiban.createAggregateListProjector).toBeDefined();
-  });
-
-  it('should export executor types', () => {
-    expect(Sekiban.InMemorySekibanExecutor).toBeDefined();
   });
 
   it('should export storage provider types', () => {
-    expect(Sekiban.StorageProviderType).toBeDefined();
-    expect(Sekiban.StorageProviderFactory).toBeDefined();
-    expect(Sekiban.InMemoryStorageProvider).toBeDefined();
+    expect(Sekiban.InMemoryEventStore).toBeDefined();
   });
 });

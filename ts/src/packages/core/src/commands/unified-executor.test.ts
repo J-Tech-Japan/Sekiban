@@ -3,11 +3,10 @@ import { ok, err } from 'neverthrow';
 import { z } from 'zod';
 import { UnifiedCommandExecutor, createUnifiedExecutor } from './unified-executor.js';
 import { defineCommand, defineEvent, defineProjector } from '../schema-registry/index.js';
-import { TypedPartitionKeys } from '../documents/index.js';
+import { PartitionKeys } from '../documents/index.js';
 import type { IEventStore } from '../events/store.js';
 import type { IAggregateLoader } from '../aggregates/loader.js';
 import type { IEvent } from '../events/event.js';
-import type { PartitionKeys } from '../documents/partition-keys.js';
 import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
 import { CommandValidationError } from '../result/errors.js';
 
@@ -76,7 +75,7 @@ const CreateTask = defineCommand({
   }),
   projector: TaskProjector,
   handlers: {
-    specifyPartitionKeys: () => TypedPartitionKeys.Generate(TaskProjector),
+    specifyPartitionKeys: () => PartitionKeys.generate('Task'),
     validate: (data) => {
       if (data.title.length > 100) {
         return err(new CommandValidationError('CreateTask', ['Title too long']));
@@ -98,7 +97,7 @@ const CompleteTask = defineCommand({
   projector: TaskProjector,
   requiredPayloadType: 'ActiveTask',
   handlers: {
-    specifyPartitionKeys: (data) => TypedPartitionKeys.Existing(TaskProjector, data.taskId),
+    specifyPartitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
     handle: (data, context) => {
       return ok([TaskCompleted.create({
         taskId: data.taskId,
@@ -187,7 +186,7 @@ describe('UnifiedCommandExecutor', () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         expect(result.error).toBeInstanceOf(CommandValidationError);
-        expect((result.error as CommandValidationError).errors).toContain('Title too long');
+        expect((result.error as CommandValidationError).validationErrors).toContain('Title too long');
       }
     });
     
@@ -225,7 +224,7 @@ describe('UnifiedCommandExecutor', () => {
       
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.message).toContain('not found');
+        expect(result.error.message).toContain('requires payload type');
       }
     });
     
@@ -264,7 +263,7 @@ describe('UnifiedCommandExecutor', () => {
         schema: z.object({ value: z.string() }),
         projector: TaskProjector,
         handlers: {
-          specifyPartitionKeys: () => TypedPartitionKeys.Generate(TaskProjector),
+          specifyPartitionKeys: () => PartitionKeys.generate('Task'),
           handle: (data, context) => {
             const serviceResult = context.getService(TestService);
             expect(serviceResult.isOk()).toBe(true);

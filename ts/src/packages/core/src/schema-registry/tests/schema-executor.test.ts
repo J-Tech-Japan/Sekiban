@@ -27,54 +27,6 @@ const UserUpdatedEvent = defineEvent({
   })
 });
 
-const CreateUserCommand = defineCommand({
-  type: 'CreateUser',
-  schema: z.object({
-    name: z.string().min(1),
-    email: z.string().email()
-  }),
-  handlers: {
-    specifyPartitionKeys: () => PartitionKeys.generate('User'),
-    validate: (data) => {
-      // Additional business validation
-      if (data.name.toLowerCase().includes('admin')) {
-        return err(new ValidationError('Name cannot contain "admin"'));
-      }
-      return ok(undefined);
-    },
-    handle: (data, aggregate) => {
-      const userId = crypto.randomUUID();
-      const event = UserCreatedEvent.create({
-        userId,
-        name: data.name,
-        email: data.email
-      });
-      return ok([event]);
-    }
-  }
-});
-
-const UpdateUserCommand = defineCommand({
-  type: 'UpdateUser',
-  schema: z.object({
-    userId: z.string(),
-    name: z.string().optional(),
-    email: z.string().email().optional()
-  }),
-  handlers: {
-    specifyPartitionKeys: (data) => PartitionKeys.existing(data.userId, 'User'),
-    validate: () => ok(undefined),
-    handle: (data, aggregate) => {
-      const event = UserUpdatedEvent.create({
-        userId: data.userId,
-        name: data.name,
-        email: data.email
-      });
-      return ok([event]);
-    }
-  }
-});
-
 const UserProjector = defineProjector({
   aggregateType: 'User',
   initialState: () => ({ aggregateType: 'Empty' as const }),
@@ -93,6 +45,56 @@ const UserProjector = defineProjector({
       email: event.email ?? (state as any).email,
       version: ((state as any).version || 0) + 1
     })
+  }
+});
+
+const CreateUserCommand = defineCommand({
+  type: 'CreateUser',
+  schema: z.object({
+    name: z.string().min(1),
+    email: z.string().email()
+  }),
+  projector: UserProjector,
+  handlers: {
+    specifyPartitionKeys: () => PartitionKeys.generate('User'),
+    validate: (data) => {
+      // Additional business validation
+      if (data.name.toLowerCase().includes('admin')) {
+        return err(new ValidationError('Name cannot contain "admin"'));
+      }
+      return ok(undefined);
+    },
+    handle: (data, _context) => {
+      const userId = crypto.randomUUID();
+      const event = UserCreatedEvent.create({
+        userId,
+        name: data.name,
+        email: data.email
+      });
+      return ok([event]);
+    }
+  }
+});
+
+const UpdateUserCommand = defineCommand({
+  type: 'UpdateUser',
+  schema: z.object({
+    userId: z.string(),
+    name: z.string().optional(),
+    email: z.string().email().optional()
+  }),
+  projector: UserProjector,
+  handlers: {
+    specifyPartitionKeys: (data) => PartitionKeys.existing(data.userId, 'User'),
+    validate: () => ok(undefined),
+    handle: (data, _context) => {
+      const event = UserUpdatedEvent.create({
+        userId: data.userId,
+        name: data.name,
+        email: data.email
+      });
+      return ok([event]);
+    }
   }
 });
 
