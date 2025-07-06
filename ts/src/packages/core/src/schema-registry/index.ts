@@ -10,6 +10,9 @@ export { defineEvent } from './event-schema.js';
 export { defineCommand } from './command-schema.js';
 export { defineProjector } from './projector-schema.js';
 
+// Simplified command API
+export { command } from './command-api.js';
+
 // Schema registry and executor
 export { SchemaRegistry } from './registry.js';
 export { SchemaExecutor } from './schema-executor.js';
@@ -25,8 +28,13 @@ export type {
 } from './event-schema.js';
 
 export type {
+  ICommandContextWithoutState,
+  ICommandContext,
+  ICommandWithHandler,
   CommandHandlers,
   CommandSchemaDefinition,
+  CommandSchemaDefinitionWithPayload,
+  CommandDefinitionResult,
   CommandDefinition,
   InferCommandType
 } from './command-schema.js';

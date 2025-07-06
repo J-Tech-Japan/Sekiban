@@ -2,6 +2,7 @@
  * Export partition keys types and utilities
  */
 export * from './partition-keys.js';
+export * from './partition-keys-typed.js';
 
 /**
  * Export sortable unique ID types and utilities

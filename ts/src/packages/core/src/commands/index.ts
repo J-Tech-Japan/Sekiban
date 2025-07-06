@@ -67,3 +67,25 @@ export type {
 export {
   CommandExecutorBase
 } from './executor.js'
+
+/**
+ * Export unified command executor
+ */
+export type {
+  CommandExecutionResult,
+  UnifiedCommandExecutionOptions,
+  IServiceProvider
+} from './unified-executor.js'
+
+export {
+  UnifiedCommandExecutor,
+  createUnifiedExecutor
+} from './unified-executor.js'
+
+/**
+ * Export executor adapter
+ */
+export {
+  CommandExecutorAdapter,
+  createExecutorAdapter
+} from './executor-adapter.js'
