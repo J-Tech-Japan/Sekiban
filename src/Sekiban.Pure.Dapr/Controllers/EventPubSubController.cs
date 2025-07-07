@@ -14,10 +14,27 @@ namespace Sekiban.Pure.Dapr.Controllers;
 
 /// <summary>
 /// Controller to handle Dapr PubSub events and forward them to MultiProjectorActors
+/// 
+/// ⚠️ DEPRECATED: Use SekibanEventRelayExtensions.MapSekibanEventRelay() instead
+/// このControllerは将来のバージョンで削除される予定です
+/// 
+/// WARNING: Multiple instance scaling issue 🚨
+/// When scaling out to multiple instances, each instance will receive the same event,
+/// causing duplicate processing. Solutions:
+/// 1. Use Consumer Groups (recommended)
+/// 2. Use hash-based routing by aggregate ID
+/// 3. Implement idempotency at projector level
+/// 4. Use single instance deployment
+/// 5. Use MinimalAPI relay pattern (RECOMMENDED) - app.MapSekibanEventRelay()
+/// 
+/// Migration Guide:
+/// OLD: EventPubSubController automatically registered
+/// NEW: app.MapSekibanEventRelay() // explicit opt-in
 /// </summary>
 [ApiController]
 [Route("pubsub")]
-public class EventPubSubController : ControllerBase
+[Obsolete("Use SekibanEventRelayExtensions.MapSekibanEventRelay() instead. This controller will be removed in future versions.")]
+internal class EventPubSubController : ControllerBase
 {
     private readonly IActorProxyFactory _actorProxyFactory;
     private readonly SekibanDomainTypes _domainTypes;
@@ -38,13 +55,19 @@ public class EventPubSubController : ControllerBase
 
     /// <summary>
     /// Handle all domain events from PubSub
+    /// 
+    /// ⚠️ DEPRECATED: Use app.MapSekibanEventRelay() instead
     /// </summary>
     [Topic("sekiban-pubsub", "events.all")]
     [HttpPost("events")]
+    [Obsolete("Use app.MapSekibanEventRelay() for opt-in PubSub event handling")]
     public async Task<IActionResult> HandleEvent([FromBody] DaprEventEnvelope envelope)
     {
         try
         {
+            // ログで警告を出力
+            _logger.LogWarning("EventPubSubController is deprecated. Please use app.MapSekibanEventRelay() instead. This controller will be removed in future versions.");
+            
             _logger.LogDebug("Received event envelope: AggregateId={AggregateId}, Version={Version}", 
                 envelope.AggregateId, envelope.Version);
 
@@ -84,9 +107,12 @@ public class EventPubSubController : ControllerBase
     /// <summary>
     /// Handle specific event types from PubSub
     /// This allows for more granular subscriptions if needed
+    /// 
+    /// ⚠️ DEPRECATED: Use app.MapSekibanEventRelay() instead
     /// </summary>
     [Topic("sekiban-pubsub", "events.*")]
     [HttpPost("events/{eventType}")]
+    [Obsolete("Use app.MapSekibanEventRelay() for opt-in PubSub event handling")]
     public async Task<IActionResult> HandleSpecificEvent(string eventType, [FromBody] DaprEventEnvelope envelope)
     {
         // This delegates to the same handler as the general event handler
