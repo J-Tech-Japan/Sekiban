@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
-import { actorRoutes } from './routes/actor-routes.js';
+// import { actorRoutes } from './routes/actor-routes.js'; // Removed: Not needed for Sekiban
 
 async function startServer() {
   const app = express();
@@ -25,7 +25,7 @@ async function startServer() {
   // Routes
   app.use('/', healthRoutes);
   app.use('/', eventRoutes);
-  app.use('/', actorRoutes);
+  // app.use('/', actorRoutes); // Removed: Not needed for Sekiban
   app.use(config.API_PREFIX, taskRoutes);
 
   // Error handling
