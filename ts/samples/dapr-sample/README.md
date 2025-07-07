@@ -55,18 +55,7 @@ docker-compose up -d postgres
 
 ## Running the Application
 
-### Quick Start (Simplified Demo)
-
-For a quick demo without building all packages:
-```bash
-./run-simple.sh
-```
-
-This starts a simplified API server with in-memory storage that demonstrates the API structure.
-
-### With Full Type System (Requires Building)
-
-Once the main Sekiban packages are built:
+### With Dapr (Recommended)
 
 1. Build all packages:
 ```bash
