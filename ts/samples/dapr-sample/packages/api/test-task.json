@@ -1,0 +1,6 @@
+{
+  "title": "PostgreSQL Test Task",
+  "description": "Testing how data is stored in PostgreSQL",
+  "priority": "high",
+  "dueDate": "2025-07-20T10:00:00Z"
+}
