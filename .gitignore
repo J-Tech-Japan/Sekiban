@@ -202,6 +202,8 @@ PublishScripts/
 # Don't ignore TypeScript packages
 !ts/src/packages/
 !ts/src/packages/**
+!ts/samples/**/packages/
+!ts/samples/**/packages/**
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
 # NuGet v3's project.json files produces more ignorable files
