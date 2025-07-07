@@ -170,7 +170,20 @@ export class PostgresEventStore implements IEventStore {
   /**
    * Save events to storage
    */
-  async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+  saveEvents<TEvent extends IEvent>(events: TEvent[]): ResultAsync<void, StorageError> {
+    console.log('PostgresEventStore.saveEvents called');
+    return ResultAsync.fromPromise(
+      this.doSaveEvents(events),
+      (error) => new StorageError(
+        `Failed to save events: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'SAVE_FAILED',
+        error instanceof Error ? error : undefined
+      )
+    );
+  }
+  
+  private async doSaveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+    console.log('doSaveEvents called with', events.length, 'events');
     let client: PoolClient | null = null;
     
     try {
@@ -188,17 +201,17 @@ export class PostgresEventStore implements IEventStore {
           const correlationId = metadata.correlationId || '';
           const executedUser = metadata.executedUser || '';
           
-          await client.query(
-            `INSERT INTO events (
+          const insertQuery = `INSERT INTO events (
               id, payload, sortable_unique_id,
               version, aggregate_id, root_partition_key,
               "timestamp", partition_key, aggregate_group,
               payload_type_name, causation_id, correlation_id,
               executed_user
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-            [
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`;
+          
+          const insertParams = [
               event.id.toString(),
-              JSON.stringify(event.eventData || event),  // Store the event data as payload
+              JSON.stringify(event.payload || event.eventData || event),  // Store the event data as payload
               event.sortableUniqueId.toString(),
               event.version,
               event.aggregateId,
@@ -210,8 +223,20 @@ export class PostgresEventStore implements IEventStore {
               causationId,
               correlationId,
               executedUser
-            ]
-          );
+            ];
+          
+          console.log('Executing query:', insertQuery);
+          console.log('With params:', insertParams);
+          
+          try {
+            await client.query(insertQuery, insertParams);
+          } catch (queryError: any) {
+            console.error('SQL Error executing INSERT:', queryError.message);
+            console.error('SQL Error Code:', queryError.code);
+            console.error('SQL Error Position:', queryError.position);
+            console.error('SQL Error Detail:', queryError.detail);
+            throw queryError;
+          }
         }
         
         // Commit transaction
@@ -221,12 +246,6 @@ export class PostgresEventStore implements IEventStore {
         await client.query('ROLLBACK');
         throw error;
       }
-    } catch (error) {
-      throw new StorageError(
-        `Failed to save events: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'SAVE_FAILED',
-        error instanceof Error ? error : undefined
-      );
     } finally {
       if (client) {
         client.release();
