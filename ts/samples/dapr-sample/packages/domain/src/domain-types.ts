@@ -4,14 +4,16 @@ import {
   AssignTask, 
   CompleteTask, 
   UpdateTask, 
-  DeleteTask 
+  DeleteTask,
+  RevertTaskCompletion
 } from './aggregates/task/commands/task-commands.js';
 import {
   TaskCreated,
   TaskAssigned,
   TaskCompleted,
   TaskUpdated,
-  TaskDeleted
+  TaskDeleted,
+  TaskCompletionReverted
 } from './aggregates/task/events/task-events.js';
 import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
 // import { GetTaskById } from './aggregates/task/queries/task-queries.js';
@@ -23,6 +25,7 @@ globalRegistry.registerEvent(TaskAssigned);
 globalRegistry.registerEvent(TaskCompleted);
 globalRegistry.registerEvent(TaskUpdated);
 globalRegistry.registerEvent(TaskDeleted);
+globalRegistry.registerEvent(TaskCompletionReverted);
 
 // Commands
 globalRegistry.registerCommand(CreateTask);
@@ -30,6 +33,7 @@ globalRegistry.registerCommand(AssignTask);
 globalRegistry.registerCommand(CompleteTask);
 globalRegistry.registerCommand(UpdateTask);
 globalRegistry.registerCommand(DeleteTask);
+globalRegistry.registerCommand(RevertTaskCompletion);
 
 // Projectors
 globalRegistry.registerProjector(taskProjectorDefinition);

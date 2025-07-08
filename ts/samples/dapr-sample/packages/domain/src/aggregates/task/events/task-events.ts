@@ -54,3 +54,13 @@ export const TaskDeleted = defineEvent({
     reason: z.string().max(200).optional()
   })
 });
+
+export const TaskCompletionReverted = defineEvent({
+  type: 'TaskCompletionReverted',
+  schema: z.object({
+    taskId: z.string().uuid(),
+    revertedBy: z.string().email(),
+    revertedAt: z.string().datetime(),
+    reason: z.string().max(500).optional()
+  })
+});

@@ -15,9 +15,11 @@ import {
   TaskAssigned, 
   TaskCompleted, 
   TaskUpdated, 
-  TaskDeleted 
+  TaskDeleted,
+  TaskCompletionReverted
 } from '../events/task-events.js';
 
+// Active task state
 export interface TaskState {
   aggregateType: 'Task';
   taskId: string;
@@ -26,15 +28,34 @@ export interface TaskState {
   assignedTo?: string;
   dueDate?: string;
   priority: 'low' | 'medium' | 'high';
-  status: 'active' | 'completed' | 'deleted';
+  status: 'active' | 'deleted';
   createdAt: string;
   updatedAt: string;
-  completedAt?: string;
   deletedAt?: string;
 }
 
-// Task Projector using defineProjector
-export const taskProjectorDefinition = defineProjector<TaskState>({
+// Completed task state - separate type to enforce state machine
+export interface CompletedTaskState {
+  aggregateType: 'CompletedTask';
+  taskId: string;
+  title: string;
+  description?: string;
+  assignedTo?: string;
+  dueDate?: string;
+  priority: 'low' | 'medium' | 'high';
+  status: 'completed';
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string;
+  completedBy: string;
+  completionNotes?: string;
+}
+
+// Union type for all possible states
+export type TaskPayloadUnion = TaskState | CompletedTaskState;
+
+// Task Projector using defineProjector - now supports multiple states
+export const taskProjectorDefinition = defineProjector<TaskPayloadUnion>({
   aggregateType: 'Task',
   
   initialState: () => new EmptyAggregatePayload(),
@@ -63,16 +84,30 @@ export const taskProjectorDefinition = defineProjector<TaskState>({
     },
     
     TaskCompleted: (state: any, event: z.infer<typeof TaskCompleted.schema>) => {
-      if (!state || state.aggregateType !== 'Task') return state;
+      // Can only complete active tasks
+      if (!state || state.aggregateType !== 'Task' || state.status === 'deleted') return state;
+      
+      // Transform to CompletedTaskState
+      const taskState = state as TaskState;
       return {
-        ...state,
+        aggregateType: 'CompletedTask' as const,
+        taskId: taskState.taskId,
+        title: taskState.title,
+        description: taskState.description,
+        assignedTo: taskState.assignedTo,
+        dueDate: taskState.dueDate,
+        priority: taskState.priority,
         status: 'completed' as const,
+        createdAt: taskState.createdAt,
+        updatedAt: event.completedAt,
         completedAt: event.completedAt,
-        updatedAt: event.completedAt
-      } as TaskState;
+        completedBy: event.completedBy,
+        completionNotes: event.notes
+      } as CompletedTaskState;
     },
     
     TaskUpdated: (state: any, event: z.infer<typeof TaskUpdated.schema>) => {
+      // Can only update active tasks
       if (!state || state.aggregateType !== 'Task') return state;
       return {
         ...state,
@@ -85,6 +120,7 @@ export const taskProjectorDefinition = defineProjector<TaskState>({
     },
     
     TaskDeleted: (state: any, event: z.infer<typeof TaskDeleted.schema>) => {
+      // Can only delete active tasks
       if (!state || state.aggregateType !== 'Task') return state;
       return {
         ...state,
@@ -92,12 +128,32 @@ export const taskProjectorDefinition = defineProjector<TaskState>({
         deletedAt: event.deletedAt,
         updatedAt: event.deletedAt
       } as TaskState;
+    },
+    
+    TaskCompletionReverted: (state: any, event: z.infer<typeof TaskCompletionReverted.schema>) => {
+      // Can only revert completed tasks
+      if (!state || state.aggregateType !== 'CompletedTask') return state;
+      
+      // Transform back to TaskState
+      const completedState = state as CompletedTaskState;
+      return {
+        aggregateType: 'Task' as const,
+        taskId: completedState.taskId,
+        title: completedState.title,
+        description: completedState.description,
+        assignedTo: completedState.assignedTo,
+        dueDate: completedState.dueDate,
+        priority: completedState.priority,
+        status: 'active' as const,
+        createdAt: completedState.createdAt,
+        updatedAt: event.revertedAt
+      } as TaskState;
     }
   }
 });
 
 // TaskProjector class for command API compatibility
-export class TaskProjector extends AggregateProjector<TaskState> {
+export class TaskProjector extends AggregateProjector<TaskPayloadUnion> {
   readonly aggregateTypeName = 'Task';
   
   getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
@@ -105,9 +161,9 @@ export class TaskProjector extends AggregateProjector<TaskState> {
   }
   
   project(
-    aggregate: Aggregate<TaskState | EmptyAggregatePayload>, 
+    aggregate: Aggregate<TaskPayloadUnion | EmptyAggregatePayload>, 
     event: IEvent
-  ): Result<Aggregate<TaskState | EmptyAggregatePayload>, SekibanError> {
+  ): Result<Aggregate<TaskPayloadUnion | EmptyAggregatePayload>, SekibanError> {
     return taskProjectorDefinition.project(aggregate, event);
   }
   
@@ -117,11 +173,12 @@ export class TaskProjector extends AggregateProjector<TaskState> {
       'TaskAssigned',
       'TaskCompleted',
       'TaskUpdated',
-      'TaskDeleted'
+      'TaskDeleted',
+      'TaskCompletionReverted'
     ].includes(eventType);
   }
   
   getSupportedPayloadTypes(): string[] {
-    return ['Task'];
+    return ['Task', 'CompletedTask'];
   }
 }

@@ -7,23 +7,31 @@ import {
   CompleteTask, 
   UpdateTask, 
   DeleteTask,
+  RevertTaskCompletion,
   GetTaskById 
 } from '@dapr-sample/domain';
-import { PartitionKeys } from '@sekiban/core';
+import { PartitionKeys, CommandValidationError, SekibanError, AggregateNotFoundError } from '@sekiban/core';
 import { getExecutor } from '../setup/executor.js';
-import { ApiError } from '../middleware/error-handler.js';
 
 const router: ExpressRouter = Router();
+
+// Helper to create HTTP errors
+class HttpError extends Error {
+  constructor(message: string, public statusCode: number, public code: string) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
 
 // Validation middleware
 function validateBody<T>(schema: z.ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      const error: ApiError = new Error('Validation failed');
-      error.statusCode = 400;
-      error.code = 'VALIDATION_ERROR';
-      error.details = result.error.format();
+      const validationErrors = result.error.issues.map(issue => 
+        `${issue.path.join('.')}: ${issue.message}`
+      );
+      const error = new CommandValidationError('Request', validationErrors);
       return next(error);
     }
     req.body = result.data;
@@ -45,10 +53,7 @@ router.post(
 
       if (result.isErr()) {
         console.error('Command failed:', result.error);
-        const error: ApiError = new Error(result.error.message || 'Failed to create task');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       console.log('Command succeeded:', result.value);
@@ -74,9 +79,7 @@ router.get(
       // Validate UUID
       const uuidResult = z.string().uuid().safeParse(taskId);
       if (!uuidResult.success) {
-        const error: ApiError = new Error('Invalid task ID format');
-        error.statusCode = 400;
-        error.code = 'INVALID_ID';
+        const error = new CommandValidationError('TaskId', ['Invalid task ID format']);
         return next(error);
       }
 
@@ -85,32 +88,31 @@ router.get(
       const result = await executor.queryAsync(query);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Failed to get task');
-        error.statusCode = 500;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
-      if (!result.value || result.value.payload.aggregateType !== 'Task') {
-        const error: ApiError = new Error('Task not found');
-        error.statusCode = 404;
-        error.code = 'NOT_FOUND';
+      if (!result.value) {
+        const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
 
       // Transform aggregate to response
-      const task = result.value.payload as any;
+      const payload = result.value.payload as any;
+      const isCompleted = payload.aggregateType === 'CompletedTask';
+      
       res.json({
-        id: task.taskId,
-        title: task.title,
-        description: task.description,
-        assignedTo: task.assignedTo,
-        dueDate: task.dueDate,
-        priority: task.priority,
-        status: task.status,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        completedAt: task.completedAt
+        id: payload.taskId,
+        title: payload.title,
+        description: payload.description,
+        assignedTo: payload.assignedTo,
+        dueDate: payload.dueDate,
+        priority: payload.priority,
+        status: isCompleted ? 'completed' : payload.status,
+        createdAt: payload.createdAt,
+        updatedAt: payload.updatedAt,
+        completedAt: isCompleted ? payload.completedAt : undefined,
+        completedBy: isCompleted ? payload.completedBy : undefined,
+        completionNotes: isCompleted ? payload.completionNotes : undefined
       });
     } catch (error) {
       next(error);
@@ -132,10 +134,7 @@ router.post(
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Failed to assign task');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       res.json({
@@ -163,10 +162,7 @@ router.post(
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Failed to complete task');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       res.json({
@@ -196,10 +192,7 @@ router.patch(
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Failed to update task');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       res.json({
@@ -227,14 +220,39 @@ router.delete(
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Failed to delete task');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       res.json({
         message: 'Task deleted successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Revert task completion
+router.post(
+  '/tasks/:taskId/revert-completion',
+  validateBody(z.object({
+    revertedBy: z.string().email(),
+    reason: z.string().max(500).optional()
+  })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { taskId } = req.params;
+      
+      const executor = await getExecutor();
+      const command = RevertTaskCompletion.create({ ...req.body, taskId });
+      const result = await executor.executeCommandAsync(command);
+
+      if (result.isErr()) {
+        return next(result.error);
+      }
+
+      res.json({
+        message: 'Task completion reverted successfully'
       });
     } catch (error) {
       next(error);
@@ -267,10 +285,7 @@ router.post(
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
-        const error: ApiError = new Error(result.error.message || 'Workflow failed');
-        error.statusCode = 400;
-        error.code = result.error.code || 'UNKNOWN_ERROR';
-        return next(error);
+        return next(result.error);
       }
 
       res.status(201).json({

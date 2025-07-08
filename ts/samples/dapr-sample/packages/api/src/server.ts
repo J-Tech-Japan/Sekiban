@@ -4,11 +4,12 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import { config } from './config/index.js';
-import { createExecutor } from './setup/executor.js';
+import { createExecutor, cleanup } from './setup/executor.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
+import { actorRoutes } from './routes/actor-routes.js';
 // Dapr actor server is provided by the Sekiban Dapr package
 
 async function startServer() {
@@ -25,7 +26,7 @@ async function startServer() {
   // Routes
   app.use('/', healthRoutes);
   app.use('/', eventRoutes);
-  // app.use('/', actorRoutes); // Removed: Not needed for Sekiban
+  app.use('/', actorRoutes); // Actor endpoints for Dapr
   app.use(config.API_PREFIX, taskRoutes);
 
   // Error handling
@@ -58,8 +59,17 @@ async function startServer() {
   const gracefulShutdown = async (signal: string) => {
     console.log(`\n${signal} received, starting graceful shutdown...`);
     
-    server.close(() => {
+    server.close(async () => {
       console.log('HTTP server closed');
+      
+      // Cleanup database connections
+      try {
+        await cleanup();
+        console.log('Cleanup completed');
+      } catch (error) {
+        console.error('Error during cleanup:', error);
+      }
+      
       process.exit(0);
     });
 

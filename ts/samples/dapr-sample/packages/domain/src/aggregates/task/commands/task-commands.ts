@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { command, PartitionKeys } from '@sekiban/core';
-import { TaskProjector } from '../projectors/task-projector.js';
-import { TaskCreated, TaskAssigned, TaskCompleted, TaskUpdated, TaskDeleted } from '../events/task-events.js';
+import { TaskProjector, type TaskPayloadUnion, type TaskState } from '../projectors/task-projector.js';
+import { TaskCreated, TaskAssigned, TaskCompleted, TaskUpdated, TaskDeleted, TaskCompletionReverted } from '../events/task-events.js';
 
 // Create Task Command
 export const CreateTask = command.create('CreateTask', {
@@ -35,7 +35,19 @@ export const AssignTask = command.update('AssignTask', {
   }),
   projector: new TaskProjector(),
   partitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
-  handle: (data, { appendEvent }) => {
+  handle: (data, { aggregate, appendEvent }) => {
+    const taskAggregate = aggregate as TaskPayloadUnion | undefined;
+    
+    // Can only assign active tasks
+    if (!taskAggregate || taskAggregate.aggregateType !== 'Task') {
+      throw new Error('Task must be in active state to be assigned');
+    }
+    
+    const taskState = taskAggregate as TaskState;
+    if (taskState.status === 'deleted') {
+      throw new Error('Cannot assign a deleted task');
+    }
+    
     appendEvent(TaskAssigned.create({
       taskId: data.taskId,
       assignedTo: data.assignedTo,
@@ -44,7 +56,7 @@ export const AssignTask = command.update('AssignTask', {
   }
 });
 
-// Complete Task Command
+// Complete Task Command - only works on TaskState
 export const CompleteTask = command.update('CompleteTask', {
   schema: z.object({
     taskId: z.string().uuid(),
@@ -53,7 +65,19 @@ export const CompleteTask = command.update('CompleteTask', {
   }),
   projector: new TaskProjector(),
   partitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
-  handle: (data, { appendEvent }) => {
+  handle: (data, { aggregate, appendEvent }) => {
+    const taskAggregate = aggregate as TaskPayloadUnion | undefined;
+    
+    // Can only complete active tasks
+    if (!taskAggregate || taskAggregate.aggregateType !== 'Task') {
+      throw new Error('Task must be in active state to be completed');
+    }
+    
+    const taskState = taskAggregate as TaskState;
+    if (taskState.status === 'deleted') {
+      throw new Error('Cannot complete a deleted task');
+    }
+    
     appendEvent(TaskCompleted.create({
       taskId: data.taskId,
       completedBy: data.completedBy,
@@ -74,7 +98,19 @@ export const UpdateTask = command.update('UpdateTask', {
   }),
   projector: new TaskProjector(),
   partitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
-  handle: (data, { appendEvent }) => {
+  handle: (data, { aggregate, appendEvent }) => {
+    const taskAggregate = aggregate as TaskPayloadUnion | undefined;
+    
+    // Can only update active tasks
+    if (!taskAggregate || taskAggregate.aggregateType !== 'Task') {
+      throw new Error('Task must be in active state to be updated');
+    }
+    
+    const taskState = taskAggregate as TaskState;
+    if (taskState.status === 'deleted') {
+      throw new Error('Cannot update a deleted task');
+    }
+    
     appendEvent(TaskUpdated.create({
       taskId: data.taskId,
       title: data.title,
@@ -95,12 +131,50 @@ export const DeleteTask = command.update('DeleteTask', {
   }),
   projector: new TaskProjector(),
   partitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
-  handle: (data, { appendEvent }) => {
+  handle: (data, { aggregate, appendEvent }) => {
+    const taskAggregate = aggregate as TaskPayloadUnion | undefined;
+    
+    // Can only delete active tasks
+    if (!taskAggregate || taskAggregate.aggregateType !== 'Task') {
+      throw new Error('Task must be in active state to be deleted');
+    }
+    
+    const taskState = taskAggregate as TaskState;
+    if (taskState.status === 'deleted') {
+      throw new Error('Task is already deleted');
+    }
+    
     appendEvent(TaskDeleted.create({
       taskId: data.taskId,
       deletedBy: data.deletedBy,
       reason: data.reason,
       deletedAt: new Date().toISOString()
+    }));
+  }
+});
+
+// Revert Task Completion Command - only works on CompletedTaskState
+export const RevertTaskCompletion = command.update('RevertTaskCompletion', {
+  schema: z.object({
+    taskId: z.string().uuid(),
+    revertedBy: z.string().email(),
+    reason: z.string().max(500).optional()
+  }),
+  projector: new TaskProjector(),
+  partitionKeys: (data) => PartitionKeys.existing(data.taskId, 'Task'),
+  handle: (data, { aggregate, appendEvent }) => {
+    const taskAggregate = aggregate as TaskPayloadUnion | undefined;
+    
+    // Can only revert completed tasks
+    if (!taskAggregate || taskAggregate.aggregateType !== 'CompletedTask') {
+      throw new Error('Task must be in completed state to revert completion');
+    }
+    
+    appendEvent(TaskCompletionReverted.create({
+      taskId: data.taskId,
+      revertedBy: data.revertedBy,
+      reason: data.reason,
+      revertedAt: new Date().toISOString()
     }));
   }
 });
