@@ -1,46 +1,49 @@
-#\!/bin/bash
+#!/bin/bash
 
-echo "Testing Dapr Sample API"
-echo "======================"
+# Test script for Dapr-based Sekiban API
 
-# Test health endpoint
-echo -e "\n1. Testing health endpoint:"
-curl -s http://localhost:3000/api/health | jq
+API_URL="http://localhost:3000/api"
+DAPR_URL="http://localhost:3500"
 
-# Create a task
-echo -e "\n2. Creating a new task:"
-TASK_RESPONSE=$(curl -s -X POST http://localhost:3000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Test Sekiban with Dapr",
-    "description": "Verify that the event sourcing system works correctly",
-    "assignedTo": "developer@example.com",
-    "dueDate": "2025-07-15T00:00:00Z",
-    "priority": "medium"
-  }')
+echo "Testing Sekiban with Dapr Actors..."
+echo "==================================="
+echo ""
+echo "Note: Make sure the API is running with: ./run-with-dapr.sh"
+echo ""
 
-echo $TASK_RESPONSE | jq
+# First check if the API is running
+echo "1. Checking API health..."
+curl -s "$API_URL/../health" | jq . || echo "API not responding"
 
-# Extract task ID
-TASK_ID=$(echo $TASK_RESPONSE | jq -r '.id')
+echo ""
+echo "2. Creating a task via API..."
+echo "-----------------------------"
 
-if [ "$TASK_ID" \!= "null" ]; then
-  # Get the created task
-  echo -e "\n3. Getting the created task:"
-  curl -s http://localhost:3000/api/tasks/$TASK_ID | jq
-  
-  # Try to assign the task
-  echo -e "\n4. Assigning the task to another user:"
-  curl -s -X PUT http://localhost:3000/api/tasks/$TASK_ID/assign \
+RESPONSE=$(curl -s -X POST "$API_URL/tasks" \
     -H "Content-Type: application/json" \
     -d '{
-      "assignedTo": "manager@example.com"
-    }' | jq
-    
-  # Get updated task
-  echo -e "\n5. Getting the updated task:"
-  curl -s http://localhost:3000/api/tasks/$TASK_ID | jq
-else
-  echo "Failed to create task - no ID returned"
+        "title": "Test Task with Dapr",
+        "description": "Testing event sourcing with Dapr actors",
+        "priority": "high"
+    }')
+
+echo "Response:"
+echo "$RESPONSE" | jq . || echo "$RESPONSE"
+
+# Extract aggregateId if available
+AGGREGATE_ID=$(echo "$RESPONSE" | jq -r '.aggregateId // empty')
+
+if [ -n "$AGGREGATE_ID" ]; then
+    echo ""
+    echo "3. Checking task status..."
+    echo "--------------------------"
+    curl -s "$API_URL/tasks/$AGGREGATE_ID" | jq . || echo "Failed to get task"
 fi
-EOF < /dev/null
+
+echo ""
+echo "4. Listing all tasks..."
+echo "-----------------------"
+curl -s "$API_URL/tasks" | jq . || echo "Failed to list tasks"
+
+echo ""
+echo "Done."

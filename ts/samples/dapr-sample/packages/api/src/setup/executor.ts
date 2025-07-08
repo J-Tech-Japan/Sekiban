@@ -1,61 +1,91 @@
-// import { DaprClient } from '@dapr/dapr';
-// import { SekibanDaprExecutor } from '@sekiban/dapr';
-import { createPostgresEventStore, PostgresEventStore } from '@sekiban/postgres';
+import { DaprClient } from '@dapr/dapr';
+import { SekibanDaprExecutor, type DaprSekibanConfiguration } from '@sekiban/dapr';
+import type { ICommandWithHandler } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from '../config/index.js';
-import { ISekibanExecutor } from '@sekiban/core';
-import { Pool } from 'pg';
 
-let executorInstance: ISekibanExecutor | null = null;
-let eventStoreInstance: PostgresEventStore | null = null;
+// Common interface for both executors
+interface SekibanExecutor {
+  executeCommandAsync<TCommand extends ICommandWithHandler<any, any, any>>(
+    command: TCommand
+  ): Promise<any>;
+  queryAsync<TQuery>(
+    query: TQuery
+  ): Promise<any>;
+}
 
-export async function createExecutor(): Promise<ISekibanExecutor> {
+let executorInstance: SekibanExecutor | null = null;
+let daprClientInstance: DaprClient | null = null;
+
+/**
+ * Create a Sekiban executor based on environment configuration
+ * - If DAPR_HTTP_PORT is not set or Dapr is not available, uses in-memory
+ * - Otherwise uses Dapr executor for distributed execution
+ */
+export async function createExecutor(): Promise<SekibanExecutor> {
   if (executorInstance) {
     return executorInstance;
   }
 
-  // Create domain types
+  // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Create PostgreSQL connection pool
-  const pool = new Pool({
-    connectionString: config.DATABASE_URL,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-  });
-
-  // Create PostgreSQL event store
-  eventStoreInstance = new PostgresEventStore(pool);
+  // Check if we should use Dapr
+  const useDapr = process.env.DAPR_HTTP_PORT && process.env.DAPR_HTTP_PORT !== '';
   
-  // Initialize the database schema
-  await eventStoreInstance.initialize();
+  if (useDapr) {
+    console.log('Using Dapr executor for distributed event sourcing...');
+    
+    // Create Dapr client with proper configuration
+    daprClientInstance = new DaprClient({
+      daprHost: '127.0.0.1',
+      daprPort: String(config.DAPR_HTTP_PORT)
+    });
 
-  // Create a basic executor using the event store
-  executorInstance = {
-    executeCommand: async (command: any) => {
-      // Basic command execution would go here
-      throw new Error('Command execution not yet implemented');
-    },
-    executeQuery: async (query: any) => {
-      // Basic query execution would go here
-      throw new Error('Query execution not yet implemented');
-    }
-  } as ISekibanExecutor;
+    // Configure Sekiban with Dapr - include all required configuration
+    const sekibanConfig: DaprSekibanConfiguration = {
+      stateStoreName: config.DAPR_STATE_STORE_NAME,
+      pubSubName: config.DAPR_PUBSUB_NAME,
+      eventTopicName: config.DAPR_EVENT_TOPIC,
+      actorType: config.DAPR_ACTOR_TYPE,
+      actorIdPrefix: config.DAPR_APP_ID,
+      retryAttempts: 3,
+      retryDelayMs: 100
+    };
 
-  return executorInstance;
+    // Create the Sekiban Dapr executor
+    executorInstance = new SekibanDaprExecutor(
+      daprClientInstance,
+      domainTypes,
+      sekibanConfig
+    );
+
+    console.log('Sekiban Dapr Executor initialized with config:', {
+      actorType: sekibanConfig.actorType,
+      actorIdPrefix: sekibanConfig.actorIdPrefix,
+      stateStore: sekibanConfig.stateStoreName,
+      pubSub: sekibanConfig.pubSubName,
+      eventTopic: sekibanConfig.eventTopicName
+    });
+  } else {
+    console.log('ERROR: Dapr is required for this sample.');
+    console.log('Please run with Dapr using: ./run-with-dapr.sh');
+    throw new Error('Dapr not available. This sample requires Dapr to run.');
+  }
+
+  return executorInstance!; // We know it's initialized by this point
 }
 
-export async function getExecutor(): Promise<ISekibanExecutor> {
+export async function getExecutor(): Promise<SekibanExecutor> {
   if (!executorInstance) {
     return createExecutor();
   }
   return executorInstance;
 }
 
-export async function getEventStore(): Promise<PostgresEventStore> {
-  if (!eventStoreInstance) {
-    await createExecutor();
+export function getDaprClient(): DaprClient {
+  if (!daprClientInstance) {
+    daprClientInstance = new DaprClient();
   }
-  return eventStoreInstance!;
+  return daprClientInstance;
 }

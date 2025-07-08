@@ -1,0 +1,12 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: sekiban-config
+spec:
+  tracing:
+    samplingRate: "1"
+  features:
+    - name: Actor
+      enabled: true
+    - name: ActorStateTTL
+      enabled: true

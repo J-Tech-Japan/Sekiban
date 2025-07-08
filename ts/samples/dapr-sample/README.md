@@ -1,253 +1,140 @@
-# Dapr Sample - Task Management System
+# Sekiban Dapr Sample
 
-This sample demonstrates how to use Sekiban with Dapr for building a distributed event-sourced application using the new schema-based type registry system.
+This sample demonstrates how to use Sekiban TypeScript with Dapr for distributed event sourcing.
 
-## Architecture
+## Overview
 
-The sample follows the recommended project structure:
+This sample implements a simple Task management system using:
+- **Sekiban Core** for event sourcing abstractions
+- **Sekiban Dapr** for distributed actor-based aggregates (optional)
+- **PostgreSQL** for event persistence (when using Dapr)
+- **Express.js** for REST API
+
+## Project Structure
 
 ```
 dapr-sample/
 ├── packages/
-│   ├── domain/        # Pure domain logic with schema-based types
-│   ├── workflows/     # Application workflows
-│   └── api/          # REST API with Dapr integration
+│   ├── domain/        # Domain model (events, commands, projectors)
+│   ├── api/           # Express REST API
+│   └── workflows/     # Business workflows (future)
+├── dapr/              # Dapr configuration files
+│   ├── components/    # State store and pubsub configuration
+│   └── config.yaml    # Dapr runtime configuration
+└── scripts/           # Helper scripts
 ```
-
-## Key Features
-
-- **Schema-Based Type System**: Uses Zod schemas for event, command, and projector definitions
-- **PostgreSQL Event Store**: Events are persisted in PostgreSQL
-- **Dapr State Management**: In-memory state store for local development
-- **Dapr Pub/Sub**: In-memory pub/sub for event distribution
-- **Dapr Actors**: Aggregate state managed by Dapr actors
-- **Type Safety**: Full TypeScript type inference from schemas
-- **Workflows**: Multi-step business processes
 
 ## Prerequisites
 
-- Node.js >= 18
-- pnpm >= 8
-- Docker and Docker Compose
-- Dapr CLI installed
+- Node.js 18+
+- pnpm
+- Dapr CLI installed and initialized
+- PostgreSQL running (for event persistence)
+- Optional: Redis (for production pubsub, sample uses in-memory)
 
-## Setup
+## Quick Start
 
-1. Clone the repository and navigate to the sample:
 ```bash
-cd ts/samples/dapr-sample
-```
-
-2. Install dependencies:
-```bash
+# Install dependencies
 pnpm install
-```
 
-3. Copy the environment file:
-```bash
-cp .env.example .env
-```
+# Set up PostgreSQL (first time only)
+./setup-postgres.sh
 
-4. Start PostgreSQL:
-```bash
-docker-compose up -d postgres
-```
+# Start with Dapr
+./run-with-dapr.sh
 
-## Running the Application
-
-### With Dapr (Recommended)
-
-1. Build all packages:
-```bash
-pnpm build
-```
-
-2. Start with Dapr:
-```bash
-pnpm dapr:api
-```
-
-### Without Dapr (Development Mode)
-
-For development without Dapr:
-```bash
-cd packages/api && npx tsx watch src/server.ts
+# In another terminal, test the API
+./test-api.sh
 ```
 
 ## API Endpoints
 
-### Health Check
+### Create Task
 ```bash
-curl http://localhost:3000/health
+POST /api/tasks
+{
+  "title": "Task Title",
+  "description": "Task Description",
+  "priority": "high"
+}
 ```
 
-### Create a Task
+### Get Task
 ```bash
-curl -X POST http://localhost:3000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Complete documentation",
-    "description": "Write comprehensive API documentation",
-    "priority": "high",
-    "assignedTo": "john@example.com"
-  }'
+GET /api/tasks/:id
 ```
 
-### Get a Task
+### List Tasks
 ```bash
-curl http://localhost:3000/api/tasks/{taskId}
+GET /api/tasks
 ```
 
-### Assign a Task
+### Complete Task
 ```bash
-curl -X POST http://localhost:3000/api/tasks/{taskId}/assign \
-  -H "Content-Type: application/json" \
-  -d '{
-    "assignedTo": "jane@example.com"
-  }'
+PUT /api/tasks/:id/complete
 ```
 
-### Complete a Task
+## Domain Model
+
+### Events
+- `TaskCreated` - When a new task is created
+- `TaskCompleted` - When a task is marked as complete
+- `TaskPriorityChanged` - When task priority is updated
+
+### Commands
+- `CreateTask` - Creates a new task
+- `CompleteTask` - Marks a task as complete
+- `ChangePriority` - Updates task priority
+
+### Aggregate
+- `Task` - The task aggregate maintaining state through event projection
+
+## How It Works
+
+1. **Commands** are sent to the API endpoints
+2. **SekibanDaprExecutor** routes commands to Dapr actors
+3. **Dapr Actors** (from @sekiban/dapr) handle command execution
+4. **Events** are persisted to PostgreSQL via actor state
+5. **Projectors** apply events to rebuild aggregate state
+6. **Queries** retrieve current state by replaying events
+
+### Architecture
+- Uses `SekibanDaprExecutor` from `@sekiban/dapr`
+- Each aggregate becomes a Dapr virtual actor
+- Events persisted to PostgreSQL through Dapr state store
+- Supports distribution and scaling across multiple nodes
+- Includes snapshot support for performance optimization
+
+## Configuration
+
+Environment variables (see `.env.example`):
+- `DAPR_HTTP_PORT` - If set, enables Dapr mode
+- `DATABASE_URL` - PostgreSQL connection string
+- `API_PREFIX` - API route prefix (default: `/api`)
+
+## Development
+
 ```bash
-curl -X POST http://localhost:3000/api/tasks/{taskId}/complete \
-  -H "Content-Type: application/json" \
-  -d '{
-    "completedBy": "jane@example.com",
-    "notes": "All tests passed"
-  }'
-```
+# Build all packages
+pnpm build
 
-### Update a Task
-```bash
-curl -X PATCH http://localhost:3000/api/tasks/{taskId} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Updated title",
-    "priority": "medium"
-  }'
-```
+# Run in dev mode (with hot reload)
+cd packages/api && pnpm dev
 
-### Delete a Task
-```bash
-curl -X DELETE http://localhost:3000/api/tasks/{taskId} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "deletedBy": "admin@example.com",
-    "reason": "Duplicate task"
-  }'
-```
-
-### Run Workflow
-```bash
-curl -X POST http://localhost:3000/api/workflows/task-assignment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Review PR",
-    "description": "Review and merge the feature branch",
-    "assignedTo": "reviewer@example.com",
-    "priority": "high"
-  }'
-```
-
-## Project Structure
-
-### Domain Package (`packages/domain`)
-
-Contains pure domain logic with schema-based definitions:
-
-- **Events**: Task lifecycle events (Created, Assigned, Completed, etc.)
-- **Commands**: Operations that modify tasks
-- **Projectors**: Build task state from events
-- **Queries**: Read operations (to be implemented with read models)
-
-### Workflows Package (`packages/workflows`)
-
-Contains application-level workflows that orchestrate multiple commands:
-
-- **TaskAssignmentWorkflow**: Creates and assigns a task in one operation
-
-### API Package (`packages/api`)
-
-REST API with Dapr integration:
-
-- **Routes**: RESTful endpoints for task management
-- **Executor Setup**: Configures Sekiban with Dapr and PostgreSQL
-- **Middleware**: Error handling, validation, logging
-- **Dapr Integration**: Actor configuration, pub/sub handling
-
-## Schema-Based Type System
-
-This sample demonstrates the new schema-based approach:
-
-```typescript
-// Define an event
-export const TaskCreated = defineEvent({
-  type: 'TaskCreated',
-  schema: z.object({
-    taskId: z.string().uuid(),
-    title: z.string().min(1).max(200),
-    // ... more fields
-  })
-});
-
-// Define a command
-export const CreateTask = defineCommand({
-  type: 'CreateTask',
-  schema: z.object({
-    title: z.string().min(1).max(200),
-    // ... more fields
-  }),
-  aggregateType: 'Task',
-  handlers: {
-    specifyPartitionKeys: () => PartitionKeys.generate('Task'),
-    validate: (data) => /* business validation */,
-    handle: (data, aggregate) => /* return events */
-  }
-});
-
-// Define a projector
-export const taskProjector = defineProjector<TaskPayload | EmptyAggregatePayload>({
-  aggregateType: 'Task',
-  initialState: () => ({ aggregateType: 'Empty' }),
-  projections: {
-    TaskCreated: (state, event) => /* return new state */,
-    // ... more projections
-  }
-});
-```
-
-## Testing
-
-Run tests for all packages:
-```bash
+# Run tests
 pnpm test
 ```
 
-## Cleanup
-
-Stop all services:
-```bash
-pnpm dapr:stop
-```
+## Troubleshooting
+- Ensure PostgreSQL is running and accessible
+- Check Dapr placement service: `dapr run --app-id placement --placement-host-address localhost:50005`
+- View Dapr logs: Add `--log-level debug` to the run command
+- Actor registration errors: The Sekiban Dapr actors are internal to the framework
 
 ## Next Steps
 
-1. **Add Read Models**: Implement projections for queries
-2. **Add Authentication**: Secure API endpoints
-3. **Add Monitoring**: Integrate OpenTelemetry
-4. **Add More Workflows**: Implement complex business processes
-5. **Add Integration Tests**: Test full command-to-query flow
-
-## Troubleshooting
-
-### Dapr sidecar not starting
-- Ensure Dapr is installed: `dapr --version`
-- Initialize Dapr: `dapr init`
-
-### PostgreSQL connection issues
-- Check if PostgreSQL is running: `docker ps`
-- Verify connection string in `.env`
-
-### Type errors
-- Rebuild the project: `pnpm build`
-- Ensure all packages are linked: `pnpm install`
+1. Add more complex domain logic
+2. Implement sagas for multi-aggregate workflows
+3. Add query models and projections
+4. Integrate with a frontend application

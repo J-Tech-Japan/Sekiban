@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['cjs', 'esm'],
-  dts: false, // Temporarily disable dts generation
+  dts: false, // Disable for now due to type errors
   clean: false, // Don't clean to preserve JS files
   sourcemap: true,
   splitting: false,
@@ -14,5 +14,5 @@ export default defineConfig({
   target: 'node18',
   platform: 'node',
   shims: false,
-  onSuccess: 'echo "Build completed without types - run tsc separately for type definitions"'
+  onSuccess: 'echo "Build completed"'
 });

@@ -1,4 +1,14 @@
-import { defineProjector, EmptyAggregatePayload } from '@sekiban/core';
+import { 
+  defineProjector, 
+  EmptyAggregatePayload, 
+  AggregateProjector, 
+  PartitionKeys, 
+  Aggregate, 
+  IEvent, 
+  Result, 
+  ok, 
+  SekibanError 
+} from '@sekiban/core';
 import { z } from 'zod';
 import { 
   TaskCreated, 
@@ -23,8 +33,8 @@ export interface TaskState {
   deletedAt?: string;
 }
 
-// Task Projector
-export const TaskProjector = defineProjector<TaskState>({
+// Task Projector using defineProjector
+export const taskProjectorDefinition = defineProjector<TaskState>({
   aggregateType: 'Task',
   
   initialState: () => new EmptyAggregatePayload(),
@@ -85,3 +95,33 @@ export const TaskProjector = defineProjector<TaskState>({
     }
   }
 });
+
+// TaskProjector class for command API compatibility
+export class TaskProjector extends AggregateProjector<TaskState> {
+  readonly aggregateTypeName = 'Task';
+  
+  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
+    return taskProjectorDefinition.getInitialState(partitionKeys);
+  }
+  
+  project(
+    aggregate: Aggregate<TaskState | EmptyAggregatePayload>, 
+    event: IEvent
+  ): Result<Aggregate<TaskState | EmptyAggregatePayload>, SekibanError> {
+    return taskProjectorDefinition.project(aggregate, event);
+  }
+  
+  canHandle(eventType: string): boolean {
+    return [
+      'TaskCreated',
+      'TaskAssigned',
+      'TaskCompleted',
+      'TaskUpdated',
+      'TaskDeleted'
+    ].includes(eventType);
+  }
+  
+  getSupportedPayloadTypes(): string[] {
+    return ['Task'];
+  }
+}

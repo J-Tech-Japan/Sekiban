@@ -38,8 +38,8 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const executor = await getExecutor();
+      console.log('Executing command:', JSON.stringify(req.body, null, 2));
       const command = CreateTask.create(req.body);
-      console.log('Executing command:', JSON.stringify(command, null, 2));
       const result = await executor.executeCommandAsync(command);
       console.log('Command result:', result);
 
@@ -47,17 +47,16 @@ router.post(
         console.error('Command failed:', result.error);
         const error: ApiError = new Error(result.error.message || 'Failed to create task');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
       console.log('Command succeeded:', result.value);
       res.status(201).json({
         data: {
-          taskId: result.value.aggregateId || result.value.id || 'unknown'
+          taskId: result.value.aggregateId
         },
-        message: 'Task created successfully',
-        debug: result.value
+        message: 'Task created successfully'
       });
     } catch (error) {
       next(error);
@@ -82,14 +81,13 @@ router.get(
       }
 
       const executor = await getExecutor();
-      // Use query to get task
       const query = GetTaskById.create({ taskId });
       const result = await executor.queryAsync(query);
 
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Failed to get task');
         error.statusCode = 500;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
@@ -136,7 +134,7 @@ router.post(
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Failed to assign task');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
@@ -159,15 +157,15 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { taskId } = req.params;
-      const command = CompleteTask.create({ ...req.body, taskId });
       
       const executor = await getExecutor();
+      const command = CompleteTask.create({ ...req.body, taskId });
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Failed to complete task');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
@@ -192,15 +190,15 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { taskId } = req.params;
-      const command = UpdateTask.create({ ...req.body, taskId });
       
       const executor = await getExecutor();
+      const command = UpdateTask.create({ ...req.body, taskId });
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Failed to update task');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
@@ -223,15 +221,15 @@ router.delete(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { taskId } = req.params;
-      const command = DeleteTask.create({ ...req.body, taskId });
       
       const executor = await getExecutor();
+      const command = DeleteTask.create({ ...req.body, taskId });
       const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Failed to delete task');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 
@@ -259,20 +257,19 @@ router.post(
       const executor = await getExecutor();
       
       // Create task with assignedTo already set
-      const createCommand = CreateTask.create({
+      const command = CreateTask.create({
         title: req.body.title,
         description: req.body.description,
         assignedTo: req.body.assignedTo,
         priority: req.body.priority,
         dueDate: req.body.dueDate
       });
-      
-      const result = await executor.executeCommandAsync(createCommand);
+      const result = await executor.executeCommandAsync(command);
 
       if (result.isErr()) {
         const error: ApiError = new Error(result.error.message || 'Workflow failed');
         error.statusCode = 400;
-        error.code = result.error.type || 'UNKNOWN_ERROR';
+        error.code = result.error.code || 'UNKNOWN_ERROR';
         return next(error);
       }
 

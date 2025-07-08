@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
-// import { actorRoutes } from './routes/actor-routes.js'; // Removed: Not needed for Sekiban
+// Dapr actor server is provided by the Sekiban Dapr package
 
 async function startServer() {
   const app = express();
@@ -30,6 +30,9 @@ async function startServer() {
 
   // Error handling
   app.use(errorHandler);
+
+  // Note: The Dapr actor server is managed by the Sekiban Dapr package
+  // and runs as a separate process invoked by Dapr sidecar
 
   // Initialize executor
   try {

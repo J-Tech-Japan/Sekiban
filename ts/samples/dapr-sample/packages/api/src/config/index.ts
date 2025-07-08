@@ -18,8 +18,9 @@ const ConfigSchema = z.object({
   DAPR_PUBSUB_NAME: z.string().default('pubsub'),
   DAPR_EVENT_TOPIC: z.string().default('events'),
   
-  // Actor configuration
+  // Actor configuration - must match Sekiban's internal actor names
   DAPR_ACTOR_TYPE: z.string().default('AggregateActor'),
+  DAPR_APP_ID_FOR_ACTORS: z.string().default('sekiban-api'), // App ID where actors are hosted
   
   // API configuration
   API_PREFIX: z.string().default('/api'),
