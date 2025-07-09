@@ -70,14 +70,19 @@ export class AggregateActorImpl {
     commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
   ): Promise<SekibanCommandResponse> {
     console.log(`[AggregateActorImpl] executeCommandAsync called`);
+    console.log(`[AggregateActorImpl] Raw input:`, JSON.stringify(commandAndMetadata, null, 2));
     
     try {
-      // Extract command information
-      const commandType = commandAndMetadata?.command?.type || 
-                         commandAndMetadata?.commandType ||
-                         (commandAndMetadata as any)?.type;
+      // Extract command information from the correct structure
+      const commandType = commandAndMetadata.commandType;
+      const commandData = commandAndMetadata.commandData;
+      const partitionKeys = commandAndMetadata.partitionKeys;
+      const metadata = commandAndMetadata.metadata;
       
       console.log('[AggregateActorImpl] Command type:', commandType);
+      console.log('[AggregateActorImpl] Command data:', commandData);
+      console.log('[AggregateActorImpl] Partition keys:', partitionKeys);
+      console.log('[AggregateActorImpl] Metadata:', metadata);
       
       // Validate command exists
       const commandTypeDef = this.domainTypes.commandTypes.getCommandTypeByName(commandType);
@@ -89,25 +94,31 @@ export class AggregateActorImpl {
         } as any;
       }
 
-      // Get partition keys and projector
-      const partitionKeysAndProjector = PartitionKeysAndProjector.fromSerializable(
-        commandAndMetadata.partitionKeysAndProjector
-      );
+      // Store current partition keys for future use
+      // For now, we'll create a simple response without full event sourcing logic
+      console.log('[AggregateActorImpl] Command validated successfully');
       
-      console.log('[AggregateActorImpl] Partition keys:', partitionKeysAndProjector.partitionKeys);
+      // For now, return a simplified response that matches SekibanCommandResponse
+      // In a full implementation, this would:
+      // 1. Load current aggregate state
+      // 2. Execute the command handler
+      // 3. Apply resulting events
+      // 4. Save the updated state
+      // 5. Publish events
       
-      // For now, return a simplified response
-      // In a full implementation, this would execute the command handler
-      return {
+      const response: SekibanCommandResponse = {
+        aggregateId: this.actorId,
+        lastSortableUniqueId: `mock-${Date.now()}`,
         success: true,
-        version: 1,
-        sortableUniqueId: 'mock-unique-id',
-        aggregate: {
-          id: this.actorId,
+        metadata: {
           version: 1,
-          payload: {} as any
+          commandType: commandType,
+          processedAt: new Date().toISOString()
         }
-      } as SekibanCommandResponse;
+      };
+      
+      console.log('[AggregateActorImpl] Returning response:', response);
+      return response;
       
     } catch (error) {
       console.error('[AggregateActorImpl] Error in executeCommandAsync:', error);

@@ -46,6 +46,7 @@ export interface SekibanCommandResponse {
 export interface IDaprAggregateActorProxy {
   /**
    * Execute command through the actor
+   * Returns either SekibanCommandResponse object or JSON string that can be parsed to SekibanCommandResponse
    */
   executeCommandAsync<
     TCommand,
@@ -54,7 +55,7 @@ export interface IDaprAggregateActorProxy {
     TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
   >(
     commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
-  ): Promise<SekibanCommandResponse>;
+  ): Promise<SekibanCommandResponse | string>;
   
   /**
    * Execute query through the actor

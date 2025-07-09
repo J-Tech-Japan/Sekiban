@@ -23,8 +23,7 @@ import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 
 /**
- * Main Sekiban executor that uses Dapr for distributed aggregate management
- * Equivalent to C# SekibanDaprExecutor
+ * Debug version of SekibanDaprExecutor with extensive logging
  */
 export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   constructor(
@@ -32,50 +31,67 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     private readonly domainTypes: SekibanDomainTypes,
     private configuration: DaprSekibanConfiguration
   ) {
+    console.log('[EXECUTOR CONSTRUCTOR] Creating SekibanDaprExecutor with config:', this.configuration);
     this.validateConfiguration(configuration);
   }
   
   private validateConfiguration(config: DaprSekibanConfiguration): void {
-    // Configuration validation can be extended as needed
     if (!config.actorType) {
       config.actorType = 'AggregateActor';
     }
+    console.log('[EXECUTOR CONFIG] Final configuration:', config);
   }
   
   
   private createActorProxy(actorId: string): IDaprAggregateActorProxy {
-    // Create a simple wrapper that makes direct HTTP calls to actors
+    console.log(`[ACTOR PROXY] Creating proxy for actor ID: ${actorId}`);
+    
     const actorType = this.configuration.actorType;
     const appId = this.configuration.actorIdPrefix || 'sekiban-api';
     const daprPort = (this.daprClient as any).options?.daprPort || '3500';
     const daprHost = (this.daprClient as any).options?.daprHost || '127.0.0.1';
     
+    console.log('[ACTOR PROXY] Actor configuration:', { actorType, appId, daprHost, daprPort });
+    
     // Helper to make direct HTTP calls to Dapr actors
     const callActorMethod = async (methodName: string, data: any): Promise<any> => {
       const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${actorId}/method/${methodName}`;
+      console.log(`[ACTOR HTTP] Calling ${methodName} at ${url}`);
+      console.log('[ACTOR HTTP] Request data:', JSON.stringify(data, null, 2));
       
-      const response = await fetch(url, {
-        method: 'PUT', // CRITICAL: Actors require PUT for method calls
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      });
+      const startTime = Date.now();
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Actor method ${methodName} failed: ${response.status} ${errorText}`);
-      }
-      
-      // Get response as text first to handle both JSON strings and already parsed objects
-      const responseText = await response.text();
-      
-      // Try to parse as JSON if it's a string, otherwise handle as already parsed
       try {
-        return responseText ? JSON.parse(responseText) : null;
-      } catch (parseError) {
-        // If JSON parsing fails, return the text as-is (might be already parsed by fetch)
-        return responseText;
+        console.log('[ACTOR HTTP] Making fetch request...');
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        const duration = Date.now() - startTime;
+        console.log(`[ACTOR HTTP] Response received in ${duration}ms - Status: ${response.status}`);
+        
+        const responseText = await response.text();
+        console.log('[ACTOR HTTP] Response body:', responseText);
+        
+        if (!response.ok) {
+          console.error(`[ACTOR HTTP] Actor method ${methodName} failed with status ${response.status}`);
+          throw new Error(`Actor method ${methodName} failed: ${response.status} ${responseText}`);
+        }
+        
+        try {
+          return JSON.parse(responseText);
+        } catch (parseError) {
+          console.log('[ACTOR HTTP] Response is not JSON, returning as text');
+          return responseText;
+        }
+      } catch (fetchError) {
+        const duration = Date.now() - startTime;
+        console.error(`[ACTOR HTTP] Fetch failed after ${duration}ms:`, fetchError);
+        throw fetchError;
       }
     };
     
@@ -88,16 +104,19 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
+        console.log('[ACTOR PROXY] Executing command async...');
         return callActorMethod('executeCommandAsync', commandAndMetadata);
       },
       
       queryAsync: async <T>(query: any): Promise<T> => {
+        console.log('[ACTOR PROXY] Executing query async...');
         return callActorMethod('queryAsync', query);
       },
       
       loadAggregateAsync: async <TPayload extends ITypedAggregatePayload>(
         partitionKeys: PartitionKeys
       ): Promise<Aggregate<TPayload>> => {
+        console.log('[ACTOR PROXY] Loading aggregate async...');
         return callActorMethod('loadAggregateAsync', partitionKeys);
       }
     };
@@ -110,18 +129,26 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     const maxRetries = this.configuration.retryAttempts || 3;
     let lastError: Error;
     
+    console.log(`[RETRY] Starting ${operationName} with max ${maxRetries} attempts`);
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[RETRY] Attempt ${attempt}/${maxRetries} for ${operationName}`);
       try {
-        return await operation();
+        const result = await operation();
+        console.log(`[RETRY] ${operationName} succeeded on attempt ${attempt}`);
+        return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
+        console.error(`[RETRY] Attempt ${attempt} failed:`, lastError.message);
         
         if (attempt === maxRetries) {
+          console.error(`[RETRY] ${operationName} failed after ${maxRetries} attempts`);
           throw new Error(`${operationName} failed after ${maxRetries} attempts: ${lastError.message}`);
         }
         
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 100));
+        const delay = Math.pow(2, attempt) * 100;
+        console.log(`[RETRY] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
@@ -130,7 +157,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   
   /**
    * Execute command through Dapr AggregateActor
-   * Overloaded to accept either a command instance or command with data
    */
   async executeCommandAsync<
     TCommand,
@@ -142,96 +168,96 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     commandData?: TCommand,
     metadata?: Metadata
   ): Promise<Result<SekibanCommandResponse, SekibanError>> {
+    console.log('[EXECUTOR] executeCommandAsync called');
+    
     // Handle case where command is passed as a single object (from defineCommand)
     let command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
     let data: TCommand;
     
     if (commandData === undefined) {
-      // Command instance from defineCommand
+      console.log('[EXECUTOR] Command passed as single instance');
       command = commandOrInstance;
-      // Extract data from the command instance
-      // The command instance has a 'data' property
       data = (commandOrInstance as any).data || {} as TCommand;
     } else {
-      // Separate command and data
+      console.log('[EXECUTOR] Command and data passed separately');
       command = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
       data = commandData!;
     }
+    
+    console.log('[EXECUTOR] Command type:', (command as any).commandType || command.constructor.name);
+    console.log('[EXECUTOR] Command data:', JSON.stringify(data, null, 2));
+    
     try {
       // Validate command first
+      console.log('[EXECUTOR] Validating command...');
       const validationResult = command.validate(data);
       if (validationResult.isErr()) {
+        console.error('[EXECUTOR] Command validation failed:', validationResult.error);
         return err(validationResult.error as SekibanError);
       }
+      console.log('[EXECUTOR] Command validation passed');
       
       // Get partition keys for the command
+      console.log('[EXECUTOR] Getting partition keys...');
       const partitionKeys = command.specifyPartitionKeys(data);
+      console.log('[EXECUTOR] Partition keys:', partitionKeys);
       
       // Get the projector from the command
+      console.log('[EXECUTOR] Getting projector...');
       const projector = command.getProjector();
+      console.log('[EXECUTOR] Projector:', projector.constructor.name);
       
-      // Create PartitionKeysAndProjector (matching C# pattern)
+      // Create PartitionKeysAndProjector
+      console.log('[EXECUTOR] Creating PartitionKeysAndProjector...');
       const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
       
       // Generate actor ID using the projector grain key format
       const actorId = partitionKeyAndProjector.toProjectorGrainKey();
+      console.log('[EXECUTOR] Generated actor ID:', actorId);
+      
       const actorProxy = this.createActorProxy(actorId);
       
-      // Prepare command with metadata in SerializableCommandAndMetadata format (matches C#)
+      // Prepare command with metadata
       const commandTypeName = command.commandType || (command as any).type || command.constructor.name;
       const projectorTypeName = projector.constructor.name;
       
-      const commandWithMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload> = {
-        commandType: commandTypeName,
+      const commandWithMetadata = {
+        commandId: crypto.randomUUID(),
+        causationId: metadata?.requestId || crypto.randomUUID(),
+        correlationId: metadata?.requestId || crypto.randomUUID(),
+        executedUser: metadata?.custom?.user || 'system',
+        commandTypeName,
+        projectorTypeName,
+        aggregatePayloadTypeName: '',
         commandData: data,
-        partitionKeys: partitionKeys,
-        metadata: {
-          commandId: crypto.randomUUID(),
-          causationId: metadata?.requestId || crypto.randomUUID(),
-          correlationId: metadata?.requestId || crypto.randomUUID(),
-          executedUser: metadata?.custom?.user || 'system',
-          projectorTypeName,
-          aggregatePayloadTypeName: '', // Could be determined from projector if needed
-          commandAssemblyVersion: '1.0.0'
-        }
+        commandAssemblyVersion: '1.0.0'
       };
       
-      // Log what we're sending to the actor
-      console.log('[SekibanDaprExecutor] Sending to actor:', JSON.stringify(commandWithMetadata, null, 2));
+      console.log('[EXECUTOR] Command with metadata:', JSON.stringify(commandWithMetadata, null, 2));
       
       // Execute command through actor with retry
-      const responseData = await this.executeWithRetry(
-        () => actorProxy.executeCommandAsync(commandWithMetadata),
+      console.log('[EXECUTOR] Executing command through actor...');
+      const responseStr = await this.executeWithRetry(
+        () => actorProxy.executeCommandAsync(commandWithMetadata as any),
         'Command execution'
       );
       
-      // Handle response data - could be object or string
-      let response: any;
-      if (typeof responseData === 'string') {
-        try {
-          response = JSON.parse(responseData);
-        } catch (parseError) {
-          // If parsing fails, treat as error
-          throw new Error(`Invalid JSON response: ${responseData}`);
-        }
-      } else if (responseData && typeof responseData === 'object') {
-        // Already an object
-        response = responseData;
-      } else {
-        // Handle other cases (null, undefined, etc.)
-        throw new Error(`Unexpected response type: ${typeof responseData}`);
-      }
+      console.log('[EXECUTOR] Raw response:', responseStr);
+      
+      // Parse the JSON response
+      const response = typeof responseStr === 'string' ? JSON.parse(responseStr) : responseStr;
+      console.log('[EXECUTOR] Parsed response:', response);
       
       // Check if there's an error in the response
       if (response.error) {
-        // Create a custom error class for command errors
+        console.error('[EXECUTOR] Command execution returned error:', response.error);
         class CommandExecutionError extends SekibanError {
           readonly code = 'COMMAND_EXECUTION_ERROR';
         }
         return err(new CommandExecutionError(JSON.stringify(response.error)));
       }
       
-      // Convert to SekibanCommandResponse format expected by the interface
+      // Convert to SekibanCommandResponse format
       const commandResponse: SekibanCommandResponse = {
         aggregateId: response.aggregateId,
         lastSortableUniqueId: response.lastSortableUniqueId || '',
@@ -244,10 +270,11 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         }
       };
       
+      console.log('[EXECUTOR] Command execution successful:', commandResponse);
       return ok(commandResponse);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
+      console.error('[EXECUTOR] Command execution failed with exception:', error);
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
       }
@@ -259,24 +286,25 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
    * Execute query through Dapr actor
    */
   async queryAsync<T>(query: any): Promise<Result<T, SekibanError>> {
+    console.log('[EXECUTOR] queryAsync called with:', query);
+    
     try {
-      // For queries, determine appropriate actor ID
-      // This is a simplified approach - real implementation would be more sophisticated
       const actorId = `${this.configuration.actorIdPrefix || 'sekiban'}.query.${query.queryType}.${query.userId || 'default'}`;
+      console.log('[EXECUTOR] Query actor ID:', actorId);
       
-      // Create actor proxy
       const actorProxy = this.createActorProxy(actorId);
       
-      // Execute query through actor with retry
+      console.log('[EXECUTOR] Executing query through actor...');
       const response = await this.executeWithRetry(
         () => actorProxy.queryAsync<T>(query),
         'Query execution'
       );
       
+      console.log('[EXECUTOR] Query response:', response);
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
+      console.error('[EXECUTOR] Query execution failed:', error);
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
       }
@@ -291,34 +319,38 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     projector: IAggregateProjector<TPayload>,
     partitionKeys: PartitionKeys
   ): Promise<Result<Aggregate<TPayload>, SekibanError>> {
+    console.log('[EXECUTOR] loadAggregateAsync called');
+    console.log('[EXECUTOR] Projector:', projector.constructor.name);
+    console.log('[EXECUTOR] Partition keys:', partitionKeys);
+    
     try {
       // Verify the projector is registered
       const projectorConstructor = this.domainTypes.projectorTypes.getProjectorByAggregateType(projector.aggregateTypeName);
       if (!projectorConstructor) {
-        // Create a custom error class for projector not found
+        console.error('[EXECUTOR] Projector not found for aggregate type:', projector.aggregateTypeName);
         class ProjectorNotFoundError extends SekibanError {
           readonly code = 'PROJECTOR_NOT_FOUND';
         }
         return err(new ProjectorNotFoundError(`No projector registered for aggregate type: ${projector.aggregateTypeName}`));
       }
       
-      // Create PartitionKeysAndProjector (matching C# pattern)
       const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
-      
-      // Generate actor ID using the projector grain key format
       const actorId = partitionKeyAndProjector.toProjectorGrainKey();
+      console.log('[EXECUTOR] Load aggregate actor ID:', actorId);
+      
       const actorProxy = this.createActorProxy(actorId);
       
-      // Load aggregate through actor with retry
+      console.log('[EXECUTOR] Loading aggregate through actor...');
       const response = await this.executeWithRetry(
         () => actorProxy.loadAggregateAsync<TPayload>(partitionKeys),
         'Aggregate loading'
       );
       
+      console.log('[EXECUTOR] Aggregate loaded:', response);
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
+      console.error('[EXECUTOR] Aggregate loading failed:', error);
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
       }
@@ -326,7 +358,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     }
   }
   
-  // Getters for configuration and state
+  // Other methods remain the same...
   getDaprClient(): DaprClient {
     return this.daprClient;
   }
@@ -336,18 +368,13 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   }
   
   getRegisteredProjectors(): IAggregateProjector<any>[] {
-    // Get all projector types from domain types
     const projectorInfos = this.domainTypes.projectorTypes.getProjectorTypes();
-    // The projector property contains the actual projector instance
-    // We need to handle the type mismatch between IProjector and IAggregateProjector
-    // In practice, the projector instances should implement IAggregateProjector
     return projectorInfos.map(info => info.projector as unknown as IAggregateProjector<any>);
   }
   
   getDomainTypes(): SekibanDomainTypes {
     return this.domainTypes;
   }
-  
   
   getStateStoreName(): string {
     return this.configuration.stateStoreName;
