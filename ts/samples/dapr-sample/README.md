@@ -2,11 +2,19 @@
 
 This sample demonstrates how to use Sekiban TypeScript with Dapr for distributed event sourcing.
 
+## ⚠️ Important: Actor Integration Fixed
+
+This sample has been updated with critical fixes for Dapr actor integration:
+- Actor initialization order fixed (init before register)
+- HTTP method handling (actors require PUT, not POST)
+- Proper DaprClient usage with invoker.invoke()
+- See [ACTOR_FIXES.md](./ACTOR_FIXES.md) for details
+
 ## Overview
 
 This sample implements a simple Task management system using:
 - **Sekiban Core** for event sourcing abstractions
-- **Sekiban Dapr** for distributed actor-based aggregates (optional)
+- **Sekiban Dapr** for distributed actor-based aggregates
 - **PostgreSQL** for event persistence (when using Dapr)
 - **Express.js** for REST API
 

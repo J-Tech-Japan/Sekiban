@@ -22,8 +22,10 @@ export class AggregateEventHandlerActorFactory {
     const factory = this;
     
     return class extends AggregateEventHandlerActor {
-      constructor(daprClient: any, id: any) {
-        super(daprClient, id, factory.eventStore);
+      constructor(ctx: any, id: any) {
+        super(ctx, id);
+        // Inject dependencies after construction
+        this.setupDependencies(factory.eventStore);
       }
     };
   }

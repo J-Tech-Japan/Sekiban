@@ -44,9 +44,31 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   
   
   private createActorProxy(actorId: string): IDaprAggregateActorProxy {
-    // Create a simple wrapper that uses HTTP client directly
-    // The Dapr SDK's actor API seems to have changed
+    // Create a simple wrapper that makes direct HTTP calls to actors
     const actorType = this.configuration.actorType;
+    const appId = this.configuration.actorIdPrefix || 'sekiban-api';
+    const daprPort = (this.daprClient as any).options?.daprPort || '3500';
+    const daprHost = (this.daprClient as any).options?.daprHost || '127.0.0.1';
+    
+    // Helper to make direct HTTP calls to Dapr actors
+    const callActorMethod = async (methodName: string, data: any): Promise<any> => {
+      const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${actorId}/method/${methodName}`;
+      
+      const response = await fetch(url, {
+        method: 'PUT', // CRITICAL: Actors require PUT for method calls
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Actor method ${methodName} failed: ${response.status} ${errorText}`);
+      }
+      
+      return response.json();
+    };
     
     return {
       executeCommandAsync: async <
@@ -57,36 +79,17 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
-        // Use Dapr's HTTP API directly
-        const response = await this.daprClient.invoker.invoke(
-          this.configuration.actorIdPrefix || 'sekiban',
-          `actors/${actorType}/${actorId}/method/executeCommandAsync`,
-          HttpMethod.POST,
-          commandAndMetadata
-        );
-        return response as SekibanCommandResponse;
+        return callActorMethod('executeCommandAsync', commandAndMetadata);
       },
       
       queryAsync: async <T>(query: any): Promise<T> => {
-        const response = await this.daprClient.invoker.invoke(
-          this.configuration.actorIdPrefix || 'sekiban',
-          `actors/${actorType}/${actorId}/method/queryAsync`,
-          HttpMethod.POST,
-          query
-        );
-        return response as T;
+        return callActorMethod('queryAsync', query);
       },
       
       loadAggregateAsync: async <TPayload extends ITypedAggregatePayload>(
         partitionKeys: PartitionKeys
       ): Promise<Aggregate<TPayload>> => {
-        const response = await this.daprClient.invoker.invoke(
-          this.configuration.actorIdPrefix || 'sekiban',
-          `actors/${actorType}/${actorId}/method/loadAggregateAsync`,
-          HttpMethod.POST,
-          partitionKeys
-        );
-        return response as Aggregate<TPayload>;
+        return callActorMethod('loadAggregateAsync', partitionKeys);
       }
     };
   }
@@ -165,9 +168,12 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorId = partitionKeyAndProjector.toProjectorGrainKey();
       const actorProxy = this.createActorProxy(actorId);
       
-      // Prepare command with metadata - ensure command type is included
+      // Prepare command with metadata - include commandType for serialization
       const commandWithMetadata = {
-        commandType: command.commandType || (command as any).type,
+        command: {
+          commandType: command.commandType || (command as any).type || command.constructor.name,
+          type: command.commandType || (command as any).type || command.constructor.name
+        },
         commandData: data,
         partitionKeys,
         metadata: metadata || {

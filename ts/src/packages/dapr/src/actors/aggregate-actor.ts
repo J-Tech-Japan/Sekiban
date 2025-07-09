@@ -147,8 +147,22 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
         this.currentAggregate
       );
 
-      // Execute command with new ICommandWithHandler pattern
-      const command = commandAndMetadata.command as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+      // Reconstruct command from commandType since it's serialized over HTTP
+      let command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+      
+      if (commandAndMetadata.command && typeof commandAndMetadata.command === 'object' && 'commandType' in commandAndMetadata.command) {
+        // Command type is included in the serialized command
+        const commandType = commandAndMetadata.command.commandType || commandAndMetadata.command.type;
+        const CommandClass = this.domainTypes.commandTypes.getCommandType(commandType);
+        if (!CommandClass) {
+          throw new Error(`Command type not found: ${commandType}`);
+        }
+        command = CommandClass as any;
+      } else {
+        // Legacy format or direct command object
+        command = commandAndMetadata.command as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
+      }
+      
       const commandData = commandAndMetadata.commandData;
       const metadata = commandAndMetadata.metadata || {
         timestamp: new Date(),

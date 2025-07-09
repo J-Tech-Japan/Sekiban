@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
-import { DaprServer, CommunicationProtocolEnum } from '@dapr/dapr';
+import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod } from '@dapr/dapr';
 import { 
   AggregateActorFactory, 
   AggregateEventHandlerActorFactory 
@@ -18,85 +18,11 @@ import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import logger from './utils/logger.js';
 
-async function setupDaprActors(app: express.Express) {
-  logger.info('Setting up Dapr actors...');
-
-  // Initialize domain types
-  const domainTypes = createTaskDomainTypes();
-
-  // Initialize event store (using in-memory for development)
-  const eventStore = new InMemoryEventStore({
-    type: StorageProviderType.InMemory,
-    enableLogging: config.NODE_ENV === 'development'
-  });
-
-  // Create a simple actor proxy factory
-  const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
-      logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
-      return {} as any;
-    }
-  };
-
-  // Create a simple serialization service
-  const serializationService = {
-    async deserializeAggregateAsync(surrogate: any) {
-      return surrogate;
-    },
-    async serializeAggregateAsync(aggregate: any) {
-      return aggregate;
-    }
-  };
-
-  // Configure actor factories
-  AggregateActorFactory.configure(
-    domainTypes,
-    {}, // service provider
-    actorProxyFactory,
-    serializationService
-  );
-
-  AggregateEventHandlerActorFactory.configure(eventStore);
-
-  // Create DaprServer with our Express instance
-  const daprServer = new DaprServer({
-    serverHost: "127.0.0.1",
-    serverPort: String(config.PORT),
-    serverHttp: app, // Pass our Express app here
-    communicationProtocol: CommunicationProtocolEnum.HTTP,
-    clientOptions: {
-      daprHost: "127.0.0.1",
-      daprPort: String(config.DAPR_HTTP_PORT),
-      communicationProtocol: CommunicationProtocolEnum.HTTP,
-      actor: {
-        actorIdleTimeout: "1h",
-        actorScanInterval: "30s",
-        drainOngoingCallTimeout: "1m",
-        drainRebalancedActors: true
-      }
-    }
-  });
-
-  // Initialize actor runtime
-  await daprServer.actor.init();
-  logger.info('Actor runtime initialized');
-
-  // Register actors
-  daprServer.actor.registerActor(AggregateActorFactory.createActorClass());
-  logger.info('Registered AggregateActor');
-
-  daprServer.actor.registerActor(AggregateEventHandlerActorFactory.createActorClass());
-  logger.info('Registered AggregateEventHandlerActor');
-  
-  logger.info('Dapr actors integrated with Express app');
-  
-  return daprServer;
-}
 
 async function startServer() {
   const app = express();
 
-  // Middleware
+  // Middleware BEFORE DaprServer setup
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
@@ -104,8 +30,24 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Setup Dapr actors BEFORE other routes
-  const daprServer = await setupDaprActors(app);
+  // Debug middleware to log all requests
+  app.use((req, res, next) => {
+    logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    if (req.path.startsWith('/actors/')) {
+      logger.info(`Actor route called: ${req.method} ${req.path}`);
+    }
+    next();
+  });
+
+  // CRITICAL: Convert POST to PUT for actor method calls
+  // This middleware MUST come before DaprServer setup
+  app.use((req, res, next) => {
+    if (req.path.includes('/method/') && req.method === 'POST') {
+      req.method = 'PUT';
+      logger.debug(`Converted POST to PUT for actor method: ${req.path}`);
+    }
+    next();
+  });
   
   // Routes
   app.use('/', healthRoutes);
@@ -124,7 +66,10 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Start the DaprServer (which includes our Express app)
+  // Create DaprServer and pass the Express app
+  const daprServer = await setupDaprActorsWithApp(app);
+
+  // Start the DaprServer
   await daprServer.start();
   
   console.log(`
@@ -165,6 +110,100 @@ async function startServer() {
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+}
+
+async function setupDaprActorsWithApp(app: express.Express) {
+  logger.info('Setting up Dapr actors with Express app...');
+
+  // Initialize domain types
+  const domainTypes = createTaskDomainTypes();
+
+  // Initialize event store (using in-memory for development)
+  const eventStore = new InMemoryEventStore({
+    type: StorageProviderType.InMemory,
+    enableLogging: config.NODE_ENV === 'development'
+  });
+
+  // Create DaprClient for actor proxy factory
+  const daprClient = new DaprClient({
+    daprHost: "127.0.0.1",
+    daprPort: String(config.DAPR_HTTP_PORT)
+  });
+
+  // Create actor proxy factory that uses DaprClient
+  const actorProxyFactory = {
+    createActorProxy: (actorId: any, actorType: string) => {
+      logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
+      // Note: DaprClient.actor.create requires a class, which we don't have
+      // So we'll return a proxy object that makes direct HTTP calls
+      return {
+        // This matches the expected interface for actor proxy
+        invoke: async (methodName: string, data: any) => {
+          const actorIdStr = actorId.id || actorId;
+          return daprClient.invoker.invoke(
+            config.DAPR_APP_ID,
+            `actors/${actorType}/${actorIdStr}/method/${methodName}`,
+            HttpMethod.PUT, 
+            data
+          );
+        }
+      };
+    }
+  };
+
+  // Create a simple serialization service
+  const serializationService = {
+    async deserializeAggregateAsync(surrogate: any) {
+      return surrogate;
+    },
+    async serializeAggregateAsync(aggregate: any) {
+      return aggregate;
+    }
+  };
+
+  // Configure actor factories
+  AggregateActorFactory.configure(
+    domainTypes,
+    {}, // service provider
+    actorProxyFactory,
+    serializationService
+  );
+
+  AggregateEventHandlerActorFactory.configure(eventStore);
+
+  // Create DaprServer and pass the Express app directly
+  const daprServer = new DaprServer({
+    serverHost: "127.0.0.1",
+    serverPort: String(config.PORT),
+    serverHttp: app, // Pass the configured Express app
+    communicationProtocol: CommunicationProtocolEnum.HTTP,
+    clientOptions: {
+      daprHost: "127.0.0.1",
+      daprPort: String(config.DAPR_HTTP_PORT),
+      communicationProtocol: CommunicationProtocolEnum.HTTP,
+      actor: {
+        actorIdleTimeout: "1h",
+        actorScanInterval: "30s",
+        drainOngoingCallTimeout: "1m",
+        drainRebalancedActors: true
+      }
+    }
+  });
+
+  // CRITICAL: Initialize actor runtime FIRST (before registering actors)
+  await daprServer.actor.init();
+  logger.info('Actor runtime initialized');
+
+  // Register actors AFTER init
+  daprServer.actor.registerActor(AggregateActorFactory.createActorClass());
+  logger.info('Registered AggregateActor');
+
+  daprServer.actor.registerActor(AggregateEventHandlerActorFactory.createActorClass());
+  logger.info('Registered AggregateEventHandlerActor');
+  
+  logger.info('Dapr actors integrated with Express app');
+  
+  return daprServer;
 }
 
 // Start the server

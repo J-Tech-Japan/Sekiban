@@ -21,13 +21,17 @@ export class AggregateEventHandlerActor extends AbstractActor
   private readonly PARTITION_INFO_KEY = "partitionInfo";
   
   private partitionInfo?: ActorPartitionInfo;
+  private eventStore: IEventStore;
   
-  constructor(
-    daprClient: DaprClient,
-    id: ActorId,
-    private readonly eventStore: IEventStore
-  ) {
-    super(daprClient, id);
+  constructor(ctx: any, id: any) {
+    super(ctx, id);
+    // EventStore will be injected via setupDependencies
+    this.eventStore = {} as IEventStore;
+  }
+  
+  // Method to inject dependencies after construction
+  setupDependencies(eventStore: IEventStore): void {
+    this.eventStore = eventStore;
   }
   
   /**
