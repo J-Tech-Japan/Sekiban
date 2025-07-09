@@ -52,7 +52,9 @@
       "Bash(pnpm dev:*)",
       "Bash(dapr:*)",
       "Bash(gemini:*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(rg:*)"
     ],
     "deny": [
       "Bash(curl:*)"
