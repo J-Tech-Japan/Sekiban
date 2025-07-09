@@ -55,10 +55,11 @@
       "Bash(pnpm build:*)",
       "Bash(dotnet restore:*)",
       "Bash(rg:*)",
-      "Bash(./test-create-task.sh:*)"
+      "Bash(./test-create-task.sh:*)",
+      "Bash(./run-debug.sh:*)",
+      "Bash(curl:*)"
     ],
-    "deny": [
-    ]
+    "deny": []
   },
   "enableAllProjectMcpServers": false
 }

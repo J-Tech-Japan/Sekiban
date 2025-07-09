@@ -39,7 +39,7 @@ export function initializeDaprContainer(dependencies: DaprActorDependencies): vo
   console.log('[DaprContainer] Initialized with:');
   console.log('  - domainTypes:', !!dependencies.domainTypes);
   console.log('  - command types:', dependencies.domainTypes?.commandTypes ? 
-    dependencies.domainTypes.commandTypes.getCommandTypes().map(c => c.name) : 'none');
+    dependencies.domainTypes.commandTypes.getCommandTypes() : 'none');
   console.log('  - serviceProvider:', !!dependencies.serviceProvider);
   console.log('  - actorProxyFactory:', !!dependencies.actorProxyFactory);
   console.log('  - serializationService:', !!dependencies.serializationService);
