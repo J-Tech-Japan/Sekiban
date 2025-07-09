@@ -54,7 +54,8 @@
       "Bash(gemini:*)",
       "Bash(pnpm build:*)",
       "Bash(dotnet restore:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(./test-create-task.sh:*)"
     ],
     "deny": [
       "Bash(curl:*)"

@@ -73,3 +73,9 @@ out/
 # Misc
 *.bak
 *.orig
+
+# Test artifacts
+test-*.sh
+test-*.mjs
+test-*.cjs
+analyze-error.md

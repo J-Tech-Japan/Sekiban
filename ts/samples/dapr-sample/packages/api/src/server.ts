@@ -12,7 +12,7 @@ import { eventRoutes } from './routes/event-routes.js';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod } from '@dapr/dapr';
 import { 
   AggregateActorFactory, 
-  AggregateEventHandlerActorFactory 
+  AggregateEventHandlerActorFactory
 } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -166,7 +166,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     domainTypes,
     {}, // service provider
     actorProxyFactory,
-    serializationService
+    serializationService,
+    eventStore
   );
 
   AggregateEventHandlerActorFactory.configure(eventStore);
@@ -195,8 +196,39 @@ async function setupDaprActorsWithApp(app: express.Express) {
   logger.info('Actor runtime initialized');
 
   // Register actors AFTER init
-  daprServer.actor.registerActor(AggregateActorFactory.createActorClass());
+  console.log('[DEBUG] Testing direct AggregateActor registration...');
+  const ActorClass = AggregateActorFactory.createActorClass();
+  console.log('[DEBUG] Created actor class:', ActorClass.name);
+  console.log('[DEBUG] Actor class methods:', Object.getOwnPropertyNames(ActorClass.prototype));
+  console.log('[DEBUG] Actor parent prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(ActorClass.prototype)));
+  console.log('[DEBUG] Actor class has testMethod:', 'testMethod' in ActorClass.prototype);
+  console.log('[DEBUG] Actor class has executeCommandAsync:', 'executeCommandAsync' in ActorClass.prototype);
+  
+  // Try registering with explicit actor type
+  console.log('[DEBUG] Registering actor with explicit type...');
+  daprServer.actor.registerActor(ActorClass);
   logger.info('Registered AggregateActor');
+
+  // Add diagnostic logging to catch any exceptions
+  console.log('[DEBUG] Adding diagnostic logging...');
+  
+  // Override the actor method handler to add logging
+  const originalActorHandler = (daprServer as any).actor?.actorHandler;
+  if (originalActorHandler) {
+    (daprServer as any).actor.actorHandler = async (req: any, res: any) => {
+      console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
+      try {
+        await originalActorHandler.call((daprServer as any).actor, req, res);
+      } catch (e) {
+        console.error('[DIAGNOSTIC] Actor handler error:', e);
+        console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);
+        throw e;
+      }
+    };
+    console.log('[DEBUG] Diagnostic handler installed');
+  } else {
+    console.log('[DEBUG] Could not install diagnostic handler');
+  }
 
   daprServer.actor.registerActor(AggregateEventHandlerActorFactory.createActorClass());
   logger.info('Registered AggregateEventHandlerActor');

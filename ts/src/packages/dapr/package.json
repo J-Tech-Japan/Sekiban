@@ -34,7 +34,8 @@
   "dependencies": {
     "@sekiban/core": "file:../core",
     "@dapr/dapr": "^3.3.0",
-    "neverthrow": "^8.0.0"
+    "neverthrow": "^8.0.0",
+    "awilix": "^10.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

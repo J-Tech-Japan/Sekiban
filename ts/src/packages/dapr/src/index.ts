@@ -15,6 +15,7 @@ export * from './snapshot';
 export {
   // Actors
   AggregateActor,
+  AggregateActorImpl,
   AggregateEventHandlerActor,
   MultiProjectorActor,
   
@@ -46,6 +47,15 @@ export * from './types';
 
 // Parts
 export { PartitionKeysAndProjector } from './parts';
+
+// Container and DI
+export {
+  initializeDaprContainer,
+  getDaprContainer,
+  getDaprCradle,
+  disposeDaprContainer,
+  type DaprActorDependencies
+} from './container';
 
 // Re-export commonly used types from core
 export {

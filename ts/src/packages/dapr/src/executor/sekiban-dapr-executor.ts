@@ -168,29 +168,61 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorId = partitionKeyAndProjector.toProjectorGrainKey();
       const actorProxy = this.createActorProxy(actorId);
       
-      // Prepare command with metadata - include commandType for serialization
+      // Prepare command with metadata in SerializableCommandAndMetadata format (matches C#)
+      const commandTypeName = command.commandType || (command as any).type || command.constructor.name;
+      const projectorTypeName = projector.constructor.name;
+      
       const commandWithMetadata = {
-        command: {
-          commandType: command.commandType || (command as any).type || command.constructor.name,
-          type: command.commandType || (command as any).type || command.constructor.name
-        },
+        // Flatten metadata properties
+        commandId: crypto.randomUUID(),
+        causationId: metadata?.requestId || crypto.randomUUID(),
+        correlationId: metadata?.requestId || crypto.randomUUID(),
+        executedUser: metadata?.custom?.user || 'system',
+        
+        // Command information
+        commandTypeName,
+        projectorTypeName,
+        aggregatePayloadTypeName: '', // Could be determined from projector if needed
+        
+        // Command data
         commandData: data,
-        partitionKeys,
-        metadata: metadata || {
-          timestamp: new Date(),
-          custom: {
-            requestId: crypto.randomUUID()
-          }
-        }
+        
+        // Version info
+        commandAssemblyVersion: '1.0.0'
       };
       
       // Execute command through actor with retry
-      const response = await this.executeWithRetry(
+      const responseStr = await this.executeWithRetry(
         () => actorProxy.executeCommandAsync(commandWithMetadata as any),
         'Command execution'
       );
       
-      return ok(response);
+      // Parse the JSON response
+      const response = JSON.parse(responseStr);
+      
+      // Check if there's an error in the response
+      if (response.error) {
+        // Create a custom error class for command errors
+        class CommandExecutionError extends SekibanError {
+          readonly code = 'COMMAND_EXECUTION_ERROR';
+        }
+        return err(new CommandExecutionError(JSON.stringify(response.error)));
+      }
+      
+      // Convert to SekibanCommandResponse format expected by the interface
+      const commandResponse: SekibanCommandResponse = {
+        aggregateId: response.aggregateId,
+        lastSortableUniqueId: response.lastSortableUniqueId || '',
+        success: true,
+        metadata: {
+          group: response.group,
+          rootPartitionKey: response.rootPartitionKey,
+          version: response.version,
+          events: response.events
+        }
+      };
+      
+      return ok(commandResponse);
       
     } catch (error) {
       // Create a custom error class for Dapr actor errors

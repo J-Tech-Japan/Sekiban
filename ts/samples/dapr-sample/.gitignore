@@ -47,3 +47,9 @@ temp/
 # Dapr
 .dapr/
 components-contrib/
+
+# Test scripts and temporary test files
+test-*.sh
+test-*.mjs
+test-*.cjs
+analyze-error.md

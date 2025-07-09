@@ -398,3 +398,11 @@ yarn.lock
 # Test coverage
 coverage/
 .nyc_output/
+
+# Temporary files and logs
+tmp/
+*.log
+dev.log
+
+# pnpm store
+.pnpm-store/

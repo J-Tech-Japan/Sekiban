@@ -1,91 +1,64 @@
-import { 
-  SortableUniqueId, 
-  Aggregate,
-  PartitionKeys,
-  EmptyAggregatePayload,
-  AggregateProjector,
-  SekibanError,
-  IEvent,
-  ICommandWithHandler,
-  ITypedAggregatePayload,
-  ICommandContext,
-  Metadata
-} from '@sekiban/core';
-import { Result, ok, err } from 'neverthrow';
-import { AbstractActor } from '@dapr/dapr';
+import { AbstractActor, type DaprClient, type ActorId } from '@dapr/dapr';
+import { AggregateActorImpl } from './aggregate-actor-impl.js';
 import type { 
-  IAggregateActor,
-  IAggregateEventHandlerActor,
-  SerializableAggregate,
-  ActorSerializableCommandAndMetadata,
-  SerializableEventDocument
-} from './interfaces.js';
-import { PartitionKeysAndProjector } from '../parts/partition-keys-and-projector.js';
-import { DaprRepository } from '../parts/dapr-repository.js';
-import type { SekibanDomainTypes } from '@sekiban/core';
-import type { IActorProxyFactory } from '../types/index.js';
-
+  SerializableCommandAndMetadata,
+  SekibanCommandResponse,
+  IDaprSerializationService,
+  IActorProxyFactory
+} from '../executor/interfaces.js';
+import { getDaprCradle } from '../container/index.js';
+import type { Aggregate, ITypedAggregatePayload } from '@sekiban/core';
 
 /**
- * Serializable partition info for state storage
+ * Thin wrapper actor that delegates to AggregateActorImpl
+ * This follows the Wrapper Pattern for clean DI while maintaining Dapr compatibility
+ * 
+ * IMPORTANT: This class is named AggregateActor to match Dapr's expectations
+ * The original AggregateActor has been renamed to AggregateActorLegacy
  */
-interface SerializedPartitionInfo {
-  grainKey: string;
-}
+export class AggregateActor extends AbstractActor {
+  private impl!: AggregateActorImpl;
+  private actorIdString!: string;
 
-/**
- * Serialization service interface matching C#
- */
-interface IDaprSerializationService {
-  deserializeAggregateAsync(surrogate: any): Promise<Aggregate | null>;
-  serializeAggregateAsync(aggregate: Aggregate): Promise<any>;
-}
-
-/**
- * Dapr actor for aggregate projection and command execution.
- * This is the Dapr equivalent of Orleans' AggregateProjectorGrain.
- */
-export class AggregateActor extends AbstractActor implements IAggregateActor {
-  private static readonly STATE_KEY = 'aggregateState';
-  private static readonly PARTITION_INFO_KEY = 'partitionInfo';
-  
-  private currentAggregate: Aggregate = Aggregate.empty();
-  private hasUnsavedChanges = false;
-  private partitionInfo?: PartitionKeysAndProjector<any>;
-
-  private domainTypes: SekibanDomainTypes;
-  private serviceProvider: any;
-  private actorProxyFactory: IActorProxyFactory;
-  private serializationService: IDaprSerializationService;
-
-  constructor(ctx: any, id: any) {
-    super(ctx, id);
-    // These will be injected via a factory or setup method
-    this.domainTypes = {} as SekibanDomainTypes;
-    this.serviceProvider = {};
-    this.actorProxyFactory = {} as IActorProxyFactory;
-    this.serializationService = {} as IDaprSerializationService;
-  }
-
-  // Method to inject dependencies after construction
-  setupDependencies(
-    domainTypes: SekibanDomainTypes,
-    serviceProvider: any,
-    actorProxyFactory: IActorProxyFactory,
-    serializationService: IDaprSerializationService
-  ): void {
-    this.domainTypes = domainTypes;
-    this.serviceProvider = serviceProvider;
-    this.actorProxyFactory = actorProxyFactory;
-    this.serializationService = serializationService;
+  // Must keep this exact constructor signature for Dapr
+  constructor(daprClient: DaprClient, id: ActorId) {
+    try {
+      super(daprClient, id);
+      console.log('[AggregateActor] Constructor called');
+      
+      // Extract actor ID string
+      this.actorIdString = (id as any).id || String(id);
+      
+      // Get dependencies from Awilix container
+      const cradle = getDaprCradle();
+      
+      // Create implementation with proper DI
+      this.impl = new AggregateActorImpl(
+        this.actorIdString,
+        cradle.domainTypes,
+        cradle.serviceProvider || {},
+        cradle.actorProxyFactory,
+        cradle.serializationService || {
+          async deserializeAggregateAsync(surrogate: any) { return surrogate; },
+          async serializeAggregateAsync(aggregate: any) { return aggregate; }
+        },
+        cradle.eventStore
+      );
+      
+      console.log('[AggregateActor] Implementation created');
+    } catch (error) {
+      console.error('[AggregateActor] Constructor error:', error);
+      console.error('[AggregateActor] Stack trace:', (error as Error).stack);
+      throw error;
+    }
   }
 
   async onActivate(): Promise<void> {
-    await super.onActivate();
-    console.log(`AggregateActor ${this.id} activated`);
+    console.log(`[AggregateActor] onActivate called for ${this.actorIdString}`);
+    await this.impl.initialize();
     
     // Register timer for periodic state saving
-    await this.registerTimer(
+    await this.registerActorTimer(
       'SaveState',
       'saveStateCallbackAsync',
       null,
@@ -95,393 +68,62 @@ export class AggregateActor extends AbstractActor implements IAggregateActor {
   }
 
   async onDeactivate(): Promise<void> {
-    if (this.hasUnsavedChanges) {
-      await this.saveStateAsync();
-    }
-    await super.onDeactivate();
+    console.log(`[AggregateActor] onDeactivate called for ${this.actorIdString}`);
+    await this.impl.cleanup();
   }
 
-  async getAggregateStateAsync(): Promise<SerializableAggregate> {
-    const aggregate = await this.getStateInternalAsync();
-    return {
-      partitionKeys: aggregate.partitionKeys,
-      aggregate: aggregate,
-      lastSortableUniqueId: aggregate.lastSortableUniqueId?.toString() || ''
-    };
-  }
-
-  async rebuildStateAsync(): Promise<SerializableAggregate> {
-    const aggregate = await this.rebuildStateInternalAsync();
-    return {
-      partitionKeys: aggregate.partitionKeys,
-      aggregate: aggregate,
-      lastSortableUniqueId: aggregate.lastSortableUniqueId?.toString() || ''
-    };
-  }
+  // Delegate all actor methods to implementation
 
   async executeCommandAsync<
     TCommand,
-    TProjector extends AggregateProjector<TPayloadUnion>,
-    TPayloadUnion extends ITypedAggregatePayload,
-    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
-  >(commandAndMetadata: ActorSerializableCommandAndMetadata): Promise<string> {
-    try {
-      await this.ensureInitializedAsync();
-      
-      if (!this.partitionInfo) {
-        throw new Error('Partition info not initialized');
-      }
-
-      const eventHandlerActor = this.getEventHandlerActor();
-
-      if (this.currentAggregate === Aggregate.empty()) {
-        this.currentAggregate = await this.loadStateInternalAsync(eventHandlerActor);
-      }
-
-      // Create repository for this actor
-      const repository = new DaprRepository(
-        eventHandlerActor,
-        this.partitionInfo.partitionKeys,
-        this.partitionInfo.projector,
-        this.domainTypes,
-        this.currentAggregate
-      );
-
-      // Reconstruct command from commandType since it's serialized over HTTP
-      let command: ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
-      
-      if (commandAndMetadata.command && typeof commandAndMetadata.command === 'object' && 'commandType' in commandAndMetadata.command) {
-        // Command type is included in the serialized command
-        const commandType = commandAndMetadata.command.commandType || commandAndMetadata.command.type;
-        const CommandClass = this.domainTypes.commandTypes.getCommandType(commandType);
-        if (!CommandClass) {
-          throw new Error(`Command type not found: ${commandType}`);
-        }
-        command = CommandClass as any;
-      } else {
-        // Legacy format or direct command object
-        command = commandAndMetadata.command as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
-      }
-      
-      const commandData = commandAndMetadata.commandData;
-      const metadata = commandAndMetadata.metadata || {
-        timestamp: new Date(),
-        requestId: crypto.randomUUID()
-      };
-      
-      // Validate command
-      const validateResult = command.validate(commandData);
-      if (validateResult.isErr()) {
-        return JSON.stringify({
-          aggregateId: this.partitionInfo.partitionKeys.aggregateId,
-          group: this.partitionInfo.partitionKeys.group || 'default',
-          rootPartitionKey: this.partitionInfo.partitionKeys.rootPartitionKey || 'default',
-          version: this.currentAggregate.version,
-          events: [],
-          error: validateResult.error
-        });
-      }
-
-      // Create command context
-      const context: ICommandContext = {
-        repository,
-        metadata
-      };
-
-      // Handle command with context
-      const handleResult = await command.handle(context, commandData, this.currentAggregate as Aggregate<TAggregatePayload>);
-      if (handleResult.isErr()) {
-        return JSON.stringify({
-          aggregateId: this.partitionInfo.partitionKeys.aggregateId,
-          group: this.partitionInfo.partitionKeys.group || 'default',
-          rootPartitionKey: this.partitionInfo.partitionKeys.rootPartitionKey || 'default',
-          version: this.currentAggregate.version,
-          events: [],
-          error: handleResult.error
-        });
-      }
-
-      const eventPayloads = handleResult.value;
-      
-      // Convert to events
-      const events: IEvent[] = eventPayloads.map((payload, index) => ({
-        id: SortableUniqueId.generate(),
-        partitionKeys: this.partitionInfo!.partitionKeys,
-        aggregateType: this.partitionInfo!.projector.aggregateTypeName,
-        eventType: payload.constructor.name,
-        version: this.currentAggregate.version + index + 1,
-        payload: payload,
-        metadata: {
-          timestamp: new Date(),
-          requestId: metadata.requestId
-        }
-      }));
-
-      if (events.length > 0) {
-        // Save events
-        const lastSortableId = this.currentAggregate.lastSortableUniqueId?.toString() || '';
-        const saveResult = await repository.save(lastSortableId, events);
-        
-        if (saveResult.isErr()) {
-          throw saveResult.error;
-        }
-
-        // Update current aggregate with new events
-        this.currentAggregate = repository.getProjectedAggregate(events).unwrapOr(this.currentAggregate);
-        
-        // Mark as changed
-        this.hasUnsavedChanges = true;
-      }
-
-      return JSON.stringify({
-        aggregateId: this.partitionInfo.partitionKeys.aggregateId,
-        group: this.partitionInfo.partitionKeys.group || 'default',
-        rootPartitionKey: this.partitionInfo.partitionKeys.rootPartitionKey || 'default',
-        version: this.currentAggregate.version,
-        events: events.map(e => ({
-          eventType: e.eventType,
-          payload: e.payload
-        }))
-      });
-    } catch (error) {
-      console.error('Failed to execute command:', error);
-      return JSON.stringify({
-        aggregateId: this.partitionInfo?.partitionKeys.aggregateId || '',
-        group: this.partitionInfo?.partitionKeys.group || 'default',
-        rootPartitionKey: this.partitionInfo?.partitionKeys.rootPartitionKey || 'default',
-        version: 0,
-        events: []
-      });
-    }
+    TProjector,
+    TPayloadUnion,
+    TAggregatePayload
+  >(
+    commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
+  ): Promise<SekibanCommandResponse> {
+    console.log(`[AggregateActorWrapper] Delegating executeCommandAsync`);
+    return this.impl.executeCommandAsync(commandAndMetadata);
   }
 
-  async saveStateCallbackAsync(state?: any): Promise<void> {
-    if (this.hasUnsavedChanges) {
-      await this.saveStateAsync();
-    }
+  async getAggregateStateAsync<TPayload extends ITypedAggregatePayload>(): Promise<Aggregate<TPayload> | null> {
+    console.log(`[AggregateActorWrapper] Delegating getAggregateStateAsync`);
+    return this.impl.getAggregateStateAsync<TPayload>();
   }
 
-  async receiveReminderAsync(
-    reminderName: string,
-    state: Buffer,
-    dueTime: string,
-    period: string
-  ): Promise<void> {
-    console.log(`Received reminder: ${reminderName}`);
+  async saveStateCallbackAsync(): Promise<void> {
+    console.log(`[AggregateActorWrapper] Delegating saveStateCallbackAsync`);
+    return this.impl.saveStateCallbackAsync();
   }
 
-  private async ensureInitializedAsync(): Promise<void> {
-    if (this.partitionInfo) {
-      return; // Already initialized
-    }
-
-    try {
-      console.log(`Initializing AggregateActor ${this.id.id} on first use`);
-      
-      // Initialize partition info only
-      this.partitionInfo = await this.getPartitionInfoAsync();
-      
-      console.log(`AggregateActor ${this.id.id} initialization completed`);
-    } catch (error) {
-      console.error('Error during actor initialization:', error);
-      throw error;
-    }
+  async saveStateAsync(): Promise<void> {
+    console.log(`[AggregateActorWrapper] Delegating saveStateAsync`);
+    return this.impl.saveStateAsync();
   }
 
-  private async getPartitionInfoAsync(): Promise<PartitionKeysAndProjector<any>> {
-    // Try to get saved partition info
-    const stateManager = this.getStateManager();
-    const savedInfo = await stateManager.tryGetState<SerializedPartitionInfo>(
-      AggregateActor.PARTITION_INFO_KEY
-    );
-    
-    if (savedInfo.hasValue && savedInfo.value?.grainKey) {
-      // Parse from saved grain key
-      return this.parseGrainKey(savedInfo.value.grainKey);
-    }
-
-    // Parse from actor ID
-    const actorId = this.id;
-    const grainKey = actorId.includes(':') ? actorId.substring(actorId.indexOf(':') + 1) : actorId;
-    
-    const partitionInfo = this.parseGrainKey(grainKey);
-
-    // Save for future use
-    await stateManager.setState(
-      AggregateActor.PARTITION_INFO_KEY, 
-      { grainKey } as SerializedPartitionInfo
-    );
-
-    return partitionInfo;
+  async rebuildStateAsync(): Promise<void> {
+    console.log(`[AggregateActorWrapper] Delegating rebuildStateAsync`);
+    return this.impl.rebuildStateAsync();
   }
 
-  private parseGrainKey(grainKey: string): PartitionKeysAndProjector<any> {
-    // Format: default@WeatherForecast@123=WeatherForecastProjector
-    const [partitionPart, projectorName] = grainKey.split('=');
-    if (!partitionPart || !projectorName) {
-      throw new Error(`Invalid grain key format: ${grainKey}`);
-    }
-
-    const partitionKeys = PartitionKeys.fromPrimaryKeysString(partitionPart);
-    
-    const ProjectorClass = this.domainTypes.projectorRegistry.get(projectorName);
-    if (!ProjectorClass) {
-      throw new Error(`Projector not found: ${projectorName}`);
-    }
-
-    const projector = new ProjectorClass() as AggregateProjector<any>;
-    return new PartitionKeysAndProjector(partitionKeys, projector);
+  async receiveReminder(reminderName: string, state: any): Promise<void> {
+    console.log(`[AggregateActorWrapper] Delegating receiveReminder: ${reminderName}`);
+    return this.impl.receiveReminder(reminderName, state);
   }
 
-  private getEventHandlerActor(): IAggregateEventHandlerActor {
-    if (!this.partitionInfo) {
-      throw new Error('Partition info not initialized. Call ensureInitializedAsync() first.');
-    }
-
-    const eventHandlerKey = this.partitionInfo.toEventHandlerGrainKey();
-    const eventHandlerActorId = { id: `eventhandler:${eventHandlerKey}` };
-
-    return this.actorProxyFactory.createActorProxy<IAggregateEventHandlerActor>(
-      eventHandlerActorId,
-      'AggregateEventHandlerActor'
-    );
+  async getPartitionInfoAsync(): Promise<any> {
+    console.log(`[AggregateActorWrapper] Delegating getPartitionInfoAsync`);
+    return this.impl.getPartitionInfoAsync();
   }
 
-  private async getStateInternalAsync(): Promise<Aggregate> {
-    await this.ensureInitializedAsync();
-    
-    const eventHandlerActor = this.getEventHandlerActor();
-    return await this.loadStateInternalAsync(eventHandlerActor);
-  }
-
-  private async loadStateInternalAsync(eventHandlerActor: IAggregateEventHandlerActor): Promise<Aggregate> {
-    if (!this.partitionInfo) {
-      throw new Error('Partition info not initialized');
-    }
-
-    const stateManager = this.getStateManager();
-    const savedState = await stateManager.tryGetState<any>(AggregateActor.STATE_KEY);
-
-    if (savedState.hasValue) {
-      const aggregate = await this.serializationService.deserializeAggregateAsync(savedState.value);
-      if (aggregate) {
-        if (this.partitionInfo.projector.getVersion() !== aggregate.projectorVersion) {
-          // Version mismatch - rebuild from events
-          const emptyAggregate = Aggregate.emptyFromPartitionKeys(this.partitionInfo.partitionKeys);
-          const repository = new DaprRepository(
-            eventHandlerActor,
-            this.partitionInfo.partitionKeys,
-            this.partitionInfo.projector,
-            this.domainTypes,
-            emptyAggregate
-          );
-
-          const rebuiltAggregate = await repository.load();
-          if (rebuiltAggregate.isErr()) {
-            throw rebuiltAggregate.error;
-          }
-          this.currentAggregate = rebuiltAggregate.value;
-          this.hasUnsavedChanges = true;
-          return rebuiltAggregate.value;
-        }
-
-        // Load delta events
-        const deltaEventDocuments = await eventHandlerActor.getDeltaEventsAsync(
-          aggregate.lastSortableUniqueId?.toString() || '',
-          -1
-        );
-
-        if (deltaEventDocuments.length > 0) {
-          // Convert to events and project
-          const deltaEvents: IEvent[] = deltaEventDocuments.map(doc => ({
-            id: SortableUniqueId.fromString(doc.sortableUniqueId).unwrapOr(SortableUniqueId.generate()),
-            partitionKeys: doc.partitionKeys,
-            aggregateType: doc.partitionKeys.group || '',
-            eventType: doc.eventType,
-            version: doc.version,
-            payload: doc.payload,
-            metadata: {
-              ...doc.metadata,
-              timestamp: new Date(doc.createdAt)
-            }
-          }));
-
-          // Project delta events
-          let currentAggregate = aggregate;
-          for (const event of deltaEvents) {
-            const projectResult = this.partitionInfo.projector.project(currentAggregate, event);
-            if (projectResult.isErr()) {
-              throw projectResult.error;
-            }
-            currentAggregate = projectResult.value;
-          }
-
-          this.currentAggregate = currentAggregate;
-          this.hasUnsavedChanges = true;
-        } else {
-          this.currentAggregate = aggregate;
-        }
-
-        return this.currentAggregate;
-      }
-    }
-
-    // No saved state - load all events
-    const emptyAggregate = Aggregate.emptyFromPartitionKeys(this.partitionInfo.partitionKeys);
-    const repository = new DaprRepository(
-      eventHandlerActor,
-      this.partitionInfo.partitionKeys,
-      this.partitionInfo.projector,
-      this.domainTypes,
-      emptyAggregate
-    );
-
-    const newAggregate = await repository.load();
-    if (newAggregate.isErr()) {
-      throw newAggregate.error;
-    }
-    this.currentAggregate = newAggregate.value;
-    this.hasUnsavedChanges = true;
-    return newAggregate.value;
-  }
-
-  private async rebuildStateInternalAsync(): Promise<Aggregate> {
-    await this.ensureInitializedAsync();
-
-    if (!this.partitionInfo) {
-      throw new Error('Partition info not initialized');
-    }
-
-    const eventHandlerActor = this.getEventHandlerActor();
-
-    // Create repository for rebuilding with empty aggregate
-    const emptyAggregate = Aggregate.emptyFromPartitionKeys(this.partitionInfo.partitionKeys);
-    const repository = new DaprRepository(
-      eventHandlerActor,
-      this.partitionInfo.partitionKeys,
-      this.partitionInfo.projector,
-      this.domainTypes,
-      emptyAggregate
-    );
-
-    // Load all events and rebuild state
-    const aggregate = await repository.load();
-    if (aggregate.isErr()) {
-      throw aggregate.error;
-    }
-    this.currentAggregate = aggregate.value;
-    this.hasUnsavedChanges = true;
-
-    // Save the rebuilt state
-    await this.saveStateAsync();
-
-    return aggregate.value;
-  }
-
-  private async saveStateAsync(): Promise<void> {
-    const surrogate = await this.serializationService.serializeAggregateAsync(this.currentAggregate);
-    const stateManager = this.getStateManager();
-    await stateManager.setState(AggregateActor.STATE_KEY, surrogate);
-    this.hasUnsavedChanges = false;
+  // Test method for debugging
+  async testMethod(data: any): Promise<any> {
+    console.log(`[AggregateActorWrapper] testMethod called with:`, data);
+    return {
+      success: true,
+      actorId: this.actorIdString,
+      message: 'Test method called via wrapper pattern',
+      receivedData: data
+    };
   }
 }

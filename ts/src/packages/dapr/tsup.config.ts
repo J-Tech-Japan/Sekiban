@@ -6,6 +6,8 @@ export default defineConfig({
   dts: false,
   clean: false,
   sourcemap: true,
-  external: ['@sekiban/core', '@dapr/dapr', 'neverthrow'],
+  minify: false,
+  keepNames: true,
+  external: ['@sekiban/core', '@dapr/dapr', 'neverthrow', 'awilix'],
   onSuccess: 'echo "Build completed successfully"'
 });
