@@ -6,6 +6,7 @@ dotenv.config();
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.string().default('3000').transform(Number),
+  ACTOR_SERVER_PORT: z.string().default('50010').transform(Number),
   
   // PostgreSQL configuration
   DATABASE_URL: z.string().default('postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'),

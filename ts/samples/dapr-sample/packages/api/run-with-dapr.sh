@@ -1,23 +1,31 @@
 #!/bin/bash
 
-# Check if PostgreSQL is running
-if ! pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-    echo "PostgreSQL is not running. Please start PostgreSQL first."
-    echo "You can use Docker: docker run -d --name sekiban-postgres -e POSTGRES_PASSWORD=sekiban_password -e POSTGRES_USER=sekiban -e POSTGRES_DB=sekiban_events -p 5432:5432 postgres:15"
+# Get the root directory (two levels up from API package)
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# Check if PostgreSQL is running using Docker
+if ! docker ps | grep -E "(postgres|dapr-sample-postgres)" > /dev/null 2>&1; then
+    echo "PostgreSQL container is not running. Please start PostgreSQL first."
+    echo "From the dapr-sample directory, run: docker-compose up -d"
     exit 1
 fi
 
-# Run API with Dapr
+echo "PostgreSQL container is running."
+
+# Create tmp directory for logs
+mkdir -p ./tmp
+
+# Run API with Dapr using production components
 echo "Starting API with Dapr..."
-echo "Using in-memory state store and pubsub"
-echo "Using PostgreSQL for event storage"
+echo "Using root-level Dapr configurations from: $ROOT_DIR/dapr"
+echo "Using production components (PostgreSQL state store and Redis pubsub)"
 
 dapr run \
   --app-id sekiban-api \
   --app-port 3000 \
   --dapr-http-port 3500 \
   --dapr-grpc-port 50001 \
-  --config ./dapr/config.yaml \
-  --resources-path ./dapr/components \
+  --config "$ROOT_DIR/dapr/config.yaml" \
+  --resources-path "$ROOT_DIR/dapr/components-prod" \
   --enable-api-logging \
   -- npm run start

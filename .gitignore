@@ -371,3 +371,30 @@ FodyWeavers.xsd
 .DS_Store
 
 temp/
+
+# TypeScript build outputs
+dist/
+*.tsbuildinfo
+
+# Backup files
+*.bak
+
+# Package manager lock files (when using pnpm)
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Build/cache directories
+.turbo
+.cache
+.vitecache
+.next
+
+# Test coverage
+coverage/
+.nyc_output/

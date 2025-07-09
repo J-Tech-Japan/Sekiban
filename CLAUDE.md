@@ -134,6 +134,28 @@ See the `ts/samples/` directory for working examples. Key structure:
 - `pnpm test` - Run tests
 - See samples directory for working examples
 
+### Logging and Temporary Files
+
+**ALWAYS use ./tmp directory for logs and temporary files:**
+```bash
+# Create tmp directory if needed
+mkdir -p ./tmp
+
+# Redirect command outputs to tmp
+dapr run ... > ./tmp/dapr.log 2>&1
+npm run dev > ./tmp/dev.log 2>&1
+
+# Use tmp for any temporary test files
+echo '{"test": "data"}' > ./tmp/test-data.json
+```
+
+**NEVER write logs to:**
+- Project root directory
+- Source code directories
+- Package directories
+
+This keeps the project clean and prevents accidental commits of log files.
+
 ## .NET Development Guide
 
 ### Build and Test Commands
@@ -236,6 +258,11 @@ Implement `IWaitForSortableUniqueId` on queries to wait for specific events befo
 4. **Multi-tenancy** is built-in via RootPartitionKey in PartitionKeys
 5. **Commands should be small and focused** - use workflows for complex business processes
 6. **Events are immutable** - never modify existing event types, create new versions instead
+7. **Always write temporary logs to ./tmp directory** - NEVER write log files to project root or source directories
+   - Create `./tmp` directory if it doesn't exist
+   - Redirect all command outputs to `./tmp/command.log`
+   - Use `./tmp` for any temporary files during development
+   - Add `tmp/` to .gitignore if not already present
 
 ## Development Principles
 

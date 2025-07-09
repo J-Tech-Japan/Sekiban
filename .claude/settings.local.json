@@ -51,7 +51,8 @@
       "Bash(pnpm exec:*)",
       "Bash(pnpm dev:*)",
       "Bash(dapr:*)",
-      "Bash(gemini:*)"
+      "Bash(gemini:*)",
+      "Bash(pnpm build:*)"
     ],
     "deny": [
       "Bash(curl:*)"

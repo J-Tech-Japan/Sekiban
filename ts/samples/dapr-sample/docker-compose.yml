@@ -1,8 +1,7 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
+    container_name: sekiban-postgres
     environment:
       POSTGRES_USER: sekiban
       POSTGRES_PASSWORD: sekiban_password
@@ -19,8 +18,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: sekiban-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"  # Changed to 6380 to avoid conflict
     command: redis-server --save 20 1 --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

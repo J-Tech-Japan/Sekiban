@@ -12,6 +12,7 @@ import {
   Metadata
 } from '@sekiban/core';
 import { Result, ok, err } from 'neverthrow';
+import { AbstractActor } from '@dapr/dapr';
 import type { 
   IAggregateActor,
   IAggregateEventHandlerActor,
@@ -24,44 +25,6 @@ import { DaprRepository } from '../parts/dapr-repository.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import type { IActorProxyFactory } from '../types/index.js';
 
-/**
- * Actor host interface matching C# pattern
- */
-interface ActorHost {
-  id: { id: string };
-  stateManager: any;
-}
-
-/**
- * Base Actor class for TypeScript - simplified version
- */
-class Actor {
-  protected readonly id: { id: string };
-  protected readonly stateManager: any;
-  
-  constructor(host: ActorHost) {
-    this.id = host.id;
-    this.stateManager = host.stateManager;
-  }
-  
-  async onActivateAsync(): Promise<void> {
-    // Override in subclass
-  }
-  
-  async onDeactivateAsync(): Promise<void> {
-    // Override in subclass
-  }
-  
-  async registerTimer(
-    name: string,
-    callback: string,
-    state: any,
-    dueTime: string,
-    period: string
-  ): Promise<void> {
-    // Timer registration stub
-  }
-}
 
 /**
  * Serializable partition info for state storage
@@ -82,7 +45,7 @@ interface IDaprSerializationService {
  * Dapr actor for aggregate projection and command execution.
  * This is the Dapr equivalent of Orleans' AggregateProjectorGrain.
  */
-export class AggregateActor extends Actor implements IAggregateActor {
+export class AggregateActor extends AbstractActor implements IAggregateActor {
   private static readonly STATE_KEY = 'aggregateState';
   private static readonly PARTITION_INFO_KEY = 'partitionInfo';
   
@@ -90,19 +53,36 @@ export class AggregateActor extends Actor implements IAggregateActor {
   private hasUnsavedChanges = false;
   private partitionInfo?: PartitionKeysAndProjector<any>;
 
-  constructor(
-    host: ActorHost,
-    private readonly domainTypes: SekibanDomainTypes,
-    private readonly serviceProvider: any,
-    private readonly actorProxyFactory: IActorProxyFactory,
-    private readonly serializationService: IDaprSerializationService
-  ) {
-    super(host);
+  private domainTypes: SekibanDomainTypes;
+  private serviceProvider: any;
+  private actorProxyFactory: IActorProxyFactory;
+  private serializationService: IDaprSerializationService;
+
+  constructor(ctx: any, id: any) {
+    super(ctx, id);
+    // These will be injected via a factory or setup method
+    this.domainTypes = {} as SekibanDomainTypes;
+    this.serviceProvider = {};
+    this.actorProxyFactory = {} as IActorProxyFactory;
+    this.serializationService = {} as IDaprSerializationService;
   }
 
-  async onActivateAsync(): Promise<void> {
-    await super.onActivateAsync();
-    console.log(`AggregateActor ${this.id.id} activated`);
+  // Method to inject dependencies after construction
+  setupDependencies(
+    domainTypes: SekibanDomainTypes,
+    serviceProvider: any,
+    actorProxyFactory: IActorProxyFactory,
+    serializationService: IDaprSerializationService
+  ): void {
+    this.domainTypes = domainTypes;
+    this.serviceProvider = serviceProvider;
+    this.actorProxyFactory = actorProxyFactory;
+    this.serializationService = serializationService;
+  }
+
+  async onActivate(): Promise<void> {
+    await super.onActivate();
+    console.log(`AggregateActor ${this.id} activated`);
     
     // Register timer for periodic state saving
     await this.registerTimer(
@@ -114,11 +94,11 @@ export class AggregateActor extends Actor implements IAggregateActor {
     );
   }
 
-  async onDeactivateAsync(): Promise<void> {
+  async onDeactivate(): Promise<void> {
     if (this.hasUnsavedChanges) {
       await this.saveStateAsync();
     }
-    await super.onDeactivateAsync();
+    await super.onDeactivate();
   }
 
   async getAggregateStateAsync(): Promise<SerializableAggregate> {
@@ -296,7 +276,8 @@ export class AggregateActor extends Actor implements IAggregateActor {
 
   private async getPartitionInfoAsync(): Promise<PartitionKeysAndProjector<any>> {
     // Try to get saved partition info
-    const savedInfo = await this.stateManager.tryGetState<SerializedPartitionInfo>(
+    const stateManager = this.getStateManager();
+    const savedInfo = await stateManager.tryGetState<SerializedPartitionInfo>(
       AggregateActor.PARTITION_INFO_KEY
     );
     
@@ -306,13 +287,13 @@ export class AggregateActor extends Actor implements IAggregateActor {
     }
 
     // Parse from actor ID
-    const actorId = this.id.id;
+    const actorId = this.id;
     const grainKey = actorId.includes(':') ? actorId.substring(actorId.indexOf(':') + 1) : actorId;
     
     const partitionInfo = this.parseGrainKey(grainKey);
 
     // Save for future use
-    await this.stateManager.setState(
+    await stateManager.setState(
       AggregateActor.PARTITION_INFO_KEY, 
       { grainKey } as SerializedPartitionInfo
     );
@@ -364,7 +345,8 @@ export class AggregateActor extends Actor implements IAggregateActor {
       throw new Error('Partition info not initialized');
     }
 
-    const savedState = await this.stateManager.tryGetState<any>(AggregateActor.STATE_KEY);
+    const stateManager = this.getStateManager();
+    const savedState = await stateManager.tryGetState<any>(AggregateActor.STATE_KEY);
 
     if (savedState.hasValue) {
       const aggregate = await this.serializationService.deserializeAggregateAsync(savedState.value);
@@ -484,7 +466,8 @@ export class AggregateActor extends Actor implements IAggregateActor {
 
   private async saveStateAsync(): Promise<void> {
     const surrogate = await this.serializationService.serializeAggregateAsync(this.currentAggregate);
-    await this.stateManager.setState(AggregateActor.STATE_KEY, surrogate);
+    const stateManager = this.getStateManager();
+    await stateManager.setState(AggregateActor.STATE_KEY, surrogate);
     this.hasUnsavedChanges = false;
   }
 }

@@ -18,6 +18,10 @@ export {
   AggregateEventHandlerActor,
   MultiProjectorActor,
   
+  // Actor Factories
+  AggregateActorFactory,
+  AggregateEventHandlerActorFactory,
+  
   // Interfaces - avoid duplicate exports
   SerializableAggregate,
   ActorSerializableCommandAndMetadata,

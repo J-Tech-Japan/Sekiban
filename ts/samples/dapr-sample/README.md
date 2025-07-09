@@ -18,11 +18,14 @@ dapr-sample/
 │   ├── domain/        # Domain model (events, commands, projectors)
 │   ├── api/           # Express REST API
 │   └── workflows/     # Business workflows (future)
-├── dapr/              # Dapr configuration files
+├── dapr/              # Dapr configuration files (single source of truth)
 │   ├── components/    # State store and pubsub configuration
 │   └── config.yaml    # Dapr runtime configuration
+├── docker-compose.yml # Docker services (PostgreSQL, Redis)
 └── scripts/           # Helper scripts
 ```
+
+**Note**: Following DRY principles, all infrastructure configuration (Dapr, Docker) is maintained at the root level. Package-level scripts reference these root configurations. See [STRUCTURE.md](./STRUCTURE.md) for details.
 
 ## Prerequisites
 
