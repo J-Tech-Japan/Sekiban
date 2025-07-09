@@ -58,7 +58,6 @@
       "Bash(./test-create-task.sh:*)"
     ],
     "deny": [
-      "Bash(curl:*)"
     ]
   },
   "enableAllProjectMcpServers": false

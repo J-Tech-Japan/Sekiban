@@ -58,13 +58,14 @@ export class AggregateActor extends AbstractActor {
     await this.impl.initialize();
     
     // Register timer for periodic state saving
-    await this.registerActorTimer(
-      'SaveState',
-      'saveStateCallbackAsync',
-      null,
-      '10s',  // Due time
-      '10s'   // Period
-    );
+    // TODO: Fix timer registration - currently causing "method does not exist" error
+    // await this.registerActorTimer(
+    //   'SaveState',
+    //   'saveStateCallbackAsync',
+    //   null,
+    //   '10s',  // Due time
+    //   '10s'   // Period
+    // );
   }
 
   async onDeactivate(): Promise<void> {
