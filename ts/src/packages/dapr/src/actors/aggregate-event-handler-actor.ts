@@ -165,11 +165,11 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   async getLastSortableUniqueIdAsync(): Promise<string> {
     const stateManager = await this.getStateManager();
-    const [hasState, handlerState] = await stateManager.tryGetState<AggregateEventHandlerState>(
+    const [hasState, handlerState] = await stateManager.tryGetState(
       this.HANDLER_STATE_KEY
     );
     
-    return handlerState?.lastSortableUniqueId || '';
+    return (handlerState as AggregateEventHandlerState)?.lastSortableUniqueId || '';
   }
   
   /**
@@ -184,15 +184,14 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   private async loadEventsFromStateAsync(): Promise<SerializableEventDocument[]> {
     const stateManager = await this.getStateManager();
-    const [hasEvents, events] = await stateManager.tryGetState<SerializableEventDocument[]>(
+    const [hasEvents, events] = await stateManager.tryGetState(
       this.EVENTS_KEY
     );
     
     if (!hasEvents || !events || (events as any).length === 0) {
       // Fallback to external storage
       if (this.partitionInfo) {
-        const eventRetrievalInfo = new EventRetrievalInfo();
-        eventRetrievalInfo.aggregateStream = new AggregateGroupStream(this.partitionInfo.partitionKeys);
+        const eventRetrievalInfo = EventRetrievalInfo.fromPartitionKeys(this.partitionInfo.partitionKeys);
         const externalEventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
         const externalEvents = externalEventsResult.isOk() ? externalEventsResult.value : [];
         
@@ -225,12 +224,12 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   private async loadPartitionInfoAsync(): Promise<void> {
     const stateManager = await this.getStateManager();
-    const [hasPartitionInfo, partitionInfo] = await stateManager.tryGetState<ActorPartitionInfo>(
+    const [hasPartitionInfo, partitionInfo] = await stateManager.tryGetState(
       this.PARTITION_INFO_KEY
     );
     
     if (hasPartitionInfo && partitionInfo) {
-      this.partitionInfo = partitionInfo;
+      this.partitionInfo = partitionInfo as ActorPartitionInfo;
     } else {
       // Extract from actor ID
       this.partitionInfo = this.getPartitionInfoFromActorId();
@@ -250,11 +249,12 @@ export class AggregateEventHandlerActor extends AbstractActor
     console.log('[AggregateEventHandlerActor] Extracting partition info from actor ID:', actorId);
     const idParts = actorId.split(':');
     
-    const partitionInfo = {
+    const partitionInfo: ActorPartitionInfo = {
       partitionKeys: {
         aggregateId: idParts[1] || '',
         group: idParts[0] || '',
-        rootPartitionKey: idParts[2] || 'default'
+        rootPartitionKey: idParts[2] || 'default',
+        partitionKey: `${idParts[0] || ''}:${idParts[1] || ''}:${idParts[2] || 'default'}`
       } as PartitionKeys,
       aggregateType: idParts[0] || '',
       projectorType: '' // Not used in event handler

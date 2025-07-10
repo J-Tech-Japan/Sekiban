@@ -1,6 +1,12 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import type { IEventStore, EventDocument } from '@sekiban/core';
-import { EventRetrievalInfo, SinceSortableIdCondition } from '@sekiban/core';
+import { 
+  EventRetrievalInfo, 
+  SinceSortableIdCondition,
+  SortableIdConditionNone,
+  OptionalValue,
+  SortableUniqueId
+} from '@sekiban/core';
 import type {
   IMultiProjectorActor,
   SerializableQuery,
@@ -199,7 +205,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     // Load all events from store
     // Load all events - create a retrieval info without specific filters
-    const eventRetrievalInfo = new EventRetrievalInfo();
+    const eventRetrievalInfo = EventRetrievalInfo.all();
     const eventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
     const events = eventsResult.isOk() ? eventsResult.value : [];
     
@@ -213,7 +219,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         this.serializeEvent(event)
       );
       newState.lastProcessedEventId = event.sortableUniqueId;
-      newState.lastProcessedTimestamp = event.createdAt.toISOString();
+      newState.lastProcessedTimestamp = event.timestamp.toISOString();
       newState.version++;
     }
     
@@ -351,11 +357,17 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     try {
       // Load events after last processed
-      // Load events after last processed
-      const eventRetrievalInfo = new EventRetrievalInfo();
-      eventRetrievalInfo.sortableIdCondition = new SinceSortableIdCondition(lastProcessedId);
+      const eventRetrievalInfo = EventRetrievalInfo.all();
       const newEventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
-      const newEvents = newEventsResult.isOk() ? newEventsResult.value : [];
+      let newEvents = newEventsResult.isOk() ? newEventsResult.value : [];
+      
+      // Filter events after lastProcessedId
+      if (lastProcessedId) {
+        const lastProcessedSortableId = SortableUniqueId.fromString(lastProcessedId);
+        newEvents = newEvents.filter(event => 
+          SortableUniqueId.compare(event.sortableUniqueId, lastProcessedSortableId) > 0
+        );
+      }
       
       // Add to buffer if not already present
       for (const event of newEvents) {

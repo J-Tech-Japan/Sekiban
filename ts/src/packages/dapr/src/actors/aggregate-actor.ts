@@ -6,7 +6,12 @@ import type {
 } from '../executor/interfaces.js';
 import type { IActorProxyFactory } from '../types/index.js';
 import { getDaprCradle } from '../container/index.js';
-import type { Aggregate, ITypedAggregatePayload } from '@sekiban/core';
+import type { 
+  Aggregate, 
+  ITypedAggregatePayload,
+  IAggregateProjector,
+  EmptyAggregatePayload
+} from '@sekiban/core';
 
 /**
  * Thin wrapper actor that delegates to AggregateActorImpl
@@ -72,9 +77,9 @@ export class AggregateActor extends AbstractActor {
 
   async executeCommandAsync<
     TCommand,
-    TProjector,
-    TPayloadUnion,
-    TAggregatePayload
+    TProjector extends IAggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
   >(
     commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
   ): Promise<SekibanCommandResponse> {
@@ -120,6 +125,19 @@ export class AggregateActor extends AbstractActor {
   async getPartitionInfoAsync(): Promise<any> {
     console.log(`[AggregateActorWrapper] Delegating getPartitionInfoAsync`);
     return this.impl.getPartitionInfoAsync();
+  }
+
+  // Additional methods required by the interface
+  async queryAsync(query: any): Promise<any> {
+    console.log(`[AggregateActorWrapper] queryAsync called - not implemented`);
+    // TODO: Implement query functionality
+    return { error: 'Query functionality not yet implemented' };
+  }
+
+  async loadAggregateAsync(partitionKeys: any): Promise<any> {
+    console.log(`[AggregateActorWrapper] loadAggregateAsync called`);
+    // This delegates to getAggregateStateAsync
+    return this.getAggregateStateAsync();
   }
 
   // Test method for debugging

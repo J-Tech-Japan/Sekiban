@@ -379,7 +379,10 @@ export class AggregateActorImpl {
             correlationId: eventDoc.metadata?.correlationId,
             causationId: eventDoc.metadata?.causationId,
             executedUser: eventDoc.metadata?.executedUser || 'system'
-          }
+          },
+          // C# compatibility properties
+          partitionKey: eventDoc.partitionKeys.partitionKey,
+          aggregateGroup: eventDoc.partitionKeys.group || 'default'
         };
         
         // Apply event to aggregate
