@@ -1,0 +1,58 @@
+;; This is a project-specific sandbox profile for claude-sandbox.
+;; You can customize this file to suit your project's needs.
+;; see https://github.com/kohkimakimoto/claude-sandbox
+(version 1)
+
+(allow default)
+
+(deny file-write*)
+(allow file-write*
+    ;; Working directory
+    (subpath (param "WORKDIR"))
+
+    ;; Claude Code
+    (subpath (string-append (param "HOME") "/.claude"))
+    (literal (string-append (param "HOME") "/.claude.json"))
+    (literal (string-append (param "HOME") "/.claude.json.lock"))
+    (literal (string-append (param "HOME") "/.claude.json.backup"))
+
+    ;; Temporary directories and files
+    (subpath "/tmp")
+    (subpath "/var/folders")
+    (subpath "/private/tmp")
+    (subpath "/private/var/folders")
+    
+    ;; Home directory
+    (subpath (string-append (param "HOME") "/.npm"))
+    (subpath (string-append (param "HOME") "/.cache"))
+
+    ;; devices
+    (literal "/dev/stdout")
+    (literal "/dev/stderr")
+    (literal "/dev/null")
+
+    ;; uvx
+    ;; (subpath (string-append (param "HOME") "/.local/share/uv/tools/"))
+    
+)
+
+;; 5. Let it talk to the Shortcuts helper and Pasteboard services via Mach IPC
+(allow mach-lookup
+       (global-name "com.apple.ShortcutsAgent"))
+(allow mach-lookup
+       (global-name "com.apple.pasteboard.1"))
+
+;; 6. Permit AppleEvents so Shortcuts (or Automator / AppleScript)
+;;    can reach us and vice-versa
+(allow appleevent-send
+       (require-any
+         (appleevent-destination "com.apple.shortcuts")        ; Shortcuts.app GUI
+         (appleevent-destination "com.apple.shortcuts.events") ; headless helper
+         (appleevent-destination "com.apple.systemevents")))   ; fallback
+(allow mach-lookup
+       (global-name "com.apple.ShortcutsEvents"))
+(allow process-exec (literal "/usr/bin/osascript"))
+
+;; 7. Let the app receive low-level keyboard / HID events (needed for in-app hotkeys)
+(allow iokit-open
+       (iokit-user-client-class "IOHIDSystem"))

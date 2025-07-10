@@ -1,0 +1,51 @@
+{
+  "name": "@sekiban/dapr",
+  "version": "0.0.1",
+  "description": "Dapr actor integration for Sekiban Event Sourcing framework with snapshot support",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch"
+  },
+  "keywords": [
+    "sekiban",
+    "event-sourcing",
+    "cqrs",
+    "dapr",
+    "actors",
+    "snapshot"
+  ],
+  "author": "Sekiban Team",
+  "license": "MIT",
+  "dependencies": {
+    "@sekiban/core": "file:../core",
+    "@dapr/dapr": "^3.3.0",
+    "neverthrow": "^8.0.0",
+    "awilix": "^10.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "rimraf": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

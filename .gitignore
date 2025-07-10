@@ -199,6 +199,11 @@ PublishScripts/
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
+# Don't ignore TypeScript packages
+!ts/src/packages/
+!ts/src/packages/**
+!ts/samples/**/packages/
+!ts/samples/**/packages/**
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
 # NuGet v3's project.json files produces more ignorable files
@@ -366,3 +371,38 @@ FodyWeavers.xsd
 .DS_Store
 
 temp/
+
+# TypeScript build outputs
+dist/
+*.tsbuildinfo
+
+# Backup files
+*.bak
+
+# Package manager lock files (when using pnpm)
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Build/cache directories
+.turbo
+.cache
+.vitecache
+.next
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files and logs
+tmp/
+*.log
+dev.log
+
+# pnpm store
+.pnpm-store/

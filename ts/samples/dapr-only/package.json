@@ -1,0 +1,26 @@
+{
+  "name": "dapr-only-sample",
+  "version": "1.0.0",
+  "description": "Simple Dapr actor sample with counter",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "dev:builtin": "tsx watch src/server-builtin.ts",
+    "dev:di": "tsx watch src/server-with-di.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "start:di": "node dist/server-with-di.js",
+    "test": "tsx src/test-actor.ts"
+  },
+  "dependencies": {
+    "@dapr/dapr": "^3.5.2",
+    "awilix": "^10.0.2",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

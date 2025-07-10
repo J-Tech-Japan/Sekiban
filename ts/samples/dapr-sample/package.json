@@ -1,0 +1,34 @@
+{
+  "name": "dapr-sample",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r clean",
+    "dapr:api": "dapr run --app-id sekiban-api --app-port 3000 --components-path ./dapr/components --config ./dapr/config.yaml -- pnpm --filter @dapr-sample/api dev",
+    "dapr:start": "./run-with-dapr.sh",
+    "dapr:placement": "./start-dapr-placement.sh",
+    "postgres:start": "docker-compose up -d postgres",
+    "postgres:stop": "docker-compose down postgres",
+    "redis:start": "docker-compose up -d redis",
+    "redis:stop": "docker-compose down redis",
+    "services:start": "docker-compose up -d",
+    "services:stop": "docker-compose down",
+    "setup": "pnpm install && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
