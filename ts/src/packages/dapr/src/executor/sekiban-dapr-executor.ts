@@ -1,7 +1,7 @@
 import type { Result } from 'neverthrow';
 import { ok, err } from 'neverthrow';
 import type { DaprClient } from '@dapr/dapr';
-import { HttpMethod } from '@dapr/dapr';
+import { HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import type { 
   ICommandWithHandler,
   IAggregateProjector,
@@ -21,6 +21,7 @@ import type {
 } from './interfaces.js';
 import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
+import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -44,41 +45,30 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   
   
   private createActorProxy(actorId: string): IDaprAggregateActorProxy {
-    // Create a simple wrapper that makes direct HTTP calls to actors
-    const actorType = this.configuration.actorType;
-    const appId = this.configuration.actorIdPrefix || 'sekiban-api';
-    const daprPort = (this.daprClient as any).options?.daprPort || '3500';
-    const daprHost = (this.daprClient as any).options?.daprHost || '127.0.0.1';
+    // Define the interface for our aggregate actor
+    interface AggregateActorInterface {
+      executeCommandAsync(commandAndMetadata: any): Promise<SekibanCommandResponse>;
+      queryAsync(query: any): Promise<any>;
+      loadAggregateAsync(partitionKeys: any): Promise<any>;
+      getAggregateStateAsync(): Promise<any>;
+      saveStateAsync(): Promise<void>;
+      rebuildStateAsync(): Promise<void>;
+      getPartitionInfoAsync(): Promise<any>;
+    }
     
-    // Helper to make direct HTTP calls to Dapr actors
-    const callActorMethod = async (methodName: string, data: any): Promise<any> => {
-      const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${actorId}/method/${methodName}`;
-      
-      const response = await fetch(url, {
-        method: 'PUT', // CRITICAL: Actors require PUT for method calls
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Actor method ${methodName} failed: ${response.status} ${errorText}`);
-      }
-      
-      // Get response as text first to handle both JSON strings and already parsed objects
-      const responseText = await response.text();
-      
-      // Try to parse as JSON if it's a string, otherwise handle as already parsed
-      try {
-        return responseText ? JSON.parse(responseText) : null;
-      } catch (parseError) {
-        // If JSON parsing fails, return the text as-is (might be already parsed by fetch)
-        return responseText;
-      }
-    };
+    // Get the actual actor class from the factory
+    const AggregateActorClass = AggregateActorFactory.createActorClass();
     
+    // Create ActorProxyBuilder with the actual actor class
+    const actorProxyBuilder = new ActorProxyBuilder<AggregateActorInterface>(
+      AggregateActorClass, 
+      this.daprClient
+    );
+    
+    // Build the actor proxy with the actor ID
+    const actor = actorProxyBuilder.build(new ActorId(actorId));
+    
+    // Return the proxy that implements IDaprAggregateActorProxy
     return {
       executeCommandAsync: async <
         TCommand,
@@ -88,17 +78,18 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
-        return callActorMethod('executeCommandAsync', commandAndMetadata);
+        console.log(`[SekibanDaprExecutor] Calling actor ${actorId} via ActorProxyBuilder`);
+        return actor.executeCommandAsync(commandAndMetadata);
       },
       
       queryAsync: async <T>(query: any): Promise<T> => {
-        return callActorMethod('queryAsync', query);
+        return actor.queryAsync(query);
       },
       
       loadAggregateAsync: async <TPayload extends ITypedAggregatePayload>(
         partitionKeys: PartitionKeys
       ): Promise<Aggregate<TPayload>> => {
-        return callActorMethod('loadAggregateAsync', partitionKeys);
+        return actor.loadAggregateAsync(partitionKeys);
       }
     };
   }

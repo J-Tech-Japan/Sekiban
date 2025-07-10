@@ -21,12 +21,19 @@ export class AggregateEventHandlerActorFactory {
   static createActorClass(): typeof AggregateEventHandlerActor {
     const factory = this;
     
-    return class extends AggregateEventHandlerActor {
+    // Create a named class to ensure proper registration
+    class AggregateEventHandlerActor extends factory.getBaseClass() {
       constructor(ctx: any, id: any) {
         super(ctx, id);
         // Inject dependencies after construction
         this.setupDependencies(factory.eventStore);
       }
-    };
+    }
+    
+    return AggregateEventHandlerActor;
+  }
+  
+  private static getBaseClass() {
+    return AggregateEventHandlerActor;
   }
 }

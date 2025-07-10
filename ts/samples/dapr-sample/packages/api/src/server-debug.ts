@@ -52,6 +52,17 @@ async function startServer() {
     next();
   });
   
+  // CRITICAL: Override /dapr/config to ensure both actors are registered
+  app.get('/dapr/config', (req, res) => {
+    console.log('[DAPR] Config endpoint called - returning both actors');
+    res.json({
+      entities: ['AggregateActor', 'AggregateEventHandlerActor'],
+      actorIdleTimeout: '1h',
+      drainOngoingCallTimeout: '30s',
+      drainRebalancedActors: true
+    });
+  });
+  
   // Routes
   app.use('/', healthRoutes);
   app.use('/', eventRoutes);
@@ -148,55 +159,188 @@ async function setupDaprActorsWithApp(app: express.Express) {
       console.log(`[ACTOR PROXY] Creating actor proxy for ${actorType}/${actorId.id}`);
       logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
       
-      // Define the interface for the actor
-      interface AggregateActorInterface {
-        executeCommandAsync(commandAndMetadata: any): Promise<string>;
-        queryAsync(query: any): Promise<any>;
-        loadAggregateAsync(partitionKeys: any): Promise<any>;
-      }
-      
-      // Create ActorProxyBuilder with the actual actor class
-      const ActorClass = AggregateActorFactory.createActorClass();
-      const builder = new ActorProxyBuilder<AggregateActorInterface>(ActorClass, daprClient);
-      
-      // Create actor proxy
-      const actorIdObj = new ActorId(actorId.id || actorId);
-      const proxy = builder.build(actorIdObj);
-      
-      console.log(`[ACTOR PROXY] Created proxy for actor ${actorIdObj.getId()}`);
-      
-      // Return a wrapper that matches the expected interface
-      return {
-        invoke: async (methodName: string, data: any) => {
-          console.log(`[ACTOR PROXY] Invoking ${methodName} on actor ${actorIdObj.getId()}`);
-          const startTime = Date.now();
-          
-          try {
-            let result: any;
-            switch (methodName) {
-              case 'executeCommandAsync':
-                result = await proxy.executeCommandAsync(data);
-                break;
-              case 'queryAsync':
-                result = await proxy.queryAsync(data);
-                break;
-              case 'loadAggregateAsync':
-                result = await proxy.loadAggregateAsync(data);
-                break;
-              default:
-                throw new Error(`Unknown method: ${methodName}`);
+      // Create actor proxy based on actor type
+      if (actorType === 'AggregateEventHandlerActor') {
+        // Define the interface for the event handler actor
+        interface EventHandlerActorInterface {
+          appendEventsAsync(expectedLastSortableUniqueId: string, events: any[]): Promise<any>;
+          getDeltaEventsAsync(fromSortableUniqueId: string, limit: number): Promise<any[]>;
+          getAllEventsAsync(): Promise<any[]>;
+          getLastSortableUniqueIdAsync(): Promise<string>;
+          registerProjectorAsync(projectorKey: string): Promise<void>;
+        }
+        
+        // Create ActorProxyBuilder with the event handler actor class
+        const ActorClass = AggregateEventHandlerActorFactory.createActorClass();
+        const builder = new ActorProxyBuilder<EventHandlerActorInterface>(ActorClass, daprClient);
+        
+        // Create actor proxy with app ID configuration
+        const actorIdObj = new ActorId(actorId.id || actorId);
+        
+        // Build the proxy with proper app ID
+        const proxyOptions = {
+          appId: config.DAPR_APP_ID  // Set the app ID where actors are hosted
+        };
+        
+        // The SDK's ActorProxyBuilder might not support appId directly,
+        // so we create a wrapper that adds the required headers
+        const baseProxy = builder.build(actorIdObj);
+        
+        console.log(`[ACTOR PROXY] Created proxy for event handler actor ${actorIdObj.getId()} with appId: ${config.DAPR_APP_ID}`);
+        
+        // Since ActorProxyBuilder doesn't handle app-id for local actor-to-actor calls,
+        // we need to use direct HTTP calls for event handler actor
+        const proxy = {
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]): Promise<any> => {
+            console.log(`[ACTOR PROXY] Calling appendEventsAsync on event handler actor ${actorIdObj.getId()}`);
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/actors/AggregateEventHandlerActor/${actorIdObj.getId()}/method/appendEventsAsync`;
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                expectedLastSortableUniqueId,
+                events
+              })
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`appendEventsAsync failed: ${response.status} ${errorText}`);
             }
             
-            const duration = Date.now() - startTime;
-            console.log(`[ACTOR PROXY] ${methodName} completed in ${duration}ms`);
-            return result;
-          } catch (error) {
-            const duration = Date.now() - startTime;
-            console.error(`[ACTOR PROXY] ${methodName} failed after ${duration}ms:`, error);
-            throw error;
+            return response.json() as Promise<any>;
+          },
+          getAllEventsAsync: async (): Promise<any[]> => {
+            console.log(`[ACTOR PROXY] Calling getAllEventsAsync on event handler actor ${actorIdObj.getId()}`);
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/actors/AggregateEventHandlerActor/${actorIdObj.getId()}/method/getAllEventsAsync`;
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`getAllEventsAsync failed: ${response.status} ${errorText}`);
+            }
+            
+            return response.json() as Promise<any[]>;
+          },
+          getDeltaEventsAsync: async (fromSortableUniqueId: string, limit: number): Promise<any[]> => {
+            console.log(`[ACTOR PROXY] Calling getDeltaEventsAsync on event handler actor ${actorIdObj.getId()}`);
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/actors/AggregateEventHandlerActor/${actorIdObj.getId()}/method/getDeltaEventsAsync`;
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ fromSortableUniqueId, limit })
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`getDeltaEventsAsync failed: ${response.status} ${errorText}`);
+            }
+            
+            return response.json() as Promise<any[]>;
+          },
+          getLastSortableUniqueIdAsync: async (): Promise<string> => {
+            console.log(`[ACTOR PROXY] Calling getLastSortableUniqueIdAsync on event handler actor ${actorIdObj.getId()}`);
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/actors/AggregateEventHandlerActor/${actorIdObj.getId()}/method/getLastSortableUniqueIdAsync`;
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`getLastSortableUniqueIdAsync failed: ${response.status} ${errorText}`);
+            }
+            
+            return response.json() as Promise<string>;
+          },
+          registerProjectorAsync: async (projectorKey: string): Promise<void> => {
+            console.log(`[ACTOR PROXY] Calling registerProjectorAsync on event handler actor ${actorIdObj.getId()}`);
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/actors/AggregateEventHandlerActor/${actorIdObj.getId()}/method/registerProjectorAsync`;
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ projectorKey })
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`registerProjectorAsync failed: ${response.status} ${errorText}`);
+            }
           }
+        } as EventHandlerActorInterface;
+        
+        return proxy;
+      } else {
+        // Default to AggregateActor
+        interface AggregateActorInterface {
+          executeCommandAsync(commandAndMetadata: any): Promise<string>;
+          queryAsync(query: any): Promise<any>;
+          loadAggregateAsync(partitionKeys: any): Promise<any>;
         }
-      };
+        
+        // Create ActorProxyBuilder with the actual actor class
+        const ActorClass = AggregateActorFactory.createActorClass();
+        const builder = new ActorProxyBuilder<AggregateActorInterface>(ActorClass, daprClient);
+        
+        // Create actor proxy
+        const actorIdObj = new ActorId(actorId.id || actorId);
+        const proxy = builder.build(actorIdObj);
+        
+        console.log(`[ACTOR PROXY] Created proxy for aggregate actor ${actorIdObj.getId()}`);
+        
+        // Return a wrapper that matches the expected interface
+        return {
+          invoke: async (methodName: string, data: any) => {
+            console.log(`[ACTOR PROXY] Invoking ${methodName} on actor ${actorIdObj.getId()}`);
+            const startTime = Date.now();
+            
+            try {
+              let result: any;
+              switch (methodName) {
+                case 'executeCommandAsync':
+                  result = await proxy.executeCommandAsync(data);
+                  break;
+                case 'queryAsync':
+                  result = await proxy.queryAsync(data);
+                  break;
+                case 'loadAggregateAsync':
+                  result = await proxy.loadAggregateAsync(data);
+                  break;
+                default:
+                  throw new Error(`Unknown method: ${methodName}`);
+              }
+              
+              const duration = Date.now() - startTime;
+              console.log(`[ACTOR PROXY] ${methodName} completed in ${duration}ms`);
+              return result;
+            } catch (error) {
+              const duration = Date.now() - startTime;
+              console.error(`[ACTOR PROXY] ${methodName} failed after ${duration}ms:`, error);
+              throw error;
+            }
+          }
+        };
+      }
     }
   };
 

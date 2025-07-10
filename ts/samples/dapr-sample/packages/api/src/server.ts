@@ -207,6 +207,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Try registering with explicit actor type
   console.log('[DEBUG] Registering actor with explicit type...');
   daprServer.actor.registerActor(ActorClass);
+  
+  // Register AggregateEventHandlerActor
+  console.log('[DEBUG] Registering AggregateEventHandlerActor...');
+  const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
+  daprServer.actor.registerActor(EventHandlerActorClass);
   logger.info('Registered AggregateActor');
 
   // Add diagnostic logging to catch any exceptions
