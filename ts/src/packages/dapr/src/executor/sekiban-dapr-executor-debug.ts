@@ -223,9 +223,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       
       const commandWithMetadata = {
         commandId: crypto.randomUUID(),
-        causationId: metadata?.requestId || crypto.randomUUID(),
-        correlationId: metadata?.requestId || crypto.randomUUID(),
-        executedUser: metadata?.custom?.user || 'system',
+        causationId: metadata?.causationId || crypto.randomUUID(),
+        correlationId: metadata?.correlationId || crypto.randomUUID(),
+        executedUser: metadata?.executedUser || (metadata?.custom as any)?.user || 'system',
         commandTypeName,
         projectorTypeName,
         aggregatePayloadTypeName: '',

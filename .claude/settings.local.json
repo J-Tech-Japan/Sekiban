@@ -58,7 +58,8 @@
       "Bash(./test-create-task.sh:*)",
       "Bash(./run-debug.sh:*)",
       "Bash(curl:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(pnpm --filter @sekiban/dapr build)"
     ],
     "deny": []
   },

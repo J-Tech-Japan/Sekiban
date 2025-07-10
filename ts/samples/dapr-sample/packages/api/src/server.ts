@@ -3,20 +3,24 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import pg from 'pg';
 import { config } from './config/index.js';
 import { createExecutor, cleanup } from './setup/executor.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
-import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod } from '@dapr/dapr';
+import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { 
   AggregateActorFactory, 
   AggregateEventHandlerActorFactory
 } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
+import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import logger from './utils/logger.js';
+
+const { Pool } = pg;
 
 
 async function startServer() {
@@ -118,11 +122,42 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Initialize event store (using in-memory for development)
-  const eventStore = new InMemoryEventStore({
-    type: StorageProviderType.InMemory,
-    enableLogging: config.NODE_ENV === 'development'
-  });
+  // Choose storage type based on environment variable or config
+  const usePostgres = config.USE_POSTGRES;
+  
+  let eventStore: any;
+  
+  if (usePostgres) {
+    // Initialize PostgreSQL event store
+    logger.info('Using PostgreSQL event store');
+    const pool = new Pool({
+      connectionString: config.DATABASE_URL
+    });
+    
+    eventStore = new PostgresEventStore(pool);
+    
+    // Initialize the database schema
+    logger.info('Initializing PostgreSQL schema...');
+    try {
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('PostgreSQL schema initialized successfully');
+      } else {
+        logger.error('Failed to initialize PostgreSQL schema:', result.error);
+        throw result.error;
+      }
+    } catch (error) {
+      logger.error('Failed to initialize PostgreSQL:', error);
+      throw error;
+    }
+  } else {
+    // Initialize in-memory event store (commented out for easy switching)
+    logger.info('Using in-memory event store');
+    eventStore = new InMemoryEventStore({
+      type: StorageProviderType.InMemory,
+      enableLogging: config.NODE_ENV === 'development'
+    });
+  }
 
   // Create DaprClient for actor proxy factory
   const daprClient = new DaprClient({
@@ -130,24 +165,63 @@ async function setupDaprActorsWithApp(app: express.Express) {
     daprPort: String(config.DAPR_HTTP_PORT)
   });
 
-  // Create actor proxy factory that uses DaprClient
+  // Create actor proxy factory that uses DaprClient with ActorProxyBuilder
   const actorProxyFactory = {
     createActorProxy: (actorId: any, actorType: string) => {
       logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
-      // Note: DaprClient.actor.create requires a class, which we don't have
-      // So we'll return a proxy object that makes direct HTTP calls
-      return {
-        // This matches the expected interface for actor proxy
-        invoke: async (methodName: string, data: any) => {
-          const actorIdStr = actorId.id || actorId;
-          return daprClient.invoker.invoke(
-            config.DAPR_APP_ID,
-            `actors/${actorType}/${actorIdStr}/method/${methodName}`,
-            HttpMethod.PUT, 
-            data
-          );
-        }
-      };
+      const actorIdStr = actorId.id || actorId;
+      
+      // Use ActorProxyBuilder for proper actor-to-actor communication
+      if (actorType === 'AggregateEventHandlerActor') {
+        console.log(`[ActorProxyFactory] Creating EventHandlerActor proxy using ActorProxyBuilder for ${actorIdStr}`);
+        const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
+        const builder = new ActorProxyBuilder(EventHandlerActorClass, daprClient);
+        return builder.build(new ActorId(actorIdStr));
+      } else if (actorType === 'AggregateActor') {
+        console.log(`[ActorProxyFactory] Creating AggregateActor proxy using ActorProxyBuilder for ${actorIdStr}`);
+        const AggregateActorClass = AggregateActorFactory.createActorClass();
+        const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
+        return builder.build(new ActorId(actorIdStr));
+      } else {
+        // Fallback for unknown actor types
+        console.warn(`[ActorProxyFactory] Unknown actor type: ${actorType}, using direct HTTP calls`);
+        return {
+          executeCommandAsync: async (data: any) => {
+            console.log(`[ActorProxy] Calling executeCommandAsync on ${actorType}/${actorIdStr}`);
+            return daprClient.invoker.invoke(
+              config.DAPR_APP_ID,
+              `actors/${actorType}/${actorIdStr}/method/executeCommandAsync`,
+              HttpMethod.PUT, 
+              data
+            );
+          },
+          queryAsync: async (data: any) => {
+            return daprClient.invoker.invoke(
+              config.DAPR_APP_ID,
+              `actors/${actorType}/${actorIdStr}/method/queryAsync`,
+              HttpMethod.PUT, 
+              data
+            );
+          },
+          loadAggregateAsync: async (data: any) => {
+            return daprClient.invoker.invoke(
+              config.DAPR_APP_ID,
+              `actors/${actorType}/${actorIdStr}/method/loadAggregateAsync`,
+              HttpMethod.PUT, 
+              data
+            );
+          },
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
+            console.log(`[ActorProxy] Calling appendEventsAsync on ${actorType}/${actorIdStr}`);
+            return daprClient.invoker.invoke(
+              config.DAPR_APP_ID,
+              `actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
+              HttpMethod.PUT, 
+              [expectedLastSortableUniqueId, events] // Pass as array for proper parameter passing
+            );
+          }
+        };
+      }
     }
   };
 

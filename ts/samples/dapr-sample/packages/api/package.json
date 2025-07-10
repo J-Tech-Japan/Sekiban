@@ -15,7 +15,9 @@
     "start:simple": "node dist/simple-server.js",
     "start:simple-di": "node dist/simple-server-with-di.js",
     "start:wrapper": "node dist/simple-server-wrapper.js",
-    "test": "vitest"
+    "test": "vitest",
+    "init-db": "tsx src/init-database.ts",
+    "start:postgres": "USE_POSTGRES=true npm run start"
   },
   "dependencies": {
     "@dapr-sample/domain": "workspace:*",

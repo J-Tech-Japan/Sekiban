@@ -12,13 +12,13 @@ import type {
   IEventPayload
 } from '@sekiban/core';
 import { SortableUniqueId, globalRegistry } from '@sekiban/core';
+import { ActorId } from '@dapr/dapr';
 import { ok, err } from 'neverthrow';
 import type { 
   SerializableCommandAndMetadata,
-  SekibanCommandResponse,
-  IDaprSerializationService,
-  IActorProxyFactory
+  SekibanCommandResponse
 } from '../executor/interfaces.js';
+import type { IActorProxyFactory } from '../types/index.js';
 import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { IAggregateEventHandlerActor, SerializableEventDocument } from './interfaces.js';
 
@@ -27,7 +27,7 @@ import type { IAggregateEventHandlerActor, SerializableEventDocument } from './i
  * This class contains all the business logic and is testable
  */
 export class AggregateActorImpl {
-  private currentPartitionKeysAndProjector: PartitionKeysAndProjector | null = null;
+  private currentPartitionKeysAndProjector: PartitionKeysAndProjector<any> | null = null;
   private hasUnsavedChanges: boolean = false;
 
   constructor(
@@ -35,7 +35,6 @@ export class AggregateActorImpl {
     private readonly domainTypes: SekibanDomainTypes,
     private readonly serviceProvider: any,
     private readonly actorProxyFactory: IActorProxyFactory,
-    private readonly serializationService: IDaprSerializationService,
     private readonly eventStore?: any
   ) {
     console.log(`[AggregateActorImpl] Created for actor ${actorId}`);
@@ -99,8 +98,8 @@ export class AggregateActorImpl {
       }
 
       // Get the projector for this aggregate type
-      const projectorTypeName = metadata.projectorTypeName || partitionKeys.group + 'Projector';
-      const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group);
+      const projectorTypeName = (metadata as any)?.projectorTypeName || partitionKeys.group + 'Projector';
+      const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
       
       if (!projector) {
         return {
@@ -124,8 +123,8 @@ export class AggregateActorImpl {
       
       if (!commandDef) {
         console.error('[AggregateActorImpl] Command not found in global registry');
-        console.error('[AggregateActorImpl] Available commands in registry:', globalRegistry.getCommands().map(c => c.commandType));
-        console.error('[AggregateActorImpl] Available commands in domain types:', this.domainTypes.commandTypes.getCommandTypes().map(c => c.name));
+        console.error('[AggregateActorImpl] Available commands in registry:', globalRegistry.getCommandTypes().map((c: any) => c));
+        console.error('[AggregateActorImpl] Available commands in domain types:', this.domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name));
         return {
           success: false,
           error: `Command not found in registry: ${commandType}`
@@ -140,18 +139,70 @@ export class AggregateActorImpl {
       const events: IEventPayload[] = [];
       
       try {
-        // Create context for the handler
+        // Create context for the handler that implements ICommandContext interface
         const context = {
           aggregate: currentState,
           aggregateId: partitionKeys.aggregateId,
-          appendEvent: (event: IEventPayload) => {
-            events.push(event);
+          originalSortableUniqueId: currentState?.lastSortableUniqueId || '',
+          events: [],
+          partitionKeys: partitionKeys,
+          metadata: metadata,
+          
+          // Methods required by ICommandContext
+          getPartitionKeys: () => partitionKeys,
+          getNextVersion: () => (currentState?.version || 0) + 1,
+          getCurrentVersion: () => currentState?.version || 0,
+          getAggregate: () => {
+            return ok(currentState || { version: 0, events: [], lastSortableUniqueId: '' });
+          },
+          appendEvent: (eventPayload: IEventPayload) => {
+            events.push(eventPayload);
+            return ok({
+              id: crypto.randomUUID(),
+              eventType: eventPayload.constructor.name,
+              payload: eventPayload,
+              version: (currentState?.version || 0) + events.length,
+              sortableUniqueId: SortableUniqueId.generate().toString(),
+              createdAt: new Date()
+            });
+          },
+          getService: () => {
+            return err({ code: 'SERVICE_NOT_AVAILABLE', message: 'Service resolution not available in actor context' } as SekibanError);
           }
         };
         
-        // Execute the handle function - schema-based commands have handle directly on the command
-        if (typeof commandDef.handle === 'function') {
-          const result = commandDef.handle(commandData, context);
+        // Create a command instance with the command data
+        if (!commandDef.create || typeof commandDef.create !== 'function') {
+          console.error('[AggregateActorImpl] Command definition does not have create function');
+          return {
+            success: false,
+            error: 'Command definition does not have create function'
+          } as any;
+        }
+        
+        console.log('[AggregateActorImpl] Creating command instance with data...');
+        let commandInstance: any;
+        try {
+          commandInstance = commandDef.create(commandData);
+        } catch (error) {
+          console.error('[AggregateActorImpl] Failed to create command instance:', error);
+          return {
+            success: false,
+            error: `Failed to create command: ${error instanceof Error ? error.message : 'Unknown error'}`
+          } as any;
+        }
+        
+        console.log('[AggregateActorImpl] Command instance created:', typeof commandInstance);
+        console.log('[AggregateActorImpl] Command instance has handle?', typeof commandInstance.handle === 'function');
+        
+        // Call the handle method on the command instance
+        if (typeof commandInstance.handle === 'function') {
+          console.log('[AggregateActorImpl] Calling command handle method...');
+          console.log('[AggregateActorImpl] Passing context:', typeof context, context ? 'defined' : 'undefined');
+          console.log('[AggregateActorImpl] Context has getPartitionKeys?', context && typeof context.getPartitionKeys === 'function');
+          // The handle method expects two parameters: (command, context)
+          // The first parameter is ignored by SchemaCommand as it uses this.data internally
+          const result = commandInstance.handle(commandData, context);
           
           // Handle sync or async result
           const handleResult = result instanceof Promise ? await result : result;
@@ -168,12 +219,10 @@ export class AggregateActorImpl {
             // If OK, the events are already appended via context.appendEvent
           }
         } else {
-          console.error('[AggregateActorImpl] Command does not have handle function');
-          console.error('[AggregateActorImpl] Command def structure:', JSON.stringify(Object.keys(commandDef)));
-          console.error('[AggregateActorImpl] Command def type:', typeof commandDef);
+          console.error('[AggregateActorImpl] Command instance does not have handle function');
           return {
             success: false,
-            error: 'Command does not have handle function'
+            error: 'Command instance does not have handle function'
           } as any;
         }
       } catch (error) {
@@ -216,10 +265,10 @@ export class AggregateActorImpl {
           payload: eventPayload,
           createdAt: new Date().toISOString(),
           metadata: {
-            commandId: metadata.commandId,
-            causationId: metadata.causationId,
-            correlationId: metadata.correlationId,
-            executedUser: metadata.executedUser
+            commandId: (metadata as any)?.commandId,
+            causationId: (metadata as any)?.causationId,
+            correlationId: (metadata as any)?.correlationId,
+            executedUser: (metadata as any)?.executedUser
           }
         };
         eventDocuments.push(eventDoc);
@@ -234,7 +283,7 @@ export class AggregateActorImpl {
       // Use ActorProxyBuilder for actor-to-actor communication
       console.log('[AggregateActorImpl] Creating event handler actor proxy via ActorProxyBuilder...');
       const eventHandlerProxy = this.actorProxyFactory.createActorProxy(
-        { id: eventHandlerActorId },
+        new ActorId(eventHandlerActorId),
         'AggregateEventHandlerActor'
       ) as IAggregateEventHandlerActor;
       
@@ -297,7 +346,7 @@ export class AggregateActorImpl {
       // Use ActorProxyBuilder for actor-to-actor communication
       console.log('[AggregateActorImpl] Creating event handler actor proxy via ActorProxyBuilder...');
       const eventHandlerProxy = this.actorProxyFactory.createActorProxy(
-        { id: eventHandlerActorId },
+        new ActorId(eventHandlerActorId),
         'AggregateEventHandlerActor'
       ) as IAggregateEventHandlerActor;
       
@@ -319,19 +368,22 @@ export class AggregateActorImpl {
           id: eventDoc.id,
           sortableUniqueId: SortableUniqueId.fromString(eventDoc.sortableUniqueId),
           partitionKeys: eventDoc.partitionKeys,
-          aggregateType: partitionKeys.group,
+          aggregateType: partitionKeys.group || 'Unknown',
           eventType: eventDoc.eventType,
-          aggregateId: eventDoc.aggregateId,
+          aggregateId: eventDoc.aggregateId || partitionKeys.aggregateId,
           version: eventDoc.version,
           payload: eventDoc.payload,
           timestamp: new Date(eventDoc.createdAt),
-          correlationId: eventDoc.metadata?.correlationId,
-          causationId: eventDoc.metadata?.causationId,
-          createdUser: eventDoc.metadata?.executedUser || 'system'
+          metadata: {
+            timestamp: new Date(eventDoc.createdAt),
+            correlationId: eventDoc.metadata?.correlationId,
+            causationId: eventDoc.metadata?.causationId,
+            executedUser: eventDoc.metadata?.executedUser || 'system'
+          }
         };
         
         // Apply event to aggregate
-        const applyResult = projector.applyEvent(event, aggregate);
+        const applyResult = projector.project(aggregate, event);
         if (applyResult.isOk()) {
           aggregate = applyResult.value;
           lastSortableUniqueId = eventDoc.sortableUniqueId;
@@ -365,7 +417,7 @@ export class AggregateActorImpl {
     }
 
     const partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
-    const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group);
+    const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
     
     if (!projector) {
       return null;

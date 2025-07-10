@@ -1,5 +1,6 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import type { IEventStore, EventDocument } from '@sekiban/core';
+import { EventRetrievalInfo, SinceSortableIdCondition } from '@sekiban/core';
 import type {
   IMultiProjectorActor,
   SerializableQuery,
@@ -197,7 +198,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     this.unsafeState = undefined;
     
     // Load all events from store
-    const events = await this.eventStore.loadAllEvents();
+    // Load all events - create a retrieval info without specific filters
+    const eventRetrievalInfo = new EventRetrievalInfo();
+    const eventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
+    const events = eventsResult.isOk() ? eventsResult.value : [];
     
     // Build new state
     const newState = this.createEmptyState();
@@ -347,10 +351,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     try {
       // Load events after last processed
-      const newEvents = await this.eventStore.loadEventsAfter(
-        lastProcessedId,
-        1000 // Batch size
-      );
+      // Load events after last processed
+      const eventRetrievalInfo = new EventRetrievalInfo();
+      eventRetrievalInfo.sortableIdCondition = new SinceSortableIdCondition(lastProcessedId);
+      const newEventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
+      const newEvents = newEventsResult.isOk() ? newEventsResult.value : [];
       
       // Add to buffer if not already present
       for (const event of newEvents) {
@@ -378,13 +383,13 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    */
   private async loadStateAsync(): Promise<void> {
     const stateManager = await this.getStateManager();
-    const [hasState, state] = await stateManager.tryGetState<MultiProjectionState>(
+    const [hasState, state] = await stateManager.tryGetState(
       this.PROJECTION_STATE_KEY
     );
     
     if (hasState && state) {
-      this.safeState = state;
-      this.unsafeState = { ...state };
+      this.safeState = state as MultiProjectionState;
+      this.unsafeState = { ...(state as MultiProjectionState) };
     }
   }
   
@@ -404,11 +409,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    */
   private async getProcessedEventsAsync(): Promise<Set<string>> {
     const stateManager = await this.getStateManager();
-    const [hasEvents, events] = await stateManager.tryGetState<string[]>(
+    const [hasEvents, events] = await stateManager.tryGetState(
       this.PROCESSED_EVENTS_KEY
     );
     
-    return new Set(events || []);
+    return new Set((events as string[]) || []);
   }
   
   /**
@@ -431,6 +436,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         trimmed
       );
     } else {
+      const stateManager = await this.getStateManager();
       await stateManager.setState(
         this.PROCESSED_EVENTS_KEY,
         processedArray

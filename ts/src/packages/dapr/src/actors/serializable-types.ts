@@ -57,8 +57,10 @@ export interface SerializableAggregate {
 export function createMetadata(metadata?: Partial<Metadata>): Metadata {
   return {
     timestamp: new Date(),
-    requestId: metadata?.requestId || crypto.randomUUID(),
-    custom: metadata?.custom || {}
+    custom: {
+      ...metadata?.custom,
+      requestId: (metadata as any)?.requestId || crypto.randomUUID()
+    }
   };
 }
 
@@ -76,9 +78,9 @@ export function createSerializableCommandAndMetadata(
   return {
     // Flatten metadata
     commandId: crypto.randomUUID(),
-    causationId: metadata.requestId || '',
-    correlationId: metadata.requestId || '',
-    executedUser: metadata.custom?.user || 'system',
+    causationId: (metadata as any).requestId || metadata.causationId || '',
+    correlationId: (metadata as any).requestId || metadata.correlationId || '',
+    executedUser: (metadata.custom as any)?.user || metadata.executedUser || 'system',
     
     // Command info
     commandTypeName,
