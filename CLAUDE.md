@@ -36,8 +36,7 @@ ts/
 │   ├── config/           # Configuration management
 │   ├── migration/        # Event versioning support
 │   ├── saga/             # Saga/process manager support
-│   ├── testing/          # Testing utilities
-│   └── codegen/          # Code generation tools
+│   └── testing/          # Testing utilities
 └── samples/              # Sample applications
     └── dapr-sample/      # Example using Dapr actors
 ```

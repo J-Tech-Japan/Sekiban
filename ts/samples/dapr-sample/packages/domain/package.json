@@ -14,8 +14,7 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "dev": "tsc --watch",
-    "test": "vitest",
-    "codegen": "sekiban-codegen generate"
+    "test": "vitest"
   },
   "dependencies": {
     "@sekiban/core": "file:../../../../src/packages/core",
@@ -23,7 +22,6 @@
     "neverthrow": "^6.1.0"
   },
   "devDependencies": {
-    "@sekiban/codegen": "file:../../../../src/packages/codegen",
     "@sekiban/testing": "file:../../../../src/packages/testing",
     "@types/node": "^20.10.0",
     "typescript": "^5.3.3",
