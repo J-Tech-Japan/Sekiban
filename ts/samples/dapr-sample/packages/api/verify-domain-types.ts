@@ -43,8 +43,8 @@ try {
   
   // Test projector registration
   console.log('\n🔧 Projectors Registered:');
-  const hasTaskProjector = domainTypes.projectors.has('TaskProjector');
-  console.log(`  TaskProjector: ${hasTaskProjector ? '✅' : '❌'}`);
+  const hasTaskProjector = domainTypes.projectors.has('Task');
+  console.log(`  Task: ${hasTaskProjector ? '✅' : '❌'}`);
   
   // Test lookup functions
   console.log('\n🔍 Lookup Functions:');
@@ -54,8 +54,8 @@ try {
   const taskCreatedEvt = domainTypes.findEventDefinition('TaskCreated');
   console.log(`  findEventDefinition('TaskCreated'): ${taskCreatedEvt ? '✅' : '❌'}`);
   
-  const taskProjector = domainTypes.findProjectorDefinition('TaskProjector');
-  console.log(`  findProjectorDefinition('TaskProjector'): ${taskProjector ? '✅' : '❌'}`);
+  const taskProjector = domainTypes.findProjectorDefinition('Task');
+  console.log(`  findProjectorDefinition('Task'): ${taskProjector ? '✅' : '❌'}`);
   
   // Summary
   const allCommandsOk = commandCount === expectedCommands.length;

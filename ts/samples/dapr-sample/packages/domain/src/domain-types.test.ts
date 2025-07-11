@@ -24,11 +24,11 @@ describe('Domain Types Registration', () => {
     it('should find commands by name', () => {
       const createTaskCommand = domainTypes.commands.get('CreateTask');
       expect(createTaskCommand).toBeDefined();
-      expect(createTaskCommand?.name).toBe('CreateTask');
+      expect(createTaskCommand?.type).toBe('CreateTask');
 
       const assignTaskCommand = domainTypes.commands.get('AssignTask');
       expect(assignTaskCommand).toBeDefined();
-      expect(assignTaskCommand?.name).toBe('AssignTask');
+      expect(assignTaskCommand?.type).toBe('AssignTask');
     });
 
     it('should have correct total number of commands', () => {
@@ -55,11 +55,11 @@ describe('Domain Types Registration', () => {
     it('should find events by name', () => {
       const taskCreatedEvent = domainTypes.events.get('TaskCreated');
       expect(taskCreatedEvent).toBeDefined();
-      expect(taskCreatedEvent?.name).toBe('TaskCreated');
+      expect(taskCreatedEvent?.type).toBe('TaskCreated');
 
       const taskCompletedEvent = domainTypes.events.get('TaskCompleted');
       expect(taskCompletedEvent).toBeDefined();
-      expect(taskCompletedEvent?.name).toBe('TaskCompleted');
+      expect(taskCompletedEvent?.type).toBe('TaskCompleted');
     });
 
     it('should have correct total number of events', () => {
@@ -69,13 +69,13 @@ describe('Domain Types Registration', () => {
 
   describe('Projectors Registration', () => {
     it('should have task projector registered', () => {
-      expect(domainTypes.projectors.has('TaskProjector')).toBe(true);
+      expect(domainTypes.projectors.has('Task')).toBe(true);
     });
 
-    it('should find projector by name', () => {
-      const taskProjector = domainTypes.projectors.get('TaskProjector');
+    it('should find projector by aggregate type', () => {
+      const taskProjector = domainTypes.projectors.get('Task');
       expect(taskProjector).toBeDefined();
-      expect(taskProjector?.name).toBe('TaskProjector');
+      expect(taskProjector?.aggregateType).toBe('Task');
     });
 
     it('should have correct total number of projectors', () => {
@@ -87,19 +87,19 @@ describe('Domain Types Registration', () => {
     it('should find command definition by name', () => {
       const createTaskDef = domainTypes.findCommandDefinition('CreateTask');
       expect(createTaskDef).toBeDefined();
-      expect(createTaskDef?.name).toBe('CreateTask');
+      expect(createTaskDef?.type).toBe('CreateTask');
     });
 
     it('should find event definition by name', () => {
       const taskCreatedDef = domainTypes.findEventDefinition('TaskCreated');
       expect(taskCreatedDef).toBeDefined();
-      expect(taskCreatedDef?.name).toBe('TaskCreated');
+      expect(taskCreatedDef?.type).toBe('TaskCreated');
     });
 
-    it('should find projector definition by name', () => {
-      const taskProjectorDef = domainTypes.findProjectorDefinition('TaskProjector');
+    it('should find projector definition by aggregate type', () => {
+      const taskProjectorDef = domainTypes.findProjectorDefinition('Task');
       expect(taskProjectorDef).toBeDefined();
-      expect(taskProjectorDef?.name).toBe('TaskProjector');
+      expect(taskProjectorDef?.aggregateType).toBe('Task');
     });
 
     it('should return undefined for non-existent definitions', () => {
@@ -112,23 +112,23 @@ describe('Domain Types Registration', () => {
   describe('Global Registry State', () => {
     it('should have all types registered in global registry', () => {
       // Commands
-      expect(globalRegistry.commands.has('CreateTask')).toBe(true);
-      expect(globalRegistry.commands.has('AssignTask')).toBe(true);
-      expect(globalRegistry.commands.has('CompleteTask')).toBe(true);
-      expect(globalRegistry.commands.has('UpdateTask')).toBe(true);
-      expect(globalRegistry.commands.has('DeleteTask')).toBe(true);
-      expect(globalRegistry.commands.has('RevertTaskCompletion')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('CreateTask')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('AssignTask')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('CompleteTask')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('UpdateTask')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('DeleteTask')).toBe(true);
+      expect(globalRegistry.commandDefinitions.has('RevertTaskCompletion')).toBe(true);
 
       // Events
-      expect(globalRegistry.events.has('TaskCreated')).toBe(true);
-      expect(globalRegistry.events.has('TaskAssigned')).toBe(true);
-      expect(globalRegistry.events.has('TaskCompleted')).toBe(true);
-      expect(globalRegistry.events.has('TaskUpdated')).toBe(true);
-      expect(globalRegistry.events.has('TaskDeleted')).toBe(true);
-      expect(globalRegistry.events.has('TaskCompletionReverted')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskCreated')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskAssigned')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskCompleted')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskUpdated')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskDeleted')).toBe(true);
+      expect(globalRegistry.eventDefinitions.has('TaskCompletionReverted')).toBe(true);
 
       // Projectors
-      expect(globalRegistry.projectors.has('TaskProjector')).toBe(true);
+      expect(globalRegistry.projectorDefinitions.has('Task')).toBe(true);
     });
   });
 });
