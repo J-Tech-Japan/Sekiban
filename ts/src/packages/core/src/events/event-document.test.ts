@@ -4,10 +4,10 @@ import {
   SerializableEventDocument,
   toSerializableEventDocument,
   fromSerializableEventDocument
-} from './event-document'
-import { createEvent, IEventPayload } from './event'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { PartitionKeys } from '../documents/partition-keys'
+} from './event-document.js'
+import { createEvent, IEventPayload } from './event.js'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
 
 describe('EventDocument', () => {
   describe('EventDocument class', () => {

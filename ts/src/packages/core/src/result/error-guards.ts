@@ -9,7 +9,7 @@ import {
   ConcurrencyError,
   UnsupportedOperationError,
   ValidationError
-} from './errors'
+} from './errors.js'
 
 /**
  * Type guard for SekibanError

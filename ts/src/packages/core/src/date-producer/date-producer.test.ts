@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import type { ISekibanDateProducer } from './types'
-import { SekibanDateProducer } from './date-producer'
+import type { ISekibanDateProducer } from './types.js'
+import { SekibanDateProducer } from './date-producer.js'
 
 describe('SekibanDateProducer', () => {
   describe('ISekibanDateProducer interface', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { AggregatePayload, Projector } from './types'
-import { Event } from '../events/types'
+import type { AggregatePayload, Projector } from './types.js'
+import { Event } from '../events/types.js'
 
 // Test aggregate payload implementation
 interface TestUserPayload extends AggregatePayload {

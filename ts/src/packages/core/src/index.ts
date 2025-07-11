@@ -16,6 +16,14 @@ export {
 
 export * from './events/event-payload.js';
 export * from './events/index.js';
+export { type IEvent } from './events/event.js';
+export { 
+  SekibanError,
+  CommandValidationError,
+  AggregateNotFoundError
+} from './result/errors.js';
+export { InMemoryEventStore } from './storage/in-memory-event-store.js';
+export { StorageProviderType } from './storage/storage-provider.js';
 
 export {
   Aggregate,
@@ -26,12 +34,29 @@ export {
 } from './aggregates/aggregate.js';
 
 export * from './documents/partition-keys.js';
+export { PartitionKeys } from './documents/partition-keys.js';
 export { SortableUniqueId } from './documents/sortable-unique-id.js';
 export * from './result/errors.js';
 export * from './storage/index.js';
 
 // Schema Registry (modern schema-first approach)
 export * from './schema-registry/index.js';
+
+// Explicitly export defineProjector and other schema functions
+export { 
+  defineEvent,
+  defineCommand,
+  defineProjector,
+  command,
+  SchemaRegistry,
+  SchemaExecutor,
+  createSchemaDomainTypes,
+  createSekibanDomainTypesFromGlobalRegistry,
+  globalRegistry,
+  registerEvent,
+  registerCommand,
+  registerProjector
+} from './schema-registry/index.js';
 
 // Re-export ICommandContext types for convenience
 export type {

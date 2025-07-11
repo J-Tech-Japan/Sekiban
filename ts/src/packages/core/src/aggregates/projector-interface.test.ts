@@ -5,11 +5,11 @@ import {
   createProjector,
   ProjectionResult,
   EventOrNone
-} from './projector-interface'
-import { IAggregatePayload } from './aggregate-payload'
-import { IEventPayload } from '../events/event-payload'
-import { IEvent, createEvent } from '../events/event'
-import { PartitionKeys } from '../documents/partition-keys'
+} from './projector-interface.js'
+import { IAggregatePayload } from './aggregate-payload.js'
+import { IEventPayload } from '../events/event-payload.js'
+import { IEvent, createEvent } from '../events/event.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
 
 // Test event types
 class UserCreated implements IEventPayload {

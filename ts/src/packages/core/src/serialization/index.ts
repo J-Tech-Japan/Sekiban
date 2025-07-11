@@ -1,9 +1,9 @@
 /**
  * Export JSON serialization types and implementations
  */
-export * from './json';
+export * from './json.js';
 
 /**
  * Export event serialization types and implementations
  */
-export * from './event-format';
+export * from './event-format.js';
