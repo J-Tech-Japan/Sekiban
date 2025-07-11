@@ -41,6 +41,18 @@ When running the application with the Aspire host, use the following command:
 dotnet run --project MyProject.AppHost
 ```
 
+### Running the Application with the Docker
+When running the application with the Docker, use the following command:
+
+```bash
+# export devstoreaccount
+export STORAGE_BASE="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+docker compose build
+docker compose up -d
+```
+
+NOTE: If you would like to use dashboard, you can uncomment out silo port in `docker-compose.yml` and `config.UseDashboard` in `MyProject.ApiService/Program.cs`
+
 ## Core Concepts
 
 Event Sourcing: Store all state changes as immutable events. Current state is derived by replaying events.
