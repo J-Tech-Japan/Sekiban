@@ -246,6 +246,13 @@ async function setupDaprActorsWithApp(app: express.Express) {
 
   AggregateEventHandlerActorFactory.configure(eventStore);
 
+  // Create actor classes before DaprServer initialization
+  const AggregateActorClass = AggregateActorFactory.createActorClass();
+  const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
+  
+  console.log('[DEBUG] AggregateActorClass name:', AggregateActorClass.name);
+  console.log('[DEBUG] EventHandlerActorClass name:', EventHandlerActorClass.name);
+
   // Create DaprServer and pass the Express app directly
   const daprServer = new DaprServer({
     serverHost: "127.0.0.1",
@@ -255,38 +262,25 @@ async function setupDaprActorsWithApp(app: express.Express) {
     clientOptions: {
       daprHost: "127.0.0.1",
       daprPort: String(config.DAPR_HTTP_PORT),
-      communicationProtocol: CommunicationProtocolEnum.HTTP,
-      actor: {
-        actorIdleTimeout: "1h",
-        actorScanInterval: "30s",
-        drainOngoingCallTimeout: "1m",
-        drainRebalancedActors: true
-      }
+      communicationProtocol: CommunicationProtocolEnum.HTTP
+    },
+    // Register all actor types during initialization
+    actor: {
+      actorIdleTimeout: "1h",
+      actorScanInterval: "30s",
+      drainOngoingCallTimeout: "1m",
+      drainRebalancedActors: true,
+      actorTypes: [
+        AggregateActorClass,
+        EventHandlerActorClass
+      ]
     }
   });
 
-  // CRITICAL: Initialize actor runtime FIRST (before registering actors)
+  // CRITICAL: Initialize actor runtime FIRST (actors are already registered in constructor)
   await daprServer.actor.init();
   logger.info('Actor runtime initialized');
-
-  // Register actors AFTER init
-  console.log('[DEBUG] Testing direct AggregateActor registration...');
-  const ActorClass = AggregateActorFactory.createActorClass();
-  console.log('[DEBUG] Created actor class:', ActorClass.name);
-  console.log('[DEBUG] Actor class methods:', Object.getOwnPropertyNames(ActorClass.prototype));
-  console.log('[DEBUG] Actor parent prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(ActorClass.prototype)));
-  console.log('[DEBUG] Actor class has testMethod:', 'testMethod' in ActorClass.prototype);
-  console.log('[DEBUG] Actor class has executeCommandAsync:', 'executeCommandAsync' in ActorClass.prototype);
-  
-  // Try registering with explicit actor type
-  console.log('[DEBUG] Registering actor with explicit type...');
-  daprServer.actor.registerActor(ActorClass);
-  
-  // Register AggregateEventHandlerActor
-  console.log('[DEBUG] Registering AggregateEventHandlerActor...');
-  const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
-  daprServer.actor.registerActor(EventHandlerActorClass);
-  logger.info('Registered AggregateActor');
+  logger.info('Registered actors: AggregateActor, AggregateEventHandlerActor');
 
   // Add diagnostic logging to catch any exceptions
   console.log('[DEBUG] Adding diagnostic logging...');
@@ -309,8 +303,6 @@ async function setupDaprActorsWithApp(app: express.Express) {
     console.log('[DEBUG] Could not install diagnostic handler');
   }
 
-  daprServer.actor.registerActor(AggregateEventHandlerActorFactory.createActorClass());
-  logger.info('Registered AggregateEventHandlerActor');
   
   logger.info('Dapr actors integrated with Express app');
   
