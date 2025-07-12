@@ -15,6 +15,46 @@ import { getExecutor } from '../setup/executor.js';
 
 const router: ExpressRouter = Router();
 
+// Test actor directly
+router.get(
+  '/test-actor',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      console.log('[TEST] Testing direct actor invocation...');
+      
+      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
+      const { AggregateActorFactory } = await import('@sekiban/dapr');
+      
+      const daprClient = new DaprClient({
+        daprHost: "127.0.0.1",
+        daprPort: "3500"
+      });
+      
+      const AggregateActorClass = AggregateActorFactory.createActorClass();
+      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
+      const actorId = 'test-actor-123';
+      const actor = builder.build(new ActorId(actorId));
+      
+      console.log('[TEST] Calling actor testMethod...');
+      const testResult = await (actor as any).testMethod();
+      console.log('[TEST] Test method result:', testResult);
+      
+      res.json({ 
+        success: true, 
+        actorId,
+        testResult,
+        message: 'Actor test completed' 
+      });
+    } catch (error) {
+      console.error('[TEST] Actor test error:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+  }
+);
+
 // Helper to create HTTP errors
 class HttpError extends Error {
   constructor(message: string, public statusCode: number, public code: string) {
@@ -294,6 +334,53 @@ router.post(
       });
     } catch (error) {
       next(error);
+    }
+  }
+);
+
+// Test loadAggregateAsync directly
+router.get(
+  '/tasks/:taskId/aggregate-state',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { taskId } = req.params;
+      console.log('[TEST] Testing loadAggregateAsync for task:', taskId);
+      
+      // Create the actor ID in the same format as the executor
+      const aggregateId = `default@Task@${taskId}=TaskProjector`;
+      
+      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
+      const { AggregateActorFactory } = await import('@sekiban/dapr');
+      
+      const daprClient = new DaprClient({
+        daprHost: "127.0.0.1",
+        daprPort: String(process.env.DAPR_HTTP_PORT || "3500")
+      });
+      
+      const AggregateActorClass = AggregateActorFactory.createActorClass();
+      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
+      const actor = builder.build(new ActorId(aggregateId));
+      
+      console.log('[TEST] Calling loadAggregateAsync...');
+      const partitionKeys = {
+        aggregateId: taskId,
+        group: 'Task',
+        rootPartitionKey: 'default'
+      };
+      const aggregateState = await (actor as any).loadAggregateAsync(partitionKeys);
+      console.log('[TEST] Aggregate state:', aggregateState);
+      
+      res.json({ 
+        success: true, 
+        aggregateId,
+        aggregateState,
+        message: 'Aggregate state loaded successfully' 
+      });
+    } catch (error) {
+      console.error('[TEST] Load aggregate error:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
   }
 );

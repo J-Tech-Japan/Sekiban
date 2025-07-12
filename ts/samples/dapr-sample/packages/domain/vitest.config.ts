@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts']
-  }
+  },
+  resolve: {
+    alias: {
+      'uuid': 'uuid',
+    },
+  },
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { IEventPayload, isEventPayload } from './event-payload'
+import { IEventPayload, isEventPayload } from './event-payload.js'
 
 describe('IEventPayload', () => {
   describe('Type marker interface', () => {

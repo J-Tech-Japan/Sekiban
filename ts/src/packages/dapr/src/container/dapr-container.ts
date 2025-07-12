@@ -11,6 +11,7 @@ export interface DaprActorDependencies {
   actorProxyFactory: IActorProxyFactory;
   serializationService: any;
   eventStore?: any;
+  eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>;
 }
 
 /**

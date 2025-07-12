@@ -1,11 +1,11 @@
-import { PartitionKeys, IAggregateProjector } from '@sekiban/core';
+import { PartitionKeys, IAggregateProjector, ITypedAggregatePayload } from '@sekiban/core';
 import { Result, ok, err } from 'neverthrow';
 
 /**
  * Holds partition keys and projector information for aggregate actors.
  * This is the TypeScript equivalent of C# Dapr's PartitionKeysAndProjector.
  */
-export class PartitionKeysAndProjector<TPayload> {
+export class PartitionKeysAndProjector<TPayload extends ITypedAggregatePayload> {
   constructor(
     public readonly partitionKeys: PartitionKeys,
     public readonly projector: IAggregateProjector<TPayload>
@@ -22,7 +22,7 @@ export class PartitionKeysAndProjector<TPayload> {
    * Creates PartitionKeysAndProjector from a grain key string
    * Format: "PartitionKeysString=ProjectorType" (matching C# format)
    */
-  static fromGrainKey<TPayload>(
+  static fromGrainKey<TPayload extends ITypedAggregatePayload>(
     grainKey: string,
     projectorRegistry: Map<string, IAggregateProjector<TPayload>>
   ): Result<PartitionKeysAndProjector<TPayload>, Error> {

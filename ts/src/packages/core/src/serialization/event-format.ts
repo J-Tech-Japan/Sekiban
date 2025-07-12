@@ -1,5 +1,5 @@
 import { Event, IEventPayload } from '../events/index.js';
-import { IJsonSerializer, defaultJsonSerializer } from './json';
+import { IJsonSerializer, defaultJsonSerializer } from './json.js';
 import { Result, ok, err } from 'neverthrow';
 import { SerializationError } from '../result/index.js';
 import { SortableUniqueId, SortableUniqueIdUtils, PartitionKeys, Metadata } from '../documents/index.js';

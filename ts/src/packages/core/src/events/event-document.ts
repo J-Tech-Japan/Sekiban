@@ -1,6 +1,6 @@
 import { Result, ok, err } from 'neverthrow'
-import { IEvent, Event, createEventMetadata } from './event'
-import { IEventPayload } from './event-payload'
+import { IEvent, Event, createEventMetadata } from './event.js'
+import { IEventPayload } from './event-payload.js'
 import { SortableUniqueId } from '../documents/sortable-unique-id.js'
 import { PartitionKeys } from '../documents/partition-keys.js'
 import { SerializationError, ValidationError } from '../result/errors.js'

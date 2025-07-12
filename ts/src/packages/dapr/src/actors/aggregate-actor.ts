@@ -2,12 +2,16 @@ import { AbstractActor, type DaprClient, type ActorId } from '@dapr/dapr';
 import { AggregateActorImpl } from './aggregate-actor-impl.js';
 import type { 
   SerializableCommandAndMetadata,
-  SekibanCommandResponse,
-  IDaprSerializationService,
-  IActorProxyFactory
+  SekibanCommandResponse
 } from '../executor/interfaces.js';
+import type { IActorProxyFactory } from '../types/index.js';
 import { getDaprCradle } from '../container/index.js';
-import type { Aggregate, ITypedAggregatePayload } from '@sekiban/core';
+import type { 
+  Aggregate, 
+  ITypedAggregatePayload,
+  IAggregateProjector,
+  EmptyAggregatePayload
+} from '@sekiban/core';
 
 /**
  * Thin wrapper actor that delegates to AggregateActorImpl
@@ -19,6 +23,11 @@ import type { Aggregate, ITypedAggregatePayload } from '@sekiban/core';
 export class AggregateActor extends AbstractActor {
   private impl!: AggregateActorImpl;
   private actorIdString!: string;
+  
+  // Explicitly define actor type for Dapr
+  static get actorType() { 
+    return "AggregateActor"; 
+  }
 
   // Must keep this exact constructor signature for Dapr
   constructor(daprClient: DaprClient, id: ActorId) {
@@ -38,10 +47,6 @@ export class AggregateActor extends AbstractActor {
         cradle.domainTypes,
         cradle.serviceProvider || {},
         cradle.actorProxyFactory,
-        cradle.serializationService || {
-          async deserializeAggregateAsync(surrogate: any) { return surrogate; },
-          async serializeAggregateAsync(aggregate: any) { return aggregate; }
-        },
         cradle.eventStore
       );
       
@@ -77,14 +82,24 @@ export class AggregateActor extends AbstractActor {
 
   async executeCommandAsync<
     TCommand,
-    TProjector,
-    TPayloadUnion,
-    TAggregatePayload
+    TProjector extends IAggregateProjector<TPayloadUnion>,
+    TPayloadUnion extends ITypedAggregatePayload,
+    TAggregatePayload extends TPayloadUnion | EmptyAggregatePayload = TPayloadUnion | EmptyAggregatePayload
   >(
     commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
   ): Promise<SekibanCommandResponse> {
-    console.log(`[AggregateActorWrapper] Delegating executeCommandAsync`);
-    return this.impl.executeCommandAsync(commandAndMetadata);
+    console.log(`[AggregateActorWrapper] executeCommandAsync called with actor ID: ${this.getActorId()?.toString()}`);
+    console.log(`[AggregateActorWrapper] Command type: ${commandAndMetadata?.commandType}`);
+    console.log(`[AggregateActorWrapper] Delegating to implementation...`);
+    
+    try {
+      const result = await this.impl.executeCommandAsync(commandAndMetadata);
+      console.log(`[AggregateActorWrapper] executeCommandAsync completed with result:`, result);
+      return result;
+    } catch (error) {
+      console.error(`[AggregateActorWrapper] executeCommandAsync error:`, error);
+      throw error;
+    }
   }
 
   async getAggregateStateAsync<TPayload extends ITypedAggregatePayload>(): Promise<Aggregate<TPayload> | null> {
@@ -107,14 +122,27 @@ export class AggregateActor extends AbstractActor {
     return this.impl.rebuildStateAsync();
   }
 
-  async receiveReminder(reminderName: string, state: any): Promise<void> {
-    console.log(`[AggregateActorWrapper] Delegating receiveReminder: ${reminderName}`);
-    return this.impl.receiveReminder(reminderName, state);
+  async receiveReminder(_data: string): Promise<void> {
+    console.log(`[AggregateActorWrapper] Delegating receiveReminder: ${_data}`);
+    return this.impl.receiveReminder(_data, {});
   }
 
   async getPartitionInfoAsync(): Promise<any> {
     console.log(`[AggregateActorWrapper] Delegating getPartitionInfoAsync`);
     return this.impl.getPartitionInfoAsync();
+  }
+
+  // Additional methods required by the interface
+  async queryAsync(query: any): Promise<any> {
+    console.log(`[AggregateActorWrapper] queryAsync called - not implemented`);
+    // TODO: Implement query functionality
+    return { error: 'Query functionality not yet implemented' };
+  }
+
+  async loadAggregateAsync(partitionKeys: any): Promise<any> {
+    console.log(`[AggregateActorWrapper] loadAggregateAsync called`);
+    // This delegates to getAggregateStateAsync
+    return this.getAggregateStateAsync();
   }
 
   // Test method for debugging

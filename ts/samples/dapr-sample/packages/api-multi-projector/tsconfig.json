@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../domain" },
+    { "path": "../../../src/packages/core" },
+    { "path": "../../../src/packages/dapr" },
+    { "path": "../../../src/packages/postgres" }
+  ]
+}

@@ -1,5 +1,5 @@
 import { Result, ok, err } from 'neverthrow';
-import { IQuery, QueryContext, QueryResult, IWaitForSortableUniqueId } from './types';
+import { IQuery, QueryContext, QueryResult, IWaitForSortableUniqueId } from './types.js';
 import { QueryExecutionError } from '../result/index.js';
 import { SortableUniqueId } from '../documents/index.js';
 

@@ -1,4 +1,4 @@
-import type { ISekibanDateProducer } from './types'
+import type { ISekibanDateProducer } from './types.js'
 
 /**
  * Create a mock date producer with fixed dates for testing

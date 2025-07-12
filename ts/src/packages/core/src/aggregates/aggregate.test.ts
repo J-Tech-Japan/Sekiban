@@ -4,10 +4,10 @@ import {
   Aggregate,
   createEmptyAggregate,
   isEmptyAggregate
-} from './aggregate'
-import { PartitionKeys } from '../documents/partition-keys'
-import { SortableUniqueId } from '../documents/sortable-unique-id'
-import { IAggregatePayload } from './aggregate-payload'
+} from './aggregate.js'
+import { PartitionKeys } from '../documents/partition-keys.js'
+import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+import { IAggregatePayload } from './aggregate-payload.js'
 
 // Test payload types
 class UserPayload implements IAggregatePayload {

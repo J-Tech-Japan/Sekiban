@@ -4,9 +4,9 @@ import {
   IEvent,
   PartitionKeys,
   AggregateProjector,
-  SekibanError,
   SortableUniqueId,
-  EmptyAggregatePayload
+  EmptyAggregatePayload,
+  SekibanError
 } from '@sekiban/core';
 import type { IAggregateEventHandlerActor, SerializableEventDocument } from '../actors/interfaces.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
@@ -66,7 +66,7 @@ export class DaprRepository {
       );
 
       if (!response.isSuccess) {
-        return err(new SekibanError(response.errorMessage || 'Failed to append events'));
+        return err(new SekibanError(response.error || 'Failed to append events'));
       }
 
       // Note: Unlike the previous implementation, we should NOT update currentAggregate here

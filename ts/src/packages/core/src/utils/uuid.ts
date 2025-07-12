@@ -1,5 +1,5 @@
 import { v4 as uuidv4, v5 as uuidv5 } from 'uuid'
-import * as crypto from 'crypto'
+import { randomBytes } from 'node:crypto'
 
 /**
  * Generate a new UUID v4
@@ -20,21 +20,21 @@ export function createVersion7(): string {
   const timestampHex = timestamp.toString(16).padStart(12, '0')
   
   // Generate random bytes for the rest
-  const randomBytes = crypto.randomBytes(10)
+  const randomBytesData = randomBytes(10)
   
   // Set version (0111 = 7) in bits 48-51
-  randomBytes[0] = (randomBytes[0]! & 0x0f) | 0x70
+  randomBytesData[0] = (randomBytesData[0]! & 0x0f) | 0x70
   
   // Set variant (10) in bits 64-65
-  randomBytes[2] = (randomBytes[2]! & 0x3f) | 0x80
+  randomBytesData[2] = (randomBytesData[2]! & 0x3f) | 0x80
   
   // Format as UUID
   const uuid = [
     timestampHex.substring(0, 8),                    // time_low
     timestampHex.substring(8, 12),                   // time_mid
-    randomBytes.subarray(0, 2).toString('hex'),     // time_hi_and_version
-    randomBytes.subarray(2, 4).toString('hex'),     // clock_seq_hi_and_reserved + clock_seq_low
-    randomBytes.subarray(4, 10).toString('hex')     // node
+    randomBytesData.subarray(0, 2).toString('hex'),     // time_hi_and_version
+    randomBytesData.subarray(2, 4).toString('hex'),     // clock_seq_hi_and_reserved + clock_seq_low
+    randomBytesData.subarray(4, 10).toString('hex')     // node
   ].join('-')
   
   return uuid

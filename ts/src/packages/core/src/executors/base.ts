@@ -4,7 +4,7 @@ import {
   SekibanExecutorConfig,
   ISekibanTransaction,
   ITransactionalSekibanExecutor 
-} from './types';
+} from './types.js';
 import { 
   ICommand, 
   CommandContext, 

@@ -1,9 +1,7 @@
 import type { 
   Aggregate,
   PartitionKeys,
-  EventDocument,
   CommandExecutionResult,
-  IEventPayload,
   ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,

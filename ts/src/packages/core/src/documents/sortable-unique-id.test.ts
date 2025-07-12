@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { SortableUniqueId } from './sortable-unique-id'
+import { SortableUniqueId } from './sortable-unique-id.js'
 
 describe('SortableUniqueId', () => {
   describe('generate', () => {

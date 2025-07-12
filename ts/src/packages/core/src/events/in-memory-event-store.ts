@@ -1,6 +1,6 @@
 import { Result, ok, err, ResultAsync } from 'neverthrow'
-import { IEvent } from './event'
-import { IEventPayload } from './event-payload'
+import { IEvent } from './event.js'
+import { IEventPayload } from './event-payload.js'
 import { PartitionKeys } from '../documents/partition-keys.js'
 import { SortableUniqueId } from '../documents/sortable-unique-id.js'
 import { EventStoreError, ConcurrencyError } from '../result/errors.js'
