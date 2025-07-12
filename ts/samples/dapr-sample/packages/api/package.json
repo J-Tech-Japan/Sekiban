@@ -16,13 +16,14 @@
     "start:simple-di": "node dist/simple-server-with-di.js",
     "start:wrapper": "node dist/simple-server-wrapper.js",
     "test": "vitest",
+    "test:command": "tsx src/test-command-debug.ts",
     "init-db": "tsx src/init-database.ts",
     "start:postgres": "USE_POSTGRES=true npm run start"
   },
   "dependencies": {
     "@dapr-sample/domain": "workspace:*",
     "@dapr-sample/workflows": "workspace:*",
-    "@dapr/dapr": "^3.3.0",
+    "@dapr/dapr": "^3.5.2",
     "@sekiban/core": "file:../../../../src/packages/core",
     "@sekiban/dapr": "file:../../../../src/packages/dapr",
     "@sekiban/postgres": "file:../../../../src/packages/postgres",

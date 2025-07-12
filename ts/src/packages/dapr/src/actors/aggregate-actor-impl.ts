@@ -4,13 +4,12 @@ import type {
   IAggregateProjector,
   ITypedAggregatePayload,
   EmptyAggregatePayload,
-  PartitionKeys,
   Aggregate,
   Metadata,
   SekibanError,
-  IEvent,
-  IEventPayload
+  IEvent
 } from '@sekiban/core';
+import { PartitionKeys } from '@sekiban/core';
 import { SortableUniqueId, globalRegistry } from '@sekiban/core';
 import { ActorId } from '@dapr/dapr';
 import { ok, err } from 'neverthrow';
@@ -21,7 +20,6 @@ import type {
 import type { IActorProxyFactory } from '../types/index.js';
 import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { IAggregateEventHandlerActor, SerializableEventDocument } from './interfaces.js';
-
 /**
  * Domain implementation of AggregateActor with proper constructor injection
  * This class contains all the business logic and is testable
@@ -35,11 +33,12 @@ export class AggregateActorImpl {
     private readonly domainTypes: SekibanDomainTypes,
     private readonly serviceProvider: any,
     private readonly actorProxyFactory: IActorProxyFactory,
-    private readonly eventStore?: any
+    private readonly eventStore?: any,
+    private readonly eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>
   ) {
     console.log(`[AggregateActorImpl] Created for actor ${actorId}`);
     console.log(`[AggregateActorImpl] Available command types:`, 
-      this.domainTypes.commandTypes.getCommandTypes().map(c => c.name)
+      this.domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name)
     );
   }
 
@@ -93,7 +92,7 @@ export class AggregateActorImpl {
         return {
           success: false,
           error: `Unknown command type: ${commandType}`,
-          availableCommands: this.domainTypes.commandTypes.getCommandTypes().map(c => c.name)
+          availableCommands: this.domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name)
         } as any;
       }
 
@@ -134,9 +133,11 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Found command definition from registry:', commandDef);
       console.log('[AggregateActorImpl] Command def type:', typeof commandDef);
       console.log('[AggregateActorImpl] Command def keys:', commandDef ? Object.keys(commandDef) : 'null');
+      console.log('[AggregateActorImpl] Command def handlers:', commandDef?.handlers ? Object.keys(commandDef.handlers) : 'no handlers');
+      console.log('[AggregateActorImpl] Has handle in handlers?', commandDef?.handlers?.handle ? 'yes' : 'no');
       
       // For schema-based commands, we need to execute the handle function
-      const events: IEventPayload[] = [];
+      const events: any[] = [];
       
       try {
         // Create context for the handler that implements ICommandContext interface
@@ -155,8 +156,14 @@ export class AggregateActorImpl {
           getAggregate: () => {
             return ok(currentState || { version: 0, events: [], lastSortableUniqueId: '' });
           },
-          appendEvent: (eventPayload: IEventPayload) => {
+          appendEvent: (eventPayload: any) => {
+            console.log('[AggregateActorImpl] !!!! appendEvent called !!!!');
+            console.log('[AggregateActorImpl] appendEvent payload:', eventPayload);
+            console.log('[AggregateActorImpl] appendEvent payload type:', typeof eventPayload);
+            console.log('[AggregateActorImpl] appendEvent payload constructor:', eventPayload?.constructor?.name);
             events.push(eventPayload);
+            console.log('[AggregateActorImpl] Total events collected after push:', events.length);
+            console.log('[AggregateActorImpl] Events array:', events);
             return ok({
               id: crypto.randomUUID(),
               eventType: eventPayload.constructor.name,
@@ -194,18 +201,57 @@ export class AggregateActorImpl {
         
         console.log('[AggregateActorImpl] Command instance created:', typeof commandInstance);
         console.log('[AggregateActorImpl] Command instance has handle?', typeof commandInstance.handle === 'function');
+        console.log('[AggregateActorImpl] Command instance details:', {
+          type: typeof commandInstance,
+          constructor: commandInstance?.constructor?.name,
+          keys: commandInstance ? Object.keys(commandInstance) : 'null',
+          isSchemaCommand: commandInstance && 'data' in commandInstance && 'handle' in commandInstance
+        });
+        
+        // Check if we need to get the handle function from the command definition
+        let handleFunction = commandInstance.handle;
+        
+        // For schema-based commands, the handle function is in handlers.handle
+        if (!handleFunction && commandDef.handlers?.handle) {
+          console.log('[AggregateActorImpl] Using handle function from command definition handlers');
+          handleFunction = commandDef.handlers.handle;
+        } else if (!handleFunction && commandDef.handle) {
+          console.log('[AggregateActorImpl] Using handle function from command definition');
+          handleFunction = commandDef.handle;
+        }
         
         // Call the handle method on the command instance
-        if (typeof commandInstance.handle === 'function') {
+        if (typeof handleFunction === 'function') {
           console.log('[AggregateActorImpl] Calling command handle method...');
           console.log('[AggregateActorImpl] Passing context:', typeof context, context ? 'defined' : 'undefined');
-          console.log('[AggregateActorImpl] Context has getPartitionKeys?', context && typeof context.getPartitionKeys === 'function');
-          // The handle method expects two parameters: (command, context)
-          // The first parameter is ignored by SchemaCommand as it uses this.data internally
-          const result = commandInstance.handle(commandData, context);
+          console.log('[AggregateActorImpl] Context has appendEvent?', context && typeof context.appendEvent === 'function' ? 'yes' : 'no');
+          console.log('[AggregateActorImpl] Context.appendEvent details:', context && typeof context.appendEvent === 'function' ? 'function exists' : 'missing');
+          
+          let result;
+          try {
+            // If we have a command instance with handle method, call it directly
+            if (commandInstance && typeof commandInstance.handle === 'function') {
+              console.log('[AggregateActorImpl] Calling handle on command instance');
+              // SchemaCommand.handle expects (command, context) but ignores the first parameter
+              result = commandInstance.handle(commandData, context);
+            } else if (typeof handleFunction === 'function') {
+              console.log('[AggregateActorImpl] Calling handle function directly');
+              // Call the handle function directly with data and context
+              result = handleFunction(commandData, context);
+            } else {
+              throw new Error('No handle method available');
+            }
+          } catch (handleError) {
+            console.error('[AggregateActorImpl] Command handle threw error:', handleError);
+            throw handleError;
+          }
           
           // Handle sync or async result
           const handleResult = result instanceof Promise ? await result : result;
+          
+          console.log('[AggregateActorImpl] Handle result:', handleResult);
+          console.log('[AggregateActorImpl] Handle result type:', typeof handleResult);
+          console.log('[AggregateActorImpl] Is Result type?', handleResult && typeof handleResult === 'object' && 'isOk' in handleResult);
           
           // Check if it's a Result type (neverthrow)
           if (handleResult && typeof handleResult === 'object' && 'isOk' in handleResult) {
@@ -216,13 +262,24 @@ export class AggregateActorImpl {
                 error: handleResult.error.message || 'Command handler failed'
               } as any;
             }
-            // If OK, the events are already appended via context.appendEvent
+            // If OK, the result value should be the events array
+            const handlerEvents = handleResult.value;
+            console.log('[AggregateActorImpl] Handler returned events:', handlerEvents);
+            console.log('[AggregateActorImpl] Handler events type:', typeof handlerEvents);
+            console.log('[AggregateActorImpl] Is array?', Array.isArray(handlerEvents));
+            
+            if (Array.isArray(handlerEvents)) {
+              console.log('[AggregateActorImpl] Adding', handlerEvents.length, 'events from handler');
+              events.push(...handlerEvents);
+            }
           }
         } else {
-          console.error('[AggregateActorImpl] Command instance does not have handle function');
+          console.error('[AggregateActorImpl] Command handle function not found');
+          console.error('[AggregateActorImpl] Command instance:', commandInstance);
+          console.error('[AggregateActorImpl] Command definition:', commandDef);
           return {
             success: false,
-            error: 'Command instance does not have handle function'
+            error: 'Command handle function not found'
           } as any;
         }
       } catch (error) {
@@ -234,8 +291,10 @@ export class AggregateActorImpl {
       }
       
       console.log('[AggregateActorImpl] Command generated', events.length, 'events');
+      console.log('[AggregateActorImpl] Events array content:', JSON.stringify(events, null, 2));
       
       if (events.length === 0) {
+        console.log('[AggregateActorImpl] WARNING: No events generated, returning early without calling EventHandlerActor');
         // No events generated, return success with current state
         return {
           aggregateId: this.actorId,
@@ -255,10 +314,12 @@ export class AggregateActorImpl {
       
       for (const eventPayload of events) {
         const sortableUniqueId = SortableUniqueId.generate();
+        // Get event type from the payload's type property (created by defineEvent)
+        const eventType = eventPayload.type || eventPayload.constructor.name;
         const eventDoc: SerializableEventDocument = {
           id: crypto.randomUUID(),
           sortableUniqueId: sortableUniqueId.toString(),
-          eventType: eventPayload.constructor.name,
+          eventType: eventType,
           aggregateId: partitionKeys.aggregateId,
           partitionKeys: partitionKeys,
           version: version++,
@@ -275,30 +336,29 @@ export class AggregateActorImpl {
       }
       
       console.log('[AggregateActorImpl] Created', eventDocuments.length, 'event documents');
+      console.log('[AggregateActorImpl] Event documents:', JSON.stringify(eventDocuments, null, 2));
       
-      // Get the event handler actor
+      // Call AggregateEventHandlerActor in the separate service
       const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
-      // Use ActorProxyBuilder for actor-to-actor communication
-      console.log('[AggregateActorImpl] Creating event handler actor proxy via ActorProxyBuilder...');
-      const eventHandlerProxy = this.actorProxyFactory.createActorProxy(
+      // Create proxy for AggregateEventHandlerActor (in separate service)
+      const eventHandlerActor = this.actorProxyFactory.createActorProxy(
         new ActorId(eventHandlerActorId),
         'AggregateEventHandlerActor'
-      ) as IAggregateEventHandlerActor;
+      ) as any;
       
-      // Append events to the event handler
-      console.log('[AggregateActorImpl] Appending events to event handler via ActorProxyBuilder...');
-      const appendResult = await eventHandlerProxy.appendEventsAsync(
+      console.log('[AggregateActorImpl] Calling appendEventsAsync on AggregateEventHandlerActor');
+      const appendResult = await eventHandlerActor.appendEventsAsync(
         currentState?.lastSortableUniqueId || '',
         eventDocuments
       );
       
-      if (!appendResult.isSuccess) {
-        console.error('[AggregateActorImpl] Failed to append events:', appendResult.error);
+      if (!appendResult || !appendResult.isSuccess) {
+        console.error('[AggregateActorImpl] Failed to append events:', appendResult?.error);
         return {
           success: false,
-          error: appendResult.error || 'Failed to append events'
+          error: appendResult?.error || 'Failed to append events'
         } as any;
       }
       
@@ -342,19 +402,19 @@ export class AggregateActorImpl {
     try {
       // Get the event handler actor
       const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
+      console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
-      // Use ActorProxyBuilder for actor-to-actor communication
-      console.log('[AggregateActorImpl] Creating event handler actor proxy via ActorProxyBuilder...');
-      const eventHandlerProxy = this.actorProxyFactory.createActorProxy(
+      // Create proxy for AggregateEventHandlerActor (in separate service)
+      const eventHandlerActor = this.actorProxyFactory.createActorProxy(
         new ActorId(eventHandlerActorId),
         'AggregateEventHandlerActor'
-      ) as IAggregateEventHandlerActor;
+      ) as any;
       
-      console.log('[AggregateActorImpl] Calling event handler actor via ActorProxyBuilder...');
-      const events = await eventHandlerProxy.getAllEventsAsync();
-      console.log('[AggregateActorImpl] Loaded', events.length, 'events from event handler');
+      console.log('[AggregateActorImpl] Calling getAllEventsAsync on AggregateEventHandlerActor');
+      const events = await eventHandlerActor.getAllEventsAsync();
+      console.log('[AggregateActorImpl] Loaded', (events as any[]).length, 'events from event handler');
       
-      if (events.length === 0) {
+      if (!events || events.length === 0) {
         return null;
       }
       
@@ -362,9 +422,9 @@ export class AggregateActorImpl {
       let aggregate: any = null;
       let lastSortableUniqueId = '';
       
-      for (const eventDoc of events) {
+      for (const eventDoc of (events as any[])) {
         // Create event instance from payload
-        const event: IEvent<IEventPayload> = {
+        const event: IEvent<any> = {
           id: eventDoc.id,
           sortableUniqueId: SortableUniqueId.fromString(eventDoc.sortableUniqueId),
           partitionKeys: eventDoc.partitionKeys,
@@ -415,14 +475,29 @@ export class AggregateActorImpl {
   >(): Promise<Aggregate<TPayload> | null> {
     console.log(`[AggregateActorImpl] getAggregateStateAsync called`);
     
-    if (!this.currentPartitionKeysAndProjector) {
-      return null;
+    // Extract partition keys from actor ID if not already set
+    let partitionKeys: PartitionKeys;
+    let projector: IAggregateProjector<any>;
+    
+    if (this.currentPartitionKeysAndProjector) {
+      partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
+      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+    } else {
+      // Parse actor ID: "rootPartition@group@aggregateId=projectorType"
+      const parts = this.actorId.split('@');
+      const lastPart = parts[parts.length - 1];
+      const [aggregateId, projectorType] = lastPart.split('=');
+      const group = parts[1];
+      const rootPartition = parts[0];
+      
+      partitionKeys = new PartitionKeys(aggregateId, group, rootPartition);
+      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      
+      console.log(`[AggregateActorImpl] Extracted from actor ID - group: ${group}, aggregateId: ${aggregateId}, rootPartition: ${rootPartition}`);
     }
-
-    const partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
-    const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
     
     if (!projector) {
+      console.log(`[AggregateActorImpl] No projector found for group: ${partitionKeys.group}`);
       return null;
     }
     
@@ -473,6 +548,36 @@ export class AggregateActorImpl {
     
     if (reminderName === 'SaveState') {
       await this.saveStateCallbackAsync();
+    }
+  }
+
+  /**
+   * Call event handler actor directly via HTTP to avoid ActorProxyBuilder issues
+   */
+  private async callEventHandlerDirectly(
+    actorId: string, 
+    methodName: string, 
+    args: any[]
+  ): Promise<any> {
+    try {
+      // For same-app communication, we can use HTTP directly
+      const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/actors/AggregateEventHandlerActor/${actorId}/method/${methodName}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'dapr-app-id': process.env.DAPR_APP_ID || 'sekiban-app'
+        },
+        body: JSON.stringify(args)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error(`[AggregateActorImpl] Direct HTTP call failed for ${methodName}:`, error);
+      throw error;
     }
   }
 }

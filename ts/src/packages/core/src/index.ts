@@ -16,6 +16,7 @@ export {
 
 export * from './events/event-payload.js';
 export * from './events/index.js';
+export { type IEventPayload } from './events/event-payload.js';
 export { type IEvent } from './events/event.js';
 export { 
   SekibanError,
@@ -23,7 +24,7 @@ export {
   AggregateNotFoundError
 } from './result/errors.js';
 export { InMemoryEventStore } from './storage/in-memory-event-store.js';
-export { StorageProviderType } from './storage/storage-provider.js';
+export { StorageProviderType, type IEventStore } from './storage/storage-provider.js';
 
 export {
   Aggregate,

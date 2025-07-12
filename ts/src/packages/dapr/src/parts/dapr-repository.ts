@@ -4,9 +4,9 @@ import {
   IEvent,
   PartitionKeys,
   AggregateProjector,
-  EventStoreError,
   SortableUniqueId,
-  EmptyAggregatePayload
+  EmptyAggregatePayload,
+  SekibanError
 } from '@sekiban/core';
 import type { IAggregateEventHandlerActor, SerializableEventDocument } from '../actors/interfaces.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
@@ -66,7 +66,7 @@ export class DaprRepository {
       );
 
       if (!response.isSuccess) {
-        return err(new EventStoreError(response.error || 'Failed to append events'));
+        return err(new SekibanError(response.error || 'Failed to append events'));
       }
 
       // Note: Unlike the previous implementation, we should NOT update currentAggregate here
@@ -75,7 +75,7 @@ export class DaprRepository {
 
       return ok(newEvents);
     } catch (error) {
-      return err(new EventStoreError(error instanceof Error ? error.message : 'Unknown error'));
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
     }
   }
 
@@ -122,7 +122,7 @@ export class DaprRepository {
 
       return ok(aggregate);
     } catch (error) {
-      return err(new EventStoreError(error instanceof Error ? error.message : 'Unknown error'));
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
     }
   }
 
@@ -143,7 +143,7 @@ export class DaprRepository {
       console.log(`[getProjectedAggregate] After projection - version: ${aggregate.version}`);
       return ok(aggregate);
     } catch (error) {
-      return err(new EventStoreError(error instanceof Error ? error.message : 'Unknown error'));
+      return err(new SekibanError(error instanceof Error ? error.message : 'Unknown error'));
     }
   }
 }

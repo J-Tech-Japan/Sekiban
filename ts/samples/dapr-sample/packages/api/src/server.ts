@@ -173,10 +173,28 @@ async function setupDaprActorsWithApp(app: express.Express) {
       
       // Use ActorProxyBuilder for proper actor-to-actor communication
       if (actorType === 'AggregateEventHandlerActor') {
-        console.log(`[ActorProxyFactory] Creating EventHandlerActor proxy using ActorProxyBuilder for ${actorIdStr}`);
-        const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
-        const builder = new ActorProxyBuilder(EventHandlerActorClass, daprClient);
-        return builder.build(new ActorId(actorIdStr));
+        console.log(`[ActorProxyFactory] Creating EventHandlerActor proxy for remote service ${actorIdStr}`);
+        // AggregateEventHandlerActor is in a different service, use HTTP invocation
+        return {
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
+            console.log(`[ActorProxy] Calling appendEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
+            return daprClient.invoker.invoke(
+              'dapr-sample-api-event-handler', // Target app ID
+              `actors/AggregateEventHandlerActor/${actorIdStr}/method/appendEventsAsync`,
+              HttpMethod.PUT, 
+              [expectedLastSortableUniqueId, events] // Dapr expects parameters as an array
+            );
+          },
+          getAllEventsAsync: async () => {
+            console.log(`[ActorProxy] Calling getAllEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
+            return daprClient.invoker.invoke(
+              'dapr-sample-api-event-handler', // Target app ID
+              `actors/AggregateEventHandlerActor/${actorIdStr}/method/getAllEventsAsync`,
+              HttpMethod.PUT,
+              [] // Empty array for no parameters
+            );
+          }
+        };
       } else if (actorType === 'AggregateActor') {
         console.log(`[ActorProxyFactory] Creating AggregateActor proxy using ActorProxyBuilder for ${actorIdStr}`);
         const AggregateActorClass = AggregateActorFactory.createActorClass();
@@ -253,7 +271,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   console.log('[DEBUG] AggregateActorClass name:', AggregateActorClass.name);
   console.log('[DEBUG] EventHandlerActorClass name:', EventHandlerActorClass.name);
 
-  // Create DaprServer and pass the Express app directly
+  // Create DaprServer
   const daprServer = new DaprServer({
     serverHost: "127.0.0.1",
     serverPort: String(config.PORT),
@@ -263,24 +281,20 @@ async function setupDaprActorsWithApp(app: express.Express) {
       daprHost: "127.0.0.1",
       daprPort: String(config.DAPR_HTTP_PORT),
       communicationProtocol: CommunicationProtocolEnum.HTTP
-    },
-    // Register all actor types during initialization
-    actor: {
-      actorIdleTimeout: "1h",
-      actorScanInterval: "30s",
-      drainOngoingCallTimeout: "1m",
-      drainRebalancedActors: true,
-      actorTypes: [
-        AggregateActorClass,
-        EventHandlerActorClass
-      ]
     }
   });
-
-  // CRITICAL: Initialize actor runtime FIRST (actors are already registered in constructor)
+  
+  // Register all actors explicitly before starting the server
+  await daprServer.actor.registerActor(AggregateActorClass);
+  logger.info('Registered AggregateActor');
+  
+  // Only register AggregateActor in this service
+  // AggregateEventHandlerActor is now in a separate service
+  
+  // Initialize actor runtime (like in the simple test)
+  logger.info('Initializing actor runtime...');
   await daprServer.actor.init();
   logger.info('Actor runtime initialized');
-  logger.info('Registered actors: AggregateActor, AggregateEventHandlerActor');
 
   // Add diagnostic logging to catch any exceptions
   console.log('[DEBUG] Adding diagnostic logging...');

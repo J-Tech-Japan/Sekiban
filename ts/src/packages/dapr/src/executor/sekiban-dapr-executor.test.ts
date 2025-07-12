@@ -163,7 +163,7 @@ describe('SekibanDaprExecutor', () => {
     it('should use default actor type when not provided', () => {
       // Arrange
       const configWithoutActorType = { ...configuration };
-      delete configWithoutActorType.actorType;
+      delete (configWithoutActorType as any).actorType;
 
       // Act
       const executorWithDefault = new SekibanDaprExecutor(daprClient, mockDomainTypes, configWithoutActorType);

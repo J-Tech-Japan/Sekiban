@@ -23,6 +23,11 @@ import type {
 export class AggregateActor extends AbstractActor {
   private impl!: AggregateActorImpl;
   private actorIdString!: string;
+  
+  // Explicitly define actor type for Dapr
+  static get actorType() { 
+    return "AggregateActor"; 
+  }
 
   // Must keep this exact constructor signature for Dapr
   constructor(daprClient: DaprClient, id: ActorId) {

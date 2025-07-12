@@ -1,6 +1,7 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
-import type { IEventStore, EventDocument } from '@sekiban/core';
+import type { IEventStore } from '@sekiban/core';
 import { 
+  EventDocument,
   EventRetrievalInfo, 
   SinceSortableIdCondition,
   SortableIdConditionNone,
@@ -364,7 +365,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Filter events after lastProcessedId
       if (lastProcessedId) {
         const lastProcessedSortableId = SortableUniqueId.fromString(lastProcessedId);
-        newEvents = newEvents.filter(event => 
+        newEvents = newEvents.filter((event: any) => 
           SortableUniqueId.compare(event.sortableUniqueId, lastProcessedSortableId) > 0
         );
       }
