@@ -1,5 +1,7 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
+// @ts-ignore - These are exported from core
 import type { IEventStore } from '@sekiban/core';
+// @ts-ignore - These are exported from core  
 import { 
   EventDocument,
   EventRetrievalInfo, 
@@ -8,6 +10,7 @@ import {
   OptionalValue,
   SortableUniqueId
 } from '@sekiban/core';
+import { getDaprCradle } from '../container/index.js';
 import type {
   IMultiProjectorActor,
   SerializableQuery,
@@ -25,6 +28,11 @@ import type {
  * Mirrors C# MultiProjectorActor implementation
  */
 export class MultiProjectorActor extends AbstractActor implements IMultiProjectorActor {
+  // Explicitly define actor type for Dapr
+  static get actorType() { 
+    return "MultiProjectorActor"; 
+  }
+
   private safeState?: MultiProjectionState;     // State older than 7 seconds
   private unsafeState?: MultiProjectionState;   // Recent state including buffer
   private eventBuffer: BufferedEvent[] = [];
@@ -47,39 +55,95 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   private readonly PROJECTION_STATE_KEY = "projectionState";
   private readonly PROCESSED_EVENTS_KEY = "processedEvents";
   
-  constructor(
-    daprClient: DaprClient,
-    id: ActorId,
-    private readonly eventStore: IEventStore,
-    // TODO: IQueryExecutor needs to be implemented in core
-    // private readonly queryExecutor: IQueryExecutor,
-    private readonly projectorType: string
-  ) {
-    super(daprClient, id);
+  // Dependencies
+  private eventStore: IEventStore;
+  private actorIdString: string;
+  private projectorType: string;
+  
+  constructor(daprClient: DaprClient, id: ActorId) {
+    try {
+      super(daprClient, id);
+      console.log('[MultiProjectorActor] Constructor called');
+      
+      // Extract actor ID string
+      this.actorIdString = (id as any).id || String(id);
+      
+      // Get dependencies from Awilix container (same pattern as other actors)
+      const cradle = getDaprCradle();
+      
+      // Get eventStore from container
+      this.eventStore = cradle.eventStore;
+      
+      // Extract projector type from actor ID or use default
+      // Actor ID format could be: "projectorType:other_info" or just the projector type
+      const idParts = this.actorIdString.split(':');
+      this.projectorType = idParts[0] || 'DefaultProjector';
+      
+      console.log('[MultiProjectorActor] Dependencies injected, eventStore:', !!this.eventStore);
+      console.log('[MultiProjectorActor] Projector type:', this.projectorType);
+    } catch (error) {
+      console.error('[MultiProjectorActor] Constructor error:', error);
+      throw error;
+    }
   }
   
   /**
    * Actor activation - set up reminders/timers
    */
   async onActivate(): Promise<void> {
+    console.log('[MultiProjectorActor] onActivate called for actor:', this.actorIdString);
+    console.log('[MultiProjectorActor] Projector type:', this.projectorType);
+    
     try {
-      // TODO: Register reminders when the method is available
-      // await this.registerReminderAsync(
-      //   this.SNAPSHOT_REMINDER,
-      //   Buffer.from(""),
-      //   "PT5M",  // 5 minutes
-      //   "PT5M"
-      // );
+      // Load initial state
+      await this.loadStateAsync();
       
-      // await this.registerReminderAsync(
-      //   this.EVENT_CHECK_REMINDER,
-      //   Buffer.from(""),
-      //   "PT1S",  // 1 second
-      //   "PT1S"
-      // );
+      // Set up timers for periodic processing (like AggregateEventHandlerActor pattern)
+      // Note: Dapr doesn't allow complex operations during onActivate, so we keep it simple
+      console.log('[MultiProjectorActor] Actor activated successfully');
+      
+      // TODO: Register reminders when the method is available
+      // For now, use simple timers that will be set up on first method call
     } catch (error) {
-      // Fall back to timers if reminders fail
-      console.warn('Failed to register reminders, falling back to timers:', error);
+      console.error('[MultiProjectorActor] Error during activation:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Actor deactivation - clean up
+   */
+  async onDeactivate(): Promise<void> {
+    console.log('[MultiProjectorActor] onDeactivate called for actor:', this.actorIdString);
+    
+    try {
+      // Clean up timers
+      if (this.snapshotTimer) {
+        clearInterval(this.snapshotTimer);
+        this.snapshotTimer = undefined;
+      }
+      if (this.eventCheckTimer) {
+        clearInterval(this.eventCheckTimer);
+        this.eventCheckTimer = undefined;
+      }
+      
+      // Save final state
+      if (this.safeState) {
+        await this.persistStateAsync(this.safeState);
+      }
+      
+      console.log('[MultiProjectorActor] Actor deactivated successfully');
+    } catch (error) {
+      console.error('[MultiProjectorActor] Error during deactivation:', error);
+    }
+  }
+  
+  /**
+   * Ensure timers are set up (called on first method invocation, like AggregateEventHandlerActor pattern)
+   */
+  private async ensureTimersSetup(): Promise<void> {
+    if (!this.snapshotTimer && !this.eventCheckTimer) {
+      console.log('[MultiProjectorActor] Setting up timers on first method call');
       
       this.snapshotTimer = setInterval(
         () => this.handleSnapshotReminder(),
@@ -91,34 +155,19 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         this.EVENT_CHECK_INTERVAL_MS
       );
     }
-    
-    // Load initial state
-    await this.loadStateAsync();
   }
-  
-  /**
-   * Actor deactivation - clean up
-   */
-  async onDeactivate(): Promise<void> {
-    // Clean up timers
-    if (this.snapshotTimer) {
-      clearInterval(this.snapshotTimer);
-    }
-    if (this.eventCheckTimer) {
-      clearInterval(this.eventCheckTimer);
-    }
-    
-    // Save final state
-    if (this.safeState) {
-      await this.persistStateAsync(this.safeState);
-    }
-  }
-  
+
   /**
    * Execute single-item query
    */
   async queryAsync(query: SerializableQuery): Promise<QueryResponse> {
+    console.log('[MultiProjectorActor] queryAsync called for actor:', this.actorIdString);
+    console.log('[MultiProjectorActor] Query type:', query.queryType);
+    
     try {
+      // Ensure timers are set up on first method call
+      await this.ensureTimersSetup();
+      
       await this.flushBuffer();
       
       // Use safe state for queries
@@ -148,7 +197,13 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    * Execute list query
    */
   async queryListAsync(query: SerializableListQuery): Promise<ListQueryResponse> {
+    console.log('[MultiProjectorActor] queryListAsync called for actor:', this.actorIdString);
+    console.log('[MultiProjectorActor] List query type:', query.queryType);
+    
     try {
+      // Ensure timers are set up on first method call
+      await this.ensureTimersSetup();
+      
       await this.flushBuffer();
       
       // Use safe state for queries
@@ -177,6 +232,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    * Check if event has been processed
    */
   async isSortableUniqueIdReceived(sortableUniqueId: string): Promise<boolean> {
+    console.log('[MultiProjectorActor] isSortableUniqueIdReceived called for:', sortableUniqueId);
+    
+    // Ensure timers are set up on first method call
+    await this.ensureTimersSetup();
+    
     // Check buffer
     if (this.eventBuffer.some(e => e.event.sortableUniqueId === sortableUniqueId)) {
       return true;
@@ -235,6 +295,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    * Handle published event from PubSub
    */
   async handlePublishedEvent(envelope: DaprEventEnvelope): Promise<void> {
+    console.log('[MultiProjectorActor] handlePublishedEvent called for event:', envelope.event.sortableUniqueId);
+    
+    // Ensure timers are set up on first method call
+    await this.ensureTimersSetup();
+    
     // Check if already processed
     if (await this.isSortableUniqueIdReceived(envelope.event.sortableUniqueId)) {
       return;
