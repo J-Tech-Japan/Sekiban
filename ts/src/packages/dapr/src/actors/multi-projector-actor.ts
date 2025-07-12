@@ -1,5 +1,6 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import type { IEventStore, EventDocument } from '@sekiban/core';
+import { EventRetrievalInfo, SortableIdCondition, SortableUniqueId, OptionalValue, IEvent, ISortableIdCondition } from '@sekiban/core';
 import type {
   IMultiProjectorActor,
   SerializableQuery,
@@ -64,10 +65,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       console.error('[MultiProjectorActor] Failed to get dependencies from container:', error);
       // Create a dummy event store that returns empty results
       this.eventStore = {
-        loadAllEvents: async () => [],
-        loadEventsAfter: async () => [],
-        saveEvents: async () => {},
-        loadEvents: async () => []
+        getEvents: async () => ({ isOk: () => true, isErr: () => false, value: [], error: null } as any),
+        appendEvents: async () => ({ isOk: () => true, isErr: () => false, value: [], error: null } as any),
+        initialize: async () => ({ isOk: () => true, isErr: () => false, value: undefined, error: null } as any),
+        close: async () => ({ isOk: () => true, isErr: () => false, value: undefined, error: null } as any)
       } as any;
       this.projectorType = 'unknown';
     }
@@ -449,19 +450,46 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     const lastProcessedId = this.safeState?.lastProcessedEventId || '';
     
     try {
-      // Load events after last processed
-      const newEvents = await this.eventStore.loadEventsAfter(
-        lastProcessedId,
-        1000 // Batch size
+      // Create retrieval info to get all events after the last processed one
+      let sortableIdCondition: ISortableIdCondition;
+      
+      if (lastProcessedId) {
+        const lastIdResult = SortableUniqueId.fromString(lastProcessedId);
+        if (lastIdResult.isOk()) {
+          sortableIdCondition = SortableIdCondition.since(lastIdResult.value);
+        } else {
+          sortableIdCondition = SortableIdCondition.none();
+        }
+      } else {
+        sortableIdCondition = SortableIdCondition.none();
+      }
+      
+      // Create retrieval info for all events with the condition
+      const retrievalInfo = new EventRetrievalInfo(
+        OptionalValue.empty<string>(),
+        OptionalValue.empty<any>(),
+        OptionalValue.empty<string>(),
+        sortableIdCondition,
+        OptionalValue.fromValue(1000) // Batch size
       );
+      
+      // Load events using the proper interface
+      const eventsResult = await this.eventStore.getEvents(retrievalInfo);
+      
+      if (eventsResult.isErr()) {
+        console.error('Failed to get events from store:', eventsResult.error);
+        return;
+      }
+      
+      const newEvents = eventsResult.value;
       
       // Add to buffer if not already present
       for (const event of newEvents) {
-        const serialized = this.serializeEvent(event);
+        const sortableId = (event as any).sortableUniqueId || '';
         
-        if (!await this.isSortableUniqueIdReceived(serialized.sortableUniqueId)) {
+        if (!await this.isSortableUniqueIdReceived(sortableId)) {
           this.eventBuffer.push({
-            event: serialized,
+            event: this.serializeEvent(event as any),
             receivedAt: new Date()
           });
         }
