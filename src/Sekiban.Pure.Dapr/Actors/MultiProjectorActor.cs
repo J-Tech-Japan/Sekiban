@@ -46,7 +46,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     // ---------- State Keys ----------
     private const string StateKey = "multiprojector_state";
     private const string SnapshotReminderName = "snapshot_reminder";
-    private const string EventCheckReminderName = "event_check_reminder";
 
     public MultiProjectorActor(
         ActorHost host,
@@ -75,43 +74,30 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         
         try
         {
-            // Register reminders for periodic tasks
-            // Snapshot reminder for saving state periodically
+            // Register reminder for periodic snapshot saving
             await RegisterReminderAsync(
                 SnapshotReminderName,
                 null,
                 TimeSpan.FromMinutes(1), // Initial delay
                 PersistInterval);
-
-            // Event check reminder for polling new events from PubSub
-            await RegisterReminderAsync(
-                EventCheckReminderName,
-                null,
-                TimeSpan.FromSeconds(5), // Initial delay
-                TimeSpan.FromSeconds(1)); // Check every 1 second
                 
-            _logger.LogInformation("Reminders registered successfully for {ActorId}", Id.GetId());
+            _logger.LogInformation("Snapshot reminder registered successfully for {ActorId}", Id.GetId());
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to register reminders for {ActorId}. Falling back to timer-based approach.", Id.GetId());
+            _logger.LogWarning(ex, "Failed to register reminder for {ActorId}. Falling back to timer-based approach.", Id.GetId());
             
-            // Fallback to timers if reminders fail
+            // Fallback to timer if reminder fails
             await RegisterTimerAsync(
                 "SnapshotTimer",
                 nameof(HandleSnapshotTimerAsync),
                 Array.Empty<byte>(),
                 TimeSpan.FromMinutes(1),
                 PersistInterval);
-
-            await RegisterTimerAsync(
-                "EventCheckTimer",
-                nameof(HandleEventCheckTimerAsync),
-                Array.Empty<byte>(),
-                TimeSpan.FromSeconds(5),
-                TimeSpan.FromSeconds(1));
         }
-            
+        
+        // Initial state loading and catch-up will be done via EnsureStateLoadedAsync
+        // when the first event arrives via PubSub
         _bootstrapping = false;
     }
 
@@ -125,9 +111,8 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             await PersistStateAsync(_safeState);
         }
         
-        // Unregister reminders
+        // Unregister snapshot reminder
         await UnregisterReminderAsync(SnapshotReminderName);
-        await UnregisterReminderAsync(EventCheckReminderName);
         
         await base.OnDeactivateAsync();
     }
@@ -143,9 +128,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             case SnapshotReminderName:
                 await HandleSnapshotReminder();
                 break;
-            case EventCheckReminderName:
-                await HandleEventCheckReminder();
-                break;
             default:
                 _logger.LogWarning("Unknown reminder: {ReminderName}", reminderName);
                 break;
@@ -160,14 +142,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         await PersistStateAsync(_safeState);
     }
 
-    private async Task HandleEventCheckReminder()
-    {
-        // This is where we would check for new events
-        // In a real Dapr implementation, this could be replaced with
-        // actual PubSub subscription handling
-        await CatchUpFromStoreAsync();
-    }
-
     #endregion
 
     #region Timer Fallback Methods
@@ -178,14 +152,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     public async Task HandleSnapshotTimerAsync(byte[] state)
     {
         await HandleSnapshotReminder();
-    }
-
-    /// <summary>
-    /// Timer fallback for event check handling when reminders are not available
-    /// </summary>
-    public async Task HandleEventCheckTimerAsync(byte[] state)
-    {
-        await HandleEventCheckReminder();
     }
 
     #endregion
@@ -537,12 +503,20 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 
     #region Event Handling via PubSub
 
-    // This method would be called by Dapr when events are published
-    // In a real implementation, you would need to set up proper subscription
+    /// <summary>
+    /// Handles events published through Dapr PubSub.
+    /// This is called by the EventPubSubController when events are received.
+    /// </summary>
     public async Task HandlePublishedEvent(DaprEventEnvelope envelope)
     {
         try
         {
+            _logger.LogInformation("Received event from PubSub: EventId={EventId}, AggregateId={AggregateId}, Version={Version}", 
+                envelope.EventId, envelope.AggregateId, envelope.Version);
+
+            // Ensure state is loaded before processing
+            await EnsureStateLoadedAsync();
+
             // Deserialize the event
             var @event = await _serialization.DeserializeEventAsync(envelope);
             if (@event == null)
@@ -551,10 +525,18 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 return;
             }
             
+            // Check if we've already processed this event
+            if (await IsSortableUniqueIdReceived(@event.SortableUniqueId))
+            {
+                _logger.LogDebug("Event already processed: {SortableUniqueId}", @event.SortableUniqueId);
+                return;
+            }
+            
             // Add to buffer if not duplicate
             if (!_buffer.Any(e => e.SortableUniqueId == @event.SortableUniqueId))
             {
                 _buffer.Add(@event);
+                _logger.LogDebug("Added event to buffer: {SortableUniqueId}", @event.SortableUniqueId);
                 
                 // Flush buffer immediately for real-time updates
                 if (!_bootstrapping)

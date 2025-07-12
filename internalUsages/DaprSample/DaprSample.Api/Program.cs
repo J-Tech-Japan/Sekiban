@@ -44,12 +44,19 @@ builder.Services.AddMemoryCache();
 var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
+// ローカル開発とACA (Azure Container Apps) 両方に対応
+var actorIdPrefix = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX") ?? 
+                    Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? 
+                    (builder.Environment.IsDevelopment() ? 
+                     $"local-dev-{Environment.MachineName}" : 
+                     "dapr-sample");
+
 builder.Services.AddSekibanWithDapr(domainTypes, options =>
 {
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
-    options.EventTopicName = "domain-events";
-    options.ActorIdPrefix = "dapr-sample";
+    options.EventTopicName = "events.all";  // Changed to match subscription.yaml
+    options.ActorIdPrefix = actorIdPrefix; // 環境に応じて自動設定
 });
 
 // Use patched event reader to avoid timeout
@@ -89,8 +96,65 @@ app.UseRouting();
 app.UseCloudEvents();
 app.MapSubscribeHandler();
 
+// === Sekiban PubSub Event Relay (MinimalAPI) ===
+// 新しいopt-in方式でPubSubイベントリレーを有効化
+// ローカル開発とACA (Azure Container Apps) 両方に対応
+var instanceId = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? 
+                Environment.GetEnvironmentVariable("HOSTNAME") ?? 
+                Environment.MachineName ?? 
+                Guid.NewGuid().ToString("N")[..8];
+
+// ローカル開発環境では開発用のConsumer Group、ACAでは本番用を使用
+var consumerGroup = Environment.GetEnvironmentVariable("SEKIBAN_CONSUMER_GROUP") ?? 
+                   (app.Environment.IsDevelopment() ? 
+                    "dapr-sample-projectors-dev" : 
+                    "dapr-sample-projectors");
+
+// ローカル開発環境では緩い設定、ACAでは厳密な設定
+var continueOnFailure = app.Environment.IsDevelopment() || 
+                       !bool.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING"), out var strictMode) || 
+                       !strictMode;
+
+var maxConcurrency = int.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_MAX_CONCURRENCY"), out var concurrency) ? 
+                    concurrency : 
+                    (app.Environment.IsDevelopment() ? 3 : 5);
+
+app.MapSekibanEventRelay(new SekibanPubSubRelayOptions
+{
+    PubSubName = "sekiban-pubsub",
+    TopicName = "events.all", // subscription.yamlに合わせる
+    EndpointPath = "/internal/pubsub/events",
+    ConsumerGroup = consumerGroup, // 環境に応じて自動設定
+    MaxConcurrency = maxConcurrency, // 環境に応じて調整
+    ContinueOnProjectorFailure = continueOnFailure, // ローカルでは続行、本番では設定可能
+    EnableDeadLetterQueue = !app.Environment.IsDevelopment(), // ローカルでは無効、本番では有効
+    DeadLetterTopic = "events.dead-letter",
+    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3 // ローカルでは少なく、本番では多く
+});
+
 // Log actor registration before mapping handlers
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
+// Log the configured PubSub relay information
+logger.LogInformation("=== SEKIBAN PUBSUB RELAY CONFIGURED ({Environment} ENVIRONMENT) ===", app.Environment.EnvironmentName);
+logger.LogInformation("Instance ID: {InstanceId}", instanceId);
+logger.LogInformation("Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
+logger.LogInformation("PubSub Component: sekiban-pubsub");
+logger.LogInformation("Topic: events.all");
+logger.LogInformation("Endpoint: /internal/pubsub/events");
+logger.LogInformation("Consumer Group: {ConsumerGroup}", consumerGroup);
+logger.LogInformation("Max Concurrency: {MaxConcurrency}", maxConcurrency);
+logger.LogInformation("Continue On Failure: {ContinueOnFailure}", continueOnFailure);
+logger.LogInformation("Dead Letter Queue: {DeadLetterEnabled}", !app.Environment.IsDevelopment());
+if (app.Environment.IsDevelopment())
+{
+    logger.LogInformation("🔧 LOCAL DEVELOPMENT MODE: Relaxed settings for easier debugging");
+}
+else
+{
+    logger.LogInformation("🚀 PRODUCTION MODE: Strict settings for reliability");
+}
+logger.LogInformation("=== END PUBSUB RELAY CONFIG ===");
 try 
 {
     var actorOptions = app.Services.GetService<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>();
@@ -131,12 +195,39 @@ var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
 startupLogger.LogInformation("Waiting for Dapr sidecar to be ready...");
 
 // Log Dapr environment information
-startupLogger.LogInformation("Dapr Environment Info:");
-startupLogger.LogInformation("  - DAPR_HTTP_PORT: {DaprHttpPort}", Environment.GetEnvironmentVariable("DAPR_HTTP_PORT") ?? "Not Set");
-startupLogger.LogInformation("  - DAPR_GRPC_PORT: {DaprGrpcPort}", Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") ?? "Not Set");
+startupLogger.LogInformation("=== DAPR & ENVIRONMENT INFO ({Environment}) ===", app.Environment.EnvironmentName);
+startupLogger.LogInformation("  - DAPR_HTTP_PORT: {DaprHttpPort}", Environment.GetEnvironmentVariable("DAPR_HTTP_PORT") ?? "Not Set (Default: 3500)");
+startupLogger.LogInformation("  - DAPR_GRPC_PORT: {DaprGrpcPort}", Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") ?? "Not Set (Default: 50001)");
 startupLogger.LogInformation("  - APP_ID: {AppId}", Environment.GetEnvironmentVariable("APP_ID") ?? "Not Set");
 startupLogger.LogInformation("  - Expected Dapr HTTP: http://localhost:3500");
 startupLogger.LogInformation("  - App Port: {AppPort}", 5000);
+
+if (app.Environment.IsDevelopment())
+{
+    // ローカル開発環境の情報
+    startupLogger.LogInformation("=== LOCAL DEVELOPMENT ENVIRONMENT INFO ===");
+    startupLogger.LogInformation("  - Machine Name: {MachineName}", Environment.MachineName);
+    startupLogger.LogInformation("  - User Name: {UserName}", Environment.UserName ?? "Not Set");
+    startupLogger.LogInformation("  - OS Version: {OSVersion}", Environment.OSVersion);
+    startupLogger.LogInformation("  - Process ID: {ProcessId}", Environment.ProcessId);
+}
+else
+{
+    // ACA specific environment variables
+    startupLogger.LogInformation("=== ACA ENVIRONMENT INFO ===");
+    startupLogger.LogInformation("  - CONTAINER_APP_NAME: {ContainerAppName}", Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? "Not Set");
+    startupLogger.LogInformation("  - CONTAINER_APP_REPLICA_NAME: {ReplicaName}", Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? "Not Set");
+    startupLogger.LogInformation("  - CONTAINER_APP_REVISION: {Revision}", Environment.GetEnvironmentVariable("CONTAINER_APP_REVISION") ?? "Not Set");
+}
+
+startupLogger.LogInformation("=== SEKIBAN CONFIGURATION ===");
+startupLogger.LogInformation("  - HOSTNAME: {Hostname}", Environment.GetEnvironmentVariable("HOSTNAME") ?? Environment.MachineName);
+startupLogger.LogInformation("  - Instance ID: {InstanceId}", instanceId);
+startupLogger.LogInformation("  - Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
+startupLogger.LogInformation("  - Consumer Group: {ConsumerGroup}", consumerGroup);
+startupLogger.LogInformation("  - Max Concurrency: {MaxConcurrency}", maxConcurrency);
+startupLogger.LogInformation("  - Continue On Failure: {ContinueOnFailure}", continueOnFailure);
+startupLogger.LogInformation("=== END ENVIRONMENT INFO ===");
 
 // Wait for basic Dapr health
 var maxWaitTime = TimeSpan.FromSeconds(60); // Increased timeout
@@ -187,18 +278,94 @@ app.MapGet("/debug/env", () =>
 {
     var envVars = new Dictionary<string, string?>
     {
+        // Basic Environment
+        ["Environment"] = app.Environment.EnvironmentName,
+        ["MachineName"] = Environment.MachineName,
+        ["UserName"] = Environment.UserName,
+        ["ProcessId"] = Environment.ProcessId.ToString(),
+        
+        // Dapr Environment
         ["REDIS_CONNECTION_STRING"] = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING"),
         ["ConnectionStrings__redis"] = builder.Configuration.GetConnectionString("redis"),
         ["APP_ID"] = Environment.GetEnvironmentVariable("APP_ID"),
         ["DAPR_HTTP_PORT"] = Environment.GetEnvironmentVariable("DAPR_HTTP_PORT"),
-        ["DAPR_GRPC_PORT"] = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT")
+        ["DAPR_GRPC_PORT"] = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT"),
+        
+        // Sekiban Configuration
+        ["SEKIBAN_CONSUMER_GROUP"] = Environment.GetEnvironmentVariable("SEKIBAN_CONSUMER_GROUP"),
+        ["SEKIBAN_ACTOR_PREFIX"] = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX"),
+        ["SEKIBAN_MAX_CONCURRENCY"] = Environment.GetEnvironmentVariable("SEKIBAN_MAX_CONCURRENCY"),
+        ["SEKIBAN_STRICT_ERROR_HANDLING"] = Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING")
     };
+    
+    // ACA環境変数（ローカルでは通常null）
+    if (!app.Environment.IsDevelopment())
+    {
+        envVars.Add("CONTAINER_APP_NAME", Environment.GetEnvironmentVariable("CONTAINER_APP_NAME"));
+        envVars.Add("CONTAINER_APP_REPLICA_NAME", Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME"));
+        envVars.Add("CONTAINER_APP_REVISION", Environment.GetEnvironmentVariable("CONTAINER_APP_REVISION"));
+    }
+    
+    envVars.Add("HOSTNAME", Environment.GetEnvironmentVariable("HOSTNAME"));
     
     return Results.Ok(envVars);
 })
 .WithName("GetEnvironmentVariables")
 .WithSummary("Get environment variables")
-.WithDescription("Debug endpoint to check current environment variables")
+.WithDescription("Debug endpoint to check current environment variables (Local Dev & ACA compatible)")
+.WithTags("Debug");
+
+// Debug endpoint to check PubSub relay configuration
+app.MapGet("/debug/pubsub-config", () =>
+{
+    var config = new
+    {
+        // Basic Configuration
+        Environment = app.Environment.EnvironmentName,
+        PubSubComponent = "sekiban-pubsub",
+        Topic = "events.all", 
+        Endpoint = "/internal/pubsub/events",
+        ConsumerGroup = consumerGroup,
+        MaxConcurrency = maxConcurrency,
+        ContinueOnFailure = continueOnFailure,
+        RelayMethod = "MinimalAPI (opt-in)",
+        ConfiguredAt = DateTime.UtcNow,
+        
+        // Environment-specific Configuration
+        InstanceId = instanceId,
+        ActorIdPrefix = actorIdPrefix,
+        ScaleOutReady = true,
+        DeadLetterQueue = !app.Environment.IsDevelopment(),
+        DeadLetterTopic = "events.dead-letter",
+        MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3,
+        
+        // Runtime Environment
+        MachineName = Environment.MachineName,
+        Hostname = Environment.GetEnvironmentVariable("HOSTNAME") ?? Environment.MachineName,
+        
+        Note = app.Environment.IsDevelopment() ? 
+               "🔧 Local Development: Relaxed settings for easier debugging" :
+               "🚀 Production: Configured for ACA scale-out with Consumer Group to prevent duplicate processing"
+    };
+    
+    // ACA固有の情報を追加（本番環境のみ）
+    if (!app.Environment.IsDevelopment())
+    {
+        var acaInfo = new
+        {
+            ContainerAppName = Environment.GetEnvironmentVariable("CONTAINER_APP_NAME"),
+            ReplicaName = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME"),
+            Revision = Environment.GetEnvironmentVariable("CONTAINER_APP_REVISION")
+        };
+        
+        return Results.Ok(new { config, aca = acaInfo });
+    }
+    
+    return Results.Ok(config);
+})
+.WithName("GetPubSubConfiguration")
+.WithSummary("Get PubSub relay configuration")
+.WithDescription("Debug endpoint to check current PubSub relay configuration (Local Dev & ACA compatible)")
 .WithTags("Debug");
 
 // Map API endpoints
@@ -420,6 +587,48 @@ app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecu
 .WithSummary("Generate sample weather data")
 .WithDescription("Generates sample weather forecast data for testing")
 .WithTags("WeatherForecast");
+
+// Health check endpoint for Dapr
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+.WithName("HealthCheck")
+.WithSummary("Health check endpoint")
+.WithDescription("Returns the health status of the application")
+.WithTags("Health");
+
+// Enhanced health check for ACA scaling
+app.MapGet("/health/detailed", () =>
+{
+    var health = new
+    {
+        status = "healthy",
+        timestamp = DateTime.UtcNow,
+        instance = new
+        {
+            id = instanceId,
+            hostname = Environment.GetEnvironmentVariable("HOSTNAME"),
+            replicaName = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME"),
+            revision = Environment.GetEnvironmentVariable("CONTAINER_APP_REVISION")
+        },
+        sekiban = new
+        {
+            actorIdPrefix = actorIdPrefix,
+            consumerGroup = consumerGroup,
+            pubsubEndpoint = "/internal/pubsub/events"
+        },
+        dapr = new
+        {
+            httpPort = Environment.GetEnvironmentVariable("DAPR_HTTP_PORT"),
+            grpcPort = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT"),
+            appId = Environment.GetEnvironmentVariable("APP_ID")
+        }
+    };
+    
+    return Results.Ok(health);
+})
+.WithName("DetailedHealthCheck")
+.WithSummary("Detailed health check for ACA scaling")
+.WithDescription("Returns detailed health status including instance and configuration information")
+.WithTags("Health");
 
 // Map default endpoints for Aspire integration
 app.MapDefaultEndpoints();

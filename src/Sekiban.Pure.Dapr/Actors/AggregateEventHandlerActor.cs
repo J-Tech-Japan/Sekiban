@@ -1,10 +1,14 @@
 using Dapr.Actors;
 using Dapr.Actors.Runtime;
+using Dapr.Client;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Dapr.Parts;
+using Sekiban.Pure.Dapr.Serialization;
 using ResultBoxes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Sekiban.Pure.Dapr.Configuration;
 
 namespace Sekiban.Pure.Dapr.Actors;
 
@@ -17,10 +21,15 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
     private readonly IEventWriter _eventWriter;
     private readonly IEventReader _eventReader;
     private readonly SekibanDomainTypes _sekibanDomainTypes;
+    private readonly DaprClient _daprClient;
+    private readonly DaprSekibanOptions _options;
+    private readonly IDaprSerializationService _serialization;
     private readonly ILogger<AggregateEventHandlerActor> _logger;
     
     private const string StateKey = "aggregateEventHandler";
     private const string EventDocumentsStateKey = "aggregateEventDocuments";
+    private const string PubSubName = "sekiban-pubsub";
+    private const string EventTopicName = "events.all";
     
     /// <summary>
     /// Initializes a new instance of the AggregateEventHandlerActor class.
@@ -30,11 +39,17 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
         IEventWriter eventWriter,
         IEventReader eventReader,
         SekibanDomainTypes sekibanDomainTypes,
+        DaprClient daprClient,
+        IOptions<DaprSekibanOptions> options,
+        IDaprSerializationService serialization,
         ILogger<AggregateEventHandlerActor> logger) : base(host)
     {
         _eventWriter = eventWriter ?? throw new ArgumentNullException(nameof(eventWriter));
         _eventReader = eventReader ?? throw new ArgumentNullException(nameof(eventReader));
         _sekibanDomainTypes = sekibanDomainTypes ?? throw new ArgumentNullException(nameof(sekibanDomainTypes));
+        _daprClient = daprClient ?? throw new ArgumentNullException(nameof(daprClient));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -106,6 +121,9 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
                 };
                 
                 await StateManager.SetStateAsync(StateKey, newState);
+                
+                // Publish events to PubSub
+                await PublishEventsToPubSub(newEventDocuments);
             }
             
             var lastEventId = newEventDocuments.Any() ? newEventDocuments.Last().SortableUniqueId : expectedLastSortableUniqueId;
@@ -257,6 +275,48 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
             .UnwrapBox();
     }
 
+    /// <summary>
+    /// Publishes events to Dapr PubSub for consumption by projectors
+    /// </summary>
+    private async Task PublishEventsToPubSub(List<SerializableEventDocument> eventDocuments)
+    {
+        foreach (var eventDoc in eventDocuments)
+        {
+            try
+            {
+                // Create DaprEventEnvelope from SerializableEventDocument
+                var envelope = new DaprEventEnvelope
+                {
+                    EventId = eventDoc.Id,
+                    EventData = eventDoc.CompressedPayloadJson, // Use compressed payload
+                    EventType = eventDoc.PayloadTypeName,
+                    AggregateId = eventDoc.AggregateId,
+                    Version = eventDoc.Version,
+                    Timestamp = eventDoc.TimeStamp,
+                    SortableUniqueId = eventDoc.SortableUniqueId,
+                    RootPartitionKey = eventDoc.RootPartitionKey,
+                    IsCompressed = true, // SerializableEventDocument stores compressed data
+                    Metadata = new Dictionary<string, string>
+                    {
+                        ["PartitionGroup"] = eventDoc.AggregateGroup,
+                        ["ActorId"] = Id.GetId()
+                    }
+                };
+                
+                // Publish to PubSub
+                await _daprClient.PublishEventAsync(PubSubName, EventTopicName, envelope);
+                
+                _logger.LogDebug("Published event to PubSub: EventId={EventId}, AggregateId={AggregateId}, Type={EventType}", 
+                    envelope.EventId, envelope.AggregateId, envelope.EventType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish event to PubSub: EventId={EventId}", eventDoc.Id);
+                // Continue with other events even if one fails
+            }
+        }
+    }
+    
     /// <summary>
     /// State object for persisting event handler information
     /// </summary>
