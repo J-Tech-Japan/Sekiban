@@ -1,0 +1,44 @@
+version: '3.8'
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    container_name: azurite
+    ports:
+      - "10000:10000" # Blob
+      - "10001:10001" # Queue
+      - "10002:10002" # Table
+    volumes:
+      - azurite_data:/data
+    command: "azurite --tableHost 0.0.0.0 --blobHost 0.0.0.0 --queueHost 0.0.0.0"
+    networks:
+      - orleans_net
+  silo:
+    build:
+      context: .
+      dockerfile: MyProject.ApiService/Dockerfile
+    ports:
+      - "11111"   # Silo-to-Silo
+      - "30000"   # Gateway
+      # - "8081"     # Orleans Dashboard（Optional）
+    environment:
+      - "ConnectionStrings__MyProjectGrainTable=${STORAGE_BASE};TableEndpoint=http://azurite:10002/devstoreaccount1;"
+      - "ConnectionStrings__MyProjectQueue=${STORAGE_BASE};QueueEndpoint=http://azurite:10001/devstoreaccount1;"
+    networks:
+      - orleans_net
+    depends_on:
+      - azurite
+  client:
+    build:
+      context: .
+      dockerfile: MyProject.Web/Dockerfile
+    ports:
+      - "8080:8080"
+    networks:
+      - orleans_net
+    depends_on:
+      - silo
+volumes:
+  azurite_data:
+networks:
+  orleans_net:
+    driver: bridge
