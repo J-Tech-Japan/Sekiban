@@ -5,7 +5,7 @@ async function testMultiProjectorActor() {
 
   const daprClient = new DaprClient({
     daprHost: "127.0.0.1",
-    daprPort: "3503"
+    daprPort: "3513"  // Updated to match the new port
   });
 
   try {
@@ -42,7 +42,7 @@ async function testMultiProjectorActor() {
     
     // Test 3: Use the REST API endpoint
     console.log('\n📋 Test 3: Testing REST API endpoint');
-    const apiResponse = await fetch('http://localhost:3003/api/v1/multi-projections/UserProjector/test-id');
+    const apiResponse = await fetch('http://localhost:3013/api/v1/multi-projections/UserProjector/test-id');
     const apiData = await apiResponse.json();
     console.log('✅ API Response:', JSON.stringify(apiData, null, 2));
     

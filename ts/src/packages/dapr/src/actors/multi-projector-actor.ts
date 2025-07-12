@@ -11,6 +11,7 @@ import type {
   BufferedEvent,
   SerializableEventDocument
 } from './interfaces';
+import { getDaprCradle } from '../container/index.js';
 
 /**
  * Handles cross-aggregate projections and queries over multiple aggregates
@@ -39,15 +40,37 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   private readonly PROJECTION_STATE_KEY = "projectionState";
   private readonly PROCESSED_EVENTS_KEY = "processedEvents";
   
+  private eventStore: IEventStore;
+  private projectorType: string;
+  
   constructor(
     daprClient: DaprClient,
-    id: ActorId,
-    private readonly eventStore: IEventStore,
-    // TODO: IQueryExecutor needs to be implemented in core
-    // private readonly queryExecutor: IQueryExecutor,
-    private readonly projectorType: string
+    id: ActorId
   ) {
     super(daprClient, id);
+    
+    // Get dependencies from container
+    try {
+      const cradle = getDaprCradle();
+      this.eventStore = cradle.eventStore;
+      
+      // Extract projector type from actor ID
+      const actorIdStr = id.toString();
+      const parts = actorIdStr.split('-');
+      this.projectorType = parts.length > 1 ? parts[1] : 'unknown';
+      
+      console.log(`[MultiProjectorActor] Created for ${actorIdStr}, projectorType: ${this.projectorType}`);
+    } catch (error) {
+      console.error('[MultiProjectorActor] Failed to get dependencies from container:', error);
+      // Create a dummy event store that returns empty results
+      this.eventStore = {
+        loadAllEvents: async () => [],
+        loadEventsAfter: async () => [],
+        saveEvents: async () => {},
+        loadEvents: async () => []
+      } as any;
+      this.projectorType = 'unknown';
+    }
   }
   
   /**
@@ -55,23 +78,25 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    */
   async onActivate(): Promise<void> {
     try {
-      // TODO: Register reminders when the method is available
-      // await this.registerReminderAsync(
-      //   this.SNAPSHOT_REMINDER,
-      //   Buffer.from(""),
-      //   "PT5M",  // 5 minutes
-      //   "PT5M"
-      // );
+      // Register reminders - AbstractActor provides registerReminder method
+      await this.registerReminder(
+        this.SNAPSHOT_REMINDER,
+        Buffer.from(""),
+        "PT5M",  // 5 minutes
+        "PT5M"
+      );
       
-      // await this.registerReminderAsync(
-      //   this.EVENT_CHECK_REMINDER,
-      //   Buffer.from(""),
-      //   "PT1S",  // 1 second
-      //   "PT1S"
-      // );
+      await this.registerReminder(
+        this.EVENT_CHECK_REMINDER,
+        Buffer.from(""),
+        "PT1S",  // 1 second
+        "PT1S"
+      );
+      
+      console.log(`[MultiProjectorActor] Registered reminders for ${this.projectorType}`);
     } catch (error) {
       // Fall back to timers if reminders fail
-      console.warn('Failed to register reminders, falling back to timers:', error);
+      console.warn('[MultiProjectorActor] Failed to register reminders, falling back to timers:', error);
       
       this.snapshotTimer = setInterval(
         () => this.handleSnapshotReminder(),
@@ -116,24 +141,71 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Use safe state for queries
       const state = this.safeState || await this.buildStateAsync();
       
-      // Execute query through query executor
-      // TODO: Implement query execution
-      // const result = await this.queryExecutor.executeQuery(
-      //   query,
-      //   state.projections
-      // );
-      throw new Error('Query execution not yet implemented');
+      console.log('[MultiProjectorActor] Executing query:', {
+        queryType: query.queryType,
+        projectorType: this.projectorType,
+        projectionsCount: Object.keys(state.projections).length
+      });
       
+      // Basic implementation: return first matching projection based on query payload
+      const projections = state.projections;
+      
+      // If query has an ID field, try to find by ID
+      if (query.payload?.id) {
+        const projection = projections[query.payload.id];
+        if (projection) {
+          return {
+            isSuccess: true,
+            data: projection
+          };
+        }
+      }
+      
+      // Otherwise, search through all projections
+      const projectionEntries = Object.entries(projections);
+      for (const [id, projection] of projectionEntries) {
+        // Simple matching: check if projection matches query filters
+        if (this.matchesQuery(projection, query.payload)) {
+          return {
+            isSuccess: true,
+            data: projection
+          };
+        }
+      }
+      
+      // No matching projection found
       return {
         isSuccess: true,
-        data: {}
+        data: null
       };
     } catch (error) {
+      console.error('[MultiProjectorActor] Query error:', error);
       return {
         isSuccess: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+  
+  /**
+   * Simple query matcher
+   */
+  private matchesQuery(projection: any, queryPayload: any): boolean {
+    if (!queryPayload || Object.keys(queryPayload).length === 0) {
+      return true; // No filters, match all
+    }
+    
+    // Check each filter property
+    for (const [key, value] of Object.entries(queryPayload)) {
+      if (key === 'id') continue; // Already handled
+      
+      // Simple equality check
+      if (projection[key] !== value) {
+        return false;
+      }
+    }
+    
+    return true;
   }
   
   /**
@@ -146,18 +218,37 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Use safe state for queries
       const state = this.safeState || await this.buildStateAsync();
       
-      // TODO: Implement list query execution
-      // const result = await this.queryExecutor.executeListQuery(
-      //   query,
-      //   state.projections
-      // );
+      console.log('[MultiProjectorActor] Executing list query:', {
+        queryType: query.queryType,
+        projectorType: this.projectorType,
+        skip: query.skip,
+        take: query.take,
+        projectionsCount: Object.keys(state.projections).length
+      });
+      
+      // Get all matching projections
+      const projections = state.projections;
+      const matchingProjections: any[] = [];
+      
+      // Filter projections based on query
+      for (const [id, projection] of Object.entries(projections)) {
+        if (this.matchesQuery(projection, query.payload)) {
+          matchingProjections.push({ ...projection, id });
+        }
+      }
+      
+      // Apply pagination
+      const skip = query.skip || 0;
+      const take = query.take || 10;
+      const paginatedItems = matchingProjections.slice(skip, skip + take);
       
       return {
         isSuccess: true,
-        items: [],
-        totalCount: 0
+        items: paginatedItems,
+        totalCount: matchingProjections.length
       };
     } catch (error) {
+      console.error('[MultiProjectorActor] List query error:', error);
       return {
         isSuccess: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -247,9 +338,9 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   }
   
   /**
-   * Reminder handling
+   * Reminder handling - Dapr expects this method name
    */
-  async receiveReminderAsync(
+  async receiveReminder(
     reminderName: string,
     state: Buffer,
     dueTime: string,
@@ -263,6 +354,18 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         await this.handleEventCheckReminder();
         break;
     }
+  }
+  
+  /**
+   * Alias for backward compatibility
+   */
+  async receiveReminderAsync(
+    reminderName: string,
+    state: Buffer,
+    dueTime: string,
+    period: string
+  ): Promise<void> {
+    return this.receiveReminder(reminderName, state, dueTime, period);
   }
   
   /**

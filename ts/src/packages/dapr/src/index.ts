@@ -22,6 +22,7 @@ export {
   // Actor Factories
   AggregateActorFactory,
   AggregateEventHandlerActorFactory,
+  MultiProjectorActorFactory,
   
   // Interfaces - avoid duplicate exports
   SerializableAggregate,
