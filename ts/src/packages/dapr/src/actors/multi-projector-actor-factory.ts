@@ -1,21 +1,22 @@
+import type { SekibanDomainTypes } from '@sekiban/core';
+import type { IActorProxyFactory } from '../types/index.js';
 import { MultiProjectorActor } from './multi-projector-actor.js';
-import { 
-  SekibanDomainTypes, 
-  IActorProxyFactory,
-  IEventStore
-} from '@sekiban/core';
 import { initializeDaprContainer } from '../container/index.js';
 
 /**
- * Factory for creating MultiProjectorActor
+ * Factory for creating and configuring MultiProjectorActor instances
+ * This follows the same pattern as AggregateActorFactory
  */
 export class MultiProjectorActorFactory {
+  /**
+   * Configure the factory with dependencies
+   */
   static configure(
     domainTypes: SekibanDomainTypes,
     serviceProvider: any,
     actorProxyFactory: IActorProxyFactory,
     serializationService: any,
-    eventStore?: IEventStore,
+    eventStore?: any,
     eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>
   ): void {
     console.log('[MultiProjectorActorFactory] Configuring with domainTypes:', !!domainTypes);
@@ -31,9 +32,14 @@ export class MultiProjectorActorFactory {
       eventHandlerDirectCall
     });
   }
-  
+
+  /**
+   * Create an actor class that can be registered with DaprServer
+   * Returns the actor class directly (no wrapper)
+   */
   static createActorClass(): typeof MultiProjectorActor {
     console.log('[MultiProjectorActorFactory] Creating actor class (returning MultiProjectorActor)');
+    // Return the actual class, not a wrapper
     return MultiProjectorActor;
   }
 }

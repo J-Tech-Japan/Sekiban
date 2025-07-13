@@ -8,6 +8,9 @@ const ConfigSchema = z.object({
   PORT: z.string().default('3000').transform(Number),
   ACTOR_SERVER_PORT: z.string().default('50010').transform(Number),
   
+  // Storage configuration
+  USE_POSTGRES: z.string().default('false').transform(val => val === 'true'),
+  
   // PostgreSQL configuration
   DATABASE_URL: z.string().default('postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'),
   

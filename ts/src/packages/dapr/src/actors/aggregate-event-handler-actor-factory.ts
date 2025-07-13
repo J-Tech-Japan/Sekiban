@@ -1,3 +1,4 @@
+// @ts-ignore - IEventStore is exported from core
 import type { IEventStore } from '@sekiban/core';
 import { AggregateEventHandlerActor } from './aggregate-event-handler-actor.js';
 
@@ -19,21 +20,8 @@ export class AggregateEventHandlerActorFactory {
    * Create an actor class that can be registered with DaprServer
    */
   static createActorClass(): typeof AggregateEventHandlerActor {
-    const factory = this;
-    
-    // Create a named class to ensure proper registration
-    class AggregateEventHandlerActor extends factory.getBaseClass() {
-      constructor(ctx: any, id: any) {
-        super(ctx, id);
-        // Inject dependencies after construction
-        this.setupDependencies(factory.eventStore);
-      }
-    }
-    
-    return AggregateEventHandlerActor;
-  }
-  
-  private static getBaseClass() {
+    // Return the actual class directly, not a wrapper
+    // Dependencies are now injected via Awilix container in the constructor
     return AggregateEventHandlerActor;
   }
 }

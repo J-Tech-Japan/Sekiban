@@ -50,5 +50,18 @@ globalRegistry.registerProjector(UserProjector);
 // globalRegistry.registerQuery(GetTaskById);
 
 export function createTaskDomainTypes() {
-  return createSchemaDomainTypes(globalRegistry);
+  const domainTypes = createSchemaDomainTypes(globalRegistry);
+  
+  // Add convenience properties for backward compatibility
+  return {
+    ...domainTypes,
+    // Expose the registry's collections directly
+    commands: globalRegistry.commandDefinitions,
+    events: globalRegistry.eventDefinitions,
+    projectors: globalRegistry.projectorDefinitions,
+    // Add helper methods
+    findCommandDefinition: (name: string) => globalRegistry.commandDefinitions.get(name),
+    findEventDefinition: (name: string) => globalRegistry.eventDefinitions.get(name),
+    findProjectorDefinition: (name: string) => globalRegistry.projectorDefinitions.get(name)
+  };
 }

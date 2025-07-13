@@ -7,8 +7,14 @@
   "include": ["src/**/*"],
   "references": [
     { "path": "../domain" },
+<<<<<<< HEAD
     { "path": "../../../../src/packages/core" },
     { "path": "../../../../src/packages/dapr" },
     { "path": "../../../../src/packages/postgres" }
+=======
+    { "path": "../../../src/packages/core" },
+    { "path": "../../../src/packages/dapr" },
+    { "path": "../../../src/packages/postgres" }
+>>>>>>> origin/main
   ]
 }

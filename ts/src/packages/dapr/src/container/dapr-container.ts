@@ -11,6 +11,13 @@ export interface DaprActorDependencies {
   actorProxyFactory: IActorProxyFactory;
   serializationService: any;
   eventStore?: any;
+  eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>;
+  daprClient?: any;
+  configuration?: {
+    pubSubName?: string;
+    eventTopicName?: string;
+    [key: string]: any;
+  };
 }
 
 /**
@@ -33,7 +40,10 @@ export function initializeDaprContainer(dependencies: DaprActorDependencies): vo
     serviceProvider: asValue(dependencies.serviceProvider),
     actorProxyFactory: asValue(dependencies.actorProxyFactory),
     serializationService: asValue(dependencies.serializationService),
-    eventStore: asValue(dependencies.eventStore)
+    eventStore: asValue(dependencies.eventStore),
+    eventHandlerDirectCall: asValue(dependencies.eventHandlerDirectCall),
+    daprClient: asValue(dependencies.daprClient),
+    configuration: asValue(dependencies.configuration)
   });
 
   console.log('[DaprContainer] Initialized with:');

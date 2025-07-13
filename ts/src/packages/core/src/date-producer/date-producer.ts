@@ -1,4 +1,4 @@
-import type { ISekibanDateProducer } from './types'
+import type { ISekibanDateProducer } from './types.js'
 
 /**
  * Default implementation of ISekibanDateProducer.

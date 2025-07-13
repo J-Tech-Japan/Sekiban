@@ -10,7 +10,7 @@ import {
   isConcurrencyError,
   isUnsupportedOperationError,
   isValidationError
-} from './error-guards'
+} from './error-guards.js'
 import {
   SekibanError,
   AggregateNotFoundError,
@@ -22,7 +22,7 @@ import {
   ConcurrencyError,
   UnsupportedOperationError,
   ValidationError
-} from './errors'
+} from './errors.js'
 
 describe('Error Guards', () => {
   describe('isSekibanError', () => {

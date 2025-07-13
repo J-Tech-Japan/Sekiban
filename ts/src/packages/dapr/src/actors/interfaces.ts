@@ -1,9 +1,7 @@
 import type { 
   Aggregate,
   PartitionKeys,
-  EventDocument,
   CommandExecutionResult,
-  IEventPayload,
   ICommandWithHandler,
   IAggregateProjector,
   ITypedAggregatePayload,
@@ -49,6 +47,23 @@ export interface SerializableEventDocument {
   version: number;
   createdAt: string; // ISO date string
   metadata: any;
+  aggregateType?: string;
+  
+  // C# compatible uppercase fields (for pub/sub)
+  Id?: string;
+  SortableUniqueId?: string;
+  Version?: number;
+  AggregateId?: string;
+  AggregateGroup?: string;
+  RootPartitionKey?: string;
+  PayloadTypeName?: string;
+  TimeStamp?: string;
+  PartitionKey?: string;
+  CausationId?: string;
+  CorrelationId?: string;
+  ExecutedUser?: string;
+  CompressedPayloadJson?: string;
+  PayloadAssemblyVersion?: string;
 }
 
 /**
@@ -74,6 +89,7 @@ export interface SerializableQuery {
  */
 export interface SerializableListQuery extends SerializableQuery {
   skip?: number;
+  take?: number;
   limit?: number;
   sortField?: string;
   sortDirection?: 'asc' | 'desc';

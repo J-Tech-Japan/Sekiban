@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import pg from 'pg';
+<<<<<<< HEAD
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { MultiProjectorActorFactory, getDaprCradle } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
@@ -23,6 +24,21 @@ const config = {
   DATABASE_URL: process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'
 };
 
+=======
+import { config } from './config/index.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { healthRoutes } from './routes/health-routes.js';
+import { multiProjectorRoutes } from './routes/multi-projector-routes.js';
+import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
+import { MultiProjectorActorFactory } from '@sekiban/dapr';
+import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
+import { PostgresEventStore } from '@sekiban/postgres';
+import { createTaskDomainTypes } from '@dapr-sample/domain';
+import logger from './utils/logger.js';
+
+const { Pool } = pg;
+
+>>>>>>> origin/main
 async function startServer() {
   const app = express();
 
@@ -36,9 +52,15 @@ async function startServer() {
 
   // Debug middleware to log all requests
   app.use((req, res, next) => {
+<<<<<<< HEAD
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     if (req.path.startsWith('/actors/')) {
       console.log(`Actor route called: ${req.method} ${req.path}`);
+=======
+    logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    if (req.path.startsWith('/actors/')) {
+      logger.info(`Actor route called: ${req.method} ${req.path}`);
+>>>>>>> origin/main
     }
     next();
   });
@@ -47,11 +69,16 @@ async function startServer() {
   app.use((req, res, next) => {
     if (req.path.includes('/method/') && req.method === 'POST') {
       req.method = 'PUT';
+<<<<<<< HEAD
       console.log(`Converted POST to PUT for actor method: ${req.path}`);
+=======
+      logger.debug(`Converted POST to PUT for actor method: ${req.path}`);
+>>>>>>> origin/main
     }
     next();
   });
   
+<<<<<<< HEAD
   // Health routes
   app.get('/health', (_req, res) => {
     res.json({ 
@@ -125,6 +152,14 @@ async function startServer() {
       },
     });
   });
+=======
+  // Routes
+  app.use('/', healthRoutes);
+  app.use(config.API_PREFIX, multiProjectorRoutes);
+
+  // Error handling (must be last)
+  app.use(errorHandler);
+>>>>>>> origin/main
 
   // Create DaprServer and pass the Express app
   const daprServer = await setupDaprActorsWithApp(app);
@@ -166,6 +201,7 @@ async function startServer() {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
+<<<<<<< HEAD
 /**
  * Distribute event to all relevant MultiProjectorActors
  */
@@ -221,6 +257,10 @@ async function distributeEventToProjectors(eventData: any) {
 
 async function setupDaprActorsWithApp(app: express.Express) {
   console.log('Setting up Dapr actors with Express app...');
+=======
+async function setupDaprActorsWithApp(app: express.Express) {
+  logger.info('Setting up Dapr actors with Express app...');
+>>>>>>> origin/main
 
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
@@ -232,7 +272,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   if (usePostgres) {
     // Initialize PostgreSQL event store
+<<<<<<< HEAD
     console.log('Using PostgreSQL event store');
+=======
+    logger.info('Using PostgreSQL event store');
+>>>>>>> origin/main
     const pool = new Pool({
       connectionString: config.DATABASE_URL
     });
@@ -240,6 +284,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
     eventStore = new PostgresEventStore(pool);
     
     // Initialize the database schema
+<<<<<<< HEAD
     console.log('Initializing PostgreSQL schema...');
     try {
       const result = await eventStore.initialize();
@@ -251,11 +296,28 @@ async function setupDaprActorsWithApp(app: express.Express) {
       }
     } catch (error) {
       console.error('Failed to initialize PostgreSQL:', error);
+=======
+    logger.info('Initializing PostgreSQL schema...');
+    try {
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('PostgreSQL schema initialized successfully');
+      } else {
+        logger.error('Failed to initialize PostgreSQL schema:', result.error);
+        throw result.error;
+      }
+    } catch (error) {
+      logger.error('Failed to initialize PostgreSQL:', error);
+>>>>>>> origin/main
       throw error;
     }
   } else {
     // Initialize in-memory event store
+<<<<<<< HEAD
     console.log('Using in-memory event store');
+=======
+    logger.info('Using in-memory event store');
+>>>>>>> origin/main
     eventStore = new InMemoryEventStore({
       type: StorageProviderType.InMemory,
       enableLogging: config.NODE_ENV === 'development'
@@ -271,7 +333,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory
   const actorProxyFactory = {
     createActorProxy: (actorId: any, actorType: string) => {
+<<<<<<< HEAD
       console.log(`Creating actor proxy for ${actorType}/${actorId.id}`);
+=======
+      logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
+>>>>>>> origin/main
       const actorIdStr = actorId.id || actorId;
       
       // For now, we only need MultiProjectorActor proxies in this service
@@ -309,7 +375,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor class
   const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
   
+<<<<<<< HEAD
   console.log('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
+=======
+  logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
+>>>>>>> origin/main
 
   // Create DaprServer
   const daprServer = new DaprServer({
@@ -326,6 +396,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   // Register MultiProjectorActor
   await daprServer.actor.registerActor(MultiProjectorActorClass);
+<<<<<<< HEAD
   console.log('Registered MultiProjectorActor');
   
   // Initialize actor runtime
@@ -334,6 +405,36 @@ async function setupDaprActorsWithApp(app: express.Express) {
   console.log('Actor runtime initialized');
 
   console.log('Dapr actors integrated with Express app');
+=======
+  logger.info('Registered MultiProjectorActor');
+  
+  // Initialize actor runtime
+  logger.info('Initializing actor runtime...');
+  await daprServer.actor.init();
+  logger.info('Actor runtime initialized');
+
+  // Add diagnostic logging
+  console.log('[DEBUG] Adding diagnostic logging...');
+  
+  const originalActorHandler = (daprServer as any).actor?.actorHandler;
+  if (originalActorHandler) {
+    (daprServer as any).actor.actorHandler = async (req: any, res: any) => {
+      console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
+      try {
+        await originalActorHandler.call((daprServer as any).actor, req, res);
+      } catch (e) {
+        console.error('[DIAGNOSTIC] Actor handler error:', e);
+        console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);
+        throw e;
+      }
+    };
+    console.log('[DEBUG] Diagnostic handler installed');
+  } else {
+    console.log('[DEBUG] Could not install diagnostic handler');
+  }
+
+  logger.info('Dapr actors integrated with Express app');
+>>>>>>> origin/main
   
   return daprServer;
 }

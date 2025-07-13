@@ -177,13 +177,17 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         commandData: data,
         partitionKeys: partitionKeys,
         metadata: {
-          commandId: crypto.randomUUID(),
-          causationId: metadata?.requestId || crypto.randomUUID(),
-          correlationId: metadata?.requestId || crypto.randomUUID(),
-          executedUser: metadata?.custom?.user || 'system',
-          projectorTypeName,
-          aggregatePayloadTypeName: '', // Could be determined from projector if needed
-          commandAssemblyVersion: '1.0.0'
+          causationId: metadata?.causationId || crypto.randomUUID(),
+          correlationId: metadata?.correlationId || crypto.randomUUID(),
+          executedUser: metadata?.executedUser || (metadata?.custom as any)?.user || 'system',
+          timestamp: metadata?.timestamp || new Date(),
+          custom: {
+            commandId: crypto.randomUUID(),
+            projectorTypeName,
+            aggregatePayloadTypeName: '', // Could be determined from projector if needed
+            commandAssemblyVersion: '1.0.0',
+            ...metadata?.custom
+          }
         }
       };
       

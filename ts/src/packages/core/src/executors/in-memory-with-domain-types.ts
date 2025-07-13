@@ -1,6 +1,6 @@
 import { Result, ok, err } from 'neverthrow';
-import { SekibanExecutorBase, SimpleTransaction } from './base';
-import { ISekibanTransaction, SekibanExecutorConfig } from './types';
+import { SekibanExecutorBase, SimpleTransaction } from './base.js';
+import { ISekibanTransaction, SekibanExecutorConfig } from './types.js';
 import { CommandHandlerRegistry, ICommandExecutor, CommandContext, CommandResult, CommandExecutionOptions } from '../commands/index.js';
 import { QueryHandlerRegistry } from '../queries/index.js';
 import { 

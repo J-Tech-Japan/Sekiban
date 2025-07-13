@@ -1,9 +1,9 @@
 import { IEvent, IEventPayload, PartitionKeys, SortableUniqueId } from '@sekiban/core';
-import { gzip, ungzip } from 'node:zlib';
+import { gzip, gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
 const gzipAsync = promisify(gzip);
-const ungzipAsync = promisify(ungzip);
+const ungzipAsync = promisify(gunzip);
 
 /**
  * Serializable event document format for Dapr pub/sub

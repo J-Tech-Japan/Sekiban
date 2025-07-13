@@ -15,7 +15,7 @@ export interface IAggregateActor<TPayload extends ITypedAggregatePayload> {
   /**
    * Apply new events to the aggregate
    */
-  applyEvents(events: import('@sekiban/core').EventDocument[]): Promise<Result<void, SnapshotError>>;
+  applyEvents(events: any[]): Promise<Result<void, SnapshotError>>;
   
   /**
    * Force creation of a snapshot

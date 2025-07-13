@@ -6,7 +6,7 @@ import {
   validateOrThrow,
   type ValidationResult,
   type Validator
-} from './validation'
+} from './validation.js'
 import { z } from 'zod'
 
 describe('Validation utilities', () => {

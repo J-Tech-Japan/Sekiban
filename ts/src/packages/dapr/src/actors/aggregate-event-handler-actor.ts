@@ -1,5 +1,10 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
-import type { IEventStore, PartitionKeys } from '@sekiban/core';
+import type { PartitionKeys } from '@sekiban/core';
+// @ts-ignore - These are exported from core
+import type { IEventStore } from '@sekiban/core';
+// @ts-ignore - These are exported from core
+import { EventRetrievalInfo, AggregateGroupStream } from '@sekiban/core';
+import { getDaprCradle } from '../container/index.js';
 import type {
   IAggregateEventHandlerActor,
   SerializableEventDocument,
@@ -7,7 +12,6 @@ import type {
   AggregateEventHandlerState,
   ActorPartitionInfo
 } from './interfaces';
-import { getDaprCradle } from '../container/index.js';
 
 /**
  * Handles event persistence and retrieval for aggregate streams
@@ -16,6 +20,11 @@ import { getDaprCradle } from '../container/index.js';
 export class AggregateEventHandlerActor extends AbstractActor 
   implements IAggregateEventHandlerActor {
   
+  // Explicitly define actor type for Dapr
+  static get actorType() { 
+    return "AggregateEventHandlerActor"; 
+  }
+  
   // State keys
   private readonly HANDLER_STATE_KEY = "aggregateEventHandler";
   private readonly EVENTS_KEY = "aggregateEventDocuments";
@@ -23,31 +32,60 @@ export class AggregateEventHandlerActor extends AbstractActor
   
   private partitionInfo?: ActorPartitionInfo;
   private eventStore: IEventStore;
+  private actorIdString!: string;
   
-  constructor(ctx: any, id: any) {
-    super(ctx, id);
-    // EventStore will be injected via setupDependencies
-    this.eventStore = {} as IEventStore;
+  constructor(daprClient: DaprClient, id: ActorId) {
+    try {
+      super(daprClient, id);
+      console.log('[AggregateEventHandlerActor] Constructor called');
+      
+      // Extract actor ID string
+      this.actorIdString = (id as any).id || String(id);
+      
+      // Get dependencies from Awilix container (same pattern as AggregateActor)
+      const cradle = getDaprCradle();
+      
+      // Get eventStore from container
+      this.eventStore = cradle.eventStore;
+      
+      console.log('[AggregateEventHandlerActor] Dependencies injected, eventStore:', !!this.eventStore);
+    } catch (error) {
+      console.error('[AggregateEventHandlerActor] Constructor error:', error);
+      throw error;
+    }
   }
   
-  private getDaprClient(): DaprClient {
+  getDaprClient(): DaprClient {
     // Get DaprClient from the actor context
     return (this as any).client || new DaprClient();
-  }
-  
-  // Method to inject dependencies after construction
-  setupDependencies(eventStore: IEventStore): void {
-    this.eventStore = eventStore;
   }
   
   /**
    * Actor activation
    */
   async onActivate(): Promise<void> {
+    console.log('[AggregateEventHandlerActor] onActivate called for actor:', (this as any).id?.toString());
     // Load partition info on activation
     await this.loadPartitionInfoAsync();
+    console.log('[AggregateEventHandlerActor] Actor activated with partition info:', JSON.stringify(this.partitionInfo));
   }
   
+  /**
+   * Ensure partition info is saved (called on first method invocation)
+   */
+  private async ensurePartitionInfoSaved(): Promise<void> {
+    try {
+      const stateManager = await this.getStateManager();
+      const [hasPartitionInfo] = await stateManager.tryGetState(this.PARTITION_INFO_KEY);
+      
+      if (!hasPartitionInfo && this.partitionInfo) {
+        await stateManager.setState(this.PARTITION_INFO_KEY, this.partitionInfo);
+      }
+    } catch (error) {
+      console.warn('[AggregateEventHandlerActor] Could not save partition info:', error);
+    }
+  }
+
   /**
    * Append events with concurrency check
    */
@@ -55,17 +93,32 @@ export class AggregateEventHandlerActor extends AbstractActor
     expectedLastSortableUniqueId: string,
     events: SerializableEventDocument[]
   ): Promise<EventHandlingResponse> {
+    console.log('[AggregateEventHandlerActor] appendEventsAsync called with:');
+    console.log('  - Actor ID:', (this as any).id?.toString());
+    console.log('  - Expected last ID:', expectedLastSortableUniqueId);
+    console.log('  - Events count:', events.length);
+    console.log('  - Partition info:', JSON.stringify(this.partitionInfo));
+    
     try {
+      // Ensure partition info is saved on first method call
+      await this.ensurePartitionInfoSaved();
+      
       // Load current state
       const stateManager = await this.getStateManager();
-      const [hasState, handlerState] = await stateManager.tryGetState<AggregateEventHandlerState>(
+      const [hasState, handlerState] = await stateManager.tryGetState(
         this.HANDLER_STATE_KEY
       );
       
-      const currentLastId = handlerState?.lastSortableUniqueId || '';
+      console.log('[AggregateEventHandlerActor] Current state:', hasState ? 'exists' : 'not found', handlerState);
+      
+      const currentLastId = (handlerState as any)?.lastSortableUniqueId || '';
       
       // Validate optimistic concurrency
       if (currentLastId !== expectedLastSortableUniqueId) {
+        console.error('[AggregateEventHandlerActor] Concurrency conflict:', {
+          expected: expectedLastSortableUniqueId,
+          actual: currentLastId
+        });
         return {
           isSuccess: false,
           error: `Concurrency conflict: expected ${expectedLastSortableUniqueId}, actual ${currentLastId}`
@@ -83,10 +136,21 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       // Save to external storage
       if (this.partitionInfo) {
-        await this.eventStore.saveEvents(
-          this.partitionInfo.partitionKeys,
-          events.map(e => this.deserializeEvent(e))
-        );
+        console.log('[AggregateEventHandlerActor] Saving to event store:', {
+          partitionKeys: this.partitionInfo.partitionKeys,
+          eventCount: events.length
+        });
+        
+        try {
+          const deserializedEvents = events.map(e => this.deserializeEvent(e));
+          await this.eventStore.saveEvents(deserializedEvents);
+          console.log('[AggregateEventHandlerActor] Events saved to event store successfully');
+        } catch (saveError) {
+          console.error('[AggregateEventHandlerActor] Failed to save to event store:', saveError);
+          throw saveError;
+        }
+      } else {
+        console.warn('[AggregateEventHandlerActor] No partition info available, skipping event store save');
       }
       
       // Update metadata
@@ -180,7 +244,18 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Get all events
    */
   async getAllEventsAsync(): Promise<SerializableEventDocument[]> {
-    return this.loadEventsFromStateAsync();
+    console.log('[AggregateEventHandlerActor] getAllEventsAsync called for actor:', (this as any).id?.toString());
+    try {
+      // Ensure partition info is saved on first method call
+      await this.ensurePartitionInfoSaved();
+      
+      const events = await this.loadEventsFromStateAsync();
+      console.log('[AggregateEventHandlerActor] Returning', events.length, 'events');
+      return events;
+    } catch (error) {
+      console.error('[AggregateEventHandlerActor] Error in getAllEventsAsync:', error);
+      throw error;
+    }
   }
   
   /**
@@ -188,11 +263,11 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   async getLastSortableUniqueIdAsync(): Promise<string> {
     const stateManager = await this.getStateManager();
-    const [hasState, handlerState] = await stateManager.tryGetState<AggregateEventHandlerState>(
+    const [hasState, handlerState] = await stateManager.tryGetState(
       this.HANDLER_STATE_KEY
     );
     
-    return handlerState?.lastSortableUniqueId || '';
+    return (handlerState as AggregateEventHandlerState)?.lastSortableUniqueId || '';
   }
   
   /**
@@ -206,17 +281,26 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Load events from state with external storage fallback
    */
   private async loadEventsFromStateAsync(): Promise<SerializableEventDocument[]> {
+    console.log('[AggregateEventHandlerActor] loadEventsFromStateAsync called');
+    
     const stateManager = await this.getStateManager();
-    const [hasEvents, events] = await stateManager.tryGetState<SerializableEventDocument[]>(
+    console.log('[AggregateEventHandlerActor] Got state manager');
+    
+    const [hasEvents, events] = await stateManager.tryGetState(
       this.EVENTS_KEY
     );
     
-    if (!hasEvents || !events || events.length === 0) {
+    console.log('[AggregateEventHandlerActor] State check:', {
+      hasEvents,
+      eventsCount: events ? (events as any).length : 0
+    });
+    
+    if (!hasEvents || !events || (events as any).length === 0) {
       // Fallback to external storage
       if (this.partitionInfo) {
-        const externalEvents = await this.eventStore.loadEvents(
-          this.partitionInfo.partitionKeys
-        );
+        const eventRetrievalInfo = EventRetrievalInfo.fromPartitionKeys(this.partitionInfo.partitionKeys);
+        const externalEventsResult = await this.eventStore.getEvents(eventRetrievalInfo);
+        const externalEvents = externalEventsResult.isOk() ? externalEventsResult.value : [];
         
         const serializedEvents = externalEvents.map((e: any) => this.serializeEvent(e));
         
@@ -239,27 +323,31 @@ export class AggregateEventHandlerActor extends AbstractActor
       return [];
     }
     
-    return events;
+    return (events as SerializableEventDocument[]) || [];
   }
   
   /**
    * Load partition info from state or actor ID
    */
   private async loadPartitionInfoAsync(): Promise<void> {
-    const stateManager = await this.getStateManager();
-    const [hasPartitionInfo, partitionInfo] = await stateManager.tryGetState<ActorPartitionInfo>(
-      this.PARTITION_INFO_KEY
-    );
-    
-    if (hasPartitionInfo && partitionInfo) {
-      this.partitionInfo = partitionInfo;
-    } else {
-      // Extract from actor ID
-      this.partitionInfo = this.getPartitionInfoFromActorId();
-      await stateManager.setState(
-        this.PARTITION_INFO_KEY,
-        this.partitionInfo
+    try {
+      const stateManager = await this.getStateManager();
+      const [hasPartitionInfo, partitionInfo] = await stateManager.tryGetState(
+        this.PARTITION_INFO_KEY
       );
+      
+      if (hasPartitionInfo && partitionInfo) {
+        this.partitionInfo = partitionInfo as ActorPartitionInfo;
+      } else {
+        // Extract from actor ID but don't save during onActivate
+        // Dapr might not have the actor instance ready yet
+        this.partitionInfo = this.getPartitionInfoFromActorId();
+        // We'll save it on first actual method call instead
+      }
+    } catch (error) {
+      console.warn('[AggregateEventHandlerActor] Error loading partition info, using extracted info:', error);
+      // Fallback to extracting from actor ID
+      this.partitionInfo = this.getPartitionInfoFromActorId();
     }
   }
   
@@ -268,17 +356,23 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   private getPartitionInfoFromActorId(): ActorPartitionInfo {
     // Actor ID format: "aggregateType:aggregateId:rootPartition"
-    const idParts = (this as any).id.toString().split(':');
+    const actorId = (this as any).id.toString();
+    console.log('[AggregateEventHandlerActor] Extracting partition info from actor ID:', actorId);
+    const idParts = actorId.split(':');
     
-    return {
+    const partitionInfo: ActorPartitionInfo = {
       partitionKeys: {
         aggregateId: idParts[1] || '',
         group: idParts[0] || '',
-        rootPartitionKey: idParts[2] || 'default'
+        rootPartitionKey: idParts[2] || 'default',
+        partitionKey: `${idParts[0] || ''}:${idParts[1] || ''}:${idParts[2] || 'default'}`
       } as PartitionKeys,
       aggregateType: idParts[0] || '',
       projectorType: '' // Not used in event handler
     };
+    
+    console.log('[AggregateEventHandlerActor] Extracted partition info:', JSON.stringify(partitionInfo));
+    return partitionInfo;
   }
   
   /**
