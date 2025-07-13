@@ -1,0 +1,81 @@
+# TypeScript build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+.nyc_output/
+
+# Production builds
+*.js
+*.d.ts
+*.map
+
+# Keep configuration and test files
+!*.config.js
+!*.config.ts
+!*.test.ts
+!vitest.config.ts
+!tsup.config.ts
+!jest.config.js
+!jest.config.ts
+
+# Package manager files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+temp/
+tmp/
+
+# Build tools
+.turbo/
+.parcel-cache/
+.next/
+out/
+
+# Misc
+*.bak
+*.orig
+
+# Test artifacts
+test-*.sh
+test-*.mjs
+test-*.cjs
+analyze-error.md

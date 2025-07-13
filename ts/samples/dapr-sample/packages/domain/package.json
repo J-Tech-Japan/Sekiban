@@ -1,0 +1,31 @@
+{
+  "name": "@dapr-sample/domain",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@sekiban/core": "file:../../../../src/packages/core",
+    "zod": "^3.22.4",
+    "neverthrow": "^6.1.0"
+  },
+  "devDependencies": {
+    "@sekiban/testing": "file:../../../../src/packages/testing",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0"
+  }
+}

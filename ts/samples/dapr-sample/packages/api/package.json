@@ -1,0 +1,52 @@
+{
+  "name": "@dapr-sample/api",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsx watch src/server.ts",
+    "dev:simple": "tsx watch src/simple-server.ts",
+    "dev:simple-di": "tsx watch src/simple-server-with-di.ts",
+    "dev:wrapper": "tsx watch src/simple-server-wrapper.ts",
+    "demo": "tsx src/server.ts",
+    "start": "node dist/server.js",
+    "start:simple": "node dist/simple-server.js",
+    "start:simple-di": "node dist/simple-server-with-di.js",
+    "start:wrapper": "node dist/simple-server-wrapper.js",
+    "test": "vitest",
+    "test:command": "tsx src/test-command-debug.ts",
+    "init-db": "tsx src/init-database.ts",
+    "start:postgres": "USE_POSTGRES=true npm run start"
+  },
+  "dependencies": {
+    "@dapr-sample/domain": "workspace:*",
+    "@dapr-sample/workflows": "workspace:*",
+    "@dapr/dapr": "^3.5.2",
+    "@sekiban/core": "file:../../../../src/packages/core",
+    "@sekiban/dapr": "file:../../../../src/packages/dapr",
+    "@sekiban/postgres": "file:../../../../src/packages/postgres",
+    "awilix": "^10.0.2",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "neverthrow": "^6.1.0",
+    "pg": "^8.16.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.15.4",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0"
+  }
+}

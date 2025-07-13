@@ -168,6 +168,36 @@ check_pubsub_subscriptions() {
     fi
 }
 
+# Function to test pubsub flow (from origin/main)
+test_pubsub_flow() {
+    echo ""
+    echo "=== Testing pub/sub flow with dedicated endpoint ==="
+    echo "POST $API_URL/api/test/pubsub-flow"
+    echo ""
+    
+    response=$(curl -s -X POST "$API_URL/api/test/pubsub-flow" \
+        -H "Content-Type: application/json")
+    
+    echo "Response:"
+    echo "$response" | jq '.' 2>/dev/null || echo "$response"
+    echo ""
+    
+    # Parse response
+    if echo "$response" | grep -q '"projectionAvailable":true'; then
+        echo -e "${GREEN}✅ SUCCESS! Pub/Sub is working correctly.${NC}"
+        echo "   Events are being published and multi-projections are being updated."
+    else
+        echo -e "${YELLOW}⚠️  WARNING: Pub/Sub might not be working correctly.${NC}"
+        echo "   User was created but not found in multi-projections."
+        echo ""
+        echo "Troubleshooting steps:"
+        echo "1. Check if Redis is running: redis-cli ping"
+        echo "2. Check Dapr logs for any errors"
+        echo "3. Verify EventPubSubController is registered"
+        echo "4. Check if multi-projector actors are running"
+    fi
+}
+
 # Main test flow
 main() {
     echo "Starting Dapr PubSub integration test..."
@@ -245,6 +275,17 @@ main() {
     echo ""
     get_user_list
     echo ""
+    
+    # Also test the dedicated pubsub flow endpoint
+    test_pubsub_flow
+    
+    echo ""
+    echo "=== Additional checks ==="
+    echo ""
+    
+    # Check if pub/sub component is configured
+    echo "Checking Dapr components..."
+    dapr components -k pubsub 2>/dev/null || echo "Could not list Dapr components"
     
     echo ""
     echo -e "${GREEN}=== Test Complete ===${NC}"
