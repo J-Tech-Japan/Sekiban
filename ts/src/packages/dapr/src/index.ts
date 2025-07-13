@@ -77,3 +77,9 @@ export type {
   EmptyAggregatePayload,
   Aggregate
 } from '@sekiban/core';
+
+// Export serializable event document utilities
+export { 
+  eventToSerializableDocument,
+  serializableDocumentToEvent
+} from './events/serializable-event-document.js';
