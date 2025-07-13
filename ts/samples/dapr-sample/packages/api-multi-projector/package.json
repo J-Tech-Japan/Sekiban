@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "tsx watch src/server-sdk.ts",
+    "dev:express": "tsx watch src/server.ts",
+    "start": "node dist/server-sdk.js",
     "build": "tsc",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit"

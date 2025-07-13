@@ -13,6 +13,10 @@ import type {
   SerializableEventDocument
 } from './interfaces';
 import { getDaprCradle } from '../container/index.js';
+import { ungzip } from 'node:zlib';
+import { promisify } from 'node:util';
+
+const ungzipAsync = promisify(ungzip);
 
 /**
  * Handles cross-aggregate projections and queries over multiple aggregates
@@ -112,6 +116,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     // Load initial state
     await this.loadStateAsync();
+    
+    // Catch up from event store (following C# MultiProjectorGrain pattern)
+    console.log('[MultiProjectorActor] Catching up from event store...');
+    await this.catchUpFromStoreAsync();
   }
   
   /**
@@ -289,18 +297,45 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     this.unsafeState = undefined;
     
     // Load all events from store
-    const events = await this.eventStore.loadAllEvents();
+    const retrievalInfo = new EventRetrievalInfo(
+      OptionalValue.empty<string>(),
+      OptionalValue.empty<any>(),
+      OptionalValue.empty<string>(),
+      SortableIdCondition.none(),
+      OptionalValue.fromValue(10000) // Get up to 10k events
+    );
+    
+    const eventsResult = await this.eventStore.getEvents(retrievalInfo);
+    if (eventsResult.isErr()) {
+      console.error('Failed to load events for rebuild:', eventsResult.error);
+      return;
+    }
+    
+    const events = eventsResult.value;
     
     // Build new state
     const newState = this.createEmptyState();
     
     // Apply all events
     for (const event of events) {
+      const serializedEvent: SerializableEventDocument = {
+        id: event.id.value,
+        sortableUniqueId: event.id.value,
+        payload: event.payload,
+        eventType: event.type,
+        aggregateId: event.aggregateId,
+        partitionKeys: event.partitionKeys,
+        version: event.version,
+        createdAt: typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString(),
+        metadata: event.metadata || {},
+        aggregateType: event.aggregateType
+      };
+      
       newState.projections = await this.applyEventToProjections(
         newState.projections,
-        this.serializeEvent(event)
+        serializedEvent
       );
-      newState.lastProcessedEventId = event.sortableUniqueId;
+      newState.lastProcessedEventId = event.id.value;
       newState.lastProcessedTimestamp = event.createdAt.toISOString();
       newState.version++;
     }
@@ -477,19 +512,60 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       const eventsResult = await this.eventStore.getEvents(retrievalInfo);
       
       if (eventsResult.isErr()) {
-        console.error('Failed to get events from store:', eventsResult.error);
+        console.error('[MultiProjectorActor] Failed to get events from store:', eventsResult.error);
         return;
       }
       
       const newEvents = eventsResult.value;
+      console.log(`[MultiProjectorActor] Retrieved ${newEvents.length} events from store`);
+      
+      // Debug: Check the structure of the first event
+      if (newEvents.length > 0) {
+        const firstEvent = newEvents[0];
+        console.log(`[MultiProjectorActor] First event structure:`, {
+          hasType: 'type' in firstEvent,
+          hasEventType: 'eventType' in firstEvent,
+          type: (firstEvent as any).type,
+          eventType: (firstEvent as any).eventType,
+          aggregateType: firstEvent.aggregateType,
+          aggregateId: firstEvent.aggregateId,
+          payload: firstEvent.payload
+        });
+      }
       
       // Add to buffer if not already present
       for (const event of newEvents) {
-        const sortableId = (event as any).sortableUniqueId || '';
+        const sortableId = event.id.value;
         
         if (!await this.isSortableUniqueIdReceived(sortableId)) {
+          // Events from store already have the right structure, just need to convert to SerializableEventDocument
+          let createdAtStr: string;
+          if (typeof event.createdAt === 'string') {
+            createdAtStr = event.createdAt;
+          } else if (event.createdAt instanceof Date) {
+            createdAtStr = event.createdAt.toISOString();
+          } else if (event.createdAt && typeof event.createdAt.toISOString === 'function') {
+            createdAtStr = event.createdAt.toISOString();
+          } else {
+            console.warn('[MultiProjectorActor] Invalid createdAt format:', event.createdAt);
+            createdAtStr = new Date().toISOString();
+          }
+          
+          const serializedEvent: SerializableEventDocument = {
+            id: event.id.value,
+            sortableUniqueId: event.id.value,
+            payload: event.payload,
+            eventType: event.type || event.eventType,  // Support both field names
+            aggregateId: event.aggregateId,
+            partitionKeys: event.partitionKeys,
+            version: event.version,
+            createdAt: createdAtStr,
+            metadata: event.metadata || {},
+            aggregateType: event.aggregateType
+          };
+          
           this.eventBuffer.push({
-            event: this.serializeEvent(event as any),
+            event: serializedEvent,
             receivedAt: new Date()
           });
         }
@@ -576,10 +652,194 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     projections: Record<string, any>,
     event: SerializableEventDocument
   ): Promise<Record<string, any>> {
-    // This would call the actual projector logic
-    // For now, return unchanged projections
-    // TODO: Implement actual projection logic based on projector type
-    return projections;
+    try {
+      // Get the domain types from container
+      const cradle = getDaprCradle();
+      const domainTypes = cradle.domainTypes;
+      
+      // Extract the projector name from the actor ID
+      // Format: aggregatelistprojector-{projectorname}
+      const actorIdStr = this.id.toString();
+      const parts = actorIdStr.split('-');
+      let projectorName = parts.length > 1 ? parts[1] : '';
+      
+      // The projectorName might be like 'taskprojector', but we need 'Task' for aggregateTypeName
+      // Common pattern: remove 'projector' suffix and capitalize
+      if (projectorName.endsWith('projector')) {
+        projectorName = projectorName.slice(0, -9); // Remove 'projector'
+        projectorName = projectorName.charAt(0).toUpperCase() + projectorName.slice(1); // Capitalize
+      }
+      
+      console.log(`[MultiProjectorActor] Applying event to projections:`, {
+        projectorName,
+        eventType: event.eventType,
+        aggregateId: event.aggregateId,
+        actorId: actorIdStr,
+        payload: event.payload
+      });
+      
+      // Find the projector in the registry
+      let projectorInstance = null;
+      
+      if (domainTypes.projectorTypes && typeof domainTypes.projectorTypes.getProjectorTypes === 'function') {
+        const projectorList = domainTypes.projectorTypes.getProjectorTypes();
+        const projectorWrapper = projectorList.find(
+          (p: any) => p.aggregateTypeName.toLowerCase() === projectorName.toLowerCase()
+        );
+        
+        if (projectorWrapper) {
+          projectorInstance = projectorWrapper.projector;
+        }
+      }
+      
+      if (!projectorInstance) {
+        console.warn(`[MultiProjectorActor] Projector not found: ${projectorName}`);
+        console.warn(`[MultiProjectorActor] Available projectors:`, 
+          domainTypes.projectorTypes?.getProjectorTypes?.()?.map((p: any) => p.aggregateTypeName) || 'none'
+        );
+        return projections;
+      }
+      
+      // Debug: Check projector structure
+      console.log(`[MultiProjectorActor] Projector instance type:`, typeof projectorInstance);
+      console.log(`[MultiProjectorActor] Projector has project method:`, typeof projectorInstance.project === 'function');
+      console.log(`[MultiProjectorActor] Projector has getInitialState method:`, typeof projectorInstance.getInitialState === 'function');
+      
+      // Check if projector has projections
+      if (projectorInstance.projections) {
+        console.log(`[MultiProjectorActor] Projector has projections:`, Object.keys(projectorInstance.projections));
+      }
+      
+      // Check if this projector can handle this event type
+      // SerializableEventDocument uses PayloadTypeName for event type
+      const eventType = event.PayloadTypeName;
+      if (projectorInstance.canHandle && !projectorInstance.canHandle(eventType)) {
+        // This projector doesn't handle this event type
+        return projections;
+      }
+      
+      // Get or create the projection for this aggregate
+      const aggregateId = event.AggregateId;
+      let currentProjection = projections[aggregateId];
+      
+      // If no projection exists, create initial state
+      if (!currentProjection) {
+        // Reconstruct partition keys from SerializableEventDocument
+        const partitionKeys = {
+          aggregateId: event.AggregateId,
+          group: event.AggregateGroup || projectorName,
+          rootPartitionKey: event.RootPartitionKey || 'default',
+          partitionKey: event.PartitionKey || '',
+          toString: () => event.PartitionKey || `${event.AggregateGroup}-${event.AggregateId}`
+        };
+        
+        const initialAggregate = projectorInstance.getInitialState(partitionKeys);
+        currentProjection = initialAggregate;
+      }
+      
+      // Convert SerializableEventDocument to IEvent format
+      const sortableIdResult = SortableUniqueId.fromString(event.SortableUniqueId);
+      const sortableId = sortableIdResult.isOk() ? sortableIdResult.value : SortableUniqueId.create();
+      
+      // Decompress payload if needed
+      let payload: any;
+      try {
+        if (event.CompressedPayloadJson) {
+          // Check if it's actually compressed
+          const payloadBuffer = Buffer.from(event.CompressedPayloadJson, 'base64');
+          
+          // Check for gzip header (1f 8b)
+          if (payloadBuffer[0] === 0x1f && payloadBuffer[1] === 0x8b) {
+            // It's gzipped, decompress it
+            const decompressed = await ungzipAsync(payloadBuffer);
+            const payloadJson = decompressed.toString('utf-8');
+            payload = JSON.parse(payloadJson);
+          } else {
+            // Not gzipped, just base64 encoded JSON
+            const payloadJson = payloadBuffer.toString('utf-8');
+            payload = JSON.parse(payloadJson);
+          }
+        } else {
+          // Fallback if not compressed
+          payload = {};
+        }
+      } catch (error) {
+        console.error('[MultiProjectorActor] Error decompressing payload:', error);
+        payload = {};
+      }
+      
+      // Reconstruct partition keys
+      const partitionKeys = {
+        aggregateId: event.AggregateId,
+        group: event.AggregateGroup || projectorName,
+        rootPartitionKey: event.RootPartitionKey || 'default',
+        partitionKey: event.PartitionKey || '',
+        toString: () => event.PartitionKey || `${event.AggregateGroup}-${event.AggregateId}`
+      };
+      
+      const iEvent: IEvent = {
+        id: sortableId,
+        aggregateType: event.AggregateGroup || 'unknown',
+        aggregateId: event.AggregateId,
+        eventType: event.PayloadTypeName,  // PayloadTypeName is the event type!
+        payload: payload,
+        version: event.Version,
+        partitionKeys: partitionKeys,
+        sortableUniqueId: sortableId,
+        timestamp: new Date(event.TimeStamp),
+        metadata: {
+          causationId: event.CausationId,
+          correlationId: event.CorrelationId,
+          userId: event.ExecutedUser,
+          executedUser: event.ExecutedUser,
+          timestamp: new Date(event.TimeStamp)
+        },
+        // Additional fields for IEvent interface
+        partitionKey: event.PartitionKey,
+        aggregateGroup: event.AggregateGroup,
+        eventData: payload
+      };
+      
+      // Project the event
+      console.log(`[MultiProjectorActor] Projecting event:`, {
+        currentProjectionPayload: currentProjection.payload,
+        eventType: iEvent.eventType,
+        eventPayload: iEvent.payload
+      });
+      
+      const result = projectorInstance.project(currentProjection, iEvent);
+      
+      if (result.isOk()) {
+        const newProjection = result.value;
+        console.log(`[MultiProjectorActor] Projection result:`, {
+          newPayload: newProjection.payload,
+          version: newProjection.version,
+          payloadType: newProjection.payload?.aggregateType || typeof newProjection.payload
+        });
+        
+        // Update the projections map
+        projections[aggregateId] = {
+          id: aggregateId,
+          aggregateType: newProjection.aggregateType,
+          version: newProjection.version,
+          lastEventId: event.id,
+          lastSortableUniqueId: event.sortableUniqueId,
+          payload: newProjection.payload,
+          partitionKeys: newProjection.partitionKeys,
+          createdAt: currentProjection.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        console.log(`[MultiProjectorActor] Projection updated for aggregate: ${aggregateId}`);
+      } else {
+        console.error(`[MultiProjectorActor] Failed to project event:`, result.error);
+      }
+      
+      return projections;
+    } catch (error) {
+      console.error('[MultiProjectorActor] Error in applyEventToProjections:', error);
+      return projections;
+    }
   }
   
   /**
@@ -597,17 +857,91 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   /**
    * Serialize event for storage
    */
-  private serializeEvent(event: EventDocument): SerializableEventDocument {
+  private serializeEvent(event: IEvent): SerializableEventDocument {
     return {
-      id: event.id,
-      sortableUniqueId: event.sortableUniqueId,
+      id: event.id.value,
+      sortableUniqueId: event.id.value,
       payload: event.payload,
-      eventType: event.payload?.constructor?.name || 'Unknown',
+      eventType: event.type,
       aggregateId: event.aggregateId,
       partitionKeys: event.partitionKeys,
       version: event.version,
-      createdAt: event.createdAt.toISOString(),
-      metadata: event.metadata || {}
+      createdAt: typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString(),
+      metadata: event.metadata || {},
+      aggregateType: event.aggregateType
     };
+  }
+  
+  /**
+   * Receive event from pub/sub
+   */
+  async receiveEventAsync(eventData: any): Promise<void> {
+    console.log('[MultiProjectorActor] Received event from pub/sub:', {
+      payloadTypeName: eventData?.PayloadTypeName,
+      aggregateGroup: eventData?.AggregateGroup,
+      aggregateId: eventData?.AggregateId,
+      actorId: this.id.toString()
+    });
+    
+    try {
+      // Check if it's already in SerializableEventDocument format
+      let serializedEvent: SerializableEventDocument;
+      
+      if (eventData.PayloadTypeName && eventData.CompressedPayloadJson) {
+        // It's already in the correct format
+        serializedEvent = eventData as SerializableEventDocument;
+      } else {
+        // Legacy format - convert to SerializableEventDocument
+        console.warn('[MultiProjectorActor] Received event in legacy format, converting...');
+        
+        // Create a simple serialized event for backward compatibility
+        const payload = eventData.payload || eventData;
+        const payloadJson = JSON.stringify(payload);
+        const payloadBase64 = Buffer.from(payloadJson).toString('base64');
+        
+        serializedEvent = {
+          Id: eventData.id || SortableUniqueId.create().value,
+          SortableUniqueId: eventData.sortableUniqueId || eventData.id || SortableUniqueId.create().value,
+          Version: eventData.version || 1,
+          
+          // Partition keys
+          AggregateId: eventData.aggregateId || '',
+          AggregateGroup: eventData.aggregateType || eventData.aggregateGroup || 'default',
+          RootPartitionKey: eventData.partitionKeys?.rootPartitionKey || 'default',
+          
+          // Event info
+          PayloadTypeName: eventData.eventType || eventData.type || 'UnknownEvent',
+          TimeStamp: eventData.createdAt || eventData.timestamp || new Date().toISOString(),
+          PartitionKey: eventData.partitionKey || '',
+          
+          // Metadata
+          CausationId: eventData.metadata?.causationId || '',
+          CorrelationId: eventData.metadata?.correlationId || '',
+          ExecutedUser: eventData.metadata?.executedUser || eventData.metadata?.userId || '',
+          
+          // Payload (not compressed in legacy format)
+          CompressedPayloadJson: payloadBase64,
+          
+          // Version
+          PayloadAssemblyVersion: '0.0.0.0'
+        };
+      }
+      
+      // Add to buffer
+      this.eventBuffer.push({
+        event: serializedEvent,
+        receivedAt: new Date()
+      });
+      
+      // If we're not already processing, flush immediately
+      if (this.eventBuffer.length === 1) {
+        await this.flushBuffer();
+      }
+      
+      console.log('[MultiProjectorActor] Event processed successfully');
+    } catch (error) {
+      console.error('[MultiProjectorActor] Error processing pub/sub event:', error);
+      throw error; // Let Dapr retry
+    }
   }
 }

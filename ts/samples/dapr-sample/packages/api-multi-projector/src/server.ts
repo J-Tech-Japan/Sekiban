@@ -5,7 +5,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
-import { MultiProjectorActorFactory } from '@sekiban/dapr';
+import { MultiProjectorActorFactory, getDaprCradle } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -69,6 +69,49 @@ async function startServer() {
     });
   });
 
+  // Dapr pub/sub subscription endpoint
+  app.get('/dapr/subscribe', (_req, res) => {
+    console.log('[PubSub] Subscription endpoint called');
+    res.json([
+      {
+        pubsubname: 'pubsub',
+        topic: 'sekiban-events',
+        route: '/events',
+        metadata: {
+          rawPayload: 'false'
+        }
+      }
+    ]);
+  });
+
+  // Event handler endpoint
+  app.post('/events', async (req, res) => {
+    console.log('[PubSub] Received event:', {
+      topic: req.headers['ce-topic'],
+      type: req.headers['ce-type'],
+      id: req.headers['ce-id'],
+      source: req.headers['ce-source']
+    });
+    console.log('[PubSub] Request body:', JSON.stringify(req.body, null, 2));
+    
+    try {
+      // Dapr wraps the event in a cloud event envelope
+      const eventData = req.body.data || req.body;
+      
+      // Distribute event to all relevant MultiProjectorActors
+      await distributeEventToProjectors(eventData);
+      
+      // Return 200 OK to acknowledge message
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('[PubSub] Error processing event:', error);
+      // Return 500 to retry later
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
   // Error handling
   app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(`Error handling request ${req.method} ${req.path}:`, err.message);
@@ -121,6 +164,59 @@ async function startServer() {
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+}
+
+/**
+ * Distribute event to all relevant MultiProjectorActors
+ */
+async function distributeEventToProjectors(eventData: any) {
+  console.log('[Distributor] Processing event:', {
+    type: eventData?.type,
+    aggregateType: eventData?.aggregateType,
+    aggregateId: eventData?.aggregateId
+  });
+
+  // Use hardcoded list for now
+  const multiProjectorTypes = [
+    { name: 'TaskProjector' },
+    { name: 'UserProjector' },
+    { name: 'WeatherForecastProjector' }
+  ];
+
+  console.log(`[Distributor] Using ${multiProjectorTypes.length} multi-projector types:`, multiProjectorTypes.map(p => p.name));
+
+  // Create DaprClient for invoking actors
+  const daprClient = new DaprClient({
+    daprHost: "127.0.0.1",
+    daprPort: String(config.DAPR_HTTP_PORT)
+  });
+
+  // Send event to each MultiProjectorActor
+  const promises = multiProjectorTypes.map(async (projectorType) => {
+    const actorId = `aggregatelistprojector-${projectorType.name.toLowerCase()}`;
+    
+    try {
+      console.log(`[Distributor] Sending event to actor: ${actorId}`);
+      
+      // Invoke the actor's receiveEvent method
+      await daprClient.invoker.invoke(
+        config.DAPR_APP_ID,
+        `actors/MultiProjectorActor/${actorId}/method/receiveEventAsync`,
+        HttpMethod.PUT,
+        [eventData]
+      );
+      
+      console.log(`[Distributor] Successfully sent event to actor: ${actorId}`);
+    } catch (error) {
+      console.error(`[Distributor] Failed to send event to actor ${actorId}:`, error);
+      // Don't fail the whole operation if one actor fails
+    }
+  });
+
+  // Wait for all distributions to complete
+  await Promise.allSettled(promises);
+  
+  console.log('[Distributor] Event distribution completed');
 }
 
 async function setupDaprActorsWithApp(app: express.Express) {

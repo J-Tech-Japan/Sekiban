@@ -7,6 +7,7 @@ import type {
   AggregateEventHandlerState,
   ActorPartitionInfo
 } from './interfaces';
+import { getDaprCradle } from '../container/index.js';
 
 /**
  * Handles event persistence and retrieval for aggregate streams
@@ -27,6 +28,11 @@ export class AggregateEventHandlerActor extends AbstractActor
     super(ctx, id);
     // EventStore will be injected via setupDependencies
     this.eventStore = {} as IEventStore;
+  }
+  
+  private getDaprClient(): DaprClient {
+    // Get DaprClient from the actor context
+    return (this as any).client || new DaprClient();
   }
   
   // Method to inject dependencies after construction
@@ -91,6 +97,49 @@ export class AggregateEventHandlerActor extends AbstractActor
       };
       
       await stateManager.setState(this.HANDLER_STATE_KEY, newState);
+      
+      // Publish events to Dapr pub/sub
+      try {
+        const cradle = getDaprCradle();
+        const daprClient = cradle.daprClient || this.getDaprClient();
+        const pubSubName = cradle.configuration?.pubSubName || 'pubsub';
+        const topicName = cradle.configuration?.eventTopicName || 'sekiban-events';
+        
+        // Publish each event
+        for (const event of events) {
+          // Extract only the C# compatible fields
+          const publishEvent = {
+            Id: event.Id,
+            SortableUniqueId: event.SortableUniqueId,
+            Version: event.Version,
+            AggregateId: event.AggregateId,
+            AggregateGroup: event.AggregateGroup,
+            RootPartitionKey: event.RootPartitionKey,
+            PayloadTypeName: event.PayloadTypeName,
+            TimeStamp: event.TimeStamp,
+            PartitionKey: event.PartitionKey,
+            CausationId: event.CausationId,
+            CorrelationId: event.CorrelationId,
+            ExecutedUser: event.ExecutedUser,
+            CompressedPayloadJson: event.CompressedPayloadJson,
+            PayloadAssemblyVersion: event.PayloadAssemblyVersion
+          };
+          
+          console.log(`[AggregateEventHandlerActor] Publishing event to pub/sub:`, {
+            pubSubName,
+            topicName,
+            eventType: publishEvent.PayloadTypeName,
+            aggregateId: publishEvent.AggregateId
+          });
+          
+          await daprClient.pubsub.publish(pubSubName, topicName, publishEvent);
+        }
+        
+        console.log(`[AggregateEventHandlerActor] Published ${events.length} events to pub/sub`);
+      } catch (pubsubError) {
+        // Log but don't fail - pub/sub is not critical for event storage
+        console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
+      }
       
       return {
         isSuccess: true,
@@ -236,7 +285,38 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Serialize event for storage
    */
   private serializeEvent(event: any): SerializableEventDocument {
+    // Convert to proper SerializableEventDocument format for pub/sub
+    const payloadJson = JSON.stringify(event.payload || {});
+    const payloadBase64 = Buffer.from(payloadJson).toString('base64');
+    
     return {
+      // Use uppercase field names to match C# format
+      Id: event.id?.value || event.id || '',
+      SortableUniqueId: event.sortableUniqueId || event.id?.value || '',
+      Version: event.version || 1,
+      
+      // Partition keys
+      AggregateId: event.aggregateId || event.partitionKeys?.aggregateId || '',
+      AggregateGroup: event.aggregateType || event.partitionKeys?.group || 'default',
+      RootPartitionKey: event.partitionKeys?.rootPartitionKey || 'default',
+      
+      // Event info
+      PayloadTypeName: event.payload?.constructor?.name || event.eventType || 'Unknown',
+      TimeStamp: event.createdAt instanceof Date ? event.createdAt.toISOString() : event.createdAt,
+      PartitionKey: event.partitionKeys?.partitionKey || event.partitionKeys?.toString?.() || '',
+      
+      // Metadata
+      CausationId: event.metadata?.causationId || '',
+      CorrelationId: event.metadata?.correlationId || '',
+      ExecutedUser: event.metadata?.executedUser || event.metadata?.userId || '',
+      
+      // Payload (not compressed for now)
+      CompressedPayloadJson: payloadBase64,
+      
+      // Version
+      PayloadAssemblyVersion: '0.0.0.0',
+      
+      // Keep old format fields for backward compatibility
       id: event.id,
       sortableUniqueId: event.sortableUniqueId,
       payload: event.payload,
@@ -246,7 +326,7 @@ export class AggregateEventHandlerActor extends AbstractActor
       version: event.version,
       createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : event.createdAt,
       metadata: event.metadata || {}
-    };
+    } as any;
   }
   
   /**
