@@ -27,3 +27,6 @@ export type { TaskState, CompletedTaskState, TaskPayloadUnion } from './aggregat
 
 // Export queries
 export { GetTaskById } from './aggregates/task/queries/task-queries.js';
+
+// Export User aggregate
+export * from './aggregates/user/index.js';

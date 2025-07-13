@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Sekiban.Pure.CosmosDb;
 using Sekiban.Pure.Postgres;
 using Scalar.AspNetCore;
+using Microsoft.AspNetCore.Routing;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +32,10 @@ builder.Logging.SetMinimumLevel(LogLevel.Debug);
 builder.AddServiceDefaults();
 
 // Add services to the container
-builder.Services.AddControllers().AddDapr();
+builder.Services.AddControllers()
+    .AddDapr()
+    .AddApplicationPart(typeof(Sekiban.Pure.Dapr.Controllers.EventPubSubController).Assembly)
+    .AddControllersAsServices(); // This helps with controller discovery from external assemblies
 builder.Services.AddEndpointsApiExplorer();
 
 // Add OpenAPI services
@@ -421,8 +425,83 @@ app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecu
 .WithDescription("Generates sample weather forecast data for testing")
 .WithTags("WeatherForecast");
 
+// Test endpoint to verify multi-projector pub/sub flow
+app.MapPost("/api/test/pubsub-flow", async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> testLogger) =>
+{
+    testLogger.LogInformation("=== Testing Pub/Sub Flow ===");
+    
+    // Create a test user - this should trigger pub/sub
+    var userId = Guid.NewGuid();
+    var createCommand = new CreateUser(userId, "PubSub Test User", $"pubsub-{userId}@test.com");
+    
+    testLogger.LogInformation("Creating user with ID: {UserId}", userId);
+    var result = await executor.CommandAsync(createCommand);
+    
+    if (!result.IsSuccess)
+    {
+        return Results.BadRequest(new { error = result.GetException().Message });
+    }
+    
+    testLogger.LogInformation("User created successfully. Version: {Version}", result.GetValue().Version);
+    
+    // Wait a bit for pub/sub to propagate
+    await Task.Delay(1000);
+    
+    // Try to query using the multi-projector
+    testLogger.LogInformation("Querying user list to verify multi-projection...");
+    var query = new UserListQuery("", "");
+    var queryResult = await executor.QueryAsync(query);
+    
+    if (!queryResult.IsSuccess)
+    {
+        return Results.Ok(new 
+        { 
+            userCreated = true,
+            version = result.GetValue().Version,
+            projectionAvailable = false,
+            error = queryResult.GetException().Message
+        });
+    }
+    
+    var users = queryResult.GetValue().Items.ToList();
+    var foundUser = users.FirstOrDefault(u => u.UserId == userId);
+    
+    return Results.Ok(new 
+    { 
+        userCreated = true,
+        version = result.GetValue().Version,
+        projectionAvailable = foundUser != null,
+        totalUsers = users.Count,
+        testUserId = userId,
+        foundInProjection = foundUser != null ? new { foundUser.UserId, foundUser.Name, foundUser.Email } : null,
+        message = foundUser != null 
+            ? "✅ Pub/Sub working! User found in multi-projection." 
+            : "⚠️ User created but not yet in multi-projection. Pub/Sub might not be working."
+    });
+})
+.WithName("TestPubSubFlow")
+.WithSummary("Test pub/sub event flow")
+.WithDescription("Creates a user and verifies it appears in multi-projections via pub/sub")
+.WithTags("Debug");
+
 // Map default endpoints for Aspire integration
 app.MapDefaultEndpoints();
+
+// Note: app.MapSubscribeHandler() already maps the /dapr/subscribe endpoint
+// The EventPubSubController from Sekiban.Pure.Dapr should provide the subscriptions
+
+// Log all registered endpoints
+var endpointDataSource = app.Services.GetRequiredService<EndpointDataSource>();
+logger.LogInformation("=== Registered Endpoints ===");
+foreach (var endpoint in endpointDataSource.Endpoints)
+{
+    if (endpoint is RouteEndpoint routeEndpoint)
+    {
+        logger.LogInformation("Route: {Pattern}, HTTP: {Methods}", 
+            routeEndpoint.RoutePattern.RawText,
+            routeEndpoint.Metadata.OfType<HttpMethodMetadata>().FirstOrDefault()?.HttpMethods ?? new[] { "ANY" });
+    }
+}
 
 app.Run();
 

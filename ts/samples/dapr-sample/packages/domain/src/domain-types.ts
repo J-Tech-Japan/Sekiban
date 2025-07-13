@@ -17,6 +17,8 @@ import {
 } from './aggregates/task/events/task-events.js';
 import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
 // import { GetTaskById } from './aggregates/task/queries/task-queries.js';
+import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
+import { UserProjector } from './aggregates/user/projectors/user-projector.js';
 
 // Register all domain types with the global registry
 // Events
@@ -35,8 +37,14 @@ globalRegistry.registerCommand(UpdateTask);
 globalRegistry.registerCommand(DeleteTask);
 globalRegistry.registerCommand(RevertTaskCompletion);
 
+// User Events
+globalRegistry.registerEvent(UserCreated);
+globalRegistry.registerEvent(UserNameChanged);
+globalRegistry.registerEvent(UserEmailChanged);
+
 // Projectors
 globalRegistry.registerProjector(taskProjectorDefinition);
+globalRegistry.registerProjector(UserProjector);
 
 // TODO: Register queries when supported
 // globalRegistry.registerQuery(GetTaskById);
