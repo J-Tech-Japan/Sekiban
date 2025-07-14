@@ -66,7 +66,8 @@ public static class DaprSerializationExtensions
             var innerService = new DaprSerializationService(
                 sp.GetRequiredService<IDaprTypeRegistry>(),
                 sp.GetRequiredService<IOptions<DaprSerializationOptions>>(),
-                sp.GetRequiredService<ILogger<DaprSerializationService>>());
+                sp.GetRequiredService<ILogger<DaprSerializationService>>(),
+                sp.GetRequiredService<SekibanDomainTypes>());
             
             return new CachedDaprSerializationService(
                 innerService,

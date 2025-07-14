@@ -304,8 +304,65 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"            types.Add(typeof({type.TypeName}));");
         }
+        
+        sb.AppendLine("            // Add aggregate list projector types");
+        foreach (var type in aggregateProjectorTypes)
+        {
+            sb.AppendLine($"            types.Add(typeof(AggregateListProjector<{type.RecordName}>));");
+        }
+        
         sb.AppendLine("            return types;");
         sb.AppendLine("        }");
+        
+        sb.AppendLine();
+        sb.AppendLine("        public ResultBox<IMultiProjectorCommon> GenerateInitialPayload(Type projectorType)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // Check if it's an AggregateListProjector");
+        sb.AppendLine("            if (projectorType.IsGenericType && ");
+        sb.AppendLine("                projectorType.GetGenericTypeDefinition() == typeof(AggregateListProjector<>))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                // Get the static GenerateInitialPayload method");
+        sb.AppendLine("                var generateMethod = projectorType.GetMethod(\"GenerateInitialPayload\", ");
+        sb.AppendLine("                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);");
+        sb.AppendLine("                ");
+        sb.AppendLine("                if (generateMethod != null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var payload = generateMethod.Invoke(null, null) as IMultiProjectorCommon;");
+        sb.AppendLine("                    if (payload != null)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        return ResultBox.FromValue(payload);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
+        sb.AppendLine("                ");
+        sb.AppendLine("                return ResultBox<IMultiProjectorCommon>.Error(");
+        sb.AppendLine("                    new InvalidOperationException($\"Could not generate initial payload for {projectorType.Name}\"));");
+        sb.AppendLine("            }");
+        sb.AppendLine("            ");
+        sb.AppendLine("            // Try type-specific generation based on full type name");
+        sb.AppendLine("            var typeName = projectorType.FullName ?? projectorType.Name;");
+        sb.AppendLine("            ");
+        sb.AppendLine("            return typeName switch");
+        sb.AppendLine("            {");
+        
+        // Generate cases for each multi-projector type
+        foreach (var type in multiProjectorTypes)
+        {
+            sb.AppendLine($"                \"{type.TypeName}\" => ");
+            sb.AppendLine($"                    ResultBox.FromValue((IMultiProjectorCommon){type.TypeName}.GenerateInitialPayload()),");
+        }
+        
+        // Generate cases for each aggregate list projector type
+        foreach (var type in aggregateProjectorTypes)
+        {
+            sb.AppendLine($"                string s when s == typeof(AggregateListProjector<{type.RecordName}>).FullName => ");
+            sb.AppendLine($"                    ResultBox.FromValue((IMultiProjectorCommon)AggregateListProjector<{type.RecordName}>.GenerateInitialPayload()),");
+        }
+        
+        sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.Error(");
+        sb.AppendLine("                    new ArgumentException($\"Unknown projector type: {typeName}\"))");
+        sb.AppendLine("            };");
+        sb.AppendLine("        }");
+        
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
