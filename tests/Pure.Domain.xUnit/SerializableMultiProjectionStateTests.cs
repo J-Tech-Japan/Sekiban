@@ -248,7 +248,6 @@ public class SerializableMultiProjectionStateTests
         }
     }
 
-     */
     [Fact(Skip = "PartitionKeys as dictionary keys requires custom JSON handling in SerializableMultiProjectionState")]
     public async Task SerializeDeserialize_AggregateListProjector_Success()
     {
