@@ -15,7 +15,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
     // The service name will be resolved by Aspire service discovery
-    client.BaseAddress = new Uri("http://dapr-sample-api");
+    client.BaseAddress = new Uri("https+http://dapr-sample-api");
 });
 
 var app = builder.Build();

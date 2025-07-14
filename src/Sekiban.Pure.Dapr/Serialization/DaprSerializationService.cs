@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sekiban.Pure;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Events;
@@ -16,15 +18,18 @@ public class DaprSerializationService : IDaprSerializationService
     private readonly IDaprTypeRegistry _typeRegistry;
     private readonly DaprSerializationOptions _options;
     private readonly ILogger<DaprSerializationService> _logger;
+    private readonly SekibanDomainTypes _domainTypes;
 
     public DaprSerializationService(
         IDaprTypeRegistry typeRegistry,
         IOptions<DaprSerializationOptions> options,
-        ILogger<DaprSerializationService> logger)
+        ILogger<DaprSerializationService> logger,
+        SekibanDomainTypes domainTypes)
     {
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
     public async ValueTask<byte[]> SerializeAsync<T>(T value)
@@ -363,30 +368,46 @@ public class DaprSerializationService : IDaprSerializationService
 
         try
         {
-            Type? eventType = null;
-
-            if (_options.EnableTypeAliases)
-            {
-                eventType = _typeRegistry.ResolveType(envelope.EventType);
-            }
-
-            if (eventType == null)
-            {
-                eventType = Type.GetType(envelope.EventType);
-            }
-
-            if (eventType == null)
-            {
-                _logger.LogError("Cannot resolve event type {TypeName}", envelope.EventType);
-                throw new InvalidOperationException($"Cannot resolve event type: {envelope.EventType}");
-            }
-
             byte[] json = envelope.IsCompressed
                 ? DaprCompressionUtility.Decompress(envelope.EventData)
                 : envelope.EventData;
 
-            var @event = JsonSerializer.Deserialize(json, eventType, _options.JsonSerializerOptions) as IEvent;
-            return @event;
+            // Parse the JSON to JsonNode for EventDocumentCommon
+            var jsonNode = JsonSerializer.Deserialize<JsonNode>(json, _options.JsonSerializerOptions);
+            if (jsonNode == null)
+            {
+                return null;
+            }
+
+            // Create EventDocumentCommon with the payload data
+            var eventDocumentCommon = new EventDocumentCommon(
+                envelope.EventId,
+                jsonNode, // The payload as JsonNode
+                envelope.SortableUniqueId,
+                envelope.Version,
+                envelope.AggregateId,
+                string.Empty, // AggregateGroup - not included in DaprEventEnvelope
+                envelope.RootPartitionKey,
+                envelope.EventType,
+                envelope.Timestamp,
+                string.Empty, // PartitionKey - not included in DaprEventEnvelope
+                new EventMetadata(
+                    envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
+                    envelope.Metadata.GetValueOrDefault("CorrelationId", string.Empty),
+                    envelope.Metadata.GetValueOrDefault("ExecutedUser", string.Empty)
+                )
+            );
+
+            // Use IEventTypes.DeserializeToTyped to properly reconstruct the event
+            var eventResult = _domainTypes.EventTypes.DeserializeToTyped(eventDocumentCommon, _options.JsonSerializerOptions);
+            
+            if (!eventResult.IsSuccess)
+            {
+                _logger.LogError("Failed to deserialize event: {Error}", eventResult.GetException().Message);
+                throw eventResult.GetException();
+            }
+
+            return eventResult.GetValue();
         }
         catch (Exception ex)
         {

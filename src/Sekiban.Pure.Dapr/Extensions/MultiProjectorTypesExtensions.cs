@@ -10,18 +10,25 @@ public static class MultiProjectorTypesExtensions
     public static IEnumerable<string> GetAllProjectorNames(this IMultiProjectorTypes multiProjectorTypes)
     {
         var projectorTypes = multiProjectorTypes.GetMultiProjectorTypes();
+        var names = new List<string>();
         
         foreach (var projectorType in projectorTypes)
         {
-            // Create an instance to get the name
-            if (Activator.CreateInstance(projectorType) is IMultiProjectorCommon projector)
+            // Use the new GenerateInitialPayload method to create instances
+            var payloadResult = multiProjectorTypes.GenerateInitialPayload(projectorType);
+            
+            if (payloadResult.IsSuccess)
             {
+                var projector = payloadResult.GetValue();
                 var nameResult = multiProjectorTypes.GetMultiProjectorNameFromMultiProjector(projector);
+                
                 if (nameResult.IsSuccess)
                 {
-                    yield return nameResult.GetValue();
+                    names.Add(nameResult.GetValue());
                 }
             }
         }
+        
+        return names;
     }
 }

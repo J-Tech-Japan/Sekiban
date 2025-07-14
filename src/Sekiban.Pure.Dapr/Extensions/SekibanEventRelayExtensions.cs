@@ -34,9 +34,9 @@ public static class SekibanEventRelayExtensions
         var builder = app.MapPost(options.EndpointPath,
             async (
                 DaprEventEnvelope envelope,
-                IActorProxyFactory actorProxyFactory,
-                SekibanDomainTypes domainTypes,
-                ILogger<SekibanEventRelayHandler> logger) =>
+                [FromServices]IActorProxyFactory actorProxyFactory,
+                [FromServices]SekibanDomainTypes domainTypes,
+                [FromServices]ILogger<SekibanEventRelayHandler> logger) =>
             {
                 return await HandleEventAsync(envelope, actorProxyFactory, domainTypes, logger, options);
             })

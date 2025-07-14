@@ -1,9 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Logging;
 using SystemType = System.Type;
 using Microsoft.Extensions.Options;
+using Sekiban.Pure;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Dapr.Protos;
@@ -21,15 +23,18 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
     private readonly DaprSerializationOptions _options;
     private readonly ILogger<DaprProtobufSerializationService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly SekibanDomainTypes _domainTypes;
 
     public DaprProtobufSerializationService(
         IDaprTypeRegistry typeRegistry,
         IOptions<DaprSerializationOptions> options,
-        ILogger<DaprProtobufSerializationService> logger)
+        ILogger<DaprProtobufSerializationService> logger,
+        SekibanDomainTypes domainTypes)
     {
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _jsonOptions = _options.JsonSerializerOptions;
     }
 
@@ -469,30 +474,57 @@ public class DaprProtobufSerializationService : IDaprProtobufSerializationServic
 
         try
         {
-            SystemType? eventType = null;
-
-            if (_options.EnableTypeAliases)
-            {
-                eventType = _typeRegistry.ResolveType(envelope.EventType);
-            }
-
-            if (eventType == null)
-            {
-                eventType = SystemType.GetType(envelope.EventType);
-            }
-
-            if (eventType == null)
-            {
-                _logger.LogError("Cannot resolve event type {TypeName}", envelope.EventType);
-                throw new InvalidOperationException($"Cannot resolve event type: {envelope.EventType}");
-            }
-
             byte[] json = envelope.IsCompressed
                 ? DaprCompressionUtility.Decompress(envelope.EventJson.ToByteArray())
                 : envelope.EventJson.ToByteArray();
 
-            var @event = JsonSerializer.Deserialize(new MemoryStream(json), eventType, _jsonOptions) as IEvent;
-            return @event;
+            // Parse the JSON to JsonNode for EventDocumentCommon
+            var jsonNode = JsonSerializer.Deserialize<JsonNode>(new MemoryStream(json), _jsonOptions);
+            if (jsonNode == null)
+            {
+                return null;
+            }
+
+            // Parse AggregateId and EventId as Guid
+            if (!Guid.TryParse(envelope.AggregateId, out var aggregateId))
+            {
+                throw new InvalidOperationException($"Invalid aggregate ID format: {envelope.AggregateId}");
+            }
+            
+            if (!Guid.TryParse(envelope.EventId, out var eventId))
+            {
+                throw new InvalidOperationException($"Invalid event ID format: {envelope.EventId}");
+            }
+
+            // Create EventDocumentCommon with the payload data
+            var eventDocumentCommon = new EventDocumentCommon(
+                eventId,
+                jsonNode, // The payload as JsonNode
+                envelope.SortableUniqueId,
+                envelope.Version,
+                aggregateId,
+                string.Empty, // AggregateGroup - not included in ProtobufEventEnvelope
+                envelope.RootPartitionKey,
+                envelope.EventType,
+                envelope.Timestamp.ToDateTime(),
+                string.Empty, // PartitionKey - not included in ProtobufEventEnvelope
+                new EventMetadata(
+                    envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
+                    envelope.Metadata.GetValueOrDefault("CorrelationId", string.Empty),
+                    envelope.Metadata.GetValueOrDefault("ExecutedUser", string.Empty)
+                )
+            );
+
+            // Use IEventTypes.DeserializeToTyped to properly reconstruct the event
+            var eventResult = _domainTypes.EventTypes.DeserializeToTyped(eventDocumentCommon, _jsonOptions);
+            
+            if (!eventResult.IsSuccess)
+            {
+                _logger.LogError("Failed to deserialize event: {Error}", eventResult.GetException().Message);
+                throw eventResult.GetException();
+            }
+
+            return eventResult.GetValue();
         }
         catch (Exception ex)
         {
