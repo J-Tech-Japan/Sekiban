@@ -3,22 +3,22 @@ using Dapr.Actors;
 namespace DaprSample2;
 
 /// <summary>
-/// カウンターActorのインターフェース
+/// Counter Actor interface
 /// </summary>
 public interface ICounterActor : IActor
 {
     /// <summary>
-    /// カウンターの値を取得
+    /// Get counter value
     /// </summary>
     Task<int> GetCountAsync();
 
     /// <summary>
-    /// カウンターをインクリメント
+    /// Increment counter
     /// </summary>
     Task IncrementAsync();
 
     /// <summary>
-    /// カウンターをリセット
+    /// Reset counter
     /// </summary>
     Task ResetAsync();
 }

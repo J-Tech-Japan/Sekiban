@@ -7,42 +7,32 @@ namespace Sekiban.Pure.Events;
 [Serializable]
 public record SerializableEventDocument
 {
-    // EventDocumentのフラットなプロパティ
     public Guid Id { get; init; } = Guid.Empty;
     public string SortableUniqueId { get; init; } = string.Empty;
     public int Version { get; init; }
     
-    // PartitionKeysのフラットなプロパティ
     public Guid AggregateId { get; init; } = Guid.Empty;
     public string AggregateGroup { get; init; } = PartitionKeys.DefaultAggregateGroupName;
     public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
     
-    // イベント情報
     public string PayloadTypeName { get; init; } = string.Empty;
     public DateTime TimeStamp { get; init; }
     public string PartitionKey { get; init; } = string.Empty;
     
-    // EventMetadataのフラットなプロパティ
     public string CausationId { get; init; } = string.Empty;
     public string CorrelationId { get; init; } = string.Empty;
     public string ExecutedUser { get; init; } = string.Empty;
     
-    // IEventPayloadを圧縮したデータ
     public byte[] CompressedPayloadJson { get; init; } = Array.Empty<byte>();
     
-    // アプリケーションバージョン情報（互換性チェック用）
     public string PayloadAssemblyVersion { get; init; } = string.Empty;
     
-    // デフォルトコンストラクタ（シリアライザ用）
     public SerializableEventDocument() { }
 
-    // PartitionKeysを取得するメソッド
     public PartitionKeys GetPartitionKeys() => new(AggregateId, AggregateGroup, RootPartitionKey);
     
-    // EventMetadataを取得するメソッド
     public EventMetadata GetEventMetadata() => new(CausationId, CorrelationId, ExecutedUser);
 
-    // コンストラクタ（直接初期化用）
     private SerializableEventDocument(
         Guid id,
         string sortableUniqueId,
@@ -75,12 +65,10 @@ public record SerializableEventDocument
         PayloadAssemblyVersion = payloadAssemblyVersion;
     }
 
-    // 変換メソッド：IEventDocument → SerializableEventDocument
     public static async Task<SerializableEventDocument> CreateFromAsync<TEventPayload>(
         EventDocument<TEventPayload> eventDoc,
         JsonSerializerOptions options) where TEventPayload : IEventPayload
     {
-        // PayloadをJSONシリアライズしてGZip圧縮
         byte[] compressedPayloadJson = Array.Empty<byte>();
         string payloadAssemblyVersion = "0.0.0.0";
 
@@ -115,14 +103,12 @@ public record SerializableEventDocument
         );
     }
 
-    // 変換メソッド：IEvent → SerializableEventDocument
     public static async Task<SerializableEventDocument> CreateFromEventAsync(
         IEvent ev,
         JsonSerializerOptions options)
     {
         var sortableUniqueIdValue = new SortableUniqueIdValue(ev.SortableUniqueId);
         
-        // PayloadをJSONシリアライズしてGZip圧縮
         byte[] compressedPayloadJson = Array.Empty<byte>();
         string payloadAssemblyVersion = "0.0.0.0";
 
@@ -158,30 +144,25 @@ public record SerializableEventDocument
         );
     }
 
-    // 変換メソッド：SerializableEventDocument → EventDocument<TEventPayload>
     public async Task<OptionalValue<IEventDocument>> ToEventDocumentAsync(
         SekibanDomainTypes domainTypes)
     {
         try
         {
-            // ペイロードタイプを取得
             Type? payloadType = null;
             try
             {
                 payloadType = domainTypes.EventTypes.GetEventTypeByName(PayloadTypeName);
                 if (payloadType == null)
                 {
-                    // 型が見つからない場合は互換性なしと判断
                     return OptionalValue<IEventDocument>.Empty;
                 }
             }
             catch
             {
-                // 例外が発生した場合も互換性なしと判断
                 return OptionalValue<IEventDocument>.Empty;
             }
 
-            // PayloadをJSONデシリアライズ
             IEventPayload? payload = null;
             
             if (CompressedPayloadJson.Length > 0)
@@ -199,15 +180,12 @@ public record SerializableEventDocument
             }
             else
             {
-                // 圧縮データがない場合はエラー
                 return OptionalValue<IEventDocument>.Empty;
             }
 
-            // EventDocumentの型を動的に作成
             var eventDocumentType = typeof(EventDocument<>).MakeGenericType(payloadType);
             var metadata = GetEventMetadata();
             
-            // EventDocumentを再構築（リフレクションを使用）
             var eventDocument = Activator.CreateInstance(
                 eventDocumentType,
                 Id,
@@ -231,35 +209,29 @@ public record SerializableEventDocument
         }
         catch (Exception)
         {
-            // 変換中に例外が発生した場合は、互換性なしと判断
             return OptionalValue<IEventDocument>.Empty;
         }
     }
 
-    // 変換メソッド：SerializableEventDocument → IEvent
     public async Task<OptionalValue<IEvent>> ToEventAsync(
         SekibanDomainTypes domainTypes)
     {
         try
         {
-            // ペイロードタイプを取得
             Type? payloadType = null;
             try
             {
                 payloadType = domainTypes.EventTypes.GetEventTypeByName(PayloadTypeName);
                 if (payloadType == null)
                 {
-                    // 型が見つからない場合は互換性なしと判断
                     return OptionalValue<IEvent>.Empty;
                 }
             }
             catch
             {
-                // 例外が発生した場合も互換性なしと判断
                 return OptionalValue<IEvent>.Empty;
             }
 
-            // PayloadをJSONデシリアライズ
             IEventPayload? payload = null;
             
             if (CompressedPayloadJson.Length > 0)
@@ -277,16 +249,13 @@ public record SerializableEventDocument
             }
             else
             {
-                // 圧縮データがない場合はエラー
                 return OptionalValue<IEvent>.Empty;
             }
 
-            // Eventの型を動的に作成
             var eventType = typeof(Event<>).MakeGenericType(payloadType);
             var partitionKeys = GetPartitionKeys();
             var metadata = GetEventMetadata();
             
-            // Eventを再構築（リフレクションを使用）
             var ev = Activator.CreateInstance(
                 eventType,
                 Id,
@@ -305,12 +274,10 @@ public record SerializableEventDocument
         }
         catch (Exception)
         {
-            // 変換中に例外が発生した場合は、互換性なしと判断
             return OptionalValue<IEvent>.Empty;
         }
     }
 
-    // GZip圧縮ヘルパーメソッド
     private static async Task<byte[]> CompressAsync(byte[] data)
     {
         if (data.Length == 0)
@@ -326,7 +293,6 @@ public record SerializableEventDocument
         return memoryStream.ToArray();
     }
 
-    // GZip解凍ヘルパーメソッド
     private static async Task<byte[]> DecompressAsync(byte[] compressedData)
     {
         if (compressedData.Length == 0)

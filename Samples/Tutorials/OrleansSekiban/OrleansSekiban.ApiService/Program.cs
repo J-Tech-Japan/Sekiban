@@ -135,9 +135,8 @@ builder.UseOrleans(
                     });
                 });
                 configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                    ob.Configure(o => o.TotalQueueCount = 3));   // 8 → 3 へ
+                    ob.Configure(o => o.TotalQueueCount = 3));
 
-                // --- Pulling Agent の頻度・バッチ ---
                 configurator.ConfigurePullingAgent(ob =>
                     ob.Configure(opt =>
                     {
@@ -145,7 +144,6 @@ builder.UseOrleans(
                         opt.BatchContainerBatchSize = 256;
                         opt.StreamInactivityPeriod  = TimeSpan.FromMinutes(10);
                     }));
-                // --- キャッシュ ---
                 configurator.ConfigureCacheSize(8192);
             });
             config.AddAzureQueueStreams("OrleansSekibanQueue", (SiloAzureQueueStreamConfigurator configurator) =>
@@ -163,9 +161,8 @@ builder.UseOrleans(
                     });
                 });
                 configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                    ob.Configure(o => o.TotalQueueCount = 3));   // 8 → 3 へ
+                    ob.Configure(o => o.TotalQueueCount = 3));
 
-                // --- Pulling Agent の頻度・バッチ ---
                 configurator.ConfigurePullingAgent(ob =>
                     ob.Configure(opt =>
                     {
@@ -173,7 +170,6 @@ builder.UseOrleans(
                         opt.BatchContainerBatchSize = 256;
                         opt.StreamInactivityPeriod  = TimeSpan.FromMinutes(10);
                     }));
-                // --- キャッシュ ---
                 configurator.ConfigureCacheSize(8192);
             });
         }

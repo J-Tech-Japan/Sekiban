@@ -103,14 +103,11 @@ public class AzureOpenAIService
             // Complete chat
             var response = await chatClient.CompleteChatAsync(messages);
             
-            // レスポンス内容を取得
             try 
             {
-                // Azure OpenAI SDK 2024-12-01-Preview の応答形式で内容を抽出
                 var contentProperty = response.Value.GetType().GetProperty("Content");
                 if (contentProperty != null)
                 {
-                    // Content プロパティから値を取得
                     var content = response.Value.Content.FirstOrDefault()?.Text;
                     if (!string.IsNullOrEmpty(content))
                     {
@@ -118,7 +115,6 @@ public class AzureOpenAIService
                     }
                 }
 
-                // プロパティが見つからない場合は ToString() を使用
                 return response.Value.Content.FirstOrDefault()?.Text ?? "No response content";
             }
             catch (Exception ex)

@@ -14,7 +14,7 @@ namespace Sekiban.Pure.xUnit;
 public abstract class SekibanInMemoryTestBase
 {
     /// <summary>
-    ///     各テストケースごとにドメインタイプを実装するための抽象プロパティ
+    ///     Abstract property for implementing domain types for each test case
     /// </summary>
     private SekibanDomainTypes DomainTypes => GetDomainTypes();
     protected abstract SekibanDomainTypes GetDomainTypes();
@@ -32,7 +32,7 @@ public abstract class SekibanInMemoryTestBase
         Executor = new InMemorySekibanExecutor(DomainTypes, CommandMetadataProvider, Repository, ServiceProvider);
 
     /// <summary>
-    ///     Givenフェーズのコマンド実行
+    ///     Command execution in Given phase
     /// </summary>
     protected ResultBox<CommandResponse> GivenCommandWithResult(
         ICommandWithHandlerSerializable command,
@@ -40,7 +40,7 @@ public abstract class SekibanInMemoryTestBase
         Executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Whenフェーズのコマンド実行
+    ///     Command execution in When phase
     /// </summary>
     protected ResultBox<CommandResponse> WhenCommandWithResult(
         ICommandWithHandlerSerializable command,
@@ -48,7 +48,7 @@ public abstract class SekibanInMemoryTestBase
         Executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Thenフェーズの集約取得
+    ///     Get aggregate in Then phase
     /// </summary>
     protected ResultBox<Aggregate> ThenGetAggregateWithResult<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new() => Executor
@@ -71,19 +71,19 @@ public abstract class SekibanInMemoryTestBase
         .ToResultBox();
 
     /// <summary>
-    ///     Givenフェーズのコマンド実行
+    ///     Command execution in Given phase
     /// </summary>
     protected CommandResponse GivenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         Executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
-    ///     Whenフェーズのコマンド実行
+    ///     Command execution in When phase
     /// </summary>
     protected CommandResponse WhenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         Executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
-    ///     Thenフェーズの集約取得
+    ///     Get aggregate in Then phase
     /// </summary>
     protected Aggregate ThenGetAggregate<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new() =>

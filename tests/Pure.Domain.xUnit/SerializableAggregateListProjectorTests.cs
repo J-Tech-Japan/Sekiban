@@ -14,7 +14,7 @@ using ResultBoxes;
 namespace Pure.Domain.xUnit;
 
 /// <summary>
-/// SerializableAggregateListProjector のシリアライズ/デシリアライズをテストするためのテストクラス
+/// Test class for testing serialization/deserialization of SerializableAggregateListProjector
 /// </summary>
 public class SerializableAggregateListProjectorTests
 {
@@ -22,14 +22,13 @@ public class SerializableAggregateListProjectorTests
 
     public SerializableAggregateListProjectorTests()
     {
-        // テスト用のSekibanDomainTypesを取得（自動生成されたものを使用）
         _domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
     }
 
     #region Helper Methods
 
     /// <summary>
-    /// テスト用のBranchアグリゲートリストプロジェクターを作成します
+    /// Creates a Branch aggregate list projector for testing
     /// </summary>
     private AggregateListProjector<BranchProjector> CreateTestBranchListProjector()
     {
@@ -67,7 +66,7 @@ public class SerializableAggregateListProjectorTests
     }
 
     /// <summary>
-    /// テスト用のClientアグリゲートリストプロジェクターを作成します
+    /// Creates a Client aggregate list projector for testing
     /// </summary>
     private AggregateListProjector<ClientProjector> CreateTestClientListProjector()
     {
@@ -107,7 +106,7 @@ public class SerializableAggregateListProjectorTests
     }
 
     /// <summary>
-    /// テスト用の大量のBranchアグリゲートリストプロジェクターを作成します
+    /// Creates a large number of Branch aggregate list projectors for testing
     /// </summary>
     private AggregateListProjector<BranchProjector> CreateLargeBranchListProjector(int count = 100)
     {
@@ -135,13 +134,12 @@ public class SerializableAggregateListProjectorTests
     }
 
     /// <summary>
-    /// 複数タイプのアグリゲートペイロードを持つリストプロジェクターを作成します
+    /// Creates a list projector with multiple types of aggregate payloads
     /// </summary>
     private AggregateListProjector<BranchProjector> CreateMixedTypeListProjector()
     {
         var aggregates = ImmutableDictionary<PartitionKeys, Aggregate>.Empty;
         
-        // Branch型のアグリゲート
         var branch1Id = Guid.NewGuid();
         var partitionKeys1 = new PartitionKeys(branch1Id, typeof(BranchProjector).Name, "test");
         var branch1 = new Branch("Tokyo Branch");
@@ -155,7 +153,6 @@ public class SerializableAggregateListProjectorTests
             typeof(Branch).Name);
         aggregates = aggregates.Add(partitionKeys1, aggregate1);
         
-        // 空のアグリゲートペイロード
         var emptyId = Guid.NewGuid();
         var partitionKeys2 = new PartitionKeys(emptyId, typeof(BranchProjector).Name, "test");
         var aggregate2 = new Aggregate(
@@ -172,8 +169,8 @@ public class SerializableAggregateListProjectorTests
     }
 
     /// <summary>
-    /// PartitionKeysをJSON変換するためのカスタムコンバーター
-    /// これはディクショナリのキーとしてPartitionKeysを使用する場合に必要
+    /// Custom converter for JSON conversion of PartitionKeys
+    /// This is necessary when using PartitionKeys as dictionary keys
     /// </summary>
     private class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
     {
@@ -234,7 +231,6 @@ public class SerializableAggregateListProjectorTests
 
         public override void WriteAsPropertyName(Utf8JsonWriter writer, PartitionKeys value, JsonSerializerOptions options)
         {
-            // このメソッドをオーバーライドすることで、PartitionKeysをディクショナリキーとして使用可能にする
             writer.WritePropertyName($"{value.RootPartitionKey}@{value.Group}@{value.AggregateId}");
         }
     }
@@ -258,10 +254,8 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // アグリゲート数一致
         Assert.Equal(originalProjector.Aggregates.Count, restoredProjector.Aggregates.Count);
         
-        // 個々のアグリゲートを検証
         foreach (var partitionKeys in originalProjector.Aggregates.Keys)
         {
             Assert.True(restoredProjector.Aggregates.ContainsKey(partitionKeys));
@@ -269,22 +263,18 @@ public class SerializableAggregateListProjectorTests
             var originalAggregate = originalProjector.Aggregates[partitionKeys];
             var restoredAggregate = restoredProjector.Aggregates[partitionKeys];
             
-            // 基本的なプロパティを検証
             Assert.Equal(originalAggregate.Version, restoredAggregate.Version);
             Assert.Equal(originalAggregate.LastSortableUniqueId, restoredAggregate.LastSortableUniqueId);
             Assert.Equal(originalAggregate.Version, restoredAggregate.Version);
             Assert.Equal(originalAggregate.ProjectorVersion, restoredAggregate.ProjectorVersion);
             Assert.Equal(originalAggregate.PayloadTypeName, restoredAggregate.PayloadTypeName);
             
-            // PartitionKeys一致を検証
             Assert.Equal(originalAggregate.PartitionKeys.AggregateId, restoredAggregate.PartitionKeys.AggregateId);
             Assert.Equal(originalAggregate.PartitionKeys.Group, restoredAggregate.PartitionKeys.Group);
             Assert.Equal(originalAggregate.PartitionKeys.RootPartitionKey, restoredAggregate.PartitionKeys.RootPartitionKey);
             
-            // ペイロードタイプの検証
             Assert.Equal(originalAggregate.GetPayload().GetType(), restoredAggregate.GetPayload().GetType());
             
-            // Branchの場合の内容検証
             if (originalAggregate.GetPayload() is Branch originalBranch && 
                 restoredAggregate.GetPayload() is Branch restoredBranch)
             {
@@ -311,10 +301,8 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // アグリゲート数一致
         Assert.Equal(originalProjector.Aggregates.Count, restoredProjector.Aggregates.Count);
         
-        // 個々のアグリゲートを検証
         foreach (var partitionKeys in originalProjector.Aggregates.Keys)
         {
             Assert.True(restoredProjector.Aggregates.ContainsKey(partitionKeys));
@@ -322,7 +310,6 @@ public class SerializableAggregateListProjectorTests
             var originalAggregate = originalProjector.Aggregates[partitionKeys];
             var restoredAggregate = restoredProjector.Aggregates[partitionKeys];
             
-            // Client固有のプロパティを検証
             if (originalAggregate.GetPayload() is Client originalClient && 
                 restoredAggregate.GetPayload() is Client restoredClient)
             {
@@ -359,10 +346,8 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // アグリゲート数一致
         Assert.Equal(originalProjector.Aggregates.Count, restoredProjector.Aggregates.Count);
         
-        // Branchタイプのアグリゲートを検証
         var branchAggregate = originalProjector.Aggregates.Values.FirstOrDefault(a => a.GetPayload() is Branch);
         Assert.NotNull(branchAggregate);
         
@@ -370,7 +355,6 @@ public class SerializableAggregateListProjectorTests
         Assert.NotNull(restoredBranchAggregate);
         Assert.IsType<Branch>(restoredBranchAggregate.GetPayload());
         
-        // EmptyAggregatePayloadタイプのアグリゲートを検証
         var emptyAggregate = originalProjector.Aggregates.Values.FirstOrDefault(a => a.GetPayload() is EmptyAggregatePayload);
         Assert.NotNull(emptyAggregate);
         
@@ -382,7 +366,6 @@ public class SerializableAggregateListProjectorTests
     [Fact]
     public async Task SerializeDeserialize_LargeListProjector_Success()
     {
-        // Arrange - 多数のアグリゲートを含むプロジェクター
         var originalProjector = CreateLargeBranchListProjector(100);
         
         // Act
@@ -397,11 +380,9 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // アグリゲート数一致
         Assert.Equal(100, originalProjector.Aggregates.Count);
         Assert.Equal(100, restoredProjector.Aggregates.Count);
         
-        // サンプルアグリゲートを検証
         foreach (var partitionKeys in originalProjector.Aggregates.Keys.Take(10))
         {
             Assert.True(restoredProjector.Aggregates.ContainsKey(partitionKeys));
@@ -434,7 +415,6 @@ public class SerializableAggregateListProjectorTests
     [Fact]
     public async Task SerializeDeserialize_EmptyListProjector_Success()
     {
-        // Arrange - 空のプロジェクター
         var emptyProjector = new AggregateListProjector<BranchProjector>(ImmutableDictionary<PartitionKeys, Aggregate>.Empty);
         
         // Act
@@ -449,7 +429,6 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // 空のアグリゲートリストを確認
         Assert.Empty(restoredProjector.Aggregates);
     }
     
@@ -464,7 +443,6 @@ public class SerializableAggregateListProjectorTests
         var serializedString = serializedJson.IsSuccess ? serializedJson.GetValue() : null;
         Assert.NotNull(serializedString);
         
-        // 異なるプロジェクター型で逆シリアル化
         var deserializedResult = await SerializableAggregateListProjector.DeserializeAggregateList<ClientProjector>(
             serializedString!, _domainTypes);
         
@@ -472,10 +450,8 @@ public class SerializableAggregateListProjectorTests
         Assert.True(deserializedResult.IsSuccess);
         var restoredProjector = deserializedResult.GetValue();
         
-        // アグリゲート数一致（プロジェクター型が異なっても、シリアライズされたアグリゲートは正しく復元される）
         Assert.Equal(originalProjector.Aggregates.Count, restoredProjector.Aggregates.Count);
         
-        // プロジェクター型が異なるため、厳密には異なるオブジェクトになるが、アグリゲートデータ自体は保持される
         foreach (var partitionKeys in originalProjector.Aggregates.Keys)
         {
             Assert.True(restoredProjector.Aggregates.ContainsKey(partitionKeys));
@@ -483,7 +459,6 @@ public class SerializableAggregateListProjectorTests
             var originalAggregate = originalProjector.Aggregates[partitionKeys];
             var restoredAggregate = restoredProjector.Aggregates[partitionKeys];
             
-            // ペイロードタイプは保持される
             Assert.Equal(originalAggregate.GetPayload().GetType(), restoredAggregate.GetPayload().GetType());
         }
     }

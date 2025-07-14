@@ -7,9 +7,9 @@ public interface IAggregateTypes
     public List<Type> GetAggregateTypes();
     
     /// <summary>
-    /// ペイロード型名から型を取得します。
+    /// Gets the type from the payload type name。
     /// </summary>
-    /// <param name="payloadTypeName">ペイロード型の名前</param>
-    /// <returns>見つかった型、または見つからない場合はnull</returns>
+    /// <param name="payloadTypeName">Name of the payload type</param>
+    /// <returns>The found type, or null if not found</returns>
     public Type? GetPayloadTypeByName(string payloadTypeName);
 }

@@ -39,7 +39,7 @@ public abstract class SekibanInMemoryTestBase
     }
 
     /// <summary>
-    ///     Givenフェーズのコマンド実行
+    ///     Command execution in Given phase
     /// </summary>
     protected ResultBox<CommandResponse> GivenCommandWithResult(
         ICommandWithHandlerSerializable command,
@@ -47,7 +47,7 @@ public abstract class SekibanInMemoryTestBase
         _executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Whenフェーズのコマンド実行
+    ///     Command execution in When phase
     /// </summary>
     protected ResultBox<CommandResponse> WhenCommandWithResult(
         ICommandWithHandlerSerializable command,
@@ -55,7 +55,7 @@ public abstract class SekibanInMemoryTestBase
         _executor.CommandAsync(command, relatedEvent).Result.UnwrapBox().ToResultBox();
 
     /// <summary>
-    ///     Thenフェーズの集約取得
+    ///     Get aggregate in Then phase
     /// </summary>
     protected ResultBox<Aggregate> ThenGetAggregateWithResult<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new() => _executor
@@ -78,19 +78,19 @@ public abstract class SekibanInMemoryTestBase
         .ToResultBox();
 
     /// <summary>
-    ///     Givenフェーズのコマンド実行
+    ///     Command execution in Given phase
     /// </summary>
     protected CommandResponse GivenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
-    ///     Whenフェーズのコマンド実行
+    ///     Command execution in When phase
     /// </summary>
     protected CommandResponse WhenCommand(ICommandWithHandlerSerializable command, IEvent? relatedEvent = null) =>
         _executor.CommandAsync(command, relatedEvent).UnwrapBox().Result;
 
     /// <summary>
-    ///     Thenフェーズの集約取得
+    ///     Get aggregate in Then phase
     /// </summary>
     protected Aggregate ThenGetAggregate<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new() =>

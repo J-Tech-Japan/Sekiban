@@ -37,8 +37,8 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         _repository = new Repository();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
-        builder.Options.ClusterId = "dev"; // 固定のクラスタ ID
-        builder.Options.ServiceId = "TestService"; // 固定のサービス ID
+        builder.Options.ClusterId = "dev";
+        builder.Options.ServiceId = "TestService";
         builder.AddSiloBuilderConfigurator<TDomainTypesGetter>();
         _cluster = builder.Build();
         _cluster.Deploy();

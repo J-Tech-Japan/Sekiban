@@ -18,24 +18,19 @@ public class AggregateProjectorGrain(
     private bool UpdatedAfterWrite { get; set; }
     private IGrainTimer? _timer;
     
-    // JSONシリアライザオプション
     private JsonSerializerOptions JsonOptions => sekibanDomainTypes.JsonSerializerOptions;
     
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         await base.OnActivateAsync(cancellationToken);
         
-        // アクティベーション時に状態を読み込み
         await state.ReadStateAsync();
         
-        // イベントGrainを取得
         var eventGrain = GrainFactory.GetGrain<IAggregateEventHandlerGrain>(
             GetPartitionKeysAndProjector().ToEventHandlerGrainKey());
             
-        // 内部状態の初期化
         _currentAggregate = await GetStateInternalAsync(eventGrain);
         
-        // 定期的な状態保存タイマーを設定
         _timer = this.RegisterGrainTimer(
             Callback,
             state,
@@ -86,7 +81,6 @@ public class AggregateProjectorGrain(
     
     private async Task<Aggregate> GetStateInternalAsync(IAggregateEventHandlerGrain eventHandlerGrain)
     {
-        // SerializableAggregateからAggregateに変換を試みる
         var projector = GetPartitionKeysAndProjector().Projector;
         var serializableState = state.State;
         
@@ -97,20 +91,17 @@ public class AggregateProjectorGrain(
             {
                 var aggregate = aggregateOptional.GetValue();
                 
-                // プロジェクターバージョンが一致しない場合は再構築
                 if (projector.GetVersion() != aggregate.ProjectorVersion)
                 {
                     UpdatedAfterWrite = true;
                     return await RebuildStateInternalAsync();
                 }
                 
-                // バージョンが0の場合は空の集約を返す
                 if (aggregate.Version == 0)
                 {
                     return Aggregate.EmptyFromPartitionKeys(GetPartitionKeysAndProjector().PartitionKeys);
                 }
                 
-                // 最新イベントまで更新
                 if (await eventHandlerGrain.GetLastSortableUniqueIdAsync() != aggregate.LastSortableUniqueId)
                 {
                     var events = await eventHandlerGrain.GetDeltaEventsAsync(aggregate.LastSortableUniqueId);
@@ -123,12 +114,10 @@ public class AggregateProjectorGrain(
             }
         }
         
-        // 変換に失敗した場合や状態がnullの場合は再構築
         UpdatedAfterWrite = true;
         return await RebuildStateInternalAsync();
     }
 
-    // シリアライズ可能な状態を保存
     private async Task WriteSerializableStateAsync()
     {
         state.State = await SerializableAggregate.CreateFromAsync(_currentAggregate, JsonOptions);
@@ -142,7 +131,6 @@ public class AggregateProjectorGrain(
         var eventGrain = GrainFactory.GetGrain<IAggregateEventHandlerGrain>(
             GetPartitionKeysAndProjector().ToEventHandlerGrainKey());
             
-        // _currentAggregateが空またはnullの場合、再度取得
         if (_currentAggregate == null || _currentAggregate == Aggregate.Empty)
         {
             _currentAggregate = await GetStateInternalAsync(eventGrain);

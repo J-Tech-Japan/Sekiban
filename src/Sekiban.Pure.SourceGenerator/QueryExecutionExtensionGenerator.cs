@@ -248,12 +248,11 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
                     (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
                         m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
             var formatWithoutNullable = new SymbolDisplayFormat(
-                // 型の完全修飾名などの設定（必要に応じて調整）
                 typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
                 genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
                 miscellaneousOptions:
                 SymbolDisplayMiscellaneousOptions
-                    .EscapeKeywordIdentifiers // このオプションに IncludeNullableReferenceTypeModifier は含めない
+                    .EscapeKeywordIdentifiers
             );
             if (matchingInterface != null)
                 eventTypes.Add(

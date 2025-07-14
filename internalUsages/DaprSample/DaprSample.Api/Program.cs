@@ -47,7 +47,6 @@ builder.Services.AddMemoryCache();
 var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
-// ローカル開発とACA (Azure Container Apps) 両方に対応
 var actorIdPrefix = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX") ?? 
                     Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? 
                     (builder.Environment.IsDevelopment() ? 
@@ -59,7 +58,7 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
     options.EventTopicName = "events.all";  // Changed to match subscription.yaml
-    options.ActorIdPrefix = actorIdPrefix; // 環境に応じて自動設定
+    options.ActorIdPrefix = actorIdPrefix;
 });
 
 // Use patched event reader to avoid timeout
@@ -100,20 +99,16 @@ app.UseCloudEvents();
 app.MapSubscribeHandler();
 
 // === Sekiban PubSub Event Relay (MinimalAPI) ===
-// 新しいopt-in方式でPubSubイベントリレーを有効化
-// ローカル開発とACA (Azure Container Apps) 両方に対応
 var instanceId = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? 
                 Environment.GetEnvironmentVariable("HOSTNAME") ?? 
                 Environment.MachineName ?? 
                 Guid.NewGuid().ToString("N")[..8];
 
-// ローカル開発環境では開発用のConsumer Group、ACAでは本番用を使用
 var consumerGroup = Environment.GetEnvironmentVariable("SEKIBAN_CONSUMER_GROUP") ?? 
                    (app.Environment.IsDevelopment() ? 
                     "dapr-sample-projectors-dev" : 
                     "dapr-sample-projectors");
 
-// ローカル開発環境では緩い設定、ACAでは厳密な設定
 var continueOnFailure = app.Environment.IsDevelopment() || 
                        !bool.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING"), out var strictMode) || 
                        !strictMode;
@@ -125,14 +120,14 @@ var maxConcurrency = int.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_MA
 app.MapSekibanEventRelay(new SekibanPubSubRelayOptions
 {
     PubSubName = "sekiban-pubsub",
-    TopicName = "events.all", // subscription.yamlに合わせる
+    TopicName = "events.all",
     EndpointPath = "/internal/pubsub/events",
-    ConsumerGroup = consumerGroup, // 環境に応じて自動設定
-    MaxConcurrency = maxConcurrency, // 環境に応じて調整
-    ContinueOnProjectorFailure = continueOnFailure, // ローカルでは続行、本番では設定可能
-    EnableDeadLetterQueue = !app.Environment.IsDevelopment(), // ローカルでは無効、本番では有効
+    ConsumerGroup = consumerGroup,
+    MaxConcurrency = maxConcurrency,
+    ContinueOnProjectorFailure = continueOnFailure,
+    EnableDeadLetterQueue = !app.Environment.IsDevelopment(),
     DeadLetterTopic = "events.dead-letter",
-    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3 // ローカルでは少なく、本番では多く
+    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3
 });
 
 // Log actor registration before mapping handlers
@@ -207,7 +202,6 @@ startupLogger.LogInformation("  - App Port: {AppPort}", 5000);
 
 if (app.Environment.IsDevelopment())
 {
-    // ローカル開発環境の情報
     startupLogger.LogInformation("=== LOCAL DEVELOPMENT ENVIRONMENT INFO ===");
     startupLogger.LogInformation("  - Machine Name: {MachineName}", Environment.MachineName);
     startupLogger.LogInformation("  - User Name: {UserName}", Environment.UserName ?? "Not Set");
@@ -301,7 +295,6 @@ app.MapGet("/debug/env", () =>
         ["SEKIBAN_STRICT_ERROR_HANDLING"] = Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING")
     };
     
-    // ACA環境変数（ローカルでは通常null）
     if (!app.Environment.IsDevelopment())
     {
         envVars.Add("CONTAINER_APP_NAME", Environment.GetEnvironmentVariable("CONTAINER_APP_NAME"));
@@ -351,7 +344,6 @@ app.MapGet("/debug/pubsub-config", () =>
                "🚀 Production: Configured for ACA scale-out with Consumer Group to prevent duplicate processing"
     };
     
-    // ACA固有の情報を追加（本番環境のみ）
     if (!app.Environment.IsDevelopment())
     {
         var acaInfo = new

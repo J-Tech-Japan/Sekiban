@@ -19,7 +19,7 @@ namespace Sekiban.Pure.Orleans.Grains;
 
 /// <summary>
 /// Projection grain that maintains a multi‑projection state and is fed by an Orleans stream.
-/// スナップショット保存は 5 分ごとのバックグラウンド‑タイマーで行う。
+/// Snapshot saving is performed by a background timer every 5 minutes.
 /// </summary>
 public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecycleParticipant<IGrainLifecycle>
 {
@@ -103,17 +103,14 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         // 4) snapshot timer
         _logger.LogInformation("start snapshot timer");
         
-        // 必要に応じてこちらに修正（Orleans 9の最新API）
         _persistTimer = this.RegisterGrainTimer(_ => PersistTick(), PersistInterval, PersistInterval);
         
-        // ストリーム初期化はライフサイクルコールバックで行うため、ここでは行わない
         _bootstrapping = false;
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken token)
     {
         _persistTimer?.Dispose();
-        // ストリームの購読解除はCloseStreamsAsyncで行われるため、ここでは行わない
         if (_pendingSave) await PersistStateAsync(_safeState);
         _streamActive = false;
         await base.OnDeactivateAsync(reason, token);
@@ -139,7 +136,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
 
     private Task Enqueue(IEvent e)
     {
-        // 同じSortableUniqueIdを持つイベントが既にバッファにあるかチェック
         if (!_buffer.Any(existingEvent => existingEvent.SortableUniqueId == e.SortableUniqueId))
         {
             _buffer.Add(e);
@@ -178,25 +174,20 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
             return aValue.IsEarlierThan(bValue) ? -1 : (aValue.IsLaterThan(bValue) ? 1 : 0);
         });
         
-        // safeBorderを計算
         var safeBorderId = SortableUniqueIdValue.Generate((DateTime.UtcNow - SafeStateWindow), Guid.Empty);
         var safeBorder = new SortableUniqueIdValue(safeBorderId);
-        // safeBorderより古いイベントのインデックスを探す
         int splitIndex = _buffer.FindLastIndex(e => 
             new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
         
         _logger.LogInformation("Splitted Total {count} events", _buffer.Count);
         _logger.LogInformation("SplitIndex {count} events", splitIndex);
         
-        // 古いイベントがあれば処理
         if (splitIndex >= 0)
         {
             _logger.LogInformation("Working on old events");
             var sortableUniqueIdFrom = _safeState?.GetLastSortableUniqueId() ?? SortableUniqueIdValue.MinValue;   
-            // 古いイベントを取得
             var oldEvents = _buffer.Take(splitIndex + 1).Where(e => (new SortableUniqueIdValue(e.SortableUniqueId)).IsLaterThan(sortableUniqueIdFrom)).ToList();
             
-            // _safeStateに適用
             var newSafeState = _domainTypes.MultiProjectorsType.Project(_safeState?.ProjectorCommon ?? projector, oldEvents).UnwrapBox();
             var lastOldEvt = oldEvents.Last();
             _safeState = new MultiProjectionState(
@@ -207,19 +198,15 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
                 0, 
                 _safeState?.RootPartitionKey ?? "default");
             
-            // 適用したイベントはバッファから削除
             _buffer.RemoveRange(0, splitIndex + 1);
             
-            // スナップショット更新フラグをセット
             _pendingSave = true;
         }
 
         _logger.LogInformation("After worked old events Total {count} events", _buffer.Count);
 
-        // バッファに残っているイベント（新しいイベント）があり、かつ_safeStateが初期化されていれば
         if (_buffer.Any() && _safeState != null)
         {
-            // _unsafeStateを更新
             var newUnsafeState = _domainTypes.MultiProjectorsType.Project(_safeState.ProjectorCommon, _buffer).UnwrapBox();
             var lastNewEvt = _buffer.Last();
             _unsafeState = new MultiProjectionState(
@@ -233,7 +220,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         {
             _unsafeState = null;
         }
-        // 注意: バッファの残りのイベントは削除せず、保持しておく
         _logger.LogInformation("Finish flush buffer {count} events", _buffer.Count);
         LogState();
     }
@@ -259,7 +245,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         LogState();
         if (events.Count > 0)
         {
-            // 重複チェックを行いながら追加
             foreach (var e in events)
             {
                 if (!_buffer.Any(existingEvent => existingEvent.SortableUniqueId == e.SortableUniqueId))
@@ -335,13 +320,11 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
 
     public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
     {
-        // バッファ内に存在するか確認
         if (_buffer.Any(e => new SortableUniqueIdValue(e.SortableUniqueId).IsLaterThanOrEqual(new SortableUniqueIdValue(sortableUniqueId))))
         {
             return Task.FromResult(true);
         }
         
-        // LastSortableUniqueIdが目標のIDより新しいか確認
         if (!string.IsNullOrEmpty(_safeState?.LastSortableUniqueId))
         {
             var lastId = new SortableUniqueIdValue(_safeState.LastSortableUniqueId);
@@ -392,20 +375,19 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
     #region ILifecycleParticipant implementation
     
     /// <summary>
-    /// Grainのライフサイクルに参加するためのメソッド。
-    /// Activateステージ後に実行される独自のステージを登録する。
+    /// Method to participate in the grain lifecycle.
+    /// Registers a custom stage to be executed after the Activate stage.
     /// </summary>
-    /// <param name="lifecycle">グレインのライフサイクル</param>
+    /// <param name="lifecycle">Grain lifecycle</param>
     public void Participate(IGrainLifecycle lifecycle)
     {
-        // Activateステージの直後、Lastの前に実行されるカスタムステージ
         var stage = GrainLifecycleStage.Activate + 100;
         lifecycle.Subscribe(this.GetType().FullName!, stage, InitStreamsAsync, CloseStreamsAsync);
     }
     
     /// <summary>
-    /// ストリームを初期化するメソッド。
-    /// Activateステージの後に実行される。
+    /// Method to initialize the stream.
+    /// Executed after the Activate stage.
     /// </summary>
     private async Task InitStreamsAsync(CancellationToken ct)
     {
@@ -421,8 +403,8 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
     }
     
     /// <summary>
-    /// ストリームをクリーンアップするメソッド。
-    /// グレインの非アクティブ化時に実行される。
+    /// Method to clean up the stream.
+    /// Executed when the grain is deactivated.
     /// </summary>
     private Task CloseStreamsAsync(CancellationToken ct)
     {

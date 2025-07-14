@@ -17,7 +17,6 @@ public class SekibanSerializer : ISekibanSerializer
         {
             eventTypes.CheckEventJsonContextOption(serializerOptions);
         }
-        // ソースジェネレーターで生成されたオプションを利用できるようにする
         return new SekibanSerializer(serializerOptions);
     }
 
