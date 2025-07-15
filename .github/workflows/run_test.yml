@@ -46,7 +46,7 @@ jobs:
         dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=127.0.0.1;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
     - name: dotnet build
       run: |
-        dotnet build -c Release
+        dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
     - name: dotnet test all projects sequentially
       run: |
         dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
