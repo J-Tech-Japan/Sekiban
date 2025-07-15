@@ -24,7 +24,22 @@ public class CosmosDbFactory(
 
     public async Task DeleteAllFromEventContainer()
     {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
+        try
+        {
+            await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
+            Console.WriteLine("CosmosDB event container cleanup completed successfully");
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Container doesn't exist - nothing to delete, which is fine for cleanup
+            Console.WriteLine($"CosmosDB container not found during cleanup - this is expected for fresh tests: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            // Log other exceptions but don't fail the test setup
+            Console.WriteLine($"Warning: CosmosDB cleanup encountered an error: {ex.Message}");
+            throw; // Re-throw non-404 exceptions as they indicate real problems
+        }
     }
 
     public async Task<T> CosmosActionAsync<T>(DocumentType documentType, Func<Container, Task<T>> cosmosAction)
