@@ -31,8 +31,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-        <PackageReference Include="Microsoft.Orleans.Serialization.SystemTextJson" Version="9.1.2"/>
-        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.1.2"/>
+        <PackageReference Include="Microsoft.Orleans.Serialization.SystemTextJson" Version="9.2.0" />
+        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.2.0" />
         <PackageReference Include="NUnit" Version="4.3.2"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
             <PrivateAssets>all</PrivateAssets>

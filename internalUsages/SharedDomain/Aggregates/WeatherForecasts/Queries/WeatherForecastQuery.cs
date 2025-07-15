@@ -9,7 +9,7 @@ using Sekiban.Pure.Query;
 
 namespace SharedDomain.Aggregates.WeatherForecasts.Queries;
 
-[GenerateSerializer]
+[GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record WeatherForecastQuery : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastResponse>, IWaitForSortableUniqueId
 {
     public string? WaitForSortableUniqueId { get; set; }

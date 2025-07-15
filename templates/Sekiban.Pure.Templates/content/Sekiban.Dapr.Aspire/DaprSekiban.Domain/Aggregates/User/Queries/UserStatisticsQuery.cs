@@ -5,7 +5,6 @@ using Sekiban.Pure.Query;
 
 namespace DaprSekiban.Domain.Aggregates.User.Queries;
 
-[GenerateSerializer]
 public record UserStatisticsQuery()
     : IMultiProjectionQuery<AggregateListProjector<UserProjector>, UserStatisticsQuery, UserStatisticsQuery.UserStatistics>,
       IWaitForSortableUniqueId

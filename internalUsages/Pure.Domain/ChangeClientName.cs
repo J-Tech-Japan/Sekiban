@@ -6,7 +6,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Pure.Domain;
 
-[GenerateSerializer]
+[GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record ChangeClientName(Guid ClientId, string Name) : ICommandWithHandler<ChangeClientName, ClientProjector>
 {
     public int? ReferenceVersion { get; init; }
