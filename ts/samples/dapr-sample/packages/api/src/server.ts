@@ -178,21 +178,47 @@ async function setupDaprActorsWithApp(app: express.Express) {
         return {
           appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
             console.log(`[ActorProxy] Calling appendEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
-            return daprClient.invoker.invoke(
-              'dapr-sample-api-event-handler', // Target app ID
-              `actors/AggregateEventHandlerActor/${actorIdStr}/method/appendEventsAsync`,
-              HttpMethod.PUT, 
-              [expectedLastSortableUniqueId, events] // Dapr expects parameters as an array
-            );
+            // Use service invocation to call actors in remote service
+            // The URL format for cross-service actor invocation is:
+            // /v1.0/invoke/{app-id}/method/actors/{actor-type}/{actor-id}/method/{method-name}
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-api-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/appendEventsAsync`;
+            console.log(`[ActorProxy] Cross-service actor invocation to: ${url}`);
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify([expectedLastSortableUniqueId, events])
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            return response.json();
           },
           getAllEventsAsync: async () => {
             console.log(`[ActorProxy] Calling getAllEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
-            return daprClient.invoker.invoke(
-              'dapr-sample-api-event-handler', // Target app ID
-              `actors/AggregateEventHandlerActor/${actorIdStr}/method/getAllEventsAsync`,
-              HttpMethod.PUT,
-              [] // Empty array for no parameters
-            );
+            // Use service invocation to call actors in remote service
+            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-api-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/getAllEventsAsync`;
+            console.log(`[ActorProxy] Cross-service actor invocation to: ${url}`);
+            
+            const response = await fetch(url, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({})
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            return response.json();
           }
         };
       } else if (actorType === 'AggregateActor') {

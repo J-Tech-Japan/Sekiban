@@ -339,7 +339,7 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Event documents:', JSON.stringify(eventDocuments, null, 2));
       
       // Call AggregateEventHandlerActor in the separate service
-      const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
+      const eventHandlerActorId = `${partitionKeys.group}-${partitionKeys.aggregateId}-${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
       // Create proxy for AggregateEventHandlerActor (in separate service)
@@ -353,6 +353,8 @@ export class AggregateActorImpl {
         currentState?.lastSortableUniqueId || '',
         eventDocuments
       );
+      
+      console.log('[AggregateActorImpl] appendEventsAsync returned:', JSON.stringify(appendResult));
       
       if (!appendResult || !appendResult.isSuccess) {
         console.error('[AggregateActorImpl] Failed to append events:', appendResult?.error);
@@ -401,7 +403,7 @@ export class AggregateActorImpl {
   ): Promise<any> {
     try {
       // Get the event handler actor
-      const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
+      const eventHandlerActorId = `${partitionKeys.group}-${partitionKeys.aggregateId}-${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
       // Create proxy for AggregateEventHandlerActor (in separate service)

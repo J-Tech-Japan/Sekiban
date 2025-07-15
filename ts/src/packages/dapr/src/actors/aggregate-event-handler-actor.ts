@@ -80,6 +80,7 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       if (!hasPartitionInfo && this.partitionInfo) {
         await stateManager.setState(this.PARTITION_INFO_KEY, this.partitionInfo);
+        await stateManager.saveState();
       }
     } catch (error) {
       console.warn('[AggregateEventHandlerActor] Could not save partition info:', error);
@@ -133,6 +134,7 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       // Save to actor state
       await stateManager.setState(this.EVENTS_KEY, allEvents);
+      await stateManager.saveState();
       
       // Save to external storage
       if (this.partitionInfo) {
@@ -154,13 +156,17 @@ export class AggregateEventHandlerActor extends AbstractActor
       }
       
       // Update metadata
-      const newLastId = events[events.length - 1].sortableUniqueId;
+      const lastEvent = events[events.length - 1];
+      console.log('[AggregateEventHandlerActor] Last event:', JSON.stringify(lastEvent));
+      const newLastId = lastEvent.sortableUniqueId || lastEvent.SortableUniqueId;
+      console.log('[AggregateEventHandlerActor] newLastId extracted:', newLastId);
       const newState: AggregateEventHandlerState = {
         lastSortableUniqueId: newLastId,
         eventCount: allEvents.length
       };
       
       await stateManager.setState(this.HANDLER_STATE_KEY, newState);
+      await stateManager.saveState();
       
       // Publish events to Dapr pub/sub
       try {
@@ -205,11 +211,26 @@ export class AggregateEventHandlerActor extends AbstractActor
         console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
       }
       
-      return {
+      try {
+        console.log('[AggregateEventHandlerActor] After pub/sub block, newLastId:', newLastId);
+      } catch (e) {
+        console.error('[AggregateEventHandlerActor] Error accessing newLastId:', e);
+      }
+      
+      console.log('[AggregateEventHandlerActor] About to return success response:', {
+        isSuccess: true,
+        lastSortableUniqueId: newLastId
+      });
+      
+      const response = {
         isSuccess: true,
         lastSortableUniqueId: newLastId
       };
+      
+      console.log('[AggregateEventHandlerActor] Actually returning response now');
+      return response;
     } catch (error) {
+      console.error('[AggregateEventHandlerActor] Error in appendEventsAsync:', error);
       return {
         isSuccess: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -315,6 +336,7 @@ export class AggregateEventHandlerActor extends AbstractActor
             eventCount: serializedEvents.length
           };
           await stateManager.setState(this.HANDLER_STATE_KEY, state);
+          await stateManager.saveState();
         }
         
         return serializedEvents;
