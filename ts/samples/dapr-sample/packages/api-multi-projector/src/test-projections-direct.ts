@@ -1,4 +1,4 @@
-import { InMemoryEventStore, StorageProviderType, Event, SortableUniqueId, PartitionKeys, EventRetrievalInfo, OptionalValue, SortableIdCondition } from '@sekiban/core';
+import { InMemoryEventStore, StorageProviderType, IEvent, SortableUniqueId, PartitionKeys, createEvent, createEventMetadata, EventRetrievalInfo, OptionalValue, SortableIdCondition } from '@sekiban/core';
 import { MultiProjectorActor, initializeDaprContainer } from '@sekiban/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { ActorId } from '@dapr/dapr';
@@ -21,21 +21,21 @@ async function testProjections() {
   for (let i = 1; i <= 3; i++) {
     const taskId = `task-${i}`;
     const partitionKeys = PartitionKeys.existing(taskId, 'Task');
-    const event = new Event(
-      SortableUniqueId.create(),
+    const event = createEvent({
+      id: SortableUniqueId.create(),
       partitionKeys,
-      'Task',
-      'TaskCreated',
-      1,
-      {
+      aggregateType: 'Task',
+      eventType: 'TaskCreated',
+      version: 1,
+      payload: {
         taskId,
         title: `Test Task ${i}`,
         description: `Description for task ${i}`,
         priority: i === 1 ? 'high' : 'medium',
         createdAt: new Date().toISOString()
       },
-      { timestamp: new Date() }
-    );
+      metadata: createEventMetadata({ timestamp: new Date() })
+    });
     events.push(event);
   }
   
@@ -98,10 +98,10 @@ async function testProjections() {
       }
     }
     
-    // If not found, check if TaskProjector is registered differently
-    if (!projectorType && domainTypes.projectors) {
-      console.log('Checking domainTypes.projectors:', Object.keys(domainTypes.projectors));
-      projectorType = domainTypes.projectors.TaskProjector;
+    // If not found, use the domain types method
+    if (!projectorType) {
+      projectorType = domainTypes.findProjectorDefinition('TaskProjector');
+      console.log('Found projectorType via findProjectorDefinition:', !!projectorType);
     }
     
     if (projectorType) {
@@ -112,7 +112,7 @@ async function testProjections() {
       
       // Apply each event
       for (const event of eventsResult.value) {
-        console.log(`  Applying event: ${event.type} for ${event.aggregateId}`);
+        console.log(`  Applying event: ${event.eventType} for ${event.aggregateId}`);
         
         // Get or create projection
         let currentProjection = projections[event.aggregateId];

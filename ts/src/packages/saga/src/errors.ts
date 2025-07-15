@@ -1,9 +1,11 @@
-import { SekibanError } from '../../core/src';
+import { SekibanError } from '@sekiban/core';
 
 /**
  * Base error for saga-related errors
  */
-export class SagaError extends SekibanError {
+export abstract class SagaError extends SekibanError {
+  abstract readonly code: string;
+  
   constructor(
     message: string,
     public readonly sagaId?: string,
@@ -11,7 +13,7 @@ export class SagaError extends SekibanError {
     public readonly stepName?: string,
     cause?: Error
   ) {
-    super('SAGA_ERROR', message, cause);
+    super(message);
   }
 }
 
@@ -19,9 +21,10 @@ export class SagaError extends SekibanError {
  * Error when saga is not found
  */
 export class SagaNotFoundError extends SagaError {
+  readonly code = 'SAGA_NOT_FOUND';
+  
   constructor(sagaId: string) {
     super(`Saga not found: ${sagaId}`, sagaId);
-    this.code = 'SAGA_NOT_FOUND';
   }
 }
 
@@ -29,9 +32,10 @@ export class SagaNotFoundError extends SagaError {
  * Error when saga definition is not found
  */
 export class SagaDefinitionNotFoundError extends SagaError {
+  readonly code = 'SAGA_DEFINITION_NOT_FOUND';
+  
   constructor(sagaType: string) {
     super(`Saga definition not found: ${sagaType}`, undefined, sagaType);
-    this.code = 'SAGA_DEFINITION_NOT_FOUND';
   }
 }
 
@@ -39,6 +43,8 @@ export class SagaDefinitionNotFoundError extends SagaError {
  * Error when saga step fails
  */
 export class SagaStepError extends SagaError {
+  readonly code = 'SAGA_STEP_FAILED';
+  
   constructor(
     sagaId: string,
     sagaType: string,
@@ -52,7 +58,6 @@ export class SagaStepError extends SagaError {
       stepName,
       cause
     );
-    this.code = 'SAGA_STEP_FAILED';
   }
 }
 
@@ -60,6 +65,8 @@ export class SagaStepError extends SagaError {
  * Error when saga compensation fails
  */
 export class SagaCompensationError extends SagaError {
+  readonly code = 'SAGA_COMPENSATION_FAILED';
+  
   constructor(
     sagaId: string,
     sagaType: string,
@@ -73,7 +80,6 @@ export class SagaCompensationError extends SagaError {
       stepName,
       cause
     );
-    this.code = 'SAGA_COMPENSATION_FAILED';
   }
 }
 
@@ -81,6 +87,8 @@ export class SagaCompensationError extends SagaError {
  * Error when saga times out
  */
 export class SagaTimeoutError extends SagaError {
+  readonly code = 'SAGA_TIMEOUT';
+  
   constructor(
     sagaId: string,
     sagaType: string,
@@ -91,7 +99,6 @@ export class SagaTimeoutError extends SagaError {
       sagaId,
       sagaType
     );
-    this.code = 'SAGA_TIMEOUT';
   }
 }
 
@@ -99,6 +106,8 @@ export class SagaTimeoutError extends SagaError {
  * Error when saga is in invalid state for operation
  */
 export class SagaInvalidStateError extends SagaError {
+  readonly code = 'SAGA_INVALID_STATE';
+  
   constructor(
     sagaId: string,
     sagaType: string,
@@ -110,6 +119,22 @@ export class SagaInvalidStateError extends SagaError {
       sagaId,
       sagaType
     );
-    this.code = 'SAGA_INVALID_STATE';
+  }
+}
+
+/**
+ * General saga error for non-specific errors
+ */
+export class GeneralSagaError extends SagaError {
+  readonly code = 'SAGA_ERROR';
+  
+  constructor(
+    message: string,
+    sagaId?: string,
+    sagaType?: string,
+    stepName?: string,
+    cause?: Error
+  ) {
+    super(message, sagaId, sagaType, stepName, cause);
   }
 }

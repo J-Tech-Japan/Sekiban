@@ -1,11 +1,9 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
-// @ts-ignore - These are exported from core
+import { Temporal } from '@js-temporal/polyfill';
 import type { IEventStore } from '@sekiban/core';
-// @ts-ignore - These are exported from core  
 import type { 
   IEvent
 } from '@sekiban/core';
-// @ts-ignore
 import {
   EventRetrievalInfo,
   SortableIdCondition,
@@ -113,20 +111,14 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Register reminders - AbstractActor provides registerActorReminder method
       await this.registerActorReminder(
         this.SNAPSHOT_REMINDER,
-        {
-          dueTime: "5m",
-          period: "5m",
-          ttl: undefined
-        }
+        Temporal.Duration.from({ minutes: 5 }),
+        Temporal.Duration.from({ minutes: 5 })
       );
       
       await this.registerActorReminder(
         this.EVENT_CHECK_REMINDER,
-        {
-          dueTime: "1s", 
-          period: "1s",
-          ttl: undefined
-        }
+        Temporal.Duration.from({ seconds: 1 }),
+        Temporal.Duration.from({ seconds: 1 })
       );
       
       console.log(`[MultiProjectorActor] Registered reminders for ${this.projectorType}`);

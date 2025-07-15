@@ -112,8 +112,8 @@ async function queryMultiProjector() {
     console.log('Query response:', JSON.stringify(queryResponse, null, 2));
     
     // Test queryAsync with specific filter
-    if (queryResponse.isSuccess && queryResponse.items.length > 0) {
-      const firstTaskId = queryResponse.items[0].id;
+    if ((queryResponse as any).isSuccess && (queryResponse as any).items?.length > 0) {
+      const firstTaskId = (queryResponse as any).items[0].id;
       console.log(`\n📋 Querying specific task: ${firstTaskId}`);
       
       const singleQueryResponse = await daprClient.invoker.invoke(

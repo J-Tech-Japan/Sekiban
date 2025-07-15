@@ -59,7 +59,7 @@ async function publishTestEvent() {
     const queryResponse = await daprClient.invoker.invoke(
       'dapr-sample-api-multi-projector',
       `actors/MultiProjectorActor/${actorId}/method/queryListAsync`,
-      'PUT',
+      'PUT' as any,
       [{
         queryType: 'TaskProjector',
         payload: {},
@@ -135,7 +135,7 @@ async function publishTestEvent() {
     const finalResponse = await daprClient.invoker.invoke(
       'dapr-sample-api-multi-projector',
       `actors/MultiProjectorActor/${actorId}/method/queryListAsync`,
-      'PUT',
+      'PUT' as any,
       [{
         queryType: 'TaskProjector',
         payload: {},

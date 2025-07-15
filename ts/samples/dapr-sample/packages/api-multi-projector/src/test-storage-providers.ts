@@ -1,5 +1,5 @@
 import { DaprClient, HttpMethod } from '@dapr/dapr';
-import { InMemoryEventStore as StorageInMemoryEventStore, StorageProviderType, PartitionKeys, Event, SortableUniqueId, IEvent } from '@sekiban/core';
+import { InMemoryEventStore as StorageInMemoryEventStore, StorageProviderType, PartitionKeys, IEvent, SortableUniqueId, createEvent, createEventMetadata } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
@@ -10,8 +10,8 @@ const { Pool } = pg;
 async function testWithInMemory() {
   console.log('🧪 Testing with InMemory Event Store...\n');
   
-  // Import from storage folder
-  const { InMemoryEventStore } = await import('@sekiban/core/storage');
+  // Use the already imported InMemoryEventStore
+  const InMemoryEventStore = StorageInMemoryEventStore;
   
   // Create InMemory event store
   const eventStore = new InMemoryEventStore({
@@ -45,7 +45,7 @@ async function testWithInMemory() {
       },
       version: 1,
       partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
+      sortableUniqueId: SortableUniqueId.create(),
       createdAt: new Date()
     },
     {
@@ -59,7 +59,7 @@ async function testWithInMemory() {
       },
       version: 2,
       partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
+      sortableUniqueId: SortableUniqueId.create(),
       createdAt: new Date()
     }
   ];
@@ -116,7 +116,7 @@ async function testWithPostgres() {
       },
       version: 1,
       partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
+      sortableUniqueId: SortableUniqueId.create(),
       createdAt: new Date()
     },
     {
@@ -130,7 +130,7 @@ async function testWithPostgres() {
       },
       version: 2,
       partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
+      sortableUniqueId: SortableUniqueId.create(),
       createdAt: new Date()
     }
   ];

@@ -3,6 +3,7 @@ import { Event, EventFilter, IEventPayload } from '../events/index.js';
 import { EventStoreError, ConcurrencyError } from '../result/index.js';
 import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
 import { IEventStore, EventStoreOptions } from '../events/store.js';
+import { createEvent, createEventMetadata } from '../events/event.js';
 
 /**
  * In-memory implementation of the events IEventStore interface
@@ -33,15 +34,15 @@ export class EventsInMemoryStore implements IEventStore {
 
     for (const payload of events) {
       version++;
-      const event: Event = {
+      const event = createEvent({
         id: SortableUniqueId.create(),
         partitionKeys,
         aggregateType,
         eventType: payload.constructor.name,
         version,
         payload,
-        metadata: metadata ? Metadata.merge(Metadata.create(), metadata) : Metadata.create(),
-      };
+        metadata: metadata ? createEventMetadata(metadata) : createEventMetadata()
+      });
       storedEvents.push(event);
     }
 

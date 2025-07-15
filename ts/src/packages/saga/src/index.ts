@@ -20,4 +20,4 @@ export type {
   EventDocument,
   PartitionKeys,
   SortableUniqueId
-} from '../../core/src';
+} from '@sekiban/core';

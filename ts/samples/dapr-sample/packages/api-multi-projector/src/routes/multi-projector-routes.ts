@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { DaprClient, ActorId } from '@dapr/dapr';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
 
-export const multiProjectorRoutes = Router();
+export const multiProjectorRoutes: ExpressRouter = Router();
 
 // Get a multi-projection state
 multiProjectorRoutes.get('/multi-projections/:projectorType/:id', async (req, res, next) => {
@@ -22,7 +23,7 @@ multiProjectorRoutes.get('/multi-projections/:projectorType/:id', async (req, re
     // Call the MultiProjectorActor's getProjectionAsync method
     const response = await daprClient.actor.invoke(
       'MultiProjectorActor',
-      actorId.id,
+      actorId.getId(),
       'getProjectionAsync'
     );
     

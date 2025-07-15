@@ -16,4 +16,4 @@ export type {
   PartitionKeys,
   SortableUniqueId,
   Aggregate
-} from '../../core/src';
+} from '@sekiban/core';

@@ -1,13 +1,13 @@
-import { InMemoryEventStore, SortableUniqueId, Event, PartitionKeys } from '@sekiban/core';
+import { InMemoryEventStore, StorageProviderType, SortableUniqueId, IEvent, PartitionKeys, createEvent, createEventMetadata } from '@sekiban/core';
 import { getDaprCradle, registerMultiProjectorActor, MultiProjectorActorFactory } from '@sekiban/dapr';
-import { createSchemaDomainTypes } from '@dapr-sample/domain';
+import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { DaprClient, DaprServer, HttpMethod } from '@dapr/dapr';
 
 console.log('🧪 Testing Multi-Projector Catch-up from Event Store\n');
 
 // Initialize event store and add events manually
-const eventStore = new InMemoryEventStore();
-const domainTypes = createSchemaDomainTypes();
+const eventStore = new InMemoryEventStore({ type: StorageProviderType.InMemory });
+const domainTypes = createTaskDomainTypes();
 
 // Create test events
 const events = [
@@ -25,7 +25,7 @@ const events = [
       createdAt: new Date().toISOString()
     },
     version: 1,
-    partitionKeys: PartitionKeys.generate('Task', 'task-1').value,
+    partitionKeys: PartitionKeys.generate('Task', 'task-1'),
     metadata: {}
   },
   {
@@ -42,7 +42,7 @@ const events = [
       createdAt: new Date().toISOString()
     },
     version: 1,
-    partitionKeys: PartitionKeys.generate('Task', 'task-2').value,
+    partitionKeys: PartitionKeys.generate('Task', 'task-2'),
     metadata: {}
   }
 ];
@@ -51,17 +51,16 @@ const events = [
 async function prepareEventStore() {
   console.log('📝 Adding events to event store...');
   for (const eventData of events) {
-    const event = new Event(
-      SortableUniqueId.fromString(eventData.sortableUniqueId).value!,
-      eventData.aggregateType,
-      eventData.aggregateId,
-      eventData.type,
-      eventData.payload,
-      eventData.version,
-      eventData.partitionKeys,
-      eventData.metadata
-    );
-    await eventStore.appendEvents([event]);
+    const event = createEvent({
+      id: SortableUniqueId.generate(),
+      partitionKeys: eventData.partitionKeys,
+      aggregateType: eventData.aggregateType,
+      eventType: eventData.type,
+      version: eventData.version,
+      payload: eventData.payload,
+      metadata: createEventMetadata(eventData.metadata)
+    });
+    await eventStore.saveEvents([event]);
   }
   console.log(`✅ Added ${events.length} events to event store\n`);
 }
@@ -71,10 +70,7 @@ async function testCatchUp() {
   await prepareEventStore();
   
   // Initialize Dapr container with event store
-  const daprCradle = getDaprCradle({
-    domainTypes,
-    eventStore
-  });
+  const daprCradle = getDaprCradle();
   
   const daprClient = new DaprClient({ daprHost: '127.0.0.1', daprPort: '3503' });
   

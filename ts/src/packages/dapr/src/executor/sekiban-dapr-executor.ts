@@ -222,6 +222,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         // Create a custom error class for command errors
         class CommandExecutionError extends SekibanError {
           readonly code = 'COMMAND_EXECUTION_ERROR';
+          constructor(message: string) {
+            super(message);
+          }
         }
         return err(new CommandExecutionError(JSON.stringify(response.error)));
       }
@@ -245,6 +248,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       // Create a custom error class for Dapr actor errors
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
+        constructor(message: string) {
+          super(message);
+        }
       }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
@@ -274,6 +280,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       // Create a custom error class for Dapr actor errors
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
+        constructor(message: string) {
+          super(message);
+        }
       }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
@@ -293,6 +302,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         // Create a custom error class for projector not found
         class ProjectorNotFoundError extends SekibanError {
           readonly code = 'PROJECTOR_NOT_FOUND';
+          constructor(message: string) {
+            super(message);
+          }
         }
         return err(new ProjectorNotFoundError(`No projector registered for aggregate type: ${projector.aggregateTypeName}`));
       }
@@ -316,6 +328,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       // Create a custom error class for Dapr actor errors
       class DaprActorError extends SekibanError {
         readonly code = 'DAPR_ACTOR_ERROR';
+        constructor(message: string) {
+          super(message);
+        }
       }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
@@ -336,7 +351,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
     // The projector property contains the actual projector instance
     // We need to handle the type mismatch between IProjector and IAggregateProjector
     // In practice, the projector instances should implement IAggregateProjector
-    return projectorInfos.map(info => info.projector as unknown as IAggregateProjector<any>);
+    return projectorInfos.map((info: any) => info.projector as unknown as IAggregateProjector<any>);
   }
   
   getDomainTypes(): SekibanDomainTypes {

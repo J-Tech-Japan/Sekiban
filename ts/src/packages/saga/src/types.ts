@@ -1,4 +1,4 @@
-import { ICommand, IEventPayload, EventDocument } from '../../core/src';
+import { ICommand, IEventPayload, EventDocument } from '@sekiban/core';
 
 /**
  * Saga execution status

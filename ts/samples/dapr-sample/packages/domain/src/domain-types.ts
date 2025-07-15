@@ -52,16 +52,12 @@ globalRegistry.registerProjector(UserProjector);
 export function createTaskDomainTypes() {
   const domainTypes = createSchemaDomainTypes(globalRegistry);
   
-  // Add convenience properties for backward compatibility
+  // Add convenience methods using the public API
   return {
     ...domainTypes,
-    // Expose the registry's collections directly
-    commands: globalRegistry.commandDefinitions,
-    events: globalRegistry.eventDefinitions,
-    projectors: globalRegistry.projectorDefinitions,
-    // Add helper methods
-    findCommandDefinition: (name: string) => globalRegistry.commandDefinitions.get(name),
-    findEventDefinition: (name: string) => globalRegistry.eventDefinitions.get(name),
-    findProjectorDefinition: (name: string) => globalRegistry.projectorDefinitions.get(name)
+    // Add helper methods using public API
+    findCommandDefinition: (name: string) => globalRegistry.getCommand(name),
+    findEventDefinition: (name: string) => globalRegistry.getEventDefinition(name),
+    findProjectorDefinition: (name: string) => globalRegistry.getProjector(name)
   };
 }

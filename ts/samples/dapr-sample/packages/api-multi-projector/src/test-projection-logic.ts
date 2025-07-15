@@ -1,4 +1,4 @@
-import { InMemoryEventStore, SortableUniqueId, Event, PartitionKeys } from '@sekiban/core';
+import { InMemoryEventStore, StorageProviderType, SortableUniqueId, IEvent, PartitionKeys, createEvent, createEventMetadata } from '@sekiban/core';
 import { MultiProjectorActor, initializeDaprContainer } from '@sekiban/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { DaprClient, ActorId } from '@dapr/dapr';
@@ -7,27 +7,27 @@ console.log('🧪 Testing MultiProjectorActor Projection Logic\n');
 
 async function testProjectionLogic() {
   // Create in-memory event store
-  const eventStore = new InMemoryEventStore();
+  const eventStore = new InMemoryEventStore({ type: StorageProviderType.InMemory });
   const domainTypes = createTaskDomainTypes();
   
   // Add test event to store
   const taskId = 'task-test-1';
   const partitionKeys = PartitionKeys.existing(taskId, 'Task');
-  const event = new Event(
-    SortableUniqueId.create(),
+  const event = createEvent({
+    id: SortableUniqueId.create(),
     partitionKeys,
-    'Task',
-    'TaskCreated',
-    1,
-    {
+    aggregateType: 'Task',
+    eventType: 'TaskCreated',
+    version: 1,
+    payload: {
       taskId,
       title: 'Test Task for Projection',
       description: 'Testing projection logic',
       priority: 'high',
       createdAt: new Date().toISOString()
     },
-    { timestamp: new Date() }
-  );
+    metadata: createEventMetadata({ timestamp: new Date() })
+  });
   
   await (eventStore as any).saveEvents([event]);
   console.log('✅ Added test event to store\n');

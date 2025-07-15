@@ -3,7 +3,13 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['cjs', 'esm'],
-  dts: false, // Temporarily disable dts generation
+  dts: {
+    // Skip type checking during build
+    compilerOptions: {
+      skipLibCheck: true,
+      skipDefaultLibCheck: true
+    }
+  },
   clean: true,
   sourcemap: true,
   external: ['pg', '@sekiban/core']

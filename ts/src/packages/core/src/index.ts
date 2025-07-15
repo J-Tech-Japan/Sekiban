@@ -34,6 +34,9 @@ export {
   type IAggregate
 } from './aggregates/aggregate.js';
 
+// Export IAggregatePayload
+export type { IAggregatePayload } from './aggregates/aggregate-payload.js';
+
 export * from './documents/partition-keys.js';
 export { PartitionKeys } from './documents/partition-keys.js';
 export { SortableUniqueId } from './documents/sortable-unique-id.js';
@@ -105,6 +108,9 @@ export {
   type IServiceProvider
 } from './commands/index.js';
 
+// Export ICommand interface
+export { type ICommand } from './commands/command.js';
+
 // Export utilities
 export {
   generateUuid,
@@ -117,6 +123,17 @@ export { Metadata } from './documents/metadata.js';
 
 // Export query types
 export * from './queries/index.js';
+
+// Export event retrieval info and related types
+export {
+  EventRetrievalInfo,
+  OptionalValue,
+  SortableIdCondition,
+  AggregateGroupStream
+} from './events/event-retrieval-info.js';
+
+// Export EventDocument type
+export type { EventDocument } from './domain-types/interfaces.js';
 
 // Version
 export const VERSION = '0.0.1';

@@ -77,28 +77,28 @@ app.post('/test/populate-events', async (req, res) => {
   
   try {
     // Import required classes
-    const { Event, SortableUniqueId, PartitionKeys } = await import('@sekiban/core');
+    const { createEvent, createEventMetadata, SortableUniqueId, PartitionKeys } = await import('@sekiban/core');
     
     // Add some test events to the store
     const events = [];
     for (let i = 1; i <= 5; i++) {
       const taskId = `task-${i}`;
       const partitionKeys = PartitionKeys.existing(taskId, 'Task');
-      const event = new Event(
-        SortableUniqueId.create(),
+      const event = createEvent({
+        id: SortableUniqueId.create(),
         partitionKeys,
-        'Task',
-        'TaskCreated',
-        1,
-        {
+        aggregateType: 'Task',
+        eventType: 'TaskCreated',
+        version: 1,
+        payload: {
           taskId,
           title: `Test Task ${i}`,
           description: `Description for task ${i}`,
           priority: i % 2 === 0 ? 'high' : 'medium',
           createdAt: new Date().toISOString()
         },
-        { timestamp: new Date() }
-      );
+        metadata: createEventMetadata({ timestamp: new Date() })
+      });
       events.push(event);
     }
     
