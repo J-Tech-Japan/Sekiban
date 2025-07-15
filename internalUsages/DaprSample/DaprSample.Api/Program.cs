@@ -2,6 +2,7 @@ using SharedDomain;
 using SharedDomain.Generated;
 using SharedDomain.Aggregates.User.Commands;
 using SharedDomain.Aggregates.User.Queries;
+using SharedDomain.Aggregates.WeatherForecasts;
 using SharedDomain.Aggregates.WeatherForecasts.Commands;
 using SharedDomain.Aggregates.WeatherForecasts.Queries;
 using SharedDomain.ValueObjects;
@@ -46,7 +47,6 @@ builder.Services.AddMemoryCache();
 var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
-// ローカル開発とACA (Azure Container Apps) 両方に対応
 var actorIdPrefix = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX") ?? 
                     Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? 
                     (builder.Environment.IsDevelopment() ? 
@@ -58,7 +58,7 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
     options.EventTopicName = "events.all";  // Changed to match subscription.yaml
-    options.ActorIdPrefix = actorIdPrefix; // 環境に応じて自動設定
+    options.ActorIdPrefix = actorIdPrefix;
 });
 
 // Use patched event reader to avoid timeout
@@ -99,20 +99,16 @@ app.UseCloudEvents();
 app.MapSubscribeHandler();
 
 // === Sekiban PubSub Event Relay (MinimalAPI) ===
-// 新しいopt-in方式でPubSubイベントリレーを有効化
-// ローカル開発とACA (Azure Container Apps) 両方に対応
 var instanceId = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? 
                 Environment.GetEnvironmentVariable("HOSTNAME") ?? 
                 Environment.MachineName ?? 
                 Guid.NewGuid().ToString("N")[..8];
 
-// ローカル開発環境では開発用のConsumer Group、ACAでは本番用を使用
 var consumerGroup = Environment.GetEnvironmentVariable("SEKIBAN_CONSUMER_GROUP") ?? 
                    (app.Environment.IsDevelopment() ? 
                     "dapr-sample-projectors-dev" : 
                     "dapr-sample-projectors");
 
-// ローカル開発環境では緩い設定、ACAでは厳密な設定
 var continueOnFailure = app.Environment.IsDevelopment() || 
                        !bool.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING"), out var strictMode) || 
                        !strictMode;
@@ -124,14 +120,14 @@ var maxConcurrency = int.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_MA
 app.MapSekibanEventRelay(new SekibanPubSubRelayOptions
 {
     PubSubName = "sekiban-pubsub",
-    TopicName = "events.all", // subscription.yamlに合わせる
+    TopicName = "events.all",
     EndpointPath = "/internal/pubsub/events",
-    ConsumerGroup = consumerGroup, // 環境に応じて自動設定
-    MaxConcurrency = maxConcurrency, // 環境に応じて調整
-    ContinueOnProjectorFailure = continueOnFailure, // ローカルでは続行、本番では設定可能
-    EnableDeadLetterQueue = !app.Environment.IsDevelopment(), // ローカルでは無効、本番では有効
+    ConsumerGroup = consumerGroup,
+    MaxConcurrency = maxConcurrency,
+    ContinueOnProjectorFailure = continueOnFailure,
+    EnableDeadLetterQueue = !app.Environment.IsDevelopment(),
     DeadLetterTopic = "events.dead-letter",
-    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3 // ローカルでは少なく、本番では多く
+    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3
 });
 
 // Log actor registration before mapping handlers
@@ -206,7 +202,6 @@ startupLogger.LogInformation("  - App Port: {AppPort}", 5000);
 
 if (app.Environment.IsDevelopment())
 {
-    // ローカル開発環境の情報
     startupLogger.LogInformation("=== LOCAL DEVELOPMENT ENVIRONMENT INFO ===");
     startupLogger.LogInformation("  - Machine Name: {MachineName}", Environment.MachineName);
     startupLogger.LogInformation("  - User Name: {UserName}", Environment.UserName ?? "Not Set");
@@ -300,7 +295,6 @@ app.MapGet("/debug/env", () =>
         ["SEKIBAN_STRICT_ERROR_HANDLING"] = Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING")
     };
     
-    // ACA環境変数（ローカルでは通常null）
     if (!app.Environment.IsDevelopment())
     {
         envVars.Add("CONTAINER_APP_NAME", Environment.GetEnvironmentVariable("CONTAINER_APP_NAME"));
@@ -350,7 +344,6 @@ app.MapGet("/debug/pubsub-config", () =>
                "🚀 Production: Configured for ACA scale-out with Consumer Group to prevent duplicate processing"
     };
     
-    // ACA固有の情報を追加（本番環境のみ）
     if (!app.Environment.IsDevelopment())
     {
         var acaInfo = new
@@ -590,6 +583,118 @@ app.MapPost("/api/weatherforecast/generate", async ([FromServices] ISekibanExecu
 .WithDescription("Generates sample weather forecast data for testing")
 .WithTags("WeatherForecast");
 
+// Test endpoint to get individual aggregate state directly
+app.MapGet("/api/weatherforecast/{weatherForecastId}/aggregate-state", async (Guid weatherForecastId, [FromServices] ILogger<Program> logger) =>
+{
+    try
+    {
+        logger.LogInformation("=== GetAggregateState API called with WeatherForecastId: {WeatherForecastId} ===", weatherForecastId);
+        
+        // Use HttpClient to call Dapr actor directly
+        using var httpClient = new HttpClient();
+        httpClient.BaseAddress = new Uri($"http://localhost:{Environment.GetEnvironmentVariable("DAPR_HTTP_PORT") ?? "3500"}");
+        
+        // Try different actor ID formats
+        var actorIdFormats = new[]
+        {
+            $"local-dev-Mac-WeatherForecastProjector-{weatherForecastId}-default",
+            $"WeatherForecastProjector-{weatherForecastId}-default",
+            $"{weatherForecastId}"
+        };
+        
+        foreach (var actorIdFormat in actorIdFormats)
+        {
+            try
+            {
+                logger.LogInformation("Trying actor ID format: {ActorId}", actorIdFormat);
+                
+                // Call the actor method directly via HTTP
+                var response = await httpClient.PutAsync(
+                    $"/v1.0/actors/AggregateActor/{actorIdFormat}/method/GetAggregateStateAsync",
+                    new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    logger.LogInformation("Success with actor ID: {ActorId}, Response: {Response}", actorIdFormat, content);
+                    
+                    return Results.Ok(new 
+                    { 
+                        success = true,
+                        aggregateId = weatherForecastId,
+                        actorId = actorIdFormat,
+                        rawResponse = content
+                    });
+                }
+                else
+                {
+                    logger.LogWarning("Failed with actor ID: {ActorId}, Status: {Status}", actorIdFormat, response.StatusCode);
+                }
+            }
+            catch (Exception innerEx)
+            {
+                logger.LogWarning(innerEx, "Error with actor ID format: {ActorId}", actorIdFormat);
+            }
+        }
+        
+        return Results.NotFound(new { success = false, error = "Actor not found with any ID format" });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error getting aggregate state for WeatherForecastId: {WeatherForecastId}", weatherForecastId);
+        return Results.BadRequest(new { success = false, error = ex.Message });
+    }
+})
+.WithName("GetWeatherForecastAggregateState")
+.WithSummary("Get weather forecast aggregate state directly from actor")
+.WithDescription("Test endpoint to verify individual aggregate actors are working")
+.WithTags("WeatherForecast");
+
+// Simple test endpoint to check aggregate version
+app.MapGet("/api/weatherforecast/{weatherForecastId}/version", async (Guid weatherForecastId, [FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
+{
+    try
+    {
+        logger.LogInformation("=== CheckAggregateVersion API called with WeatherForecastId: {WeatherForecastId} ===", weatherForecastId);
+        
+        // Try to execute a simple query command to check if aggregate exists
+        var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, "test");
+        var result = await executor.CommandAsync(command).Conveyor(r => ResultBox.FromValue(r));
+        
+        if (result.IsSuccess)
+        {
+            var response = result.GetValue();
+            return Results.Ok(new 
+            { 
+                success = true,
+                aggregateId = weatherForecastId,
+                version = response.Version,
+                exists = true
+            });
+        }
+        else
+        {
+            return Results.Ok(new 
+            { 
+                success = true,
+                aggregateId = weatherForecastId,
+                version = 0,
+                exists = false,
+                error = result.GetException().Message
+            });
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error checking aggregate version for WeatherForecastId: {WeatherForecastId}", weatherForecastId);
+        return Results.BadRequest(new { success = false, error = ex.Message });
+    }
+})
+.WithName("GetWeatherForecastVersion")
+.WithSummary("Get weather forecast aggregate version")
+.WithDescription("Simple endpoint to check if aggregate exists by version")
+.WithTags("WeatherForecast");
+
 // Health check endpoint for Dapr
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
 .WithName("HealthCheck")
@@ -631,6 +736,46 @@ app.MapGet("/health/detailed", () =>
 .WithSummary("Detailed health check for ACA scaling")
 .WithDescription("Returns detailed health status including instance and configuration information")
 .WithTags("Health");
+
+// Event monitoring endpoint - tracks PubSub events
+var eventCounter = 0;
+var lastEventTime = DateTime.MinValue;
+var eventLog = new Queue<string>(100); // Keep last 100 events
+
+app.MapPost("/internal/pubsub/events/monitor", async (HttpContext context, [FromServices] ILogger<Program> logger) =>
+{
+    var body = await new StreamReader(context.Request.Body).ReadToEndAsync();
+    eventCounter++;
+    lastEventTime = DateTime.UtcNow;
+    
+    var logEntry = $"[{lastEventTime:yyyy-MM-dd HH:mm:ss.fff}] Event #{eventCounter}: {body.Substring(0, Math.Min(200, body.Length))}...";
+    eventLog.Enqueue(logEntry);
+    if (eventLog.Count > 100) eventLog.Dequeue();
+    
+    logger.LogInformation("=== PUBSUB EVENT RECEIVED (Monitor) ===");
+    logger.LogInformation("Event Count: {EventCount}", eventCounter);
+    logger.LogInformation("Body Preview: {Body}", body.Substring(0, Math.Min(500, body.Length)));
+    
+    return Results.Ok();
+})
+.WithName("EventMonitor")
+.WithSummary("Monitor PubSub events")
+.WithDescription("Endpoint to monitor incoming PubSub events for debugging");
+
+app.MapGet("/api/debug/event-stats", () =>
+{
+    return Results.Ok(new
+    {
+        totalEvents = eventCounter,
+        lastEventTime = lastEventTime == DateTime.MinValue ? "No events received" : lastEventTime.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+        timeSinceLastEvent = lastEventTime == DateTime.MinValue ? "N/A" : $"{(DateTime.UtcNow - lastEventTime).TotalSeconds:F1} seconds ago",
+        recentEvents = eventLog.Take(10).ToArray()
+    });
+})
+.WithName("EventStats")
+.WithSummary("Get event statistics")
+.WithDescription("Returns statistics about received PubSub events")
+.WithTags("Debug");
 
 // Test endpoint to verify multi-projector pub/sub flow
 app.MapPost("/api/test/pubsub-flow", async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> testLogger) =>

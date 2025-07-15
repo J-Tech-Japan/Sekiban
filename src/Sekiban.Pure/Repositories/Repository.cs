@@ -7,12 +7,9 @@ namespace Sekiban.Pure.Repositories;
 
 public class Repository
 {
-    // 内部イベントリストは外部から直接変更されないよう隠蔽
     private readonly List<IEvent> _events = new();
-    // 排他制御用のロックオブジェクト
     private readonly object _lock = new();
 
-    // 外部からの読み取り用に、常に最新の状態のコピーを返す
     public IReadOnlyList<IEvent> Events
     {
         get

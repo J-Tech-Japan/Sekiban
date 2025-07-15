@@ -8,25 +8,18 @@ namespace Sekiban.Pure.Dapr.Serialization;
 [Serializable]
 public record SerializableQueryResult
 {
-    // 結果の型名
     public string ResultTypeName { get; init; } = string.Empty;
     
-    // クエリの型名
     public string QueryTypeName { get; init; } = string.Empty;
     
-    // 結果をシリアライズした圧縮データ
     public byte[] CompressedResultJson { get; init; } = Array.Empty<byte>();
     
-    // クエリをシリアライズした圧縮データ
     public byte[] CompressedQueryJson { get; init; } = Array.Empty<byte>();
     
-    // アプリケーションバージョン情報（互換性チェック用）
     public string ResultAssemblyVersion { get; init; } = string.Empty;
     
-    // デフォルトコンストラクタ（シリアライザ用）
     public SerializableQueryResult() { }
 
-    // コンストラクタ（直接初期化用）
     private SerializableQueryResult(
         string resultTypeName,
         string queryTypeName,
@@ -41,7 +34,6 @@ public record SerializableQueryResult
         ResultAssemblyVersion = resultAssemblyVersion;
     }
 
-    // 変換メソッド：QueryResultGeneral → SerializableQueryResult
     public static async Task<SerializableQueryResult> CreateFromAsync(
         QueryResultGeneral result, 
         JsonSerializerOptions options)
@@ -93,7 +85,6 @@ public record SerializableQueryResult
         );
     }
 
-    // 変換メソッド：ResultBox<object> → SerializableQueryResult (成功時のみ)
     public static async Task<ResultBox<SerializableQueryResult>> CreateFromResultBoxAsync(
         ResultBox<object> resultBox,
         IQueryCommon originalQuery,
@@ -112,13 +103,11 @@ public record SerializableQueryResult
         return ResultBox<SerializableQueryResult>.FromValue(serializable);
     }
 
-    // 変換メソッド：SerializableQueryResult → QueryResultGeneral
     public async Task<ResultBox<QueryResultGeneral>> ToQueryResultAsync(
         SekibanDomainTypes domainTypes)
     {
         try
         {
-            // 結果型を取得
             Type? resultType = null;
             try
             {
@@ -146,7 +135,6 @@ public record SerializableQueryResult
                     new InvalidOperationException($"Failed to get result type: {ResultTypeName}", ex));
             }
 
-            // クエリ型を取得
             Type? queryType = null;
             try
             {
@@ -174,7 +162,6 @@ public record SerializableQueryResult
                     new InvalidOperationException($"Failed to get query type: {QueryTypeName}", ex));
             }
 
-            // 結果をデシリアライズ
             object? result = null;
             if (CompressedResultJson.Length > 0)
             {
@@ -206,7 +193,6 @@ public record SerializableQueryResult
                     new InvalidOperationException("No result data to deserialize"));
             }
 
-            // クエリをデシリアライズ
             IQueryCommon? query = null;
             if (CompressedQueryJson.Length > 0)
             {
@@ -248,7 +234,6 @@ public record SerializableQueryResult
         }
     }
 
-    // 変換メソッド：SerializableQueryResult → ResultBox<object>
     public async Task<ResultBox<object>> ToResultBoxAsync(
         SekibanDomainTypes domainTypes)
     {
@@ -256,7 +241,6 @@ public record SerializableQueryResult
         return queryResultBox.Conveyor(qr => ResultBox<object>.FromValue(qr.Value));
     }
 
-    // GZip圧縮ヘルパーメソッド
     private static async Task<byte[]> CompressAsync(byte[] data)
     {
         if (data.Length == 0)
@@ -272,7 +256,6 @@ public record SerializableQueryResult
         return memoryStream.ToArray();
     }
 
-    // GZip解凍ヘルパーメソッド
     private static async Task<byte[]> DecompressAsync(byte[] compressedData)
     {
         if (compressedData.Length == 0)

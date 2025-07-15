@@ -3,7 +3,7 @@ using Dapr.Actors.Runtime;
 namespace DaprSample2;
 
 /// <summary>
-/// カウンターActorの実装
+/// Counter Actor implementation
 /// </summary>
 public class CounterActor : Actor, ICounterActor
 {
@@ -14,7 +14,7 @@ public class CounterActor : Actor, ICounterActor
     }
 
     /// <summary>
-    /// カウンターの値を取得
+    /// Get counter value
     /// </summary>
     public async Task<int> GetCountAsync()
     {
@@ -26,7 +26,7 @@ public class CounterActor : Actor, ICounterActor
     }
 
     /// <summary>
-    /// カウンターをインクリメント
+    /// Increment counter
     /// </summary>
     public async Task IncrementAsync()
     {
@@ -38,7 +38,7 @@ public class CounterActor : Actor, ICounterActor
     }
 
     /// <summary>
-    /// カウンターをリセット
+    /// Reset counter
     /// </summary>
     public async Task ResetAsync()
     {
@@ -47,7 +47,7 @@ public class CounterActor : Actor, ICounterActor
     }
 
     /// <summary>
-    /// Actor起動時の処理
+    /// Processing when Actor is activated
     /// </summary>
     protected override Task OnActivateAsync()
     {
@@ -56,7 +56,7 @@ public class CounterActor : Actor, ICounterActor
     }
 
     /// <summary>
-    /// Actor非活性化時の処理
+    /// Processing when Actor is deactivated
     /// </summary>
     protected override Task OnDeactivateAsync()
     {

@@ -12,10 +12,10 @@ public interface ICommandTypes
     public List<Type> GetCommandTypes();
     
     /// <summary>
-    /// コマンド型名から型を取得します。
+    /// Gets the type from the command type name.
     /// </summary>
-    /// <param name="commandTypeName">コマンド型の名前</param>
-    /// <returns>見つかった型、または見つからない場合はnull</returns>
+    /// <param name="commandTypeName">Name of the command type</param>
+    /// <returns>The found type, or null if not found</returns>
     public Type? GetCommandTypeByName(string commandTypeName);
     
     public Task<ResultBox<CommandResponse>> ExecuteGeneral(

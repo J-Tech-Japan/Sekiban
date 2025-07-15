@@ -44,7 +44,6 @@ public class SekibanOrleansExecutor(
             return ResultBox<TResult>.Error(new ApplicationException("Projector name not found"));
         var multiProjectorGrain = clusterClient.GetGrain<IMultiProjectorGrain>(nameResult.GetValue());
         
-        // 待機ロジックを追加
         await WaitForSortableUniqueIdIfNeeded(multiProjectorGrain, queryCommon);
         
         var result = await multiProjectorGrain.QueryAsync(queryCommon);
@@ -62,7 +61,6 @@ public class SekibanOrleansExecutor(
             return ResultBox<ListQueryResult<TResult>>.Error(new ApplicationException("Projector name not found"));
         var multiProjectorGrain = clusterClient.GetGrain<IMultiProjectorGrain>(nameResult.GetValue());
         
-        // 待機ロジックを追加
         await WaitForSortableUniqueIdIfNeeded(multiProjectorGrain, queryCommon);
         
         var result = await multiProjectorGrain.QueryAsync(queryCommon);
@@ -103,7 +101,6 @@ public class SekibanOrleansExecutor(
                 await Task.Delay(pollingIntervalMs);
             }
             
-            // タイムアウト時のログ記録
             // Logger.LogWarning($"Timeout waiting for SortableUniqueId {sortableUniqueId} after {timeoutMs}ms");
         }
     }

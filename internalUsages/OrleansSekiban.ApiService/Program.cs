@@ -139,16 +139,14 @@ builder.UseOrleans(config =>
                     });
                 });
                 configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                    ob.Configure(o => o.TotalQueueCount = 3)); // 8 → 3 へ
+                    ob.Configure(o => o.TotalQueueCount = 3));
 
-                // --- Pulling Agent の頻度・バッチ ---
                 configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
                 {
                     opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
                     opt.BatchContainerBatchSize = 256;
                     opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
                 }));
-                // --- キャッシュ ---
                 configurator.ConfigureCacheSize(8192);
             });
         config.AddAzureQueueStreams(
@@ -170,16 +168,14 @@ builder.UseOrleans(config =>
                     });
                 });
                 configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                    ob.Configure(o => o.TotalQueueCount = 3)); // 8 → 3 へ
+                    ob.Configure(o => o.TotalQueueCount = 3));
 
-                // --- Pulling Agent の頻度・バッチ ---
                 configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
                 {
                     opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
                     opt.BatchContainerBatchSize = 256;
                     opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
                 }));
-                // --- キャッシュ ---
                 configurator.ConfigureCacheSize(8192);
             });
     }

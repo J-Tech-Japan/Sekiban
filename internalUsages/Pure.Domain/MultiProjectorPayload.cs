@@ -67,7 +67,6 @@ public record MultiProjectorPayload(
         _ => payload
     };
     public static MultiProjectorPayload GenerateInitialPayload()
-        // ここで初期値を ImmutableDictionary にする
         => new(ImmutableDictionary<Guid, User>.Empty, ImmutableDictionary<Guid, Cart>.Empty);
     public static string GetMultiProjectorName() => nameof(MultiProjectorPayload);
     public record User(Guid UserId, string Name, string Email, bool IsConfirmed);

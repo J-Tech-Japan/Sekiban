@@ -8,19 +8,14 @@ namespace Sekiban.Pure.Dapr.Serialization;
 [Serializable]
 public record SerializableQuery
 {
-    // クエリの型名
     public string QueryTypeName { get; init; } = string.Empty;
     
-    // IQueryCommonをシリアライズした圧縮データ
     public byte[] CompressedQueryJson { get; init; } = Array.Empty<byte>();
     
-    // アプリケーションバージョン情報（互換性チェック用）
     public string QueryAssemblyVersion { get; init; } = string.Empty;
     
-    // デフォルトコンストラクタ（シリアライザ用）
     public SerializableQuery() { }
 
-    // コンストラクタ（直接初期化用）
     private SerializableQuery(
         string queryTypeName,
         byte[] compressedQueryJson,
@@ -31,7 +26,6 @@ public record SerializableQuery
         QueryAssemblyVersion = queryAssemblyVersion;
     }
 
-    // 変換メソッド：IQueryCommon → SerializableQuery
     public static async Task<SerializableQuery> CreateFromAsync(
         IQueryCommon query, 
         JsonSerializerOptions options)
@@ -65,13 +59,11 @@ public record SerializableQuery
         );
     }
 
-    // 変換メソッド：SerializableQuery → IQueryCommon
     public async Task<ResultBox<IQueryCommon>> ToQueryAsync(
         SekibanDomainTypes domainTypes)
     {
         try
         {
-            // クエリ型を取得
             Type? queryType = null;
             try
             {
@@ -90,7 +82,6 @@ public record SerializableQuery
                     new InvalidOperationException($"Failed to get query type: {QueryTypeName}", ex));
             }
 
-            // クエリをデシリアライズ
             if (CompressedQueryJson.Length > 0)
             {
                 var decompressedJson = await DecompressAsync(CompressedQueryJson);
@@ -129,7 +120,6 @@ public record SerializableQuery
         }
     }
 
-    // GZip圧縮ヘルパーメソッド
     private static async Task<byte[]> CompressAsync(byte[] data)
     {
         if (data.Length == 0)
@@ -145,7 +135,6 @@ public record SerializableQuery
         return memoryStream.ToArray();
     }
 
-    // GZip解凍ヘルパーメソッド
     private static async Task<byte[]> DecompressAsync(byte[] compressedData)
     {
         if (compressedData.Length == 0)

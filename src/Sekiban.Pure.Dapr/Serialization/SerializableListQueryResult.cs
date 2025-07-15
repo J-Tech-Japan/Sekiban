@@ -8,31 +8,23 @@ namespace Sekiban.Pure.Dapr.Serialization;
 [Serializable]
 public record SerializableListQueryResult
 {
-    // ページング情報
     public int? TotalCount { get; init; }
     public int? TotalPages { get; init; }
     public int? CurrentPage { get; init; }
     public int? PageSize { get; init; }
     
-    // レコードの型名
     public string RecordTypeName { get; init; } = string.Empty;
     
-    // クエリの型名
     public string QueryTypeName { get; init; } = string.Empty;
     
-    // アイテムをシリアライズした圧縮データ
     public byte[] CompressedItemsJson { get; init; } = Array.Empty<byte>();
     
-    // クエリをシリアライズした圧縮データ
     public byte[] CompressedQueryJson { get; init; } = Array.Empty<byte>();
     
-    // アプリケーションバージョン情報（互換性チェック用）
     public string ItemsAssemblyVersion { get; init; } = string.Empty;
     
-    // デフォルトコンストラクタ（シリアライザ用）
     public SerializableListQueryResult() { }
 
-    // コンストラクタ（直接初期化用）
     private SerializableListQueryResult(
         int? totalCount,
         int? totalPages,
@@ -55,7 +47,6 @@ public record SerializableListQueryResult
         ItemsAssemblyVersion = itemsAssemblyVersion;
     }
 
-    // 変換メソッド：ListQueryResultGeneral → SerializableListQueryResult
     public static async Task<SerializableListQueryResult> CreateFromAsync(
         ListQueryResultGeneral result, 
         JsonSerializerOptions options)
@@ -63,7 +54,6 @@ public record SerializableListQueryResult
         var queryType = result.Query.GetType();
         string itemsAssemblyVersion = "0.0.0.0";
         
-        // アイテムの型情報を取得（アイテムがある場合）
         string recordTypeName = result.RecordType;
         if (result.Items.Any())
         {
@@ -73,7 +63,6 @@ public record SerializableListQueryResult
             recordTypeName = firstItemType.AssemblyQualifiedName ?? result.RecordType;
         }
         
-        // アイテムリストをシリアライズ
         byte[] itemsJson;
         try
         {
@@ -118,7 +107,6 @@ public record SerializableListQueryResult
         );
     }
 
-    // 変換メソッド：ResultBox<IListQueryResult> → SerializableListQueryResult (成功時のみ)
     public static async Task<ResultBox<SerializableListQueryResult>> CreateFromResultBoxAsync(
         ResultBox<IListQueryResult> resultBox,
         IListQueryCommon originalQuery,
@@ -136,13 +124,11 @@ public record SerializableListQueryResult
         return ResultBox<SerializableListQueryResult>.FromValue(serializable);
     }
 
-    // 変換メソッド：SerializableListQueryResult → ListQueryResultGeneral
     public async Task<ResultBox<ListQueryResultGeneral>> ToListQueryResultAsync(
         SekibanDomainTypes domainTypes)
     {
         try
         {
-            // レコード型を取得
             Type? recordType = null;
             if (!string.IsNullOrEmpty(RecordTypeName))
             {
@@ -164,7 +150,6 @@ public record SerializableListQueryResult
                 }
             }
 
-            // クエリ型を取得
             Type? queryType = null;
             try
             {
@@ -183,7 +168,6 @@ public record SerializableListQueryResult
                     new InvalidOperationException($"Failed to get query type: {QueryTypeName}", ex));
             }
 
-            // アイテムをデシリアライズ
             IEnumerable<object> items = Array.Empty<object>();
             if (CompressedItemsJson.Length > 0 && recordType != null)
             {
@@ -214,7 +198,6 @@ public record SerializableListQueryResult
                 items = itemsList;
             }
 
-            // クエリをデシリアライズ
             IListQueryCommon? query = null;
             if (CompressedQueryJson.Length > 0)
             {
@@ -264,7 +247,6 @@ public record SerializableListQueryResult
         }
     }
 
-    // 変換メソッド：SerializableListQueryResult → ResultBox<IListQueryResult>
     public async Task<ResultBox<IListQueryResult>> ToResultBoxAsync(
         SekibanDomainTypes domainTypes)
     {
@@ -276,7 +258,6 @@ public record SerializableListQueryResult
         return ResultBox<IListQueryResult>.FromValue(listQueryResultBox.GetValue());
     }
 
-    // GZip圧縮ヘルパーメソッド
     private static async Task<byte[]> CompressAsync(byte[] data)
     {
         if (data.Length == 0)
@@ -292,7 +273,6 @@ public record SerializableListQueryResult
         return memoryStream.ToArray();
     }
 
-    // GZip解凍ヘルパーメソッド
     private static async Task<byte[]> DecompressAsync(byte[] compressedData)
     {
         if (compressedData.Length == 0)

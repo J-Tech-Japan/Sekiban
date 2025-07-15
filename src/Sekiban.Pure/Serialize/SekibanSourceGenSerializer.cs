@@ -16,7 +16,6 @@ public class SekibanSourceGenSerializer : ISekibanSerializer
         var eventTypes = new TEventTypes();
         // check if all event types are registered
         eventTypes.CheckEventJsonContextOption(serializerOptions);
-        // ソースジェネレーターで生成されたオプションを利用できるようにする
         return new SekibanSourceGenSerializer(serializerOptions);
     }
 

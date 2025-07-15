@@ -27,9 +27,9 @@ public interface IEventTypes
     List<Type> GetEventTypes();
     
     /// <summary>
-    /// イベント型名から型を取得します。
+    /// Gets the type from the event type name.
     /// </summary>
-    /// <param name="eventTypeName">イベント型の名前</param>
-    /// <returns>見つかった型、または見つからない場合はnull</returns>
+    /// <param name="eventTypeName">Name of the event type</param>
+    /// <returns>The found type, or null if not found</returns>
     Type? GetEventTypeByName(string eventTypeName);
 }

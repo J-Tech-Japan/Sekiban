@@ -9,24 +9,18 @@ namespace Sekiban.Pure.Command.Executor;
 [Serializable]
 public record SerializableCommandResponse
 {
-    // PartitionKeysの個別プロパティ
     public Guid AggregateId { get; init; } = Guid.Empty;
     public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
     public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
     
-    // バージョン情報
     public int Version { get; init; }
     
-    // イベント情報（シリアライズされた圧縮データ）
     public List<SerializableEvent> Events { get; init; } = new();
     
-    // デフォルトコンストラクタ（シリアライザ用）
     public SerializableCommandResponse() { }
 
-    // PartitionKeysを取得するメソッド
     public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
 
-    // コンストラクタ（直接初期化用）
     private SerializableCommandResponse(
         Guid aggregateId,
         string group,
@@ -41,7 +35,6 @@ public record SerializableCommandResponse
         Events = events;
     }
 
-    // 変換メソッド：CommandResponse → SerializableCommandResponse
     public static async Task<SerializableCommandResponse> CreateFromAsync(
         CommandResponse response,
         JsonSerializerOptions options)
@@ -63,7 +56,6 @@ public record SerializableCommandResponse
         );
     }
 
-    // 変換メソッド：SerializableCommandResponse → CommandResponse
     public async Task<OptionalValue<CommandResponse>> ToCommandResponseAsync(
         SekibanDomainTypes domainTypes)
     {
@@ -76,7 +68,6 @@ public record SerializableCommandResponse
                 var eventOptional = await serializableEvent.ToEventAsync(domainTypes);
                 if (!eventOptional.HasValue)
                 {
-                    // 変換できないイベントがある場合は全体を失敗とする
                     return OptionalValue<CommandResponse>.Empty;
                 }
                 events.Add(eventOptional.Value!);
@@ -92,12 +83,10 @@ public record SerializableCommandResponse
         }
         catch (Exception)
         {
-            // 変換中に例外が発生した場合は、互換性なしと判断
             return OptionalValue<CommandResponse>.Empty;
         }
     }
 
-    // 内部クラス：個別のイベントをシリアライズ可能な形式で保持
     [Serializable]
     public record SerializableEvent
     {
@@ -106,7 +95,6 @@ public record SerializableCommandResponse
         public byte[] CompressedPayloadJson { get; init; } = Array.Empty<byte>();
         public string PayloadAssemblyVersion { get; init; } = string.Empty;
         
-        // IEventの追加プロパティ
         public Guid AggregateId { get; init; } = Guid.Empty;
         public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
         public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
@@ -173,7 +161,6 @@ public record SerializableCommandResponse
                     return OptionalValue<IEvent>.Empty;
                 }
 
-                // ペイロードをデシリアライズ
                 var decompressedJson = await DecompressAsync(CompressedPayloadJson);
                 var payload = JsonSerializer.Deserialize(
                     decompressedJson,
@@ -185,7 +172,6 @@ public record SerializableCommandResponse
                     return OptionalValue<IEvent>.Empty;
                 }
 
-                // Eventを再構築
                 var partitionKeys = new PartitionKeys(AggregateId, Group, RootPartitionKey);
                 
                 // Get the Event type with the correct payload type
@@ -212,7 +198,6 @@ public record SerializableCommandResponse
             }
         }
 
-        // GZip圧縮ヘルパーメソッド
         private static async Task<byte[]> CompressAsync(byte[] data)
         {
             if (data.Length == 0)
@@ -228,7 +213,6 @@ public record SerializableCommandResponse
             return memoryStream.ToArray();
         }
 
-        // GZip解凍ヘルパーメソッド
         private static async Task<byte[]> DecompressAsync(byte[] compressedData)
         {
             if (compressedData.Length == 0)

@@ -14,7 +14,7 @@ using Sekiban.Pure;
 namespace Pure.Domain.xUnit;
 
 /// <summary>
-/// SerializableMultiProjectionState のシリアライズ/デシリアライズをテストするためのテストクラス
+/// Test class for testing serialization/deserialization of SerializableMultiProjectionState
 /// </summary>
 public class SerializableMultiProjectionStateTests
 {
@@ -22,25 +22,22 @@ public class SerializableMultiProjectionStateTests
 
     public SerializableMultiProjectionStateTests()
     {
-        // テスト用のSekibanDomainTypesを取得
         _domainTypes = PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
     }
 
     #region Helper Methods
 
     /// <summary>
-    /// テスト用のMultiProjectorPayloadを作成します
+    /// Creates a MultiProjectorPayload for testing
     /// </summary>
     private MultiProjectorPayload CreateTestMultiProjectorPayload()
     {
-        // テスト用のユーザーを作成
         var user1Id = Guid.NewGuid();
         var user2Id = Guid.NewGuid();
         var users = ImmutableDictionary<Guid, MultiProjectorPayload.User>.Empty
             .Add(user1Id, new MultiProjectorPayload.User(user1Id, "User1", "user1@example.com", true))
             .Add(user2Id, new MultiProjectorPayload.User(user2Id, "User2", "user2@example.com", false));
 
-        // テスト用のカートを作成
         var cart1Id = Guid.NewGuid();
         var cart2Id = Guid.NewGuid();
         var cart1Items = ImmutableList<MultiProjectorPayload.Item>.Empty
@@ -57,7 +54,7 @@ public class SerializableMultiProjectionStateTests
     }
 
     /// <summary>
-    /// テスト用のAggregateListProjector&lt;BranchProjector&gt;を作成します
+    /// Creates an AggregateListProjector&lt;BranchProjector&gt; for testing
     /// </summary>
     private AggregateListProjector<BranchProjector> CreateTestAggregateListProjector()
     {
@@ -95,7 +92,7 @@ public class SerializableMultiProjectionStateTests
     }
 
     /// <summary>
-    /// MultiProjectionStateを作成します
+    /// Creates a MultiProjectionState
     /// </summary>
     private MultiProjectionState CreateMultiProjectionState<TProjection>(TProjection projector)
         where TProjection : IMultiProjectorCommon
@@ -110,7 +107,7 @@ public class SerializableMultiProjectionStateTests
     }
 
     /// <summary>
-    /// MultiProjectionStateの内容を比較します
+    /// Compares the contents of MultiProjectionState
     /// </summary>
     private void AssertMultiProjectionStatesEqual(
         MultiProjectionState expected,
@@ -122,15 +119,14 @@ public class SerializableMultiProjectionStateTests
         Assert.Equal(expected.AppliedSnapshotVersion, actual.AppliedSnapshotVersion);
         Assert.Equal(expected.RootPartitionKey, actual.RootPartitionKey);
         
-        // ProjectorCommonの型一致を確認
         Assert.Equal(
             expected.ProjectorCommon.GetType().FullName,
             actual.ProjectorCommon.GetType().FullName);
     }
 
     /// <summary>
-    /// PartitionKeysをJSON変換するためのカスタムコンバーター
-    /// これはディクショナリのキーとしてPartitionKeysを使用する場合に必要
+    /// Custom converter for JSON conversion of PartitionKeys
+    /// This is necessary when using PartitionKeys as dictionary keys
     /// </summary>
     private class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
     {
@@ -191,7 +187,6 @@ public class SerializableMultiProjectionStateTests
 
         public override void WriteAsPropertyName(Utf8JsonWriter writer, PartitionKeys value, JsonSerializerOptions options)
         {
-            // このメソッドをオーバーライドすることで、PartitionKeysをディクショナリキーとして使用可能にする
             writer.WritePropertyName($"{value.RootPartitionKey}@{value.Group}@{value.AggregateId}");
         }
     }
@@ -215,11 +210,9 @@ public class SerializableMultiProjectionStateTests
         
         AssertMultiProjectionStatesEqual(originalState, restoredState);
         
-        // Payloadの内容も詳細に比較
         var originalPayload = (MultiProjectorPayload)originalState.ProjectorCommon;
         var restoredPayload = (MultiProjectorPayload)restoredState.ProjectorCommon;
         
-        // ユーザー数一致
         Assert.Equal(originalPayload.Users.Count, restoredPayload.Users.Count);
         foreach (var userId in originalPayload.Users.Keys)
         {
@@ -232,7 +225,6 @@ public class SerializableMultiProjectionStateTests
             Assert.Equal(originalUser.IsConfirmed, restoredUser.IsConfirmed);
         }
         
-        // カート数一致
         Assert.Equal(originalPayload.Carts.Count, restoredPayload.Carts.Count);
         foreach (var cartId in originalPayload.Carts.Keys)
         {
@@ -243,7 +235,6 @@ public class SerializableMultiProjectionStateTests
             Assert.Equal(originalCart.UserId, restoredCart.UserId);
             Assert.Equal(originalCart.PaymentMethod, restoredCart.PaymentMethod);
             
-            // アイテム数一致
             Assert.Equal(originalCart.Items.Count, restoredCart.Items.Count);
             for (var i = 0; i < originalCart.Items.Count; i++)
             {
@@ -257,9 +248,6 @@ public class SerializableMultiProjectionStateTests
         }
     }
 
-    /* PartitionKeysをディクショナリキーとして使うテストは現時点で不安定なためスキップ
-     * SerializableMultiProjectionStateの実装に改良が必要
-     */
     [Fact(Skip = "PartitionKeys as dictionary keys requires custom JSON handling in SerializableMultiProjectionState")]
     public async Task SerializeDeserialize_AggregateListProjector_Success()
     {
@@ -278,11 +266,9 @@ public class SerializableMultiProjectionStateTests
         
         AssertMultiProjectionStatesEqual(originalState, restoredState);
         
-        // Payloadの内容も詳細に比較
         var originalPayload = (AggregateListProjector<BranchProjector>)originalState.ProjectorCommon;
         var restoredPayload = (AggregateListProjector<BranchProjector>)restoredState.ProjectorCommon;
         
-        // アグリゲート数一致
         Assert.Equal(originalPayload.Aggregates.Count, restoredPayload.Aggregates.Count);
         
         foreach (var partitionKeys in originalPayload.Aggregates.Keys)
@@ -297,12 +283,10 @@ public class SerializableMultiProjectionStateTests
             Assert.Equal(originalAggregate.PartitionKeys.AggregateId, restoredAggregate.PartitionKeys.AggregateId);
             Assert.Equal(originalAggregate.PartitionKeys.Group, restoredAggregate.PartitionKeys.Group);
             
-            // Payloadの型が一致することを確認
             Assert.Equal(
                 originalAggregate.GetPayload().GetType().FullName,
                 restoredAggregate.GetPayload().GetType().FullName);
             
-            // Branchの場合は内容まで確認
             if (originalAggregate.GetPayload() is Branch originalBranch && 
                 restoredAggregate.GetPayload() is Branch restoredBranch)
             {
@@ -318,11 +302,9 @@ public class SerializableMultiProjectionStateTests
         var payload = CreateTestMultiProjectorPayload();
         var originalState = CreateMultiProjectionState(payload);
         
-        // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _domainTypes);
         
-        // バージョンを変更
         var modifiedSerializable = serializable with { PayloadVersion = "999.0.0.0" };
         
         // Act
@@ -339,11 +321,9 @@ public class SerializableMultiProjectionStateTests
         var payload = CreateTestMultiProjectorPayload();
         var originalState = CreateMultiProjectionState(payload);
         
-        // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _domainTypes);
         
-        // 型名を変更
         var modifiedSerializable = serializable with { PayloadTypeName = "Some.Invalid.Type, Assembly" };
         
         // Act
@@ -360,11 +340,9 @@ public class SerializableMultiProjectionStateTests
         var payload = CreateTestMultiProjectorPayload();
         var originalState = CreateMultiProjectionState(payload);
         
-        // 一旦通常通りシリアライズ
         var serializable = await SerializableMultiProjectionState.CreateFromAsync(
             originalState, _domainTypes);
         
-        // CompressedPayloadJsonをnullに設定
         var modifiedSerializable = serializable with { CompressedPayloadJson = null };
         
         // Act
@@ -377,11 +355,9 @@ public class SerializableMultiProjectionStateTests
     [Fact]
     public async Task SerializeDeserialize_LargeData_Success()
     {
-        // Arrange - 多数のデータを含むMultiProjectorPayloadを作成
         var users = ImmutableDictionary<Guid, MultiProjectorPayload.User>.Empty;
         var carts = ImmutableDictionary<Guid, MultiProjectorPayload.Cart>.Empty;
         
-        // 100人のユーザーを追加
         for (var i = 0; i < 100; i++)
         {
             var userId = Guid.NewGuid();
@@ -393,11 +369,9 @@ public class SerializableMultiProjectionStateTests
                     $"user{i}@example.com", 
                     i % 2 == 0));
             
-            // 各ユーザーに1つのカートを追加
             var cartId = Guid.NewGuid();
             var items = ImmutableList<MultiProjectorPayload.Item>.Empty;
             
-            // 各カートに20アイテムを追加
             for (var j = 0; j < 20; j++)
             {
                 items = items.Add(
@@ -431,7 +405,6 @@ public class SerializableMultiProjectionStateTests
         
         AssertMultiProjectionStatesEqual(originalState, restoredState);
         
-        // 基本的な検証 - ユーザー数とカート数の一致
         var originalPayload = (MultiProjectorPayload)originalState.ProjectorCommon;
         var restoredPayload = (MultiProjectorPayload)restoredState.ProjectorCommon;
         
@@ -440,7 +413,6 @@ public class SerializableMultiProjectionStateTests
         Assert.Equal(100, originalPayload.Carts.Count);
         Assert.Equal(100, restoredPayload.Carts.Count);
         
-        // サンプルデータを検証
         foreach (var userId in originalPayload.Users.Keys.Take(10))
         {
             Assert.True(restoredPayload.Users.ContainsKey(userId));
