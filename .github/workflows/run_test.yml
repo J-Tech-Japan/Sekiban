@@ -49,7 +49,7 @@ jobs:
         dotnet build -c Release
     - name: dotnet test all projects sequentially
       run: |
-        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --parallel none
-        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --parallel none
-        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --parallel none
+        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
   
