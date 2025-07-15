@@ -1,7 +1,7 @@
 import { InMemoryEventStore, StorageProviderType, SortableUniqueId, IEvent, PartitionKeys, createEvent, createEventMetadata } from '@sekiban/core';
-import { getDaprCradle, registerMultiProjectorActor, MultiProjectorActorFactory } from '@sekiban/dapr';
+import { getDaprCradle, MultiProjectorActorFactory } from '@sekiban/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
-import { DaprClient, DaprServer, HttpMethod } from '@dapr/dapr';
+import { DaprClient, DaprServer, HttpMethod, ActorId } from '@dapr/dapr';
 
 console.log('🧪 Testing Multi-Projector Catch-up from Event Store\n');
 
@@ -85,10 +85,10 @@ async function testCatchUp() {
   
   try {
     // Invoke queryListAsync to trigger actor activation
-    const result = await daprClient.actor.invoke(
-      actorType,
-      actorId,
-      'queryListAsync',
+    const result = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector', // app-id
+      `actors/${actorType}/${actorId}/method/queryListAsync`,
+      HttpMethod.PUT,
       {
         queryType: 'GetAllTasks',
         payload: {},
@@ -100,9 +100,10 @@ async function testCatchUp() {
     console.log('📊 Query result after catch-up:');
     console.log(JSON.stringify(result, null, 2));
     
-    if (result && result.isSuccess && result.items) {
-      console.log(`\n✅ Catch-up successful! Found ${result.items.length} projections`);
-      result.items.forEach((item: any, index: number) => {
+    const typedResult = result as { isSuccess?: boolean; items?: any[] };
+    if (typedResult && typedResult.isSuccess && typedResult.items) {
+      console.log(`\n✅ Catch-up successful! Found ${typedResult.items.length} projections`);
+      typedResult.items.forEach((item: any, index: number) => {
         console.log(`  ${index + 1}. ${item.title} (${item.priority})`);
       });
     } else {

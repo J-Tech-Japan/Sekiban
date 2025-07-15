@@ -5,8 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
-import { MultiProjectorActorFactory, getDaprCradle } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
+import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
+import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from './config/index.js';
@@ -14,6 +14,8 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { multiProjectorRoutes } from './routes/multi-projector-routes.js';
 import logger from './utils/logger.js';
+import type { MultiProjectorActorFactoryConfigureMethod, MultiProjectorActorFactoryCreateMethod } from './types/factory-types.js';
+import type { PubSubEventData, SerializationService, ActorProxyFactory } from './types/domain-types.js';
 
 const { Pool } = pg;
 
@@ -139,7 +141,7 @@ async function startServer() {
 /**
  * Distribute event to all relevant MultiProjectorActors
  */
-async function distributeEventToProjectors(eventData: any) {
+async function distributeEventToProjectors(eventData: PubSubEventData) {
   logger.info('[Distributor] Processing event:', {
     type: eventData?.type,
     aggregateType: eventData?.aggregateType,
@@ -198,7 +200,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Choose storage type based on environment variable or config
   const usePostgres = config.USE_POSTGRES;
   
-  let eventStore: any;
+  let eventStore: any; // Use any to avoid neverthrow version mismatch
   
   if (usePostgres) {
     // Initialize PostgreSQL event store
@@ -239,14 +241,17 @@ async function setupDaprActorsWithApp(app: express.Express) {
   });
 
   // Create actor proxy factory
-  const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
-      logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
-      const actorIdStr = actorId.id || actorId;
+  const actorProxyFactory: ActorProxyFactory = {
+    createActorProxy: (actorId, actorType: string) => {
+      const actorIdObj = typeof actorId === 'string' ? { id: actorId } : actorId;
+      const actorIdStr = 'id' in actorIdObj ? (actorIdObj as { id: string }).id : (actorIdObj as any).getId ? (actorIdObj as any).getId() : String(actorId);
+      logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
-        const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+        // Type assertion needed due to factory pattern limitations
+        const factory = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryCreateMethod;
+        const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr));
       }
@@ -258,17 +263,18 @@ async function setupDaprActorsWithApp(app: express.Express) {
   };
 
   // Create a simple serialization service
-  const serializationService = {
-    async deserializeAggregateAsync(surrogate: any) {
+  const serializationService: SerializationService = {
+    async deserializeAggregateAsync(surrogate: unknown) {
       return surrogate;
     },
-    async serializeAggregateAsync(aggregate: any) {
+    async serializeAggregateAsync(aggregate: unknown) {
       return aggregate;
     }
   };
 
   // Configure MultiProjectorActorFactory
-  MultiProjectorActorFactory.configure(
+  const configureMethod = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryConfigureMethod;
+  configureMethod.configure(
     domainTypes,
     {}, // service provider
     actorProxyFactory,
@@ -276,8 +282,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     eventStore
   );
 
-  // Create actor class
-  const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+  // Create actor class - use direct reference to avoid type issues
+  const MultiProjectorActorClass = MultiProjectorActor as any;
   
   logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
 
@@ -306,12 +312,29 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Add diagnostic logging
   console.log('[DEBUG] Adding diagnostic logging...');
   
-  const originalActorHandler = (daprServer as any).actor?.actorHandler;
-  if (originalActorHandler) {
-    (daprServer as any).actor.actorHandler = async (req: any, res: any) => {
+  // Type assertion for private properties
+  // Type for Express Request and Response
+  interface ExpressRequest {
+    url: string;
+    [key: string]: unknown;
+  }
+  
+  interface ExpressResponse {
+    [key: string]: unknown;
+  }
+  
+  const serverWithActorHandler = daprServer as unknown as {
+    actor?: {
+      actorHandler?: (req: ExpressRequest, res: ExpressResponse) => Promise<void>;
+    };
+  };
+  
+  const originalActorHandler = serverWithActorHandler.actor?.actorHandler;
+  if (originalActorHandler && serverWithActorHandler.actor) {
+    serverWithActorHandler.actor.actorHandler = async (req: ExpressRequest, res: ExpressResponse) => {
       console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
       try {
-        await originalActorHandler.call((daprServer as any).actor, req, res);
+        await originalActorHandler.call(serverWithActorHandler.actor, req, res);
       } catch (e) {
         console.error('[DIAGNOSTIC] Actor handler error:', e);
         console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);

@@ -1,4 +1,14 @@
-import { defineProjector, EmptyAggregatePayload, type ITypedAggregatePayload } from '@sekiban/core';
+import { 
+  defineProjector, 
+  EmptyAggregatePayload, 
+  type ITypedAggregatePayload,
+  AggregateProjector,
+  PartitionKeys,
+  Aggregate,
+  IEvent,
+  Result,
+  SekibanError
+} from '@sekiban/core';
 import { z } from 'zod';
 import { UserCreated, UserNameChanged, UserEmailChanged } from '../events/index.js';
 
@@ -21,35 +31,64 @@ export interface UserState extends ITypedAggregatePayload {
   updatedAt: string;
 }
 
-// Define the User projector
-export const UserProjector = defineProjector({
+// Define the User projector using defineProjector
+export const userProjectorDefinition = defineProjector<UserState>({
   aggregateType: 'User',
   initialState: () => new EmptyAggregatePayload(),
   projections: {
-    [UserCreated.type]: (state, event) => {
-      const userState: UserState = {
-        aggregateType: 'User',
-        userId: event.payload.userId,
-        name: event.payload.name,
-        email: event.payload.email,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      return userState;
-    },
-    [UserNameChanged.type]: (state, event) => {
+    UserCreated: (state: any, event: z.infer<typeof UserCreated.schema>) => ({
+      aggregateType: 'User' as const,
+      userId: event.userId,
+      name: event.name,
+      email: event.email,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as UserState),
+    
+    UserNameChanged: (state: any, event: z.infer<typeof UserNameChanged.schema>) => {
+      if (!state || state.aggregateType !== 'User') return state;
       return {
         ...state,
-        name: event.payload.newName,
+        name: event.newName,
         updatedAt: new Date().toISOString()
-      };
+      } as UserState;
     },
-    [UserEmailChanged.type]: (state, event) => {
+    
+    UserEmailChanged: (state: any, event: z.infer<typeof UserEmailChanged.schema>) => {
+      if (!state || state.aggregateType !== 'User') return state;
       return {
         ...state,
-        email: event.payload.newEmail,
+        email: event.newEmail,
         updatedAt: new Date().toISOString()
-      };
+      } as UserState;
     }
   }
 });
+
+// UserProjector class for command API compatibility
+export class UserProjector extends AggregateProjector<UserState> {
+  readonly aggregateTypeName = 'User';
+  
+  getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
+    return userProjectorDefinition.getInitialState(partitionKeys);
+  }
+  
+  project(
+    aggregate: Aggregate<UserState | EmptyAggregatePayload>, 
+    event: IEvent
+  ): Result<Aggregate<UserState | EmptyAggregatePayload>, SekibanError> {
+    return userProjectorDefinition.project(aggregate, event);
+  }
+  
+  canHandle(eventType: string): boolean {
+    return [
+      'UserCreated',
+      'UserNameChanged', 
+      'UserEmailChanged'
+    ].includes(eventType);
+  }
+  
+  getSupportedPayloadTypes(): string[] {
+    return ['User'];
+  }
+}

@@ -73,10 +73,10 @@ async function main() {
   });
   
   // Configure AggregateEventHandlerActor factory
-  AggregateEventHandlerActorFactory.configure(eventStore);
+  (AggregateEventHandlerActorFactory as any).configure(eventStore);
 
   // Create actor class
-  const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
+  const EventHandlerActorClass = (AggregateEventHandlerActorFactory as any).createActorClass();
   logger.info('EventHandlerActorClass created:', EventHandlerActorClass.name);
 
   // Create DaprServer

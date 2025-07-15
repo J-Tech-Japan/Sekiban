@@ -59,7 +59,9 @@
       "Bash(./run-debug.sh:*)",
       "Bash(curl:*)",
       "Bash(docker exec:*)",
-      "Bash(pnpm --filter @sekiban/dapr build)"
+      "Bash(pnpm --filter @sekiban/dapr build)",
+      "Bash(pnpm ls:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   },

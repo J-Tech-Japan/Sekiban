@@ -32,36 +32,32 @@ async function testWithInMemory() {
   
   // Create proper IEvent objects
   const events: IEvent[] = [
-    {
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCreated',
+      eventType: 'TaskCreated',
+      version: 1,
       payload: {
         taskId,
         title: 'Test Task InMemory',
         description: 'Testing with InMemory storage',
         assigneeEmail: 'test@example.com'
       },
-      version: 1,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create(),
-      createdAt: new Date()
-    },
-    {
+      metadata: createEventMetadata({ timestamp: new Date() })
+    }),
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskAssigned',
+      eventType: 'TaskAssigned',
+      version: 2,
       payload: {
         taskId,
         assigneeEmail: 'developer@example.com'
       },
-      version: 2,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create(),
-      createdAt: new Date()
-    }
+      metadata: createEventMetadata({ timestamp: new Date() })
+    })
   ];
   
   // Use saveEvents method
@@ -103,36 +99,32 @@ async function testWithPostgres() {
   
   // Create proper IEvent objects
   const events: IEvent[] = [
-    {
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCreated',
+      eventType: 'TaskCreated',
+      version: 1,
       payload: {
         taskId,
         title: 'Test Task PostgreSQL',
         description: 'Testing with PostgreSQL storage',
         assigneeEmail: 'postgres@example.com'
       },
-      version: 1,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create(),
-      createdAt: new Date()
-    },
-    {
+      metadata: createEventMetadata({ timestamp: new Date() })
+    }),
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCompleted',
+      eventType: 'TaskCompleted',
+      version: 2,
       payload: {
         taskId,
         completedAt: new Date().toISOString()
       },
-      version: 2,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create(),
-      createdAt: new Date()
-    }
+      metadata: createEventMetadata({ timestamp: new Date() })
+    })
   ];
   
   // Use saveEvents method

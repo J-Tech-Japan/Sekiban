@@ -2,6 +2,7 @@ import { InMemoryEventStore, StorageProviderType, IEvent, SortableUniqueId, Part
 import { MultiProjectorActor, initializeDaprContainer } from '@sekiban/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { ActorId } from '@dapr/dapr';
+import type { EventStoreWithSaveEvents } from './types/test-types.js';
 
 console.log('🧪 Testing MultiProjectorActor Projections Directly\n');
 
@@ -39,14 +40,14 @@ async function testProjections() {
     events.push(event);
   }
   
-  await (eventStore as any).saveEvents(events);
+  await (eventStore as EventStoreWithSaveEvents).saveEvents(events);
   console.log(`✅ Added ${events.length} events to store\n`);
   
   // Initialize Dapr container
   initializeDaprContainer({
     domainTypes,
     serviceProvider: {},
-    actorProxyFactory: {} as any,
+    actorProxyFactory: {},
     serializationService: {},
     eventStore
   });
