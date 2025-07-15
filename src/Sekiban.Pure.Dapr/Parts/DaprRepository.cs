@@ -98,7 +98,7 @@ public class DaprRepository
             foreach (var document in eventDocuments)
             {
                 var eventResult = await document.ToEventAsync(_domainTypes);
-                if (eventResult.HasValue)
+                if (eventResult.HasValue && eventResult.Value is not null)
                 {
                     events.Add(eventResult.Value);
                 }

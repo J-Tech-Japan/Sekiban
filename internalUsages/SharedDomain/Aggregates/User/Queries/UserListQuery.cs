@@ -5,7 +5,7 @@ using Sekiban.Pure.Query;
 
 namespace SharedDomain.Aggregates.User.Queries;
 
-[GenerateSerializer]
+[GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record UserListQuery(string NameContains = "", string EmailContains = "")
     : IMultiProjectionListQuery<AggregateListProjector<UserProjector>, UserListQuery, UserListQuery.UserRecord>,
       IWaitForSortableUniqueId

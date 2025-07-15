@@ -135,31 +135,50 @@ public class AggregateProjectorGrain(
         {
             _currentAggregate = await GetStateInternalAsync(eventGrain);
         }
-            
-        var orleansRepository = new OrleansRepository(
-            eventGrain,
-            GetPartitionKeysAndProjector().PartitionKeys,
-            GetPartitionKeysAndProjector().Projector,
-            sekibanDomainTypes.EventTypes,
-            _currentAggregate);
-            
-        var commandExecutor = new CommandExecutor(serviceProvider) { EventTypes = sekibanDomainTypes.EventTypes };
-        
-        var result = await sekibanDomainTypes
-            .CommandTypes
-            .ExecuteGeneral(
-                commandExecutor,
-                orleansCommand,
-                GetPartitionKeysAndProjector().PartitionKeys,
-                metadata,
-                (_, _) => orleansRepository.GetAggregate(),
-                orleansRepository.Save)
-            .UnwrapBox();
-            
-        _currentAggregate = orleansRepository.GetProjectedAggregate(result.Events).UnwrapBox();
-        UpdatedAfterWrite = true;
-        
-        return result;
+
+        // 楽観的並行性制御のためのリトライ機能を追加
+        const int maxRetries = 3;
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
+            {
+                var orleansRepository = new OrleansRepository(
+                    eventGrain,
+                    GetPartitionKeysAndProjector().PartitionKeys,
+                    GetPartitionKeysAndProjector().Projector,
+                    sekibanDomainTypes.EventTypes,
+                    _currentAggregate);
+                    
+                var commandExecutor = new CommandExecutor(serviceProvider) { EventTypes = sekibanDomainTypes.EventTypes };
+                
+                var result = await sekibanDomainTypes
+                    .CommandTypes
+                    .ExecuteGeneral(
+                        commandExecutor,
+                        orleansCommand,
+                        GetPartitionKeysAndProjector().PartitionKeys,
+                        metadata,
+                        (_, _) => orleansRepository.GetAggregate(),
+                        orleansRepository.Save)
+                    .UnwrapBox();
+                    
+                _currentAggregate = orleansRepository.GetProjectedAggregate(result.Events).UnwrapBox();
+                UpdatedAfterWrite = true;
+                
+                return new CommandResponse(
+                    GetPartitionKeysAndProjector().PartitionKeys,
+                    result.Events,
+                    _currentAggregate.Version);
+            }
+            catch (InvalidCastException ex) when (ex.Message.Contains("Expected last event ID does not match") && attempt < maxRetries - 1)
+            {
+                await Task.Delay(50 * (attempt + 1));
+                _currentAggregate = await GetStateInternalAsync(eventGrain);
+            }
+        }
+
+        // 最大リトライ回数に達した場合は例外を再スロー
+        throw new InvalidOperationException("Failed to execute command after maximum retries due to concurrency conflicts");
     }
 
     private async Task<Aggregate> RebuildStateInternalAsync()
