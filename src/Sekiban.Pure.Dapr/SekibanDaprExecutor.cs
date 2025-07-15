@@ -90,7 +90,7 @@ public class SekibanDaprExecutor : ISekibanExecutor
             // Convert SerializableCommandResponse back to SekibanCommandResponse
             var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
             
-            if (!responseResult.HasValue)
+                if (!responseResult.HasValue || responseResult.Value is null)
             {
                 return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException("Failed to convert command response"));

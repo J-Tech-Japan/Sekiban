@@ -81,7 +81,7 @@ public record SerializableCommandAndMetadata
         try
         {
             var payloadTypeOpt = command?.GetAggregatePayloadType();
-            if (payloadTypeOpt?.HasValue == true)
+            if (payloadTypeOpt?.HasValue == true && payloadTypeOpt.Value != null)
             {
                 aggregatePayloadTypeName = payloadTypeOpt.Value.Name;
             }

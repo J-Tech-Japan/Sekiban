@@ -21,14 +21,14 @@ public abstract class SekibanInMemoryTestBase
     private SekibanDomainTypes DomainTypes => GetDomainTypes();
     protected abstract SekibanDomainTypes GetDomainTypes();
 
-    private ICommandMetadataProvider _commandMetadataProvider;
-    private IServiceProvider _serviceProvider;
-    private ISekibanExecutor _executor;
+    private ICommandMetadataProvider _commandMetadataProvider = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private ISekibanExecutor _executor = null!;
     protected Repository Repository
     {
         get;
         private set;
-    }
+    } = null!;
     [SetUp]
     public virtual void SetUp()
     {
