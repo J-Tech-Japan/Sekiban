@@ -14,6 +14,9 @@ concurrency:
 jobs:
   regularAggregateTest:
     runs-on: ubuntu-latest
+    concurrency:
+      group: test-execution-${{ github.ref }}
+      cancel-in-progress: false
 
     services:
       postgres:
@@ -44,13 +47,9 @@ jobs:
     - name: dotnet build
       run: |
         dotnet build -c Release
-    - name: dotnet test by project
+    - name: dotnet test all projects sequentially
       run: |
-        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj  -c Release --no-build --verbosity normal
-    - name: dotnet test by project2
-      run: |
-        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal
-    - name: dotnet test by project3
-      run: |
-        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal
+        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --parallel none
+        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --parallel none
+        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --parallel none
   
