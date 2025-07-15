@@ -27,6 +27,7 @@ public class CosmosDbFactory(
         try
         {
             await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
+            await Task.Delay(3000);
             Console.WriteLine("CosmosDB event container cleanup completed successfully");
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
