@@ -33,9 +33,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container
 builder.Services.AddControllers()
-    .AddDapr()
-    .AddApplicationPart(typeof(Sekiban.Pure.Dapr.Controllers.EventPubSubController).Assembly)
-    .AddControllersAsServices(); // This helps with controller discovery from external assemblies
+    .AddDapr();
 builder.Services.AddEndpointsApiExplorer();
 
 // Add OpenAPI services
