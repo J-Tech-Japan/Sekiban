@@ -61,7 +61,8 @@
       "Bash(docker exec:*)",
       "Bash(pnpm --filter @sekiban/dapr build)",
       "Bash(pnpm ls:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(ps:*)"
     ],
     "deny": []
   },
