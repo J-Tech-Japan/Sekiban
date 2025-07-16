@@ -24,6 +24,7 @@ namespace OrleansSekiban.Domain;
 [JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads.WeatherForecast))]
 [JsonSerializable(typeof(OrleansSekiban.Domain.Aggregates.WeatherForecasts.Payloads.DeletedWeatherForecast))]
 [JsonSerializable(typeof(OrleansSekiban.Domain.Projections.Count.WeatherCountMultiProjection))]
+[JsonSerializable(typeof(Sekiban.Pure.Projectors.AggregateListProjector<OrleansSekiban.Domain.Aggregates.WeatherForecasts.WeatherForecastProjector>))]
 public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerContext
 {
 }

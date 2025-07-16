@@ -31,7 +31,7 @@ builder.Services.AddHttpClient<WeatherApiClient>((serviceProvider, client) =>
     
     // This URL uses "https+http://" to indicate HTTPS is preferred over HTTP.
     // Learn more about service discovery scheme resolution at https://aka.ms/dotnet/sdschemes.
-    var baseUrl = "https+http://apiservice";
+    var baseUrl = "https+http://dapr-sekiban-api";
     logger.LogInformation("Setting HttpClient BaseAddress to: {BaseUrl}", baseUrl);
     client.BaseAddress = new(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);

@@ -46,7 +46,7 @@ public class WeatherApiClient
 
     public async Task<CommandResponseSimple?> AddWeatherForecastAsync(InputWeatherForecastCommand command)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/inputweatherforecast", command);
+        var response = await _httpClient.PostAsJsonAsync("api/weatherforecast/input", command);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();
@@ -57,7 +57,7 @@ public class WeatherApiClient
     public async Task<CommandResponseSimple?> UpdateLocationAsync(Guid weatherForecastId, string location)
     {
         var command = new UpdateWeatherForecastLocationCommand(weatherForecastId, location);
-        var response = await _httpClient.PostAsJsonAsync("api/updateweatherforecastlocation", command);
+        var response = await _httpClient.PostAsJsonAsync($"api/weatherforecast/{weatherForecastId}/update-location", new { Location = location });
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();
@@ -77,8 +77,7 @@ public class WeatherApiClient
 
     public async Task<CommandResponseSimple?> RemoveWeatherForecastAsync(Guid weatherForecastId)
     {
-        var command = new RemoveWeatherForecastCommand(weatherForecastId);
-        var response = await _httpClient.PostAsJsonAsync("api/removeweatherforecast", command);
+        var response = await _httpClient.PostAsync($"api/weatherforecast/{weatherForecastId}/remove", null);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();
@@ -86,13 +85,15 @@ public class WeatherApiClient
         return null;
     }
 
-    public async Task<List<CommandResponseSimple>?> GenerateSampleDataAsync()
+    public async Task<GenerateDataResponse?> GenerateSampleDataAsync()
     {
         var response = await _httpClient.PostAsync("api/weatherforecast/generate", null);
         if (response.IsSuccessStatusCode)
         {
-            return await response.Content.ReadFromJsonAsync<List<CommandResponseSimple>>();
+            return await response.Content.ReadFromJsonAsync<GenerateDataResponse>();
         }
         return null;
     }
 }
+
+public record GenerateDataResponse(string Message, int Count);
