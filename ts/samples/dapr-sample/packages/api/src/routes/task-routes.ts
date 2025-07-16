@@ -143,6 +143,7 @@ router.get(
       
       console.log(`[GET] Getting aggregate state for actor: ${actorId}`);
       
+      let result: { value: any } | undefined;
       try {
         const aggregateState = await actor.getAggregateStateAsync();
         console.log('[GET] Raw aggregate state result:', aggregateState);
@@ -235,7 +236,7 @@ router.get(
         }
         
         console.log('[GET] Aggregate state loaded:', JSON.stringify(aggregateState, null, 2));
-        const result = { value: aggregateState };
+        result = { value: aggregateState };
       } catch (actorError) {
         console.error('[GET] Error calling getAggregateStateAsync:', actorError);
         const error = new AggregateNotFoundError(taskId, 'Task');

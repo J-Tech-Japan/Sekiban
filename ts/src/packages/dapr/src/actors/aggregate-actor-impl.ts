@@ -27,6 +27,8 @@ import type { IAggregateEventHandlerActor, SerializableEventDocument } from './i
 export class AggregateActorImpl {
   private currentPartitionKeysAndProjector: PartitionKeysAndProjector<any> | null = null;
   private hasUnsavedChanges: boolean = false;
+  private _currentAggregate: any = null;
+  private _lastLoadedSortableUniqueId: string = '';
 
   constructor(
     private readonly actorId: string,
@@ -98,7 +100,8 @@ export class AggregateActorImpl {
 
       // Get the projector for this aggregate type
       const projectorTypeName = (metadata as any)?.projectorTypeName || partitionKeys.group + 'Projector';
-      const projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      const projectorLookup = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      const projector = projectorLookup ? (typeof projectorLookup === 'function' ? new projectorLookup() : projectorLookup) : null;
       
       if (!projector) {
         return {
@@ -116,6 +119,8 @@ export class AggregateActorImpl {
       
       // Execute the command handler
       console.log('[AggregateActorImpl] Executing command handler...');
+      console.log('[AggregateActorImpl] Current state before command:', currentState ? 'exists' : 'null');
+      console.log('[AggregateActorImpl] Current state version:', currentState?.version || 0);
       
       // Get the actual command definition from the global registry
       const commandDef = globalRegistry.getCommand(commandType);
@@ -366,6 +371,25 @@ export class AggregateActorImpl {
       
       console.log('[AggregateActorImpl] Events appended successfully');
       
+      // Update cached state with new events
+      if (this.cachedAggregateState && projector) {
+        console.log('[AggregateActorImpl] Updating cached aggregate state with new events');
+        // Apply the new events to the cached state
+        for (const event of events) {
+          const applyResult = projector.project(this.cachedAggregateState, event);
+          if (applyResult.isOk()) {
+            this.cachedAggregateState = applyResult.value;
+          }
+        }
+        this.lastLoadedSortableUniqueId = appendResult.lastSortableUniqueId;
+        console.log('[AggregateActorImpl] Updated cache, new last ID:', this.lastLoadedSortableUniqueId);
+      } else if (!this.cachedAggregateState) {
+        // If we don't have cached state yet, load it now with the new events
+        console.log('[AggregateActorImpl] No cached state, loading aggregate after command execution');
+        const updatedState = await this.loadAggregateStateAsync(partitionKeys, projector);
+        // The loadAggregateStateAsync will cache it for us
+      }
+      
       // Update our state
       this.hasUnsavedChanges = true;
       
@@ -402,6 +426,15 @@ export class AggregateActorImpl {
     projector: IAggregateProjector<any>
   ): Promise<any> {
     try {
+      console.log('[AggregateActorImpl] loadAggregateStateAsync called');
+      
+      // First check if we have a cached state (like C# _currentAggregate)
+      if (this._currentAggregate) {
+        console.log('[AggregateActorImpl] Returning cached aggregate state');
+        return this._currentAggregate;
+      }
+      
+      console.log('[AggregateActorImpl] No cached state, loading from storage or events');
       // Get the event handler actor
       const eventHandlerActorId = `${partitionKeys.group}-${partitionKeys.aggregateId}-${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
@@ -412,22 +445,34 @@ export class AggregateActorImpl {
         'AggregateEventHandlerActor'
       ) as any;
       
+      // Get all events (we'll optimize with delta loading later)
       console.log('[AggregateActorImpl] Calling getAllEventsAsync on AggregateEventHandlerActor');
       const events = await eventHandlerActor.getAllEventsAsync();
       console.log('[AggregateActorImpl] Loaded', (events as any[]).length, 'events from event handler');
       console.log('[AggregateActorImpl] Raw events from handler:', JSON.stringify(events, null, 2));
       
       if (!events || events.length === 0) {
+        console.warn('[AggregateActorImpl] WARNING: No events returned from EventHandler, returning null aggregate');
         console.log('[AggregateActorImpl] No events found, returning null');
+        this._currentAggregate = null;
+        this._lastLoadedSortableUniqueId = '';
         return null;
       }
       
       // Apply events using projector
       let aggregate: any = null;
-      let lastSortableUniqueId = '';
+      let lastSortableUniqueId: string = '';
+      
+      // Initialize aggregate state using projector
+      if (projector && projector.getInitialState) {
+        const partitionKeysForInit = { aggregateId: partitionKeys.aggregateId, group: partitionKeys.group };
+        aggregate = projector.getInitialState(partitionKeysForInit);
+      } else {
+        aggregate = {};
+      }
       
       console.log('[AggregateActorImpl] Starting event projection with projector:', projector.aggregateTypeName);
-      console.log('[AggregateActorImpl] Projector can handle events:', projector.getSupportedPayloadTypes());
+      console.log('[AggregateActorImpl] Projector can handle events:', projector.getSupportedPayloadTypes ? projector.getSupportedPayloadTypes() : ['Task', 'CompletedTask']);
       
       for (const eventDoc of (events as any[])) {
         // Handle serialization differences like in multi-projector-actor
@@ -507,10 +552,14 @@ export class AggregateActorImpl {
         
         console.log('[AggregateActorImpl] Created event object:', JSON.stringify(event, null, 2));
         console.log('[AggregateActorImpl] Current aggregate before projection:', aggregate);
+        console.log('[AggregateActorImpl] Projector type:', projector.constructor.name);
+        console.log('[AggregateActorImpl] Projector has project method?', typeof projector.project === 'function');
         
         // Apply event to aggregate
-        const applyResult = projector.project(aggregate, event);
-        console.log('[AggregateActorImpl] Projection result success:', applyResult.isOk());
+        try {
+          const applyResult = projector.project(aggregate, event);
+          console.log('[AggregateActorImpl] Projection result success:', applyResult.isOk());
+          console.log('[AggregateActorImpl] Projection result:', applyResult);
         
         if (applyResult.isOk()) {
           aggregate = applyResult.value;
@@ -520,12 +569,22 @@ export class AggregateActorImpl {
           console.error('[AggregateActorImpl] Failed to apply event:', applyResult.error);
           console.error('[AggregateActorImpl] Event that failed:', JSON.stringify(event, null, 2));
         }
+        } catch (projError) {
+          console.error('[AggregateActorImpl] EXCEPTION during projection:', projError);
+          console.error('[AggregateActorImpl] Error stack:', (projError as Error).stack);
+          console.error('[AggregateActorImpl] Event causing error:', JSON.stringify(event, null, 2));
+        }
       }
       
       // Add metadata to aggregate
       if (aggregate) {
         aggregate.lastSortableUniqueId = lastSortableUniqueId;
       }
+      
+      // Cache the state for future use
+      this._currentAggregate = aggregate;
+      this._lastLoadedSortableUniqueId = lastSortableUniqueId;
+      console.log('[AggregateActorImpl] Cached aggregate state, last ID:', lastSortableUniqueId);
       
       return aggregate;
     } catch (error) {
@@ -548,7 +607,8 @@ export class AggregateActorImpl {
     
     if (this.currentPartitionKeysAndProjector) {
       partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      const projectorLookup2 = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      projector = projectorLookup2 ? (typeof projectorLookup2 === 'function' ? new projectorLookup2() : projectorLookup2) : null;
     } else {
       // Parse actor ID: "rootPartition@group@aggregateId=projectorType"
       const parts = this.actorId.split('@');
@@ -558,7 +618,8 @@ export class AggregateActorImpl {
       const rootPartition = parts[0];
       
       partitionKeys = new PartitionKeys(aggregateId, group, rootPartition);
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      const projectorLookup3 = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      projector = projectorLookup3 ? (typeof projectorLookup3 === 'function' ? new projectorLookup3() : projectorLookup3) : null;
       
       console.log(`[AggregateActorImpl] Extracted from actor ID - group: ${group}, aggregateId: ${aggregateId}, rootPartition: ${rootPartition}`);
     }
