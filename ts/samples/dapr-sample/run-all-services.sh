@@ -42,10 +42,11 @@ mkdir -p tmp/logs
 # Start Event Handler with environment variables
 echo "Starting Event Handler..."
 cd packages/api-event-handler
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL dapr run \
+USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3001 dapr run \
   --app-id dapr-sample-event-handler \
   --app-port 3001 \
   --dapr-http-port 3501 \
+  --resources-path ../../dapr/components \
   --log-level info \
   -- npm run dev > ../../tmp/logs/event-handler.log 2>&1 &
 
@@ -59,6 +60,7 @@ USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL dapr run \
   --app-id dapr-sample-multi-projector \
   --app-port 3002 \
   --dapr-http-port 3502 \
+  --resources-path ../../dapr/components \
   --log-level info \
   -- npm run dev > ../../tmp/logs/multi-projector.log 2>&1 &
 
@@ -73,6 +75,7 @@ USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=$PORT dapr run \
   --app-id dapr-sample-api \
   --app-port 3000 \
   --dapr-http-port 3500 \
+  --resources-path ../../dapr/components \
   --log-level info \
   -- npm run dev
 

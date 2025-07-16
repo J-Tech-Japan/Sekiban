@@ -124,11 +124,122 @@ router.get(
       }
 
       const executor = await getExecutor();
-      const query = GetTaskById.create({ taskId });
-      const result = await executor.queryAsync(query);
-
-      if (result.isErr()) {
-        return next(result.error);
+      
+      // Get the aggregate state directly from the actor (like in create task)
+      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
+      const { AggregateActorFactory } = await import('@sekiban/dapr');
+      
+      const daprClient = new DaprClient({
+        daprHost: "127.0.0.1",
+        daprPort: "3500"
+      });
+      
+      const AggregateActorClass = AggregateActorFactory.createActorClass();
+      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
+      
+      // Use the same actor ID pattern as in command execution
+      const actorId = `default@Task@${taskId}=TaskProjector`;
+      const actor = builder.build(new ActorId(actorId)) as any;
+      
+      console.log(`[GET] Getting aggregate state for actor: ${actorId}`);
+      
+      try {
+        const aggregateState = await actor.getAggregateStateAsync();
+        console.log('[GET] Raw aggregate state result:', aggregateState);
+        console.log('[GET] Aggregate state type:', typeof aggregateState);
+        console.log('[GET] Aggregate state keys:', aggregateState ? Object.keys(aggregateState) : 'null');
+        
+        if (!aggregateState) {
+          console.log(`[GET] No aggregate found for task: ${taskId}, trying direct event retrieval`);
+          
+          // Try direct approach: load events from EventHandler and project them manually
+          const { TaskProjector } = await import('@dapr-sample/domain');
+          const projector = new TaskProjector();
+          
+          // Get events from event handler directly
+          const eventHandlerActorId = `Task-${taskId}-default`;
+          const eventHandlerActor = builder.build(new ActorId(eventHandlerActorId));
+          
+          console.log(`[GET] Trying to get events directly from EventHandler: ${eventHandlerActorId}`);
+          // This won't work with ActorProxyBuilder since it's wrong actor type, let me use direct HTTP call
+          const eventsUrl = `http://127.0.0.1:3501/v1.0/actors/AggregateEventHandlerActor/${eventHandlerActorId}/method/getAllEventsAsync`;
+          console.log(`[GET] Calling EventHandler directly: ${eventsUrl}`);
+          
+          const eventsResponse = await fetch(eventsUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          
+          console.log(`[GET] Events response status: ${eventsResponse.status}`);
+          const eventsText = await eventsResponse.text();
+          console.log(`[GET] Events response body: ${eventsText}`);
+          
+          if (eventsResponse.ok && eventsText && eventsText !== '{}') {
+            const events = JSON.parse(eventsText);
+            console.log(`[GET] Retrieved ${events.length} events directly`);
+            
+            if (events.length > 0) {
+              // Project the events manually
+              let projectedState: any = null;
+              for (const eventDoc of events) {
+                console.log(`[GET] Projecting event: ${eventDoc.eventType}`);
+                // Create a simple projection for TaskCreated
+                if (eventDoc.eventType === 'TaskCreated') {
+                  projectedState = {
+                    aggregateType: 'Task',
+                    taskId: eventDoc.payload.taskId,
+                    title: eventDoc.payload.title,
+                    description: eventDoc.payload.description,
+                    priority: eventDoc.payload.priority,
+                    status: 'active',
+                    createdAt: eventDoc.payload.createdAt,
+                    updatedAt: eventDoc.payload.createdAt
+                  };
+                  console.log(`[GET] Manually projected state: ${JSON.stringify(projectedState, null, 2)}`);
+                  break;
+                }
+              }
+              
+              if (projectedState) {
+                console.log('[GET] Using manually projected state');
+                
+                // Handle different possible result structures
+                let payload: any = projectedState;
+                
+                console.log('Final payload for response:', JSON.stringify(payload, null, 2));
+                
+                const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
+                
+                res.json({
+                  id: payload.taskId,
+                  title: payload.title,
+                  description: payload.description,
+                  assignedTo: payload.assignedTo,
+                  dueDate: payload.dueDate,
+                  priority: payload.priority,
+                  status: isCompleted ? 'completed' : payload.status,
+                  createdAt: payload.createdAt,
+                  updatedAt: payload.updatedAt,
+                  completedAt: isCompleted ? payload.completedAt : undefined,
+                  completedBy: isCompleted ? payload.completedBy : undefined,
+                  completionNotes: isCompleted ? payload.completionNotes : undefined
+                });
+                return;
+              }
+            }
+          }
+          
+          const error = new AggregateNotFoundError(taskId, 'Task');
+          return next(error);
+        }
+        
+        console.log('[GET] Aggregate state loaded:', JSON.stringify(aggregateState, null, 2));
+        const result = { value: aggregateState };
+      } catch (actorError) {
+        console.error('[GET] Error calling getAggregateStateAsync:', actorError);
+        const error = new AggregateNotFoundError(taskId, 'Task');
+        return next(error);
       }
 
       if (!result.value) {
@@ -137,8 +248,31 @@ router.get(
       }
 
       // Transform aggregate to response
-      const payload = result.value.payload as any;
-      const isCompleted = payload.aggregateType === 'CompletedTask';
+      console.log('Query result structure:', JSON.stringify(result.value, null, 2));
+      
+      // Handle different possible result structures
+      let payload: any;
+      if (result.value && result.value.payload) {
+        payload = result.value.payload;
+      } else if (result.value && typeof result.value === 'object') {
+        // The result might be the payload directly
+        payload = result.value;
+      } else {
+        console.error('Unexpected result structure:', result.value);
+        const error = new AggregateNotFoundError(taskId, 'Task');
+        return next(error);
+      }
+      
+      console.log('Extracted payload:', JSON.stringify(payload, null, 2));
+      
+      // Check if payload has the expected properties
+      if (!payload || typeof payload !== 'object') {
+        console.error('Invalid payload structure:', payload);
+        const error = new AggregateNotFoundError(taskId, 'Task');
+        return next(error);
+      }
+      
+      const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
       
       res.json({
         id: payload.taskId,
@@ -171,11 +305,24 @@ router.post(
 
       const executor = await getExecutor();
       const command = AssignTask.create({ taskId, assignedTo });
+      
+      console.log(`[ASSIGN] Executing AssignTask for taskId: ${taskId}, assignedTo: ${assignedTo}`);
+      console.log(`[ASSIGN] Command created:`, JSON.stringify(command, null, 2));
+      
       const result = await executor.executeCommandAsync(command);
-
+      
+      console.log(`[ASSIGN] Command execution result success: ${result.isOk()}`);
       if (result.isErr()) {
+        console.error(`[ASSIGN] Command execution failed:`, result.error);
+        console.error(`[ASSIGN] Error details:`, {
+          message: result.error.message,
+          stack: result.error.stack,
+          code: (result.error as any).code
+        });
         return next(result.error);
       }
+      
+      console.log(`[ASSIGN] Command execution successful:`, result.value);
 
       res.json({
         message: 'Task assigned successfully'
