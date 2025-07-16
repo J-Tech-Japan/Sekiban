@@ -69,6 +69,8 @@ builder.Services.Configure<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Run
     // Any additional actor configuration can go here
 });
 
+// Note: In Dapr mode, Sekiban uses Dapr state store for event persistence
+// However, database configuration is still needed for registering core services like IEventWriter
 if (builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() == "cosmos")
 {
     // Cosmos settings
@@ -504,8 +506,22 @@ app
         "/api/inputweatherforecast",
         async (
                 [FromBody] InputWeatherForecastCommand command,
-                [FromServices] ISekibanExecutor executor) =>
-            await executor.CommandAsync(command).ToSimpleCommandResponse().UnwrapBox())
+                [FromServices] ISekibanExecutor executor,
+                [FromServices] ILogger<Program> logger) =>
+        {
+            try
+            {
+                logger.LogInformation("Attempting to execute InputWeatherForecastCommand for location: {Location}", command.Location);
+                var result = await executor.CommandAsync(command);
+                logger.LogInformation("Command executed successfully");
+                return result.ToSimpleCommandResponse().UnwrapBox();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error executing InputWeatherForecastCommand: {Message}", ex.Message);
+                throw;
+            }
+        })
     .WithName("InputWeatherForecast")
     .WithOpenApi();
 
