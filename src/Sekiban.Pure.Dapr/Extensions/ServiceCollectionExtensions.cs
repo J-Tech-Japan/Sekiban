@@ -1,4 +1,5 @@
 using Dapr.Actors.Runtime;
+using Dapr.Actors.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sekiban.Pure.Dapr.Actors;
@@ -83,6 +84,50 @@ public static class ServiceCollectionExtensions
             var logger = provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Sekiban.Pure.Dapr.EventStore.DaprEventStore>>();
             return new Sekiban.Pure.Dapr.EventStore.DaprEventStore(daprClient, serialization, logger);
         });
+        
+        return services;
+    }
+
+    /// <summary>
+    /// Adds Sekiban services for EventRelay pattern - does not register actors
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="domainTypes">The domain types to register</param>
+    /// <param name="configureOptions">Options configuration</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddSekibanWithDaprForEventRelay(
+        this IServiceCollection services,
+        SekibanDomainTypes domainTypes,
+        Action<DaprSekibanOptions>? configureOptions = null)
+    {
+        // Configure options
+        services.Configure<DaprSekibanOptions>(options =>
+        {
+            configureOptions?.Invoke(options);
+        });
+
+        // Add Dapr client directly
+        services.AddSingleton<global::Dapr.Client.DaprClient>(provider =>
+        {
+            return new global::Dapr.Client.DaprClientBuilder().Build();
+        });
+        
+        // Add serialization services
+        services.AddSekibanDaprSerialization();
+        
+        // Register Sekiban domain types
+        services.AddSingleton(domainTypes);
+        
+        // Add Actor proxy factory for forwarding events to actors in other services
+        // This does NOT register actors in this service, only provides the proxy factory
+        services.AddSingleton<IActorProxyFactory>(provider =>
+        {
+            return new ActorProxyFactory();
+        });
+        
+        // Note: No actors registration for EventRelay
+        // Note: No repository or executor registration
+        // EventRelay only forwards events to existing actors in other services
         
         return services;
     }

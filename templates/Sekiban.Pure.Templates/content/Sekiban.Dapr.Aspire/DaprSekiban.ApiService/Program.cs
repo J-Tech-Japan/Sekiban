@@ -45,18 +45,11 @@ builder.Services.AddMemoryCache();
 var domainTypes = DaprSekiban.Domain.Generated.DaprSekibanDomainDomainTypes.Generate(DaprSekiban.Domain.DaprSekibanDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
-var actorIdPrefix = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX") ?? 
-                    Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? 
-                    (builder.Environment.IsDevelopment() ? 
-                     $"local-dev-{Environment.MachineName}" : 
-                     "dapr-sample");
-
 builder.Services.AddSekibanWithDapr(domainTypes, options =>
 {
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
     options.EventTopicName = "events.all";  // Changed to match subscription.yaml
-    options.ActorIdPrefix = actorIdPrefix;
 });
 
 // Use patched event reader to avoid timeout
@@ -136,7 +129,6 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 // Log the configured PubSub relay information
 logger.LogInformation("=== SEKIBAN PUBSUB RELAY CONFIGURED ({Environment} ENVIRONMENT) ===", app.Environment.EnvironmentName);
 logger.LogInformation("Instance ID: {InstanceId}", instanceId);
-logger.LogInformation("Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
 logger.LogInformation("PubSub Component: sekiban-pubsub");
 logger.LogInformation("Topic: events.all");
 logger.LogInformation("Endpoint: /internal/pubsub/events");
@@ -220,7 +212,6 @@ else
 startupLogger.LogInformation("=== SEKIBAN CONFIGURATION ===");
 startupLogger.LogInformation("  - HOSTNAME: {Hostname}", Environment.GetEnvironmentVariable("HOSTNAME") ?? Environment.MachineName);
 startupLogger.LogInformation("  - Instance ID: {InstanceId}", instanceId);
-startupLogger.LogInformation("  - Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
 startupLogger.LogInformation("  - Consumer Group: {ConsumerGroup}", consumerGroup);
 startupLogger.LogInformation("  - Max Concurrency: {MaxConcurrency}", maxConcurrency);
 startupLogger.LogInformation("  - Continue On Failure: {ContinueOnFailure}", continueOnFailure);
@@ -329,7 +320,6 @@ app.MapGet("/debug/pubsub-config", () =>
         
         // Environment-specific Configuration
         InstanceId = instanceId,
-        ActorIdPrefix = actorIdPrefix,
         ScaleOutReady = true,
         DeadLetterQueue = !app.Environment.IsDevelopment(),
         DeadLetterTopic = "events.dead-letter",

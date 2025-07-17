@@ -3,5 +3,10 @@ kind: Component
 metadata:
   name: sekiban-pubsub
 spec:
-  type: pubsub.in-memory
+  type: pubsub.redis
   version: v1
+  metadata:
+  - name: redisHost
+    value: "localhost:6379"
+  - name: redisPassword
+    value: ""

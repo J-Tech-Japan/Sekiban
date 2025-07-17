@@ -16,6 +16,23 @@ builder.AddDapr();
 var daprComponentsPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "dapr-components"));
 var configPath = Path.Combine(daprComponentsPath, "config.yaml");
 
+// Log the paths for debugging
+Console.WriteLine($"=== DAPR COMPONENTS CONFIGURATION ===");
+Console.WriteLine($"ContentRootPath: {builder.Environment.ContentRootPath}");
+Console.WriteLine($"DaprComponentsPath: {daprComponentsPath}");
+Console.WriteLine($"ConfigPath: {configPath}");
+Console.WriteLine($"DaprComponentsPath Exists: {Directory.Exists(daprComponentsPath)}");
+Console.WriteLine($"ConfigPath Exists: {File.Exists(configPath)}");
+if (Directory.Exists(daprComponentsPath))
+{
+    Console.WriteLine($"Files in DaprComponentsPath:");
+    foreach (var file in Directory.GetFiles(daprComponentsPath))
+    {
+        Console.WriteLine($"  - {Path.GetFileName(file)}");
+    }
+}
+Console.WriteLine($"=====================================");
+
 var api = builder.AddProject<Projects.DaprSample_Api>("dapr-sample-api")
     .WithExternalHttpEndpoints()
     .WithReference(postgres)

@@ -16,13 +16,12 @@ builder.Services.AddMemoryCache();
 // Generate domain types
 var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
-// Configure Sekiban with Dapr only (event relay doesn't need direct DB access)
-builder.Services.AddSekibanWithDapr(domainTypes, options =>
+// Configure Sekiban with Dapr for EventRelay (no actors registration)
+builder.Services.AddSekibanWithDaprForEventRelay(domainTypes, options =>
 {
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
     options.EventTopicName = "events.all";
-    options.ActorIdPrefix = "event-relay"; // Different prefix for event relay actors
 });
 
 // Add Dapr services
