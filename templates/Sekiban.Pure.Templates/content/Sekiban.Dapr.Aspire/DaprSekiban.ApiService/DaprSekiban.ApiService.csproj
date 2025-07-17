@@ -13,9 +13,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview18" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview18" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview18" />
+    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview19" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview19" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview19" />
   </ItemGroup>
 
   <ItemGroup>
