@@ -32,6 +32,22 @@ var api = builder.AddProject<Projects.DaprSample_Api>("dapr-sample-api")
         ResourcesPaths = [daprComponentsPath] // Use absolute path to components directory
     });
 
+// Add EventRelay project with Dapr sidecar
+var eventRelay = builder.AddProject<Projects.DaprSample_EventRelay>("dapr-sample-event-relay")
+    .WithReference(postgres)
+    .WaitFor(postgres)
+    .WithDaprSidecar(new DaprSidecarOptions
+    {
+        AppId = "sekiban-event-relay",
+        AppPort = 5020,
+        DaprHttpPort = 3502,
+        DaprGrpcPort = 50003,
+        PlacementHostAddress = "localhost:50005",
+        SchedulerHostAddress = "localhost:50006", // Enable scheduler for Actor Reminders
+        Config = configPath, // Use absolute path to config file
+        ResourcesPaths = [daprComponentsPath] // Use absolute path to components directory
+    });
+
 // Add Blazor Web project
 builder.AddProject<Projects.DaprSample_Web>("dapr-sample-web")
     .WithExternalHttpEndpoints()

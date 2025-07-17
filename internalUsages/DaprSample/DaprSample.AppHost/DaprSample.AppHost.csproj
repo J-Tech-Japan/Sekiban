@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DaprSample.Api\DaprSample.Api.csproj" />
+    <ProjectReference Include="..\DaprSample.EventRelay\DaprSample.EventRelay.csproj" />
     <ProjectReference Include="..\DaprSample.Web\DaprSample.Web.csproj" />
     <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
