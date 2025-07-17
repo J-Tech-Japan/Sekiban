@@ -19,16 +19,16 @@
     <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.3.1" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.0" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.6.2" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.6.3" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
     <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview18" />
     <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview18" />
     <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview18" />
