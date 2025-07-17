@@ -173,22 +173,79 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             _currentAggregate,
             _sekibanDomainTypes);
 
-        // Execute command
-        var commandExecutor = new CommandExecutor(_serviceProvider)
+        // Execute command with retry logic for concurrency conflicts
+        const int maxRetries = 3;
+        CommandResponse? result = null;
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++)
         {
-            EventTypes = _sekibanDomainTypes.EventTypes
-        };
+            try
+            {
+                var commandExecutor = new CommandExecutor(_serviceProvider)
+                {
+                    EventTypes = _sekibanDomainTypes.EventTypes
+                };
 
-        var result = await _sekibanDomainTypes
-            .CommandTypes
-            .ExecuteGeneral(
-                commandExecutor,
-                command,
-                _partitionInfo.PartitionKeys,
-                metadata,
-                (_, _) => Task.FromResult(repository.GetAggregate()),
-                repository.Save)
-            .UnwrapBox();
+                var executeResult = await _sekibanDomainTypes
+                    .CommandTypes
+                    .ExecuteGeneral(
+                        commandExecutor,
+                        command,
+                        _partitionInfo.PartitionKeys,
+                        metadata,
+                        (_, _) => Task.FromResult(repository.GetAggregate()),
+                        repository.Save);
+                
+                if (!executeResult.IsSuccess)
+                {
+                    var ex = executeResult.GetException();
+                    if (ex.Message.Contains("Expected last event ID") && attempt < maxRetries - 1)
+                    {
+                        // Concurrency conflict - retry with exponential backoff
+                        _logger.LogInformation("Concurrency conflict detected, retrying attempt {Attempt}/{MaxRetries}", 
+                            attempt + 1, maxRetries);
+                        await Task.Delay(50 * (attempt + 1));
+                        
+                        // Reload state and update repository
+                        _currentAggregate = await LoadStateInternalAsync(eventHandlerActor);
+                        repository = new DaprRepository(
+                            eventHandlerActor,
+                            _partitionInfo.PartitionKeys,
+                            _partitionInfo.Projector,
+                            _sekibanDomainTypes.EventTypes,
+                            _currentAggregate,
+                            _sekibanDomainTypes);
+                        continue;
+                    }
+                    throw ex;
+                }
+                
+                result = executeResult.GetValue();
+                break;
+            }
+            catch (InvalidCastException ex) when (ex.Message.Contains("Expected last event ID") && attempt < maxRetries - 1)
+            {
+                // Handle exceptions thrown by UnwrapBox
+                _logger.LogInformation("Concurrency conflict detected (exception), retrying attempt {Attempt}/{MaxRetries}", 
+                    attempt + 1, maxRetries);
+                await Task.Delay(50 * (attempt + 1));
+                
+                // Reload state and update repository
+                _currentAggregate = await LoadStateInternalAsync(eventHandlerActor);
+                repository = new DaprRepository(
+                    eventHandlerActor,
+                    _partitionInfo.PartitionKeys,
+                    _partitionInfo.Projector,
+                    _sekibanDomainTypes.EventTypes,
+                    _currentAggregate,
+                    _sekibanDomainTypes);
+            }
+        }
+        
+        if (result == null)
+        {
+            throw new InvalidOperationException("Failed to execute command after maximum retries due to concurrency conflicts");
+        }
 
         // Debug logging
         _logger.LogDebug("Command execution completed. Events produced: {EventCount}, Version before: {VersionBefore}", 
@@ -301,9 +358,16 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
         if (savedState.HasValue)
         {
-            var aggregate = await _serialization.DeserializeAggregateAsync(savedState.Value);
-            if (aggregate != null)
+            try
             {
+                var aggregate = await _serialization.DeserializeAggregateAsync(savedState.Value);
+                if (aggregate == null)
+                {
+                    _logger.LogWarning("Failed to deserialize aggregate state, will rebuild from events");
+                    // Continue to rebuild from events below
+                }
+                else
+                {
                 if (_partitionInfo.Projector.GetVersion() != aggregate.ProjectorVersion)
                 {
                     var emptyAggregate = Aggregate.EmptyFromPartitionKeys(_partitionInfo.PartitionKeys);
@@ -343,8 +407,10 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                     var projectedResult = concreteAggregate.Project(deltaEvents, _partitionInfo.Projector);
                     if (!projectedResult.IsSuccess)
                     {
-                        throw new InvalidOperationException(
-                            $"Failed to project delta events: {projectedResult.GetException().Message}");
+                        _logger.LogWarning("Failed to project delta events: {Error}. Rebuilding from scratch.", 
+                            projectedResult.GetException().Message);
+                        // Fallback to rebuilding from scratch
+                        return await RebuildStateAsync();
                     }
                     _currentAggregate = projectedResult.GetValue();
                     _hasUnsavedChanges = true;
@@ -355,6 +421,12 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
                 }
 
                 return _currentAggregate;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Exception while deserializing aggregate state, will rebuild from events");
+                // Fall through to rebuild from events
             }
         }
 
@@ -367,7 +439,17 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             emptyAggregateForNewLoad,
             _sekibanDomainTypes);
 
-        var newAggregate = await repositoryForNewLoad.Load().UnwrapBox();
+        var loadResult = await repositoryForNewLoad.Load();
+        if (!loadResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to load aggregate from repository: {Error}", loadResult.GetException().Message);
+            // Return empty aggregate as fallback
+            _currentAggregate = emptyAggregateForNewLoad;
+            _hasUnsavedChanges = false;
+            return _currentAggregate;
+        }
+        
+        var newAggregate = loadResult.GetValue();
         _currentAggregate = newAggregate;
         _hasUnsavedChanges = true;
         return newAggregate;
