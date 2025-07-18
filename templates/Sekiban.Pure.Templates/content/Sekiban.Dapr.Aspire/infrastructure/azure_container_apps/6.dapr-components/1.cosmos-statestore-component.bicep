@@ -42,6 +42,7 @@ resource stateStoreComponent 'Microsoft.App/managedEnvironments/daprComponents@2
     ]
     scopes: [
       'daprsekiban-apiservice'
+      'daprsekiban-eventrelay'
     ]
     secrets: [
       {

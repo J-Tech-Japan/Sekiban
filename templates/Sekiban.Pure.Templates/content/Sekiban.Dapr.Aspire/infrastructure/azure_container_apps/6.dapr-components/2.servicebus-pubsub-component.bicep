@@ -19,9 +19,18 @@ resource pubSubComponent 'Microsoft.App/managedEnvironments/daprComponents@2023-
         name: 'connectionString'
         secretRef: 'servicebus-connectionstring'
       }
+      {
+        name: 'maxConcurrentHandlers'
+        value: '32'
+      }
+      {
+        name: 'enableEntityManagement'
+        value: 'true'
+      }
     ]
     scopes: [
       'daprsekiban-apiservice'
+      'daprsekiban-eventrelay'
     ]
     secrets: [
       {

@@ -15,20 +15,26 @@ RUN dotnet restore
 
 COPY . .
 
-RUN dotnet publish DaprSekiban.ApiService/DaprSekiban.ApiService.csproj -c Release -o /app/publish \
+# Change to the project directory before publish
+WORKDIR /src/DaprSekiban.EventRelay
+
+# Publish to default location first
+RUN dotnet publish -c Release \
     /p:CopyLocalLockFileAssemblies=true \
     /p:PreserveCompilationContext=true \
-    /p:PublishTrimmed=false
+    /p:PublishTrimmed=false \
+    /p:IsTransformWebConfigDisabled=true
 
+# Copy from the default publish location
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build /src/DaprSekiban.EventRelay/bin/Release/net9.0/publish .
 
 # Expose the port that Dapr will use to communicate with the app
-EXPOSE 8080
+EXPOSE 5020
 
-# Set ASP.NET Core to listen on port 8080 on all interfaces (0.0.0.0)
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+# Set ASP.NET Core to listen on port 5020 on all interfaces (0.0.0.0)
+ENV ASPNETCORE_URLS=http://0.0.0.0:5020
 
-ENTRYPOINT ["dotnet", "DaprSekiban.ApiService.dll"]
+ENTRYPOINT ["dotnet", "DaprSekiban.EventRelay.dll"]

@@ -167,7 +167,31 @@ module backendDiagnosticSettings '7.backend/4.diagnostic-settings.bicep' = {
   ]
 }
 
-// 9. Frontend App Container
+// 9. EventRelay App Container with Dapr
+module eventRelayContainerApp '9.eventrelay/1.container-app.bicep' = {
+  name: 'eventRelayContainerAppDeployment'
+  params: {
+    cosmosAccountName: cosmosAccountName
+    serviceBusNamespace: serviceBusNamespace
+  }
+  dependsOn: [
+    managedEnv
+    cosmosSaveKeyVault
+    servicebusSaveKeyVault
+    daprCosmosStateStoreComponent
+    daprServiceBusPubSubComponent
+  ]
+}
+
+module eventRelayDiagnosticSettings '9.eventrelay/2.diagnostic-settings.bicep' = {
+  name: 'eventRelayDiagnosticSettingsDeployment'
+  params: {}
+  dependsOn: [
+    eventRelayContainerApp
+  ]
+}
+
+// 10. Frontend App Container
 module blazorContainerApp '8.blazor/1.container-app.bicep' = {
   name: 'blazorContainerAppDeployment'
   params: {}
@@ -188,6 +212,7 @@ module blazorDiagnosticSettings '8.blazor/2.diagnositic-settings.bicep' = {
 
 // Outputs
 output backendUrl string = backendContainerApp.outputs.url
+output eventRelayUrl string = eventRelayContainerApp.outputs.url
 output blazorUrl string = blazorContainerApp.outputs.url
 output keyVaultName string = keyVaultCreate.outputs.keyVaultName
 output managedEnvironmentId string = managedEnv.outputs.id
