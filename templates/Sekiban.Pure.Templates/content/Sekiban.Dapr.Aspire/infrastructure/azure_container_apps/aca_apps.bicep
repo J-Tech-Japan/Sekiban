@@ -27,6 +27,22 @@ module backendDiagnosticSettings '7.backend/4.diagnostic-settings.bicep' = {
   ]
 }
 
+// EventRelay App Container with Dapr
+module eventRelayContainerApp '9.eventrelay/1.container-app.bicep' = {
+  name: 'eventRelayContainerAppDeployment'
+  params: {
+    serviceBusNamespace: 'sb-${resourceGroup().name}'
+  }
+}
+
+module eventRelayDiagnosticSettings '9.eventrelay/2.diagnostic-settings.bicep' = {
+  name: 'eventRelayDiagnosticSettingsDeployment'
+  params: {}
+  dependsOn: [
+    eventRelayContainerApp
+  ]
+}
+
 // Frontend App Container
 module blazorContainerApp '8.blazor/1.container-app.bicep' = {
   name: 'blazorContainerAppDeployment'
@@ -46,4 +62,5 @@ module blazorDiagnosticSettings '8.blazor/2.diagnositic-settings.bicep' = {
 
 // Outputs
 output backendUrl string = backendContainerApp.outputs.url
+output eventRelayUrl string = eventRelayContainerApp.outputs.url
 output blazorUrl string = blazorContainerApp.outputs.url

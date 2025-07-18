@@ -43,6 +43,7 @@ Use only lower case and '-' and number in your resource group name
     "location": "japaneast",
     "backendRelativePath": "../../DaprSekiban.ApiService",
     "frontendRelativePath": "../../DaprSekiban.Web",
+    "eventRelayRelativePath": "../../DaprSekiban.EventRelay",
     "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
 }
 ```
@@ -98,7 +99,7 @@ This deploys:
 - Virtual Network
 - Application Insights & Log Analytics
 - Container Apps Environment (Managed Environment)
-- Dapr Components (Cosmos DB State Store + Service Bus Pub/Sub)
+- Dapr Components (Cosmos DB State Store + Service Bus Pub/Sub) with scopes for both API and EventRelay
 
 **Note:** This deployment may take 5-10 minutes as Container Apps Environment creation can take time.
 
@@ -118,7 +119,15 @@ chmod +x ./code_deploy_frontend.sh
 
 **Note:** Similar to the backend, you may see an error "The containerapp 'frontend-xxx' does not exist" on first deployment. This is expected and normal. The image will be successfully pushed to ACR.
 
-11. Deploy Container Apps
+11. Deploy EventRelay image to ACR
+```bash
+chmod +x ./code_deploy_eventrelay.sh
+./code_deploy_eventrelay.sh mydeploy   
+```
+
+**Note:** Similar to other apps, you may see an error "The containerapp 'eventrelay-xxx' does not exist" on first deployment. This is expected and normal. The image will be successfully pushed to ACR.
+
+12. Deploy Container Apps
 
 After infrastructure and images are ready, deploy the Container Apps:
 
@@ -128,28 +137,34 @@ After infrastructure and images are ready, deploy the Container Apps:
 
 This creates:
 - Backend Container App (internal access only, with Dapr enabled)
+- EventRelay Container App (internal access only, with Dapr enabled)
 - Frontend Container App (public access)
 
 **Important Notes:**
 - The backend is configured with internal access only for security
 - The backend uses Dapr app ID: `daprsekiban-apiservice`
+- The EventRelay is configured with internal access only and uses Dapr app ID: `daprsekiban-eventrelay`
+- The EventRelay automatically scales based on Service Bus message volume (min: 1, max: 5 replicas)
 - The frontend communicates with backend via internal URL
-- Dapr components are automatically scoped to the backend app
+- Dapr components are scoped to both backend and EventRelay apps, allowing them to share state store and pub/sub
 
-12. Give yourself access to KeyVault (optional)
+13. Give yourself access to KeyVault (optional)
 
 ```bash
 chmod +x ./user_access_keyvault.sh
 ./user_access_keyvault.sh mydeploy   
 ```
 
-13. Updating Deployed Applications
+14. Updating Deployed Applications
 
 After initial deployment, you can update your applications easily:
 
 ```bash
 # Update backend
 ./code_deploy_backend.sh mydeploy
+
+# Update EventRelay
+./code_deploy_eventrelay.sh mydeploy
 
 # Update frontend  
 ./code_deploy_frontend.sh mydeploy
@@ -160,7 +175,7 @@ These scripts will:
 - Push to ACR
 - Automatically update the running Container Apps
 
-14. Setup Github Actions (Optional) - Create Azure Credentials
+15. Setup Github Actions (Optional) - Create Azure Credentials
 
 ```bash
 chmod +x ./generate_azure_credentials.sh
@@ -169,7 +184,7 @@ chmod +x ./generate_azure_credentials.sh
 
 json will print on the screen, you will keep that json as AZURE_CREDENTIALS_MYDEPLOY in github secrets.
 
-15. Setup Github Actions
+16. Setup Github Actions
 
 you need to include mydeploy.local.json to the git
 deploy-backend.yml
@@ -233,6 +248,67 @@ jobs:
             --image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
 ```
 
+deploy-eventrelay.yml
+```yml
+name: "Deploy EventRelay"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "DaprSekiban.EventRelay/**"
+      - "DaprSekiban.Domain/**"
+      - "DaprSekiban.ServiceDefaults/**"
+env:
+  DOTNET_VERSION: 9.0.x
+  RESOUCE_GROUP_NAME: <resouce_group_name>
+  EVENTRELAY_IMAGE_NAME: eventrelay-${{ env.RESOUCE_GROUP_NAME }}
+
+jobs:
+  deploy-eventrelay:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_MYDEPLOY }}
+
+      - name: Prepare Docker buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to ACR
+        run: |
+          access_token=$(az account get-access-token --query accessToken -o tsv)
+          refresh_token=$(curl https://${{ secrets.ACR_LOGIN_SERVER }}/oauth2/exchange -v \
+          -d "grant_type=access_token&service=${{ secrets.ACR_LOGIN_SERVER }}&access_token=$access_token" | jq -r .refresh_token)
+          # The null GUID 0000... tells the container registry that this is an ACR refresh token during the login flow
+          docker login -u 00000000-0000-0000-0000-000000000000 \
+          --password-stdin ${{ secrets.ACR_LOGIN_SERVER }} <<< "$refresh_token"
+
+      - name: Build and push EventRelay image to registry
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.EVENTRELAY_IMAGE_NAME }}:${{ github.sha }}
+          file: DaprSekiban.EventRelay/Dockerfile
+
+      - name: Update ACA image
+        run: |
+          az containerapp update \
+            --name ${{ env.EVENTRELAY_IMAGE_NAME }} \
+            --resource-group ${{ env.RESOUCE_GROUP_NAME }} \
+            --image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.EVENTRELAY_IMAGE_NAME }}:${{ github.sha }}
+```
+
 deploy-frontend.yml
 ```yml
 name: "Deploy Frontend"
@@ -268,7 +344,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS_MYDEPLOY }}
 
       - name: Prepare Docker buildx
-              uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v1
 
       - name: Login to ACR
         run: |
@@ -300,8 +376,8 @@ jobs:
 
 1. **Dapr state store error: "the state store is not configured to use the actor runtime"**
    - This occurs when Dapr components are not properly loaded
-   - Solution: Ensure the backend app ID matches the Dapr component scopes (`daprsekiban-apiservice`)
-   - You may need to restart the backend container app
+   - Solution: Ensure the app IDs match the Dapr component scopes (`daprsekiban-apiservice` for backend, `daprsekiban-eventrelay` for EventRelay)
+   - You may need to restart the container apps
 
 2. **Frontend cannot connect to backend**
    - Check that the backend is using internal ingress (not external)
@@ -321,14 +397,26 @@ jobs:
    - Use the purge_keyvault.sh script to remove soft-deleted vaults
    - Key Vaults have a 90-day retention period by default
 
+6. **EventRelay not processing messages**
+   - Check that EventRelay is running with at least 1 replica
+   - Verify Service Bus topic `events.all` exists
+   - Check EventRelay logs for subscription errors
+   - Ensure EventRelay Dapr app ID is included in pub/sub component scopes
+
 ### Viewing Logs
 
 ```bash
 # View backend logs
 az containerapp logs show --name backend-{resource-group} --resource-group {resource-group} --tail 50
 
-# View Dapr sidecar logs
+# View backend Dapr sidecar logs
 az containerapp logs show --name backend-{resource-group} --resource-group {resource-group} --container daprd --tail 50
+
+# View EventRelay logs
+az containerapp logs show --name eventrelay-{resource-group} --resource-group {resource-group} --tail 50
+
+# View EventRelay Dapr sidecar logs
+az containerapp logs show --name eventrelay-{resource-group} --resource-group {resource-group} --container daprd --tail 50
 
 # View frontend logs  
 az containerapp logs show --name frontend-{resource-group} --resource-group {resource-group} --tail 50
@@ -339,4 +427,17 @@ az containerapp logs show --name frontend-{resource-group} --resource-group {res
 After successful deployment:
 - Frontend URL: `https://frontend-{resource-group}.{region}.azurecontainerapps.io`
 - Backend is internal only and not directly accessible from internet
+- EventRelay is internal only and processes events automatically in the background
 - Navigate to the frontend URL and click on "Weather" to test the application
+
+### Architecture Overview
+
+The deployed solution consists of:
+1. **Frontend (Blazor)** - Public facing web application
+2. **Backend API** - Internal Dapr-enabled API handling commands and queries
+3. **EventRelay** - Internal Dapr-enabled service processing events and updating projections
+4. **Shared Infrastructure**:
+   - Single Container Apps Environment with Dapr enabled
+   - Cosmos DB for event store and actor state
+   - Service Bus for pub/sub messaging
+   - All services share the same Dapr components with proper scoping

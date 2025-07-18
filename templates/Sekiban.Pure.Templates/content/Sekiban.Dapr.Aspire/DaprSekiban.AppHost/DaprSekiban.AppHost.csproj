@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DaprSekiban.ApiService\DaprSekiban.ApiService.csproj" />
     <ProjectReference Include="..\DaprSekiban.Web\DaprSekiban.Web.csproj" />
+    <ProjectReference Include="..\DaprSekiban.EventRelay\DaprSekiban.EventRelay.csproj" />
     <ProjectReference Include="..\DaprSekiban.ServiceDefaults\DaprSekiban.ServiceDefaults.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 
