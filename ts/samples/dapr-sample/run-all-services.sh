@@ -9,6 +9,7 @@ pkill -f "dapr run" 2>/dev/null || true
 lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 lsof -ti:3002 | xargs kill -9 2>/dev/null || true
+lsof -ti:3003 | xargs kill -9 2>/dev/null || true
 sleep 3
 
 # Always use PostgreSQL storage
@@ -29,10 +30,25 @@ echo "Starting services:"
 echo "  1. API (port 3000)"
 echo "  2. Event Handler (port 3001)" 
 echo "  3. Multi-Projector (port 3002)"
+echo "  4. Event Relay (port 3003)"
 echo ""
 
 # Create log directory
 mkdir -p tmp/logs
+
+# Start Event Relay first (it needs to be ready to receive events)
+echo "Starting Event Relay..."
+cd packages/event-relay
+USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3003 dapr run \
+  --app-id dapr-sample-event-relay \
+  --app-port 3003 \
+  --dapr-http-port 3503 \
+  --resources-path ../../dapr/components \
+  --log-level info \
+  -- npm run dev > ../../tmp/logs/event-relay.log 2>&1 &
+
+cd ../..
+sleep 5
 
 # Start Event Handler with environment variables
 echo "Starting Event Handler..."

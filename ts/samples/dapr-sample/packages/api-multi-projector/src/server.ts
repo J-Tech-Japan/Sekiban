@@ -52,49 +52,6 @@ async function startServer() {
   app.use('/', healthRoutes);
   app.use(config.API_PREFIX, multiProjectorRoutes);
 
-  // Dapr pub/sub subscription endpoint
-  app.get('/dapr/subscribe', (_req, res) => {
-    logger.info('[PubSub] Subscription endpoint called');
-    res.json([
-      {
-        pubsubname: 'pubsub',
-        topic: 'sekiban-events',
-        route: '/events',
-        metadata: {
-          rawPayload: 'false'
-        }
-      }
-    ]);
-  });
-
-  // Event handler endpoint
-  app.post('/events', async (req, res) => {
-    logger.info('[PubSub] Received event:', {
-      topic: req.headers['ce-topic'],
-      type: req.headers['ce-type'],
-      id: req.headers['ce-id'],
-      source: req.headers['ce-source']
-    });
-    logger.debug('[PubSub] Request body:', JSON.stringify(req.body, null, 2));
-    
-    try {
-      // Dapr wraps the event in a cloud event envelope
-      const eventData = req.body.data || req.body;
-      
-      // Distribute event to all relevant MultiProjectorActors
-      await distributeEventToProjectors(eventData);
-      
-      // Return 200 OK to acknowledge message
-      res.status(200).json({ success: true });
-    } catch (error) {
-      logger.error('[PubSub] Error processing event:', error);
-      // Return 500 to retry later
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      });
-    }
-  });
-
   // Error handling (must be last)
   app.use(errorHandler);
 
@@ -138,58 +95,6 @@ async function startServer() {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-/**
- * Distribute event to all relevant MultiProjectorActors
- */
-async function distributeEventToProjectors(eventData: PubSubEventData) {
-  logger.info('[Distributor] Processing event:', {
-    type: eventData?.type,
-    aggregateType: eventData?.aggregateType,
-    aggregateId: eventData?.aggregateId
-  });
-
-  // Use hardcoded list for now
-  const multiProjectorTypes = [
-    { name: 'TaskProjector' },
-    { name: 'UserProjector' },
-    { name: 'WeatherForecastProjector' }
-  ];
-
-  logger.info(`[Distributor] Using ${multiProjectorTypes.length} multi-projector types:`, multiProjectorTypes.map(p => p.name));
-
-  // Create DaprClient for invoking actors
-  const daprClient = new DaprClient({
-    daprHost: "127.0.0.1",
-    daprPort: String(config.DAPR_HTTP_PORT)
-  });
-
-  // Send event to each MultiProjectorActor
-  const promises = multiProjectorTypes.map(async (projectorType) => {
-    const actorId = `aggregatelistprojector-${projectorType.name.toLowerCase()}`;
-    
-    try {
-      logger.info(`[Distributor] Sending event to actor: ${actorId}`);
-      
-      // Invoke the actor's receiveEvent method
-      await daprClient.invoker.invoke(
-        config.DAPR_APP_ID,
-        `actors/MultiProjectorActor/${actorId}/method/receiveEventAsync`,
-        HttpMethod.PUT,
-        [eventData]
-      );
-      
-      logger.info(`[Distributor] Successfully sent event to actor: ${actorId}`);
-    } catch (error) {
-      logger.error(`[Distributor] Failed to send event to actor ${actorId}:`, error);
-      // Don't fail the whole operation if one actor fails
-    }
-  });
-
-  // Wait for all distributions to complete
-  await Promise.allSettled(promises);
-  
-  logger.info('[Distributor] Event distribution completed');
-}
 
 async function setupDaprActorsWithApp(app: express.Express) {
   logger.info('Setting up Dapr actors with Express app...');
