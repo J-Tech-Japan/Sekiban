@@ -392,6 +392,50 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   }
   
   /**
+   * Process event from event relay service
+   * This method is called by the event-relay service
+   */
+  async processEvent(eventData: any): Promise<void> {
+    console.log('[MultiProjectorActor] processEvent called with data:', {
+      type: eventData?.type,
+      aggregateType: eventData?.aggregateType,
+      aggregateId: eventData?.aggregateId,
+      version: eventData?.version
+    });
+    
+    // Convert the event data to SerializableEventDocument format
+    const eventDocument: SerializableEventDocument = {
+      id: eventData.id,
+      sortableUniqueId: eventData.sortKey || eventData.sortableUniqueId || eventData.id,
+      aggregateId: eventData.aggregateId,
+      aggregateType: eventData.aggregateType,
+      eventType: eventData.type || eventData.eventType,
+      version: eventData.version,
+      createdAt: eventData.created || eventData.timestamp || new Date().toISOString(),
+      payload: eventData.data,
+      metadata: {
+        correlationId: eventData.correlationId || '',
+        causationId: eventData.causationId || '',
+        executedUser: eventData.executedUser || 'system'
+      },
+      partitionKeys: new PartitionKeys(
+        eventData.aggregateId,
+        eventData.rootPartitionKey || 'default',
+        eventData.tenantId
+      )
+    };
+    
+    // Create envelope and call handlePublishedEvent
+    const envelope: DaprEventEnvelope = {
+      event: eventDocument,
+      topic: 'sekiban-events',
+      pubsubName: 'pubsub'
+    };
+    
+    await this.handlePublishedEvent(envelope);
+  }
+
+  /**
    * Handle published event from PubSub
    */
   async handlePublishedEvent(envelope: DaprEventEnvelope): Promise<void> {

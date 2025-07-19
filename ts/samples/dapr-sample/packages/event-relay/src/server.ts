@@ -61,7 +61,7 @@ async function main() {
       id: req.headers['ce-id'],
       source: req.headers['ce-source']
     });
-    logger.debug('[PubSub] Request body:', JSON.stringify(req.body, null, 2));
+    logger.info('[PubSub] Request body:', JSON.stringify(req.body, null, 2));
     
     try {
       // Dapr wraps the event in a cloud event envelope
