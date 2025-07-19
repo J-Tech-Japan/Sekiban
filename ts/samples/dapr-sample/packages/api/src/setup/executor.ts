@@ -1,6 +1,5 @@
 import { DaprClient } from '@dapr/dapr';
 import type { DaprSekibanConfiguration, ISekibanDaprExecutor } from '@sekiban/dapr';
-const { SekibanDaprExecutor } = require('@sekiban/dapr');
 import type { ICommandWithHandler } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from '../config/index.js';
@@ -62,6 +61,9 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     retryDelayMs: 100
   };
 
+  // Dynamically import SekibanDaprExecutor
+  const { SekibanDaprExecutor } = await import('@sekiban/dapr');
+  
   // Create the Sekiban Dapr executor
   executorInstance = new SekibanDaprExecutor(
     daprClientInstance,
