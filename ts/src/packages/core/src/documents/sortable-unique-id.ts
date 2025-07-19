@@ -2,11 +2,19 @@ import { generateUuid, getUnixTimestamp, createVersion7 } from '../utils/index.j
 import { Result, ok, err } from 'neverthrow';
 import { ValidationError } from '../result/errors.js';
 
+// Constants from lib.ts
+const SafeMilliseconds = 5000;
+const TickNumberOfLength = 19;
+const IdNumberOfLength = 11;
+const IdModBase = Math.pow(10, IdNumberOfLength);
+const TicksPerSecond = 10_000_000;
+const TicksFromUnixToCSharp = 621_355_968_000_000_000;
+
 /**
  * Represents a sortable unique identifier for events
+ * Format: 30 digits (19 for ticks + 11 for ID hash)
  */
 export class SortableUniqueId {
-  private static counter = 0;
   private constructor(readonly value: string) {}
 
   /**
@@ -20,17 +28,10 @@ export class SortableUniqueId {
    * Generates a new sortable unique ID
    */
   static generate(): SortableUniqueId {
-    const timestamp = Date.now();
-    const timestampHex = timestamp.toString(16).padStart(12, '0');
-    
-    // Add counter to ensure uniqueness even in rapid generation
-    this.counter = (this.counter + 1) % 0xFFFF;
-    const counterHex = this.counter.toString(16).padStart(4, '0');
-    
-    const uuid = createVersion7();
-    // Extract the random part from UUID v7 (everything after the timestamp and counter)
-    const randomPart = uuid.substring(18);
-    const value = `${timestampHex}${counterHex}${randomPart.replace(/-/g, '')}`;
+    const timestamp = new Date();
+    const tickString = SortableUniqueId.getTickString(timestamp);
+    const idString = SortableUniqueId.getIdString(generateUuid());
+    const value = tickString + idString;
     return new SortableUniqueId(value);
   }
 
@@ -38,13 +39,13 @@ export class SortableUniqueId {
    * Creates a SortableUniqueId from a string value
    */
   static fromString(value: string): Result<SortableUniqueId, ValidationError> {
-    if (!value || value.length < 32) {
-      return err(new ValidationError('Invalid SortableUniqueId format'));
+    if (!value || value.length !== 30) {
+      return err(new ValidationError('Invalid SortableUniqueId format: must be exactly 30 digits'));
     }
     
-    // Basic validation - should be hex characters
-    if (!/^[0-9a-f]+$/i.test(value)) {
-      return err(new ValidationError('Invalid SortableUniqueId format'));
+    // Basic validation - should be numeric characters only
+    if (!/^\d{30}$/.test(value)) {
+      return err(new ValidationError('Invalid SortableUniqueId format: must contain only digits'));
     }
     
     return ok(new SortableUniqueId(value));
@@ -58,12 +59,86 @@ export class SortableUniqueId {
   }
 
   /**
+   * Gets the timestamp from the ID
+   */
+  getTicks(): Date {
+    const ticksString = this.value.slice(0, TickNumberOfLength);
+    const csharpTicks = BigInt(ticksString);
+    // Convert C# ticks to JavaScript timestamp
+    // First subtract the C# epoch offset, then convert from 100-nanosecond intervals to milliseconds
+    const jsTicks = Number(csharpTicks - BigInt(TicksFromUnixToCSharp)) / 10000;
+    return new Date(jsTicks);
+  }
+
+  /**
    * Compares two SortableUniqueIds
    */
   static compare(a: SortableUniqueId, b: SortableUniqueId): number {
     if (a.value < b.value) return -1;
     if (a.value > b.value) return 1;
     return 0;
+  }
+
+  /**
+   * Comparison methods
+   */
+  isEarlierThan(other: SortableUniqueId): boolean {
+    return this.value < other.value;
+  }
+
+  isEarlierThanOrEqual(other: SortableUniqueId): boolean {
+    return this.value <= other.value;
+  }
+
+  isLaterThan(other: SortableUniqueId): boolean {
+    return this.value > other.value;
+  }
+
+  isLaterThanOrEqual(other: SortableUniqueId): boolean {
+    return this.value >= other.value;
+  }
+
+  // Helper methods
+  private static getTickString(timestamp: Date): string {
+    const ticks = SortableUniqueId.systemTimeToCSharpTicks(timestamp);
+    return SortableUniqueId.formatTick(BigInt(ticks));
+  }
+
+  private static systemTimeToCSharpTicks(timestamp: Date): number {
+    const durationSinceUnix = timestamp.getTime() - Date.UTC(1970, 0, 1);
+    const ticksSinceUnix = Math.floor(durationSinceUnix * 10000);
+    return ticksSinceUnix + TicksFromUnixToCSharp;
+  }
+
+  private static formatTick(ticks: bigint): string {
+    return ticks.toString().padStart(TickNumberOfLength, '0');
+  }
+
+  private static getIdString(id: string): string {
+    const hash = SortableUniqueId.generateIdHash(id);
+    return SortableUniqueId.formatId(hash);
+  }
+
+  private static generateIdHash(id: string): number {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = (31 * hash + id.charCodeAt(i)) & 0xffffffff;
+    }
+    return Math.abs(hash);
+  }
+
+  private static formatId(hash: number): string {
+    return (hash % IdModBase).toString().padStart(IdNumberOfLength, '0');
+  }
+
+  /**
+   * Creates a safe ID with a timestamp adjusted by SafeMilliseconds
+   */
+  static getSafeIdFromUtc(): string {
+    const safeTimestamp = new Date(Date.now() - SafeMilliseconds);
+    const tickString = SortableUniqueId.getTickString(safeTimestamp);
+    const idString = SortableUniqueId.getIdString('00000000-0000-0000-0000-000000000000');
+    return tickString + idString;
   }
 }
 

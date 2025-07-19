@@ -47,7 +47,11 @@ async function testProjections() {
   initializeDaprContainer({
     domainTypes,
     serviceProvider: {},
-    actorProxyFactory: {},
+    actorProxyFactory: {
+      createActorProxy: <T>(actorId: any, actorType: string): T => {
+        throw new Error(`Actor proxy creation not supported in test mode for ${actorType}`);
+      }
+    },
     serializationService: {},
     eventStore
   });

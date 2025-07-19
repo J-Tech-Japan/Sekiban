@@ -24,7 +24,11 @@ const domainTypes = createTaskDomainTypes();
 initializeDaprContainer({
   domainTypes,
   serviceProvider: {},
-  actorProxyFactory: {},
+  actorProxyFactory: {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
+      throw new Error(`Actor proxy creation not supported in in-memory mode for ${actorType}`);
+    }
+  },
   serializationService: {},
   eventStore
 });

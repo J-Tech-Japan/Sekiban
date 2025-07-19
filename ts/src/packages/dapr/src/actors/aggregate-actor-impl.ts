@@ -113,7 +113,7 @@ export class AggregateActorImpl {
       
       // Load current aggregate state
       console.log('[AggregateActorImpl] Loading current aggregate state...');
-      const currentState = await this.loadAggregateStateAsync(partitionKeys, projector as IAggregateProjector<any>);
+      const currentState = await this.loadAggregateStateAsync(partitionKeys, projector as unknown as IAggregateProjector<any>);
       console.log('[AggregateActorImpl] Current aggregate version:', currentState?.version || 0);
       console.log('[AggregateActorImpl] Current aggregate payload:', JSON.stringify(currentState, null, 2));
       
@@ -396,7 +396,7 @@ export class AggregateActorImpl {
       } else if (!this._currentAggregate) {
         // If we don't have cached state yet, load it now with the new events
         console.log('[AggregateActorImpl] No cached state, loading aggregate after command execution');
-        const updatedState = await this.loadAggregateStateAsync(partitionKeys, projector as IAggregateProjector<any>);
+        const updatedState = await this.loadAggregateStateAsync(partitionKeys, projector as unknown as IAggregateProjector<any>);
         // The loadAggregateStateAsync will cache it for us
       }
       
@@ -624,7 +624,11 @@ export class AggregateActorImpl {
     
     if (this.currentPartitionKeysAndProjector) {
       partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown') as IAggregateProjector<any> | undefined;
+      const foundProjector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      if (!foundProjector) {
+        throw new Error(`Projector not found for aggregate type: ${partitionKeys.group || 'Unknown'}`);
+      }
+      projector = foundProjector as unknown as IAggregateProjector<any>;
     } else {
       // Parse actor ID: "rootPartition@group@aggregateId=projectorType"
       const parts = this.actorId.split('@');
@@ -634,7 +638,11 @@ export class AggregateActorImpl {
       const rootPartition = parts[0];
       
       partitionKeys = new PartitionKeys(aggregateId, group, rootPartition);
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(group) as IAggregateProjector<any> | undefined;
+      const foundProjector2 = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      if (!foundProjector2) {
+        throw new Error(`Projector not found for aggregate type: ${group}`);
+      }
+      projector = foundProjector2 as unknown as IAggregateProjector<any>;
       
       console.log(`[AggregateActorImpl] Extracted from actor ID - group: ${group}, aggregateId: ${aggregateId}, rootPartition: ${rootPartition}`);
     }

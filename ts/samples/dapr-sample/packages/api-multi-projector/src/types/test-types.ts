@@ -39,7 +39,7 @@ export interface MockDaprClient {
  * Actor proxy factory interface
  */
 export interface IActorProxyFactory {
-  // Define methods if known, otherwise leave empty for now
+  createActorProxy<T>(actorId: any, actorType: string): T;
 }
 
 /**

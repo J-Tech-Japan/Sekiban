@@ -168,7 +168,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
 
   // Create actor proxy factory that uses DaprClient with ActorProxyBuilder
   const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
       logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
       const actorIdStr = actorId.id || actorId;
       
@@ -267,12 +267,12 @@ async function setupDaprActorsWithApp(app: express.Express) {
               throw new Error(`Failed to parse response: ${responseText}`);
             }
           }
-        };
+        } as T;
       } else if (actorType === 'AggregateActor') {
         console.log(`[ActorProxyFactory] Creating AggregateActor proxy using ActorProxyBuilder for ${actorIdStr}`);
         const AggregateActorClass = AggregateActorFactory.createActorClass();
         const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
-        return builder.build(new ActorId(actorIdStr));
+        return builder.build(new ActorId(actorIdStr)) as T;
       } else {
         // Fallback for unknown actor types
         console.warn(`[ActorProxyFactory] Unknown actor type: ${actorType}, using direct HTTP calls`);
@@ -311,7 +311,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
               [expectedLastSortableUniqueId, events] // Pass as array for proper parameter passing
             );
           }
-        };
+        } as T;
       }
     }
   };

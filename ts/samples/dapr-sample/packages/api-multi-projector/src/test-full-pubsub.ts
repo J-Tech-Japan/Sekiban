@@ -3,6 +3,7 @@ import { DaprClient, ActorId, ActorProxyBuilder, HttpMethod } from '@dapr/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { InMemoryEventStore, StorageProviderType, SortableUniqueId, PartitionKeys } from '@sekiban/core';
 import { MultiProjectorActor, MultiProjectorActorFactory, initializeDaprContainer } from '@sekiban/dapr';
+import type { IActorProxyFactory } from './types/test-types.js';
 
 console.log('🧪 Testing Full Flow with Pub/Sub\n');
 
@@ -27,16 +28,16 @@ async function testFullPubSub() {
   });
   
   // Create actor proxy factory
-  const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
+  const actorProxyFactory: IActorProxyFactory = {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
       console.log(`Creating actor proxy for ${actorType}/${actorId.id || actorId}`);
       if (actorType === 'MultiProjectorActor') {
         const factory = MultiProjectorActorFactory as unknown as { createActorClass(): typeof MultiProjectorActor };
         const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
-        return builder.build(new ActorId(actorId.id || actorId));
+        return builder.build(new ActorId(actorId.id || actorId)) as T;
       }
-      return null;
+      throw new Error(`Unknown actor type: ${actorType}`);
     }
   };
   

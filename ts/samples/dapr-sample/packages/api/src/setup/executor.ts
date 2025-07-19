@@ -57,8 +57,7 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     eventTopicName: config.DAPR_EVENT_TOPIC,
     actorType: config.DAPR_ACTOR_TYPE,
     actorIdPrefix: config.DAPR_APP_ID,
-    retryAttempts: 3,
-    retryDelayMs: 100
+    retryAttempts: 3
   };
 
   // Dynamically import SekibanDaprExecutor

@@ -590,8 +590,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
             createdAtStr = timestamp;
           } else if (timestamp instanceof Date) {
             createdAtStr = timestamp.toISOString();
-          } else if (timestamp && typeof timestamp.toISOString === 'function') {
-            createdAtStr = timestamp.toISOString();
+          } else if (timestamp && typeof (timestamp as any).toISOString === 'function') {
+            createdAtStr = (timestamp as any).toISOString();
           } else {
             console.warn('[MultiProjectorActor] Invalid timestamp format:', timestamp);
             createdAtStr = new Date().toISOString();
