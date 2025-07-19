@@ -6,7 +6,7 @@ using Sekiban.Pure.Query;
 
 namespace OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
-[GenerateSerializer]
+[GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record WeatherForecastQuery(string LocationContains)
     : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery,
             WeatherForecastQuery.WeatherForecastRecord>,

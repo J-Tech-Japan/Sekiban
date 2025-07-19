@@ -41,7 +41,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
     private IAsyncStream<IEvent>? _eventStream;
     private StreamSubscriptionHandle<IEvent>? _subscription;
     private readonly List<IEvent> _buffer = new();
-    private bool _bootstrapping = true;
     private bool _streamActive = false;
 
     // ---------- Snapshot control ----------
@@ -105,7 +104,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         
         _persistTimer = this.RegisterGrainTimer(_ => PersistTick(), PersistInterval, PersistInterval);
         
-        _bootstrapping = false;
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken token)
@@ -395,7 +393,6 @@ public class MultiProjectorGrain : Grain, IMultiProjectorGrain, ILifecyclePartic
         _eventStream = this.GetStreamProvider("EventStreamProvider").GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
         _subscription = await _eventStream.SubscribeAsync(OnStreamEventAsync, OnStreamErrorAsync, OnStreamCompletedAsync);
         
-        _bootstrapping = false;
         _streamActive = true;
         _logger.LogInformation("stream active");
         FlushBuffer();

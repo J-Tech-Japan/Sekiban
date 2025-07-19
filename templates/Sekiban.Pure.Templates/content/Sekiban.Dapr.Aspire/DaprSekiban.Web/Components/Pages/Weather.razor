@@ -287,9 +287,8 @@ else
             var results = await WeatherApi.GenerateSampleDataAsync();
             if (results != null && results.Count > 0)
             {
-                // Use the last event's sortable unique ID to ensure all generated data is loaded
-                var lastResult = results.Last();
-                await LoadForecasts(lastResult.LastSortableUniqueId);
+                // Just reload the forecasts without waiting for specific sortable unique ID
+                await LoadForecasts();
             }
             else
             {
@@ -298,7 +297,7 @@ else
         }
         catch (Exception ex)
         {
-            // Log error
+            Console.WriteLine($"Error generating sample data: {ex.Message}");
         }
     }
 

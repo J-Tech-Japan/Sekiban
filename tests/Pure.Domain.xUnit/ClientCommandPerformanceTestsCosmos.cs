@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Reflection;
 namespace Pure.Domain.xUnit;
 
+[Collection("CosmosDbTests")]
 public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<ClientCommandPerformanceTestsCosmos>
 {
     // Generate a unique ID for this test class

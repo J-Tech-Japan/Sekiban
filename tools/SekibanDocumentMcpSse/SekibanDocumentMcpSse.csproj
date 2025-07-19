@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.4" />
-    <PackageReference Include="OpenAI" Version="2.2.0-beta.4" />
+    <PackageReference Include="OpenAI" Version="2.2.0" />
     <PackageReference Include="Markdig" Version="0.41.3" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.1" />
-    <PackageReference Include="System.Text.Json" Version="9.0.6" />
+    <PackageReference Include="System.Text.Json" Version="9.0.7" />
   </ItemGroup>
 
   <ItemGroup>

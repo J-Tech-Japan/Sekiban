@@ -86,13 +86,15 @@ public class WeatherApiClient
         return null;
     }
 
-    public async Task<List<CommandResponseSimple>?> GenerateSampleDataAsync()
+    public async Task<GenerateDataResponse?> GenerateSampleDataAsync()
     {
         var response = await _httpClient.PostAsync("api/weatherforecast/generate", null);
         if (response.IsSuccessStatusCode)
         {
-            return await response.Content.ReadFromJsonAsync<List<CommandResponseSimple>>();
+            return await response.Content.ReadFromJsonAsync<GenerateDataResponse>();
         }
         return null;
     }
 }
+
+public record GenerateDataResponse(string Message, int Count);

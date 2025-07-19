@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace OrleansSekiban.Playwright.Base
 {
-    public class BaseTest : IDisposable
+    public abstract class BaseTest : IDisposable
     {
         protected const string BaseUrl = "https://localhost:7201"; // Default URL, will be overridden if needed
         protected IBrowser? Browser;

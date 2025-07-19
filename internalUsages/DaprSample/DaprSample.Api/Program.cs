@@ -47,18 +47,11 @@ builder.Services.AddMemoryCache();
 var domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
 // Add Sekiban with Dapr - using the original Dapr-based implementation
-var actorIdPrefix = Environment.GetEnvironmentVariable("SEKIBAN_ACTOR_PREFIX") ?? 
-                    Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? 
-                    (builder.Environment.IsDevelopment() ? 
-                     $"local-dev-{Environment.MachineName}" : 
-                     "dapr-sample");
-
 builder.Services.AddSekibanWithDapr(domainTypes, options =>
 {
     options.StateStoreName = "sekiban-eventstore";
     options.PubSubName = "sekiban-pubsub";
     options.EventTopicName = "events.all";  // Changed to match subscription.yaml
-    options.ActorIdPrefix = actorIdPrefix;
 });
 
 // Use patched event reader to avoid timeout
@@ -98,6 +91,8 @@ app.UseRouting();
 app.UseCloudEvents();
 app.MapSubscribeHandler();
 
+// No custom subscription needed - MultiProjectorActors will be shared via same actor ID
+
 // === Sekiban PubSub Event Relay (MinimalAPI) ===
 var instanceId = Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? 
                 Environment.GetEnvironmentVariable("HOSTNAME") ?? 
@@ -109,50 +104,17 @@ var consumerGroup = Environment.GetEnvironmentVariable("SEKIBAN_CONSUMER_GROUP")
                     "dapr-sample-projectors-dev" : 
                     "dapr-sample-projectors");
 
-var continueOnFailure = app.Environment.IsDevelopment() || 
-                       !bool.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_STRICT_ERROR_HANDLING"), out var strictMode) || 
-                       !strictMode;
-
-var maxConcurrency = int.TryParse(Environment.GetEnvironmentVariable("SEKIBAN_MAX_CONCURRENCY"), out var concurrency) ? 
-                    concurrency : 
-                    (app.Environment.IsDevelopment() ? 3 : 5);
-
-app.MapSekibanEventRelay(new SekibanPubSubRelayOptions
-{
-    PubSubName = "sekiban-pubsub",
-    TopicName = "events.all",
-    EndpointPath = "/internal/pubsub/events",
-    ConsumerGroup = consumerGroup,
-    MaxConcurrency = maxConcurrency,
-    ContinueOnProjectorFailure = continueOnFailure,
-    EnableDeadLetterQueue = !app.Environment.IsDevelopment(),
-    DeadLetterTopic = "events.dead-letter",
-    MaxRetryCount = app.Environment.IsDevelopment() ? 1 : 3
-});
+// Event relay functionality has been moved to DaprSample.EventRelay service
 
 // Log actor registration before mapping handlers
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
-// Log the configured PubSub relay information
-logger.LogInformation("=== SEKIBAN PUBSUB RELAY CONFIGURED ({Environment} ENVIRONMENT) ===", app.Environment.EnvironmentName);
+// Log the actor configuration
+logger.LogInformation("=== SEKIBAN API SERVICE CONFIGURED ({Environment} ENVIRONMENT) ===", app.Environment.EnvironmentName);
 logger.LogInformation("Instance ID: {InstanceId}", instanceId);
-logger.LogInformation("Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
-logger.LogInformation("PubSub Component: sekiban-pubsub");
-logger.LogInformation("Topic: events.all");
-logger.LogInformation("Endpoint: /internal/pubsub/events");
 logger.LogInformation("Consumer Group: {ConsumerGroup}", consumerGroup);
-logger.LogInformation("Max Concurrency: {MaxConcurrency}", maxConcurrency);
-logger.LogInformation("Continue On Failure: {ContinueOnFailure}", continueOnFailure);
-logger.LogInformation("Dead Letter Queue: {DeadLetterEnabled}", !app.Environment.IsDevelopment());
-if (app.Environment.IsDevelopment())
-{
-    logger.LogInformation("🔧 LOCAL DEVELOPMENT MODE: Relaxed settings for easier debugging");
-}
-else
-{
-    logger.LogInformation("🚀 PRODUCTION MODE: Strict settings for reliability");
-}
-logger.LogInformation("=== END PUBSUB RELAY CONFIG ===");
+logger.LogInformation("Event Relay Service: Running separately in DaprSample.EventRelay");
+logger.LogInformation("=== END API SERVICE CONFIG ===");
 try 
 {
     var actorOptions = app.Services.GetService<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>();
@@ -220,10 +182,7 @@ else
 startupLogger.LogInformation("=== SEKIBAN CONFIGURATION ===");
 startupLogger.LogInformation("  - HOSTNAME: {Hostname}", Environment.GetEnvironmentVariable("HOSTNAME") ?? Environment.MachineName);
 startupLogger.LogInformation("  - Instance ID: {InstanceId}", instanceId);
-startupLogger.LogInformation("  - Actor ID Prefix: {ActorIdPrefix}", actorIdPrefix);
 startupLogger.LogInformation("  - Consumer Group: {ConsumerGroup}", consumerGroup);
-startupLogger.LogInformation("  - Max Concurrency: {MaxConcurrency}", maxConcurrency);
-startupLogger.LogInformation("  - Continue On Failure: {ContinueOnFailure}", continueOnFailure);
 startupLogger.LogInformation("=== END ENVIRONMENT INFO ===");
 
 // Wait for basic Dapr health
@@ -322,14 +281,11 @@ app.MapGet("/debug/pubsub-config", () =>
         Topic = "events.all", 
         Endpoint = "/internal/pubsub/events",
         ConsumerGroup = consumerGroup,
-        MaxConcurrency = maxConcurrency,
-        ContinueOnFailure = continueOnFailure,
         RelayMethod = "MinimalAPI (opt-in)",
         ConfiguredAt = DateTime.UtcNow,
         
         // Environment-specific Configuration
         InstanceId = instanceId,
-        ActorIdPrefix = actorIdPrefix,
         ScaleOutReady = true,
         DeadLetterQueue = !app.Environment.IsDevelopment(),
         DeadLetterTopic = "events.dead-letter",
@@ -718,7 +674,6 @@ app.MapGet("/health/detailed", () =>
         },
         sekiban = new
         {
-            actorIdPrefix = actorIdPrefix,
             consumerGroup = consumerGroup,
             pubsubEndpoint = "/internal/pubsub/events"
         },
@@ -854,6 +809,9 @@ foreach (var endpoint in endpointDataSource.Endpoints)
             routeEndpoint.Metadata.OfType<HttpMethodMetadata>().FirstOrDefault()?.HttpMethods ?? new[] { "ANY" });
     }
 }
+
+// MultiProjectorActors are shared between API and EventRelay services via same actor ID
+// This allows waitForSortableUniqueId to work properly
 
 app.Run();
 

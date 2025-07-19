@@ -9,7 +9,6 @@ using Sekiban.Pure.Query;
 
 namespace DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 
-[GenerateSerializer]
 public record WeatherForecastQuery(string LocationContains) : IMultiProjectionListQuery<AggregateListProjector<WeatherForecastProjector>, WeatherForecastQuery, WeatherForecastResponse>, IWaitForSortableUniqueId
 {
     public string? WaitForSortableUniqueId { get; set; }

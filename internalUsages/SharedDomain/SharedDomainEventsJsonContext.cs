@@ -31,8 +31,11 @@ namespace SharedDomain;
 [JsonSerializable(typeof(SerializableAggregate))]
 [JsonSerializable(typeof(IEvent))]
 [JsonSerializable(typeof(TemperatureCelsius))]
+// Projector types
+[JsonSerializable(typeof(AggregateListProjector<Aggregates.User.UserProjector>))]
+[JsonSerializable(typeof(AggregateListProjector<Aggregates.WeatherForecasts.WeatherForecastProjector>))]
 // User domain
-[JsonSerializable(typeof(SharedDomain.Aggregates.User.User))]
+[JsonSerializable(typeof(Aggregates.User.User))]
 [JsonSerializable(typeof(CreateUser))]
 [JsonSerializable(typeof(UpdateUserName))]
 [JsonSerializable(typeof(UpdateUserEmail))]

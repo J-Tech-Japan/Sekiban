@@ -14,11 +14,12 @@
     <PackageReference Include="Aspire.Hosting" Version="9.3.2" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.3.1" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="9.3.1" />
-    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Dapr" Version="9.5.0" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Dapr" Version="9.6.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DaprSample.Api\DaprSample.Api.csproj" />
+    <ProjectReference Include="..\DaprSample.EventRelay\DaprSample.EventRelay.csproj" />
     <ProjectReference Include="..\DaprSample.Web\DaprSample.Web.csproj" />
     <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" IsAspireProjectResource="false" />
   </ItemGroup>

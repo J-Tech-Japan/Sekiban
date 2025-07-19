@@ -9,6 +9,7 @@ COPY DaprSekiban.ServiceDefaults/*.csproj ./DaprSekiban.ServiceDefaults/
 COPY DaprSekiban.AppHost/*.csproj ./DaprSekiban.AppHost/
 COPY DaprSekiban.Web/*.csproj ./DaprSekiban.Web/
 COPY DaprSekiban.Unit/*.csproj ./DaprSekiban.Unit/
+COPY DaprSekiban.EventRelay/*.csproj ./DaprSekiban.EventRelay/
 
 RUN dotnet restore
 

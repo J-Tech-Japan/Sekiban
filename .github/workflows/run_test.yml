@@ -14,6 +14,9 @@ concurrency:
 jobs:
   regularAggregateTest:
     runs-on: ubuntu-latest
+    concurrency:
+      group: test-execution-${{ github.ref }}
+      cancel-in-progress: false
 
     services:
       postgres:
@@ -43,14 +46,10 @@ jobs:
         dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=127.0.0.1;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
     - name: dotnet build
       run: |
-        dotnet build -c Release
-    - name: dotnet test by project
+        dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+    - name: dotnet test all projects sequentially
       run: |
-        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj  -c Release --no-build --verbosity normal
-    - name: dotnet test by project2
-      run: |
-        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal
-    - name: dotnet test by project3
-      run: |
-        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal
+        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
   

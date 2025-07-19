@@ -24,7 +24,23 @@ public class CosmosDbFactory(
 
     public async Task DeleteAllFromEventContainer()
     {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
+        try
+        {
+            await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
+            await Task.Delay(3000);
+            Console.WriteLine("CosmosDB event container cleanup completed successfully");
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Container doesn't exist - nothing to delete, which is fine for cleanup
+            Console.WriteLine($"CosmosDB container not found during cleanup - this is expected for fresh tests: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            // Log other exceptions but don't fail the test setup
+            Console.WriteLine($"Warning: CosmosDB cleanup encountered an error: {ex.Message}");
+            throw; // Re-throw non-404 exceptions as they indicate real problems
+        }
     }
 
     public async Task<T> CosmosActionAsync<T>(DocumentType documentType, Func<Container, Task<T>> cosmosAction)
@@ -176,6 +192,7 @@ public class CosmosDbFactory(
             documentType,
             async container =>
             {
+                // まずは削除対象のアイテムを収集
                 var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<EventDocumentCommon>(query.ToQueryDefinition());
 
@@ -201,13 +218,41 @@ public class CosmosDbFactory(
                     }
                 }
 
+                Console.WriteLine($"Found {deleteItemIds.Count} items to delete from CosmosDB container");
+
+                // 削除タスクを並行実行（ただし例外処理を追加）
                 var concurrencyTasks = new List<Task>();
                 foreach (var (id, partitionKey) in deleteItemIds)
-                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(id.ToString(), partitionKey));
+                {
+                    concurrencyTasks.Add(DeleteItemSafely(container, id, partitionKey));
+                }
 
                 await Task.WhenAll(concurrencyTasks);
+                
+                Console.WriteLine($"Completed deletion of {deleteItemIds.Count} items from CosmosDB container");
                 return null;
             });
+    }
+
+    /// <summary>
+    /// CosmosDBアイテムを安全に削除する
+    /// </summary>
+    private async Task DeleteItemSafely(Container container, Guid id, PartitionKey partitionKey)
+    {
+        try
+        {
+            await container.DeleteItemAsync<IDocument>(id.ToString(), partitionKey);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // アイテムが既に削除されている場合は無視
+            Console.WriteLine($"Item {id} already deleted or not found");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to delete item {id}: {ex.Message}");
+            throw;
+        }
     }
 
     public void ResetMemoryCache(DocumentType documentType)

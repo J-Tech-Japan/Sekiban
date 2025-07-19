@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.CosmosDb</PackageId>
-        <Version>1.0.1-preview17</Version>
+        <Version>1.0.1-preview19</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview17</PackageVersion>
+        <PackageVersion>1.0.1-preview19</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.CosmosDb</AssemblyName>
         <RootNamespace>Sekiban.Pure.CosmosDb</RootNamespace>
@@ -29,15 +29,15 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.52.0" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.6" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.6" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.7" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.7" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview17"/>
+        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="1.0.1-preview19"/>
     </ItemGroup>
 
 </Project>

@@ -5,7 +5,7 @@ using Sekiban.Pure.Query;
 
 namespace SharedDomain.Aggregates.User.Queries;
 
-[GenerateSerializer]
+[GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record UserStatisticsQuery()
     : IMultiProjectionQuery<AggregateListProjector<UserProjector>, UserStatisticsQuery, UserStatisticsQuery.UserStatistics>,
       IWaitForSortableUniqueId

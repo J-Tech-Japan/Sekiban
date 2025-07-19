@@ -1,3 +1,4 @@
+using Dapr;
 using Dapr.Actors;
 using Dapr.Actors.Client;
 using Dapr.Client;
@@ -85,12 +86,23 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 _domainTypes.JsonSerializerOptions);
             
             // Execute command via SerializableCommandAndMetadata
-            var envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
+            // Retry once if we get a 500 error (actor not yet created)
+            SerializableCommandResponse envelopeResponse;
+            try
+            {
+                envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
+            }
+            catch (DaprApiException ex) when (ex.Message.Contains("500"))
+            {
+                // Actor might not exist yet, retry after a short delay
+                await Task.Delay(100);
+                envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
+            }
             
             // Convert SerializableCommandResponse back to SekibanCommandResponse
             var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
             
-            if (!responseResult.HasValue)
+                if (!responseResult.HasValue || responseResult.Value is null)
             {
                 return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException("Failed to convert command response"));

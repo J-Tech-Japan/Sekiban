@@ -47,7 +47,7 @@ public class DaprSerializationService : IDaprSerializationService
             {
                 return DaprCompressionUtility.Compress(json);
             }
-
+            await Task.CompletedTask;
             return json;
         }
         catch (Exception ex)
@@ -73,7 +73,7 @@ public class DaprSerializationService : IDaprSerializationService
             {
                 json = DaprCompressionUtility.Decompress(data);
             }
-
+            await Task.CompletedTask;
             return JsonSerializer.Deserialize<T>(json, _options.JsonSerializerOptions);
         }
         catch (Exception ex)
@@ -109,7 +109,7 @@ public class DaprSerializationService : IDaprSerializationService
             var typeAlias = _options.EnableTypeAliases 
                 ? _typeRegistry.GetTypeAlias(payloadType) 
                 : payloadType.AssemblyQualifiedName ?? payloadType.FullName ?? payloadType.Name;
-
+            await Task.CompletedTask;
             return new DaprAggregateSurrogate
             {
                 CompressedPayload = compressedPayload,
@@ -210,7 +210,7 @@ public class DaprSerializationService : IDaprSerializationService
                 "1", // ProjectorVersion - TODO: need to handle this properly
                 payloadType.Name, // ProjectorTypeName  
                 payloadType.AssemblyQualifiedName ?? payloadType.FullName ?? payloadType.Name); // PayloadTypeName
-
+            await Task.CompletedTask;
             return aggregate;
         }
         catch (Exception ex)
@@ -245,7 +245,7 @@ public class DaprSerializationService : IDaprSerializationService
             var typeAlias = _options.EnableTypeAliases
                 ? _typeRegistry.GetTypeAlias(commandType)
                 : commandType.AssemblyQualifiedName ?? commandType.FullName ?? commandType.Name;
-
+            await Task.CompletedTask;
             return new DaprCommandEnvelope
             {
                 CommandData = commandData,
@@ -296,7 +296,7 @@ public class DaprSerializationService : IDaprSerializationService
             byte[] json = envelope.IsCompressed
                 ? DaprCompressionUtility.Decompress(envelope.CommandData)
                 : envelope.CommandData;
-
+            await Task.CompletedTask;
             var command = JsonSerializer.Deserialize(json, commandType, _options.JsonSerializerOptions) as ICommandWithHandlerSerializable;
             return command;
         }
@@ -332,7 +332,7 @@ public class DaprSerializationService : IDaprSerializationService
             var typeAlias = _options.EnableTypeAliases
                 ? _typeRegistry.GetTypeAlias(eventType)
                 : eventType.AssemblyQualifiedName ?? eventType.FullName ?? eventType.Name;
-
+            await Task.CompletedTask;
             return new DaprEventEnvelope
             {
                 EventId = Guid.NewGuid(),
@@ -406,7 +406,7 @@ public class DaprSerializationService : IDaprSerializationService
                 _logger.LogError("Failed to deserialize event: {Error}", eventResult.GetException().Message);
                 throw eventResult.GetException();
             }
-
+            await Task.CompletedTask;
             return eventResult.GetValue();
         }
         catch (Exception ex)

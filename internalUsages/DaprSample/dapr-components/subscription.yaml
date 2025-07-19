@@ -5,7 +5,7 @@ metadata:
 spec:
   topic: events.all
   routes:
-    default: /pubsub/events
+    default: /internal/pubsub/events
   pubsubname: sekiban-pubsub
 scopes:
-- dapr-sample-api
+- sekiban-event-relay

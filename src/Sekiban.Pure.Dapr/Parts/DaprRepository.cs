@@ -1,3 +1,4 @@
+using Dapr;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
@@ -91,14 +92,23 @@ public class DaprRepository
         try
         {
             // Get all events from the event handler
-            var eventDocuments = await _eventHandlerActor.GetAllEventsAsync();
+            IReadOnlyList<SerializableEventDocument> eventDocuments;
+            try
+            {
+                eventDocuments = await _eventHandlerActor.GetAllEventsAsync();
+            }
+            catch (DaprApiException ex) when (ex.Message.Contains("500"))
+            {
+                // Actor doesn't exist yet, return empty list
+                eventDocuments = new List<SerializableEventDocument>();
+            }
             
             // Convert documents back to events
             var events = new List<IEvent>();
             foreach (var document in eventDocuments)
             {
                 var eventResult = await document.ToEventAsync(_domainTypes);
-                if (eventResult.HasValue)
+                if (eventResult.HasValue && eventResult.Value is not null)
                 {
                     events.Add(eventResult.Value);
                 }

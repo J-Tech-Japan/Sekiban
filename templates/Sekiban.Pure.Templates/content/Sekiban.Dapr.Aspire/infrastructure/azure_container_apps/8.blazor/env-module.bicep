@@ -34,7 +34,7 @@ var envVars = [
     value: '~3'
   }
   {
-    name: 'services__apiservice__https__0'
+    name: 'services__dapr-sekiban-api__https__0'
     value: 'https://${containerAppBackend.properties.configuration.ingress.fqdn}'
   }
 ]

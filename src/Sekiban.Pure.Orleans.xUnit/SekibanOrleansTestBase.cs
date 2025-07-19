@@ -40,13 +40,14 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         _repository = new Repository();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
-        builder.Options.ClusterId = "dev";
-        builder.Options.ServiceId = "TestService";
+        // Generate unique IDs for each test to avoid conflicts
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        builder.Options.ClusterId = $"dev-{uniqueId}";
+        builder.Options.ServiceId = $"TestService-{uniqueId}";
         builder.AddSiloBuilderConfigurator<TDomainTypesGetter>();
         _cluster = builder.Build();
-        _cluster.Deploy();
+        await _cluster.DeployAsync();
         _executor = new SekibanOrleansExecutor(_cluster.Client, _domainTypes, _commandMetadataProvider);
-        await Task.CompletedTask;
     }
 
     public async Task DisposeAsync()
