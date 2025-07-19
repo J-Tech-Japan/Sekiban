@@ -116,6 +116,7 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Loading current aggregate state...');
       const currentState = await this.loadAggregateStateAsync(partitionKeys, projector);
       console.log('[AggregateActorImpl] Current aggregate version:', currentState?.version || 0);
+      console.log('[AggregateActorImpl] Current aggregate payload:', JSON.stringify(currentState, null, 2));
       
       // Execute the command handler
       console.log('[AggregateActorImpl] Executing command handler...');
@@ -372,18 +373,28 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Events appended successfully');
       
       // Update cached state with new events
-      if (this.cachedAggregateState && projector) {
+      if (this._currentAggregate && projector) {
         console.log('[AggregateActorImpl] Updating cached aggregate state with new events');
         // Apply the new events to the cached state
         for (const event of events) {
-          const applyResult = projector.project(this.cachedAggregateState, event);
+          const applyResult = projector.project(this._currentAggregate, event);
           if (applyResult.isOk()) {
-            this.cachedAggregateState = applyResult.value;
+            this._currentAggregate = applyResult.value;
           }
         }
-        this.lastLoadedSortableUniqueId = appendResult.lastSortableUniqueId;
-        console.log('[AggregateActorImpl] Updated cache, new last ID:', this.lastLoadedSortableUniqueId);
-      } else if (!this.cachedAggregateState) {
+        this._lastLoadedSortableUniqueId = appendResult.lastSortableUniqueId;
+        
+        // Update the lastSortableUniqueId in the aggregate state as well
+        if (this._currentAggregate) {
+          if (Object.isFrozen(this._currentAggregate) || Object.isSealed(this._currentAggregate)) {
+            this._currentAggregate = { ...this._currentAggregate, lastSortableUniqueId: appendResult.lastSortableUniqueId };
+          } else {
+            this._currentAggregate.lastSortableUniqueId = appendResult.lastSortableUniqueId;
+          }
+        }
+        
+        console.log('[AggregateActorImpl] Updated cache, new last ID:', this._lastLoadedSortableUniqueId);
+      } else if (!this._currentAggregate) {
         // If we don't have cached state yet, load it now with the new events
         console.log('[AggregateActorImpl] No cached state, loading aggregate after command execution');
         const updatedState = await this.loadAggregateStateAsync(partitionKeys, projector);
@@ -427,12 +438,15 @@ export class AggregateActorImpl {
   ): Promise<any> {
     try {
       console.log('[AggregateActorImpl] loadAggregateStateAsync called');
+      console.log('[AggregateActorImpl] Current cache state:', {
+        hasCachedAggregate: !!this._currentAggregate,
+        cachedVersion: this._currentAggregate?.version,
+        lastLoadedSortableUniqueId: this._lastLoadedSortableUniqueId
+      });
       
-      // First check if we have a cached state (like C# _currentAggregate)
-      if (this._currentAggregate) {
-        console.log('[AggregateActorImpl] Returning cached aggregate state');
-        return this._currentAggregate;
-      }
+      // For now, we'll always reload state to ensure consistency
+      // TODO: Implement proper cache validation once EventHandlerActor has getLatestSnapshotAsync
+      console.log('[AggregateActorImpl] Skipping cache, always reloading state for consistency');
       
       console.log('[AggregateActorImpl] No cached state, loading from storage or events');
       // Get the event handler actor

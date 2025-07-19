@@ -6,11 +6,27 @@ echo "================================"
 # Kill any existing processes
 echo "Cleaning up existing processes..."
 pkill -f "dapr run" 2>/dev/null || true
-lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-lsof -ti:3001 | xargs kill -9 2>/dev/null || true
-lsof -ti:3002 | xargs kill -9 2>/dev/null || true
-lsof -ti:3003 | xargs kill -9 2>/dev/null || true
+sleep 2
+
+# Kill any processes on our ports
+for port in 3000 3001 3002 3003 3500 3501 3502 3503; do
+  lsof -ti:$port | xargs kill -9 2>/dev/null || true
+done
 sleep 3
+
+# Check if Dapr is initialized
+if ! dapr --version > /dev/null 2>&1; then
+    echo "❌ Dapr is not installed. Please install Dapr first."
+    exit 1
+fi
+
+# Check if Dapr runtime is running
+if ! docker ps | grep -q dapr_placement; then
+    echo "⚠️  Dapr runtime is not running. Initializing Dapr..."
+    dapr init
+    echo "Waiting for Dapr to be ready..."
+    sleep 10
+fi
 
 # Always use PostgreSQL storage
 echo "Using PostgreSQL storage..."
@@ -48,7 +64,8 @@ USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3003 dapr run \
   -- npm run dev > ../../tmp/logs/event-relay.log 2>&1 &
 
 cd ../..
-sleep 5
+echo "Waiting for Event Relay to be ready..."
+sleep 10
 
 # Start Event Handler with environment variables
 echo "Starting Event Handler..."
@@ -62,12 +79,13 @@ USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3001 dapr run \
   -- npm run dev > ../../tmp/logs/event-handler.log 2>&1 &
 
 cd ../..
-sleep 5
+echo "Waiting for Event Handler to be ready..."
+sleep 10
 
 # Start Multi-Projector with environment variables
 echo "Starting Multi-Projector..."
 cd packages/api-multi-projector
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL dapr run \
+USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3002 dapr run \
   --app-id dapr-sample-multi-projector \
   --app-port 3002 \
   --dapr-http-port 3502 \
@@ -76,7 +94,8 @@ USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL dapr run \
   -- npm run dev > ../../tmp/logs/multi-projector.log 2>&1 &
 
 cd ../..
-sleep 5
+echo "Waiting for Multi-Projector to be ready..."
+sleep 10
 
 # Start API (main service) with environment variables
 echo "Starting API..."

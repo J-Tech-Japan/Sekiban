@@ -3,12 +3,8 @@ kind: Component
 metadata:
   name: statestore
 spec:
-  type: state.postgresql
+  type: state.in-memory
   version: v1
   metadata:
-  - name: connectionString
-    value: "host=localhost user=postgres password=postgres dbname=sekiban port=5432 sslmode=disable"
   - name: actorStateStore
     value: "true"
-  - name: tableName
-    value: "state"
