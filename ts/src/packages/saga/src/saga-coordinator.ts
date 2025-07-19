@@ -1,4 +1,4 @@
-import { Result, ok, err } from '../../core/src/result';
+import { Result, ok, err } from 'neverthrow';
 import {
   ChoreographySaga,
   SagaReaction,
@@ -15,8 +15,9 @@ import {
   IEventPayload,
   EventDocument,
   SekibanError
-} from '../../core/src';
-import { SagaError } from './errors';
+} from '@sekiban/core';
+import { GeneralSagaError, SagaError } from './errors';
+import type { ICommandExecutor } from './saga-manager';
 
 /**
  * Event store interface for choreography
@@ -31,12 +32,7 @@ export interface IEventStore {
   }): Promise<Result<EventDocument<IEventPayload>[], SekibanError>>;
 }
 
-/**
- * Command executor interface
- */
-export interface ICommandExecutor {
-  execute(command: ICommand & { type: string }): Promise<Result<EventDocument<IEventPayload>[], SekibanError>>;
-}
+// ICommandExecutor is imported from saga-manager to avoid duplication
 
 /**
  * Coordinator configuration
@@ -217,7 +213,7 @@ export class SagaCoordinator {
 
     // Add this occurrence
     tracker.occurrences.push({
-      eventId: event.id,
+      eventId: event.id.toString(),
       timestamp: event.timestamp
     });
 
@@ -273,7 +269,7 @@ export class SagaCoordinator {
       };
       this.state.reactionHistory.push(result);
 
-      return err(new SagaError(
+      return err(new GeneralSagaError(
         `Reaction ${reaction.name} failed`,
         undefined,
         choreographyName,

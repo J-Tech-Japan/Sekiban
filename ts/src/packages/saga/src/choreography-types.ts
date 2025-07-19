@@ -1,4 +1,5 @@
-import { ICommand, IEventPayload, EventDocument } from '../../core/src';
+import { ICommand, IEventPayload } from '@sekiban/core';
+import type { EventDocument } from '@sekiban/core';
 
 /**
  * Reaction trigger conditions

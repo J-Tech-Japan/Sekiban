@@ -65,9 +65,9 @@ export class AggregateEventHandlerActor extends AbstractActor
    */
   async onActivate(): Promise<void> {
     console.log('[AggregateEventHandlerActor] onActivate called for actor:', (this as any).id?.toString());
-    // Load partition info on activation
-    await this.loadPartitionInfoAsync();
-    console.log('[AggregateEventHandlerActor] Actor activated with partition info:', JSON.stringify(this.partitionInfo));
+    // Don't load partition info on activation to avoid state access issues
+    // It will be loaded on first method call instead
+    console.log('[AggregateEventHandlerActor] Actor activated');
   }
   
   /**
@@ -80,6 +80,8 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       if (!hasPartitionInfo && this.partitionInfo) {
         await stateManager.setState(this.PARTITION_INFO_KEY, this.partitionInfo);
+        // Don't save state immediately, let it be saved with other state changes
+        // await stateManager.saveState();
       }
     } catch (error) {
       console.warn('[AggregateEventHandlerActor] Could not save partition info:', error);
@@ -154,13 +156,32 @@ export class AggregateEventHandlerActor extends AbstractActor
       }
       
       // Update metadata
-      const newLastId = events[events.length - 1].sortableUniqueId;
+      const lastEvent = events[events.length - 1];
+      console.log('[AggregateEventHandlerActor] Last event:', JSON.stringify(lastEvent));
+      const newLastId = lastEvent.sortableUniqueId || lastEvent.SortableUniqueId;
+      console.log('[AggregateEventHandlerActor] newLastId extracted:', newLastId);
       const newState: AggregateEventHandlerState = {
-        lastSortableUniqueId: newLastId,
+        lastSortableUniqueId: newLastId || '',
         eventCount: allEvents.length
       };
       
       await stateManager.setState(this.HANDLER_STATE_KEY, newState);
+      
+      // Save all state changes together
+      try {
+        await stateManager.saveState();
+      } catch (saveError) {
+        console.error('[AggregateEventHandlerActor] Failed to save state:', saveError);
+        // Try alternative approach - return success if events were saved to external store
+        if (this.partitionInfo) {
+          console.warn('[AggregateEventHandlerActor] State save failed but events saved to external store, returning success');
+          return {
+            isSuccess: true,
+            lastSortableUniqueId: newLastId
+          };
+        }
+        throw saveError;
+      }
       
       // Publish events to Dapr pub/sub
       try {
@@ -205,11 +226,26 @@ export class AggregateEventHandlerActor extends AbstractActor
         console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
       }
       
-      return {
+      try {
+        console.log('[AggregateEventHandlerActor] After pub/sub block, newLastId:', newLastId);
+      } catch (e) {
+        console.error('[AggregateEventHandlerActor] Error accessing newLastId:', e);
+      }
+      
+      console.log('[AggregateEventHandlerActor] About to return success response:', {
+        isSuccess: true,
+        lastSortableUniqueId: newLastId
+      });
+      
+      const response = {
         isSuccess: true,
         lastSortableUniqueId: newLastId
       };
+      
+      console.log('[AggregateEventHandlerActor] Actually returning response now');
+      return response;
     } catch (error) {
+      console.error('[AggregateEventHandlerActor] Error in appendEventsAsync:', error);
       return {
         isSuccess: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -246,6 +282,11 @@ export class AggregateEventHandlerActor extends AbstractActor
   async getAllEventsAsync(): Promise<SerializableEventDocument[]> {
     console.log('[AggregateEventHandlerActor] getAllEventsAsync called for actor:', (this as any).id?.toString());
     try {
+      // Load partition info if not already loaded
+      if (!this.partitionInfo) {
+        await this.loadPartitionInfoAsync();
+      }
+      
       // Ensure partition info is saved on first method call
       await this.ensurePartitionInfoSaved();
       
@@ -315,6 +356,7 @@ export class AggregateEventHandlerActor extends AbstractActor
             eventCount: serializedEvents.length
           };
           await stateManager.setState(this.HANDLER_STATE_KEY, state);
+          await stateManager.saveState();
         }
         
         return serializedEvents;

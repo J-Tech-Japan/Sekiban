@@ -1,4 +1,4 @@
-import { EventDocument, IEventPayload } from '../../../core/src';
+import { EventDocument, IEventPayload } from '@sekiban/core';
 
 /**
  * Timeline entry for event analysis

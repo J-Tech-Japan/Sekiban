@@ -5,7 +5,7 @@ import {
   Aggregate,
   PartitionKeys,
   SortableUniqueId 
-} from '../../../core/src';
+} from '@sekiban/core';
 
 // Test aggregate payload
 interface UserAggregate extends IAggregatePayload {

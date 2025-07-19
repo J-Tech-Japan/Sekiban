@@ -155,7 +155,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory using ActorProxyBuilder
   console.log('[DAPR SETUP] Creating actor proxy factory with ActorProxyBuilder...');
   const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
       console.log(`[ACTOR PROXY] Creating actor proxy for ${actorType}/${actorId.id}`);
       logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
       
@@ -289,11 +289,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
           }
         } as EventHandlerActorInterface;
         
-        return proxy;
+        return proxy as T;
       } else {
         // Default to AggregateActor
         interface AggregateActorInterface {
-          executeCommandAsync(commandAndMetadata: any): Promise<string>;
+          executeCommandAsync(commandAndMetadata: any): Promise<any>;
           queryAsync(query: any): Promise<any>;
           loadAggregateAsync(partitionKeys: any): Promise<any>;
         }
@@ -339,7 +339,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
               throw error;
             }
           }
-        };
+        } as T;
       }
     }
   };

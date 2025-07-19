@@ -1,4 +1,4 @@
-import { DaprClient } from '@dapr/dapr';
+import { DaprClient, HttpMethod } from '@dapr/dapr';
 
 async function testCompleteFlow() {
   const daprClient = new DaprClient({ daprHost: '127.0.0.1', daprPort: '3503' });
@@ -42,10 +42,10 @@ async function testCompleteFlow() {
     
     // 3. Query the projections
     console.log('🔍 Querying projections...');
-    const result = await daprClient.actor.invoke(
-      'MultiProjectorActor',
-      'aggregatelistprojector-taskprojector',
-      'queryListAsync',
+    const result = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector', // app-id
+      'actors/MultiProjectorActor/aggregatelistprojector-taskprojector/method/queryListAsync',
+      HttpMethod.PUT,
       {
         queryType: 'GetAllTasks',
         payload: {},
@@ -57,10 +57,11 @@ async function testCompleteFlow() {
     console.log('\n📊 Query Result:');
     console.log(JSON.stringify(result, null, 2));
     
-    if (result && result.isSuccess && result.items && result.items.length > 0) {
-      console.log(`\n✅ SUCCESS! Found ${result.items.length} projections`);
+    const typedResult = result as { isSuccess?: boolean; items?: any[] };
+    if (typedResult && typedResult.isSuccess && typedResult.items && typedResult.items.length > 0) {
+      console.log(`\n✅ SUCCESS! Found ${typedResult.items.length} projections`);
       console.log('\nProjections:');
-      result.items.forEach((item: any, index: number) => {
+      typedResult.items.forEach((item: any, index: number) => {
         console.log(`  ${index + 1}. ${item.title || item.taskId} (${item.priority || 'N/A'})`);
       });
     } else {

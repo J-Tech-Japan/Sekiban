@@ -18,6 +18,7 @@ import type {
   CommandResult
 } from '../domain-types/interfaces.js';
 import type { IEvent } from '../events/event.js';
+import { createEvent, createEventMetadata } from '../events/event.js';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { ICommand } from '../commands/command.js';
 import type { IAggregatePayload } from '../aggregates/aggregate-payload.js';
@@ -73,7 +74,7 @@ class SchemaEventTypes implements IEventTypes {
     try {
       const deserialized = this.registry.deserializeEvent(document.eventType, document.payload);
       
-      const event: IEvent<IEventPayload> = {
+      const event = createEvent({
         id: SortableUniqueId.fromString(document.id).unwrapOr(SortableUniqueId.generate()),
         partitionKeys: PartitionKeys.create(
           document.aggregateId,
@@ -84,11 +85,11 @@ class SchemaEventTypes implements IEventTypes {
         payload: deserialized,
         aggregateType: document.aggregateType,
         version: document.version,
-        metadata: {
+        metadata: createEventMetadata({
           timestamp: new Date(document.timestamp),
           ...document.metadata
-        }
-      };
+        })
+      });
       
       return ok(event);
     } catch (error) {

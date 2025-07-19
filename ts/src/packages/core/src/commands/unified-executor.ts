@@ -8,6 +8,7 @@ import type { IEventStore } from '../events/store.js';
 import type { IAggregateLoader } from '../aggregates/loader.js';
 import type { IAggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
 import type { IEvent, IEventPayload } from '../events/index.js';
+import { createEvent, createEventMetadata, type EventMetadata } from '../events/event.js';
 import type { Aggregate } from '../aggregates/aggregate.js';
 import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
 import type { SekibanError } from '../result/errors.js';
@@ -178,15 +179,15 @@ export class UnifiedCommandExecutor {
       getCurrentVersion: () => events.length,
       
       appendEvent: (eventPayload: IEventPayload) => {
-        const event: IEvent = {
+        const event = createEvent({
           id: SortableUniqueId.generate(),
           partitionKeys,
           aggregateType: command.getProjector().aggregateTypeName,
           eventType: eventPayload.constructor.name || 'UnknownEvent',
           version: events.length + 1,
           payload: eventPayload,
-          metadata
-        };
+          metadata: metadata as EventMetadata
+        });
         events.push(event);
         return ok(event);
       },
@@ -282,18 +283,18 @@ export class UnifiedCommandExecutor {
     
     for (const payload of eventPayloads) {
       version++;
-      const event: IEvent = {
+      const event = createEvent({
         id: SortableUniqueId.generate(),
         partitionKeys,
         aggregateType: aggregate.aggregateType,
         eventType: (payload as any).type || payload.constructor.name || 'UnknownEvent',
         version,
         payload,
-        metadata: {
+        metadata: createEventMetadata({
           timestamp: new Date(),
           ...metadata
-        }
-      };
+        })
+      });
       events.push(event);
     }
     

@@ -1,7 +1,20 @@
 import { InMemoryEventStore, StorageProviderType, SortableUniqueId, PartitionKeys } from '@sekiban/core';
-import { MultiProjectorActor, initializeDaprContainer } from '@sekiban/dapr';
+import { initializeDaprContainer } from '@sekiban/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
-import { ActorId } from '@dapr/dapr';
+import { DaprClient, HttpMethod } from '@dapr/dapr';
+import type { EventStoreWithSaveEvents } from './types/test-types.js';
+
+interface SerializableListQuery {
+  queryType: string;
+  payload: any;
+  skip: number;
+  take: number;
+}
+
+interface SerializableQuery {
+  queryType: string;
+  payload: any;
+}
 
 console.log('🧪 Testing Complete MultiProjectorActor Flow\n');
 
@@ -47,95 +60,80 @@ async function testCompleteFlow() {
     events.push(event);
   }
   
-  await (eventStore as any).saveEvents(events);
+  await (eventStore as EventStoreWithSaveEvents).saveEvents(events);
   console.log(`✅ Added ${events.length} events to store\n`);
   
   // Initialize Dapr container
   initializeDaprContainer({
     domainTypes,
     serviceProvider: {},
-    actorProxyFactory: {} as any,
+    actorProxyFactory: {
+      createActorProxy: <T>(actorId: any, actorType: string): T => {
+        throw new Error(`Actor proxy creation not supported in test mode for ${actorType}`);
+      }
+    },
     serializationService: {},
     eventStore
   });
   
-  // Mock actor infrastructure
-  const actorState: any = {};
-  const mockStateManager = {
-    tryGetState: async (key: string) => {
-      return [actorState.hasOwnProperty(key), actorState[key]];
-    },
-    setState: async (key: string, value: any) => {
-      actorState[key] = value;
-    }
-  };
+  // Create DaprClient to invoke actor methods
+  const daprClient = new DaprClient({
+    daprHost: '127.0.0.1',
+    daprPort: '3500'
+  });
   
-  // Create a minimal mock DaprClient that satisfies AbstractActor requirements
-  const mockDaprClient = {
-    options: {
-      daprHost: '127.0.0.1',
-      daprPort: '3500',
-      communicationProtocol: 'HTTP',
-      isHTTP: true
-    },
-    actor: {
-      registerReminder: async () => {},
-      unregisterReminder: async () => {}
-    }
-  } as any;
+  const actorId = 'aggregatelistprojector-taskprojector';
   
-  // Create MultiProjectorActor instance
-  const actorId = new ActorId('aggregatelistprojector-taskprojector');
-  const actor = new MultiProjectorActor(mockDaprClient, actorId);
-  
-  // Override getStateManager method
-  (actor as any).getStateManager = async () => mockStateManager;
-  
-  console.log('🔍 Testing actor onActivate (should trigger catch-up)...');
+  console.log('🔍 Testing actor functionality via HTTP...');
   try {
-    // Call onActivate which should trigger catch-up
-    await actor.onActivate();
-    console.log('✅ onActivate completed\n');
-    
-    // Wait a bit for catch-up to process
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Try to query
+    // Query projections using Dapr HTTP API
     console.log('📊 Querying projections...');
-    const result = await actor.queryListAsync({
+    const listQuery: SerializableListQuery = {
       queryType: 'GetAllTasks',
       payload: {},
       skip: 0,
       take: 10
-    });
+    };
+    
+    const result = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector',
+      `actors/MultiProjectorActor/${actorId}/method/queryListAsync`,
+      HttpMethod.PUT,
+      listQuery
+    );
     
     console.log('Query Result:', JSON.stringify(result, null, 2));
     
-    if (result.isSuccess && result.items && result.items.length > 0) {
-      console.log(`\n✅ SUCCESS! Found ${result.items.length} projections`);
+    const typedResult = result as { isSuccess?: boolean; items?: any[] };
+    if (typedResult.isSuccess && typedResult.items && typedResult.items.length > 0) {
+      console.log(`\n✅ SUCCESS! Found ${typedResult.items.length} projections`);
       console.log('\nProjections:');
-      result.items.forEach((item: any, index: number) => {
-        console.log(`  ${index + 1}. ${item.title || item.payload?.title} (${item.priority || item.payload?.priority})`);
+      typedResult.items.forEach((item, index: number) => {
+        const itemPayload = item as { title?: string; payload?: { title?: string; priority?: string }; priority?: string };
+        console.log(`  ${index + 1}. ${itemPayload.title || itemPayload.payload?.title} (${itemPayload.priority || itemPayload.payload?.priority})`);
       });
     } else {
       console.log('\n❌ No projections found');
-      console.log('Actor state:', actorState);
     }
     
     // Test single query
     console.log('\n🔍 Testing single query...');
-    const singleResult = await actor.queryAsync({
+    const singleQuery: SerializableQuery = {
       queryType: 'GetTaskById',
       payload: { id: 'task-1' }
-    });
+    };
+    
+    const singleResult = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector',
+      `actors/MultiProjectorActor/${actorId}/method/queryAsync`,
+      HttpMethod.PUT,
+      singleQuery
+    );
     
     console.log('Single query result:', JSON.stringify(singleResult, null, 2));
     
   } catch (error) {
     console.error('❌ Error:', error);
-  } finally {
-    // Clean up
-    await actor.onDeactivate();
   }
 }
 

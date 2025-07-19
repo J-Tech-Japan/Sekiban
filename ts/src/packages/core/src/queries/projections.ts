@@ -1,4 +1,4 @@
-import { Event, IEventPayload } from '../events/index.js';
+import { IEventType as Event, IEventPayload } from '../events/index.js';
 import { PartitionKeys } from '../documents/index.js';
 
 /**

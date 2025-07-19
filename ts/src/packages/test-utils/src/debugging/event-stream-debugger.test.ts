@@ -5,7 +5,7 @@ import {
   IEventPayload,
   PartitionKeys,
   SortableUniqueId 
-} from '../../../core/src';
+} from '@sekiban/core';
 
 // Test events
 interface UserCreated extends IEventPayload {

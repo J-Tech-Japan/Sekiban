@@ -11,7 +11,7 @@ import {
   ok,
   err,
   ValidationError
-} from '../../../core/src';
+} from '@sekiban/core';
 
 // Test domain types
 interface CreateUser extends ICommand {

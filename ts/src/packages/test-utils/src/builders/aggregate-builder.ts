@@ -3,7 +3,7 @@ import {
   Aggregate,
   PartitionKeys,
   SortableUniqueId 
-} from '../../../core/src';
+} from '@sekiban/core';
 
 /**
  * Fluent builder for creating test aggregates

@@ -4,7 +4,6 @@ import { defineEvent } from '@sekiban/core';
 // User Created Event
 export const UserCreated = defineEvent({
   type: 'UserCreated',
-  aggregateType: 'User',
   schema: z.object({
     userId: z.string().uuid(),
     name: z.string().min(1),
@@ -15,7 +14,6 @@ export const UserCreated = defineEvent({
 // User Name Changed Event
 export const UserNameChanged = defineEvent({
   type: 'UserNameChanged',
-  aggregateType: 'User',
   schema: z.object({
     userId: z.string().uuid(),
     newName: z.string().min(1)
@@ -25,7 +23,6 @@ export const UserNameChanged = defineEvent({
 // User Email Changed Event
 export const UserEmailChanged = defineEvent({
   type: 'UserEmailChanged',
-  aggregateType: 'User',
   schema: z.object({
     userId: z.string().uuid(),
     newEmail: z.string().email()

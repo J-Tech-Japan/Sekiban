@@ -27,6 +27,8 @@ import type { IAggregateEventHandlerActor, SerializableEventDocument } from './i
 export class AggregateActorImpl {
   private currentPartitionKeysAndProjector: PartitionKeysAndProjector<any> | null = null;
   private hasUnsavedChanges: boolean = false;
+  private _currentAggregate: any = null;
+  private _lastLoadedSortableUniqueId: string = '';
 
   constructor(
     private readonly actorId: string,
@@ -111,11 +113,14 @@ export class AggregateActorImpl {
       
       // Load current aggregate state
       console.log('[AggregateActorImpl] Loading current aggregate state...');
-      const currentState = await this.loadAggregateStateAsync(partitionKeys, projector);
+      const currentState = await this.loadAggregateStateAsync(partitionKeys, projector as unknown as IAggregateProjector<any>);
       console.log('[AggregateActorImpl] Current aggregate version:', currentState?.version || 0);
+      console.log('[AggregateActorImpl] Current aggregate payload:', JSON.stringify(currentState, null, 2));
       
       // Execute the command handler
       console.log('[AggregateActorImpl] Executing command handler...');
+      console.log('[AggregateActorImpl] Current state before command:', currentState ? 'exists' : 'null');
+      console.log('[AggregateActorImpl] Current state version:', currentState?.version || 0);
       
       // Get the actual command definition from the global registry
       const commandDef = globalRegistry.getCommand(commandType);
@@ -339,7 +344,7 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Event documents:', JSON.stringify(eventDocuments, null, 2));
       
       // Call AggregateEventHandlerActor in the separate service
-      const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
+      const eventHandlerActorId = `${partitionKeys.group}-${partitionKeys.aggregateId}-${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
       // Create proxy for AggregateEventHandlerActor (in separate service)
@@ -354,6 +359,8 @@ export class AggregateActorImpl {
         eventDocuments
       );
       
+      console.log('[AggregateActorImpl] appendEventsAsync returned:', JSON.stringify(appendResult));
+      
       if (!appendResult || !appendResult.isSuccess) {
         console.error('[AggregateActorImpl] Failed to append events:', appendResult?.error);
         return {
@@ -363,6 +370,35 @@ export class AggregateActorImpl {
       }
       
       console.log('[AggregateActorImpl] Events appended successfully');
+      
+      // Update cached state with new events
+      if (this._currentAggregate && projector) {
+        console.log('[AggregateActorImpl] Updating cached aggregate state with new events');
+        // Apply the new events to the cached state
+        for (const event of events) {
+          const applyResult = projector.project(this._currentAggregate, event);
+          if (applyResult.isOk()) {
+            this._currentAggregate = applyResult.value;
+          }
+        }
+        this._lastLoadedSortableUniqueId = appendResult.lastSortableUniqueId;
+        
+        // Update the lastSortableUniqueId in the aggregate state as well
+        if (this._currentAggregate) {
+          if (Object.isFrozen(this._currentAggregate) || Object.isSealed(this._currentAggregate)) {
+            this._currentAggregate = { ...this._currentAggregate, lastSortableUniqueId: appendResult.lastSortableUniqueId };
+          } else {
+            this._currentAggregate.lastSortableUniqueId = appendResult.lastSortableUniqueId;
+          }
+        }
+        
+        console.log('[AggregateActorImpl] Updated cache, new last ID:', this._lastLoadedSortableUniqueId);
+      } else if (!this._currentAggregate) {
+        // If we don't have cached state yet, load it now with the new events
+        console.log('[AggregateActorImpl] No cached state, loading aggregate after command execution');
+        const updatedState = await this.loadAggregateStateAsync(partitionKeys, projector as unknown as IAggregateProjector<any>);
+        // The loadAggregateStateAsync will cache it for us
+      }
       
       // Update our state
       this.hasUnsavedChanges = true;
@@ -400,8 +436,20 @@ export class AggregateActorImpl {
     projector: IAggregateProjector<any>
   ): Promise<any> {
     try {
+      console.log('[AggregateActorImpl] loadAggregateStateAsync called');
+      console.log('[AggregateActorImpl] Current cache state:', {
+        hasCachedAggregate: !!this._currentAggregate,
+        cachedVersion: this._currentAggregate?.version,
+        lastLoadedSortableUniqueId: this._lastLoadedSortableUniqueId
+      });
+      
+      // For now, we'll always reload state to ensure consistency
+      // TODO: Implement proper cache validation once EventHandlerActor has getLatestSnapshotAsync
+      console.log('[AggregateActorImpl] Skipping cache, always reloading state for consistency');
+      
+      console.log('[AggregateActorImpl] No cached state, loading from storage or events');
       // Get the event handler actor
-      const eventHandlerActorId = `${partitionKeys.group}:${partitionKeys.aggregateId}:${partitionKeys.rootPartitionKey || 'default'}`;
+      const eventHandlerActorId = `${partitionKeys.group}-${partitionKeys.aggregateId}-${partitionKeys.rootPartitionKey || 'default'}`;
       console.log('[AggregateActorImpl] Getting event handler actor:', eventHandlerActorId);
       
       // Create proxy for AggregateEventHandlerActor (in separate service)
@@ -410,55 +458,150 @@ export class AggregateActorImpl {
         'AggregateEventHandlerActor'
       ) as any;
       
+      // Get all events (we'll optimize with delta loading later)
       console.log('[AggregateActorImpl] Calling getAllEventsAsync on AggregateEventHandlerActor');
       const events = await eventHandlerActor.getAllEventsAsync();
       console.log('[AggregateActorImpl] Loaded', (events as any[]).length, 'events from event handler');
+      console.log('[AggregateActorImpl] Raw events from handler:', JSON.stringify(events, null, 2));
       
       if (!events || events.length === 0) {
+        console.warn('[AggregateActorImpl] WARNING: No events returned from EventHandler, returning null aggregate');
+        console.log('[AggregateActorImpl] No events found, returning null');
+        this._currentAggregate = null;
+        this._lastLoadedSortableUniqueId = '';
         return null;
       }
       
       // Apply events using projector
       let aggregate: any = null;
-      let lastSortableUniqueId = '';
+      let lastSortableUniqueId: string = '';
+      
+      // Initialize aggregate state using projector
+      if (projector && projector.getInitialState) {
+        aggregate = projector.getInitialState(partitionKeys);
+      } else {
+        aggregate = {};
+      }
+      
+      console.log('[AggregateActorImpl] Starting event projection with projector:', projector.aggregateTypeName);
+      console.log('[AggregateActorImpl] Projector can handle events:', projector.getSupportedPayloadTypes ? projector.getSupportedPayloadTypes() : ['Task', 'CompletedTask']);
       
       for (const eventDoc of (events as any[])) {
-        // Create event instance from payload
-        const event: IEvent<any> = {
-          id: eventDoc.id,
-          sortableUniqueId: SortableUniqueId.fromString(eventDoc.sortableUniqueId),
-          partitionKeys: eventDoc.partitionKeys,
-          aggregateType: partitionKeys.group || 'Unknown',
-          eventType: eventDoc.eventType,
-          aggregateId: eventDoc.aggregateId || partitionKeys.aggregateId,
-          version: eventDoc.version,
-          payload: eventDoc.payload,
-          timestamp: new Date(eventDoc.createdAt),
-          metadata: {
-            timestamp: new Date(eventDoc.createdAt),
-            correlationId: eventDoc.metadata?.correlationId,
-            causationId: eventDoc.metadata?.causationId,
-            executedUser: eventDoc.metadata?.executedUser || 'system'
-          },
-          // C# compatibility properties
-          partitionKey: eventDoc.partitionKeys.partitionKey,
-          aggregateGroup: eventDoc.partitionKeys.group || 'default'
+        // Handle serialization differences like in multi-projector-actor
+        const eventType = eventDoc.PayloadTypeName || eventDoc.eventType;
+        const aggregateId = eventDoc.AggregateId || eventDoc.aggregateId || partitionKeys.aggregateId;
+        const sortableIdStr = eventDoc.SortableUniqueId || eventDoc.sortableUniqueId || eventDoc.id;
+        
+        console.log('[AggregateActorImpl] Processing event:', eventType, 'for aggregate:', aggregateId);
+        console.log('[AggregateActorImpl] Event doc fields:', {
+          hasPayloadTypeName: !!eventDoc.PayloadTypeName,
+          hasEventType: !!eventDoc.eventType,
+          hasAggregateId: !!eventDoc.AggregateId,
+          hasaggregateId: !!eventDoc.aggregateId,
+          sortableIdFormat: sortableIdStr
+        });
+        
+        // Handle SortableUniqueId conversion with error handling
+        const sortableIdResult = SortableUniqueId.fromString(sortableIdStr);
+        const sortableId = sortableIdResult.isOk() ? sortableIdResult.value : SortableUniqueId.create();
+        
+        // Handle payload decompression if needed (like in multi-projector-actor)
+        let payload: any;
+        try {
+          if (eventDoc.CompressedPayloadJson) {
+            const payloadBuffer = Buffer.from(eventDoc.CompressedPayloadJson, 'base64');
+            // Check for gzip header (1f 8b)
+            if (payloadBuffer[0] === 0x1f && payloadBuffer[1] === 0x8b) {
+              // It's gzipped, decompress it
+              const { gunzip } = await import('node:zlib');
+              const { promisify } = await import('node:util');
+              const ungzipAsync = promisify(gunzip);
+              const decompressed = await ungzipAsync(payloadBuffer);
+              const payloadJson = decompressed.toString('utf-8');
+              payload = JSON.parse(payloadJson);
+            } else {
+              // Not gzipped, just base64 encoded JSON
+              const payloadJson = payloadBuffer.toString('utf-8');
+              payload = JSON.parse(payloadJson);
+            }
+          } else {
+            payload = eventDoc.payload || {};
+          }
+        } catch (error) {
+          console.error('[AggregateActorImpl] Error decompressing payload:', error);
+          payload = eventDoc.payload || {};
+        }
+        
+        // Reconstruct partition keys properly
+        const reconstructedPartitionKeys = eventDoc.partitionKeys || {
+          aggregateId: aggregateId,
+          group: eventDoc.AggregateGroup || eventDoc.aggregateType || partitionKeys.group || 'Unknown',
+          rootPartitionKey: eventDoc.RootPartitionKey || 'default',
+          partitionKey: eventDoc.PartitionKey || partitionKeys.partitionKey || `${partitionKeys.group}-${aggregateId}`
         };
         
+        // Create event instance from payload with proper field mapping
+        const event: IEvent<any> = {
+          id: sortableId,
+          sortableUniqueId: sortableId,
+          partitionKeys: reconstructedPartitionKeys,
+          aggregateType: eventDoc.AggregateGroup || eventDoc.aggregateType || partitionKeys.group || 'Unknown',
+          eventType: eventType,
+          aggregateId: aggregateId,
+          version: eventDoc.Version || eventDoc.version,
+          payload: payload,
+          timestamp: new Date(eventDoc.TimeStamp || eventDoc.createdAt),
+          metadata: {
+            timestamp: new Date(eventDoc.TimeStamp || eventDoc.createdAt),
+            correlationId: eventDoc.CorrelationId || eventDoc.metadata?.correlationId,
+            causationId: eventDoc.CausationId || eventDoc.metadata?.causationId,
+            executedUser: eventDoc.ExecutedUser || eventDoc.metadata?.executedUser || 'system'
+          },
+          // C# compatibility properties
+          partitionKey: eventDoc.PartitionKey || reconstructedPartitionKeys.partitionKey,
+          aggregateGroup: eventDoc.AggregateGroup || eventDoc.aggregateType || reconstructedPartitionKeys.group || 'default'
+        };
+        
+        console.log('[AggregateActorImpl] Created event object:', JSON.stringify(event, null, 2));
+        console.log('[AggregateActorImpl] Current aggregate before projection:', aggregate);
+        console.log('[AggregateActorImpl] Projector type:', projector.constructor.name);
+        console.log('[AggregateActorImpl] Projector has project method?', typeof projector.project === 'function');
+        
         // Apply event to aggregate
-        const applyResult = projector.project(aggregate, event);
+        try {
+          const applyResult = projector.project(aggregate, event);
+          console.log('[AggregateActorImpl] Projection result success:', applyResult.isOk());
+          console.log('[AggregateActorImpl] Projection result:', applyResult);
+        
         if (applyResult.isOk()) {
           aggregate = applyResult.value;
           lastSortableUniqueId = eventDoc.sortableUniqueId;
+          console.log('[AggregateActorImpl] Projection successful, new aggregate:', JSON.stringify(aggregate, null, 2));
         } else {
           console.error('[AggregateActorImpl] Failed to apply event:', applyResult.error);
+          console.error('[AggregateActorImpl] Event that failed:', JSON.stringify(event, null, 2));
+        }
+        } catch (projError) {
+          console.error('[AggregateActorImpl] EXCEPTION during projection:', projError);
+          console.error('[AggregateActorImpl] Error stack:', (projError as Error).stack);
+          console.error('[AggregateActorImpl] Event causing error:', JSON.stringify(event, null, 2));
         }
       }
       
       // Add metadata to aggregate
       if (aggregate) {
-        aggregate.lastSortableUniqueId = lastSortableUniqueId;
+        // Handle readonly/frozen aggregates by creating a new object
+        if (Object.isFrozen(aggregate) || Object.isSealed(aggregate)) {
+          aggregate = { ...aggregate, lastSortableUniqueId };
+        } else {
+          aggregate.lastSortableUniqueId = lastSortableUniqueId;
+        }
       }
+      
+      // Cache the state for future use
+      this._currentAggregate = aggregate;
+      this._lastLoadedSortableUniqueId = lastSortableUniqueId;
+      console.log('[AggregateActorImpl] Cached aggregate state, last ID:', lastSortableUniqueId);
       
       return aggregate;
     } catch (error) {
@@ -481,7 +624,11 @@ export class AggregateActorImpl {
     
     if (this.currentPartitionKeysAndProjector) {
       partitionKeys = this.currentPartitionKeysAndProjector.partitionKeys;
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      const foundProjector = this.domainTypes.projectorTypes.getProjectorByAggregateType(partitionKeys.group || 'Unknown');
+      if (!foundProjector) {
+        throw new Error(`Projector not found for aggregate type: ${partitionKeys.group || 'Unknown'}`);
+      }
+      projector = foundProjector as unknown as IAggregateProjector<any>;
     } else {
       // Parse actor ID: "rootPartition@group@aggregateId=projectorType"
       const parts = this.actorId.split('@');
@@ -491,7 +638,11 @@ export class AggregateActorImpl {
       const rootPartition = parts[0];
       
       partitionKeys = new PartitionKeys(aggregateId, group, rootPartition);
-      projector = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      const foundProjector2 = this.domainTypes.projectorTypes.getProjectorByAggregateType(group);
+      if (!foundProjector2) {
+        throw new Error(`Projector not found for aggregate type: ${group}`);
+      }
+      projector = foundProjector2 as unknown as IAggregateProjector<any>;
       
       console.log(`[AggregateActorImpl] Extracted from actor ID - group: ${group}, aggregateId: ${aggregateId}, rootPartition: ${rootPartition}`);
     }
@@ -501,7 +652,7 @@ export class AggregateActorImpl {
       return null;
     }
     
-    return this.loadAggregateStateAsync(partitionKeys, projector);
+    return this.loadAggregateStateAsync(partitionKeys, projector as IAggregateProjector<any>);
   }
 
   /**

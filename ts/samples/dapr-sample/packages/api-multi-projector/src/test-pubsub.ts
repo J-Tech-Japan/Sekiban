@@ -1,4 +1,4 @@
-import { DaprClient } from '@dapr/dapr';
+import { DaprClient, HttpMethod } from '@dapr/dapr';
 import { v4 as uuidv4 } from 'uuid';
 import { SortableUniqueId } from '@sekiban/core';
 
@@ -59,7 +59,7 @@ async function publishTestEvent() {
     const queryResponse = await daprClient.invoker.invoke(
       'dapr-sample-api-multi-projector',
       `actors/MultiProjectorActor/${actorId}/method/queryListAsync`,
-      'PUT',
+      HttpMethod.PUT,
       [{
         queryType: 'TaskProjector',
         payload: {},
@@ -135,7 +135,7 @@ async function publishTestEvent() {
     const finalResponse = await daprClient.invoker.invoke(
       'dapr-sample-api-multi-projector',
       `actors/MultiProjectorActor/${actorId}/method/queryListAsync`,
-      'PUT',
+      HttpMethod.PUT,
       [{
         queryType: 'TaskProjector',
         payload: {},

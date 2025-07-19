@@ -170,9 +170,9 @@ export class PostgresEventStore implements IEventStore {
   /**
    * Save events to storage
    */
-  saveEvents<TEvent extends IEvent>(events: TEvent[]): ResultAsync<void, StorageError> {
+  async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
     console.log('PostgresEventStore.saveEvents called');
-    return ResultAsync.fromPromise(
+    const result = await ResultAsync.fromPromise(
       this.doSaveEvents(events),
       (error) => new StorageError(
         `Failed to save events: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -180,6 +180,10 @@ export class PostgresEventStore implements IEventStore {
         error instanceof Error ? error : undefined
       )
     );
+    
+    if (result.isErr()) {
+      throw result.error;
+    }
   }
   
   private async doSaveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {

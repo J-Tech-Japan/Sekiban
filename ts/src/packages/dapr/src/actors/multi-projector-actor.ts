@@ -1,17 +1,16 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
-// @ts-ignore - These are exported from core
+import { Temporal } from '@js-temporal/polyfill';
 import type { IEventStore } from '@sekiban/core';
-// @ts-ignore - These are exported from core  
 import type { 
   IEvent
 } from '@sekiban/core';
-// @ts-ignore
 import {
   EventRetrievalInfo,
   SortableIdCondition,
   AggregateGroupStream,
   OptionalValue,
-  SortableUniqueId
+  SortableUniqueId,
+  PartitionKeys
 } from '@sekiban/core';
 import type {
   IMultiProjectorActor,
@@ -113,20 +112,14 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Register reminders - AbstractActor provides registerActorReminder method
       await this.registerActorReminder(
         this.SNAPSHOT_REMINDER,
-        {
-          dueTime: "5m",
-          period: "5m",
-          ttl: undefined
-        }
+        Temporal.Duration.from({ minutes: 5 }),
+        Temporal.Duration.from({ minutes: 5 })
       );
       
       await this.registerActorReminder(
         this.EVENT_CHECK_REMINDER,
-        {
-          dueTime: "1s", 
-          period: "1s",
-          ttl: undefined
-        }
+        Temporal.Duration.from({ seconds: 1 }),
+        Temporal.Duration.from({ seconds: 1 })
       );
       
       console.log(`[MultiProjectorActor] Registered reminders for ${this.projectorType}`);
@@ -373,11 +366,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         id: event.id.value,
         sortableUniqueId: event.id.value,
         payload: event.payload,
-        eventType: event.type,
+        eventType: event.eventType,
         aggregateId: event.aggregateId,
         partitionKeys: event.partitionKeys,
         version: event.version,
-        createdAt: typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString(),
+        createdAt: event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp),
         metadata: event.metadata || {},
         aggregateType: event.aggregateType
       };
@@ -387,7 +380,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         serializedEvent
       );
       newState.lastProcessedEventId = event.id.value;
-      newState.lastProcessedTimestamp = event.createdAt.toISOString();
+      newState.lastProcessedTimestamp = event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp);
       newState.version++;
     }
     
@@ -398,6 +391,50 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     await this.persistStateAsync(newState);
   }
   
+  /**
+   * Process event from event relay service
+   * This method is called by the event-relay service
+   */
+  async processEvent(eventData: any): Promise<void> {
+    console.log('[MultiProjectorActor] processEvent called with data:', {
+      type: eventData?.type,
+      aggregateType: eventData?.aggregateType,
+      aggregateId: eventData?.aggregateId,
+      version: eventData?.version
+    });
+    
+    // Convert the event data to SerializableEventDocument format
+    const eventDocument: SerializableEventDocument = {
+      id: eventData.id,
+      sortableUniqueId: eventData.sortKey || eventData.sortableUniqueId || eventData.id,
+      aggregateId: eventData.aggregateId,
+      aggregateType: eventData.aggregateType,
+      eventType: eventData.type || eventData.eventType,
+      version: eventData.version,
+      createdAt: eventData.created || eventData.timestamp || new Date().toISOString(),
+      payload: eventData.data,
+      metadata: {
+        correlationId: eventData.correlationId || '',
+        causationId: eventData.causationId || '',
+        executedUser: eventData.executedUser || 'system'
+      },
+      partitionKeys: new PartitionKeys(
+        eventData.aggregateId,
+        eventData.rootPartitionKey || 'default',
+        eventData.tenantId
+      )
+    };
+    
+    // Create envelope and call handlePublishedEvent
+    const envelope: DaprEventEnvelope = {
+      event: eventDocument,
+      topic: 'sekiban-events',
+      pubsubName: 'pubsub'
+    };
+    
+    await this.handlePublishedEvent(envelope);
+  }
+
   /**
    * Handle published event from PubSub
    */
@@ -477,7 +514,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           bufferedEvent.event
         );
         newSafeState.lastProcessedEventId = bufferedEvent.event.sortableUniqueId;
-        newSafeState.lastProcessedTimestamp = bufferedEvent.event.createdAt;
+        newSafeState.lastProcessedTimestamp = bufferedEvent.event.TimeStamp || bufferedEvent.event.createdAt || new Date().toISOString();
         newSafeState.version++;
       }
       
@@ -592,14 +629,15 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         if (!await this.isSortableUniqueIdReceived(sortableId)) {
           // Events from store already have the right structure, just need to convert to SerializableEventDocument
           let createdAtStr: string;
-          if (typeof event.createdAt === 'string') {
-            createdAtStr = event.createdAt;
-          } else if (event.createdAt instanceof Date) {
-            createdAtStr = event.createdAt.toISOString();
-          } else if (event.createdAt && typeof event.createdAt.toISOString === 'function') {
-            createdAtStr = event.createdAt.toISOString();
+          const timestamp = event.timestamp;
+          if (typeof timestamp === 'string') {
+            createdAtStr = timestamp;
+          } else if (timestamp instanceof Date) {
+            createdAtStr = timestamp.toISOString();
+          } else if (timestamp && typeof (timestamp as any).toISOString === 'function') {
+            createdAtStr = (timestamp as any).toISOString();
           } else {
-            console.warn('[MultiProjectorActor] Invalid createdAt format:', event.createdAt);
+            console.warn('[MultiProjectorActor] Invalid timestamp format:', timestamp);
             createdAtStr = new Date().toISOString();
           }
           
@@ -607,7 +645,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
             id: event.id.value,
             sortableUniqueId: event.id.value,
             payload: event.payload,
-            eventType: event.type || event.eventType,  // Support both field names
+            eventType: event.eventType,
             aggregateId: event.aggregateId,
             partitionKeys: event.partitionKeys,
             version: event.version,
@@ -758,18 +796,12 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       console.log(`[MultiProjectorActor] Projector has project method:`, typeof projectorInstance.project === 'function');
       console.log(`[MultiProjectorActor] Projector has getInitialState method:`, typeof projectorInstance.getInitialState === 'function');
       
-      // Check if projector has projections
-      if (projectorInstance.projections) {
-        console.log(`[MultiProjectorActor] Projector has projections:`, Object.keys(projectorInstance.projections));
-      }
+      // IProjector interface doesn't have projections property
       
       // Check if this projector can handle this event type
       // SerializableEventDocument uses PayloadTypeName for event type
       const eventType = event.PayloadTypeName || event.eventType;
-      if (projectorInstance.canHandle && !projectorInstance.canHandle(eventType)) {
-        // This projector doesn't handle this event type
-        return projections;
-      }
+      // IProjector doesn't have canHandle method, all projectors handle their supported events
       
       // Get or create the projection for this aggregate
       const aggregateId = event.AggregateId || event.aggregateId;
@@ -778,13 +810,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // If no projection exists, create initial state
       if (!currentProjection) {
         // Reconstruct partition keys from SerializableEventDocument
-        const partitionKeys = {
-          aggregateId: event.AggregateId || event.aggregateId,
-          group: event.AggregateGroup || event.aggregateType || projectorName,
-          rootPartitionKey: event.RootPartitionKey || 'default',
-          partitionKey: event.PartitionKey || '',
-          toString: () => event.PartitionKey || `${event.AggregateGroup || projectorName}-${aggregateId}`
-        };
+        const partitionKeys = new PartitionKeys(
+          event.AggregateId || event.aggregateId,
+          event.AggregateGroup || event.aggregateType || projectorName,
+          event.RootPartitionKey || 'default'
+        );
         
         const initialAggregate = projectorInstance.getInitialState(partitionKeys);
         currentProjection = initialAggregate;
@@ -822,13 +852,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       }
       
       // Reconstruct partition keys
-      const partitionKeys = {
-        aggregateId: aggregateId,
-        group: event.AggregateGroup || event.aggregateType || projectorName,
-        rootPartitionKey: event.RootPartitionKey || 'default',
-        partitionKey: event.PartitionKey || '',
-        toString: () => event.PartitionKey || `${event.AggregateGroup || projectorName}-${aggregateId}`
-      };
+      const partitionKeys = new PartitionKeys(
+        aggregateId,
+        event.AggregateGroup || event.aggregateType || projectorName,
+        event.RootPartitionKey || 'default'
+      );
       
       const iEvent: IEvent = {
         id: sortableId,
@@ -839,13 +867,13 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         version: event.Version || event.version || 1,
         partitionKeys: partitionKeys,
         sortableUniqueId: sortableId,
-        timestamp: new Date(event.TimeStamp || event.createdAt),
+        timestamp: new Date(event.TimeStamp || event.createdAt || new Date()),
         metadata: {
           causationId: event.CausationId || event.metadata?.causationId || '',
           correlationId: event.CorrelationId || event.metadata?.correlationId || '',
           userId: event.ExecutedUser || event.metadata?.userId || '',
           executedUser: event.ExecutedUser || event.metadata?.executedUser || '',
-          timestamp: new Date(event.TimeStamp || event.createdAt)
+          timestamp: new Date(event.TimeStamp || event.createdAt || new Date())
         },
         // Additional fields for IEvent interface
         partitionKey: event.PartitionKey || '',
@@ -915,11 +943,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       id: event.id.value,
       sortableUniqueId: event.id.value,
       payload: event.payload,
-      eventType: event.type,
+      eventType: event.eventType,
       aggregateId: event.aggregateId,
       partitionKeys: event.partitionKeys,
       version: event.version,
-      createdAt: typeof event.createdAt === 'string' ? event.createdAt : event.createdAt.toISOString(),
+      createdAt: event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp),
       metadata: event.metadata || {},
       aggregateType: event.aggregateType
     };

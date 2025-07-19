@@ -1,4 +1,4 @@
-import { Result, ok, err } from '../../core/src/result';
+import { Result, ok, err } from 'neverthrow';
 import {
   SagaDefinition,
   SagaInstance,
@@ -13,7 +13,7 @@ import {
   IEventPayload,
   EventDocument,
   SekibanError
-} from '../../core/src';
+} from '@sekiban/core';
 import {
   SagaError,
   SagaNotFoundError,

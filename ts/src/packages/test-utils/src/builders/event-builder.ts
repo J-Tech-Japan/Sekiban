@@ -4,7 +4,7 @@ import {
   PartitionKeys,
   SortableUniqueId,
   Metadata
-} from '../../../core/src';
+} from '@sekiban/core';
 
 /**
  * Fluent builder for creating test events

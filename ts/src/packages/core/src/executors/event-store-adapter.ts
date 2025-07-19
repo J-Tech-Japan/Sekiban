@@ -51,15 +51,15 @@ export class EventStoreAdapter implements IEventsEventStore {
 
     for (const payload of events) {
       version++;
-      const event: Event = {
+      const event = createEvent({
         id: SortableUniqueId.create(),
         partitionKeys,
         aggregateType,
         eventType: payload.constructor.name,
         version,
         payload,
-        metadata: metadata ? Metadata.merge(Metadata.create(), metadata) : Metadata.create(),
-      };
+        metadata: metadata ? createEventMetadata(metadata) : createEventMetadata()
+      });
       storedEvents.push(event);
     }
 

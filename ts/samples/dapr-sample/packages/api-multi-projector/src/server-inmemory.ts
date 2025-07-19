@@ -1,9 +1,10 @@
 import express from 'express';
-import { DaprServer, DaprClient, CommunicationProtocolEnum } from '@dapr/dapr';
-import { MultiProjectorActorFactory, initializeDaprContainer } from '@sekiban/dapr';
+import { DaprServer, DaprClient, CommunicationProtocolEnum, ActorId, HttpMethod } from '@dapr/dapr';
+import { MultiProjectorActorFactory, initializeDaprContainer, MultiProjectorActor } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import dotenv from 'dotenv';
+import type { EventStoreWithSaveEvents } from './types/test-types.js';
 
 dotenv.config();
 
@@ -23,7 +24,11 @@ const domainTypes = createTaskDomainTypes();
 initializeDaprContainer({
   domainTypes,
   serviceProvider: {},
-  actorProxyFactory: {} as any,
+  actorProxyFactory: {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
+      throw new Error(`Actor proxy creation not supported in in-memory mode for ${actorType}`);
+    }
+  },
   serializationService: {},
   eventStore
 });
@@ -40,7 +45,10 @@ const daprClient = new DaprClient({
 });
 
 // Configure factory with dependencies
-MultiProjectorActorFactory.configure(
+const configureMethod = MultiProjectorActorFactory as unknown as {
+  configure(domainTypes: any, serviceProvider: any, actorProxyFactory: any, serializationService: any, eventStore: any): void;
+};
+configureMethod.configure(
   domainTypes,
   {},
   daprClient,
@@ -48,8 +56,8 @@ MultiProjectorActorFactory.configure(
   eventStore
 );
 
-// Create actor class
-const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+// Create actor class - use direct reference to avoid type issues
+const MultiProjectorActorClass = MultiProjectorActor as any;
 
 // Create DaprServer
 const daprServer = new DaprServer({
@@ -77,32 +85,32 @@ app.post('/test/populate-events', async (req, res) => {
   
   try {
     // Import required classes
-    const { Event, SortableUniqueId, PartitionKeys } = await import('@sekiban/core');
+    const { createEvent, createEventMetadata, SortableUniqueId, PartitionKeys } = await import('@sekiban/core');
     
     // Add some test events to the store
     const events = [];
     for (let i = 1; i <= 5; i++) {
       const taskId = `task-${i}`;
       const partitionKeys = PartitionKeys.existing(taskId, 'Task');
-      const event = new Event(
-        SortableUniqueId.create(),
+      const event = createEvent({
+        id: SortableUniqueId.create(),
         partitionKeys,
-        'Task',
-        'TaskCreated',
-        1,
-        {
+        aggregateType: 'Task',
+        eventType: 'TaskCreated',
+        version: 1,
+        payload: {
           taskId,
           title: `Test Task ${i}`,
           description: `Description for task ${i}`,
           priority: i % 2 === 0 ? 'high' : 'medium',
           createdAt: new Date().toISOString()
         },
-        { timestamp: new Date() }
-      );
+        metadata: createEventMetadata({ timestamp: new Date() })
+      });
       events.push(event);
     }
     
-    await (eventStore as any).saveEvents(events);
+    await (eventStore as EventStoreWithSaveEvents).saveEvents(events);
     console.log(`Added ${events.length} test events to store`);
     
     res.json({ success: true, eventsAdded: events.length });
@@ -116,10 +124,10 @@ app.post('/test/populate-events', async (req, res) => {
 app.post('/test/query-projections', async (req, res) => {
   try {
     const daprClient = new DaprClient({ daprHost, daprPort });
-    const result = await daprClient.actor.invoke(
-      'MultiProjectorActor',
-      'aggregatelistprojector-taskprojector',
-      'queryListAsync',
+    const result = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector', // app-id
+      `actors/MultiProjectorActor/aggregatelistprojector-taskprojector/method/queryListAsync`,
+      HttpMethod.PUT,
       {
         queryType: 'GetAllTasks',
         payload: {},
@@ -150,10 +158,10 @@ await daprServer.pubsub.subscribe('pubsub', 'sekiban-events', async (data: any) 
     const projectorName = 'taskprojector';
     const actorId = `aggregatelistprojector-${projectorName}`;
     
-    await daprClient.actor.invoke(
-      'MultiProjectorActor',
-      actorId,
-      'receiveEventAsync',
+    await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector', // app-id
+      `actors/MultiProjectorActor/${actorId}/method/receiveEventAsync`,
+      HttpMethod.PUT,
       data
     );
     

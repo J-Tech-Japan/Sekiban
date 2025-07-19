@@ -1,6 +1,6 @@
-import { Result, ok, err } from '../../../core/src/result';
+import { Result, ok, err } from 'neverthrow';
 import { SagaInstance, SagaEvent, SagaStatus } from '../types';
-import { SagaError } from '../errors';
+import { GeneralSagaError, SagaError } from '../errors';
 import { SagaRepository, SagaSnapshot, SagaSnapshotUtils } from './saga-repository';
 
 /**
@@ -21,7 +21,7 @@ export class SagaStoreAdapter<TContext = any> {
       await this.repository.save(snapshot);
       return ok(undefined);
     } catch (error) {
-      return err(new SagaError(
+      return err(new GeneralSagaError(
         `Failed to save saga ${instance.id}`,
         undefined,
         undefined,
@@ -44,7 +44,7 @@ export class SagaStoreAdapter<TContext = any> {
       const instance = this.snapshotToInstance(snapshot);
       return ok(instance);
     } catch (error) {
-      return err(new SagaError(
+      return err(new GeneralSagaError(
         `Failed to load saga ${sagaId}`,
         undefined,
         undefined,
@@ -92,7 +92,7 @@ export class SagaStoreAdapter<TContext = any> {
 
       return ok(instances);
     } catch (error) {
-      return err(new SagaError(
+      return err(new GeneralSagaError(
         'Failed to list sagas',
         undefined,
         undefined,
@@ -112,7 +112,7 @@ export class SagaStoreAdapter<TContext = any> {
       this.events.set(event.sagaId, sagaEvents);
       return ok(undefined);
     } catch (error) {
-      return err(new SagaError(
+      return err(new GeneralSagaError(
         `Failed to save event for saga ${event.sagaId}`,
         undefined,
         undefined,

@@ -1,10 +1,12 @@
 import type { Result } from 'neverthrow';
 import type { IEventPayload } from '../events/event-payload.js';
 import type { IEvent } from '../events/event.js';
+import { createEvent, createEventMetadata } from '../events/event.js';
 import type { IAggregatePayload } from './aggregate-payload.js';
 import { Aggregate, EmptyAggregatePayload as EmptyPayload } from './aggregate.js';
 import type { PartitionKeys } from '../documents/partition-keys.js';
 import type { SekibanError } from '../result/errors.js';
+import { SortableUniqueId } from '../documents/sortable-unique-id.js';
 
 /**
  * Base interface for aggregate payloads with discriminated union support
@@ -106,17 +108,17 @@ export abstract class AggregateProjector<TPayloadUnion extends ITypedAggregatePa
     eventPayload: IEventPayload
   ): Result<Aggregate<TPayloadUnion | EmptyPayload>, SekibanError> {
     // Create a minimal event for backwards compatibility
-    const minimalEvent: IEvent = {
-      id: aggregate.lastSortableUniqueId || ({ toString: () => '' } as any),
+    const minimalEvent = createEvent({
+      id: aggregate.lastSortableUniqueId || SortableUniqueId.generate(),
       partitionKeys: aggregate.partitionKeys,
       aggregateType: aggregate.aggregateType,
       eventType: eventPayload.constructor.name,
       version: aggregate.version + 1,
       payload: eventPayload,
-      metadata: {
+      metadata: createEventMetadata({
         timestamp: new Date()
-      }
-    };
+      })
+    });
     return this.project(aggregate, minimalEvent);
   }
   

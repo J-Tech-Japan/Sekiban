@@ -3,6 +3,7 @@ import type { CommandDefinition } from './command-schema.js';
 import type { ProjectorDefinitionType } from './projector-schema.js';
 import type { SchemaRegistry } from './registry.js';
 import type { IEvent } from '../events/event.js';
+import { createEvent, createEventMetadata, type EventMetadata } from '../events/event.js';
 import type { PartitionKeys } from '../documents/partition-keys.js';
 import type { Aggregate } from '../aggregates/aggregate.js';
 import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
@@ -116,15 +117,15 @@ export class SchemaExecutor {
         const sortableId = SortableUniqueId.generate();
         eventIds.push(sortableId.toString());
         
-        const event: IEvent = {
+        const event = createEvent({
           id: sortableId,
           partitionKeys,
           aggregateType: commandDef.projector.aggregateTypeName || partitionKeys.group || 'Unknown',
           version: aggregate.version + events.length + 1,
           eventType: (eventPayload as any).type || eventPayload.constructor.name,
           payload: eventPayload,
-          metadata: { timestamp: new Date() }
-        };
+          metadata: createEventMetadata({ timestamp: new Date() })
+        });
         
         events.push(event);
       }
@@ -333,15 +334,15 @@ export class SchemaExecutor {
       
       appendEvent(eventPayload: IEventPayload): Result<IEvent, SekibanError> {
         const sortableId = SortableUniqueId.generate();
-        const event: IEvent = {
+        const event = createEvent({
           id: sortableId,
           partitionKeys: aggregate.partitionKeys,
           aggregateType: aggregate.aggregateType,
           version: this.getNextVersion(),
           eventType: (eventPayload as any).type || eventPayload.constructor.name,
           payload: eventPayload,
-          metadata: this.metadata
-        };
+          metadata: this.metadata as EventMetadata
+        });
         
         events.push(event);
         return ok(event);

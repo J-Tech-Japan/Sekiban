@@ -1,4 +1,4 @@
-import { InMemoryEventStore, StorageProviderType, Event, SortableUniqueId, PartitionKeys } from '@sekiban/core';
+import { InMemoryEventStore, StorageProviderType, IEvent, SortableUniqueId, PartitionKeys, createEvent, createEventMetadata } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 
 console.log('🔍 Debugging Projection Issue\n');
@@ -7,24 +7,24 @@ async function debugProjection() {
   // Create event
   const taskId = 'debug-task-1';
   const partitionKeys = PartitionKeys.existing(taskId, 'Task');
-  const event = new Event(
-    SortableUniqueId.create(),
+  const event = createEvent({
+    id: SortableUniqueId.create(),
     partitionKeys,
-    'Task',
-    'TaskCreated',
-    1,
-    {
+    aggregateType: 'Task',
+    eventType: 'TaskCreated',
+    version: 1,
+    payload: {
       taskId,
       title: 'Debug Task',
       description: 'Testing projection',
       priority: 'high',
       createdAt: new Date().toISOString()
     },
-    { timestamp: new Date() }
-  );
+    metadata: createEventMetadata({ timestamp: new Date() })
+  });
   
   console.log('📝 Created event:', {
-    type: event.type,
+    type: event.eventType,
     payload: event.payload,
     aggregateId: event.aggregateId
   });
@@ -48,7 +48,7 @@ async function debugProjection() {
       const projector = taskProjectorWrapper.projector;
       console.log('\n✅ Found TaskProjector');
       console.log('Projector methods:', Object.getOwnPropertyNames(projector));
-      console.log('Projector type:', projector.aggregateType);
+      console.log('Projector type:', (projector as any).aggregateType);
       
       // Get initial state
       const initialState = projector.getInitialState(partitionKeys);
@@ -62,7 +62,7 @@ async function debugProjection() {
       // Try to project the event
       console.log('\n🎯 Projecting event...');
       console.log('Event to project:', {
-        type: event.type,
+        type: event.eventType,
         payload: event.payload
       });
       
@@ -84,8 +84,8 @@ async function debugProjection() {
           
           // Let's check the projector's projection functions
           console.log('\n🔍 Checking projector projections...');
-          if (projector.projections) {
-            console.log('Available projections:', Object.keys(projector.projections));
+          if ((projector as any).projections) {
+            console.log('Available projections:', Object.keys((projector as any).projections));
           }
           
           // Try to see if we can access the defineProjector result directly
@@ -94,7 +94,7 @@ async function debugProjection() {
           
           // Let's also check if the event type matches
           console.log('\n🔍 Event type matching...');
-          console.log('Event type:', event.type);
+          console.log('Event type:', event.eventType);
           console.log('Event eventType:', (event as any).eventType);
           
         } else {

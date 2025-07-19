@@ -1,4 +1,5 @@
-import { Result } from '../../core/src/result';
+import { Result } from 'neverthrow';
+import { SagaNotFoundError } from '../errors';
 
 /**
  * Persistent snapshot of a saga instance
@@ -109,15 +110,7 @@ export class SagaConcurrencyError extends Error {
   }
 }
 
-/**
- * Error thrown when a saga is not found
- */
-export class SagaNotFoundError extends Error {
-  constructor(public readonly sagaId: string) {
-    super(`Saga ${sagaId} not found`);
-    this.name = 'SagaNotFoundError';
-  }
-}
+// SagaNotFoundError is imported from errors module
 
 /**
  * Utility functions for working with saga snapshots

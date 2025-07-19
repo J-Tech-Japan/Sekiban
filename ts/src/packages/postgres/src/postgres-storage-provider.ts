@@ -7,7 +7,7 @@ import {
   ConnectionError,
   EventStoreFactory
 } from '@sekiban/core';
-import { PostgresEventStore } from './postgres-event-store.js';
+import { PostgresEventStore } from './postgres-event-store';
 
 /**
  * Creates a PostgreSQL event store
