@@ -578,7 +578,12 @@ export class AggregateActorImpl {
       
       // Add metadata to aggregate
       if (aggregate) {
-        aggregate.lastSortableUniqueId = lastSortableUniqueId;
+        // Handle readonly/frozen aggregates by creating a new object
+        if (Object.isFrozen(aggregate) || Object.isSealed(aggregate)) {
+          aggregate = { ...aggregate, lastSortableUniqueId };
+        } else {
+          aggregate.lastSortableUniqueId = lastSortableUniqueId;
+        }
       }
       
       // Cache the state for future use

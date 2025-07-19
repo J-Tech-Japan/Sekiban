@@ -11,23 +11,18 @@ lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 lsof -ti:3002 | xargs kill -9 2>/dev/null || true
 sleep 3
 
-# Check storage type
-if [ "$1" == "postgres" ]; then
-    echo "Using PostgreSQL storage..."
-    
-    # Start PostgreSQL if needed
-    if ! docker ps | grep -q sekiban-postgres; then
-        docker-compose up -d postgres
-        echo "Waiting for PostgreSQL to be ready..."
-        sleep 10
-    fi
-    
-    export USE_POSTGRES=true
-    export DATABASE_URL="postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events"
-else
-    echo "Using In-Memory storage (default)..."
-    export USE_POSTGRES=false
+# Always use PostgreSQL storage
+echo "Using PostgreSQL storage..."
+
+# Start PostgreSQL if needed
+if ! docker ps | grep -q sekiban-postgres; then
+    docker-compose up -d postgres
+    echo "Waiting for PostgreSQL to be ready..."
+    sleep 10
 fi
+
+export USE_POSTGRES=true
+export DATABASE_URL="postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events"
 
 echo ""
 echo "Starting services:"
