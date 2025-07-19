@@ -161,7 +161,7 @@ export class AggregateEventHandlerActor extends AbstractActor
       const newLastId = lastEvent.sortableUniqueId || lastEvent.SortableUniqueId;
       console.log('[AggregateEventHandlerActor] newLastId extracted:', newLastId);
       const newState: AggregateEventHandlerState = {
-        lastSortableUniqueId: newLastId,
+        lastSortableUniqueId: newLastId || '',
         eventCount: allEvents.length
       };
       

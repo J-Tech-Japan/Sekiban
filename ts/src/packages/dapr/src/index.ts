@@ -1,12 +1,12 @@
 // Executor implementation
-export * from './executor/sekiban-dapr-executor.js';
+export * from './executor/sekiban-dapr-executor';
 export {
   SerializableCommandAndMetadata,
   SekibanCommandResponse,
   IDaprAggregateActorProxy,
   DaprSekibanConfiguration,
   ISekibanDaprExecutor
-} from './executor/interfaces.js';
+} from './executor/interfaces';
 
 // Snapshot types and strategies
 export * from './snapshot';
@@ -82,4 +82,4 @@ export type {
 export { 
   eventToSerializableDocument,
   serializableDocumentToEvent
-} from './events/serializable-event-document.js';
+} from './events/serializable-event-document';

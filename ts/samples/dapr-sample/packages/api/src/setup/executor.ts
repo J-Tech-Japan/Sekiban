@@ -1,5 +1,6 @@
 import { DaprClient } from '@dapr/dapr';
-import { SekibanDaprExecutor, type DaprSekibanConfiguration } from '@sekiban/dapr';
+import type { DaprSekibanConfiguration, ISekibanDaprExecutor } from '@sekiban/dapr';
+const { SekibanDaprExecutor } = require('@sekiban/dapr');
 import type { ICommandWithHandler } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from '../config/index.js';

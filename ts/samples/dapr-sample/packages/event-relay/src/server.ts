@@ -154,7 +154,7 @@ async function distributeEvent(eventData: PubSubEventData) {
       const actorId = `aggregatelistprojector-${projectorType.toLowerCase()}`;
       
       promises.push(
-        daprClient.actor.invoke(
+        (daprClient.actor as any).invoke(
           multiProjectorTarget.actorType,
           actorId,
           'processEvent',
@@ -174,7 +174,7 @@ async function distributeEvent(eventData: PubSubEventData) {
     const actorId = `aggregate-${eventData.aggregateType.toLowerCase()}-eventhandler`;
     
     promises.push(
-      daprClient.actor.invoke(
+      (daprClient.actor as any).invoke(
         eventHandlerTarget.actorType,
         actorId,
         'processEvent',
