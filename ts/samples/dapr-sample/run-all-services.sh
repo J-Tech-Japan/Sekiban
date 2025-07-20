@@ -5,14 +5,40 @@ echo "================================"
 
 # Kill any existing processes
 echo "Cleaning up existing processes..."
-pkill -f "dapr run" 2>/dev/null || true
-sleep 2
+
+# Kill all dapr-sample related processes
+pkill -f "dapr-sample" 2>/dev/null || true
+pkill -f "dapr run.*dapr-sample" 2>/dev/null || true
+
+# Kill processes by npm script names
+pkill -f "npm run dev" 2>/dev/null || true
+pkill -f "tsx watch src/server.ts" 2>/dev/null || true
+
+# Kill any remaining dapr processes
+dapr list | grep "dapr-sample" | awk '{print $1}' | xargs -I {} dapr stop --app-id {} 2>/dev/null || true
 
 # Kill any processes on our ports
 for port in 3000 3001 3002 3003 3500 3501 3502 3503; do
-  lsof -ti:$port | xargs kill -9 2>/dev/null || true
+  if lsof -ti:$port > /dev/null 2>&1; then
+    echo "  Killing process on port $port"
+    lsof -ti:$port | xargs kill -9 2>/dev/null || true
+  fi
 done
-sleep 3
+
+# Wait for processes to fully terminate
+sleep 5
+
+# Verify ports are free
+echo "Verifying ports are free..."
+for port in 3000 3001 3002 3003; do
+  if lsof -ti:$port > /dev/null 2>&1; then
+    echo "  ⚠️  Port $port is still in use!"
+  else
+    echo "  ✓ Port $port is free"
+  fi
+done
+
+sleep 2
 
 # Check if Dapr is initialized
 if ! dapr --version > /dev/null 2>&1; then
