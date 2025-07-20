@@ -1,9 +1,9 @@
 import { Result, ok, err } from 'neverthrow';
-import { Event, EventFilter, IEventPayload } from '../events/index.js';
-import { EventStoreError, ConcurrencyError } from '../result/index.js';
-import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
-import { IEventStore, EventStoreOptions } from '../events/store.js';
-import { createEvent, createEventMetadata } from '../events/event.js';
+import { Event, EventFilter, IEventPayload } from '../events/index';
+import { EventStoreError, ConcurrencyError } from '../result/index';
+import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index';
+import { IEventStore, EventStoreOptions } from '../events/store';
+import { createEvent, createEventMetadata } from '../events/event';
 
 /**
  * In-memory implementation of the events IEventStore interface

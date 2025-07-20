@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ok, err } from 'neverthrow';
 import { z } from 'zod';
-import { UnifiedCommandExecutor, createUnifiedExecutor } from './unified-executor.js';
-import { defineCommand, defineEvent, defineProjector } from '../schema-registry/index.js';
-import { PartitionKeys } from '../documents/index.js';
-import type { IEventStore } from '../events/store.js';
-import type { IAggregateLoader } from '../aggregates/loader.js';
-import type { IEvent } from '../events/event.js';
-import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
-import { CommandValidationError } from '../result/errors.js';
+import { UnifiedCommandExecutor, createUnifiedExecutor } from './unified-executor';
+import { defineCommand, defineEvent, defineProjector } from '../schema-registry/index';
+import { PartitionKeys } from '../documents/index';
+import type { IEventStore } from '../events/store';
+import type { IAggregateLoader } from '../aggregates/loader';
+import type { IEvent } from '../events/event';
+import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector';
+import { CommandValidationError } from '../result/errors';
 
 // Test domain setup
 interface ActiveTask extends ITypedAggregatePayload {

@@ -16,22 +16,22 @@ import type {
   EventDocument,
   CommandMetadata,
   CommandResult
-} from '../domain-types/interfaces.js';
-import type { IEvent } from '../events/event.js';
-import { createEvent, createEventMetadata } from '../events/event.js';
-import type { IEventPayload } from '../events/event-payload.js';
-import type { ICommand } from '../commands/command.js';
-import type { IAggregatePayload } from '../aggregates/aggregate-payload.js';
-import type { AggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
-import type { ICommandExecutor } from '../commands/executor.js';
-import type { IProjector } from '../aggregates/projector-interface.js';
-import { PartitionKeys } from '../documents/partition-keys.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
-import { SchemaRegistry } from './registry.js';
-import { SekibanError, EventStoreError } from '../result/errors.js';
-import type { EventDefinition } from './event-schema.js';
-import type { CommandDefinition } from './command-schema.js';
-import type { ProjectorDefinitionType } from './projector-schema.js';
+} from '../domain-types/interfaces';
+import type { IEvent } from '../events/event';
+import { createEvent, createEventMetadata } from '../events/event';
+import type { IEventPayload } from '../events/event-payload';
+import type { ICommand } from '../commands/command';
+import type { IAggregatePayload } from '../aggregates/aggregate-payload';
+import type { AggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector';
+import type { ICommandExecutor } from '../commands/executor';
+import type { IProjector } from '../aggregates/projector-interface';
+import { PartitionKeys } from '../documents/partition-keys';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
+import { SchemaRegistry } from './registry';
+import { SekibanError, EventStoreError } from '../result/errors';
+import type { EventDefinition } from './event-schema';
+import type { CommandDefinition } from './command-schema';
+import type { ProjectorDefinitionType } from './projector-schema';
 
 /**
  * Schema-based implementation of IEventTypes

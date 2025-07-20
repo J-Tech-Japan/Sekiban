@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryEventStore } from '../../storage/in-memory-event-store.js';
-import { StorageProviderType } from '../../storage/storage-provider.js';
-import { EventRetrievalInfo, OptionalValue, AggregateGroupStream, SortableIdCondition } from '../../events/event-retrieval-info.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { createEvent } from '../../events/event.js';
-import { IEvent } from '../../events/event.js';
+import { InMemoryEventStore } from '../../storage/in-memory-event-store';
+import { StorageProviderType } from '../../storage/storage-provider';
+import { EventRetrievalInfo, OptionalValue, AggregateGroupStream, SortableIdCondition } from '../../events/event-retrieval-info';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { createEvent } from '../../events/event';
+import { IEvent } from '../../events/event';
 
 describe('InMemoryEventStore', () => {
   let store: InMemoryEventStore;

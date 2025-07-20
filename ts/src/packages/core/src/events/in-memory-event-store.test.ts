@@ -5,10 +5,10 @@ import {
   InMemoryEventWriter,
   IEventReader,
   IEventWriter
-} from './in-memory-event-store.js'
-import { createEvent, IEventPayload } from './event.js'
-import { PartitionKeys } from '../documents/partition-keys.js'
-import { SortableUniqueId } from '../documents/sortable-unique-id.js'
+} from './in-memory-event-store'
+import { createEvent, IEventPayload } from './event'
+import { PartitionKeys } from '../documents/partition-keys'
+import { SortableUniqueId } from '../documents/sortable-unique-id'
 
 describe('InMemoryEventStore', () => {
   let store: InMemoryEventStore

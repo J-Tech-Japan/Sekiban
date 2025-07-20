@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { Event, EventDocument } from './types.js'
-import { SortableUniqueId } from '../documents/sortable-unique-id.js'
-import { PartitionKeys } from '../documents/partition-keys.js'
+import type { Event, EventDocument } from './types'
+import { SortableUniqueId } from '../documents/sortable-unique-id'
+import { PartitionKeys } from '../documents/partition-keys'
 
 // Test event implementations
 class ProductCreated implements Event {

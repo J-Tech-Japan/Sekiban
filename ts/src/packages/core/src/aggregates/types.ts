@@ -1,5 +1,5 @@
-import { PartitionKeys, SortableUniqueId } from '../documents/index.js';
-import { IEventPayload } from '../events/index.js';
+import { PartitionKeys, SortableUniqueId } from '../documents/index';
+import { IEventPayload } from '../events/index';
 
 /**
  * Base interface for aggregate payloads (state)

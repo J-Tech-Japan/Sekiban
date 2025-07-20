@@ -9,13 +9,13 @@ import {
   ListQueryResult,
   createQueryResult,
   createListQueryResult
-} from './query.js'
+} from './query'
 import { Result, ok, err } from 'neverthrow'
-import { QueryExecutionError } from '../result/errors.js'
-import { IMultiProjector, MultiProjectionState } from './multi-projection.js'
-import { PartitionKeys } from '../documents/partition-keys.js'
-import { Aggregate } from '../aggregates/aggregate.js'
-import { IAggregatePayload } from '../aggregates/aggregate-payload.js'
+import { QueryExecutionError } from '../result/errors'
+import { IMultiProjector, MultiProjectionState } from './multi-projection'
+import { PartitionKeys } from '../documents/partition-keys'
+import { Aggregate } from '../aggregates/aggregate'
+import { IAggregatePayload } from '../aggregates/aggregate-payload'
 
 // Test payload
 class UserPayload implements IAggregatePayload {

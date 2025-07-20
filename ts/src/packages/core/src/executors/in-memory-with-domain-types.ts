@@ -1,17 +1,17 @@
 import { Result, ok, err } from 'neverthrow';
-import { SekibanExecutorBase, SimpleTransaction } from './base.js';
-import { ISekibanTransaction, SekibanExecutorConfig } from './types.js';
-import { CommandHandlerRegistry, ICommandExecutor, CommandContext, CommandResult, CommandExecutionOptions } from '../commands/index.js';
-import { QueryHandlerRegistry } from '../queries/index.js';
+import { SekibanExecutorBase, SimpleTransaction } from './base';
+import { ISekibanTransaction, SekibanExecutorConfig } from './types';
+import { CommandHandlerRegistry, ICommandExecutor, CommandContext, CommandResult, CommandExecutionOptions } from '../commands/index';
+import { QueryHandlerRegistry } from '../queries/index';
 import { 
   InMemoryEventStream,
   Event,
   IEventPayload,
   EventFilter
-} from '../events/index.js';
+} from '../events/index';
 // Use the in-memory event store implementation
-import { EventsInMemoryStore } from './events-in-memory-store.js';
-import type { IEventStore } from '../events/store.js';
+import { EventsInMemoryStore } from './events-in-memory-store';
+import type { IEventStore } from '../events/store';
 import { 
   IAggregateLoader, 
   IAggregateProjector,
@@ -19,11 +19,11 @@ import {
   Aggregate,
   IAggregatePayload,
   ITypedAggregatePayload 
-} from '../aggregates/index.js';
-import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
-import { EventStoreError, ConcurrencyError, SekibanError } from '../result/index.js';
-import { ICommand } from '../commands/index.js';
-import type { SekibanDomainTypes } from '../domain-types/interfaces.js';
+} from '../aggregates/index';
+import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index';
+import { EventStoreError, ConcurrencyError, SekibanError } from '../result/index';
+import { ICommand } from '../commands/index';
+import type { SekibanDomainTypes } from '../domain-types/interfaces';
 
 /**
  * Domain-aware aggregate loader that uses SekibanDomainTypes

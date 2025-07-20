@@ -1,7 +1,7 @@
-export type { ValidationError, ValidationResult, Validator, ZodSchema } from './types.js'
+export type { ValidationError, ValidationResult, Validator, ZodSchema } from './types'
 export { 
   createValidator,
   isValid,
   getErrors,
   validateOrThrow
-} from './validation.js'
+} from './validation'

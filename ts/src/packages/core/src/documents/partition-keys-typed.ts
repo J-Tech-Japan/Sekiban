@@ -1,6 +1,6 @@
-import { generateUuid } from '../utils/index.js';
-import { PartitionKeys } from './partition-keys.js';
-import type { IAggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
+import { generateUuid } from '../utils/index';
+import { PartitionKeys } from './partition-keys';
+import type { IAggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector';
 
 /**
  * Type-safe partition keys factory that uses projector type for group name

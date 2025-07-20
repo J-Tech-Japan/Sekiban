@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [],
+  "linked": [["@sekiban/*"]],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": ["@dapr-sample/*"],
+  "___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH": {
+    "updateInternalDependents": "always"
+  }
+}

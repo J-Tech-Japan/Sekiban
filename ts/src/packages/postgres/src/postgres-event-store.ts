@@ -200,7 +200,7 @@ export class PostgresEventStore implements IEventStore {
         // Insert each event (matching C# DbEvent structure)
         for (const event of events) {
           // Extract metadata with defaults
-          const metadata = event.metadata || {};
+          const metadata = event.metadata;
           const causationId = metadata.causationId || '';
           const correlationId = metadata.correlationId || '';
           const executedUser = metadata.executedUser || '';

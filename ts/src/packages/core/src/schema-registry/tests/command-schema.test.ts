@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ok, err } from 'neverthrow';
-import { defineCommand, createCommandContext } from '../command-schema.js';
-import { defineEvent } from '../event-schema.js';
-import { defineProjector } from '../projector-schema.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { Aggregate } from '../../aggregates/aggregate.js';
-import { EmptyAggregatePayload } from '../../aggregates/aggregate.js';
-import { CommandValidationError } from '../../result/errors.js';
-import { ValidationError } from '../../result/errors.js';
-import type { ITypedAggregatePayload, IAggregateProjector } from '../../aggregates/aggregate-projector.js';
+import { defineCommand, createCommandContext } from '../command-schema';
+import { defineEvent } from '../event-schema';
+import { defineProjector } from '../projector-schema';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { Aggregate } from '../../aggregates/aggregate';
+import { EmptyAggregatePayload } from '../../aggregates/aggregate';
+import { CommandValidationError } from '../../result/errors';
+import { ValidationError } from '../../result/errors';
+import type { ITypedAggregatePayload, IAggregateProjector } from '../../aggregates/aggregate-projector';
 
 // Test aggregate payload types
 interface UserPayload extends ITypedAggregatePayload {

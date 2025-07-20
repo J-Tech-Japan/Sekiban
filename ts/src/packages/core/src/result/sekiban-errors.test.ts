@@ -10,7 +10,7 @@ import {
   ConcurrencyError,
   UnsupportedOperationError,
   ValidationError
-} from './errors.js'
+} from './errors'
 
 describe('Sekiban Errors', () => {
   describe('SekibanError', () => {

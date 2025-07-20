@@ -11,10 +11,10 @@
 
 import { z } from 'zod';
 import { ok, err } from 'neverthrow';
-import { defineEvent, defineCommand, defineProjector, command } from '../index.js';
-import { TypedPartitionKeys } from '../../documents/index.js';
-import { CommandValidationError } from '../../result/errors.js';
-import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector.js';
+import { defineEvent, defineCommand, defineProjector, command } from '../index';
+import { TypedPartitionKeys } from '../../documents/index';
+import { CommandValidationError } from '../../result/errors';
+import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector';
 
 // ============================================
 // Events

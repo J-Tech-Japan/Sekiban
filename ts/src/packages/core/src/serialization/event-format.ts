@@ -1,8 +1,8 @@
-import { Event, IEventPayload } from '../events/index.js';
-import { IJsonSerializer, defaultJsonSerializer } from './json.js';
+import { Event, IEventPayload } from '../events/index';
+import { IJsonSerializer, defaultJsonSerializer } from './json';
 import { Result, ok, err } from 'neverthrow';
-import { SerializationError } from '../result/index.js';
-import { SortableUniqueId, SortableUniqueIdUtils, PartitionKeys, Metadata } from '../documents/index.js';
+import { SerializationError } from '../result/index';
+import { SortableUniqueId, SortableUniqueIdUtils, PartitionKeys, Metadata } from '../documents/index';
 
 /**
  * Serialized event format for storage

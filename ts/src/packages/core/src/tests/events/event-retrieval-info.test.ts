@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { EventRetrievalInfo, OptionalValue, AggregateGroupStream, SortableIdCondition } from '../../events/event-retrieval-info.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { SortableUniqueId } from '../../documents/sortable-unique-id.js';
+import { EventRetrievalInfo, OptionalValue, AggregateGroupStream, SortableIdCondition } from '../../events/event-retrieval-info';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { SortableUniqueId } from '../../documents/sortable-unique-id';
 
 describe('EventRetrievalInfo', () => {
   describe('constructor', () => {

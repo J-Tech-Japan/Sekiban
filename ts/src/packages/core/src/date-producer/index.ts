@@ -1,3 +1,3 @@
-export type { ISekibanDateProducer } from './types.js'
-export { SekibanDateProducer } from './date-producer.js'
-export { createMockDateProducer, createSequentialDateProducer } from './mock.js'
+export type { ISekibanDateProducer } from './types'
+export { SekibanDateProducer } from './date-producer'
+export { createMockDateProducer, createSequentialDateProducer } from './mock'

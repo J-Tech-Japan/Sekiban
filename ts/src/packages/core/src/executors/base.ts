@@ -4,14 +4,14 @@ import {
   SekibanExecutorConfig,
   ISekibanTransaction,
   ITransactionalSekibanExecutor 
-} from './types.js';
+} from './types';
 import { 
   ICommand, 
   CommandContext, 
   CommandResult, 
   CommandExecutionOptions,
   ICommandExecutor 
-} from '../commands/index.js';
+} from '../commands/index';
 import { 
   IBaseQuery as IQuery, 
   QueryContext, 
@@ -19,18 +19,18 @@ import {
   QueryExecutionOptions,
   IQueryHandler,
   QueryHandlerRegistry 
-} from '../queries/index.js';
-import { IEventPayload, EventRetrievalInfo, OptionalValue, SortableIdCondition, AggregateGroupStream } from '../events/index.js';
-import type { IEventStore as IStorageEventStore } from '../storage/index.js';
-import type { IEventStore } from '../events/store.js';
-import { PartitionKeys, Metadata } from '../documents/index.js';
+} from '../queries/index';
+import { IEventPayload, EventRetrievalInfo, OptionalValue, SortableIdCondition, AggregateGroupStream } from '../events/index';
+import type { IEventStore as IStorageEventStore } from '../storage/index';
+import type { IEventStore } from '../events/store';
+import { PartitionKeys, Metadata } from '../documents/index';
 import { 
   SekibanError, 
   UnsupportedOperationError,
   EventStoreError,
   QueryExecutionError 
-} from '../result/index.js';
-import { IAggregateLoader } from '../aggregates/index.js';
+} from '../result/index';
+import { IAggregateLoader } from '../aggregates/index';
 
 /**
  * Base implementation of Sekiban executor

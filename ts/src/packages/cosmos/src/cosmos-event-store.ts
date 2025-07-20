@@ -165,6 +165,7 @@ export class CosmosEventStore implements IEventStore {
       for (const event of events) {
         const eventWithPartitionKey = {
           ...event,
+          id: event.id.value, // Convert SortableUniqueId to string
           partitionKey: event.partitionKeys.partitionKey
         };
         await this.eventsContainer.items.create(eventWithPartitionKey);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SchemaRegistry, SchemaExecutor } from '../index.js';
-import { InMemoryEventStore } from '../../events/in-memory-event-store.js';
+import { SchemaRegistry, SchemaExecutor } from '../index';
+import { InMemoryEventStore } from '../../events/in-memory-event-store';
 import {
   // Events
   OrderCreated,
@@ -25,8 +25,8 @@ import {
   // Queries
   LowStockQuery,
   OrdersByCustomerQuery
-} from './ecommerce-domain.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
+} from './ecommerce-domain';
+import { PartitionKeys } from '../../documents/partition-keys';
 
 describe('E-commerce Domain Example', () => {
   let registry: SchemaRegistry;

@@ -7,7 +7,7 @@ import {
   ConnectionError,
   EventStoreFactory
 } from '@sekiban/core';
-import { CosmosEventStore } from './cosmos-event-store.js';
+import { CosmosEventStore } from './cosmos-event-store';
 
 /**
  * Creates a CosmosDB event store
@@ -24,7 +24,7 @@ export function createCosmosEventStore(config: StorageProviderConfig): ResultAsy
     (async () => {
       try {
         // Parse connection string to extract endpoint and key
-        const connectionString = config.connectionString;
+        const connectionString = config.connectionString!; // We already checked this above
         const endpoint = extractEndpoint(connectionString);
         const key = extractKey(connectionString);
 
@@ -74,7 +74,7 @@ export function createCosmosEventStore(config: StorageProviderConfig): ResultAsy
  */
 function extractEndpoint(connectionString: string): string {
   const match = connectionString.match(/AccountEndpoint=([^;]+);/);
-  if (!match) {
+  if (!match || !match[1]) {
     throw new Error('Invalid connection string: missing AccountEndpoint');
   }
   return match[1];
@@ -85,7 +85,7 @@ function extractEndpoint(connectionString: string): string {
  */
 function extractKey(connectionString: string): string {
   const match = connectionString.match(/AccountKey=([^;]+);/);
-  if (!match) {
+  if (!match || !match[1]) {
     throw new Error('Invalid connection string: missing AccountKey');
   }
   return match[1];

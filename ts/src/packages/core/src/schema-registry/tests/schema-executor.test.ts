@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { ok, err } from 'neverthrow';
-import { defineEvent, defineCommand, defineProjector } from '../index.js';
-import { SchemaRegistry } from '../registry.js';
-import { SchemaExecutor } from '../schema-executor.js';
-import { InMemoryEventStore } from '../../events/in-memory-event-store.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { ValidationError } from '../../result/errors.js';
+import { defineEvent, defineCommand, defineProjector } from '../index';
+import { SchemaRegistry } from '../registry';
+import { SchemaExecutor } from '../schema-executor';
+import { InMemoryEventStore } from '../../events/in-memory-event-store';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { ValidationError } from '../../result/errors';
 
 // Define test domain
 const UserCreatedEvent = defineEvent({

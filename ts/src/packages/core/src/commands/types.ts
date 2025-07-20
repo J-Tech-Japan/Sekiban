@@ -3,7 +3,7 @@
  * For command definitions, use schema-registry/command-schema.ts
  */
 
-import { Metadata } from '../documents/index.js';
+import { Metadata } from '../documents/index';
 
 /**
  * Command execution options

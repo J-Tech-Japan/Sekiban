@@ -1,15 +1,15 @@
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from 'neverthrow';
-import type { IEventStore as IStorageEventStore } from '../storage/storage-provider.js';
-import type { IEventStore as IEventsEventStore, EventStoreOptions } from '../events/store.js';
-import { Event, EventFilter, IEventPayload } from '../events/index.js';
-import { EventStoreError, ConcurrencyError } from '../result/index.js';
-import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index.js';
-import { EventRetrievalInfo } from '../events/event-retrieval-info.js';
-import { InMemoryEventStore as StorageInMemoryEventStore } from '../storage/in-memory-event-store.js';
-import { StorageError } from '../storage/storage-provider.js';
-import { createEventMetadata, createEvent } from '../events/event.js';
-import { OptionalValue, SortableIdCondition, AggregateGroupStream } from '../events/index.js';
-import { IEvent } from '../events/event.js';
+import type { IEventStore as IStorageEventStore } from '../storage/storage-provider';
+import type { IEventStore as IEventsEventStore, EventStoreOptions } from '../events/store';
+import { Event, EventFilter, IEventPayload } from '../events/index';
+import { EventStoreError, ConcurrencyError } from '../result/index';
+import { PartitionKeys, Metadata, SortableUniqueId } from '../documents/index';
+import { EventRetrievalInfo } from '../events/event-retrieval-info';
+import { InMemoryEventStore as StorageInMemoryEventStore } from '../storage/in-memory-event-store';
+import { StorageError } from '../storage/storage-provider';
+import { createEventMetadata, createEvent } from '../events/event';
+import { OptionalValue, SortableIdCondition, AggregateGroupStream } from '../events/index';
+import { IEvent } from '../events/event';
 
 /**
  * Adapter that provides the events IEventStore interface

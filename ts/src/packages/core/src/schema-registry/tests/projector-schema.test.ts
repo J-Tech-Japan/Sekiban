@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { ok, err } from 'neverthrow';
-import { defineProjector } from '../projector-schema.js';
-import { defineEvent } from '../event-schema.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { Aggregate } from '../../aggregates/aggregate.js';
-import { EmptyAggregatePayload } from '../../aggregates/aggregate.js';
-import { SortableUniqueId } from '../../documents/sortable-unique-id.js';
-import { ValidationError } from '../../result/errors.js';
-import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector.js';
-import type { IEvent } from '../../events/event.js';
+import { defineProjector } from '../projector-schema';
+import { defineEvent } from '../event-schema';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { Aggregate } from '../../aggregates/aggregate';
+import { EmptyAggregatePayload } from '../../aggregates/aggregate';
+import { SortableUniqueId } from '../../documents/sortable-unique-id';
+import { ValidationError } from '../../result/errors';
+import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector';
+import type { IEvent } from '../../events/event';
 import { z } from 'zod';
 
 // Test aggregate payload types

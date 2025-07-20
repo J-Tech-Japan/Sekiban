@@ -1,8 +1,8 @@
 import { Result } from 'neverthrow';
-import { SekibanError } from '../result/errors.js';
-import { ICommand } from './command.js';
-import { CommandExecutionOptions } from './types.js';
-import { PartitionKeys, Metadata } from '../documents/index.js';
+import { SekibanError } from '../result/errors';
+import { ICommand } from './command';
+import { CommandExecutionOptions } from './types';
+import { PartitionKeys, Metadata } from '../documents/index';
 
 /**
  * Legacy command context interface

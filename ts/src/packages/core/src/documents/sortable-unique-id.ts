@@ -1,6 +1,6 @@
-import { generateUuid, getUnixTimestamp, createVersion7 } from '../utils/index.js';
+import { generateUuid, getUnixTimestamp, createVersion7 } from '../utils/index';
 import { Result, ok, err } from 'neverthrow';
-import { ValidationError } from '../result/errors.js';
+import { ValidationError } from '../result/errors';
 
 // Constants from lib.ts
 const SafeMilliseconds = 5000;

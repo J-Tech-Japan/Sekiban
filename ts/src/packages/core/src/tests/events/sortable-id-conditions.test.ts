@@ -4,8 +4,8 @@ import {
   SinceSortableIdCondition,
   BetweenSortableIdCondition,
   SortableIdCondition
-} from '../../events/event-retrieval-info.js';
-import { SortableUniqueId } from '../../documents/sortable-unique-id.js';
+} from '../../events/event-retrieval-info';
+import { SortableUniqueId } from '../../documents/sortable-unique-id';
 
 describe('SortableIdConditionNone', () => {
   it('never filters out any ID', () => {

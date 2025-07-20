@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { ok, err, type Result } from 'neverthrow';
-import { defineCommand, CommandSchemaDefinition, CommandSchemaDefinitionWithPayload } from './command-schema.js';
-import { TypedPartitionKeys, type PartitionKeys } from '../documents/index.js';
-import type { IEventPayload } from '../events/event-payload.js';
-import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector.js';
-import type { SekibanError } from '../result/errors.js';
-import { CommandValidationError } from '../result/errors.js';
-import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
-import type { ICommandContext } from './command-schema.js';
+import { defineCommand, CommandSchemaDefinition, CommandSchemaDefinitionWithPayload } from './command-schema';
+import { TypedPartitionKeys, type PartitionKeys } from '../documents/index';
+import type { IEventPayload } from '../events/event-payload';
+import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector';
+import type { SekibanError } from '../result/errors';
+import { CommandValidationError } from '../result/errors';
+import type { EmptyAggregatePayload } from '../aggregates/aggregate';
+import type { ICommandContext } from './command-schema';
 
 /**
  * Simplified context for command handlers

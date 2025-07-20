@@ -8,14 +8,14 @@ import {
   collectErrors,
   firstError,
   chainErrors
-} from './error-utils.js'
+} from './error-utils'
 import {
   ValidationError,
   EventStoreError,
   ConcurrencyError,
   AggregateNotFoundError,
   CommandValidationError
-} from './errors.js'
+} from './errors'
 
 describe('Error Utils', () => {
   describe('toResult', () => {

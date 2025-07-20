@@ -10,10 +10,10 @@ import {
   custom,
   CommandValidator,
   createCommandValidator
-} from './validation.js'
-import { ICommand } from './command.js'
+} from './validation'
+import { ICommand } from './command'
 import { Result } from 'neverthrow'
-import { ValidationError } from '../result/errors.js'
+import { ValidationError } from '../result/errors'
 
 // Test commands
 class CreateUserCommand implements ICommand {

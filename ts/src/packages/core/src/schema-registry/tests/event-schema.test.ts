@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { defineEvent } from '../event-schema.js';
+import { defineEvent } from '../event-schema';
 
 describe('defineEvent', () => {
   // Test 1: Basic event definition creation

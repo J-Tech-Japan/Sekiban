@@ -1,12 +1,12 @@
-import type { IEventPayload } from '../events/event-payload.js';
-import type { ICommand } from '../commands/command.js';
-import type { IAggregatePayload } from '../aggregates/aggregate-payload.js';
-import type { IProjector } from '../aggregates/projector-interface.js';
-import type { IEvent } from '../events/event.js';
+import type { IEventPayload } from '../events/event-payload';
+import type { ICommand } from '../commands/command';
+import type { IAggregatePayload } from '../aggregates/aggregate-payload';
+import type { IProjector } from '../aggregates/projector-interface';
+import type { IEvent } from '../events/event';
 import type { Result } from 'neverthrow';
-import type { SekibanError } from '../result/errors.js';
-import type { ICommandExecutor } from '../commands/executor.js';
-import type { Metadata } from '../documents/metadata.js';
+import type { SekibanError } from '../result/errors';
+import type { ICommandExecutor } from '../commands/executor';
+import type { Metadata } from '../documents/metadata';
 
 // Type aliases for compatibility
 export type EventTypeInfo = { name: string; constructor: any };

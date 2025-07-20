@@ -1,8 +1,8 @@
 /**
  * Export event payload interfaces
  */
-export type { IEventPayload } from './event-payload.js';
-export { isEventPayload } from './event-payload.js';
+export type { IEventPayload } from './event-payload';
+export { isEventPayload } from './event-payload';
 
 /**
  * Export event interfaces and classes
@@ -12,25 +12,25 @@ export type {
   EventMetadata,
   CreateEventMetadataOptions,
   CreateEventOptions
-} from './event.js';
+} from './event';
 
 /**
  * Re-export IEvent from event.js for backwards compatibility
  */
-export type { IEvent as IEventFromEventJs } from './event.js';
+export type { IEvent as IEventFromEventJs } from './event';
 
 export {
   Event,
   createEventMetadata,
   createEvent
-} from './event.js';
+} from './event';
 
 /**
  * Export event document types
  */
 export {
   EventDocument
-} from './event-document.js';
+} from './event-document';
 
 // Event store interfaces are exported from storage module
 // to avoid conflicts
@@ -40,11 +40,11 @@ export {
  */
 export type {
   IEventStream
-} from './stream.js';
+} from './stream';
 
 export {
   InMemoryEventStream
-} from './stream.js';
+} from './stream';
 
 /**
  * Export event types including Event and EventFilter
@@ -52,15 +52,15 @@ export {
 export type {
   Event as IEventType,
   EventFilter
-} from './types.js';
+} from './types';
 
-export { EventBuilder } from './types.js';
+export { EventBuilder } from './types';
 
 /**
  * Export event reader and writer interfaces
  */
-export type { IEventReader } from './event-reader.js';
-export type { IEventWriter } from './event-writer.js';
+export type { IEventReader } from './event-reader';
+export type { IEventWriter } from './event-writer';
 
 /**
  * Export event retrieval info and related types
@@ -73,9 +73,9 @@ export {
   SinceSortableIdCondition,
   BetweenSortableIdCondition,
   AggregateGroupStream
-} from './event-retrieval-info.js';
+} from './event-retrieval-info';
 
 export type {
   ISortableIdCondition,
   IAggregatesStream
-} from './event-retrieval-info.js';
+} from './event-retrieval-info';

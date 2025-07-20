@@ -6,22 +6,22 @@ export { Result, Ok, Err, ok, err, ResultAsync, okAsync, errAsync } from 'nevert
 /**
  * Export all error types
  */
-export * from './errors.js';
+export * from './errors';
 
 /**
  * Export error utilities
  */
-export * from './error-utils.js';
+export * from './error-utils';
 
 /**
  * Export error type guards
  */
-export * from './error-guards.js';
+export * from './error-guards';
 
 /**
  * Type alias for Result with SekibanError
  */
 import { Result } from 'neverthrow';
-import { SekibanError } from './errors.js';
+import { SekibanError } from './errors';
 
 export type SekibanResult<T> = Result<T, SekibanError>;

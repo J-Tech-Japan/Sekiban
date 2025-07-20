@@ -1,5 +1,5 @@
-import { Event, EventFilter, EventHandler, EventSubscription } from './types.js';
-import { IEventPayload } from './event-payload.js';
+import { Event, EventFilter, EventHandler, EventSubscription } from './types';
+import { IEventPayload } from './event-payload';
 
 /**
  * Interface for event stream implementations

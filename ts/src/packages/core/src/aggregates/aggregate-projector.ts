@@ -1,12 +1,12 @@
 import type { Result } from 'neverthrow';
-import type { IEventPayload } from '../events/event-payload.js';
-import type { IEvent } from '../events/event.js';
-import { createEvent, createEventMetadata } from '../events/event.js';
-import type { IAggregatePayload } from './aggregate-payload.js';
-import { Aggregate, EmptyAggregatePayload as EmptyPayload } from './aggregate.js';
-import type { PartitionKeys } from '../documents/partition-keys.js';
-import type { SekibanError } from '../result/errors.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
+import type { IEventPayload } from '../events/event-payload';
+import type { IEvent } from '../events/event';
+import { createEvent, createEventMetadata } from '../events/event';
+import type { IAggregatePayload } from './aggregate-payload';
+import { Aggregate, EmptyAggregatePayload as EmptyPayload } from './aggregate';
+import type { PartitionKeys } from '../documents/partition-keys';
+import type { SekibanError } from '../result/errors';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
 
 /**
  * Base interface for aggregate payloads with discriminated union support
