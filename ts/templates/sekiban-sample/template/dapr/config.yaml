@@ -1,0 +1,24 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: sekiban-config
+spec:
+  tracing:
+    samplingRate: "1"
+    zipkin:
+      endpointAddress: "http://localhost:9411/api/v2/spans"
+  metric:
+    enabled: true
+  actor:
+    actorIdleTimeout: "1h"
+    actorScanInterval: "30s"
+    drainOngoingCallTimeout: "30s"
+    drainRebalancedActors: true
+    remindersStoragePartitions: 7
+  features:
+    - name: Actor
+      enabled: true
+    - name: ActorStateTTL
+      enabled: true
+    - name: proxy.grpc
+      enabled: true
