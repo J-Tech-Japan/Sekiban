@@ -1,8 +1,8 @@
-import { defineEvent, defineCommand, defineProjector } from '../index.js';
+import { defineEvent, defineCommand, defineProjector } from '../index';
 import { z } from 'zod';
 import { ok, err } from 'neverthrow';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { ValidationError } from '../../result/errors.js';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { ValidationError } from '../../result/errors';
 
 // ============================================
 // Value Objects

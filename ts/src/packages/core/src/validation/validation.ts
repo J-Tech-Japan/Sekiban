@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import type { ValidationError, ValidationResult, Validator, ZodSchema } from './types.js'
+import type { ValidationError, ValidationResult, Validator, ZodSchema } from './types'
 
-export type { ValidationError, ValidationResult, Validator } from './types.js'
+export type { ValidationError, ValidationResult, Validator } from './types'
 
 /**
  * Create a validator from a Zod schema

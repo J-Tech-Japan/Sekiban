@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { EventDefinition } from './event-schema.js';
-import type { CommandDefinition } from './command-schema.js';
-import type { ProjectorDefinitionType } from './projector-schema.js';
+import type { EventDefinition } from './event-schema';
+import type { CommandDefinition } from './command-schema';
+import type { ProjectorDefinitionType } from './projector-schema';
 
 /**
  * Result type for safe deserialization

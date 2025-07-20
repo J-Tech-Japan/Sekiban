@@ -1,32 +1,41 @@
 {
-  "name": "@sekiban/pure-dapr",
+  "name": "sekiban-ts",
   "version": "0.1.0",
-  "description": "TypeScript client for Sekiban.Pure.Dapr",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "private": true,
+  "description": "Sekiban Event Sourcing Framework for TypeScript - Monorepo Root",
   "scripts": {
-    "build": "echo 'Please use pnpm build in individual packages'",
-    "build:old": "tsc",
-    "test": "jest",
-    "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts"
-  },
-  "dependencies": {
-    "@dapr/dapr": "^3.0.0",
-    "uuid": "^9.0.0"
+    "build": "pnpm run build:packages",
+    "build:packages": "pnpm run build:core && pnpm run build:storage && pnpm run build:dapr",
+    "build:core": "pnpm --filter @sekiban/core build",
+    "build:storage": "pnpm --filter @sekiban/postgres build && pnpm --filter @sekiban/cosmos build",
+    "build:dapr": "pnpm --filter @sekiban/dapr build",
+    "build:all": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r clean",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "version:alpha": "changeset version --snapshot alpha",
+    "release:alpha": "pnpm build:packages && changeset publish --tag alpha",
+    "release:check": "pnpm build:packages && pnpm pack -r --dry-run"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.5",
     "@types/node": "^20.0.0",
-    "@types/uuid": "^9.0.0",
-    "typescript": "^5.0.0",
-    "jest": "^29.0.0",
-    "ts-jest": "^29.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
   },
-  "keywords": ["sekiban", "dapr", "event-sourcing", "cqrs", "typescript"],
-  "author": "J-Tech Japan",
+  "keywords": [
+    "sekiban",
+    "event-sourcing",
+    "cqrs",
+    "typescript",
+    "dapr",
+    "cosmos",
+    "postgres"
+  ],
+  "author": "Sekiban Team",
   "license": "MIT",
   "repository": {
     "type": "git",

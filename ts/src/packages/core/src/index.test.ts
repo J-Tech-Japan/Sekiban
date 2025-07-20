@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as Sekiban from './index.js';
+import * as Sekiban from './index';
 
 describe('@sekiban/core', () => {
   it('should export VERSION', () => {

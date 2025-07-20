@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PartitionKeys } from './partition-keys.js'
+import { PartitionKeys } from './partition-keys'
 
 describe('PartitionKeys', () => {
   describe('create', () => {

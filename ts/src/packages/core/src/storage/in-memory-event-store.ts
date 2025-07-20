@@ -1,8 +1,8 @@
 import { ResultAsync, okAsync, errAsync } from 'neverthrow';
-import { IEvent } from '../events/event.js';
-import { EventRetrievalInfo, OptionalValue } from '../events/event-retrieval-info.js';
-import { IEventStore, StorageProviderConfig, StorageError } from './storage-provider.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
+import { IEvent } from '../events/event';
+import { EventRetrievalInfo, OptionalValue } from '../events/event-retrieval-info';
+import { IEventStore, StorageProviderConfig, StorageError } from './storage-provider';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
 
 /**
  * In-memory event store for testing and development

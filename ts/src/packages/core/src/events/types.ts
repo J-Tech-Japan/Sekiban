@@ -1,5 +1,5 @@
-import { PartitionKeys, SortableUniqueId, Metadata, MetadataBuilder } from '../documents/index.js';
-import { IEventPayload } from './event-payload.js';
+import { PartitionKeys, SortableUniqueId, Metadata, MetadataBuilder } from '../documents/index';
+import { IEventPayload } from './event-payload';
 
 /**
  * Represents a domain event with its metadata

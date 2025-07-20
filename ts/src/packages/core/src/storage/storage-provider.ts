@@ -1,10 +1,10 @@
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from 'neverthrow';
-import { IEvent } from '../events/event.js';
-import { IEventReader } from '../events/event-reader.js';
-import { IEventWriter } from '../events/event-writer.js';
-import { EventRetrievalInfo } from '../events/event-retrieval-info.js';
-import { SekibanError } from '../result/errors.js';
-import { InMemoryEventStore } from './in-memory-event-store.js';
+import { IEvent } from '../events/event';
+import { IEventReader } from '../events/event-reader';
+import { IEventWriter } from '../events/event-writer';
+import { EventRetrievalInfo } from '../events/event-retrieval-info';
+import { SekibanError } from '../result/errors';
+import { InMemoryEventStore } from './in-memory-event-store';
 
 /**
  * Storage provider types

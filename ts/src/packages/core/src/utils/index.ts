@@ -1,9 +1,9 @@
 /**
  * Export UUID utilities
  */
-export * from './uuid.js';
+export * from './uuid';
 
 /**
  * Export date utilities
  */
-export * from './date.js';
+export * from './date';

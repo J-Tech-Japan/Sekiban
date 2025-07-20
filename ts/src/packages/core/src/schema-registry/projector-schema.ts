@@ -1,12 +1,12 @@
 import { ok, err, type Result } from 'neverthrow';
-import type { IEvent } from '../events/event.js';
-import { Aggregate } from '../aggregates/aggregate.js';
-import type { PartitionKeys } from '../documents/partition-keys.js';
-import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
-import type { SekibanError } from '../result/errors.js';
-import { ValidationError } from '../result/errors.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
-import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
+import type { IEvent } from '../events/event';
+import { Aggregate } from '../aggregates/aggregate';
+import type { PartitionKeys } from '../documents/partition-keys';
+import type { EmptyAggregatePayload } from '../aggregates/aggregate';
+import type { SekibanError } from '../result/errors';
+import { ValidationError } from '../result/errors';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
+import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector';
 
 /**
  * Projection function that transforms aggregate state based on an event

@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { err, ok, type Result } from 'neverthrow';
-import { PartitionKeys, TypedPartitionKeys } from '../documents/index.js';
-import type { IEventPayload } from '../events/event-payload.js';
-import type { Aggregate } from '../aggregates/aggregate.js';
-import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
-import type { SekibanError } from '../result/errors.js';
-import { CommandValidationError } from '../result/errors.js';
-import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector.js';
-import type { IEvent } from '../events/event.js';
-import { createEvent, createEventMetadata } from '../events/event.js';
-import type { Metadata } from '../documents/metadata.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
+import { PartitionKeys, TypedPartitionKeys } from '../documents/index';
+import type { IEventPayload } from '../events/event-payload';
+import type { Aggregate } from '../aggregates/aggregate';
+import type { EmptyAggregatePayload } from '../aggregates/aggregate';
+import type { SekibanError } from '../result/errors';
+import { CommandValidationError } from '../result/errors';
+import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector';
+import type { IEvent } from '../events/event';
+import { createEvent, createEventMetadata } from '../events/event';
+import type { Metadata } from '../documents/metadata';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
 
 /**
  * Command context without aggregate state - base context

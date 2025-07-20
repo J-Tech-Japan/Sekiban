@@ -1,5 +1,5 @@
 import { Result, ok, err } from 'neverthrow'
-import { ValidationError } from '../result/errors.js'
+import { ValidationError } from '../result/errors'
 
 /**
  * Validation rule function

@@ -1,6 +1,6 @@
 {
   "name": "@sekiban/dapr",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "Dapr actor integration for Sekiban Event Sourcing framework with snapshot support",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -12,8 +12,15 @@
       "require": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "tsup",
+    "prebuild": "rimraf dist",
+    "build": "./build-types.sh",
+    "postbuild": "ls -la dist/*.d.ts || echo 'Warning: No .d.ts files found!'",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -32,7 +39,7 @@
   "author": "Sekiban Team",
   "license": "MIT",
   "dependencies": {
-    "@sekiban/core": "file:../core",
+    "@sekiban/core": "^0.1.0-alpha.1",
     "@dapr/dapr": "^3.3.0",
     "@js-temporal/polyfill": "^0.3.0",
     "neverthrow": "^8.0.0",
@@ -48,5 +55,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/J-Tech-Japan/Sekiban",
+    "directory": "ts/src/packages/dapr"
   }
 }

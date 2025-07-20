@@ -1,12 +1,12 @@
 /**
  * Export storage provider types and interfaces
  */
-export * from './storage-provider.js';
+export * from './storage-provider';
 
 /**
  * Export in-memory event store
  */
-export * from './in-memory-event-store.js';
+export * from './in-memory-event-store';
 
 // Legacy in-memory storage provider has been removed
 // Use InMemoryEventStore instead

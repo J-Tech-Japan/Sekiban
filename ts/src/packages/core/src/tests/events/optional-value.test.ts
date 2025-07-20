@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OptionalValue } from '../../events/event-retrieval-info.js';
+import { OptionalValue } from '../../events/event-retrieval-info';
 
 describe('OptionalValue', () => {
   describe('empty()', () => {

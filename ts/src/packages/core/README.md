@@ -1,6 +1,18 @@
 # @sekiban/core
 
+> ⚠️ **Alpha Version**: This package is currently in alpha. APIs may change between releases.
+
 Core event sourcing and CQRS framework for TypeScript, featuring a modern schema-based type registry system with runtime validation.
+
+## Installation
+
+```bash
+npm install @sekiban/core@alpha
+# or
+pnpm add @sekiban/core@alpha
+# or
+yarn add @sekiban/core@alpha
+```
 
 ## Features
 

@@ -1,7 +1,7 @@
-import { IAggregatePayload } from './aggregate-payload.js'
-import { IEventPayload } from '../events/event-payload.js'
-import { IEvent } from '../events/event.js'
-import { PartitionKeys } from '../documents/partition-keys.js'
+import { IAggregatePayload } from './aggregate-payload'
+import { IEventPayload } from '../events/event-payload'
+import { IEvent } from '../events/event'
+import { PartitionKeys } from '../documents/partition-keys'
 
 /**
  * Interface for aggregate projectors - pure functions that apply events to aggregates

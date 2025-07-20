@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { ok, err } from 'neverthrow';
-import { AggregateProjector, type ITypedAggregatePayload, type EmptyAggregatePayload } from './aggregate-projector.js';
-import type { IEventPayload } from '../events/event-payload.js';
-import { Aggregate } from './aggregate.js';
-import type { SekibanError } from '../result/errors.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
-import { PartitionKeys } from '../documents/partition-keys.js';
+import { AggregateProjector, type ITypedAggregatePayload, type EmptyAggregatePayload } from './aggregate-projector';
+import type { IEventPayload } from '../events/event-payload';
+import { Aggregate } from './aggregate';
+import type { SekibanError } from '../result/errors';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
+import { PartitionKeys } from '../documents/partition-keys';
 
 // Test domain - User aggregate with multiple states
 interface UnconfirmedUserPayload extends ITypedAggregatePayload {

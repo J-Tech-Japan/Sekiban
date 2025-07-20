@@ -1,6 +1,6 @@
 import { ResultAsync } from 'neverthrow';
-import { IEvent } from './event.js';
-import { EventRetrievalInfo } from './event-retrieval-info.js';
+import { IEvent } from './event';
+import { EventRetrievalInfo } from './event-retrieval-info';
 
 /**
  * Interface for reading events from storage

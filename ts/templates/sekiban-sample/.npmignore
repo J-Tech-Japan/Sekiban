@@ -1,0 +1,27 @@
+# Logs
+template/logs/
+template/tmp/
+template/packages/*/node_modules/
+template/packages/*/dist/
+template/packages/*/.env
+template/packages/*/.env.local
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+*.log

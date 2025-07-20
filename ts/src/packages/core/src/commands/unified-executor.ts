@@ -3,22 +3,22 @@ import type {
   ICommandWithHandler,
   ICommandContext,
   ICommandContextWithoutState 
-} from '../schema-registry/command-schema.js';
-import type { IEventStore } from '../events/store.js';
-import type { IAggregateLoader } from '../aggregates/loader.js';
-import type { IAggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
-import type { IEvent, IEventPayload } from '../events/index.js';
-import { createEvent, createEventMetadata, type EventMetadata } from '../events/event.js';
-import type { Aggregate } from '../aggregates/aggregate.js';
-import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
-import type { SekibanError } from '../result/errors.js';
+} from '../schema-registry/command-schema';
+import type { IEventStore } from '../events/store';
+import type { IAggregateLoader } from '../aggregates/loader';
+import type { IAggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector';
+import type { IEvent, IEventPayload } from '../events/index';
+import { createEvent, createEventMetadata, type EventMetadata } from '../events/event';
+import type { Aggregate } from '../aggregates/aggregate';
+import type { EmptyAggregatePayload } from '../aggregates/aggregate';
+import type { SekibanError } from '../result/errors';
 import { 
   CommandValidationError, 
   AggregateNotFoundError,
   ConcurrencyError 
-} from '../result/errors.js';
-import type { PartitionKeys, Metadata } from '../documents/index.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
+} from '../result/errors';
+import type { PartitionKeys, Metadata } from '../documents/index';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
 
 /**
  * Command execution result

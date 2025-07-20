@@ -1,4 +1,4 @@
-import { IEvent } from './event.js';
+import { IEvent } from './event';
 
 /**
  * Interface for writing events to storage

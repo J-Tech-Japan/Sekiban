@@ -8,10 +8,10 @@ import {
   SchemaRegistry,
   SchemaExecutor,
   globalRegistry
-} from '../index.js';
-import { InMemoryEventStore } from '../../events/in-memory-event-store.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
-import { ValidationError } from '../../result/errors.js';
+} from '../index';
+import { InMemoryEventStore } from '../../events/in-memory-event-store';
+import { PartitionKeys } from '../../documents/partition-keys';
+import { ValidationError } from '../../result/errors';
 
 describe('Schema Registry Integration Tests', () => {
   let registry: SchemaRegistry;

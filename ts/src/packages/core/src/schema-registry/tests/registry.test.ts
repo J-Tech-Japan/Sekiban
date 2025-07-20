@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { SchemaRegistry } from '../registry.js';
-import { defineEvent } from '../event-schema.js';
-import { defineCommand } from '../command-schema.js';
-import { defineProjector } from '../projector-schema.js';
-import { PartitionKeys } from '../../documents/partition-keys.js';
+import { SchemaRegistry } from '../registry';
+import { defineEvent } from '../event-schema';
+import { defineCommand } from '../command-schema';
+import { defineProjector } from '../projector-schema';
+import { PartitionKeys } from '../../documents/partition-keys';
 import { ok } from 'neverthrow';
-import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector.js';
+import type { ITypedAggregatePayload } from '../../aggregates/aggregate-projector';
 
 // Test types
 interface UserPayload extends ITypedAggregatePayload {

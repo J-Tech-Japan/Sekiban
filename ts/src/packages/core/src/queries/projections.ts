@@ -1,5 +1,5 @@
-import { IEventType as Event, IEventPayload } from '../events/index.js';
-import { PartitionKeys } from '../documents/index.js';
+import { IEventType as Event, IEventPayload } from '../events/index';
+import { PartitionKeys } from '../documents/index';
 
 /**
  * Base interface for projections

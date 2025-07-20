@@ -1,18 +1,20 @@
 {
   "name": "@sekiban/core",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.1",
   "description": "Core event sourcing and CQRS framework for TypeScript",
-  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "prebuild": "rm -rf dist",
+    "build": "./build-types.sh",
+    "postbuild": "ls -la dist/*.d.ts || echo 'Warning: No .d.ts files found!'",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:watch": "vitest --watch",
@@ -45,9 +47,15 @@
   },
   "files": [
     "dist",
-    "src"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/J-Tech-Japan/Sekiban",
+    "directory": "ts/src/packages/core"
   }
 }

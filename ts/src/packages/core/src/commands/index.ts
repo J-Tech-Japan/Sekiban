@@ -3,7 +3,7 @@
  */
 export type {
   CommandExecutionOptions
-} from './types.js'
+} from './types'
 
 /**
  * Export legacy command interfaces for backwards compatibility
@@ -11,13 +11,13 @@ export type {
  */
 export type {
   ICommand,
-} from './command.js'
+} from './command'
 
 export type {
   CommandContext,
   CommandResult,
   ICommandExecutor
-} from './executor.js'
+} from './executor'
 
 /**
  * Export validation utilities
@@ -26,7 +26,7 @@ export type {
   ValidationRule,
   CommandValidator,
   ValidationRules
-} from './validation.js'
+} from './validation'
 
 export {
   createCommandValidator,
@@ -38,7 +38,7 @@ export {
   range,
   pattern,
   custom
-} from './validation.js'
+} from './validation'
 
 /**
  * Export unified command executor
@@ -47,12 +47,12 @@ export type {
   CommandExecutionResult,
   UnifiedCommandExecutionOptions,
   IServiceProvider
-} from './unified-executor.js'
+} from './unified-executor'
 
 export {
   UnifiedCommandExecutor,
   createUnifiedExecutor
-} from './unified-executor.js'
+} from './unified-executor'
 
 /**
  * Legacy exports for backwards compatibility

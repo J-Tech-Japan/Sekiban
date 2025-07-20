@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Metadata, MetadataBuilder } from './metadata.js'
+import { Metadata, MetadataBuilder } from './metadata'
 
 describe('Metadata', () => {
   describe('MetadataBuilder', () => {

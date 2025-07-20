@@ -6,26 +6,26 @@
  */
 
 // Core schema definition functions
-export { defineEvent } from './event-schema.js';
-export { defineCommand } from './command-schema.js';
-export { defineProjector } from './projector-schema.js';
+export { defineEvent } from './event-schema';
+export { defineCommand } from './command-schema';
+export { defineProjector } from './projector-schema';
 
 // Simplified command API
-export { command } from './command-api.js';
+export { command } from './command-api';
 
 // Schema registry and executor
-export { SchemaRegistry } from './registry.js';
-export { SchemaExecutor } from './schema-executor.js';
+export { SchemaRegistry } from './registry';
+export { SchemaExecutor } from './schema-executor';
 
 // Schema-based SekibanDomainTypes implementation
-export { createSchemaDomainTypes, createSekibanDomainTypesFromGlobalRegistry } from './schema-domain-types.js';
+export { createSchemaDomainTypes, createSekibanDomainTypesFromGlobalRegistry } from './schema-domain-types';
 
 // Type exports for advanced usage
 export type {
   EventSchemaDefinition,
   EventDefinition,
   InferEventType
-} from './event-schema.js';
+} from './event-schema';
 
 export type {
   ICommandContextWithoutState,
@@ -37,26 +37,26 @@ export type {
   CommandDefinitionResult,
   CommandDefinition,
   InferCommandType
-} from './command-schema.js';
+} from './command-schema';
 
 export type {
   ProjectionFunction,
   ProjectorDefinition,
   ProjectorDefinitionType,
   InferProjectorPayload
-} from './projector-schema.js';
+} from './projector-schema';
 
 export type {
   SafeParseResult
-} from './registry.js';
+} from './registry';
 
 export type {
   SchemaExecutorConfig,
   CommandResponse
-} from './schema-executor.js';
+} from './schema-executor';
 
 // Import SchemaRegistry for global instance
-import { SchemaRegistry } from './registry.js';
+import { SchemaRegistry } from './registry';
 
 // Create a global registry instance for convenience
 export const globalRegistry = new SchemaRegistry();

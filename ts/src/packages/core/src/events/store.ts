@@ -1,8 +1,8 @@
 import { Result } from 'neverthrow';
-import { Event, EventFilter } from './types.js';
-import { IEventPayload } from './event-payload.js';
-import { EventStoreError, ConcurrencyError } from '../result/index.js';
-import { PartitionKeys } from '../documents/index.js';
+import { Event, EventFilter } from './types';
+import { IEventPayload } from './event-payload';
+import { EventStoreError, ConcurrencyError } from '../result/index';
+import { PartitionKeys } from '../documents/index';
 
 /**
  * Interface for event store implementations

@@ -1,21 +1,21 @@
 import { Result, ResultAsync, ok, err } from 'neverthrow';
-import type { CommandDefinition } from './command-schema.js';
-import type { ProjectorDefinitionType } from './projector-schema.js';
-import type { SchemaRegistry } from './registry.js';
-import type { IEvent } from '../events/event.js';
-import { createEvent, createEventMetadata, type EventMetadata } from '../events/event.js';
-import type { PartitionKeys } from '../documents/partition-keys.js';
-import type { Aggregate } from '../aggregates/aggregate.js';
-import type { EmptyAggregatePayload } from '../aggregates/aggregate.js';
-import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector.js';
-import type { SekibanError } from '../result/errors.js';
-import { ValidationError, CommandValidationError, QueryExecutionError } from '../result/errors.js';
-import { SortableUniqueId } from '../documents/sortable-unique-id.js';
-import { InMemoryEventStore, InMemoryEventReader, InMemoryEventWriter } from '../events/in-memory-event-store.js';
-import type { IMultiProjectionQuery } from '../queries/query.js';
-import type { ICommandContext } from './command-schema.js';
-import type { IEventPayload } from '../events/event-payload.js';
-import type { Metadata } from '../documents/metadata.js';
+import type { CommandDefinition } from './command-schema';
+import type { ProjectorDefinitionType } from './projector-schema';
+import type { SchemaRegistry } from './registry';
+import type { IEvent } from '../events/event';
+import { createEvent, createEventMetadata, type EventMetadata } from '../events/event';
+import type { PartitionKeys } from '../documents/partition-keys';
+import type { Aggregate } from '../aggregates/aggregate';
+import type { EmptyAggregatePayload } from '../aggregates/aggregate';
+import type { ITypedAggregatePayload } from '../aggregates/aggregate-projector';
+import type { SekibanError } from '../result/errors';
+import { ValidationError, CommandValidationError, QueryExecutionError } from '../result/errors';
+import { SortableUniqueId } from '../documents/sortable-unique-id';
+import { InMemoryEventStore, InMemoryEventReader, InMemoryEventWriter } from '../events/in-memory-event-store';
+import type { IMultiProjectionQuery } from '../queries/query';
+import type { ICommandContext } from './command-schema';
+import type { IEventPayload } from '../events/event-payload';
+import type { Metadata } from '../documents/metadata';
 
 /**
  * Configuration for schema-based executor

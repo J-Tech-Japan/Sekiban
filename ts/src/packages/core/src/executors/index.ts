@@ -6,7 +6,7 @@ export type {
   SekibanExecutorConfig,
   ISekibanTransaction,
   ITransactionalSekibanExecutor
-} from './types.js';
+} from './types';
 
 /**
  * Export base executor implementations
@@ -15,7 +15,7 @@ export {
   SekibanExecutorBase,
   TransactionalSekibanExecutorBase,
   SimpleTransaction
-} from './base.js';
+} from './base';
 
 
 /**
@@ -25,5 +25,5 @@ export {
   InMemorySekibanExecutorWithDomainTypes,
   createInMemorySekibanExecutor,
   InMemorySekibanExecutorBuilder as InMemorySekibanExecutorWithDomainTypesBuilder
-} from './in-memory-with-domain-types.js';
+} from './in-memory-with-domain-types';
 

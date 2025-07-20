@@ -1,5 +1,7 @@
 # @sekiban/dapr
 
+> ⚠️ **Alpha Version**: This package is currently in alpha. APIs may change between releases.
+
 Dapr actor integration for Sekiban Event Sourcing framework with snapshot support.
 
 ## Overview
@@ -13,7 +15,11 @@ This package provides integration between Sekiban and Dapr actors, enabling:
 ## Installation
 
 ```bash
-npm install @sekiban/dapr @sekiban/core
+npm install @sekiban/dapr@alpha @sekiban/core@alpha
+# or
+pnpm add @sekiban/dapr@alpha @sekiban/core@alpha
+# or
+yarn add @sekiban/dapr@alpha @sekiban/core@alpha
 ```
 
 ## Features

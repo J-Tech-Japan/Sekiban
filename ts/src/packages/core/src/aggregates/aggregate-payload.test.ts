@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { IAggregatePayload, isAggregatePayload } from './aggregate-payload.js'
+import { IAggregatePayload, isAggregatePayload } from './aggregate-payload'
 
 describe('IAggregatePayload', () => {
   describe('Type marker interface', () => {
