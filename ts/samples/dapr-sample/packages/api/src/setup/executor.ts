@@ -1,5 +1,5 @@
 import { DaprClient } from '@dapr/dapr';
-import { SekibanDaprExecutor, type DaprSekibanConfiguration } from '@sekiban/dapr';
+import type { DaprSekibanConfiguration, ISekibanDaprExecutor } from '@sekiban/dapr';
 import type { ICommandWithHandler } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from '../config/index.js';
@@ -57,10 +57,12 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     eventTopicName: config.DAPR_EVENT_TOPIC,
     actorType: config.DAPR_ACTOR_TYPE,
     actorIdPrefix: config.DAPR_APP_ID,
-    retryAttempts: 3,
-    retryDelayMs: 100
+    retryAttempts: 3
   };
 
+  // Dynamically import SekibanDaprExecutor
+  const { SekibanDaprExecutor } = await import('@sekiban/dapr');
+  
   // Create the Sekiban Dapr executor
   executorInstance = new SekibanDaprExecutor(
     daprClientInstance,

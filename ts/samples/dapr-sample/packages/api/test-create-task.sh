@@ -5,7 +5,7 @@ echo
 
 # Create a new task
 echo "Creating a new task..."
-curl -X POST http://localhost:3000/api/tasks \
+curl -X POST http://localhost:3001/api/tasks \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Test Task with Awilix",

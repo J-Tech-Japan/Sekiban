@@ -18,7 +18,7 @@ import {
 import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
 // import { GetTaskById } from './aggregates/task/queries/task-queries.js';
 import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
-import { UserProjector } from './aggregates/user/projectors/user-projector.js';
+import { userProjectorDefinition } from './aggregates/user/projectors/user-projector.js';
 
 // Register all domain types with the global registry
 // Events
@@ -44,7 +44,7 @@ globalRegistry.registerEvent(UserEmailChanged);
 
 // Projectors
 globalRegistry.registerProjector(taskProjectorDefinition);
-globalRegistry.registerProjector(UserProjector);
+globalRegistry.registerProjector(userProjectorDefinition);
 
 // TODO: Register queries when supported
 // globalRegistry.registerQuery(GetTaskById);
@@ -52,16 +52,12 @@ globalRegistry.registerProjector(UserProjector);
 export function createTaskDomainTypes() {
   const domainTypes = createSchemaDomainTypes(globalRegistry);
   
-  // Add convenience properties for backward compatibility
+  // Add convenience methods using the public API
   return {
     ...domainTypes,
-    // Expose the registry's collections directly
-    commands: globalRegistry.commandDefinitions,
-    events: globalRegistry.eventDefinitions,
-    projectors: globalRegistry.projectorDefinitions,
-    // Add helper methods
-    findCommandDefinition: (name: string) => globalRegistry.commandDefinitions.get(name),
-    findEventDefinition: (name: string) => globalRegistry.eventDefinitions.get(name),
-    findProjectorDefinition: (name: string) => globalRegistry.projectorDefinitions.get(name)
+    // Add helper methods using public API
+    findCommandDefinition: (name: string) => globalRegistry.getCommand(name),
+    findEventDefinition: (name: string) => globalRegistry.getEventDefinition(name),
+    findProjectorDefinition: (name: string) => globalRegistry.getProjector(name)
   };
 }

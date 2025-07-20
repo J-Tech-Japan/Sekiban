@@ -1,8 +1,9 @@
 // Test full flow with pub/sub
-import { DaprClient, ActorId, ActorProxyBuilder } from '@dapr/dapr';
+import { DaprClient, ActorId, ActorProxyBuilder, HttpMethod } from '@dapr/dapr';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { InMemoryEventStore, StorageProviderType, SortableUniqueId, PartitionKeys } from '@sekiban/core';
 import { MultiProjectorActor, MultiProjectorActorFactory, initializeDaprContainer } from '@sekiban/dapr';
+import type { IActorProxyFactory } from './types/test-types.js';
 
 console.log('🧪 Testing Full Flow with Pub/Sub\n');
 
@@ -27,15 +28,16 @@ async function testFullPubSub() {
   });
   
   // Create actor proxy factory
-  const actorProxyFactory = {
-    createActorProxy: (actorId: any, actorType: string) => {
+  const actorProxyFactory: IActorProxyFactory = {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
       console.log(`Creating actor proxy for ${actorType}/${actorId.id || actorId}`);
       if (actorType === 'MultiProjectorActor') {
-        const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+        const factory = MultiProjectorActorFactory as unknown as { createActorClass(): typeof MultiProjectorActor };
+        const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
-        return builder.build(new ActorId(actorId.id || actorId));
+        return builder.build(new ActorId(actorId.id || actorId)) as T;
       }
-      return null;
+      throw new Error(`Unknown actor type: ${actorType}`);
     }
   };
   
@@ -124,9 +126,9 @@ async function testFullPubSub() {
   console.log('\n📊 Querying projections from MultiProjectorActor...');
   
   // Create actor proxy
-  const actorId = 'aggregatelistprojector-taskprojector';
+  const multiProjectorActorId = 'aggregatelistprojector-taskprojector';
   const proxy = actorProxyFactory.createActorProxy(
-    new ActorId(actorId),
+    new ActorId(multiProjectorActorId),
     'MultiProjectorActor'
   );
   
@@ -136,18 +138,25 @@ async function testFullPubSub() {
   }
   
   try {
-    const result = await (proxy as any).queryListAsync({
-      queryType: 'GetAllTasks',
-      payload: {},
-      skip: 0,
-      take: 10
-    });
+    // Use HTTP invoke instead of direct method call
+    const result = await daprClient.invoker.invoke(
+      'dapr-sample-api-multi-projector',
+      `actors/MultiProjectorActor/${multiProjectorActorId}/method/queryListAsync`,
+      HttpMethod.PUT,
+      {
+        queryType: 'GetAllTasks',
+        payload: {},
+        skip: 0,
+        take: 10
+      }
+    );
     
     console.log('Query Result:', JSON.stringify(result, null, 2));
     
-    if (result.isSuccess && result.items && result.items.length > 0) {
-      console.log(`\n✅ Found ${result.items.length} projections`);
-      const foundOurTask = result.items.find((item: any) => item.id === taskId);
+    const typedResult = result as { isSuccess?: boolean; items?: any[] };
+    if (typedResult.isSuccess && typedResult.items && typedResult.items.length > 0) {
+      console.log(`\n✅ Found ${typedResult.items.length} projections`);
+      const foundOurTask = typedResult.items.find((item: any) => item.id === taskId);
       
       if (foundOurTask) {
         console.log('\n✅ SUCCESS! Found our task in projections:');

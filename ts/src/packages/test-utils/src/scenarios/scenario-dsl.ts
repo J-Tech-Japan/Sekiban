@@ -2,14 +2,14 @@ import {
   ICommand, 
   IEventPayload, 
   IAggregatePayload,
-  ICommandHandler,
+  ICommandWithHandler,
   IProjector,
   EventDocument,
   PartitionKeys,
   SortableUniqueId,
   Result,
   SekibanError
-} from '../../../core/src';
+} from '@sekiban/core';
 import { EventBuilder } from '../builders/event-builder';
 import { expect } from 'vitest';
 
@@ -17,7 +17,7 @@ import { expect } from 'vitest';
  * Test context for running scenarios
  */
 export interface TestContext<TCommand extends ICommand = ICommand> {
-  commandHandler: ICommandHandler<TCommand>;
+  commandHandler: ICommandWithHandler<TCommand, any>;
   projector: IProjector<any>;
   currentTime?: Date;
   snapshotVersion?: number;
@@ -27,7 +27,7 @@ export interface TestContext<TCommand extends ICommand = ICommand> {
  * Multi-command test context
  */
 export interface SequenceTestContext {
-  commandHandlers: Record<string, ICommandHandler<any>>;
+  commandHandlers: Record<string, ICommandWithHandler<any, any>>;
   projector: IProjector<any>;
   currentTime?: Date;
 }
@@ -241,7 +241,7 @@ export class TestScenario {
 
     if (result.isOk()) {
       const startVersion = context.snapshotVersion || this.givenEventsData.length;
-      this.producedEvents = result.value.map((event, index) => {
+      this.producedEvents = result.value.map((event: any, index: number) => {
         const builder = new EventBuilder(event.eventType)
           .withPayload(event.payload)
           .withVersion(startVersion + index + 1)
@@ -261,7 +261,14 @@ export class TestScenario {
 
       // Project final state
       const allEvents = [...this.givenEventsData, ...this.producedEvents];
-      this.resultingAggregate = context.projector.project(allEvents);
+      let finalAggregate = context.projector.getInitialState(this.partitionKeys!);
+      for (const event of allEvents) {
+        const result = context.projector.project(finalAggregate, event);
+        if (result.isOk()) {
+          finalAggregate = result.value;
+        }
+      }
+      this.resultingAggregate = finalAggregate;
     } else {
       this.commandError = result.error;
     }
@@ -288,11 +295,17 @@ export class TestScenario {
         throw new Error(`No handler found for command type: ${command.type}`);
       }
 
-      const currentAggregate = context.projector.project(allEvents);
+      let currentAggregate = context.projector.getInitialState(this.partitionKeys!);
+      for (const event of allEvents) {
+        const result = context.projector.project(currentAggregate, event);
+        if (result.isOk()) {
+          currentAggregate = result.value;
+        }
+      }
       const result = await handler.handle(command, currentAggregate);
 
       if (result.isOk()) {
-        const newEvents = result.value.map((event, index) => {
+        const newEvents = result.value.map((event: any, index: number) => {
           const builder = new EventBuilder(event.eventType)
             .withPayload(event.payload)
             .withVersion(allEvents.length + index + 1)
@@ -314,7 +327,14 @@ export class TestScenario {
     }
 
     // Project final state
-    this.resultingAggregate = context.projector.project(allEvents);
+    let finalAggregate = context.projector.getInitialState(this.partitionKeys!);
+    for (const event of allEvents) {
+      const result = context.projector.project(finalAggregate, event);
+      if (result.isOk()) {
+        finalAggregate = result.value;
+      }
+    }
+    this.resultingAggregate = finalAggregate;
 
     // Run expectations
     for (const expectation of this.expectations) {

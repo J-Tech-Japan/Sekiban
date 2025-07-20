@@ -75,7 +75,7 @@ out/
 *.orig
 
 # Test artifacts
-test-*.sh
+# test-*.sh  # Commented out to allow test-all-operations.sh
 test-*.mjs
 test-*.cjs
 analyze-error.md

@@ -1,5 +1,5 @@
-export { PostgresEventStore } from './postgres-event-store.js';
-export { createPostgresEventStore } from './postgres-storage-provider.js';
+export { PostgresEventStore } from './postgres-event-store';
+export { createPostgresEventStore } from './postgres-storage-provider';
 
 // Auto-register when imported
-import './postgres-storage-provider.js';
+import './postgres-storage-provider';

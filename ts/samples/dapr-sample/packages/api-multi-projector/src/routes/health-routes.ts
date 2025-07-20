@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 
-export const healthRoutes = Router();
+export const healthRoutes: ExpressRouter = Router();
 
 healthRoutes.get('/health', (_req, res) => {
   res.json({ 

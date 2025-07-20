@@ -49,7 +49,7 @@ temp/
 components-contrib/
 
 # Test scripts and temporary test files
-test-*.sh
+# test-*.sh  # Commented out to allow test-all-operations.sh
 test-*.mjs
 test-*.cjs
 analyze-error.md

@@ -1,4 +1,4 @@
-import { ICommand, PartitionKeys, Metadata } from '../../../core/src';
+import { ICommand, PartitionKeys, Metadata } from '@sekiban/core';
 
 /**
  * Command with metadata for testing

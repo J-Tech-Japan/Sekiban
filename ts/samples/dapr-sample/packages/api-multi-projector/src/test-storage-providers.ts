@@ -1,5 +1,5 @@
 import { DaprClient, HttpMethod } from '@dapr/dapr';
-import { InMemoryEventStore as StorageInMemoryEventStore, StorageProviderType, PartitionKeys, Event, SortableUniqueId, IEvent } from '@sekiban/core';
+import { InMemoryEventStore as StorageInMemoryEventStore, StorageProviderType, PartitionKeys, IEvent, SortableUniqueId, createEvent, createEventMetadata } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
@@ -10,8 +10,8 @@ const { Pool } = pg;
 async function testWithInMemory() {
   console.log('🧪 Testing with InMemory Event Store...\n');
   
-  // Import from storage folder
-  const { InMemoryEventStore } = await import('@sekiban/core/storage');
+  // Use the already imported InMemoryEventStore
+  const InMemoryEventStore = StorageInMemoryEventStore;
   
   // Create InMemory event store
   const eventStore = new InMemoryEventStore({
@@ -32,36 +32,32 @@ async function testWithInMemory() {
   
   // Create proper IEvent objects
   const events: IEvent[] = [
-    {
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCreated',
+      eventType: 'TaskCreated',
+      version: 1,
       payload: {
         taskId,
         title: 'Test Task InMemory',
         description: 'Testing with InMemory storage',
         assigneeEmail: 'test@example.com'
       },
-      version: 1,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
-      createdAt: new Date()
-    },
-    {
+      metadata: createEventMetadata({ timestamp: new Date() })
+    }),
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskAssigned',
+      eventType: 'TaskAssigned',
+      version: 2,
       payload: {
         taskId,
         assigneeEmail: 'developer@example.com'
       },
-      version: 2,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
-      createdAt: new Date()
-    }
+      metadata: createEventMetadata({ timestamp: new Date() })
+    })
   ];
   
   // Use saveEvents method
@@ -103,36 +99,32 @@ async function testWithPostgres() {
   
   // Create proper IEvent objects
   const events: IEvent[] = [
-    {
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCreated',
+      eventType: 'TaskCreated',
+      version: 1,
       payload: {
         taskId,
         title: 'Test Task PostgreSQL',
         description: 'Testing with PostgreSQL storage',
         assigneeEmail: 'postgres@example.com'
       },
-      version: 1,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
-      createdAt: new Date()
-    },
-    {
+      metadata: createEventMetadata({ timestamp: new Date() })
+    }),
+    createEvent({
       id: SortableUniqueId.create(),
+      partitionKeys,
       aggregateType: 'Task',
-      aggregateId: taskId,
-      type: 'TaskCompleted',
+      eventType: 'TaskCompleted',
+      version: 2,
       payload: {
         taskId,
         completedAt: new Date().toISOString()
       },
-      version: 2,
-      partitionKeys,
-      sortableUniqueId: SortableUniqueId.create().value,
-      createdAt: new Date()
-    }
+      metadata: createEventMetadata({ timestamp: new Date() })
+    })
   ];
   
   // Use saveEvents method

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CommandBuilder } from './command-builder';
-import { ICommand, PartitionKeys, Metadata } from '../../../core/src';
+import { ICommand, PartitionKeys, Metadata } from '@sekiban/core';
 
 // Test commands
 interface CreateUser extends ICommand {

@@ -5,7 +5,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
-import { MultiProjectorActorFactory, getDaprCradle } from '@sekiban/dapr';
+import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -80,7 +80,8 @@ async function startServer() {
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
-        const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+        const factory = MultiProjectorActorFactory as unknown as { createActorClass(): typeof MultiProjectorActor };
+        const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr));
       }
@@ -102,7 +103,10 @@ async function startServer() {
   };
 
   // Configure MultiProjectorActorFactory
-  MultiProjectorActorFactory.configure(
+  const configureMethod = MultiProjectorActorFactory as unknown as {
+    configure(domainTypes: any, serviceProvider: any, actorProxyFactory: any, serializationService: any, eventStore: any): void;
+  };
+  configureMethod.configure(
     domainTypes,
     {}, // service provider
     actorProxyFactory,
@@ -110,8 +114,8 @@ async function startServer() {
     eventStore
   );
 
-  // Create actor class
-  const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+  // Create actor class - use direct reference to avoid type issues
+  const MultiProjectorActorClass = MultiProjectorActor as any;
 
   // Create DaprServer
   const daprServer = new DaprServer({

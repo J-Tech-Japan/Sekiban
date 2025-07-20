@@ -16,17 +16,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: sekiban-redis
-    ports:
-      - "6380:6379"  # Changed to 6380 to avoid conflict
-    command: redis-server --save 20 1 --loglevel warning
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 # volumes:
 #   postgres_data:

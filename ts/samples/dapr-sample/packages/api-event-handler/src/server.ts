@@ -65,18 +65,22 @@ async function main() {
 
   // Initialize DaprContainer with necessary dependencies
   initializeDaprContainer({
-    domainTypes: null, // Event handler doesn't need domain types
+    domainTypes: {} as any, // Event handler doesn't need domain types
     serviceProvider: {},
-    actorProxyFactory: null, // Event handler doesn't create other actors
-    serializationService: null,
+    actorProxyFactory: {
+      createActorProxy: <T>(): T => {
+        throw new Error('Event handler does not create other actors');
+      }
+    },
+    serializationService: {},
     eventStore: eventStore
   });
   
   // Configure AggregateEventHandlerActor factory
-  AggregateEventHandlerActorFactory.configure(eventStore);
+  (AggregateEventHandlerActorFactory as any).configure(eventStore);
 
   // Create actor class
-  const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
+  const EventHandlerActorClass = (AggregateEventHandlerActorFactory as any).createActorClass();
   logger.info('EventHandlerActorClass created:', EventHandlerActorClass.name);
 
   // Create DaprServer

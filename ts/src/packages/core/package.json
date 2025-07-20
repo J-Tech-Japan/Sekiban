@@ -30,7 +30,7 @@
   "author": "Sekiban",
   "license": "MIT",
   "dependencies": {
-    "neverthrow": "^6.1.0",
+    "neverthrow": "^8.0.0",
     "uuid": "^9.0.1",
     "zod": "^3.25.71"
   },

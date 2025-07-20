@@ -8,7 +8,9 @@ import type { SekibanError } from '../result/errors.js';
 import { CommandValidationError } from '../result/errors.js';
 import type { ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector.js';
 import type { IEvent } from '../events/event.js';
+import { createEvent, createEventMetadata } from '../events/event.js';
 import type { Metadata } from '../documents/metadata.js';
+import { SortableUniqueId } from '../documents/sortable-unique-id.js';
 
 /**
  * Command context without aggregate state - base context
@@ -364,15 +366,15 @@ export function createCommandContext<TAggregatePayload extends ITypedAggregatePa
     appendEvent(eventPayload: IEventPayload): Result<IEvent, SekibanError> {
       const event = eventBuilder 
         ? eventBuilder(eventPayload, this.getNextVersion())
-        : {
-            id: { toString: () => `test-${Date.now()}` } as any,
+        : createEvent({
+            id: SortableUniqueId.generate(),
             partitionKeys: aggregate.partitionKeys,
             aggregateType: aggregate.aggregateType,
             eventType: eventPayload.constructor.name,
             version: this.getNextVersion(),
             payload: eventPayload,
-            metadata: this.metadata
-          };
+            metadata: createEventMetadata(this.metadata)
+          });
       
       events.push(event);
       return ok(event);

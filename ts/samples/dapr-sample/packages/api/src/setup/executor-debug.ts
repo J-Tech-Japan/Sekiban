@@ -1,5 +1,5 @@
 import { DaprClient } from '@dapr/dapr';
-import { SekibanDaprExecutor, type DaprSekibanConfiguration } from '@sekiban/dapr';
+import type { DaprSekibanConfiguration, ISekibanDaprExecutor } from '@sekiban/dapr';
 import type { ICommandWithHandler } from '@sekiban/core';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from '../config/index.js';
@@ -18,7 +18,7 @@ interface SekibanExecutor {
 
 // Create a wrapper that adds logging
 class LoggingSekibanExecutor implements SekibanExecutor {
-  constructor(private readonly innerExecutor: SekibanDaprExecutor) {}
+  constructor(private readonly innerExecutor: ISekibanDaprExecutor) {}
 
   async executeCommandAsync<TCommand extends ICommandWithHandler<any, any, any>>(
     command: TCommand,
@@ -120,12 +120,14 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     eventTopicName: config.DAPR_EVENT_TOPIC,
     actorType: config.DAPR_ACTOR_TYPE,
     actorIdPrefix: config.DAPR_APP_ID,
-    retryAttempts: 3,
-    retryDelayMs: 100
+    retryAttempts: 3
   };
 
   console.log('[EXECUTOR SETUP] Sekiban configuration:', JSON.stringify(sekibanConfig, null, 2));
 
+  // Dynamically import SekibanDaprExecutor
+  const { SekibanDaprExecutor } = await import('@sekiban/dapr');
+  
   // Create the Sekiban Dapr executor
   console.log('[EXECUTOR SETUP] Creating SekibanDaprExecutor...');
   const innerExecutor = new SekibanDaprExecutor(
