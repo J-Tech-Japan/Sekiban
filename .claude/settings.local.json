@@ -64,7 +64,8 @@
       "Bash(sed:*)",
       "Bash(ps:*)",
       "Bash(./run-all-services.sh:*)",
-      "Bash(./test-all-operations.sh:*)"
+      "Bash(./test-all-operations.sh:*)",
+      "Bash(pnpm list:*)"
     ],
     "deny": []
   },

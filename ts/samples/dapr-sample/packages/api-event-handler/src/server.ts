@@ -3,6 +3,7 @@ import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { createCosmosEventStore } from '@sekiban/cosmos';
 import pg from 'pg';
 import pino from 'pino';
 
@@ -21,8 +22,10 @@ const logger = pino({
 
 const PORT = process.env.PORT || 3002;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
-const USE_POSTGRES = process.env.USE_POSTGRES === 'true';
+const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db';
+const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING;
+const COSMOS_DATABASE_NAME = process.env.COSMOS_DATABASE_NAME || 'sekiban_events';
 
 async function main() {
   const app = express();
@@ -37,30 +40,61 @@ async function main() {
   let eventStore: any;
   let cleanup: () => Promise<void> = async () => {};
 
-  if (USE_POSTGRES) {
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({ connectionString: DATABASE_URL });
-    
-    // Test connection
-    try {
-      await pool.query('SELECT 1');
-      logger.info('PostgreSQL connection successful');
-    } catch (error) {
-      logger.error('Failed to connect to PostgreSQL:', error);
-      throw error;
+  switch (STORAGE_TYPE) {
+    case 'postgres': {
+      logger.info('Using PostgreSQL event store');
+      const pool = new Pool({ connectionString: DATABASE_URL });
+      
+      // Test connection
+      try {
+        await pool.query('SELECT 1');
+        logger.info('PostgreSQL connection successful');
+      } catch (error) {
+        logger.error('Failed to connect to PostgreSQL:', error);
+        throw error;
+      }
+      
+      eventStore = new PostgresEventStore(pool);
+      cleanup = async () => {
+        await pool.end();
+        logger.info('PostgreSQL connection closed');
+      };
+      break;
     }
     
-    eventStore = new PostgresEventStore(pool);
-    cleanup = async () => {
-      await pool.end();
-      logger.info('PostgreSQL connection closed');
-    };
-  } else {
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: true
-    });
+    case 'cosmos': {
+      logger.info('Using Cosmos DB event store');
+      
+      if (!COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING is required when STORAGE_TYPE is cosmos');
+      }
+      
+      const cosmosStoreResult = await createCosmosEventStore({
+        type: StorageProviderType.CosmosDB,
+        connectionString: COSMOS_CONNECTION_STRING,
+        databaseName: COSMOS_DATABASE_NAME,
+        enableLogging: true
+      });
+      
+      if (cosmosStoreResult.isErr()) {
+        logger.error('Failed to create Cosmos DB event store:', cosmosStoreResult.error);
+        throw cosmosStoreResult.error;
+      }
+      
+      eventStore = cosmosStoreResult.value;
+      logger.info('Cosmos DB event store initialized successfully');
+      break;
+    }
+    
+    case 'inmemory':
+    default: {
+      logger.info('Using in-memory event store');
+      eventStore = new InMemoryEventStore({
+        type: StorageProviderType.InMemory,
+        enableLogging: true
+      });
+      break;
+    }
   }
 
   // Initialize DaprContainer with necessary dependencies

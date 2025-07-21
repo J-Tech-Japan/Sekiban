@@ -15,7 +15,7 @@ This sample has been updated with critical fixes for Dapr actor integration:
 This sample implements a simple Task management system using:
 - **Sekiban Core** for event sourcing abstractions
 - **Sekiban Dapr** for distributed actor-based aggregates
-- **PostgreSQL** for event persistence (when using Dapr)
+- **Event Store Options**: In-memory, PostgreSQL, or Azure Cosmos DB
 - **Express.js** for REST API
 
 ## Project Structure
@@ -120,9 +120,47 @@ PUT /api/tasks/:id/complete
 ## Configuration
 
 Environment variables (see `.env.example`):
+- `STORAGE_TYPE` - Event store type: `inmemory`, `postgres`, or `cosmos` (default: `inmemory`)
 - `DAPR_HTTP_PORT` - If set, enables Dapr mode
-- `DATABASE_URL` - PostgreSQL connection string
+- `DATABASE_URL` - PostgreSQL connection string (required when `STORAGE_TYPE=postgres`)
+- `COSMOS_CONNECTION_STRING` - Azure Cosmos DB connection string (required when `STORAGE_TYPE=cosmos`)
+- `COSMOS_DATABASE_NAME` - Cosmos DB database name (default: `sekiban_events`)
 - `API_PREFIX` - API route prefix (default: `/api`)
+
+## Storage Options
+
+### In-Memory (Default)
+The simplest option for development and testing:
+```bash
+# No additional configuration needed
+pnpm dev
+```
+
+### PostgreSQL
+For production-ready persistence:
+```bash
+# Set up PostgreSQL first
+./setup-postgres.sh
+
+# Run with PostgreSQL
+STORAGE_TYPE=postgres pnpm dev
+
+# Or use the convenience script
+cd packages/api && pnpm dev:postgres
+```
+
+### Azure Cosmos DB
+For global distribution and automatic scaling:
+```bash
+# Set your Cosmos DB connection string
+export COSMOS_CONNECTION_STRING="AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key;"
+
+# Run with Cosmos DB
+STORAGE_TYPE=cosmos pnpm dev
+
+# Or use the convenience script
+cd packages/api && pnpm dev:cosmos
+```
 
 ## Development
 

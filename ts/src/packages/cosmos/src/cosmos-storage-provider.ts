@@ -5,14 +5,24 @@ import {
   StorageProviderConfig,
   StorageError,
   ConnectionError,
-  EventStoreFactory
+  EventStoreFactory,
+  SekibanDomainTypes,
+  SchemaRegistry
 } from '@sekiban/core';
 import { CosmosEventStore } from './cosmos-event-store';
 
 /**
+ * Extended configuration for CosmosDB that includes domain types
+ */
+export interface CosmosStorageProviderConfig extends StorageProviderConfig {
+  domainTypes?: SekibanDomainTypes;
+  registry?: SchemaRegistry;
+}
+
+/**
  * Creates a CosmosDB event store
  */
-export function createCosmosEventStore(config: StorageProviderConfig): ResultAsync<IEventStore, StorageError> {
+export function createCosmosEventStore(config: CosmosStorageProviderConfig): ResultAsync<IEventStore, StorageError> {
   if (!config.connectionString) {
     return errAsync(new StorageError('Connection string is required for CosmosDB provider', 'INVALID_CONFIG'));
   }
@@ -48,8 +58,8 @@ export function createCosmosEventStore(config: StorageProviderConfig): ResultAsy
           id: config.databaseName
         });
 
-        // Create event store
-        const eventStore = new CosmosEventStore(database);
+        // Create event store with optional domain types and registry
+        const eventStore = new CosmosEventStore(database, config.domainTypes, config.registry);
 
         // Initialize the event store
         await eventStore.initialize();
@@ -93,5 +103,5 @@ function extractKey(connectionString: string): string {
 
 // Register the CosmosDB provider with the factory
 if (typeof EventStoreFactory !== 'undefined') {
-  EventStoreFactory.register('CosmosDB', createCosmosEventStore);
+  EventStoreFactory.register('CosmosDB', (config) => createCosmosEventStore(config as CosmosStorageProviderConfig));
 }

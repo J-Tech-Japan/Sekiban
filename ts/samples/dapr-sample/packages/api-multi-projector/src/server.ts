@@ -8,6 +8,7 @@ import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorPro
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { createCosmosEventStore } from '@sekiban/cosmos';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from './config/index.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -102,41 +103,71 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Choose storage type based on environment variable or config
-  const usePostgres = config.USE_POSTGRES;
-  
+  // Choose storage type based on configuration
   let eventStore: any; // Use any to avoid neverthrow version mismatch
   
-  if (usePostgres) {
-    // Initialize PostgreSQL event store
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({
-      connectionString: config.DATABASE_URL
-    });
-    
-    eventStore = new PostgresEventStore(pool);
-    
-    // Initialize the database schema
-    logger.info('Initializing PostgreSQL schema...');
-    try {
-      const result = await eventStore.initialize();
-      if (result.isOk()) {
-        logger.info('PostgreSQL schema initialized successfully');
-      } else {
-        logger.error('Failed to initialize PostgreSQL schema:', result.error);
-        throw result.error;
+  switch (config.STORAGE_TYPE) {
+    case 'postgres': {
+      // Initialize PostgreSQL event store
+      logger.info('Using PostgreSQL event store');
+      const pool = new Pool({
+        connectionString: config.DATABASE_URL
+      });
+      
+      eventStore = new PostgresEventStore(pool);
+      
+      // Initialize the database schema
+      logger.info('Initializing PostgreSQL schema...');
+      try {
+        const result = await eventStore.initialize();
+        if (result.isOk()) {
+          logger.info('PostgreSQL schema initialized successfully');
+        } else {
+          logger.error('Failed to initialize PostgreSQL schema:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize PostgreSQL:', error);
+        throw error;
       }
-    } catch (error) {
-      logger.error('Failed to initialize PostgreSQL:', error);
-      throw error;
+      break;
     }
-  } else {
-    // Initialize in-memory event store
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: config.NODE_ENV === 'development'
-    });
+    
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      logger.info('Using Cosmos DB event store');
+      
+      if (!config.COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING is required when STORAGE_TYPE is cosmos');
+      }
+      
+      const cosmosStoreResult = await createCosmosEventStore({
+        type: StorageProviderType.CosmosDB,
+        connectionString: config.COSMOS_CONNECTION_STRING,
+        databaseName: config.COSMOS_DATABASE_NAME,
+        enableLogging: config.NODE_ENV === 'development'
+      });
+      
+      if (cosmosStoreResult.isErr()) {
+        logger.error('Failed to create Cosmos DB event store:', cosmosStoreResult.error);
+        throw cosmosStoreResult.error;
+      }
+      
+      eventStore = cosmosStoreResult.value;
+      logger.info('Cosmos DB event store initialized successfully');
+      break;
+    }
+    
+    case 'inmemory':
+    default: {
+      // Initialize in-memory event store
+      logger.info('Using in-memory event store');
+      eventStore = new InMemoryEventStore({
+        type: StorageProviderType.InMemory,
+        enableLogging: config.NODE_ENV === 'development'
+      });
+      break;
+    }
   }
 
   // Create DaprClient for actor proxy factory
