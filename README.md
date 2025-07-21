@@ -24,6 +24,22 @@ and .NET Core 9+, it allows developers to use a declarative API to create event 
 various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)
 , and Postgres, facilitating deployment on either Azure or AWS.
 
+## Available Implementations
+
+Sekiban is available in multiple implementations:
+
+### C# with Dapr
+The C# implementation with Dapr integration provides distributed event sourcing using virtual actors. Create a new C# Sekiban application with:
+
+```bash
+npx create-sekiban-app my-app
+```
+
+This creates a complete application with domain models, REST API, event handlers, projectors, and Dapr workflow integration.
+
+### TypeScript
+The TypeScript implementation offers the same event sourcing capabilities for Node.js developers. It supports both in-memory storage for development and PostgreSQL with Dapr actors for production use. Learn more in the [TypeScript packages directory](./ts).
+
 ## Getting started
 
 

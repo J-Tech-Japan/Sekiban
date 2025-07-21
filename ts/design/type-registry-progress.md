@@ -220,7 +220,7 @@ Location: `packages/core/src/schema-registry/tests/compatibility.test.ts`
 - [ ] Create class-to-schema adapters
 - [ ] Update executor for schema support
 - [ ] Add backward compatibility layer
-- [ ] Write migration guide
+- [ ] Write migration guide (REMOVED - no longer needed)
 - [ ] Create codemods
 
 ## Phase 5: Package Updates (Week 4)
@@ -410,7 +410,7 @@ SekibanDomainTypes was recently created to standardize type registration across 
 
 4. **Testing and Documentation**:
    - Created comprehensive integration test (`integration-with-domain-types.test.ts`)
-   - Created detailed migration guide (`docs/migration-guide.md`)
+   - Created detailed migration guide (`docs/migration-guide.md`) (REMOVED - no longer needed)
    - Tests verify serialization, command routing, and executor functionality
 
 ### Completed Tasks Summary:
@@ -439,7 +439,7 @@ SekibanDomainTypes was recently created to standardize type registration across 
    - Comprehensive test coverage for new functionality
 
 5. **Documentation** ✅:
-   - Created comprehensive migration guide (`docs/migration-guide.md`)
+   - Created comprehensive migration guide (`docs/migration-guide.md`) (REMOVED - no longer needed)
    - Updated README with new schema-based patterns
    - Added API documentation for new functions (`docs/api-reference.md`)
 
@@ -509,7 +509,7 @@ The implementation has been successfully completed with all major objectives ach
 2. **SekibanDomainTypes Integration**: All executors now use centralized type registry
 3. **Class-Based Removal**: Successfully removed GlobalRegistry and decorators
 4. **Dapr Integration**: Updated to use core SekibanDomainTypes
-5. **Documentation**: Comprehensive migration guide and API reference
+5. **Documentation**: ~~Comprehensive migration guide~~ and API reference
 
 The system is now ready for production use with:
 - Full type safety and runtime validation
@@ -521,7 +521,7 @@ The system is now ready for production use with:
 - ✅ Core functionality implemented and tested
 - ✅ Integration tests passing
 - ✅ Documentation complete
-- ✅ Migration guide available
+- ~~✅ Migration guide available~~ (REMOVED)
 - ✅ Example code provided
 - ⏳ Existing test migration (can be done incrementally)
 - ⏳ Performance optimizations (can be added as needed)
@@ -632,7 +632,7 @@ describe('defineEvent', () => {
 |------|--------|------------|
 | Breaking existing code | High | Compatibility layer, gradual migration |
 | Performance regression | Medium | Benchmark before/after |
-| Complex migration | Medium | Clear guide, codemods |
+| Complex migration | Medium | ~~Clear guide~~, codemods |
 | Type inference issues | Low | Extensive testing |
 
 ## Success Criteria
