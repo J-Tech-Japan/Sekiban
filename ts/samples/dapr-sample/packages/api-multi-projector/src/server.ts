@@ -8,7 +8,8 @@ import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorPro
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
-import { createCosmosEventStore } from '@sekiban/cosmos';
+// Import domain types at the top to ensure registration happens
+import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from './config/index.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -130,31 +131,6 @@ async function setupDaprActorsWithApp(app: express.Express) {
         logger.error('Failed to initialize PostgreSQL:', error);
         throw error;
       }
-      break;
-    }
-    
-    case 'cosmos': {
-      // Initialize Cosmos DB event store
-      logger.info('Using Cosmos DB event store');
-      
-      if (!config.COSMOS_CONNECTION_STRING) {
-        throw new Error('COSMOS_CONNECTION_STRING is required when STORAGE_TYPE is cosmos');
-      }
-      
-      const cosmosStoreResult = await createCosmosEventStore({
-        type: StorageProviderType.CosmosDB,
-        connectionString: config.COSMOS_CONNECTION_STRING,
-        databaseName: config.COSMOS_DATABASE_NAME,
-        enableLogging: config.NODE_ENV === 'development'
-      });
-      
-      if (cosmosStoreResult.isErr()) {
-        logger.error('Failed to create Cosmos DB event store:', cosmosStoreResult.error);
-        throw cosmosStoreResult.error;
-      }
-      
-      eventStore = cosmosStoreResult.value;
-      logger.info('Cosmos DB event store initialized successfully');
       break;
     }
     

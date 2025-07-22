@@ -3,7 +3,8 @@ import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
-import { createCosmosEventStore } from '@sekiban/cosmos';
+// Import domain types at the top to ensure registration happens
+import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
 import pino from 'pino';
 
@@ -24,8 +25,6 @@ const PORT = process.env.PORT || 3002;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
 const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db';
-const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING;
-const COSMOS_DATABASE_NAME = process.env.COSMOS_DATABASE_NAME || 'sekiban_events';
 
 async function main() {
   const app = express();
@@ -62,30 +61,6 @@ async function main() {
       break;
     }
     
-    case 'cosmos': {
-      logger.info('Using Cosmos DB event store');
-      
-      if (!COSMOS_CONNECTION_STRING) {
-        throw new Error('COSMOS_CONNECTION_STRING is required when STORAGE_TYPE is cosmos');
-      }
-      
-      const cosmosStoreResult = await createCosmosEventStore({
-        type: StorageProviderType.CosmosDB,
-        connectionString: COSMOS_CONNECTION_STRING,
-        databaseName: COSMOS_DATABASE_NAME,
-        enableLogging: true
-      });
-      
-      if (cosmosStoreResult.isErr()) {
-        logger.error('Failed to create Cosmos DB event store:', cosmosStoreResult.error);
-        throw cosmosStoreResult.error;
-      }
-      
-      eventStore = cosmosStoreResult.value;
-      logger.info('Cosmos DB event store initialized successfully');
-      break;
-    }
-    
     case 'inmemory':
     default: {
       logger.info('Using in-memory event store');
@@ -97,9 +72,12 @@ async function main() {
     }
   }
 
+  // Initialize domain types
+  const domainTypes = createTaskDomainTypes();
+  
   // Initialize DaprContainer with necessary dependencies
   initializeDaprContainer({
-    domainTypes: {} as any, // Event handler doesn't need domain types
+    domainTypes: domainTypes,
     serviceProvider: {},
     actorProxyFactory: {
       createActorProxy: <T>(): T => {

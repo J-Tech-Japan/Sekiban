@@ -10,10 +10,8 @@ interface Config {
   DAPR_APP_ID: string;
   API_PREFIX: string;
   CORS_ORIGIN: string;
-  STORAGE_TYPE: 'inmemory' | 'postgres' | 'cosmos';
+  STORAGE_TYPE: 'inmemory' | 'postgres';
   DATABASE_URL: string;
-  COSMOS_CONNECTION_STRING?: string;
-  COSMOS_DATABASE_NAME: string;
 }
 
 export const config: Config = {
@@ -23,8 +21,6 @@ export const config: Config = {
   DAPR_APP_ID: process.env.DAPR_APP_ID || 'dapr-sample-api-multi-projector',
   API_PREFIX: process.env.API_PREFIX || '/api/v1',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
-  STORAGE_TYPE: (process.env.STORAGE_TYPE as 'inmemory' | 'postgres' | 'cosmos') || 'inmemory',
-  DATABASE_URL: process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events',
-  COSMOS_CONNECTION_STRING: process.env.COSMOS_CONNECTION_STRING,
-  COSMOS_DATABASE_NAME: process.env.COSMOS_DATABASE_NAME || 'sekiban_events'
+  STORAGE_TYPE: (process.env.STORAGE_TYPE as 'inmemory' | 'postgres') || 'inmemory',
+  DATABASE_URL: process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'
 };

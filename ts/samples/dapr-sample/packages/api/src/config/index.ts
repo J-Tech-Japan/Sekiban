@@ -9,14 +9,11 @@ const ConfigSchema = z.object({
   ACTOR_SERVER_PORT: z.string().default('50010').transform(Number),
   
   // Storage configuration
-  STORAGE_TYPE: z.enum(['inmemory', 'postgres', 'cosmos']).default('inmemory'),
+  STORAGE_TYPE: z.enum(['inmemory', 'postgres']).default('inmemory'),
   
   // PostgreSQL configuration
   DATABASE_URL: z.string().default('postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'),
   
-  // Cosmos DB configuration
-  COSMOS_CONNECTION_STRING: z.string().optional(),
-  COSMOS_DATABASE_NAME: z.string().default('sekiban_events'),
   
   // Dapr configuration
   DAPR_HTTP_PORT: z.string().default('3500').transform(Number),

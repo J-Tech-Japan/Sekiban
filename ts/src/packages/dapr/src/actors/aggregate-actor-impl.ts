@@ -39,9 +39,22 @@ export class AggregateActorImpl {
     private readonly eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>
   ) {
     console.log(`[AggregateActorImpl] Created for actor ${actorId}`);
-    console.log(`[AggregateActorImpl] Available command types:`, 
-      this.domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name)
-    );
+    console.log(`[AggregateActorImpl] domainTypes received:`, !!domainTypes);
+    console.log(`[AggregateActorImpl] domainTypes.commandTypes:`, !!domainTypes?.commandTypes);
+    
+    if (domainTypes?.commandTypes) {
+      try {
+        const commandTypes = this.domainTypes.commandTypes.getCommandTypes();
+        console.log(`[AggregateActorImpl] Available command types:`, commandTypes.map((c: any) => c.name));
+        console.log(`[AggregateActorImpl] Number of command types:`, commandTypes.length);
+      } catch (error) {
+        console.error(`[AggregateActorImpl] Error getting command types:`, error);
+      }
+    } else {
+      console.error(`[AggregateActorImpl] No commandTypes in domainTypes!`);
+    }
+    
+    console.log(`[AggregateActorImpl] eventStore present:`, !!this.eventStore);
   }
 
   /**
@@ -122,17 +135,45 @@ export class AggregateActorImpl {
       console.log('[AggregateActorImpl] Current state before command:', currentState ? 'exists' : 'null');
       console.log('[AggregateActorImpl] Current state version:', currentState?.version || 0);
       
-      // Get the actual command definition from the global registry
-      const commandDef = globalRegistry.getCommand(commandType);
+      // Get the actual command definition from domain types (global registry is empty in actor context)
+      console.log('[AggregateActorImpl] Looking for command in domain types...');
+      console.log('[AggregateActorImpl] domainTypes.commandTypes:', this.domainTypes.commandTypes);
+      console.log('[AggregateActorImpl] domainTypes.commandTypes type:', typeof this.domainTypes.commandTypes);
+      console.log('[AggregateActorImpl] domainTypes.commandTypes keys:', Object.keys(this.domainTypes.commandTypes));
+      
+      // Access the command definition directly from the schema registry
+      let commandDef: any;
+      
+      // Check if domainTypes.commandTypes has a registry property with commandDefinitions
+      if ((this.domainTypes.commandTypes as any).registry && (this.domainTypes.commandTypes as any).registry.commandDefinitions) {
+        console.log('[AggregateActorImpl] Using schema registry to get command definition');
+        console.log('[AggregateActorImpl] Command definitions map:', (this.domainTypes.commandTypes as any).registry.commandDefinitions);
+        commandDef = (this.domainTypes.commandTypes as any).registry.commandDefinitions.get(commandType);
+        console.log('[AggregateActorImpl] Found command definition from registry:', commandDef);
+      }
       
       if (!commandDef) {
-        console.error('[AggregateActorImpl] Command not found in global registry');
-        console.error('[AggregateActorImpl] Available commands in registry:', globalRegistry.getCommandTypes().map((c: any) => c));
-        console.error('[AggregateActorImpl] Available commands in domain types:', this.domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name));
-        return {
-          success: false,
-          error: `Command not found in registry: ${commandType}`
-        } as any;
+        console.log('[AggregateActorImpl] Command not found in schema registry, falling back to getCommandTypes');
+        // Fallback to using getCommandTypes
+        const commandTypesArray = this.domainTypes.commandTypes.getCommandTypes();
+        console.log('[AggregateActorImpl] Command types array:', commandTypesArray);
+        
+        // Find the command type info
+        const commandTypeInfo = commandTypesArray.find((c: any) => c.name === commandType);
+        
+        if (!commandTypeInfo) {
+          console.error('[AggregateActorImpl] Command not found in domain types');
+          console.error('[AggregateActorImpl] Available commands in registry:', globalRegistry.getCommandTypes().map((c: any) => c));
+          console.error('[AggregateActorImpl] Available commands in domain types:', commandTypesArray.map((c: any) => c.name));
+          return {
+            success: false,
+            error: `Command not found in domain types: ${commandType}`
+          } as any;
+        }
+        
+        // The commandTypeInfo has { name, constructor }, we need to get the actual command definition
+        // The constructor property contains the actual command class/definition
+        commandDef = commandTypeInfo.constructor;
       }
       
       console.log('[AggregateActorImpl] Found command definition from registry:', commandDef);

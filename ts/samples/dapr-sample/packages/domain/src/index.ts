@@ -1,3 +1,6 @@
+// Import domain types to ensure registration happens
+import './domain-types.js';
+
 // Export domain types
 export { createTaskDomainTypes } from './domain-types.js';
 
