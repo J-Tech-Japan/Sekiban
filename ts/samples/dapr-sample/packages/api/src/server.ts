@@ -194,20 +194,14 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
         throw new Error('COSMOS_CONNECTION_STRING is required');
       }
       
+      logger.info(`COSMOS_CONNECTION_STRING length: ${config.COSMOS_CONNECTION_STRING.length}`);
+      logger.info(`COSMOS_CONNECTION_STRING starts with: ${config.COSMOS_CONNECTION_STRING.substring(0, 50)}...`);
+      
       // Import CosmosClient from Azure SDK
       const { CosmosClient } = await import('@azure/cosmos');
       
-      // Parse connection string
-      const endpoint = config.COSMOS_CONNECTION_STRING.match(/AccountEndpoint=([^;]+);/)?.[1];
-      const key = config.COSMOS_CONNECTION_STRING.match(/AccountKey=([^;]+);/)?.[1];
-      
-      if (!endpoint || !key) {
-        logger.error('Invalid COSMOS_CONNECTION_STRING format');
-        throw new Error('Invalid COSMOS_CONNECTION_STRING format');
-      }
-      
-      // Create Cosmos client
-      const cosmosClient = new CosmosClient({ endpoint, key });
+      // Create Cosmos client with connection string directly
+      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
       
       // Create database if it doesn't exist
       const { database } = await cosmosClient.databases.createIfNotExists({

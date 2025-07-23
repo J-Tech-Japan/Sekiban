@@ -76,17 +76,8 @@ async function main() {
       // Import CosmosClient from Azure SDK
       const { CosmosClient } = await import('@azure/cosmos');
       
-      // Parse connection string
-      const endpoint = COSMOS_CONNECTION_STRING.match(/AccountEndpoint=([^;]+);/)?.[1];
-      const key = COSMOS_CONNECTION_STRING.match(/AccountKey=([^;]+);/)?.[1];
-      
-      if (!endpoint || !key) {
-        logger.error('Invalid COSMOS_CONNECTION_STRING format');
-        throw new Error('Invalid COSMOS_CONNECTION_STRING format');
-      }
-      
-      // Create Cosmos client
-      const cosmosClient = new CosmosClient({ endpoint, key });
+      // Create Cosmos client with connection string directly
+      const cosmosClient = new CosmosClient(COSMOS_CONNECTION_STRING);
       
       // Create database if it doesn't exist
       const { database } = await cosmosClient.databases.createIfNotExists({
