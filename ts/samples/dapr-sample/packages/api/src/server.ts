@@ -18,6 +18,7 @@ import {
 } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -180,6 +181,51 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
       } catch (error) {
         logger.error('Failed to initialize PostgreSQL:', error);
         throw error;
+      }
+      break;
+    }
+    
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      logger.info('Using Cosmos DB event store');
+      
+      if (!config.COSMOS_CONNECTION_STRING) {
+        logger.error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
+        throw new Error('COSMOS_CONNECTION_STRING is required');
+      }
+      
+      // Import CosmosClient from Azure SDK
+      const { CosmosClient } = await import('@azure/cosmos');
+      
+      // Parse connection string
+      const endpoint = config.COSMOS_CONNECTION_STRING.match(/AccountEndpoint=([^;]+);/)?.[1];
+      const key = config.COSMOS_CONNECTION_STRING.match(/AccountKey=([^;]+);/)?.[1];
+      
+      if (!endpoint || !key) {
+        logger.error('Invalid COSMOS_CONNECTION_STRING format');
+        throw new Error('Invalid COSMOS_CONNECTION_STRING format');
+      }
+      
+      // Create Cosmos client
+      const cosmosClient = new CosmosClient({ endpoint, key });
+      
+      // Create database if it doesn't exist
+      const { database } = await cosmosClient.databases.createIfNotExists({
+        id: config.COSMOS_DATABASE
+      });
+      
+      logger.info(`Cosmos DB database '${config.COSMOS_DATABASE}' ready`);
+      
+      // Create event store with the database object
+      eventStore = new CosmosEventStore(database);
+      
+      // Initialize the event store (creates containers)
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('Cosmos DB event store initialized successfully');
+      } else {
+        logger.error('Failed to initialize Cosmos DB event store:', result.error);
+        throw result.error;
       }
       break;
     }

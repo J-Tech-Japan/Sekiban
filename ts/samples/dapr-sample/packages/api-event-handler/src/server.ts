@@ -3,6 +3,7 @@ import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
@@ -25,6 +26,9 @@ const PORT = process.env.PORT || 3002;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
 const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db';
+const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING || '';
+const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'sekiban-events';
+const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || 'events';
 
 async function main() {
   const app = express();
@@ -57,6 +61,54 @@ async function main() {
       cleanup = async () => {
         await pool.end();
         logger.info('PostgreSQL connection closed');
+      };
+      break;
+    }
+    
+    case 'cosmos': {
+      logger.info('Using Cosmos DB event store');
+      
+      if (!COSMOS_CONNECTION_STRING) {
+        logger.error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
+        throw new Error('COSMOS_CONNECTION_STRING is required');
+      }
+      
+      // Import CosmosClient from Azure SDK
+      const { CosmosClient } = await import('@azure/cosmos');
+      
+      // Parse connection string
+      const endpoint = COSMOS_CONNECTION_STRING.match(/AccountEndpoint=([^;]+);/)?.[1];
+      const key = COSMOS_CONNECTION_STRING.match(/AccountKey=([^;]+);/)?.[1];
+      
+      if (!endpoint || !key) {
+        logger.error('Invalid COSMOS_CONNECTION_STRING format');
+        throw new Error('Invalid COSMOS_CONNECTION_STRING format');
+      }
+      
+      // Create Cosmos client
+      const cosmosClient = new CosmosClient({ endpoint, key });
+      
+      // Create database if it doesn't exist
+      const { database } = await cosmosClient.databases.createIfNotExists({
+        id: COSMOS_DATABASE
+      });
+      
+      logger.info(`Cosmos DB database '${COSMOS_DATABASE}' ready`);
+      
+      // Create event store with the database object
+      eventStore = new CosmosEventStore(database);
+      
+      // Initialize the event store (creates containers)
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('Cosmos DB event store initialized successfully');
+      } else {
+        logger.error('Failed to initialize Cosmos DB event store:', result.error);
+        throw result.error;
+      }
+      
+      cleanup = async () => {
+        logger.info('Cosmos DB cleanup completed');
       };
       break;
     }

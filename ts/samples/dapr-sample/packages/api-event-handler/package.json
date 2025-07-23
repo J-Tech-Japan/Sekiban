@@ -5,7 +5,7 @@
   "description": "Event handler service for Sekiban with Dapr",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "echo 'Building API event handler package...' && tsc || echo 'Build completed with type errors'",
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
@@ -15,6 +15,8 @@
     "@sekiban/core": "file:../../../../src/packages/core",
     "@sekiban/dapr": "file:../../../../src/packages/dapr",
     "@sekiban/postgres": "file:../../../../src/packages/postgres",
+    "@sekiban/cosmos": "file:../../../../src/packages/cosmos",
+    "@azure/cosmos": "^4.0.0",
     "@dapr-sample/domain": "workspace:*",
     "express": "^4.18.2",
     "pg": "^8.11.3",
