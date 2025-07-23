@@ -23,14 +23,19 @@ This sample implements a simple Task management system using:
 ```
 dapr-sample/
 ├── packages/
-│   ├── domain/        # Domain model (events, commands, projectors)
-│   ├── api/           # Express REST API
-│   └── workflows/     # Business workflows (future)
-├── dapr/              # Dapr configuration files (single source of truth)
-│   ├── components/    # State store and pubsub configuration
-│   └── config.yaml    # Dapr runtime configuration
-├── docker-compose.yml # Docker services (PostgreSQL, Redis)
-└── scripts/           # Helper scripts
+│   ├── domain/            # Domain model (events, commands, projectors)
+│   ├── api/               # Express REST API
+│   ├── api-event-handler/ # Event handler service
+│   ├── api-multi-projector/ # Multi-projector service
+│   └── workflows/         # Business workflows (future)
+├── dapr/                  # Dapr configuration files (single source of truth)
+│   ├── components/        # State store and pubsub configuration
+│   └── config.yaml        # Dapr runtime configuration
+├── docker-compose.yml     # Docker services (PostgreSQL, Redis)
+├── run-with-cosmos.sh     # Run with Cosmos DB storage
+├── run-with-postgres.sh   # Run with PostgreSQL storage
+├── run-with-inmemory.sh   # Run with in-memory storage
+└── run-all-services.sh    # Run all services with specified storage
 ```
 
 **Note**: Following DRY principles, all infrastructure configuration (Dapr, Docker) is maintained at the root level. Package-level scripts reference these root configurations. See [STRUCTURE.md](./STRUCTURE.md) for details.
@@ -49,15 +54,49 @@ dapr-sample/
 # Install dependencies
 pnpm install
 
-# Set up PostgreSQL (first time only)
-./setup-postgres.sh
+# Build all packages
+pnpm build
 
-# Start with Dapr
-./run-with-dapr.sh
+# Choose your storage option and run:
+
+# Option 1: In-Memory Storage (no persistence)
+./run-with-inmemory.sh
+
+# Option 2: PostgreSQL Storage
+./run-with-postgres.sh
+
+# Option 3: Azure Cosmos DB Storage
+./run-with-cosmos.sh
 
 # In another terminal, test the API
-./test-api.sh
+./test-all-operations.sh
 ```
+
+## Storage Options
+
+### 1. In-Memory Storage
+- Fast, no setup required
+- Data is lost when services restart
+- Good for development and testing
+
+### 2. PostgreSQL Storage
+- Persistent storage with ACID guarantees
+- Requires PostgreSQL running (via docker-compose)
+- Good for development and production
+
+### 3. Azure Cosmos DB Storage
+- Globally distributed, multi-model database
+- Requires Azure Cosmos DB account
+- Ideal for production cloud deployments
+
+### Configuring Cosmos DB
+
+1. Copy `.env.example` to `.env`
+2. Add your Cosmos DB connection string:
+   ```
+   COSMOS_CONNECTION_STRING=AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key;
+   ```
+3. Run with: `./run-with-cosmos.sh`
 
 ## API Endpoints
 
