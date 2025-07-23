@@ -17,9 +17,8 @@ echo "================================"
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
     echo -e "${GREEN}📄 Loading environment variables from .env file...${NC}"
-    set -a  # automatically export all variables
-    source .env
-    set +a  # turn off automatic export
+    # Use export to properly load environment variables with special characters
+    export $(grep -v '^#' .env | xargs)
 else
     echo -e "${YELLOW}⚠️  No .env file found. Please create one from .env.example${NC}"
     exit 1
@@ -45,7 +44,19 @@ echo "  Storage Type: $STORAGE_TYPE"
 echo "  Cosmos Database: $COSMOS_DATABASE"
 echo "  Cosmos Container: $COSMOS_CONTAINER"
 echo "  Connection String: [HIDDEN]"
+echo "  Connection String Length: ${#COSMOS_CONNECTION_STRING}"
 echo ""
+
+# Debug: Check if env vars are properly exported
+if [ -z "$COSMOS_CONNECTION_STRING" ]; then
+    echo -e "${RED}❌ Warning: COSMOS_CONNECTION_STRING is empty after loading .env${NC}"
+fi
+
+# Export all necessary environment variables to ensure they're available to child processes
+export STORAGE_TYPE
+export COSMOS_CONNECTION_STRING
+export COSMOS_DATABASE
+export COSMOS_CONTAINER
 
 # Run all services with Cosmos DB configuration
 echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
