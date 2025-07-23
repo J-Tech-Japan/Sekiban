@@ -15,7 +15,7 @@ This sample has been updated with critical fixes for Dapr actor integration:
 This sample implements a simple Task management system using:
 - **Sekiban Core** for event sourcing abstractions
 - **Sekiban Dapr** for distributed actor-based aggregates
-- **PostgreSQL** for event persistence (when using Dapr)
+- **Event Store Options**: In-memory, PostgreSQL, or Azure Cosmos DB
 - **Express.js** for REST API
 
 ## Project Structure
@@ -23,14 +23,19 @@ This sample implements a simple Task management system using:
 ```
 dapr-sample/
 ├── packages/
-│   ├── domain/        # Domain model (events, commands, projectors)
-│   ├── api/           # Express REST API
-│   └── workflows/     # Business workflows (future)
-├── dapr/              # Dapr configuration files (single source of truth)
-│   ├── components/    # State store and pubsub configuration
-│   └── config.yaml    # Dapr runtime configuration
-├── docker-compose.yml # Docker services (PostgreSQL, Redis)
-└── scripts/           # Helper scripts
+│   ├── domain/            # Domain model (events, commands, projectors)
+│   ├── api/               # Express REST API
+│   ├── api-event-handler/ # Event handler service
+│   ├── api-multi-projector/ # Multi-projector service
+│   └── workflows/         # Business workflows (future)
+├── dapr/                  # Dapr configuration files (single source of truth)
+│   ├── components/        # State store and pubsub configuration
+│   └── config.yaml        # Dapr runtime configuration
+├── docker-compose.yml     # Docker services (PostgreSQL, Redis)
+├── run-with-cosmos.sh     # Run with Cosmos DB storage
+├── run-with-postgres.sh   # Run with PostgreSQL storage
+├── run-with-inmemory.sh   # Run with in-memory storage
+└── run-all-services.sh    # Run all services with specified storage
 ```
 
 **Note**: Following DRY principles, all infrastructure configuration (Dapr, Docker) is maintained at the root level. Package-level scripts reference these root configurations. See [STRUCTURE.md](./STRUCTURE.md) for details.
@@ -49,15 +54,49 @@ dapr-sample/
 # Install dependencies
 pnpm install
 
-# Set up PostgreSQL (first time only)
-./setup-postgres.sh
+# Build all packages
+pnpm build
 
-# Start with Dapr
-./run-with-dapr.sh
+# Choose your storage option and run:
+
+# Option 1: In-Memory Storage (no persistence)
+./run-with-inmemory.sh
+
+# Option 2: PostgreSQL Storage
+./run-with-postgres.sh
+
+# Option 3: Azure Cosmos DB Storage
+./run-with-cosmos.sh
 
 # In another terminal, test the API
-./test-api.sh
+./test-all-operations.sh
 ```
+
+## Storage Options
+
+### 1. In-Memory Storage
+- Fast, no setup required
+- Data is lost when services restart
+- Good for development and testing
+
+### 2. PostgreSQL Storage
+- Persistent storage with ACID guarantees
+- Requires PostgreSQL running (via docker-compose)
+- Good for development and production
+
+### 3. Azure Cosmos DB Storage
+- Globally distributed, multi-model database
+- Requires Azure Cosmos DB account
+- Ideal for production cloud deployments
+
+### Configuring Cosmos DB
+
+1. Copy `.env.example` to `.env`
+2. Add your Cosmos DB connection string:
+   ```
+   COSMOS_CONNECTION_STRING=AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key;
+   ```
+3. Run with: `./run-with-cosmos.sh`
 
 ## API Endpoints
 
@@ -120,9 +159,47 @@ PUT /api/tasks/:id/complete
 ## Configuration
 
 Environment variables (see `.env.example`):
+- `STORAGE_TYPE` - Event store type: `inmemory`, `postgres`, or `cosmos` (default: `inmemory`)
 - `DAPR_HTTP_PORT` - If set, enables Dapr mode
-- `DATABASE_URL` - PostgreSQL connection string
+- `DATABASE_URL` - PostgreSQL connection string (required when `STORAGE_TYPE=postgres`)
+- `COSMOS_CONNECTION_STRING` - Azure Cosmos DB connection string (required when `STORAGE_TYPE=cosmos`)
+- `COSMOS_DATABASE_NAME` - Cosmos DB database name (default: `sekiban_events`)
 - `API_PREFIX` - API route prefix (default: `/api`)
+
+## Storage Options
+
+### In-Memory (Default)
+The simplest option for development and testing:
+```bash
+# No additional configuration needed
+pnpm dev
+```
+
+### PostgreSQL
+For production-ready persistence:
+```bash
+# Set up PostgreSQL first
+./setup-postgres.sh
+
+# Run with PostgreSQL
+STORAGE_TYPE=postgres pnpm dev
+
+# Or use the convenience script
+cd packages/api && pnpm dev:postgres
+```
+
+### Azure Cosmos DB
+For global distribution and automatic scaling:
+```bash
+# Set your Cosmos DB connection string
+export COSMOS_CONNECTION_STRING="AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key;"
+
+# Run with Cosmos DB
+STORAGE_TYPE=cosmos pnpm dev
+
+# Or use the convenience script
+cd packages/api && pnpm dev:cosmos
+```
 
 ## Development
 

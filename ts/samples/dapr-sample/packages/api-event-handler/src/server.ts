@@ -3,6 +3,9 @@ import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
+// Import domain types at the top to ensure registration happens
+import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
 import pino from 'pino';
 
@@ -21,8 +24,11 @@ const logger = pino({
 
 const PORT = process.env.PORT || 3002;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
-const USE_POSTGRES = process.env.USE_POSTGRES === 'true';
+const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db';
+const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING || '';
+const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'sekiban-events';
+const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || 'events';
 
 async function main() {
   const app = express();
@@ -37,35 +43,84 @@ async function main() {
   let eventStore: any;
   let cleanup: () => Promise<void> = async () => {};
 
-  if (USE_POSTGRES) {
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({ connectionString: DATABASE_URL });
-    
-    // Test connection
-    try {
-      await pool.query('SELECT 1');
-      logger.info('PostgreSQL connection successful');
-    } catch (error) {
-      logger.error('Failed to connect to PostgreSQL:', error);
-      throw error;
+  switch (STORAGE_TYPE) {
+    case 'postgres': {
+      logger.info('Using PostgreSQL event store');
+      const pool = new Pool({ connectionString: DATABASE_URL });
+      
+      // Test connection
+      try {
+        await pool.query('SELECT 1');
+        logger.info('PostgreSQL connection successful');
+      } catch (error) {
+        logger.error('Failed to connect to PostgreSQL:', error);
+        throw error;
+      }
+      
+      eventStore = new PostgresEventStore(pool);
+      cleanup = async () => {
+        await pool.end();
+        logger.info('PostgreSQL connection closed');
+      };
+      break;
     }
     
-    eventStore = new PostgresEventStore(pool);
-    cleanup = async () => {
-      await pool.end();
-      logger.info('PostgreSQL connection closed');
-    };
-  } else {
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: true
-    });
+    case 'cosmos': {
+      logger.info('Using Cosmos DB event store');
+      
+      if (!COSMOS_CONNECTION_STRING) {
+        logger.error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
+        throw new Error('COSMOS_CONNECTION_STRING is required');
+      }
+      
+      // Import CosmosClient from Azure SDK
+      const { CosmosClient } = await import('@azure/cosmos');
+      
+      // Create Cosmos client with connection string directly
+      const cosmosClient = new CosmosClient(COSMOS_CONNECTION_STRING);
+      
+      // Create database if it doesn't exist
+      const { database } = await cosmosClient.databases.createIfNotExists({
+        id: COSMOS_DATABASE
+      });
+      
+      logger.info(`Cosmos DB database '${COSMOS_DATABASE}' ready`);
+      
+      // Create event store with the database object
+      eventStore = new CosmosEventStore(database);
+      
+      // Initialize the event store (creates containers)
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('Cosmos DB event store initialized successfully');
+      } else {
+        logger.error('Failed to initialize Cosmos DB event store:', result.error);
+        throw result.error;
+      }
+      
+      cleanup = async () => {
+        logger.info('Cosmos DB cleanup completed');
+      };
+      break;
+    }
+    
+    case 'inmemory':
+    default: {
+      logger.info('Using in-memory event store');
+      eventStore = new InMemoryEventStore({
+        type: StorageProviderType.InMemory,
+        enableLogging: true
+      });
+      break;
+    }
   }
 
+  // Initialize domain types
+  const domainTypes = createTaskDomainTypes();
+  
   // Initialize DaprContainer with necessary dependencies
   initializeDaprContainer({
-    domainTypes: {} as any, // Event handler doesn't need domain types
+    domainTypes: domainTypes,
     serviceProvider: {},
     actorProxyFactory: {
       createActorProxy: <T>(): T => {

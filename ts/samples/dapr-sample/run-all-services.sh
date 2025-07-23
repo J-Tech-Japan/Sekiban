@@ -54,18 +54,38 @@ if ! docker ps | grep -q dapr_placement; then
     sleep 10
 fi
 
-# Always use PostgreSQL storage
-echo "Using PostgreSQL storage..."
+# Configure storage type
+STORAGE_TYPE="${STORAGE_TYPE:-postgres}"
+echo "Using $STORAGE_TYPE storage..."
 
-# Start PostgreSQL if needed
-if ! docker ps | grep -q sekiban-postgres; then
-    docker-compose up -d postgres
-    echo "Waiting for PostgreSQL to be ready..."
-    sleep 10
-fi
+# Storage-specific setup
+case "$STORAGE_TYPE" in
+    postgres)
+        # Start PostgreSQL if needed
+        if ! docker ps | grep -q sekiban-postgres; then
+            docker-compose up -d postgres
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 10
+        fi
+        export DATABASE_URL="${DATABASE_URL:-postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events}"
+        ;;
+    cosmos)
+        if [ -z "$COSMOS_CONNECTION_STRING" ]; then
+            echo "❌ COSMOS_CONNECTION_STRING is required when STORAGE_TYPE=cosmos"
+            exit 1
+        fi
+        export COSMOS_DATABASE_NAME="${COSMOS_DATABASE_NAME:-sekiban_events}"
+        ;;
+    inmemory)
+        echo "Using in-memory storage (no persistence)"
+        ;;
+    *)
+        echo "❌ Invalid STORAGE_TYPE: $STORAGE_TYPE (use inmemory, postgres, or cosmos)"
+        exit 1
+        ;;
+esac
 
-export USE_POSTGRES=true
-export DATABASE_URL="postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events"
+export STORAGE_TYPE
 
 echo ""
 echo "Starting services:"
@@ -81,7 +101,7 @@ mkdir -p tmp/logs
 # Start Event Relay first (it needs to be ready to receive events)
 echo "Starting Event Relay..."
 cd packages/event-relay
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3003 dapr run \
+STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE_NAME=$COSMOS_DATABASE_NAME PORT=3003 dapr run \
   --app-id dapr-sample-event-relay \
   --app-port 3003 \
   --dapr-http-port 3503 \
@@ -96,7 +116,7 @@ sleep 10
 # Start Event Handler with environment variables
 echo "Starting Event Handler..."
 cd packages/api-event-handler
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3001 dapr run \
+STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE_NAME=$COSMOS_DATABASE_NAME PORT=3001 dapr run \
   --app-id dapr-sample-event-handler \
   --app-port 3001 \
   --dapr-http-port 3501 \
@@ -111,7 +131,7 @@ sleep 10
 # Start Multi-Projector with environment variables
 echo "Starting Multi-Projector..."
 cd packages/api-multi-projector
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3002 dapr run \
+STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE_NAME=$COSMOS_DATABASE_NAME PORT=3002 dapr run \
   --app-id dapr-sample-multi-projector \
   --app-port 3002 \
   --dapr-http-port 3502 \
@@ -127,7 +147,7 @@ sleep 10
 echo "Starting API..."
 cd packages/api
 export PORT=3000
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=$PORT dapr run \
+STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE_NAME=$COSMOS_DATABASE_NAME PORT=$PORT dapr run \
   --app-id dapr-sample-api \
   --app-port 3000 \
   --dapr-http-port 3500 \

@@ -6,6 +6,7 @@ import type {
 } from '../executor/interfaces.js';
 import type { IActorProxyFactory } from '../types/index.js';
 import { getDaprCradle } from '../container/index.js';
+import { globalRegistry } from '@sekiban/core';
 import type { 
   Aggregate, 
   ITypedAggregatePayload,
@@ -40,6 +41,21 @@ export class AggregateActor extends AbstractActor {
       
       // Get dependencies from Awilix container
       const cradle = getDaprCradle();
+      
+      // Debug logging for domain types
+      console.log('[AggregateActor] Got cradle from container');
+      console.log('[AggregateActor] domainTypes present:', !!cradle.domainTypes);
+      console.log('[AggregateActor] domainTypes commandTypes:', cradle.domainTypes?.commandTypes);
+      if (cradle.domainTypes?.commandTypes) {
+        const commandTypes = cradle.domainTypes.commandTypes.getCommandTypes();
+        console.log('[AggregateActor] Available command types in domainTypes:', commandTypes.map((c: any) => c.name));
+      } else {
+        console.log('[AggregateActor] No command types available in domainTypes');
+      }
+      
+      // Check global registry
+      console.log('[AggregateActor] Global registry commands:', globalRegistry.getCommandTypes());
+      console.log('[AggregateActor] Global registry command count:', globalRegistry.getCommandTypes().length);
       
       // Create implementation with proper DI
       this.impl = new AggregateActorImpl(

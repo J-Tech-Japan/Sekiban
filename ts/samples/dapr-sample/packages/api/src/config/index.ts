@@ -1,7 +1,23 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from project root
+const envPath = path.resolve(__dirname, '../../../.env');
+console.log('[Config] Loading .env from:', envPath);
+const dotenvResult = dotenv.config({ path: envPath });
+if (dotenvResult.error) {
+  console.error('[Config] Error loading .env:', dotenvResult.error);
+} else {
+  console.log('[Config] .env loaded successfully');
+  console.log('[Config] COSMOS_CONNECTION_STRING exists:', !!process.env.COSMOS_CONNECTION_STRING);
+  console.log('[Config] STORAGE_TYPE:', process.env.STORAGE_TYPE);
+}
 
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -9,10 +25,16 @@ const ConfigSchema = z.object({
   ACTOR_SERVER_PORT: z.string().default('50010').transform(Number),
   
   // Storage configuration
-  USE_POSTGRES: z.string().default('false').transform(val => val === 'true'),
+  STORAGE_TYPE: z.enum(['inmemory', 'postgres', 'cosmos']).default('inmemory'),
   
   // PostgreSQL configuration
   DATABASE_URL: z.string().default('postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'),
+  
+  // Cosmos DB configuration
+  COSMOS_CONNECTION_STRING: z.string().optional(),
+  COSMOS_DATABASE: z.string().default('sekiban-events'),
+  COSMOS_CONTAINER: z.string().default('events'),
+  
   
   // Dapr configuration
   DAPR_HTTP_PORT: z.string().default('3500').transform(Number),

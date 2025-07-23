@@ -18,14 +18,29 @@ import {
 } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
+// Import domain types at the top to ensure registration happens
+import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
+import { globalRegistry } from '@sekiban/core';
 import logger from './utils/logger.js';
+
+// Log what's in the global registry right after import
+console.log('[Server] Global registry after domain import:', {
+  commandCount: globalRegistry.getCommandTypes().length,
+  commands: globalRegistry.getCommandTypes()
+});
 
 const { Pool } = pg;
 
 
 async function startServer() {
   const app = express();
+
+  // Initialize domain types FIRST - before any actor setup
+  const domainTypes = createTaskDomainTypes();
+  console.log('Domain types initialized with commands:', 
+    domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name));
 
   // Middleware BEFORE DaprServer setup
   app.use(helmet());
@@ -71,8 +86,8 @@ async function startServer() {
     process.exit(1);
   }
 
-  // Create DaprServer and pass the Express app
-  const daprServer = await setupDaprActorsWithApp(app);
+  // Create DaprServer and pass the Express app and domain types
+  const daprServer = await setupDaprActorsWithApp(app, domainTypes);
 
   // Start the DaprServer
   await daprServer.start();
@@ -117,47 +132,108 @@ async function startServer() {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-async function setupDaprActorsWithApp(app: express.Express) {
+async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
   logger.info('Setting up Dapr actors with Express app...');
-
-  // Initialize domain types
-  const domainTypes = createTaskDomainTypes();
-
-  // Choose storage type based on environment variable or config
-  const usePostgres = config.USE_POSTGRES;
+  logger.info('Using domain types with commands:', 
+    domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name));
   
+  // Configure AggregateActorFactory FIRST - before creating DaprServer
+  // This ensures the container is initialized before any actor instances are created
+  const tempActorProxyFactory = {
+    createActorProxy: <T>(): T => {
+      throw new Error('Temporary factory - will be replaced after event store init');
+    }
+  };
+  
+  AggregateActorFactory.configure(
+    domainTypes,
+    {}, // service provider
+    tempActorProxyFactory,
+    {}, // serializationService
+    null // eventStore - will be set later
+  );
+  
+  logger.info('AggregateActorFactory configured early with domain types');
+
+  // Choose storage type based on configuration
   let eventStore: any;
   
-  if (usePostgres) {
-    // Initialize PostgreSQL event store
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({
-      connectionString: config.DATABASE_URL
-    });
+  switch (config.STORAGE_TYPE) {
+    case 'postgres': {
+      // Initialize PostgreSQL event store
+      logger.info('Using PostgreSQL event store');
+      const pool = new Pool({
+        connectionString: config.DATABASE_URL
+      });
+      
+      eventStore = new PostgresEventStore(pool);
+      
+      // Initialize the database schema
+      logger.info('Initializing PostgreSQL schema...');
+      try {
+        const result = await eventStore.initialize();
+        if (result.isOk()) {
+          logger.info('PostgreSQL schema initialized successfully');
+        } else {
+          logger.error('Failed to initialize PostgreSQL schema:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize PostgreSQL:', error);
+        throw error;
+      }
+      break;
+    }
     
-    eventStore = new PostgresEventStore(pool);
-    
-    // Initialize the database schema
-    logger.info('Initializing PostgreSQL schema...');
-    try {
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      logger.info('Using Cosmos DB event store');
+      
+      if (!config.COSMOS_CONNECTION_STRING) {
+        logger.error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
+        throw new Error('COSMOS_CONNECTION_STRING is required');
+      }
+      
+      logger.info(`COSMOS_CONNECTION_STRING length: ${config.COSMOS_CONNECTION_STRING.length}`);
+      logger.info(`COSMOS_CONNECTION_STRING starts with: ${config.COSMOS_CONNECTION_STRING.substring(0, 50)}...`);
+      
+      // Import CosmosClient from Azure SDK
+      const { CosmosClient } = await import('@azure/cosmos');
+      
+      // Create Cosmos client with connection string directly
+      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+      
+      // Create database if it doesn't exist
+      const { database } = await cosmosClient.databases.createIfNotExists({
+        id: config.COSMOS_DATABASE
+      });
+      
+      logger.info(`Cosmos DB database '${config.COSMOS_DATABASE}' ready`);
+      
+      // Create event store with the database object
+      eventStore = new CosmosEventStore(database);
+      
+      // Initialize the event store (creates containers)
       const result = await eventStore.initialize();
       if (result.isOk()) {
-        logger.info('PostgreSQL schema initialized successfully');
+        logger.info('Cosmos DB event store initialized successfully');
       } else {
-        logger.error('Failed to initialize PostgreSQL schema:', result.error);
+        logger.error('Failed to initialize Cosmos DB event store:', result.error);
         throw result.error;
       }
-    } catch (error) {
-      logger.error('Failed to initialize PostgreSQL:', error);
-      throw error;
+      break;
     }
-  } else {
-    // Initialize in-memory event store (commented out for easy switching)
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: config.NODE_ENV === 'development'
-    });
+    
+    case 'inmemory':
+    default: {
+      // Initialize in-memory event store
+      logger.info('Using in-memory event store');
+      eventStore = new InMemoryEventStore({
+        type: StorageProviderType.InMemory,
+        enableLogging: config.NODE_ENV === 'development'
+      });
+      break;
+    }
   }
 
   // Create DaprClient for actor proxy factory
@@ -326,7 +402,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     }
   };
 
-  // Configure actor factories
+  // Reconfigure actor factory with actual dependencies
+  // The domain types were already set earlier, so they'll be preserved
   AggregateActorFactory.configure(
     domainTypes,
     {}, // service provider
@@ -334,6 +411,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     serializationService,
     eventStore
   );
+  
+  logger.info('AggregateActorFactory reconfigured with actual dependencies');
 
   AggregateEventHandlerActorFactory.configure(eventStore);
 

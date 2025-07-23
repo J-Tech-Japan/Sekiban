@@ -326,10 +326,6 @@ describe('User Domain', () => {
 4. **Use composition** - Build complex schemas from simple, reusable parts
 5. **Test thoroughly** - Test both happy paths and validation failures
 
-## Migration from Classes
-
-If you have existing class-based domain types, you can migrate gradually. The schema registry supports running both approaches side-by-side during migration.
-
 ## Performance
 
 - Schemas are parsed once and cached
