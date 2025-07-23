@@ -10,6 +10,12 @@ NC='\033[0m' # No Color
 # Global variables
 TASK_ID=""
 BASE_URL="http://localhost:3000"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMP_DIR="${SCRIPT_DIR}/tmp"
+TEMP_FILE="${TEMP_DIR}/sekiban_test_task_id"
+
+# Ensure tmp directory exists
+mkdir -p "$TEMP_DIR"
 
 # Function to print phase header
 print_phase() {
@@ -71,8 +77,9 @@ phase_1() {
         echo "Extracted UUID: $TASK_ID"
         
         # Save TASK_ID to a temp file for other phases
-        echo "$TASK_ID" > /tmp/sekiban_test_task_id
+        echo "$TASK_ID" > "$TEMP_FILE"
         print_success "Task created successfully"
+        print_info "Task ID saved to: $TEMP_FILE"
     else
         print_error "Failed to create task. Status: $HTTP_STATUS"
         return 1
@@ -83,14 +90,20 @@ phase_1() {
 phase_2() {
     print_phase 2 "QUERY Task"
     
-    # Load TASK_ID if not already set
-    if [ -z "$TASK_ID" ] && [ -f /tmp/sekiban_test_task_id ]; then
-        TASK_ID=$(cat /tmp/sekiban_test_task_id)
-        print_info "Using Task ID: $TASK_ID"
+    # Check if task ID was provided as argument
+    local provided_id="${1:-}"
+    if [ -n "$provided_id" ]; then
+        TASK_ID="$provided_id"
+        print_info "Using provided Task ID: $TASK_ID"
+    elif [ -z "$TASK_ID" ] && [ -f "$TEMP_FILE" ]; then
+        # Load TASK_ID from temp file if not already set
+        TASK_ID=$(cat "$TEMP_FILE")
+        print_info "Using Task ID from previous run: $TASK_ID"
     fi
     
     if [ -z "$TASK_ID" ]; then
-        print_error "No Task ID available. Please run phase 1 first."
+        print_error "No Task ID available. Please run phase 1 first or provide a task ID."
+        print_info "Usage: $0 2 <task-id>"
         return 1
     fi
     
@@ -114,14 +127,20 @@ phase_2() {
 phase_3() {
     print_phase 3 "ASSIGN Task"
     
-    # Load TASK_ID if not already set
-    if [ -z "$TASK_ID" ] && [ -f /tmp/sekiban_test_task_id ]; then
-        TASK_ID=$(cat /tmp/sekiban_test_task_id)
-        print_info "Using Task ID: $TASK_ID"
+    # Check if task ID was provided as argument
+    local provided_id="${1:-}"
+    if [ -n "$provided_id" ]; then
+        TASK_ID="$provided_id"
+        print_info "Using provided Task ID: $TASK_ID"
+    elif [ -z "$TASK_ID" ] && [ -f "$TEMP_FILE" ]; then
+        # Load TASK_ID from temp file if not already set
+        TASK_ID=$(cat "$TEMP_FILE")
+        print_info "Using Task ID from previous run: $TASK_ID"
     fi
     
     if [ -z "$TASK_ID" ]; then
-        print_error "No Task ID available. Please run phase 1 first."
+        print_error "No Task ID available. Please run phase 1 first or provide a task ID."
+        print_info "Usage: $0 3 <task-id>"
         return 1
     fi
     
@@ -142,14 +161,20 @@ phase_3() {
 phase_4() {
     print_phase 4 "COMPLETE Task"
     
-    # Load TASK_ID if not already set
-    if [ -z "$TASK_ID" ] && [ -f /tmp/sekiban_test_task_id ]; then
-        TASK_ID=$(cat /tmp/sekiban_test_task_id)
-        print_info "Using Task ID: $TASK_ID"
+    # Check if task ID was provided as argument
+    local provided_id="${1:-}"
+    if [ -n "$provided_id" ]; then
+        TASK_ID="$provided_id"
+        print_info "Using provided Task ID: $TASK_ID"
+    elif [ -z "$TASK_ID" ] && [ -f "$TEMP_FILE" ]; then
+        # Load TASK_ID from temp file if not already set
+        TASK_ID=$(cat "$TEMP_FILE")
+        print_info "Using Task ID from previous run: $TASK_ID"
     fi
     
     if [ -z "$TASK_ID" ]; then
-        print_error "No Task ID available. Please run phase 1 first."
+        print_error "No Task ID available. Please run phase 1 first or provide a task ID."
+        print_info "Usage: $0 4 <task-id>"
         return 1
     fi
     
@@ -178,14 +203,20 @@ phase_5() {
 phase_6() {
     print_phase 6 "FINAL QUERY (Verify Completion)"
     
-    # Load TASK_ID if not already set
-    if [ -z "$TASK_ID" ] && [ -f /tmp/sekiban_test_task_id ]; then
-        TASK_ID=$(cat /tmp/sekiban_test_task_id)
-        print_info "Using Task ID: $TASK_ID"
+    # Check if task ID was provided as argument
+    local provided_id="${1:-}"
+    if [ -n "$provided_id" ]; then
+        TASK_ID="$provided_id"
+        print_info "Using provided Task ID: $TASK_ID"
+    elif [ -z "$TASK_ID" ] && [ -f "$TEMP_FILE" ]; then
+        # Load TASK_ID from temp file if not already set
+        TASK_ID=$(cat "$TEMP_FILE")
+        print_info "Using Task ID from previous run: $TASK_ID"
     fi
     
     if [ -z "$TASK_ID" ]; then
-        print_error "No Task ID available. Please run phase 1 first."
+        print_error "No Task ID available. Please run phase 1 first or provide a task ID."
+        print_info "Usage: $0 6 <task-id>"
         return 1
     fi
     
@@ -234,23 +265,29 @@ run_all_phases() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [phase_number]"
+    echo "Usage: $0 [phase_number] [task_id]"
     echo ""
     echo "Phases:"
     echo "  0 - Health Check"
     echo "  1 - Create Task"
-    echo "  2 - Query Task"
-    echo "  3 - Assign Task"
-    echo "  4 - Complete Task"
+    echo "  2 - Query Task         (optional: provide task ID)"
+    echo "  3 - Assign Task        (optional: provide task ID)"
+    echo "  4 - Complete Task      (optional: provide task ID)"
     echo "  5 - Wait for Projections"
-    echo "  6 - Final Query (Verify Completion)"
+    echo "  6 - Final Query        (optional: provide task ID)"
     echo ""
     echo "Examples:"
-    echo "  $0        # Run all phases"
-    echo "  $0 1      # Run only phase 1 (Create Task)"
-    echo "  $0 2      # Run only phase 2 (Query Task)"
+    echo "  $0                     # Run all phases"
+    echo "  $0 1                   # Run only phase 1 (Create Task)"
+    echo "  $0 2                   # Run phase 2 (Query Task) using saved task ID"
+    echo "  $0 2 abc-123-def       # Run phase 2 with specific task ID"
+    echo "  $0 3 abc-123-def       # Assign specific task"
+    echo "  $0 4 abc-123-def       # Complete specific task"
     echo ""
-    echo "Note: Some phases depend on previous phases (e.g., phases 2-6 need the task ID from phase 1)"
+    echo "Notes:"
+    echo "  - Phase 1 saves the created task ID to: ./tmp/sekiban_test_task_id"
+    echo "  - Phases 2-6 will use the saved task ID if no ID is provided"
+    echo "  - You can override with a specific task ID as the second argument"
 }
 
 # Main execution
@@ -261,7 +298,18 @@ elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     show_usage
 elif [[ "$1" =~ ^[0-6]$ ]]; then
     # Run specific phase
-    phase_$1
+    phase_num=$1
+    task_id="${2:-}"
+    
+    # Pass task ID to phases that accept it
+    case $phase_num in
+        2|3|4|6)
+            phase_$phase_num "$task_id"
+            ;;
+        *)
+            phase_$phase_num
+            ;;
+    esac
 else
     print_error "Invalid phase number: $1"
     show_usage
