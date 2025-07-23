@@ -360,24 +360,45 @@ export class AggregateActorImpl {
       
       for (const eventPayload of events) {
         const sortableUniqueId = SortableUniqueId.generate();
+        const id = crypto.randomUUID();
+        const timestamp = new Date().toISOString();
         // Get event type from the payload's type property (created by defineEvent)
         const eventType = eventPayload.type || eventPayload.constructor.name;
+        
+        // Create event document with both lowercase (for TypeScript) and uppercase (for C#) fields
         const eventDoc: SerializableEventDocument = {
-          id: crypto.randomUUID(),
+          // Lowercase fields for TypeScript actors
+          id: id,
           sortableUniqueId: sortableUniqueId.toString(),
+          payload: eventPayload,
           eventType: eventType,
           aggregateId: partitionKeys.aggregateId,
           partitionKeys: partitionKeys,
           version: version++,
-          payload: eventPayload,
-          createdAt: new Date().toISOString(),
+          createdAt: timestamp,
           metadata: {
-            commandId: (metadata as any)?.commandId,
-            causationId: (metadata as any)?.causationId,
-            correlationId: (metadata as any)?.correlationId,
-            executedUser: (metadata as any)?.executedUser
-          }
+            causationId: (metadata as any)?.causationId || '',
+            correlationId: (metadata as any)?.correlationId || '',
+            executedUser: (metadata as any)?.executedUser || 'system'
+          },
+          
+          // Uppercase fields for C# compatibility
+          Id: id,
+          SortableUniqueId: sortableUniqueId.toString(),
+          Version: version - 1, // Use the same version number
+          AggregateId: partitionKeys.aggregateId,
+          AggregateGroup: partitionKeys.group || 'default',
+          RootPartitionKey: partitionKeys.rootPartitionKey || 'default',
+          PayloadTypeName: eventType,
+          TimeStamp: timestamp,
+          PartitionKey: partitionKeys.partitionKey || '',
+          CausationId: (metadata as any)?.causationId || '',
+          CorrelationId: (metadata as any)?.correlationId || '',
+          ExecutedUser: (metadata as any)?.executedUser || 'system',
+          CompressedPayloadJson: Buffer.from(JSON.stringify(eventPayload)).toString('base64'),
+          PayloadAssemblyVersion: '0.0.0.0'
         };
+        
         eventDocuments.push(eventDoc);
       }
       
