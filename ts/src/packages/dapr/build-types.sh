@@ -13,14 +13,20 @@ rm -rf dist
 
 # Build JavaScript with tsup (no dts)
 echo "📦 Building JavaScript..."
-npx tsup src/index.ts --format cjs,esm --target es2022 --no-dts --sourcemap --no-minify --keep-names
+npx tsup
 
-# Generate declarations with tsc
+# Build TypeScript declarations
 echo "📄 Generating TypeScript declarations..."
-npx tsc --emitDeclarationOnly --declaration --declarationMap || {
-    echo "⚠️  TypeScript had issues, creating basic declarations..."
-    echo "export {};" > dist/index.d.ts
+npx tsc --build --force || {
+    echo "⚠️  TypeScript build failed"
+    exit 1
 }
+
+# Copy declaration files to dist root
+if [ -f "dist/src/index.d.ts" ]; then
+    mv dist/src/* dist/
+    rm -rf dist/src
+fi
 
 # Check results
 echo ""
@@ -31,8 +37,8 @@ ls -la dist/
 if [ -f "dist/index.d.ts" ]; then
   echo "✅ TypeScript declarations generated successfully!"
 else
-  echo "⚠️  No TypeScript declarations found, creating fallback..."
-  echo "export {};" > dist/index.d.ts
+  echo "❌ No TypeScript declarations found!"
+  exit 1
 fi
 
 echo "✅ Build complete!"
