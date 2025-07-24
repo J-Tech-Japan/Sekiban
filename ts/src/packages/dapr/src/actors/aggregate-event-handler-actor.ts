@@ -469,8 +469,6 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Deserialize event from storage to IEvent format
    */
   private deserializeEvent(serialized: SerializableEventDocument): any {
-    console.log('[AggregateEventHandlerActor] deserializeEvent input:', JSON.stringify(serialized, null, 2));
-    
     // Handle both uppercase (C#) and lowercase (TypeScript) field names
     const id = serialized.id || serialized.Id;
     const sortableUniqueId = serialized.sortableUniqueId || serialized.SortableUniqueId;

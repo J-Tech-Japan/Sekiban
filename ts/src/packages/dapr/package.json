@@ -1,6 +1,6 @@
 {
   "name": "@sekiban/dapr",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Dapr actor integration for Sekiban Event Sourcing framework with snapshot support",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -39,7 +39,7 @@
   "author": "Sekiban Team",
   "license": "MIT",
   "dependencies": {
-    "@sekiban/core": "^0.1.0-alpha.1",
+    "@sekiban/core": "file:../core",
     "@dapr/dapr": "^3.3.0",
     "@js-temporal/polyfill": "^0.3.0",
     "neverthrow": "^8.0.0",
