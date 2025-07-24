@@ -54,18 +54,29 @@ if ! docker ps | grep -q dapr_placement; then
     sleep 10
 fi
 
-# Always use PostgreSQL storage
-echo "Using PostgreSQL storage..."
+# Use STORAGE_TYPE from environment or default to postgres
+STORAGE_TYPE=${STORAGE_TYPE:-postgres}
+echo "Using $STORAGE_TYPE storage..."
 
-# Start PostgreSQL if needed
-if ! docker ps | grep -q sekiban-postgres; then
-    docker-compose up -d postgres
-    echo "Waiting for PostgreSQL to be ready..."
-    sleep 10
+# Start storage services if needed
+if [ "$STORAGE_TYPE" = "postgres" ]; then
+    # Start PostgreSQL if needed
+    if ! docker ps | grep -q sekiban-postgres; then
+        docker-compose up -d postgres
+        echo "Waiting for PostgreSQL to be ready..."
+        sleep 10
+    fi
 fi
 
-export USE_POSTGRES=true
-export DATABASE_URL="postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events"
+# Build environment variables string
+ENV_VARS="STORAGE_TYPE=$STORAGE_TYPE"
+
+# Add storage-specific environment variables
+if [ "$STORAGE_TYPE" = "postgres" ]; then
+    ENV_VARS="$ENV_VARS DATABASE_URL=$DATABASE_URL"
+elif [ "$STORAGE_TYPE" = "cosmos" ]; then
+    ENV_VARS="$ENV_VARS COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE=$COSMOS_DATABASE COSMOS_CONTAINER=$COSMOS_CONTAINER"
+fi
 
 echo ""
 echo "Starting services:"
@@ -81,13 +92,13 @@ mkdir -p tmp/logs
 # Start Event Relay first (it needs to be ready to receive events)
 echo "Starting Event Relay..."
 cd packages/event-relay
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3003 dapr run \
+eval "$ENV_VARS PORT=3003 dapr run \
   --app-id dapr-sample-event-relay \
   --app-port 3003 \
   --dapr-http-port 3503 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev > ../../tmp/logs/event-relay.log 2>&1 &
+  -- npm run dev > ../../tmp/logs/event-relay.log 2>&1 &"
 
 cd ../..
 echo "Waiting for Event Relay to be ready..."
@@ -96,13 +107,13 @@ sleep 10
 # Start Event Handler with environment variables
 echo "Starting Event Handler..."
 cd packages/api-event-handler
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3001 dapr run \
+eval "$ENV_VARS PORT=3001 dapr run \
   --app-id dapr-sample-event-handler \
   --app-port 3001 \
   --dapr-http-port 3501 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev > ../../tmp/logs/event-handler.log 2>&1 &
+  -- npm run dev > ../../tmp/logs/event-handler.log 2>&1 &"
 
 cd ../..
 echo "Waiting for Event Handler to be ready..."
@@ -111,13 +122,13 @@ sleep 10
 # Start Multi-Projector with environment variables
 echo "Starting Multi-Projector..."
 cd packages/api-multi-projector
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=3002 dapr run \
+eval "$ENV_VARS PORT=3002 dapr run \
   --app-id dapr-sample-multi-projector \
   --app-port 3002 \
   --dapr-http-port 3502 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev > ../../tmp/logs/multi-projector.log 2>&1 &
+  -- npm run dev > ../../tmp/logs/multi-projector.log 2>&1 &"
 
 cd ../..
 echo "Waiting for Multi-Projector to be ready..."
@@ -127,12 +138,12 @@ sleep 10
 echo "Starting API..."
 cd packages/api
 export PORT=3000
-USE_POSTGRES=$USE_POSTGRES DATABASE_URL=$DATABASE_URL PORT=$PORT dapr run \
+eval "$ENV_VARS PORT=$PORT dapr run \
   --app-id dapr-sample-api \
   --app-port 3000 \
   --dapr-http-port 3500 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev
+  -- npm run dev"
 
 # This will run in foreground - when you Ctrl+C, it will stop all services

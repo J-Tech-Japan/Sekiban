@@ -3,7 +3,7 @@ import type { PartitionKeys } from '@sekiban/core';
 // @ts-ignore - These are exported from core
 import type { IEventStore } from '@sekiban/core';
 // @ts-ignore - These are exported from core
-import { EventRetrievalInfo, AggregateGroupStream } from '@sekiban/core';
+import { EventRetrievalInfo, AggregateGroupStream, SortableUniqueId } from '@sekiban/core';
 import { getDaprCradle } from '../container/index.js';
 import type {
   IAggregateEventHandlerActor,
@@ -12,6 +12,7 @@ import type {
   AggregateEventHandlerState,
   ActorPartitionInfo
 } from './interfaces';
+import type { SerializableEventDocument as ExternalSerializableEventDocument } from '../events/serializable-event-document.js';
 
 /**
  * Handles event persistence and retrieval for aggregate streams
@@ -46,6 +47,12 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       // Get eventStore from container
       this.eventStore = cradle.eventStore;
+      
+      console.log('[AggregateEventHandlerActor] Initialized with:', {
+        actorId: this.actorIdString,
+        eventStoreType: this.eventStore?.constructor?.name || 'Unknown',
+        hasEventStore: !!this.eventStore
+      });
       
     } catch (error) {
       console.error('[AggregateEventHandlerActor] Constructor error:', error);
@@ -96,6 +103,12 @@ export class AggregateEventHandlerActor extends AbstractActor
       // Ensure partition info is saved on first method call
       await this.ensurePartitionInfoSaved();
       
+      console.log('[AggregateEventHandlerActor] appendEventsAsync called with:', {
+        expectedLastSortableUniqueId,
+        eventsCount: events.length,
+        partitionInfo: this.partitionInfo
+      });
+      
       // Load current state
       const stateManager = await this.getStateManager();
       const [hasState, handlerState] = await stateManager.tryGetState(
@@ -131,7 +144,12 @@ export class AggregateEventHandlerActor extends AbstractActor
         
         try {
           const deserializedEvents = events.map(e => this.deserializeEvent(e));
-          await this.eventStore.saveEvents(deserializedEvents);
+          console.log('[AggregateEventHandlerActor] Saving events to event store:', {
+            eventStoreType: this.eventStore.constructor.name,
+            eventsCount: deserializedEvents.length
+          });
+          const saveResult = await this.eventStore.saveEvents(deserializedEvents);
+          console.log('[AggregateEventHandlerActor] Event store save result:', saveResult);
         } catch (saveError) {
           console.error('[AggregateEventHandlerActor] Failed to save to event store:', saveError);
           throw saveError;
@@ -207,6 +225,12 @@ export class AggregateEventHandlerActor extends AbstractActor
         isSuccess: true,
         lastSortableUniqueId: newLastId
       };
+      
+      console.log('[AggregateEventHandlerActor] appendEventsAsync completed successfully:', {
+        eventsCount: events.length,
+        lastSortableUniqueId: newLastId,
+        aggregateType: this.partitionInfo?.aggregateType
+      });
       
       return response;
     } catch (error) {
@@ -381,8 +405,8 @@ export class AggregateEventHandlerActor extends AbstractActor
     
     return {
       // Use uppercase field names to match C# format
-      Id: event.id?.value || event.id || '',
-      SortableUniqueId: event.sortableUniqueId || event.id?.value || '',
+      Id: typeof event.id === 'string' ? event.id : (event.id?.value || event.id?.toString() || ''),
+      SortableUniqueId: typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : (event.sortableUniqueId?.value || event.sortableUniqueId?.toString() || ''),
       Version: event.version || 1,
       
       // Partition keys
@@ -407,8 +431,8 @@ export class AggregateEventHandlerActor extends AbstractActor
       PayloadAssemblyVersion: '0.0.0.0',
       
       // Keep old format fields for backward compatibility
-      id: event.id,
-      sortableUniqueId: event.sortableUniqueId,
+      id: typeof event.id === 'string' ? event.id : (event.id?.value || event.id?.toString() || ''),
+      sortableUniqueId: typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : (event.sortableUniqueId?.value || event.sortableUniqueId?.toString() || ''),
       payload: event.payload,
       eventType: event.payload?.constructor?.name || event.eventType || 'Unknown',
       aggregateId: event.aggregateId,
@@ -422,17 +446,17 @@ export class AggregateEventHandlerActor extends AbstractActor
   /**
    * Deserialize event from storage to IEvent format
    */
-  private deserializeEvent(serialized: SerializableEventDocument): any {
+  private deserializeEvent(serialized: SerializableEventDocument | ExternalSerializableEventDocument): any {
     // Handle both uppercase (C#) and lowercase (TypeScript) field names
-    const id = serialized.id || serialized.Id;
-    const sortableUniqueId = serialized.sortableUniqueId || serialized.SortableUniqueId;
-    const aggregateId = serialized.aggregateId || serialized.AggregateId;
-    const eventType = serialized.eventType || serialized.PayloadTypeName;
-    const version = serialized.version || serialized.Version;
-    const timestamp = serialized.createdAt || serialized.TimeStamp;
+    const id = (serialized as any).id || serialized.Id;
+    const sortableUniqueId = (serialized as any).sortableUniqueId || serialized.SortableUniqueId;
+    const aggregateId = (serialized as any).aggregateId || serialized.AggregateId;
+    const eventType = (serialized as any).eventType || serialized.PayloadTypeName;
+    const version = (serialized as any).version || serialized.Version;
+    const timestamp = (serialized as any).createdAt || serialized.TimeStamp;
     
     // Decompress payload if needed
-    let payload = serialized.payload;
+    let payload = (serialized as any).payload;
     if (!payload && serialized.CompressedPayloadJson) {
       try {
         payload = JSON.parse(Buffer.from(serialized.CompressedPayloadJson, 'base64').toString('utf-8'));
@@ -442,30 +466,34 @@ export class AggregateEventHandlerActor extends AbstractActor
       }
     }
     
+    // Keep original id (UUID) and sortableUniqueId as separate values
+    const sortableIdValue = sortableUniqueId || (id && id.length === 30 ? id : null);
+    const sortableIdInstance = sortableIdValue ? SortableUniqueId.fromString(sortableIdValue).unwrapOr(SortableUniqueId.create()) : SortableUniqueId.create();
+    
     return {
-      id: sortableUniqueId ? { value: sortableUniqueId } : { value: id },
-      sortableUniqueId: sortableUniqueId ? { value: sortableUniqueId } : { value: id },
-      partitionKeys: serialized.partitionKeys || {
+      id: id || aggregateId,  // Use original UUID id, fallback to aggregateId
+      sortableUniqueId: sortableIdInstance.value,  // SortableUniqueId as string
+      partitionKeys: (serialized as any).partitionKeys || {
         aggregateId: aggregateId,
-        group: serialized.AggregateGroup || serialized.aggregateType || 'default',
+        group: serialized.AggregateGroup || (serialized as any).aggregateType || 'default',
         rootPartitionKey: serialized.RootPartitionKey || 'default',
         partitionKey: serialized.PartitionKey || `${serialized.AggregateGroup || 'default'}-${aggregateId}`
       },
-      aggregateType: serialized.aggregateType || serialized.AggregateGroup || 'default',
+      aggregateType: (serialized as any).aggregateType || serialized.AggregateGroup || 'default',
       eventType: eventType,
       aggregateId: aggregateId,
       version: version,
       payload: payload,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      metadata: serialized.metadata || {
+      metadata: (serialized as any).metadata || {
         timestamp: timestamp ? new Date(timestamp) : new Date(),
         causationId: serialized.CausationId || '',
         correlationId: serialized.CorrelationId || '',
         executedUser: serialized.ExecutedUser || 'system',
         userId: serialized.ExecutedUser || 'system'
       },
-      partitionKey: serialized.PartitionKey || serialized.partitionKey || '',
-      aggregateGroup: serialized.AggregateGroup || serialized.aggregateGroup || 'default',
+      partitionKey: serialized.PartitionKey || (serialized as any).partitionKey || '',
+      aggregateGroup: serialized.AggregateGroup || (serialized as any).aggregateGroup || 'default',
       eventData: payload
     };
   }

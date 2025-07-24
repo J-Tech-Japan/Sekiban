@@ -214,9 +214,9 @@ export class PostgresEventStore implements IEventStore {
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`;
           
           const insertParams = [
-              event.id.toString(),
+              event.id,  // id should already be a UUID
               JSON.stringify(event.payload || event.eventData || event),  // Store the event data as payload
-              event.sortableUniqueId.toString(),
+              typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : event.sortableUniqueId?.value || event.sortableUniqueId?.toString(),
               event.version,
               event.aggregateId,
               event.partitionKeys?.rootPartitionKey || 'default',

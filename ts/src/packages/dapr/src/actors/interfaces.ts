@@ -8,7 +8,7 @@ import type {
   EmptyAggregatePayload,
   Metadata
 } from '@sekiban/core';
-import type { SerializableEventDocument } from '../events/serializable-event-document.js';
+// SerializableEventDocument is defined in this file, not imported
 
 /**
  * Serializable representation of an aggregate
