@@ -466,12 +466,55 @@ export class AggregateEventHandlerActor extends AbstractActor
   }
   
   /**
-   * Deserialize event from storage
+   * Deserialize event from storage to IEvent format
    */
   private deserializeEvent(serialized: SerializableEventDocument): any {
+    console.log('[AggregateEventHandlerActor] deserializeEvent input:', JSON.stringify(serialized, null, 2));
+    
+    // Handle both uppercase (C#) and lowercase (TypeScript) field names
+    const id = serialized.id || serialized.Id;
+    const sortableUniqueId = serialized.sortableUniqueId || serialized.SortableUniqueId;
+    const aggregateId = serialized.aggregateId || serialized.AggregateId;
+    const eventType = serialized.eventType || serialized.PayloadTypeName;
+    const version = serialized.version || serialized.Version;
+    const timestamp = serialized.createdAt || serialized.TimeStamp;
+    
+    // Decompress payload if needed
+    let payload = serialized.payload;
+    if (!payload && serialized.CompressedPayloadJson) {
+      try {
+        payload = JSON.parse(Buffer.from(serialized.CompressedPayloadJson, 'base64').toString('utf-8'));
+      } catch (e) {
+        console.error('[AggregateEventHandlerActor] Failed to decompress payload:', e);
+        payload = {};
+      }
+    }
+    
     return {
-      ...serialized,
-      createdAt: new Date(serialized.createdAt)
+      id: sortableUniqueId ? { value: sortableUniqueId } : { value: id },
+      sortableUniqueId: sortableUniqueId ? { value: sortableUniqueId } : { value: id },
+      partitionKeys: serialized.partitionKeys || {
+        aggregateId: aggregateId,
+        group: serialized.AggregateGroup || serialized.aggregateType || 'default',
+        rootPartitionKey: serialized.RootPartitionKey || 'default',
+        partitionKey: serialized.PartitionKey || `${serialized.AggregateGroup || 'default'}-${aggregateId}`
+      },
+      aggregateType: serialized.aggregateType || serialized.AggregateGroup || 'default',
+      eventType: eventType,
+      aggregateId: aggregateId,
+      version: version,
+      payload: payload,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      metadata: serialized.metadata || {
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        causationId: serialized.CausationId || '',
+        correlationId: serialized.CorrelationId || '',
+        executedUser: serialized.ExecutedUser || 'system',
+        userId: serialized.ExecutedUser || 'system'
+      },
+      partitionKey: serialized.PartitionKey || serialized.partitionKey || '',
+      aggregateGroup: serialized.AggregateGroup || serialized.aggregateGroup || 'default',
+      eventData: payload
     };
   }
 }

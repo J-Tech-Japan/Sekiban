@@ -270,6 +270,8 @@ export class CosmosEventStore implements IEventStore {
    * Save events to storage
    */
   async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+    console.log('[CosmosEventStore] saveEvents called with', events.length, 'events');
+    
     if (!this.eventsContainer) {
       throw new ConnectionError('Event store not initialized');
     }
@@ -277,6 +279,12 @@ export class CosmosEventStore implements IEventStore {
     try {
       // Save events with proper partition key
       for (const event of events) {
+        console.log('[CosmosEventStore] Processing event:', {
+          id: event.id?.value,
+          aggregateId: event.partitionKeys?.aggregateId,
+          eventType: event.eventType,
+          version: event.version
+        });
         // Ensure payload is JSON-serializable
         // If domain types are available, they should ensure proper serialization
         let serializedPayload: JsonValue = event.payload as JsonValue;
@@ -326,7 +334,15 @@ export class CosmosEventStore implements IEventStore {
           }
         };
         
-        await this.eventsContainer.items.create(cosmosDocument);
+        console.log('[CosmosEventStore] Creating Cosmos document:', JSON.stringify(cosmosDocument, null, 2));
+        
+        try {
+          await this.eventsContainer.items.create(cosmosDocument);
+          console.log('[CosmosEventStore] Successfully saved event:', cosmosDocument.id);
+        } catch (createError) {
+          console.error('[CosmosEventStore] Failed to create document:', createError);
+          throw createError;
+        }
       }
     } catch (error) {
       throw new StorageError(
