@@ -78,7 +78,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
-        console.log(`[SekibanDaprExecutor] Calling actor ${actorId} via ActorProxyBuilder`);
         return actor.executeCommandAsync(commandAndMetadata);
       },
       
@@ -190,9 +189,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           }
         }
       };
-      
-      // Log what we're sending to the actor
-      console.log('[SekibanDaprExecutor] Sending to actor:', JSON.stringify(commandWithMetadata, null, 2));
       
       // Execute command through actor with retry
       const responseData = await this.executeWithRetry(

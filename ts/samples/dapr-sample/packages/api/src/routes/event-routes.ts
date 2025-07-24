@@ -9,12 +9,7 @@ router.post('/events', async (req: Request, res: Response) => {
   try {
     const { data, topic, pubsubname } = req.body;
     
-    console.log('Received event:', {
-      topic,
-      pubsubname,
-      eventType: data?.type,
-      aggregateId: data?.aggregateId
-    });
+    // Event received from pub/sub
 
     // Process event based on type
     // In a real application, you might update read models, trigger workflows, etc.

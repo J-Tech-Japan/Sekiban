@@ -19,9 +19,6 @@ export class MultiProjectorActorFactory {
     eventStore?: any,
     eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>
   ): void {
-    console.log('[MultiProjectorActorFactory] Configuring with domainTypes:', !!domainTypes);
-    console.log('[MultiProjectorActorFactory] Projector types available:', domainTypes?.projectorTypes ? 'yes' : 'no');
-    
     // Initialize the Awilix container with dependencies (same container as other actors)
     initializeDaprContainer({
       domainTypes,
@@ -38,7 +35,6 @@ export class MultiProjectorActorFactory {
    * Returns the actor class directly (no wrapper)
    */
   static createActorClass(): typeof MultiProjectorActor {
-    console.log('[MultiProjectorActorFactory] Creating actor class (returning MultiProjectorActor)');
     // Return the actual class, not a wrapper
     return MultiProjectorActor;
   }

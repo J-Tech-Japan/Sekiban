@@ -351,7 +351,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     const eventsResult = await this.eventStore.getEvents(retrievalInfo);
     if (eventsResult.isErr()) {
-      console.error('Failed to load events for rebuild:', eventsResult.error);
       return;
     }
     
@@ -601,26 +600,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       const eventsResult = await this.eventStore.getEvents(retrievalInfo);
       
       if (eventsResult.isErr()) {
-        console.error('[MultiProjectorActor] Failed to get events from store:', eventsResult.error);
         return;
       }
       
       const newEvents = eventsResult.value;
-      console.log(`[MultiProjectorActor] Retrieved ${newEvents.length} events from store`);
-      
-      // Debug: Check the structure of the first event
-      if (newEvents.length > 0) {
-        const firstEvent = newEvents[0];
-        console.log(`[MultiProjectorActor] First event structure:`, {
-          hasType: 'type' in firstEvent,
-          hasEventType: 'eventType' in firstEvent,
-          type: (firstEvent as any).type,
-          eventType: (firstEvent as any).eventType,
-          aggregateType: firstEvent.aggregateType,
-          aggregateId: firstEvent.aggregateId,
-          payload: firstEvent.payload
-        });
-      }
       
       // Add to buffer if not already present
       for (const event of newEvents) {
@@ -637,7 +620,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           } else if (timestamp && typeof (timestamp as any).toISOString === 'function') {
             createdAtStr = (timestamp as any).toISOString();
           } else {
-            console.warn('[MultiProjectorActor] Invalid timestamp format:', timestamp);
             createdAtStr = new Date().toISOString();
           }
           
@@ -666,7 +648,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         a.event.sortableUniqueId.localeCompare(b.event.sortableUniqueId)
       );
     } catch (error) {
-      console.error('Failed to catch up from store:', error);
     }
   }
   
@@ -761,14 +742,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         projectorName = projectorName.charAt(0).toUpperCase() + projectorName.slice(1); // Capitalize
       }
       
-      console.log(`[MultiProjectorActor] Applying event to projections:`, {
-        projectorName,
-        eventType: event.eventType,
-        aggregateId: event.aggregateId,
-        actorId: actorIdStr,
-        payload: event.payload
-      });
-      
       // Find the projector in the registry
       let projectorInstance = null;
       
@@ -784,17 +757,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       }
       
       if (!projectorInstance) {
-        console.warn(`[MultiProjectorActor] Projector not found: ${projectorName}`);
-        console.warn(`[MultiProjectorActor] Available projectors:`, 
-          domainTypes.projectorTypes?.getProjectorTypes?.()?.map((p: any) => p.aggregateTypeName) || 'none'
-        );
         return projections;
       }
-      
-      // Debug: Check projector structure
-      console.log(`[MultiProjectorActor] Projector instance type:`, typeof projectorInstance);
-      console.log(`[MultiProjectorActor] Projector has project method:`, typeof projectorInstance.project === 'function');
-      console.log(`[MultiProjectorActor] Projector has getInitialState method:`, typeof projectorInstance.getInitialState === 'function');
       
       // IProjector interface doesn't have projections property
       
@@ -847,7 +811,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           payload = event.payload || {};
         }
       } catch (error) {
-        console.error('[MultiProjectorActor] Error decompressing payload:', error);
         payload = event.payload || {};
       }
       
@@ -882,21 +845,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       };
       
       // Project the event
-      console.log(`[MultiProjectorActor] Projecting event:`, {
-        currentProjectionPayload: currentProjection.payload,
-        eventType: iEvent.eventType,
-        eventPayload: iEvent.payload
-      });
-      
       const result = projectorInstance.project(currentProjection, iEvent);
       
       if (result.isOk()) {
         const newProjection = result.value;
-        console.log(`[MultiProjectorActor] Projection result:`, {
-          newPayload: newProjection.payload,
-          version: newProjection.version,
-          payloadType: newProjection.payload?.aggregateType || typeof newProjection.payload
-        });
         
         // Update the projections map
         projections[aggregateId] = {
@@ -910,15 +862,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           createdAt: currentProjection.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
-        
-        console.log(`[MultiProjectorActor] Projection updated for aggregate: ${aggregateId}`);
       } else {
-        console.error(`[MultiProjectorActor] Failed to project event:`, result.error);
       }
       
       return projections;
     } catch (error) {
-      console.error('[MultiProjectorActor] Error in applyEventToProjections:', error);
       return projections;
     }
   }
@@ -957,13 +905,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    * Receive event from pub/sub
    */
   async receiveEventAsync(eventData: any): Promise<void> {
-    console.log('[MultiProjectorActor] Received event from pub/sub:', {
-      payloadTypeName: eventData?.PayloadTypeName,
-      aggregateGroup: eventData?.AggregateGroup,
-      aggregateId: eventData?.AggregateId,
-      actorId: this.actorIdString
-    });
-    
     try {
       // Check if it's already in SerializableEventDocument format
       let serializedEvent: SerializableEventDocument;
@@ -973,8 +914,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         serializedEvent = eventData as SerializableEventDocument;
       } else {
         // Legacy format - convert to SerializableEventDocument
-        console.warn('[MultiProjectorActor] Received event in legacy format, converting...');
-        
         // Create a simple serialized event for backward compatibility
         const payload = eventData.payload || eventData;
         const payloadJson = JSON.stringify(payload);
@@ -1028,10 +967,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       if (this.eventBuffer.length === 1) {
         await this.flushBuffer();
       }
-      
-      console.log('[MultiProjectorActor] Event processed successfully');
     } catch (error) {
-      console.error('[MultiProjectorActor] Error processing pub/sub event:', error);
       throw error; // Let Dapr retry
     }
   }

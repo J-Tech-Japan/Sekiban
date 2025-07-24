@@ -9,15 +9,8 @@ const __dirname = path.dirname(__filename);
 
 // Load .env from project root
 const envPath = path.resolve(__dirname, '../../../.env');
-console.log('[Config] Loading .env from:', envPath);
 const dotenvResult = dotenv.config({ path: envPath });
-if (dotenvResult.error) {
-  console.error('[Config] Error loading .env:', dotenvResult.error);
-} else {
-  console.log('[Config] .env loaded successfully');
-  console.log('[Config] COSMOS_CONNECTION_STRING exists:', !!process.env.COSMOS_CONNECTION_STRING);
-  console.log('[Config] STORAGE_TYPE:', process.env.STORAGE_TYPE);
-}
+// .env is optional, so we don't log errors if it's missing
 
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

@@ -72,7 +72,6 @@ export class DaprRepository {
 
       // Note: Unlike the previous implementation, we should NOT update currentAggregate here
       // The caller (AggregateActor) will handle the aggregate update via getProjectedAggregate
-      console.log(`[DaprRepository.save] Events saved: ${newEvents.length}, current version: ${this.currentAggregate.version}`);
 
       return ok(newEvents);
     } catch (error) {
@@ -129,7 +128,6 @@ export class DaprRepository {
 
   getProjectedAggregate(projectedEvents: IEvent[]): Result<Aggregate, SekibanError> {
     try {
-      console.log(`[getProjectedAggregate] Current version: ${this.currentAggregate.version}, projecting ${projectedEvents.length} events`);
 
       // Project the events onto the current aggregate to get a new aggregate
       let aggregate = this.currentAggregate;
@@ -141,7 +139,6 @@ export class DaprRepository {
         aggregate = projectResult.value;
       }
 
-      console.log(`[getProjectedAggregate] After projection - version: ${aggregate.version}`);
       return ok(aggregate);
     } catch (error) {
       return err(new EventStoreError('save', error instanceof Error ? error.message : 'Unknown error'));
