@@ -144,8 +144,9 @@ phase_3() {
         return 1
     fi
     
-    COMPLETE_RESPONSE=$(curl -s -X PUT "$BASE_URL/api/tasks/$TASK_ID/complete" \
-      -H "Content-Type: application/json")
+    COMPLETE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/tasks/$TASK_ID/complete" \
+      -H "Content-Type: application/json" \
+      -d '{"completedBy": "test@example.com", "notes": "Task completed via test script"}')
     echo "Response: $COMPLETE_RESPONSE"
     
     if [[ "$COMPLETE_RESPONSE" == *"success"* ]] || [[ "$COMPLETE_RESPONSE" == *"completed"* ]]; then

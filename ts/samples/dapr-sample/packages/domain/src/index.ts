@@ -29,7 +29,7 @@ export { TaskProjector } from './aggregates/task/projectors/task-projector.js';
 export type { TaskState, CompletedTaskState, TaskPayloadUnion } from './aggregates/task/projectors/task-projector.js';
 
 // Export queries
-export { GetTaskById } from './aggregates/task/queries/task-queries.js';
+export { GetTaskById, GetAllTasks } from './aggregates/task/queries/task-queries.js';
 
 // Export User aggregate
 export * from './aggregates/user/index.js';

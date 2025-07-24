@@ -18,7 +18,7 @@ import {
 } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
-import { CosmosEventStore } from '@sekiban/cosmos';
+import { createCosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -182,29 +182,20 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
       
       // Cosmos DB connection configured
       
-      // Import CosmosClient from Azure SDK
-      const { CosmosClient } = await import('@azure/cosmos');
-      
-      // Create Cosmos client with connection string directly
-      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
-      
-      // Create database if it doesn't exist
-      const { database } = await cosmosClient.databases.createIfNotExists({
-        id: config.COSMOS_DATABASE
+      // Use createCosmosEventStore helper function
+      const result = await createCosmosEventStore({
+        type: StorageProviderType.CosmosDB,
+        connectionString: config.COSMOS_CONNECTION_STRING,
+        databaseName: config.COSMOS_DATABASE,
+        enableLogging: config.NODE_ENV === 'development'
       });
       
-      // Cosmos DB database ready
-      
-      // Create event store with the database object
-      eventStore = new CosmosEventStore(database);
-      
-      // Initialize the event store (creates containers)
-      const result = await eventStore.initialize();
-      if (result.isOk()) {
-        // Cosmos DB event store initialized
-      } else {
+      if (!result.isOk()) {
         throw result.error;
       }
+      
+      eventStore = result.value;
+      // Cosmos DB event store initialized
       break;
     }
     
