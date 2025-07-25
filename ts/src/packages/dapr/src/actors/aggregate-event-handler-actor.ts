@@ -61,8 +61,14 @@ export class AggregateEventHandlerActor extends AbstractActor
   }
   
   getDaprClient(): DaprClient {
-    // Get DaprClient from the actor context
-    return (this as any).client || new DaprClient();
+    // Create a new DaprClient instance for pubsub operations
+    // Using default localhost settings which should work in Dapr sidecar environment
+    const daprPort = process.env.DAPR_HTTP_PORT || "3501";
+    console.log('[AggregateEventHandlerActor] Creating DaprClient with port:', daprPort);
+    return new DaprClient({
+      daprHost: "127.0.0.1",
+      daprPort: daprPort
+    });
   }
   
   /**
@@ -166,33 +172,29 @@ export class AggregateEventHandlerActor extends AbstractActor
         eventCount: allEvents.length
       };
       
-      await stateManager.setState(this.HANDLER_STATE_KEY, newState);
-      
-      // Save all state changes together
-      try {
-        await stateManager.saveState();
-      } catch (saveError) {
-        console.error('[AggregateEventHandlerActor] Failed to save state:', saveError);
-        // Try alternative approach - return success if events were saved to external store
-        if (this.partitionInfo) {
-          console.warn('[AggregateEventHandlerActor] State save failed but events saved to external store, returning success');
-          return {
-            isSuccess: true,
-            lastSortableUniqueId: newLastId
-          };
-        }
-        throw saveError;
-      }
-      
-      // Publish events to Dapr pub/sub
+      // Publish events to Dapr pub/sub BEFORE saving state (to ensure it happens even if state save fails)
       try {
         const cradle = getDaprCradle();
         const daprClient = cradle.daprClient || this.getDaprClient();
         const pubSubName = cradle.configuration?.pubSubName || 'pubsub';
         const topicName = cradle.configuration?.eventTopicName || 'sekiban-events';
         
+        console.log('[AggregateEventHandlerActor] Publishing events to pub/sub:', {
+          pubSubName,
+          topicName,
+          eventsCount: events.length,
+          hasDaprClient: !!daprClient
+        });
+        
         // Publish each event
         for (const event of events) {
+          console.log('[AggregateEventHandlerActor] Input event structure:', {
+            hasId: !!event.Id,
+            hasSortableUniqueId: !!event.SortableUniqueId,
+            hasCompressedPayloadJson: !!event.CompressedPayloadJson,
+            eventKeys: Object.keys(event)
+          });
+          
           // Extract only the C# compatible fields
           const publishEvent = {
             Id: event.Id,
@@ -211,13 +213,39 @@ export class AggregateEventHandlerActor extends AbstractActor
             PayloadAssemblyVersion: event.PayloadAssemblyVersion
           };
           
+          console.log('[AggregateEventHandlerActor] Publishing event:', {
+            eventId: publishEvent.Id,
+            aggregateType: publishEvent.AggregateGroup,
+            eventType: publishEvent.PayloadTypeName
+          });
+          
+          console.log('[AggregateEventHandlerActor] Full event object being published:', JSON.stringify(publishEvent, null, 2));
           
           await daprClient.pubsub.publish(pubSubName, topicName, publishEvent);
         }
         
+        console.log('[AggregateEventHandlerActor] Successfully published all events to pub/sub');
       } catch (pubsubError) {
         // Log but don't fail - pub/sub is not critical for event storage
         console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
+      }
+      
+      await stateManager.setState(this.HANDLER_STATE_KEY, newState);
+      
+      // Save all state changes together
+      try {
+        await stateManager.saveState();
+      } catch (saveError) {
+        console.error('[AggregateEventHandlerActor] Failed to save state:', saveError);
+        // Try alternative approach - return success if events were saved to external store
+        if (this.partitionInfo) {
+          console.warn('[AggregateEventHandlerActor] State save failed but events saved to external store, returning success');
+          return {
+            isSuccess: true,
+            lastSortableUniqueId: newLastId
+          };
+        }
+        throw saveError;
       }
       
       

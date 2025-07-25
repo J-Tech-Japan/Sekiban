@@ -127,38 +127,46 @@ router.get(
         offset: query.offset,
         partitionKeys: query.getPartitionKeys(),
         aggregateType: query.getAggregateType(),
-        projector: query.getProjector().name
+        projector: (query.getProjector() as any).multiProjectorName || (query.getProjector() as any).name || 'unknown'
       });
       
-      // Multi-partition queries are not supported in Dapr actors
-      // As a workaround, we'll return an empty list for now
-      console.warn('[GET ALL] Multi-partition queries are not yet supported in Dapr actors');
+      // Execute multi-projection query
+      console.log('[GET ALL] Executing multi-projection query...');
+      console.log('[GET ALL] Query details:', {
+        queryType: query.constructor.name,
+        isMultiProjection: query.isMultiProjection,
+        projectorName: (query.getProjector() as any).multiProjectorName
+      });
       
-      // For demonstration, let's fetch the specific task if we have the ID from the previous run
-      const tasks = [];
-      
-      // Check if we have a saved task ID from previous tests
-      const fs = await import('fs');
-      const path = await import('path');
-      const tempFile = path.join(process.cwd(), 'tmp', 'sekiban_test_task_id');
-      
+      let result;
       try {
-        if (fs.existsSync(tempFile)) {
-          const savedTaskId = fs.readFileSync(tempFile, 'utf-8').trim();
-          console.log('[GET ALL] Found saved task ID:', savedTaskId);
-          
-          // Fetch this specific task
-          const { GetTaskById } = await import('@dapr-sample/domain');
-          const singleTaskQuery = GetTaskById.create({ taskId: savedTaskId });
-          const singleTaskResult = await executor.queryAsync(singleTaskQuery);
-          
-          if (singleTaskResult.isOk() && singleTaskResult.value) {
-            tasks.push(singleTaskResult.value);
-          }
-        }
+        result = await executor.queryAsync(query);
       } catch (error) {
-        console.error('[GET ALL] Error reading saved task ID:', error);
+        console.error('[GET ALL] Query execution threw error:', error);
+        console.error('[GET ALL] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        return res.status(500).json({ 
+          error: 'Failed to execute query',
+          details: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
       }
+      
+      if (result.isErr()) {
+        console.error('[GET ALL] Query failed:', result.error);
+        console.error('[GET ALL] Error details:', {
+          errorType: result.error.constructor.name,
+          errorCode: (result.error as any).code,
+          errorMessage: result.error.message
+        });
+        return res.status(500).json({ 
+          error: 'Failed to fetch tasks',
+          details: result.error.message,
+          errorCode: (result.error as any).code
+        });
+      }
+      
+      console.log('[GET ALL] Query result:', result.value);
+      const tasks = result.value || [];
       
       // Transform results to response format
       const transformedTasks = tasks.map((item: any) => {

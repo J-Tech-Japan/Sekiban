@@ -28,8 +28,12 @@ export {
 export { TaskProjector } from './aggregates/task/projectors/task-projector.js';
 export type { TaskState, CompletedTaskState, TaskPayloadUnion } from './aggregates/task/projectors/task-projector.js';
 
+// Export multi-projector
+export { TaskMultiProjector } from './aggregates/task/projectors/task-multi-projector.js';
+
 // Export queries
-export { GetTaskById, GetAllTasks } from './aggregates/task/queries/task-queries.js';
+export { GetTaskById } from './aggregates/task/queries/task-queries.js';
+export { GetAllTasks } from './aggregates/task/queries/get-all-tasks.js';
 
 // Export User aggregate
 export * from './aggregates/user/index.js';

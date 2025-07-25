@@ -498,26 +498,55 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   private async flushBuffer(): Promise<void> {
     const now = new Date();
     
+    console.log('[MultiProjectorActor] flushBuffer called:', {
+      bufferSize: this.eventBuffer.length,
+      safeWindowMs: this.SAFE_WINDOW_MS,
+      currentTime: now.toISOString()
+    });
+    
     // Find events older than safe window
     const safeEvents = this.eventBuffer.filter(
       e => now.getTime() - e.receivedAt.getTime() > this.SAFE_WINDOW_MS
     );
     
+    console.log('[MultiProjectorActor] Safe events to process:', safeEvents.length);
+    
     if (safeEvents.length > 0) {
       // Update safe state with safe events
       const newSafeState = this.safeState || this.createEmptyState();
       
+      console.log('[MultiProjectorActor] Processing safe events:', {
+        currentProjections: Object.keys(newSafeState.projections).length,
+        eventsToProcess: safeEvents.length
+      });
+      
       for (const bufferedEvent of safeEvents) {
+        const beforeCount = Object.keys(newSafeState.projections).length;
         newSafeState.projections = await this.applyEventToProjections(
           newSafeState.projections,
           bufferedEvent.event
         );
+        const afterCount = Object.keys(newSafeState.projections).length;
+        
+        console.log('[MultiProjectorActor] Applied event:', {
+          eventType: bufferedEvent.event.eventType,
+          aggregateId: bufferedEvent.event.aggregateId,
+          projectionsBeforeCount: beforeCount,
+          projectionsAfterCount: afterCount
+        });
+        
         newSafeState.lastProcessedEventId = bufferedEvent.event.sortableUniqueId;
         newSafeState.lastProcessedTimestamp = bufferedEvent.event.TimeStamp || bufferedEvent.event.createdAt || new Date().toISOString();
         newSafeState.version++;
       }
       
       this.safeState = newSafeState;
+      
+      console.log('[MultiProjectorActor] Updated safe state:', {
+        totalProjections: Object.keys(newSafeState.projections).length,
+        version: newSafeState.version,
+        lastProcessedId: newSafeState.lastProcessedEventId
+      });
       
       // Remove processed events from buffer
       this.eventBuffer = this.eventBuffer.filter(
@@ -742,11 +771,20 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         projectorName = projectorName.charAt(0).toUpperCase() + projectorName.slice(1); // Capitalize
       }
       
+      console.log('[MultiProjectorActor] Looking for projector:', {
+        actorId: actorIdStr,
+        extractedProjectorName: projectorName,
+        eventType: event.eventType,
+        aggregateType: event.aggregateType
+      });
+      
       // Find the projector in the registry
       let projectorInstance = null;
       
       if (domainTypes.projectorTypes && typeof domainTypes.projectorTypes.getProjectorTypes === 'function') {
         const projectorList = domainTypes.projectorTypes.getProjectorTypes();
+        console.log('[MultiProjectorActor] Available projectors:', projectorList.map((p: any) => p.aggregateTypeName));
+        
         const projectorWrapper = projectorList.find(
           (p: any) => p.aggregateTypeName.toLowerCase() === projectorName.toLowerCase()
         );

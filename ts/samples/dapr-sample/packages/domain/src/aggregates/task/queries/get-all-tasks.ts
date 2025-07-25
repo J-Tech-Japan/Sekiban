@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TaskProjector } from '../projectors/task-projector.js';
+import { TaskMultiProjector } from '../projectors/task-multi-projector.js';
 
 // Define the query schema (no parameters needed for getting all tasks)
 const GetAllTasksSchema = z.object({
@@ -24,12 +24,20 @@ export class GetAllTasks {
   }
 
   getProjector() {
-    return TaskProjector;
+    // Return the multi-projector with multiProjectorName property
+    return {
+      multiProjectorName: TaskMultiProjector.multiProjectorName
+    };
   }
 
   // Multi-partition query - no specific partition keys
   getPartitionKeys() {
     return null; // This indicates we want all partitions
+  }
+  
+  // Mark this as a multi-projection query
+  get isMultiProjection() {
+    return true;
   }
 
   get status() {
