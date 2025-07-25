@@ -13,8 +13,8 @@ import type {
   IMultiProjectorActor,
   SerializableQuery,
   SerializableListQuery,
-  QueryResponse,
-  ListQueryResponse,
+  SerializableQueryResult,
+  SerializableListQueryResult,
   DaprEventEnvelope
 } from './interfaces';
 import { getDaprCradle } from '../container/index.js';
@@ -24,6 +24,12 @@ import {
   createSerializableMultiProjectionState,
   toMultiProjectionState
 } from '../parts/serializable-multi-projection-state.js';
+import {
+  createSerializableQueryResult,
+  createSerializableQueryResultFromResult,
+  createSerializableListQueryResult,
+  createSerializableListQueryResultFromResult
+} from './serializable-query-results.js';
 
 /**
  * Handles cross-aggregate projections and queries over multiple aggregates
@@ -363,28 +369,71 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log(`Persisting state written version ${state.version}`);
   }
   
-  async query(query: SerializableQuery): Promise<QueryResponse> {
+  async query(query: SerializableQuery): Promise<SerializableQueryResult> {
     try {
       await this.ensureStateLoadedAsync();
       
-      // For now, return empty result
-      // TODO: Implement query deserialization and execution
-      return {
-        value: null,
+      // Get the query class by name
+      if (!this.domainTypes.queryTypes) {
+        throw new Error('Query types not available');
+      }
+      
+      const QueryClass = this.domainTypes.queryTypes.getQueryTypeByName(query.queryType);
+      if (!QueryClass) {
+        throw new Error(`Query type not found: ${query.queryType}`);
+      }
+      
+      // Create query instance
+      const queryInstance = new QueryClass();
+      
+      // If the query has payload data, apply it
+      if (query.payload) {
+        Object.assign(queryInstance, query.payload);
+      }
+      
+      // Get the projector state for query
+      const projectionState = await this.getProjectorForQuery();
+      if (!projectionState) {
+        throw new Error('Failed to get projector state');
+      }
+      
+      // For now, we'll execute the query manually
+      // In a full implementation, this would use the domain query infrastructure
+      let result = { value: null };
+      
+      // If query has an execute method, use it
+      if (queryInstance.execute && typeof queryInstance.execute === 'function') {
+        result.value = await queryInstance.execute(projectionState.projectorCommon);
+      }
+      
+      // Create and return serializable result
+      const queryResult: IQueryResult<any> = {
+        value: result.value,
         hasError: false,
         error: null
       };
+      
+      return await createSerializableQueryResult(queryResult, queryInstance, this.domainTypes);
     } catch (error) {
       console.error('Error executing query:', error);
-      return {
-        value: null,
-        hasError: true,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      
+      // Create error result
+      const errorResult = await createSerializableQueryResultFromResult(
+        err(error),
+        query,
+        this.domainTypes
+      );
+      
+      if (errorResult.isErr()) {
+        // If we can't even serialize the error, throw
+        throw errorResult.error;
+      }
+      
+      return errorResult.value;
     }
   }
   
-  async queryList(query: SerializableListQuery): Promise<ListQueryResponse> {
+  async queryList(query: SerializableListQuery): Promise<SerializableListQueryResult> {
     try {
       await this.ensureStateLoadedAsync();
       
@@ -442,27 +491,48 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         const take = query.take || query.limit || 100;
         const paginatedAggregates = aggregates.slice(skip, skip + take);
         
-        // Return the aggregates (just the values, not the keys)
-        return {
+        // Create list query result
+        const listResult: IListQueryResult<any> = {
           values: paginatedAggregates.map(([_, aggregate]) => aggregate),
+          totalCount: aggregates.length,
+          totalPages: Math.ceil(aggregates.length / take),
+          currentPage: Math.floor(skip / take) + 1,
+          pageSize: take,
           hasError: false,
           error: null
         };
+        
+        return await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
       }
       
       // Fallback for non-list projectors
-      return {
+      const emptyResult: IListQueryResult<any> = {
         values: [],
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: 1,
+        pageSize: 0,
         hasError: false,
         error: null
       };
+      
+      return await createSerializableListQueryResult(emptyResult, queryInstance, this.domainTypes);
     } catch (error) {
       console.error('Error executing list query:', error);
-      return {
-        values: [],
-        hasError: true,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      
+      // Create error result
+      const errorResult = await createSerializableListQueryResultFromResult(
+        err(error),
+        query,
+        this.domainTypes
+      );
+      
+      if (errorResult.isErr()) {
+        // If we can't even serialize the error, throw
+        throw errorResult.error;
+      }
+      
+      return errorResult.value;
     }
   }
   

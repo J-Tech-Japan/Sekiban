@@ -269,3 +269,6 @@ export interface BufferedEvent {
   event: SerializableEventDocument;
   receivedAt: Date;
 }
+
+// Import serializable query result types
+export type { SerializableQueryResult, SerializableListQueryResult } from './serializable-query-results';
