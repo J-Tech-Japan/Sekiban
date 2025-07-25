@@ -7,6 +7,7 @@ import type { Result } from 'neverthrow';
 import type { SekibanError } from '../result/errors';
 import type { ICommandExecutor } from '../commands/executor';
 import type { Metadata } from '../documents/metadata';
+import type { IMultiProjectorTypes } from '../projectors/multi-projector-types';
 
 // Type aliases for compatibility
 export type EventTypeInfo = { name: string; constructor: any };
@@ -14,6 +15,9 @@ export type CommandTypeInfo = { name: string; constructor: any };
 export type ProjectorTypeInfo = { name: string; constructor: any; aggregateTypeName: string };
 export type AggregateTypeInfo = { name: string; constructor: any };
 export type QueryTypeInfo = { name: string; constructor: any };
+
+// Re-export IMultiProjectorTypes
+export type { IMultiProjectorTypes } from '../projectors/multi-projector-types';
 
 // Event document type
 export interface EventDocument {
@@ -102,4 +106,5 @@ export interface SekibanDomainTypes {
   readonly queryTypes: IQueryTypes;
   readonly aggregateTypes: IAggregateTypes;
   readonly serializer: ISekibanSerializer;
+  readonly multiProjectorTypes?: IMultiProjectorTypes;
 }

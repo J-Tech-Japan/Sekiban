@@ -15,7 +15,10 @@ This sample has been updated with critical fixes for Dapr actor integration:
 This sample implements a simple Task management system using:
 - **Sekiban Core** for event sourcing abstractions
 - **Sekiban Dapr** for distributed actor-based aggregates
-- **PostgreSQL** for event persistence (when using Dapr)
+- **Storage Options**:
+  - **In-Memory** for development and testing
+  - **PostgreSQL** for production-ready event persistence
+  - **Azure Cosmos DB** for globally distributed applications
 - **Express.js** for REST API
 
 ## Project Structure
@@ -49,8 +52,19 @@ dapr-sample/
 # Install dependencies
 pnpm install
 
-# Set up PostgreSQL (first time only)
-./setup-postgres.sh
+# Configure storage (copy and edit .env file)
+cp .env.example .env
+
+# For in-memory storage (default):
+# No additional setup needed
+
+# For PostgreSQL:
+# 1. Set STORAGE_TYPE=postgres in .env
+# 2. Run: ./setup-postgres.sh
+
+# For Cosmos DB:
+# 1. Set STORAGE_TYPE=cosmos in .env
+# 2. Set COSMOS_CONNECTION_STRING in .env
 
 # Start with Dapr
 ./run-with-dapr.sh
@@ -120,8 +134,20 @@ PUT /api/tasks/:id/complete
 ## Configuration
 
 Environment variables (see `.env.example`):
+
+### Storage Configuration
+- `STORAGE_TYPE` - Storage backend: `inmemory`, `postgres`, or `cosmos`
+
+#### PostgreSQL Configuration
+- `DATABASE_URL` - PostgreSQL connection string (required when STORAGE_TYPE=postgres)
+
+#### Cosmos DB Configuration  
+- `COSMOS_CONNECTION_STRING` - Azure Cosmos DB connection string (required when STORAGE_TYPE=cosmos)
+- `COSMOS_DATABASE` - Database name (default: `sekiban-events`)
+- `COSMOS_CONTAINER` - Container name (default: `events`)
+
+### Dapr Configuration
 - `DAPR_HTTP_PORT` - If set, enables Dapr mode
-- `DATABASE_URL` - PostgreSQL connection string
 - `API_PREFIX` - API route prefix (default: `/api`)
 
 ## Development

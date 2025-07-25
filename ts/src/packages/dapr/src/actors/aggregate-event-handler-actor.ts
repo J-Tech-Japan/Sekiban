@@ -3,7 +3,7 @@ import type { PartitionKeys } from '@sekiban/core';
 // @ts-ignore - These are exported from core
 import type { IEventStore } from '@sekiban/core';
 // @ts-ignore - These are exported from core
-import { EventRetrievalInfo, AggregateGroupStream } from '@sekiban/core';
+import { EventRetrievalInfo, AggregateGroupStream, SortableUniqueId } from '@sekiban/core';
 import { getDaprCradle } from '../container/index.js';
 import type {
   IAggregateEventHandlerActor,
@@ -12,6 +12,7 @@ import type {
   AggregateEventHandlerState,
   ActorPartitionInfo
 } from './interfaces';
+import type { SerializableEventDocument as ExternalSerializableEventDocument } from '../events/serializable-event-document.js';
 
 /**
  * Handles event persistence and retrieval for aggregate streams
@@ -37,7 +38,6 @@ export class AggregateEventHandlerActor extends AbstractActor
   constructor(daprClient: DaprClient, id: ActorId) {
     try {
       super(daprClient, id);
-      console.log('[AggregateEventHandlerActor] Constructor called');
       
       // Extract actor ID string
       this.actorIdString = (id as any).id || String(id);
@@ -48,7 +48,12 @@ export class AggregateEventHandlerActor extends AbstractActor
       // Get eventStore from container
       this.eventStore = cradle.eventStore;
       
-      console.log('[AggregateEventHandlerActor] Dependencies injected, eventStore:', !!this.eventStore);
+      console.log('[AggregateEventHandlerActor] Initialized with:', {
+        actorId: this.actorIdString,
+        eventStoreType: this.eventStore?.constructor?.name || 'Unknown',
+        hasEventStore: !!this.eventStore
+      });
+      
     } catch (error) {
       console.error('[AggregateEventHandlerActor] Constructor error:', error);
       throw error;
@@ -56,18 +61,22 @@ export class AggregateEventHandlerActor extends AbstractActor
   }
   
   getDaprClient(): DaprClient {
-    // Get DaprClient from the actor context
-    return (this as any).client || new DaprClient();
+    // Create a new DaprClient instance for pubsub operations
+    // Using default localhost settings which should work in Dapr sidecar environment
+    const daprPort = process.env.DAPR_HTTP_PORT || "3501";
+    console.log('[AggregateEventHandlerActor] Creating DaprClient with port:', daprPort);
+    return new DaprClient({
+      daprHost: "127.0.0.1",
+      daprPort: daprPort
+    });
   }
   
   /**
    * Actor activation
    */
   async onActivate(): Promise<void> {
-    console.log('[AggregateEventHandlerActor] onActivate called for actor:', (this as any).id?.toString());
     // Don't load partition info on activation to avoid state access issues
     // It will be loaded on first method call instead
-    console.log('[AggregateEventHandlerActor] Actor activated');
   }
   
   /**
@@ -95,15 +104,16 @@ export class AggregateEventHandlerActor extends AbstractActor
     expectedLastSortableUniqueId: string,
     events: SerializableEventDocument[]
   ): Promise<EventHandlingResponse> {
-    console.log('[AggregateEventHandlerActor] appendEventsAsync called with:');
-    console.log('  - Actor ID:', (this as any).id?.toString());
-    console.log('  - Expected last ID:', expectedLastSortableUniqueId);
-    console.log('  - Events count:', events.length);
-    console.log('  - Partition info:', JSON.stringify(this.partitionInfo));
     
     try {
       // Ensure partition info is saved on first method call
       await this.ensurePartitionInfoSaved();
+      
+      console.log('[AggregateEventHandlerActor] appendEventsAsync called with:', {
+        expectedLastSortableUniqueId,
+        eventsCount: events.length,
+        partitionInfo: this.partitionInfo
+      });
       
       // Load current state
       const stateManager = await this.getStateManager();
@@ -111,7 +121,6 @@ export class AggregateEventHandlerActor extends AbstractActor
         this.HANDLER_STATE_KEY
       );
       
-      console.log('[AggregateEventHandlerActor] Current state:', hasState ? 'exists' : 'not found', handlerState);
       
       const currentLastId = (handlerState as any)?.lastSortableUniqueId || '';
       
@@ -138,15 +147,15 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       // Save to external storage
       if (this.partitionInfo) {
-        console.log('[AggregateEventHandlerActor] Saving to event store:', {
-          partitionKeys: this.partitionInfo.partitionKeys,
-          eventCount: events.length
-        });
         
         try {
           const deserializedEvents = events.map(e => this.deserializeEvent(e));
-          await this.eventStore.saveEvents(deserializedEvents);
-          console.log('[AggregateEventHandlerActor] Events saved to event store successfully');
+          console.log('[AggregateEventHandlerActor] Saving events to event store:', {
+            eventStoreType: this.eventStore.constructor.name,
+            eventsCount: deserializedEvents.length
+          });
+          const saveResult = await this.eventStore.saveEvents(deserializedEvents);
+          console.log('[AggregateEventHandlerActor] Event store save result:', saveResult);
         } catch (saveError) {
           console.error('[AggregateEventHandlerActor] Failed to save to event store:', saveError);
           throw saveError;
@@ -157,13 +166,54 @@ export class AggregateEventHandlerActor extends AbstractActor
       
       // Update metadata
       const lastEvent = events[events.length - 1];
-      console.log('[AggregateEventHandlerActor] Last event:', JSON.stringify(lastEvent));
       const newLastId = lastEvent.sortableUniqueId || lastEvent.SortableUniqueId;
-      console.log('[AggregateEventHandlerActor] newLastId extracted:', newLastId);
       const newState: AggregateEventHandlerState = {
         lastSortableUniqueId: newLastId || '',
         eventCount: allEvents.length
       };
+      
+      // Publish events to Dapr pub/sub BEFORE saving state (to ensure it happens even if state save fails)
+      try {
+        const cradle = getDaprCradle();
+        const daprClient = cradle.daprClient || this.getDaprClient();
+        const pubSubName = cradle.configuration?.pubSubName || 'pubsub';
+        const topicName = cradle.configuration?.eventTopicName || 'sekiban-events';
+        
+        console.log('[AggregateEventHandlerActor] Publishing events to pub/sub:', {
+          pubSubName,
+          topicName,
+          eventsCount: events.length,
+          hasDaprClient: !!daprClient
+        });
+        
+        // Publish each event as SerializableEventDocument
+        for (const event of events) {
+          console.log('[AggregateEventHandlerActor] Publishing SerializableEventDocument:', {
+            id: event.id,
+            eventType: event.eventType,
+            aggregateId: event.aggregateId,
+            aggregateType: event.aggregateType,
+            version: event.version
+          });
+          
+          // Send the event as-is (SerializableEventDocument format)
+          // This is the same format used between aggregateActor and aggregateEventHandler
+          console.log('[AggregateEventHandlerActor] Full event object being published:', JSON.stringify(event, null, 2));
+          
+          try {
+            await daprClient.pubsub.publish(pubSubName, topicName, event);
+            console.log(`[AggregateEventHandlerActor] ✓ Successfully published event ${event.id} to ${topicName}`);
+          } catch (publishError) {
+            console.error(`[AggregateEventHandlerActor] ✗ Failed to publish event ${event.id}:`, publishError);
+            throw publishError;
+          }
+        }
+        
+        console.log('[AggregateEventHandlerActor] Successfully published all events to pub/sub');
+      } catch (pubsubError) {
+        // Log but don't fail - pub/sub is not critical for event storage
+        console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
+      }
       
       await stateManager.setState(this.HANDLER_STATE_KEY, newState);
       
@@ -183,66 +233,18 @@ export class AggregateEventHandlerActor extends AbstractActor
         throw saveError;
       }
       
-      // Publish events to Dapr pub/sub
-      try {
-        const cradle = getDaprCradle();
-        const daprClient = cradle.daprClient || this.getDaprClient();
-        const pubSubName = cradle.configuration?.pubSubName || 'pubsub';
-        const topicName = cradle.configuration?.eventTopicName || 'sekiban-events';
-        
-        // Publish each event
-        for (const event of events) {
-          // Extract only the C# compatible fields
-          const publishEvent = {
-            Id: event.Id,
-            SortableUniqueId: event.SortableUniqueId,
-            Version: event.Version,
-            AggregateId: event.AggregateId,
-            AggregateGroup: event.AggregateGroup,
-            RootPartitionKey: event.RootPartitionKey,
-            PayloadTypeName: event.PayloadTypeName,
-            TimeStamp: event.TimeStamp,
-            PartitionKey: event.PartitionKey,
-            CausationId: event.CausationId,
-            CorrelationId: event.CorrelationId,
-            ExecutedUser: event.ExecutedUser,
-            CompressedPayloadJson: event.CompressedPayloadJson,
-            PayloadAssemblyVersion: event.PayloadAssemblyVersion
-          };
-          
-          console.log(`[AggregateEventHandlerActor] Publishing event to pub/sub:`, {
-            pubSubName,
-            topicName,
-            eventType: publishEvent.PayloadTypeName,
-            aggregateId: publishEvent.AggregateId
-          });
-          
-          await daprClient.pubsub.publish(pubSubName, topicName, publishEvent);
-        }
-        
-        console.log(`[AggregateEventHandlerActor] Published ${events.length} events to pub/sub`);
-      } catch (pubsubError) {
-        // Log but don't fail - pub/sub is not critical for event storage
-        console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
-      }
-      
-      try {
-        console.log('[AggregateEventHandlerActor] After pub/sub block, newLastId:', newLastId);
-      } catch (e) {
-        console.error('[AggregateEventHandlerActor] Error accessing newLastId:', e);
-      }
-      
-      console.log('[AggregateEventHandlerActor] About to return success response:', {
-        isSuccess: true,
-        lastSortableUniqueId: newLastId
-      });
       
       const response = {
         isSuccess: true,
         lastSortableUniqueId: newLastId
       };
       
-      console.log('[AggregateEventHandlerActor] Actually returning response now');
+      console.log('[AggregateEventHandlerActor] appendEventsAsync completed successfully:', {
+        eventsCount: events.length,
+        lastSortableUniqueId: newLastId,
+        aggregateType: this.partitionInfo?.aggregateType
+      });
+      
       return response;
     } catch (error) {
       console.error('[AggregateEventHandlerActor] Error in appendEventsAsync:', error);
@@ -280,7 +282,6 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Get all events
    */
   async getAllEventsAsync(): Promise<SerializableEventDocument[]> {
-    console.log('[AggregateEventHandlerActor] getAllEventsAsync called for actor:', (this as any).id?.toString());
     try {
       // Load partition info if not already loaded
       if (!this.partitionInfo) {
@@ -291,7 +292,6 @@ export class AggregateEventHandlerActor extends AbstractActor
       await this.ensurePartitionInfoSaved();
       
       const events = await this.loadEventsFromStateAsync();
-      console.log('[AggregateEventHandlerActor] Returning', events.length, 'events');
       return events;
     } catch (error) {
       console.error('[AggregateEventHandlerActor] Error in getAllEventsAsync:', error);
@@ -322,19 +322,12 @@ export class AggregateEventHandlerActor extends AbstractActor
    * Load events from state with external storage fallback
    */
   private async loadEventsFromStateAsync(): Promise<SerializableEventDocument[]> {
-    console.log('[AggregateEventHandlerActor] loadEventsFromStateAsync called');
-    
     const stateManager = await this.getStateManager();
-    console.log('[AggregateEventHandlerActor] Got state manager');
     
     const [hasEvents, events] = await stateManager.tryGetState(
       this.EVENTS_KEY
     );
     
-    console.log('[AggregateEventHandlerActor] State check:', {
-      hasEvents,
-      eventsCount: events ? (events as any).length : 0
-    });
     
     if (!hasEvents || !events || (events as any).length === 0) {
       // Fallback to external storage
@@ -399,7 +392,6 @@ export class AggregateEventHandlerActor extends AbstractActor
   private getPartitionInfoFromActorId(): ActorPartitionInfo {
     // Actor ID format: "aggregateType:aggregateId:rootPartition"
     const actorId = (this as any).id.toString();
-    console.log('[AggregateEventHandlerActor] Extracting partition info from actor ID:', actorId);
     const idParts = actorId.split(':');
     
     const partitionInfo: ActorPartitionInfo = {
@@ -413,7 +405,6 @@ export class AggregateEventHandlerActor extends AbstractActor
       projectorType: '' // Not used in event handler
     };
     
-    console.log('[AggregateEventHandlerActor] Extracted partition info:', JSON.stringify(partitionInfo));
     return partitionInfo;
   }
   
@@ -427,8 +418,8 @@ export class AggregateEventHandlerActor extends AbstractActor
     
     return {
       // Use uppercase field names to match C# format
-      Id: event.id?.value || event.id || '',
-      SortableUniqueId: event.sortableUniqueId || event.id?.value || '',
+      Id: typeof event.id === 'string' ? event.id : (event.id?.value || event.id?.toString() || ''),
+      SortableUniqueId: typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : (event.sortableUniqueId?.value || event.sortableUniqueId?.toString() || ''),
       Version: event.version || 1,
       
       // Partition keys
@@ -453,8 +444,8 @@ export class AggregateEventHandlerActor extends AbstractActor
       PayloadAssemblyVersion: '0.0.0.0',
       
       // Keep old format fields for backward compatibility
-      id: event.id,
-      sortableUniqueId: event.sortableUniqueId,
+      id: typeof event.id === 'string' ? event.id : (event.id?.value || event.id?.toString() || ''),
+      sortableUniqueId: typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : (event.sortableUniqueId?.value || event.sortableUniqueId?.toString() || ''),
       payload: event.payload,
       eventType: event.payload?.constructor?.name || event.eventType || 'Unknown',
       aggregateId: event.aggregateId,
@@ -466,12 +457,57 @@ export class AggregateEventHandlerActor extends AbstractActor
   }
   
   /**
-   * Deserialize event from storage
+   * Deserialize event from storage to IEvent format
    */
-  private deserializeEvent(serialized: SerializableEventDocument): any {
+  private deserializeEvent(serialized: SerializableEventDocument | ExternalSerializableEventDocument): any {
+    // Handle both uppercase (C#) and lowercase (TypeScript) field names
+    const id = (serialized as any).id || serialized.Id;
+    const sortableUniqueId = (serialized as any).sortableUniqueId || serialized.SortableUniqueId;
+    const aggregateId = (serialized as any).aggregateId || serialized.AggregateId;
+    const eventType = (serialized as any).eventType || serialized.PayloadTypeName;
+    const version = (serialized as any).version || serialized.Version;
+    const timestamp = (serialized as any).createdAt || serialized.TimeStamp;
+    
+    // Decompress payload if needed
+    let payload = (serialized as any).payload;
+    if (!payload && serialized.CompressedPayloadJson) {
+      try {
+        payload = JSON.parse(Buffer.from(serialized.CompressedPayloadJson, 'base64').toString('utf-8'));
+      } catch (e) {
+        console.error('[AggregateEventHandlerActor] Failed to decompress payload:', e);
+        payload = {};
+      }
+    }
+    
+    // Keep original id (UUID) and sortableUniqueId as separate values
+    const sortableIdValue = sortableUniqueId || (id && id.length === 30 ? id : null);
+    const sortableIdInstance = sortableIdValue ? SortableUniqueId.fromString(sortableIdValue).unwrapOr(SortableUniqueId.create()) : SortableUniqueId.create();
+    
     return {
-      ...serialized,
-      createdAt: new Date(serialized.createdAt)
+      id: id || aggregateId,  // Use original UUID id, fallback to aggregateId
+      sortableUniqueId: sortableIdInstance.value,  // SortableUniqueId as string
+      partitionKeys: (serialized as any).partitionKeys || {
+        aggregateId: aggregateId,
+        group: serialized.AggregateGroup || (serialized as any).aggregateType || 'default',
+        rootPartitionKey: serialized.RootPartitionKey || 'default',
+        partitionKey: serialized.PartitionKey || `${serialized.AggregateGroup || 'default'}-${aggregateId}`
+      },
+      aggregateType: (serialized as any).aggregateType || serialized.AggregateGroup || 'default',
+      eventType: eventType,
+      aggregateId: aggregateId,
+      version: version,
+      payload: payload,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      metadata: (serialized as any).metadata || {
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        causationId: serialized.CausationId || '',
+        correlationId: serialized.CorrelationId || '',
+        executedUser: serialized.ExecutedUser || 'system',
+        userId: serialized.ExecutedUser || 'system'
+      },
+      partitionKey: serialized.PartitionKey || (serialized as any).partitionKey || '',
+      aggregateGroup: serialized.AggregateGroup || (serialized as any).aggregateGroup || 'default',
+      eventData: payload
     };
   }
 }

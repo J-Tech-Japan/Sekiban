@@ -65,7 +65,10 @@
       "Bash(ps:*)",
       "Bash(./run-all-services.sh:*)",
       "Bash(./test-all-operations.sh:*)",
-      "Bash(pnpm list:*)"
+      "Bash(pnpm list:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(redis-cli:*)",
+      "Bash(./run-with-postgres.sh:*)"
     ],
     "deny": []
   },

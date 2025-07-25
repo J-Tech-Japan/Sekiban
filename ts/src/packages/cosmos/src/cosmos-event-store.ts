@@ -288,8 +288,8 @@ export class CosmosEventStore implements IEventStore {
 
         // Create document in the exact format required
         const cosmosDocument: EventDocument = {
-          // Use aggregateId as UUID for id
-          id: event.partitionKeys.aggregateId,
+          // Use sortableUniqueId as id to ensure uniqueness
+          id: event.id.value,
           
           // Payload as JSON (similar to JsonNode in C#)
           payload: serializedPayload,

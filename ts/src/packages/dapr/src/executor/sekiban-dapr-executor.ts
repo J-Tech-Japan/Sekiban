@@ -1,7 +1,6 @@
 import type { Result } from 'neverthrow';
 import { ok, err } from 'neverthrow';
-import type { DaprClient } from '@dapr/dapr';
-import { HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
+import { DaprClient, HttpMethod, ActorProxyBuilder, ActorId, CommunicationProtocolEnum } from '@dapr/dapr';
 import type { 
   ICommandWithHandler,
   IAggregateProjector,
@@ -22,6 +21,8 @@ import type {
 import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
+import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
+import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, MultiProjectionState, DaprEventEnvelope } from '../actors/interfaces.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -78,7 +79,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
-        console.log(`[SekibanDaprExecutor] Calling actor ${actorId} via ActorProxyBuilder`);
         return actor.executeCommandAsync(commandAndMetadata);
       },
       
@@ -191,9 +191,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         }
       };
       
-      // Log what we're sending to the actor
-      console.log('[SekibanDaprExecutor] Sending to actor:', JSON.stringify(commandWithMetadata, null, 2));
-      
       // Execute command through actor with retry
       const responseData = await this.executeWithRetry(
         () => actorProxy.executeCommandAsync(commandWithMetadata),
@@ -257,12 +254,205 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   }
   
   /**
+   * Check if a query is a multi-projection query
+   */
+  private isMultiProjectionQuery(query: any): boolean {
+    console.log('[SekibanDaprExecutor] Checking if multi-projection query:', {
+      hasGetPartitionKeys: !!query.getPartitionKeys,
+      partitionKeys: query.getPartitionKeys ? query.getPartitionKeys() : 'N/A',
+      isMultiProjection: query.isMultiProjection,
+      queryType: query.constructor.name
+    });
+    
+    // Check if query has no partition keys or explicitly marked as multi-projection
+    const result = !query.getPartitionKeys || !query.getPartitionKeys() || query.isMultiProjection === true;
+    console.log('[SekibanDaprExecutor] Is multi-projection:', result);
+    return result;
+  }
+  
+  /**
+   * Get the multi-projector name for a query
+   */
+  private getMultiProjectorName(query: any): string | null {
+    // If query has a getProjector method and the projector has multiProjectorName
+    if (query.getProjector && typeof query.getProjector === 'function') {
+      const projector = query.getProjector();
+      if (projector && projector.multiProjectorName) {
+        return projector.multiProjectorName;
+      }
+    }
+    
+    // Fallback: use aggregate type as projector name
+    if (query.getAggregateType && typeof query.getAggregateType === 'function') {
+      return `${query.getAggregateType()}MultiProjector`;
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Create multi-projector actor proxy with HTTP-based implementation
+   */
+  private createMultiProjectorActorProxy(projectorName: string): IMultiProjectorActor {
+    console.log(`[SekibanDaprExecutor] Creating MultiProjectorActor proxy for: ${projectorName}`);
+    
+    const targetAppId = this.configuration.multiProjectorAppId || 'dapr-sample-multi-projector';
+    const actorType = 'MultiProjectorActor';
+    const daprPort = this.daprClient.options.daprPort || '3500';
+    const daprHost = this.daprClient.options.daprHost || '127.0.0.1';
+    
+    console.log(`[SekibanDaprExecutor] Target app-id: ${targetAppId}, Actor type: ${actorType}`);
+    
+    // Create a custom proxy that uses HTTP API directly
+    const proxy: IMultiProjectorActor = {
+      queryAsync: async (query: SerializableQuery): Promise<QueryResponse> => {
+        const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${projectorName}/method/queryAsync`;
+        console.log(`[SekibanDaprExecutor] Calling actor method at: ${url}`);
+        
+        try {
+          const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'dapr-app-id': targetAppId
+            },
+            body: JSON.stringify(query)
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[SekibanDaprExecutor] Actor call failed: ${response.status} ${errorText}`);
+            return {
+              isSuccess: false,
+              error: `Actor call failed: ${response.status} ${errorText}`
+            };
+          }
+          
+          const result = await response.json();
+          console.log(`[SekibanDaprExecutor] Actor response:`, result);
+          return result;
+        } catch (error) {
+          console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
+          return {
+            isSuccess: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      },
+      
+      queryListAsync: async (query: SerializableListQuery): Promise<ListQueryResponse> => {
+        const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${projectorName}/method/queryListAsync`;
+        console.log(`[SekibanDaprExecutor] Calling list actor method at: ${url}`);
+        
+        try {
+          const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'dapr-app-id': targetAppId
+            },
+            body: JSON.stringify(query)
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[SekibanDaprExecutor] Actor list call failed: ${response.status} ${errorText}`);
+            return {
+              isSuccess: false,
+              error: `Actor call failed: ${response.status} ${errorText}`
+            };
+          }
+          
+          const result = await response.json();
+          console.log(`[SekibanDaprExecutor] Actor list response:`, result);
+          return result;
+        } catch (error) {
+          console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
+          return {
+            isSuccess: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      },
+      
+      isSortableUniqueIdReceived: async (sortableUniqueId: string): Promise<boolean> => {
+        // Not implemented for now
+        return false;
+      },
+      
+      buildStateAsync: async (): Promise<MultiProjectionState> => {
+        // Not implemented for now
+        throw new Error('Not implemented');
+      },
+      
+      rebuildStateAsync: async (): Promise<void> => {
+        // Not implemented for now
+        throw new Error('Not implemented');
+      },
+      
+      handlePublishedEvent: async (envelope: DaprEventEnvelope): Promise<void> => {
+        // Not implemented for now
+        throw new Error('Not implemented');
+      }
+    };
+    
+    return proxy;
+  }
+  
+  /**
    * Execute query through Dapr actor
    */
   async queryAsync<T>(query: any): Promise<Result<T, SekibanError>> {
     try {
-      // For queries, determine appropriate actor ID
-      // This is a simplified approach - real implementation would be more sophisticated
+      // Check if this is a multi-projection query
+      if (this.isMultiProjectionQuery(query)) {
+        const projectorName = this.getMultiProjectorName(query);
+        if (!projectorName) {
+          return err(new SekibanError('Unable to determine multi-projector name for query'));
+        }
+        
+        console.log(`[SekibanDaprExecutor] Executing multi-projection query with projector: ${projectorName}`);
+        
+        // Create multi-projector actor proxy
+        const multiProjectorActor = this.createMultiProjectorActorProxy(projectorName);
+        
+        // Convert query to serializable format
+        const serializableQuery: SerializableQuery = {
+          queryType: query.constructor.name,
+          payload: query,
+          partitionKeys: query.getPartitionKeys ? query.getPartitionKeys() : undefined
+        };
+        
+        // Check if it's a list query
+        const isListQuery = query.limit !== undefined || query.offset !== undefined;
+        
+        let response: QueryResponse | ListQueryResponse;
+        if (isListQuery) {
+          const listQuery: SerializableListQuery = {
+            ...serializableQuery,
+            limit: query.limit,
+            skip: query.offset
+          };
+          response = await this.executeWithRetry(
+            () => multiProjectorActor.queryListAsync(listQuery),
+            'Multi-projection list query execution'
+          );
+        } else {
+          response = await this.executeWithRetry(
+            () => multiProjectorActor.queryAsync(serializableQuery),
+            'Multi-projection query execution'
+          );
+        }
+        
+        if (!response.isSuccess) {
+          return err(new SekibanError(response.error || 'Query execution failed'));
+        }
+        
+        // Return the data from the response
+        return ok((isListQuery ? (response as ListQueryResponse).items : response.data) as T);
+      }
+      
+      // Original single-aggregate query logic
       const actorId = `${this.configuration.actorIdPrefix || 'sekiban'}.query.${query.queryType}.${query.userId || 'default'}`;
       
       // Create actor proxy

@@ -15,13 +15,18 @@ rm -rf dist
 echo "📦 Building JavaScript..."
 npx tsup src/index.ts --format cjs,esm --target es2020 --no-dts --sourcemap
 
-# Generate declarations with tsc
+# Build TypeScript declarations
 echo "📄 Generating TypeScript declarations..."
-npx tsc --emitDeclarationOnly --declaration --declarationMap || {
-    echo "⚠️  TypeScript had issues, creating basic declarations..."
-    echo "export * from './postgres-event-store';" > dist/index.d.ts
-    echo "export * from './postgres-storage-provider';" >> dist/index.d.ts
+npx tsc --build --force || {
+    echo "⚠️  TypeScript build failed"
+    exit 1
 }
+
+# Copy declaration files to dist root
+if [ -f "dist/src/index.d.ts" ]; then
+    mv dist/src/* dist/
+    rm -rf dist/src
+fi
 
 # Check results
 echo ""
@@ -32,14 +37,8 @@ ls -la dist/
 if [ -f "dist/index.d.ts" ]; then
   echo "✅ TypeScript declarations generated successfully!"
 else
-  # Find all generated d.ts files
-  echo "⚠️  Looking for generated declaration files..."
-  find dist -name "*.d.ts" -type f | head -10
-  
-  # Create proper index.d.ts
-  echo "export * from './postgres-event-store';" > dist/index.d.ts
-  echo "export * from './postgres-storage-provider';" >> dist/index.d.ts
-  echo "✅ Created index.d.ts exports"
+  echo "❌ No TypeScript declarations found!"
+  exit 1
 fi
 
 echo "✅ Build complete!"

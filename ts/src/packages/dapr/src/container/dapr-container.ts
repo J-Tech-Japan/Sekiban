@@ -46,14 +46,7 @@ export function initializeDaprContainer(dependencies: DaprActorDependencies): vo
     configuration: asValue(dependencies.configuration)
   });
 
-  console.log('[DaprContainer] Initialized with:');
-  console.log('  - domainTypes:', !!dependencies.domainTypes);
-  console.log('  - command types:', dependencies.domainTypes?.commandTypes ? 
-    dependencies.domainTypes.commandTypes.getCommandTypes() : 'none');
-  console.log('  - serviceProvider:', !!dependencies.serviceProvider);
-  console.log('  - actorProxyFactory:', !!dependencies.actorProxyFactory);
-  console.log('  - serializationService:', !!dependencies.serializationService);
-  console.log('  - eventStore:', !!dependencies.eventStore);
+  // Container initialized with all dependencies
 }
 
 /**

@@ -19,9 +19,6 @@ export class AggregateActorFactory {
     eventStore?: any,
     eventHandlerDirectCall?: (actorId: string, method: string, args: any[]) => Promise<any>
   ): void {
-    console.log('[AggregateActorFactory] Configuring with domainTypes:', !!domainTypes);
-    console.log('[AggregateActorFactory] Command types available:', domainTypes?.commandTypes ? domainTypes.commandTypes.getCommandTypes().map((c: any) => c.name) : 'none');
-    
     // Initialize the Awilix container with dependencies
     initializeDaprContainer({
       domainTypes,
@@ -38,7 +35,6 @@ export class AggregateActorFactory {
    * Returns the actor class directly (no wrapper)
    */
   static createActorClass(): typeof AggregateActor {
-    console.log('[AggregateActorFactory] Creating actor class (returning AggregateActor)');
     // Return the actual class, not a wrapper
     return AggregateActor;
   }

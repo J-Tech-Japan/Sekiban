@@ -30,6 +30,15 @@ const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING || '';
 const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'sekiban-events';
 const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || 'events';
 
+// Log configuration on startup
+logger.info('=== Event Handler Configuration ===');
+logger.info(`STORAGE_TYPE: ${STORAGE_TYPE}`);
+logger.info(`DATABASE_URL: ${DATABASE_URL ? '[CONFIGURED]' : '[NOT SET]'}`);
+logger.info(`COSMOS_CONNECTION_STRING: ${COSMOS_CONNECTION_STRING ? '[CONFIGURED]' : '[NOT SET]'}`);
+logger.info(`PORT: ${PORT}`);
+logger.info(`DAPR_HTTP_PORT: ${DAPR_HTTP_PORT}`);
+logger.info('==================================');
+
 async function main() {
   const app = express();
   app.use(express.json());

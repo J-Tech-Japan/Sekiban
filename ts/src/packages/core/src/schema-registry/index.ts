@@ -18,7 +18,12 @@ export { SchemaRegistry } from './registry';
 export { SchemaExecutor } from './schema-executor';
 
 // Schema-based SekibanDomainTypes implementation
-export { createSchemaDomainTypes, createSekibanDomainTypesFromGlobalRegistry } from './schema-domain-types';
+export { 
+  createSchemaDomainTypes, 
+  createSekibanDomainTypesFromGlobalRegistry,
+  SchemaMultiProjectorTypes,
+  SchemaQueryTypes
+} from './schema-domain-types';
 
 // Type exports for advanced usage
 export type {
