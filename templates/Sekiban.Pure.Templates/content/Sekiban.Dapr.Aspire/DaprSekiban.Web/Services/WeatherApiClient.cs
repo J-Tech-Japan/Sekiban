@@ -18,13 +18,23 @@ public class WeatherApiClient
         _logger = logger;
     }
 
-    public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync(string? waitForSortableUniqueId = null)
+    public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync(string? waitForSortableUniqueId = null, int? pageSize = null, int? pageNumber = null, string? sortBy = null, bool isAsc = false)
     {
-        var url = "api/weatherforecast";
+        var queryParams = new List<string>();
         if (!string.IsNullOrEmpty(waitForSortableUniqueId))
-        {
-            url += $"?waitForSortableUniqueId={waitForSortableUniqueId}";
-        }
+            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+        if (pageSize.HasValue)
+            queryParams.Add($"pageSize={pageSize.Value}");
+        if (pageNumber.HasValue)
+            queryParams.Add($"pageNumber={pageNumber.Value}");
+        if (!string.IsNullOrEmpty(sortBy))
+            queryParams.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
+        if (isAsc)
+            queryParams.Add("isAsc=true");
+            
+        var url = "api/weatherforecast";
+        if (queryParams.Count > 0)
+            url += "?" + string.Join("&", queryParams);
         
         try
         {

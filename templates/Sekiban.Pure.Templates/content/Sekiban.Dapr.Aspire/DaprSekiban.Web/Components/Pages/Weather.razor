@@ -1,28 +1,79 @@
 ﻿@page "/weather"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode InteractiveServer
+@attribute [OutputCache(Duration = 5)]
 
-@using DaprSekiban.Domain
 @using System.ComponentModel.DataAnnotations
 @using DaprSekiban.Domain.Aggregates.WeatherForecasts.Commands
 @using DaprSekiban.Domain.Aggregates.WeatherForecasts.Queries
 @using DaprSekiban.Domain.ValueObjects
 @using DaprSekiban.Web.Services
-@using Sekiban.Pure.Aggregates
-@using Sekiban.Pure.Command.Executor
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 
 @inject WeatherApiClient WeatherApi
 @inject IJSRuntime JsRuntime
 
 <PageTitle>Weather</PageTitle>
 
+<style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 25px !important;
+        transition: background-color 0.2s ease;
+    }
+    
+    .sortable:hover {
+        background-color: #e3f2fd;
+    }
+    
+    .sortable.active {
+        background-color: #bbdefb;
+        font-weight: 600;
+    }
+    
+    .sort-indicator {
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.8em;
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
+        color: #666;
+    }
+    
+    .sortable:hover .sort-indicator {
+        opacity: 0.8;
+    }
+    
+    .sortable.active .sort-indicator {
+        opacity: 1;
+        color: #1976d2;
+        font-weight: bold;
+    }
+</style>
+
 <h1>Weather</h1>
 
 <div>
-    <button class="btn btn-primary mb-3" @onclick="OpenAddForecastModal">Add New Weather Forecast</button>
+    <button class="btn btn-primary mb-3" @onclick="OpenAddForecastModal" @onclick:preventDefault="true">Add New Weather Forecast</button>
     <button class="btn btn-success mb-3 ms-2" @onclick="GenerateSampleData">Generate Sample Data</button>
 </div>
 
-<h3>Weather Forecasts</h3>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Weather Forecasts</h3>
+    <div class="d-flex align-items-center gap-2">
+        <label for="pageSize" class="form-label mb-0">Items per page:</label>
+        <select id="pageSize" class="form-select" style="width: auto;" @onchange="OnPageSizeChanged">
+            <option value="5" selected="@(currentPageSize == 5)">5</option>
+            <option value="10" selected="@(currentPageSize == 10)">10</option>
+            <option value="20" selected="@(currentPageSize == 20)">20</option>
+            <option value="50" selected="@(currentPageSize == 50)">50</option>
+        </select>
+    </div>
+</div>
 
 @if (forecasts == null)
 {
@@ -33,11 +84,84 @@ else
     <table class="table">
         <thead>
         <tr>
-            <td>Location</td>
-            <th>Date</th>
-            <th aria-label="Temperature in Celsius">Temp. (C)</th>
-            <th aria-label="Temperature in Farenheit">Temp. (F)</th>
-            <th>Summary</th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.Location) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.Location))">
+                Location
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.Location))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.Date) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.Date))">
+                Date
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.Date))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.TemperatureC) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.TemperatureC))" aria-label="Temperature in Celsius">
+                Temp. (C)
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.TemperatureC))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.TemperatureF) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.TemperatureF))" aria-label="Temperature in Farenheit">
+                Temp. (F)
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.TemperatureF))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.Summary) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.Summary))">
+                Summary
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.Summary))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
+            <th class="sortable @(currentSortBy == nameof(WeatherForecastResponse.UpdatedAt) ? "active" : "")" @onclick="() => HandleSort(nameof(WeatherForecastResponse.UpdatedAt))">
+                Updated At
+                <span class="sort-indicator">
+                    @if (currentSortBy == nameof(WeatherForecastResponse.UpdatedAt))
+                    {
+                        @(currentIsAsc ? "▲" : "▼")
+                    }
+                    else
+                    {
+                        @("⇅")
+                    }
+                </span>
+            </th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -50,6 +174,7 @@ else
                     <td>@forecast.TemperatureC.ToString("F1")°C</td>
                     <td>@forecast.TemperatureF.ToString("F1")°F</td>
                     <td>@forecast.Summary</td>
+                    <td>@forecast.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</td>
                     <td>
                         <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
                         <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.WeatherForecastId)">Remove</button>
@@ -58,6 +183,37 @@ else
             }
         </tbody>
     </table>
+    
+    <!-- Pagination Controls -->
+    <nav aria-label="Weather forecast pagination">
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoToPage(1)" disabled="@(currentPage <= 1)">First</button>
+            </li>
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage <= 1)">Previous</button>
+            </li>
+            
+            @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+            {
+                var pageNumber = i;
+                <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                    <button class="page-link" @onclick="() => GoToPage(pageNumber)">@pageNumber</button>
+                </li>
+            }
+            
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage >= totalPages)">Next</button>
+            </li>
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <button class="page-link" @onclick="() => GoToPage(totalPages)" disabled="@(currentPage >= totalPages)">Last</button>
+            </li>
+        </ul>
+    </nav>
+    
+    <div class="text-center text-muted">
+        Page @currentPage of @totalPages (Total items: @totalItems)
+    </div>
 }
 
 <div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="addForecastModalLabel" aria-hidden="true">
@@ -148,6 +304,13 @@ else
     private ForecastModel forecastModel = new();
     private EditLocationModel editLocationModel = new();
 
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int totalItems = 0;
+    private int currentPageSize = 5;
+    private string currentSortBy = nameof(WeatherForecastResponse.Date);
+    private bool currentIsAsc = false;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadForecasts();
@@ -156,8 +319,21 @@ else
     private async Task LoadForecasts(string? waitForSortableUniqueId = null)
     {
         Console.WriteLine($"Loading forecasts with waitForSortableUniqueId: {waitForSortableUniqueId}");
-        forecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId);
+        forecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId: waitForSortableUniqueId, pageSize: currentPageSize, pageNumber: currentPage, sortBy: currentSortBy, isAsc: currentIsAsc);
         Console.WriteLine($"Loaded {forecasts?.Count ?? 0} forecasts");
+        
+        // Get total count by fetching all items without pagination
+        var allForecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId: waitForSortableUniqueId);
+        totalItems = allForecasts?.Count ?? 0;
+        totalPages = (int)Math.Ceiling((double)totalItems / currentPageSize);
+        
+        // Ensure current page is within valid range
+        if (currentPage > totalPages && totalPages > 0)
+        {
+            currentPage = totalPages;
+            // Reload with correct page
+            forecasts = await WeatherApi.GetWeatherForecastsAsync(waitForSortableUniqueId: waitForSortableUniqueId, pageSize: currentPageSize, pageNumber: currentPage, sortBy: currentSortBy, isAsc: currentIsAsc);
+        }
         
         if (forecasts != null)
         {
@@ -170,8 +346,17 @@ else
 
     private async Task OpenAddForecastModal()
     {
-        forecastModel = new ForecastModel { Date = DateTime.Now };
-        await JsRuntime.InvokeVoidAsync("showModal", "addForecastModal");
+        try
+        {
+            forecastModel = new ForecastModel { Date = DateTime.Now };
+            Console.WriteLine("About to call showModal for addForecastModal");
+            await JsRuntime.InvokeVoidAsync("showModal", "addForecastModal");
+            Console.WriteLine("showModal call completed");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error opening modal: {ex.Message}");
+        }
     }
 
     private async Task OpenEditLocationModal(WeatherForecastResponse forecast)
@@ -299,6 +484,47 @@ else
         {
             Console.WriteLine($"Error generating sample data: {ex.Message}");
         }
+    }
+
+    private async Task GoToPage(int pageNumber)
+    {
+        if (pageNumber < 1 || pageNumber > totalPages)
+            return;
+
+        currentPage = pageNumber;
+        await LoadForecasts();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newSize))
+        {
+            currentPageSize = newSize;
+            currentPage = 1; // Reset to first page
+            await LoadForecasts();
+        }
+    }
+
+    private void HandleSort(string column)
+    {
+        if (currentSortBy == column)
+        {
+            currentIsAsc = !currentIsAsc; // Toggle sort direction
+        }
+        else
+        {
+            currentSortBy = column;
+            currentIsAsc = true; // Default to ascending sort on new column
+        }
+        LoadForecasts();
+    }
+
+    private string GetSortIndicatorClass(string column)
+    {
+        if (currentSortBy != column)
+            return "default";
+
+        return currentIsAsc ? "asc" : "desc";
     }
 
     private class ForecastModel
