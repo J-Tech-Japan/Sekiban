@@ -138,5 +138,18 @@ export {
 // Export EventDocument type
 export type { EventDocument } from './domain-types/interfaces';
 
+// Type aliases for backward compatibility
+export type EventId = string;
+export type AggregateId = string;
+export type IListQueryResult<T> = import('./queries/query').ListQueryResult<T>;
+
+// Re-export types that might be missing
+export { ListQueryResult } from './queries/query';
+export { MultiProjectionState } from './projectors/multi-projector-types';
+export { IMultiProjectorCommon, IMultiProjectorStateCommon } from './projectors/index';
+export { AggregateListProjector } from './queries/aggregate-list-projector';
+export { IMultiProjectionListQuery, IQueryContext } from './queries/index';
+export { SchemaMultiProjectorTypes, SchemaQueryTypes } from './schema-registry/index';
+
 // Version
 export const VERSION = '0.0.1';

@@ -34,6 +34,8 @@ export { TaskMultiProjector } from './aggregates/task/projectors/task-multi-proj
 // Export queries
 export { GetTaskById } from './aggregates/task/queries/task-queries.js';
 export { GetAllTasks } from './aggregates/task/queries/get-all-tasks.js';
+export { TaskListQuery, ActiveTaskListQuery, TasksByAssigneeQuery } from './aggregates/task/queries/index.js';
+export type { TaskListResponse } from './aggregates/task/queries/index.js';
 
 // Export User aggregate
 export * from './aggregates/user/index.js';

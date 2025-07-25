@@ -8,7 +8,10 @@ import {
   UpdateTask, 
   DeleteTask,
   RevertTaskCompletion,
-  GetTaskById 
+  GetTaskById,
+  TaskListQuery,
+  ActiveTaskListQuery,
+  TasksByAssigneeQuery
 } from '@dapr-sample/domain';
 import { PartitionKeys, CommandValidationError, SekibanError, AggregateNotFoundError } from '@sekiban/core';
 import { getExecutor } from '../setup/executor.js';
@@ -107,36 +110,42 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Parse query parameters
-      const { status, limit, offset } = req.query;
+      const { status, assignee, limit, offset } = req.query;
       
       const executor = await getExecutor();
       
-      // Import GetAllTasks query
-      const { GetAllTasks } = await import('@dapr-sample/domain');
+      // Determine which query to use based on parameters
+      let query;
+      if (assignee) {
+        // Use TasksByAssigneeQuery if assignee is specified
+        query = new TasksByAssigneeQuery();
+        (query as any).assignee = assignee as string;
+      } else if (status === 'active') {
+        // Use ActiveTaskListQuery for active tasks
+        query = new ActiveTaskListQuery();
+      } else {
+        // Use general TaskListQuery
+        query = new TaskListQuery();
+      }
       
-      // Create query with optional filters
-      const query = GetAllTasks.create({
-        status: status as any,
-        limit: limit ? parseInt(limit as string) : undefined,
-        offset: offset ? parseInt(offset as string) : undefined
-      });
+      // Apply pagination
+      if (limit) {
+        (query as any).take = parseInt(limit as string);
+      }
+      if (offset) {
+        (query as any).skip = parseInt(offset as string);
+      }
       
-      console.log('[GET ALL] Executing GetAllTasks query:', {
-        status: query.status,
-        limit: query.limit,
-        offset: query.offset,
-        partitionKeys: query.getPartitionKeys(),
-        aggregateType: query.getAggregateType(),
-        projector: (query.getProjector() as any).multiProjectorName || (query.getProjector() as any).name || 'unknown'
+      console.log('[GET ALL] Executing task list query:', {
+        queryType: query.constructor.name,
+        assignee,
+        status,
+        limit,
+        offset
       });
       
       // Execute multi-projection query
       console.log('[GET ALL] Executing multi-projection query...');
-      console.log('[GET ALL] Query details:', {
-        queryType: query.constructor.name,
-        isMultiProjection: query.isMultiProjection,
-        projectorName: (query.getProjector() as any).multiProjectorName
-      });
       
       let result;
       try {
