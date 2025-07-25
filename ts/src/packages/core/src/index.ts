@@ -46,6 +46,9 @@ export * from './storage/index';
 // Schema Registry (modern schema-first approach)
 export * from './schema-registry/index';
 
+// Projectors
+export * from './projectors/index';
+
 // Explicitly export defineProjector and other schema functions
 export { 
   defineEvent,
