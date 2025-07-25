@@ -186,42 +186,27 @@ export class AggregateEventHandlerActor extends AbstractActor
           hasDaprClient: !!daprClient
         });
         
-        // Publish each event
+        // Publish each event as SerializableEventDocument
         for (const event of events) {
-          console.log('[AggregateEventHandlerActor] Input event structure:', {
-            hasId: !!event.Id,
-            hasSortableUniqueId: !!event.SortableUniqueId,
-            hasCompressedPayloadJson: !!event.CompressedPayloadJson,
-            eventKeys: Object.keys(event)
+          console.log('[AggregateEventHandlerActor] Publishing SerializableEventDocument:', {
+            id: event.id,
+            eventType: event.eventType,
+            aggregateId: event.aggregateId,
+            aggregateType: event.aggregateType,
+            version: event.version
           });
           
-          // Extract only the C# compatible fields
-          const publishEvent = {
-            Id: event.Id,
-            SortableUniqueId: event.SortableUniqueId,
-            Version: event.Version,
-            AggregateId: event.AggregateId,
-            AggregateGroup: event.AggregateGroup,
-            RootPartitionKey: event.RootPartitionKey,
-            PayloadTypeName: event.PayloadTypeName,
-            TimeStamp: event.TimeStamp,
-            PartitionKey: event.PartitionKey,
-            CausationId: event.CausationId,
-            CorrelationId: event.CorrelationId,
-            ExecutedUser: event.ExecutedUser,
-            CompressedPayloadJson: event.CompressedPayloadJson,
-            PayloadAssemblyVersion: event.PayloadAssemblyVersion
-          };
+          // Send the event as-is (SerializableEventDocument format)
+          // This is the same format used between aggregateActor and aggregateEventHandler
+          console.log('[AggregateEventHandlerActor] Full event object being published:', JSON.stringify(event, null, 2));
           
-          console.log('[AggregateEventHandlerActor] Publishing event:', {
-            eventId: publishEvent.Id,
-            aggregateType: publishEvent.AggregateGroup,
-            eventType: publishEvent.PayloadTypeName
-          });
-          
-          console.log('[AggregateEventHandlerActor] Full event object being published:', JSON.stringify(publishEvent, null, 2));
-          
-          await daprClient.pubsub.publish(pubSubName, topicName, publishEvent);
+          try {
+            await daprClient.pubsub.publish(pubSubName, topicName, event);
+            console.log(`[AggregateEventHandlerActor] ✓ Successfully published event ${event.id} to ${topicName}`);
+          } catch (publishError) {
+            console.error(`[AggregateEventHandlerActor] ✗ Failed to publish event ${event.id}:`, publishError);
+            throw publishError;
+          }
         }
         
         console.log('[AggregateEventHandlerActor] Successfully published all events to pub/sub');
