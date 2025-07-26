@@ -30,8 +30,6 @@ public class PatchedEventReader : IEventReader
     
     public Task<ResultBox<IReadOnlyList<IEvent>>> GetEvents(EventRetrievalInfo retrievalInfo)
     {
-        _logger.LogInformation("PatchedEventReader.GetEvents called");
-        
         // Always return empty list to avoid timeout
         return Task.FromResult(ResultBox<IReadOnlyList<IEvent>>.FromValue(
             (IReadOnlyList<IEvent>)new List<IEvent>()));

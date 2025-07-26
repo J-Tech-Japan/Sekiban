@@ -38,13 +38,7 @@ public class WeatherApiClient
         
         try
         {
-            _logger.LogInformation("=== MAKING API REQUEST ===");
-            _logger.LogInformation("HttpClient BaseAddress: {BaseAddress}", _httpClient.BaseAddress);
-            _logger.LogInformation("Request URL: {Url}", url);
-            _logger.LogInformation("Full Request URL: {FullUrl}", new Uri(_httpClient.BaseAddress!, url));
-            
             var response = await _httpClient.GetFromJsonAsync<List<WeatherForecastResponse>>(url);
-            _logger.LogInformation("API request successful");
             return response;
         }
         catch (Exception ex)
