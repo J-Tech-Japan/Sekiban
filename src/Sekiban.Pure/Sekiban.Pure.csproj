@@ -34,4 +34,8 @@
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="DCB\" />
+    </ItemGroup>
+
 </Project>
