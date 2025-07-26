@@ -46,7 +46,19 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
   ): Result<AggregateListProjector<TAggregateProjector>, SekibanError> {
     const projector = this.projectorFactory()
     const partitionKeys = event.partitionKeys
-    const partitionKey = partitionKeys.partitionKey
+    
+    // Use aggregateId as partition key if partitionKey is not available
+    const partitionKey = partitionKeys.partitionKey || partitionKeys.aggregateId || event.aggregateId
+    
+    console.log('[AggregateListProjector.project] Processing event:', {
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      partitionKeysType: typeof partitionKeys,
+      partitionKeys: partitionKeys,
+      calculatedPartitionKey: partitionKey,
+      currentAggregatesSize: payload.aggregates.size,
+      currentAggregatesKeys: Array.from(payload.aggregates.keys())
+    })
     
     // Get existing aggregate or create empty one
     const existingAggregate = payload.aggregates.get(partitionKey)
@@ -59,16 +71,29 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
       (projectedAggregate) => {
         // If the result is empty aggregate, don't update the list
         if (projectedAggregate.payload instanceof EmptyAggregatePayload) {
+          console.log('[AggregateListProjector.project] Skipping empty aggregate')
           return ok(payload)
         }
+        
+        console.log('[AggregateListProjector.project] Updating aggregate:', {
+          partitionKey,
+          aggregateType: projectedAggregate.payload?.aggregateType,
+          payloadType: projectedAggregate.payload?.constructor.name,
+          previousSize: payload.aggregates.size
+        })
         
         // Create new map with updated aggregate
         const newAggregates = new Map(payload.aggregates)
         newAggregates.set(partitionKey, projectedAggregate)
         
+        console.log('[AggregateListProjector.project] Created new projector with size:', newAggregates.size)
+        
         return ok(new AggregateListProjector(newAggregates, this.projectorFactory))
       },
-      (error) => err(error)
+      (error) => {
+        console.error('[AggregateListProjector.project] Projection error:', error)
+        return err(error)
+      }
     )
   }
   

@@ -355,14 +355,26 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       return;
     }
     
+    // Use generateInitialPayload if available
+    let initialPayload = projector;
+    if ('generateInitialPayload' in projector && typeof projector.generateInitialPayload === 'function') {
+      initialPayload = projector.generateInitialPayload();
+    }
+    
     this.safeState = {
-      projectorCommon: projector,
+      projectorCommon: initialPayload,
       lastEventId: '',
       lastSortableUniqueId: '',
       version: 0,
       appliedSnapshotVersion: 0,
       rootPartitionKey: 'default'
     };
+    
+    console.log('Initialized state with projector:', {
+      projectorType: initialPayload.constructor.name,
+      hasGetAggregates: 'getAggregates' in initialPayload,
+      hasAggregates: 'aggregates' in initialPayload
+    });
   }
   
   private async persistStateAsync(state: MultiProjectionState): Promise<void> {
@@ -477,32 +489,56 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       
       // For now, we'll manually execute the query against the state
       // This is a simplified implementation until full query infrastructure is in place
+      console.log('Query state inspection:', {
+        stateExists: !!state,
+        stateType: state ? state.constructor.name : 'null',
+        hasGetAggregates: state && 'getAggregates' in state,
+        aggregatesProperty: state && 'aggregates' in state ? (state as any).aggregates : 'not found'
+      });
+      
       if (state && 'getAggregates' in state) {
         const accessor = state as any;
-        let aggregates = Array.from(accessor.getAggregates());
+        let aggregates = accessor.getAggregates();
+        
+        console.log('[Query Debug] State inspection:', {
+          hasAggregatesMap: !!accessor.aggregates,
+          aggregatesMapType: accessor.aggregates ? accessor.aggregates.constructor.name : 'null',
+          aggregatesMapSize: accessor.aggregates ? accessor.aggregates.size : 0,
+          aggregatesKeys: accessor.aggregates ? Array.from(accessor.aggregates.keys()) : [],
+          getAggregatesResult: aggregates,
+          aggregatesCount: aggregates.length,
+          aggregatesType: Array.isArray(aggregates) ? 'array' : typeof aggregates,
+          firstAggregate: aggregates.length > 0 ? aggregates[0] : 'none'
+        });
         
         // Apply filter if query has handleFilter method
-        if (queryInstance.handleFilter) {
-          aggregates = aggregates.filter(([key, aggregate]) => 
+        if (queryInstance.handleFilter && typeof queryInstance.handleFilter === 'function') {
+          aggregates = aggregates.filter((aggregate: any) => 
             queryInstance.handleFilter(aggregate)
           );
         }
         
         // Apply sort if query has handleSort method
-        if (queryInstance.handleSort) {
-          aggregates.sort((a, b) => queryInstance.handleSort(a[1], b[1]));
+        if (queryInstance.handleSort && typeof queryInstance.handleSort === 'function') {
+          aggregates.sort((a: any, b: any) => queryInstance.handleSort(a, b));
+        }
+        
+        // Transform aggregates to response format if transformToResponse method exists
+        let values = aggregates;
+        if (queryInstance.transformToResponse && typeof queryInstance.transformToResponse === 'function') {
+          values = aggregates.map((aggregate: any) => queryInstance.transformToResponse(aggregate));
         }
         
         // Apply pagination
         const skip = query.skip || 0;
         const take = query.take || query.limit || 100;
-        const paginatedAggregates = aggregates.slice(skip, skip + take);
+        const paginatedValues = values.slice(skip, skip + take);
         
         // Create list query result
         const listResult: IListQueryResult<any> = {
-          values: paginatedAggregates.map(([_, aggregate]) => aggregate),
-          totalCount: aggregates.length,
-          totalPages: Math.ceil(aggregates.length / take),
+          values: paginatedValues,
+          totalCount: values.length,
+          totalPages: Math.ceil(values.length / take),
           currentPage: Math.floor(skip / take) + 1,
           pageSize: take,
           hasError: false,
@@ -763,22 +799,45 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     try {
       const serializedEvent = envelope.event;
       
+      // Handle field name variations from event-relay
+      const sortableUniqueIdString = serializedEvent.sortableUniqueId || serializedEvent.sortKey || serializedEvent.SortableUniqueId;
+      const aggregateIdValue = serializedEvent.aggregateId || serializedEvent.AggregateId;
+      const eventTypeValue = serializedEvent.eventType || serializedEvent.type || serializedEvent.PayloadTypeName;
+      const createdAtValue = serializedEvent.createdAt || serializedEvent.created || serializedEvent.TimeStamp;
+      
+      if (!sortableUniqueIdString || !aggregateIdValue) {
+        console.error('Missing required fields in event:', { sortableUniqueIdString, aggregateIdValue });
+        return null;
+      }
+      
       // Convert SerializableEventDocument to IEvent
       const event: IEvent = {
-        id: { value: serializedEvent.id },
-        sortableUniqueId: SortableUniqueId.fromString(serializedEvent.sortableUniqueId).unwrapOr(SortableUniqueId.generate()),
-        aggregateId: { value: serializedEvent.aggregateId },
-        partitionKeys: serializedEvent.partitionKeys,
-        version: serializedEvent.version,
-        createdAt: new Date(serializedEvent.createdAt),
-        eventType: serializedEvent.eventType,
-        payload: serializedEvent.payload,
+        id: { value: serializedEvent.id || serializedEvent.Id },
+        sortableUniqueId: SortableUniqueId.fromString(sortableUniqueIdString).unwrapOr(SortableUniqueId.generate()),
+        aggregateId: { value: aggregateIdValue },
+        partitionKeys: serializedEvent.partitionKeys || {
+          aggregateId: { value: aggregateIdValue },
+          groupId: serializedEvent.rootPartitionKey || serializedEvent.RootPartitionKey || serializedEvent.aggregateType || 'default'
+        },
+        version: serializedEvent.version || serializedEvent.Version || 1,
+        createdAt: createdAtValue ? new Date(createdAtValue) : new Date(),
+        eventType: eventTypeValue,
+        payload: serializedEvent.payload || serializedEvent.data || serializedEvent,
         metadata: serializedEvent.metadata || {}
       };
+      
+      console.log('Deserialized event:', {
+        id: event.id.value,
+        sortableUniqueId: event.sortableUniqueId.value,
+        aggregateId: event.aggregateId.value,
+        eventType: event.eventType,
+        version: event.version
+      });
       
       return event;
     } catch (error) {
       console.error('Failed to deserialize event:', error);
+      console.error('Event data:', envelope.event);
       return null;
     }
   }
