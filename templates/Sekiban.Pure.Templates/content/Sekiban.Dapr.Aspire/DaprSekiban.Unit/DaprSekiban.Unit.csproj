@@ -23,8 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview19" />
-    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview19" />
+    <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview20" />
+    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview20" />
   </ItemGroup>
 
 </Project>
