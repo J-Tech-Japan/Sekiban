@@ -1,6 +1,6 @@
 import { gzip, gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import type { IListQueryResult, IQueryResult, SekibanDomainTypes } from '@sekiban/core';
+import type { QueryResult, ListQueryResult, SekibanDomainTypes } from '@sekiban/core';
 import { Result, ok, err } from '@sekiban/core';
 
 const gzipAsync = promisify(gzip);
@@ -36,7 +36,7 @@ export interface SerializableListQueryResult {
  * Create a SerializableQueryResult from a query result
  */
 export async function createSerializableQueryResult(
-  result: IQueryResult<any>,
+  result: QueryResult<any>,
   query: any,
   domainTypes: SekibanDomainTypes
 ): Promise<SerializableQueryResult> {
@@ -72,10 +72,10 @@ export async function createSerializableQueryResultFromResult(
     return err(result.error);
   }
   
-  const queryResult: IQueryResult<any> = {
+  const queryResult: QueryResult<any> = {
     value: result.value,
-    hasError: false,
-    error: null
+    query: query.constructor.name,
+    projectionVersion: 0
   };
   
   const serializable = await createSerializableQueryResult(queryResult, query, domainTypes);
@@ -86,19 +86,19 @@ export async function createSerializableQueryResultFromResult(
  * Create a SerializableListQueryResult from a list query result
  */
 export async function createSerializableListQueryResult(
-  result: IListQueryResult<any>,
+  result: ListQueryResult<any>,
   query: any,
   domainTypes: SekibanDomainTypes
 ): Promise<SerializableListQueryResult> {
   const queryType = query.constructor.name;
   let recordTypeName = 'unknown';
   
-  if (result.values && result.values.length > 0) {
-    recordTypeName = result.values[0].constructor.name;
+  if (result.items && result.items.length > 0) {
+    recordTypeName = result.items[0].constructor.name;
   }
   
   // Serialize items and query
-  const itemsJson = JSON.stringify(result.values || []);
+  const itemsJson = JSON.stringify(result.items || []);
   const queryJson = JSON.stringify(query);
   
   // Compress
@@ -108,7 +108,7 @@ export async function createSerializableListQueryResult(
   return {
     totalCount: result.totalCount,
     totalPages: result.totalPages,
-    currentPage: result.currentPage,
+    currentPage: result.pageNumber,
     pageSize: result.pageSize,
     recordTypeName,
     queryTypeName: queryType,
@@ -122,7 +122,7 @@ export async function createSerializableListQueryResult(
  * Create a SerializableListQueryResult from a Result
  */
 export async function createSerializableListQueryResultFromResult(
-  result: Result<IListQueryResult<any>, any>,
+  result: Result<ListQueryResult<any>, any>,
   query: any,
   domainTypes: SekibanDomainTypes
 ): Promise<Result<SerializableListQueryResult, any>> {
@@ -140,15 +140,15 @@ export async function createSerializableListQueryResultFromResult(
 export async function deserializeQueryResult(
   serialized: SerializableQueryResult,
   domainTypes: SekibanDomainTypes
-): Promise<Result<IQueryResult<any>, any>> {
+): Promise<Result<QueryResult<any>, any>> {
   try {
     const resultJson = (await gunzipAsync(serialized.compressedResultJson)).toString('utf-8');
     const value = JSON.parse(resultJson);
     
     return ok({
       value,
-      hasError: false,
-      error: null
+      query: serialized.queryTypeName,
+      projectionVersion: 0
     });
   } catch (error) {
     return err(error);
@@ -161,19 +161,20 @@ export async function deserializeQueryResult(
 export async function deserializeListQueryResult(
   serialized: SerializableListQueryResult,
   domainTypes: SekibanDomainTypes
-): Promise<Result<IListQueryResult<any>, any>> {
+): Promise<Result<ListQueryResult<any>, any>> {
   try {
     const itemsJson = (await gunzipAsync(serialized.compressedItemsJson)).toString('utf-8');
     const values = JSON.parse(itemsJson);
     
     return ok({
-      values,
-      totalCount: serialized.totalCount,
-      totalPages: serialized.totalPages,
-      currentPage: serialized.currentPage,
-      pageSize: serialized.pageSize,
-      hasError: false,
-      error: null
+      items: values,
+      totalCount: serialized.totalCount || 0,
+      totalPages: serialized.totalPages || 0,
+      pageNumber: serialized.currentPage || 1,
+      pageSize: serialized.pageSize || 0,
+      hasNextPage: (serialized.currentPage || 1) < (serialized.totalPages || 0),
+      hasPreviousPage: (serialized.currentPage || 1) > 1,
+      query: serialized.queryTypeName
     });
   } catch (error) {
     return err(error);

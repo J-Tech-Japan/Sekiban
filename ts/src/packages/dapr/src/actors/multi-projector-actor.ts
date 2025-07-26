@@ -1,6 +1,6 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import { Temporal } from '@js-temporal/polyfill';
-import type { IEventStore, IEvent, SekibanDomainTypes, IMultiProjectorCommon, IMultiProjectorStateCommon, IQueryContext, IListQueryResult, IQueryResult } from '@sekiban/core';
+import type { IEventStore, IEvent, SekibanDomainTypes, IMultiProjectorCommon, IMultiProjectorStateCommon, IQueryContext, QueryResult, ListQueryResult } from '@sekiban/core';
 import {
   EventRetrievalInfo,
   SortableIdCondition,
@@ -101,7 +101,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       await this.registerActorTimer(
         'SnapshotTimer',
         'handleSnapshotTimerAsync',
-        null,
         Temporal.Duration.from({ minutes: 1 }),
         Temporal.Duration.from({ minutes: 5 })
       );
@@ -168,8 +167,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log(`Loading snapshot for MultiProjectorActor ${this.actorIdString}`);
     
     try {
-      const savedState = await this.getStateManager().tryGetState<SerializableMultiProjectionState>(this.STATE_KEY);
-      if (savedState) {
+      const [hasState, savedState] = await this.getStateManager().tryGetState(this.STATE_KEY);
+      if (hasState && savedState) {
         const restored = await this.deserializeState(savedState);
         if (restored) {
           this.safeState = restored;
@@ -210,14 +209,12 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   private async catchUpFromStoreAsync(): Promise<void> {
     const lastId = this.safeState?.lastSortableUniqueId || '';
     const retrieval: EventRetrievalInfo = {
-      streams: [],
       sortableIdCondition: lastId
         ? SortableIdCondition.between(
-            SortableUniqueId.fromString(lastId),
+            SortableUniqueId.fromString(lastId).unwrapOr(SortableUniqueId.generate()),
             SortableUniqueId.generate()
           )
         : SortableIdCondition.none(),
-      limit: undefined,
       includeMetadata: false
     };
     
@@ -271,7 +268,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     // Calculate safe border (7 seconds ago)
     const safeBorderDate = new Date(Date.now() - this.SAFE_STATE_WINDOW_MS);
     // Generate a SortableUniqueId with the safe border date
-    const safeBorder = SortableUniqueId.generate(safeBorderDate, '00000000-0000-0000-0000-000000000000');
+    const safeBorder = SortableUniqueId.generate();
     
     // Find split index - events older than safe border
     let splitIndex = -1;
@@ -426,10 +423,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       }
       
       // Create and return serializable result
-      const queryResult: IQueryResult<any> = {
+      const queryResult: QueryResult<any> = {
         value: result.value,
-        hasError: false,
-        error: null
+        query: query.queryType,
+        projectionVersion: projectionState.version
       };
       
       return await createSerializableQueryResult(queryResult, queryInstance, this.domainTypes);
@@ -535,28 +532,28 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         const paginatedValues = values.slice(skip, skip + take);
         
         // Create list query result
-        const listResult: IListQueryResult<any> = {
-          values: paginatedValues,
+        const listResult: ListQueryResult<any> = {
+          items: paginatedValues,
           totalCount: values.length,
-          totalPages: Math.ceil(values.length / take),
-          currentPage: Math.floor(skip / take) + 1,
           pageSize: take,
-          hasError: false,
-          error: null
+          pageNumber: Math.floor(skip / take) + 1,
+          totalPages: Math.ceil(values.length / take),
+          hasNextPage: (Math.floor(skip / take) + 1) < Math.ceil(values.length / take),
+          hasPreviousPage: (Math.floor(skip / take) + 1) > 1
         };
         
         return await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
       }
       
       // Fallback for non-list projectors
-      const emptyResult: IListQueryResult<any> = {
-        values: [],
+      const emptyResult: ListQueryResult<any> = {
+        items: [],
         totalCount: 0,
-        totalPages: 0,
-        currentPage: 1,
         pageSize: 0,
-        hasError: false,
-        error: null
+        pageNumber: 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false
       };
       
       return await createSerializableListQueryResult(emptyResult, queryInstance, this.domainTypes);
@@ -691,6 +688,33 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   }
   
   /**
+   * IMultiProjectorActor interface implementation
+   */
+  async queryAsync(query: SerializableQuery): Promise<QueryResponse> {
+    const result = await this.query(query);
+    return {
+      isSuccess: !result.hasError,
+      data: result
+    };
+  }
+  
+  async buildStateAsync(): Promise<MultiProjectionState> {
+    await this.buildState();
+    return this.unsafeState || this.safeState || {
+      projectorCommon: this.getProjectorFromName()!,
+      lastEventId: '',
+      lastSortableUniqueId: '',
+      version: 0,
+      appliedSnapshotVersion: 0,
+      rootPartitionKey: 'default'
+    };
+  }
+  
+  async rebuildStateAsync(): Promise<void> {
+    await this.rebuildState();
+  }
+  
+  /**
    * Handles events published through Dapr PubSub.
    */
   async handlePublishedEvent(envelope: DaprEventEnvelope): Promise<void> {
@@ -800,10 +824,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       const serializedEvent = envelope.event;
       
       // Handle field name variations from event-relay
-      const sortableUniqueIdString = serializedEvent.sortableUniqueId || serializedEvent.sortKey || serializedEvent.SortableUniqueId;
-      const aggregateIdValue = serializedEvent.aggregateId || serializedEvent.AggregateId;
-      const eventTypeValue = serializedEvent.eventType || serializedEvent.type || serializedEvent.PayloadTypeName;
-      const createdAtValue = serializedEvent.createdAt || serializedEvent.created || serializedEvent.TimeStamp;
+      const sortableUniqueIdString = serializedEvent.sortableUniqueId || (serializedEvent as any).sortKey || (serializedEvent as any).SortableUniqueId;
+      const aggregateIdValue = serializedEvent.aggregateId || (serializedEvent as any).AggregateId;
+      const eventTypeValue = serializedEvent.eventType || (serializedEvent as any).type || (serializedEvent as any).PayloadTypeName;
+      const createdAtValue = serializedEvent.createdAt || (serializedEvent as any).created || (serializedEvent as any).TimeStamp;
       
       if (!sortableUniqueIdString || !aggregateIdValue) {
         console.error('Missing required fields in event:', { sortableUniqueIdString, aggregateIdValue });
@@ -812,24 +836,28 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       
       // Convert SerializableEventDocument to IEvent
       const event: IEvent = {
-        id: { value: serializedEvent.id || serializedEvent.Id },
+        id: SortableUniqueId.fromString(serializedEvent.id || (serializedEvent as any).Id || '').unwrapOr(SortableUniqueId.generate()),
         sortableUniqueId: SortableUniqueId.fromString(sortableUniqueIdString).unwrapOr(SortableUniqueId.generate()),
-        aggregateId: { value: aggregateIdValue },
+        aggregateId: aggregateIdValue,
         partitionKeys: serializedEvent.partitionKeys || {
-          aggregateId: { value: aggregateIdValue },
-          groupId: serializedEvent.rootPartitionKey || serializedEvent.RootPartitionKey || serializedEvent.aggregateType || 'default'
+          aggregateId: aggregateIdValue,
+          group: (serializedEvent as any).RootPartitionKey || serializedEvent.aggregateType || 'default'
         },
-        version: serializedEvent.version || serializedEvent.Version || 1,
+        version: serializedEvent.version || (serializedEvent as any).Version || 1,
         createdAt: createdAtValue ? new Date(createdAtValue) : new Date(),
         eventType: eventTypeValue,
-        payload: serializedEvent.payload || serializedEvent.data || serializedEvent,
-        metadata: serializedEvent.metadata || {}
+        payload: serializedEvent.payload || (serializedEvent as any).data || serializedEvent,
+        metadata: serializedEvent.metadata || {},
+        timestamp: createdAtValue ? new Date(createdAtValue) : new Date(),
+        partitionKey: serializedEvent.partitionKey || '',
+        aggregateGroup: serializedEvent.aggregateType || '',
+        aggregateType: serializedEvent.aggregateType || ''
       };
       
       console.log('Deserialized event:', {
         id: event.id.value,
         sortableUniqueId: event.sortableUniqueId.value,
-        aggregateId: event.aggregateId.value,
+        aggregateId: event.aggregateId,
         eventType: event.eventType,
         version: event.version
       });
