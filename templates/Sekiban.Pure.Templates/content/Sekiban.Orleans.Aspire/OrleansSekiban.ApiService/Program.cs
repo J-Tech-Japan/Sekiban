@@ -283,14 +283,26 @@ string[] summaries =
     ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
 apiRoute.MapGet("/weatherforecast", 
-        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] SekibanOrleansExecutor executor) =>
+        async ([FromQuery] string? waitForSortableUniqueId,[FromQuery] int? pageSize, [FromQuery] int? pageNumber, [FromQuery] string? sortBy, [FromQuery] bool? isAsc, [FromServices] SekibanOrleansExecutor executor) =>
         {
             var query = new WeatherForecastQuery("")
             {
-                WaitForSortableUniqueId = waitForSortableUniqueId
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                SortBy = sortBy,
+                IsAsc = isAsc ?? false
             };
             var list = await executor.QueryAsync(query).UnwrapBox();
-            return list.Items;
+            
+            var items = list.Items.AsEnumerable();
+            
+            // Apply pagination if parameters are provided
+            if (pageSize.HasValue && pageNumber.HasValue && pageNumber.Value > 0)
+            {
+                var skip = (pageNumber.Value - 1) * pageSize.Value;
+                items = items.Skip(skip).Take(pageSize.Value);
+            }
+            
+            return items.ToArray();
         })
     .WithOpenApi()
     .WithName("GetWeatherForecast");

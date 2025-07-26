@@ -106,14 +106,12 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
     public Task ReceiveReminderAsync(string reminderName, byte[] state, TimeSpan dueTime, TimeSpan period)
     {
-        _logger.LogInformation("Received reminder: {ReminderName}", reminderName);
         return Task.CompletedTask;
     }
 
     protected override async Task OnActivateAsync()
     {
         await base.OnActivateAsync();
-        _logger.LogInformation("AggregateActor {ActorId} activated", Id.GetId());
 
         // Register timer for periodic state saving
         // Note: Initialization is now deferred to first command execution
@@ -247,24 +245,13 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
             throw new InvalidOperationException("Failed to execute command after maximum retries due to concurrency conflicts");
         }
 
-        // Debug logging
-        _logger.LogDebug("Command execution completed. Events produced: {EventCount}, Version before: {VersionBefore}", 
-            result.Events.Count, _currentAggregate.Version);
-        
         // Update current aggregate with new events
         _currentAggregate = repository.GetProjectedAggregate(result.Events).UnwrapBox();
-        
-        _logger.LogDebug("After projection. Version after: {VersionAfter}", _currentAggregate.Version);
         
         // Only mark as changed if events were actually produced
         if (result.Events.Count > 0)
         {
             _hasUnsavedChanges = true;
-            _logger.LogDebug("Marked aggregate as having unsaved changes");
-        }
-        else
-        {
-            _logger.LogDebug("No events produced, not marking as changed");
         }
 
         return result;
@@ -483,12 +470,8 @@ public class AggregateActor : Actor, IAggregateActor, IRemindable
 
         try
         {
-            _logger.LogDebug("Initializing AggregateActor {ActorId} on first use", Id.GetId());
-
             // Initialize partition info only
             _partitionInfo = await GetPartitionInfoAsync();
-
-            _logger.LogDebug("AggregateActor {ActorId} initialization completed", Id.GetId());
         }
         catch (Exception ex)
         {

@@ -4,8 +4,8 @@
     <!-- The package metadata. Fill in the properties marked as TODO below -->
     <!-- Follow the instructions on https://learn.microsoft.com/en-us/nuget/create-packages/package-authoring-best-practices -->
     <PackageId>Sekiban.Pure.Templates</PackageId>
-    <PackageVersion>1.1.3</PackageVersion>
-    <Version>1.1.3</Version>
+    <PackageVersion>1.1.4</PackageVersion>
+    <Version>1.1.4</Version>
     <Title>Sekiban Event Sourcing Templates</Title>
     <Authors>J-Tech Japan</Authors>
     <Description>Templates for starting Sekiban Projects</Description>
