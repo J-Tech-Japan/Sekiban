@@ -26,11 +26,17 @@ builder.Services.AddHttpClient<WeatherApiClient>((serviceProvider, client) =>
     client.BaseAddress = new(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 })
-.ConfigurePrimaryHttpMessageHandler(() =>
+.ConfigurePrimaryHttpMessageHandler((serviceProvider) =>
 {
     var handler = new HttpClientHandler();
-    // Accept all certificates for development/testing (not for production)
-    handler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+    var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
+    
+    // Only bypass certificate validation in development environment
+    if (environment.IsDevelopment())
+    {
+        handler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+    }
+    
     return handler;
 });
 
