@@ -33,7 +33,7 @@ export {
   SerializableListQuery,
   QueryResponse,
   ListQueryResponse,
-  MultiProjectionState,
+  ActorMultiProjectionState,
   DaprEventEnvelope,
   IAggregateActor,
   IAggregateEventHandlerActor,

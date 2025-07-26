@@ -10,7 +10,7 @@ import type {
   Aggregate,
   Metadata
 } from '@sekiban/core';
-import { SekibanError } from '@sekiban/core';
+import { SekibanError, QueryExecutionError } from '@sekiban/core';
 import type { 
   DaprSekibanConfiguration,
   SekibanCommandResponse,
@@ -22,7 +22,7 @@ import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
 import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
-import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, MultiProjectionState, DaprEventEnvelope, SerializableQueryResult, SerializableListQueryResult } from '../actors/interfaces.js';
+import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, ActorMultiProjectionState, DaprEventEnvelope, SerializableQueryResult, SerializableListQueryResult } from '../actors/interfaces.js';
 import { deserializeListQueryResult } from '../actors/serializable-query-results.js';
 
 /**
@@ -360,7 +360,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           
           const result = await response.json();
           console.log(`[SekibanDaprExecutor] Actor response:`, result);
-          return result;
+          return result as QueryResponse;
         } catch (error) {
           console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
           return {
@@ -401,7 +401,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           if (result && typeof result === 'object') {
             // If it has the expected properties, return as-is
             if ('isSuccess' in result) {
-              return result;
+              return result as ListQueryResponse;
             }
             
             // Otherwise, it's a SerializableListQueryResult, convert it
@@ -409,10 +409,10 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
             // For now, we'll create a simple response
             return {
               isSuccess: true,
-              items: result.items || [],
-              totalCount: result.totalCount || 0,
+              items: (result as any).items || [],
+              totalCount: (result as any).totalCount || 0,
               data: result
-            };
+            } as ListQueryResponse;
           }
           
           return {
@@ -433,7 +433,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         return false;
       },
       
-      buildStateAsync: async (): Promise<MultiProjectionState> => {
+      buildStateAsync: async (): Promise<ActorMultiProjectionState> => {
         // Not implemented for now
         throw new Error('Not implemented');
       },
@@ -461,7 +461,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       if (this.isMultiProjectionQuery(query)) {
         const projectorName = this.getMultiProjectorName(query);
         if (!projectorName) {
-          return err(new SekibanError('Unable to determine multi-projector name for query'));
+          return err(new QueryExecutionError('query', 'Unable to determine multi-projector name for query'));
         }
         
         console.log(`[SekibanDaprExecutor] Executing multi-projection query with projector: ${projectorName}`);
@@ -506,7 +506,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         }
         
         if (!response.isSuccess) {
-          return err(new SekibanError(response.error || 'Query execution failed'));
+          return err(new QueryExecutionError('query', response.error || 'Query execution failed'));
         }
         
         // Return the data from the response

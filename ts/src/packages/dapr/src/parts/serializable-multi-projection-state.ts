@@ -1,4 +1,4 @@
-import { SekibanDomainTypes, IMultiProjector, OptionalValue } from '@sekiban/core';
+import { SekibanDomainTypes, IMultiProjectorCommon, IMultiProjectorStateCommon, OptionalValue } from '@sekiban/core';
 import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
@@ -52,14 +52,7 @@ export interface SerializableMultiProjectionState {
   rootPartitionKey: string;
 }
 
-export interface MultiProjectionState {
-  projectorCommon: IMultiProjectorCommon;
-  lastEventId: string;
-  lastSortableUniqueId: string;
-  version: number;
-  appliedSnapshotVersion: number;
-  rootPartitionKey: string;
-}
+export type MultiProjectionState = IMultiProjectorStateCommon;
 
 /**
  * Creates a SerializableMultiProjectionState from a MultiProjectionState
@@ -70,12 +63,12 @@ export async function createSerializableMultiProjectionState(
 ): Promise<SerializableMultiProjectionState> {
   const projector = state.projectorCommon;
   
-  if (!domainTypes.projectorTypes) {
+  if (!domainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
   // Use IMultiProjectorTypes for serialization
-  const serializedPayloadResult = await domainTypes.projectorTypes.serializeMultiProjector(projector);
+  const serializedPayloadResult = await domainTypes.multiProjectorTypes.serializeMultiProjector(projector);
   
   if (serializedPayloadResult.isErr()) {
     throw new Error(`Failed to serialize projector: ${serializedPayloadResult.error}`);
@@ -109,7 +102,7 @@ export async function toMultiProjectionState(
     return null;
   }
   
-  if (!domainTypes.projectorTypes) {
+  if (!domainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
@@ -118,7 +111,7 @@ export async function toMultiProjectionState(
     const payloadJson = (await gunzipAsync(serialized.compressedPayloadJson)).toString('utf-8');
     
     // Use IMultiProjectorTypes for deserialization
-    const projectorResult = await domainTypes.projectorTypes.deserializeMultiProjector(
+    const projectorResult = await domainTypes.multiProjectorTypes.deserializeMultiProjector(
       payloadJson,
       serialized.payloadTypeName
     );

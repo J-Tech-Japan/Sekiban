@@ -121,9 +121,9 @@ export interface ListQueryResponse extends QueryResponse {
 }
 
 /**
- * Multi-projection state
+ * Multi-projection state for actor interface
  */
-export interface MultiProjectionState {
+export interface ActorMultiProjectionState {
   projections: Record<string, any>;
   lastProcessedEventId: string;
   lastProcessedTimestamp: string;
@@ -232,7 +232,7 @@ export interface IMultiProjectorActor {
   /**
    * Build current state from buffer
    */
-  buildStateAsync(): Promise<MultiProjectionState>;
+  buildStateAsync(): Promise<ActorMultiProjectionState>;
   
   /**
    * Rebuild state from scratch
