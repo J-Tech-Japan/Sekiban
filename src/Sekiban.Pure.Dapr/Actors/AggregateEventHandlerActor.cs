@@ -305,9 +305,6 @@ public class AggregateEventHandlerActor : Actor, IAggregateEventHandlerActor
                 
                 // Publish to PubSub
                 await _daprClient.PublishEventAsync(PubSubName, EventTopicName, envelope);
-                
-                _logger.LogDebug("Published event to PubSub: EventId={EventId}, AggregateId={AggregateId}, Type={EventType}", 
-                    envelope.EventId, envelope.AggregateId, envelope.EventType);
             }
             catch (Exception ex)
             {

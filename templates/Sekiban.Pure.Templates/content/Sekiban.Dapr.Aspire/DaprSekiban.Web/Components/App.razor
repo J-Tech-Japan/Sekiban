@@ -19,23 +19,38 @@
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <script>
         window.showModal = (modalId) => {
-            const modal = new bootstrap.Modal(document.getElementById(modalId));
-            modal.show();
+            console.log('showModal called for:', modalId);
+            const modalElement = document.getElementById(modalId);
+            console.log('Modal element found:', modalElement);
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                console.log('Bootstrap modal instance created:', modal);
+                modal.show();
+            } else {
+                console.error('Modal element not found:', modalId);
+            }
         };
         window.hideModal = (modalId) => {
+            console.log('hideModal called for:', modalId);
             const modalElement = document.getElementById(modalId);
-            const modal = bootstrap.Modal.getInstance(modalElement);
-            if (modal) {
-                modal.hide();
-                // Ensure backdrop is removed
-                setTimeout(() => {
-                    const backdrop = document.querySelector('.modal-backdrop');
-                    if (backdrop) {
-                        backdrop.remove();
-                    }
-                    document.body.classList.remove('modal-open');
-                    document.body.style = '';
-                }, 200);
+            if (modalElement) {
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) {
+                    modal.hide();
+                    // Ensure backdrop is removed
+                    setTimeout(() => {
+                        const backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) {
+                            backdrop.remove();
+                        }
+                        document.body.classList.remove('modal-open');
+                        document.body.style = '';
+                    }, 200);
+                } else {
+                    console.error('No Bootstrap modal instance found for:', modalId);
+                }
+            } else {
+                console.error('Modal element not found:', modalId);
             }
         };
     </script>

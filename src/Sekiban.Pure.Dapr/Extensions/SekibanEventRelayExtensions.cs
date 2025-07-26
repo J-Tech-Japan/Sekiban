@@ -130,15 +130,11 @@ public static class SekibanEventRelayExtensions
     {
         try
         {
-            logger.LogDebug("Received event envelope: AggregateId={AggregateId}, Version={Version}, Endpoint={Endpoint}",
-                envelope.AggregateId, envelope.Version, options.EndpointPath);
-
             // Get all multi-projector names that should process this event
             var projectorNames = domainTypes.MultiProjectorsType.GetAllProjectorNames();
 
             if (!projectorNames.Any())
             {
-                logger.LogDebug("No projectors found to process event {EventId}", envelope.EventId);
                 return Results.Ok(new { Message = "No projectors to process", EventId = envelope.EventId });
             }
 
@@ -153,7 +149,6 @@ public static class SekibanEventRelayExtensions
                         nameof(MultiProjectorActor));
 
                     await actor.HandlePublishedEvent(envelope);
-                    logger.LogDebug("Forwarded event to projector: {ProjectorName}", projectorName);
                 }
                 catch (Exception ex)
                 {
@@ -167,9 +162,6 @@ public static class SekibanEventRelayExtensions
             });
 
             await Task.WhenAll(tasks);
-
-            logger.LogDebug("Successfully processed event {EventId} for {ProjectorCount} projectors", 
-                envelope.EventId, projectorNames.Count());
 
             return Results.Ok(new { Message = "Event processed successfully", EventId = envelope.EventId });
         }
