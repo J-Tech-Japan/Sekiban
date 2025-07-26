@@ -28,7 +28,21 @@ async function startServer() {
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
-  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  // Custom morgan format to skip eventCheck reminders
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for eventCheck reminders
+    if (req.url?.includes('/remind/eventCheck')) {
+      return null;
+    }
+    // Use default dev format for other requests
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -36,7 +50,10 @@ async function startServer() {
   app.use((req, res, next) => {
     logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     if (req.path.startsWith('/actors/')) {
-      logger.info(`Actor route called: ${req.method} ${req.path}`);
+      // Only log non-eventCheck actor calls in detail
+      if (!req.path.includes('/remind/eventCheck')) {
+        logger.info(`Actor route called: ${req.method} ${req.path}`);
+      }
     }
     next();
   });

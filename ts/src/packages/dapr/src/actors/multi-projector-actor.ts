@@ -1,6 +1,6 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import { Temporal } from '@js-temporal/polyfill';
-import type { IEventStore, IEvent, SekibanDomainTypes, IMultiProjectorCommon, IMultiProjectorStateCommon, IQueryContext, QueryResult, ListQueryResult } from '@sekiban/core';
+import type { IEventStore, IEvent, SekibanDomainTypes, IMultiProjector, IQueryContext, QueryResult, ListQueryResult } from '@sekiban/core';
 import {
   EventRetrievalInfo,
   SortableIdCondition,
@@ -135,7 +135,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         await this.handleSnapshotReminder();
         break;
       default:
-        console.warn('Unknown reminder:', reminderName);
+        // Suppress logging for unknown reminders to reduce noise
+        // console.warn('Unknown reminder:', reminderName);
         break;
     }
   }
@@ -292,10 +293,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       const oldEvents = this.buffer.slice(0, splitIndex + 1)
         .filter(e => SortableUniqueId.compare(e.sortableUniqueId, sortableUniqueIdFrom) > 0);
       
-      if (oldEvents.length > 0 && this.domainTypes.multiProjectorTypes) {
+      if (oldEvents.length > 0 && this.domainTypes.projectorTypes) {
         // Apply to safe state
         const currentProjector = this.safeState?.projectorCommon ?? projector;
-        const newSafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(currentProjector, oldEvents);
+        const newSafeStateResult = this.domainTypes.projectorTypes.projectEvents(currentProjector, oldEvents);
         
         if (newSafeStateResult.isOk()) {
           const lastOldEvt = oldEvents[oldEvents.length - 1];
@@ -320,8 +321,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log(`After worked old events Total ${this.buffer.length} events`);
     
     // Process remaining (newer) events for unsafe state
-    if (this.buffer.length > 0 && this.safeState && this.domainTypes.multiProjectorTypes) {
-      const newUnsafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(
+    if (this.buffer.length > 0 && this.safeState && this.domainTypes.projectorTypes) {
+      const newUnsafeStateResult = this.domainTypes.projectorTypes.projectEvents(
         this.safeState.projectorCommon, 
         this.buffer
       );
@@ -772,13 +773,13 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     }
   }
   
-  private getProjectorFromName(): IMultiProjectorCommon | undefined {
-    if (!this.domainTypes.multiProjectorTypes) {
+  private getProjectorFromName(): IMultiProjector<any> | undefined {
+    if (!this.domainTypes.projectorTypes) {
       console.error('MultiProjectorTypes not available');
       return undefined;
     }
     
-    return this.domainTypes.multiProjectorTypes.getProjectorFromMultiProjectorName(this.actorIdString);
+    return this.domainTypes.projectorTypes.getProjectorFromMultiProjectorName(this.actorIdString);
   }
   
   private async getProjectorForQuery(): Promise<MultiProjectionState | null> {
