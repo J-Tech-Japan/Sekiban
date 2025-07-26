@@ -15,7 +15,8 @@ import type {
   SerializableListQuery,
   SerializableQueryResult,
   SerializableListQueryResult,
-  DaprEventEnvelope
+  DaprEventEnvelope,
+  ListQueryResponse
 } from './interfaces';
 import { getDaprCradle } from '../container/index.js';
 import { 
@@ -86,7 +87,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     try {
       // Register reminder for periodic snapshot saving
-      await this.registerReminder(
+      await this.registerActorReminder(
         this.SNAPSHOT_REMINDER_NAME,
         Temporal.Duration.from({ minutes: 1 }), // Initial delay
         Temporal.Duration.from({ minutes: 5 })  // Period
@@ -99,7 +100,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Fallback to timer if reminder fails
       await this.registerActorTimer(
         'SnapshotTimer',
-        this.handleSnapshotTimerAsync.bind(this),
+        'handleSnapshotTimerAsync',
         null,
         Temporal.Duration.from({ minutes: 1 }),
         Temporal.Duration.from({ minutes: 5 })
@@ -124,7 +125,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     }
     
     // Unregister snapshot reminder
-    await this.unregisterReminder(this.SNAPSHOT_REMINDER_NAME);
+    await this.unregisterActorReminder(this.SNAPSHOT_REMINDER_NAME);
     
     await super.onDeactivate();
   }
@@ -264,16 +265,22 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     // Sort buffer by sortable unique ID
     this.buffer.sort((a, b) => {
-      return a.sortableUniqueId.compareTo(b.sortableUniqueId);
+      return SortableUniqueId.compare(a.sortableUniqueId, b.sortableUniqueId);
     });
     
     // Calculate safe border (7 seconds ago)
-    const safeBorder = SortableUniqueId.fromDate(new Date(Date.now() - this.SAFE_STATE_WINDOW_MS));
+    const safeBorderDate = new Date(Date.now() - this.SAFE_STATE_WINDOW_MS);
+    // Generate a SortableUniqueId with the safe border date
+    const safeBorder = SortableUniqueId.generate(safeBorderDate, '00000000-0000-0000-0000-000000000000');
     
-    // Find split index
-    const splitIndex = this.buffer.findLastIndex(e => 
-      e.sortableUniqueId.compareTo(safeBorder) < 0
-    );
+    // Find split index - events older than safe border
+    let splitIndex = -1;
+    for (let i = this.buffer.length - 1; i >= 0; i--) {
+      if (SortableUniqueId.compare(this.buffer[i].sortableUniqueId, safeBorder) < 0) {
+        splitIndex = i;
+        break;
+      }
+    }
     
     console.log(`Splitted Total ${this.buffer.length} events, SplitIndex ${splitIndex}`);
     
@@ -281,12 +288,12 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     if (splitIndex >= 0) {
       console.log('Working on old events');
       const sortableUniqueIdFrom = this.safeState?.lastSortableUniqueId 
-        ? SortableUniqueId.fromString(this.safeState.lastSortableUniqueId)
-        : SortableUniqueId.min();
+        ? SortableUniqueId.fromString(this.safeState.lastSortableUniqueId).unwrapOr(SortableUniqueId.generate())
+        : SortableUniqueId.generate();
       
       // Get old events
       const oldEvents = this.buffer.slice(0, splitIndex + 1)
-        .filter(e => e.sortableUniqueId.compareTo(sortableUniqueIdFrom) > 0);
+        .filter(e => SortableUniqueId.compare(e.sortableUniqueId, sortableUniqueIdFrom) > 0);
       
       if (oldEvents.length > 0 && this.domainTypes.multiProjectorTypes) {
         // Apply to safe state
@@ -536,6 +543,45 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     }
   }
   
+  /**
+   * Execute list query (actor method)
+   * This is the method called by Dapr actor invocation
+   */
+  async queryListAsync(query: SerializableListQuery): Promise<ListQueryResponse> {
+    console.log('[MultiProjectorActor.queryListAsync] Called with query:', JSON.stringify(query));
+    
+    try {
+      // Call the existing queryList method
+      const result = await this.queryList(query);
+      
+      console.log('[MultiProjectorActor.queryListAsync] Result:', JSON.stringify(result));
+      
+      // Convert to ListQueryResponse format expected by actor interface
+      const response: ListQueryResponse = {
+        isSuccess: !result.hasError,
+        data: result,
+        error: result.error ? String(result.error) : undefined,
+        totalCount: result.totalCount,
+        items: result.values
+      };
+      
+      return response;
+    } catch (error) {
+      console.error('[MultiProjectorActor.queryListAsync] Error:', error);
+      
+      // Return error response
+      const errorResponse: ListQueryResponse = {
+        isSuccess: false,
+        data: null,
+        error: error instanceof Error ? error.message : String(error),
+        totalCount: 0,
+        items: []
+      };
+      
+      return errorResponse;
+    }
+  }
+  
   async isSortableUniqueIdReceived(sortableUniqueId: string): Promise<boolean> {
     await this.ensureStateLoadedAsync();
     
@@ -546,20 +592,34 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     
     // Check if already processed in safe state
     if (this.safeState?.lastSortableUniqueId) {
-      const lastId = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
-      const targetId = SortableUniqueId.fromString(sortableUniqueId);
+      const lastIdResult = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
+      const targetIdResult = SortableUniqueId.fromString(sortableUniqueId);
       
-      if (lastId.compareTo(targetId) >= 0) {
+      if (lastIdResult.isErr() || targetIdResult.isErr()) {
+        return false;
+      }
+      
+      const lastId = lastIdResult.value;
+      const targetId = targetIdResult.value;
+      
+      if (SortableUniqueId.compare(lastId, targetId) >= 0) {
         return true;
       }
     }
     
     // Check if already processed in unsafe state
     if (this.unsafeState?.lastSortableUniqueId) {
-      const lastId = SortableUniqueId.fromString(this.unsafeState.lastSortableUniqueId);
-      const targetId = SortableUniqueId.fromString(sortableUniqueId);
+      const lastIdResult = SortableUniqueId.fromString(this.unsafeState.lastSortableUniqueId);
+      const targetIdResult = SortableUniqueId.fromString(sortableUniqueId);
       
-      if (lastId.compareTo(targetId) >= 0) {
+      if (lastIdResult.isErr() || targetIdResult.isErr()) {
+        return false;
+      }
+      
+      const lastId = lastIdResult.value;
+      const targetId = targetIdResult.value;
+      
+      if (SortableUniqueId.compare(lastId, targetId) >= 0) {
         return true;
       }
     }
@@ -599,7 +659,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    */
   async handlePublishedEvent(envelope: DaprEventEnvelope): Promise<void> {
     try {
-      console.log(`Received event from PubSub: EventId=${envelope.eventId}, AggregateId=${envelope.aggregateId}, Version=${envelope.version}`);
+      console.log(`Received event from PubSub: EventId=${envelope.event?.id}, AggregateId=${envelope.event?.aggregateId}, Version=${envelope.event?.version}`);
       
       // Mark event delivery as active
       this.eventDeliveryActive = true;
@@ -623,10 +683,14 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       
       // Then check if we've already processed this event in state
       if (this.safeState?.lastSortableUniqueId) {
-        const lastSafeId = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
+        const lastSafeIdResult = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
+        if (lastSafeIdResult.isErr()) {
+          return;
+        }
+        const lastSafeId = lastSafeIdResult.value;
         const eventId = event.sortableUniqueId;
         
-        if (lastSafeId.compareTo(eventId) >= 0) {
+        if (SortableUniqueId.compare(lastSafeId, eventId) >= 0) {
           console.log(`Event already processed in safe state: ${event.sortableUniqueId.value}`);
           return;
         }
@@ -702,7 +766,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Convert SerializableEventDocument to IEvent
       const event: IEvent = {
         id: { value: serializedEvent.id },
-        sortableUniqueId: SortableUniqueId.fromString(serializedEvent.sortableUniqueId),
+        sortableUniqueId: SortableUniqueId.fromString(serializedEvent.sortableUniqueId).unwrapOr(SortableUniqueId.generate()),
         aggregateId: { value: serializedEvent.aggregateId },
         partitionKeys: serializedEvent.partitionKeys,
         version: serializedEvent.version,

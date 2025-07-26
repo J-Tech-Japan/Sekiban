@@ -22,7 +22,8 @@ import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
 import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
-import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, MultiProjectionState, DaprEventEnvelope } from '../actors/interfaces.js';
+import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, MultiProjectionState, DaprEventEnvelope, SerializableQueryResult, SerializableListQueryResult } from '../actors/interfaces.js';
+import { deserializeListQueryResult } from '../actors/serializable-query-results.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -274,19 +275,48 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
    * Get the multi-projector name for a query
    */
   private getMultiProjectorName(query: any): string | null {
-    // If query has a getProjector method and the projector has multiProjectorName
+    console.log('[SekibanDaprExecutor.getMultiProjectorName] Checking query:', {
+      queryClassName: query.constructor.name,
+      hasGetMultiProjectorName: !!query.getMultiProjectorName,
+      hasGetProjector: !!query.getProjector,
+      hasGetAggregateType: !!query.getAggregateType
+    });
+    
+    // Check if query has a getMultiProjectorName method
+    if (query.getMultiProjectorName && typeof query.getMultiProjectorName === 'function') {
+      const multiProjectorName = query.getMultiProjectorName();
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] From query.getMultiProjectorName():', multiProjectorName);
+      return multiProjectorName;
+    }
+    
+    // If query has a getProjector method and the projector has getMultiProjectorName
     if (query.getProjector && typeof query.getProjector === 'function') {
       const projector = query.getProjector();
-      if (projector && projector.multiProjectorName) {
-        return projector.multiProjectorName;
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] Got projector from query:', {
+        projectorExists: !!projector,
+        projectorType: projector?.constructor?.name,
+        hasGetMultiProjectorName: projector && projector.getMultiProjectorName && typeof projector.getMultiProjectorName === 'function'
+      });
+      
+      if (projector && projector.getMultiProjectorName && typeof projector.getMultiProjectorName === 'function') {
+        const multiProjectorName = projector.getMultiProjectorName();
+        console.log('[SekibanDaprExecutor.getMultiProjectorName] From projector.getMultiProjectorName():', multiProjectorName);
+        return multiProjectorName;
       }
     }
     
     // Fallback: use aggregate type as projector name
     if (query.getAggregateType && typeof query.getAggregateType === 'function') {
-      return `${query.getAggregateType()}MultiProjector`;
+      const aggregateType = query.getAggregateType();
+      const multiProjectorName = `${aggregateType}MultiProjector`;
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] Fallback from aggregate type:', {
+        aggregateType,
+        generatedName: multiProjectorName
+      });
+      return multiProjectorName;
     }
     
+    console.log('[SekibanDaprExecutor.getMultiProjectorName] No multi-projector name found');
     return null;
   }
   
@@ -365,7 +395,30 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           
           const result = await response.json();
           console.log(`[SekibanDaprExecutor] Actor list response:`, result);
-          return result;
+          
+          // The actor returns SerializableListQueryResult, we need to convert it
+          // For now, check if it's the expected format or needs conversion
+          if (result && typeof result === 'object') {
+            // If it has the expected properties, return as-is
+            if ('isSuccess' in result) {
+              return result;
+            }
+            
+            // Otherwise, it's a SerializableListQueryResult, convert it
+            // The result should have compressedItemsJson which needs to be decompressed
+            // For now, we'll create a simple response
+            return {
+              isSuccess: true,
+              items: result.items || [],
+              totalCount: result.totalCount || 0,
+              data: result
+            };
+          }
+          
+          return {
+            isSuccess: false,
+            error: 'Invalid response format'
+          };
         } catch (error) {
           console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
           return {
@@ -424,7 +477,15 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         };
         
         // Check if it's a list query
-        const isListQuery = query.limit !== undefined || query.offset !== undefined;
+        // A query is a list query if:
+        // 1. It has limit or offset properties
+        // 2. It implements IMultiProjectionListQuery (check by method existence)
+        // 3. The query type name contains "List"
+        const isListQuery = query.limit !== undefined || 
+                           query.offset !== undefined ||
+                           query.constructor.name.includes('List') ||
+                           (query.handleFilter && typeof query.handleFilter === 'function') ||
+                           (query.constructor.handleFilter && typeof query.constructor.handleFilter === 'function');
         
         let response: QueryResponse | ListQueryResponse;
         if (isListQuery) {

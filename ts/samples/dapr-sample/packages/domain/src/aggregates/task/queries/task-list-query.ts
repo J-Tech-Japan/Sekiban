@@ -33,6 +33,27 @@ export class TaskListQuery implements IMultiProjectionListQuery<
   TaskListResponse
 > {
   /**
+   * Get the aggregate type for this query
+   */
+  getAggregateType(): string {
+    return 'Task';
+  }
+  
+  /**
+   * Get the projector for this query
+   */
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
+  
+  /**
    * Filter tasks from the projection
    */
   static handleFilter(
@@ -91,6 +112,27 @@ export class ActiveTaskListQuery implements IMultiProjectionListQuery<
   ActiveTaskListQuery,
   TaskListResponse
 > {
+  /**
+   * Get the aggregate type for this query
+   */
+  getAggregateType(): string {
+    return 'Task';
+  }
+  
+  /**
+   * Get the projector for this query
+   */
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
+  
   /**
    * Filter active tasks from the projection
    */
@@ -155,6 +197,27 @@ export class TasksByAssigneeQuery implements IMultiProjectionListQuery<
   TaskListResponse
 > {
   constructor(public readonly assigneeId: string) {}
+  
+  /**
+   * Get the aggregate type for this query
+   */
+  getAggregateType(): string {
+    return 'Task';
+  }
+  
+  /**
+   * Get the projector for this query
+   */
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
   
   /**
    * Filter tasks by assignee

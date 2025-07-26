@@ -274,9 +274,24 @@ class SchemaMultiProjectorTypes implements IMultiProjectorTypes {
   registerAggregateListProjector<TProjector extends IAggregateProjector<any>>(
     projectorFactory: () => TProjector
   ): void {
+    console.log('[SchemaMultiProjectorTypes] Starting AggregateListProjector registration');
+    const projectorInstance = projectorFactory();
+    console.log('[SchemaMultiProjectorTypes] Projector factory result:', {
+      aggregateTypeName: projectorInstance.aggregateTypeName,
+      projectorType: projectorInstance.constructor.name
+    });
+    
     const projector = AggregateListProjector.create(projectorFactory);
     const name = projector.getMultiProjectorName();
+    
+    console.log('[SchemaMultiProjectorTypes] Registration details:', {
+      aggregateTypeNameFromProjector: projectorInstance.aggregateTypeName,
+      generatedMultiProjectorName: name,
+      projectorClass: projector.constructor.name
+    });
+    
     this.aggregateListProjectors.set(name, projector);
+    console.log(`[SchemaMultiProjectorTypes] Registered AggregateListProjector with name: ${name}`);
   }
   
   project(multiProjector: IMultiProjectorCommon, event: IEvent): Result<IMultiProjectorCommon, SekibanError> {

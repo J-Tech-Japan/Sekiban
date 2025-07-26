@@ -118,8 +118,7 @@ router.get(
       let query;
       if (assignee) {
         // Use TasksByAssigneeQuery if assignee is specified
-        query = new TasksByAssigneeQuery();
-        (query as any).assignee = assignee as string;
+        query = new TasksByAssigneeQuery(assignee as string);
       } else if (status === 'active') {
         // Use ActiveTaskListQuery for active tasks
         query = new ActiveTaskListQuery();

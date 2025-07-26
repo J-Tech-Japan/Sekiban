@@ -78,7 +78,13 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
   getMultiProjectorName(): string {
     const projector = this.projectorFactory()
     const projectorName = projector.aggregateTypeName.toLowerCase()
-    return `aggregatelistprojector-${projectorName}`
+    const multiProjectorName = `aggregatelistprojector-${projectorName}`
+    console.log('[AggregateListProjector.getMultiProjectorName]:', {
+      aggregateTypeName: projector.aggregateTypeName,
+      projectorNameLowercase: projectorName,
+      generatedMultiProjectorName: multiProjectorName
+    })
+    return multiProjectorName
   }
   
   /**
@@ -95,5 +101,16 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
     projectorFactory: () => TProjector
   ): AggregateListProjector<TProjector> {
     return new AggregateListProjector(new Map(), projectorFactory)
+  }
+  
+  /**
+   * Get the multi-projector name for a specific aggregate projector type
+   */
+  static getMultiProjectorName<TProjector extends IAggregateProjector<any>>(
+    projectorFactory: () => TProjector
+  ): string {
+    const projector = projectorFactory()
+    const projectorName = projector.aggregateTypeName.toLowerCase()
+    return `aggregatelistprojector-${projectorName}`
   }
 }

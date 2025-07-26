@@ -215,7 +215,8 @@ async function distributeEvent(eventData: PubSubEventData) {
     {
       appId: 'dapr-sample-multi-projector',
       actorType: 'MultiProjectorActor',
-      projectorTypes: ['TaskProjector', 'UserProjector', 'WeatherForecastProjector'],
+      // These should be aggregate types, not projector class names
+      aggregateTypes: ['Task', 'User', 'WeatherForecast'],
       daprPort: '3502' // Multi-projector port
     },
     {
@@ -232,21 +233,28 @@ async function distributeEvent(eventData: PubSubEventData) {
   const multiProjectorTarget = distributionTargets.find(t => t.appId === 'dapr-sample-multi-projector');
   if (multiProjectorTarget) {
     logger.info('[Distributor] Distributing to MultiProjectorActors');
-    for (const projectorType of multiProjectorTarget.projectorTypes) {
-      const actorId = `aggregatelistprojector-${projectorType.toLowerCase()}`;
-      const url = `http://${daprHost}:${multiProjectorTarget.daprPort}/v1.0/actors/${multiProjectorTarget.actorType}/${actorId}/method/processEvent`;
+    for (const aggregateType of multiProjectorTarget.aggregateTypes) {
+      const actorId = `aggregatelistprojector-${aggregateType.toLowerCase()}`;
+      const url = `http://${daprHost}:${multiProjectorTarget.daprPort}/v1.0/actors/${multiProjectorTarget.actorType}/${actorId}/method/handlePublishedEvent`;
       
       logger.info(`[Distributor] Calling MultiProjectorActor:`, {
-        projectorType,
+        aggregateType,
         actorId,
         url,
         eventAggregateType: eventData.aggregateType
       });
       
-      // Check if this is TaskProjector processing a Task event
-      if (projectorType === 'TaskProjector' && eventData.aggregateType === 'Task') {
-        logger.info('[Distributor] *** SENDING TASK EVENT TO TASK PROJECTOR ***');
+      // Check if this is Task aggregate processing a Task event
+      if (aggregateType === 'Task' && eventData.aggregateType === 'Task') {
+        logger.info('[Distributor] *** SENDING TASK EVENT TO TASK AGGREGATE LIST PROJECTOR ***');
       }
+      
+      // Wrap event in DaprEventEnvelope format
+      const eventEnvelope = {
+        event: eventData,
+        topic: 'sekiban-events',
+        pubsubName: 'pubsub'
+      };
       
       promises.push(
         fetch(url, {
@@ -254,19 +262,21 @@ async function distributeEvent(eventData: PubSubEventData) {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(eventData)
+          body: JSON.stringify(eventEnvelope)
         }).then(async (res) => {
           const responseText = await res.text();
           if (res.ok) {
             logger.info(`[Distributor] ✓ Successfully sent event to ${multiProjectorTarget.actorType}/${actorId}`, {
               status: res.status,
-              response: responseText
+              response: responseText,
+              aggregateType: aggregateType
             });
           } else {
             logger.error(`[Distributor] ✗ Failed to send event to ${multiProjectorTarget.actorType}/${actorId}:`, {
               status: res.status,
               statusText: res.statusText,
-              body: responseText
+              body: responseText,
+              aggregateType: aggregateType
             });
           }
         }).catch((error: any) => {

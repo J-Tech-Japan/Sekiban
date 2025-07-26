@@ -16,7 +16,7 @@ interface Config {
 
 export const config: Config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: parseInt(process.env.PORT || '3003', 10),
+  PORT: parseInt(process.env.PORT || '3002', 10),
   DAPR_HTTP_PORT: parseInt(process.env.DAPR_HTTP_PORT || '3503', 10),
   DAPR_APP_ID: process.env.DAPR_APP_ID || 'dapr-sample-api-multi-projector',
   API_PREFIX: process.env.API_PREFIX || '/api/v1',

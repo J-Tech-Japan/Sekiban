@@ -22,10 +22,10 @@ const logger = pino({
   }
 });
 
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3001;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
 const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events';
 const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING || '';
 const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'sekiban-events';
 const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || 'events';
