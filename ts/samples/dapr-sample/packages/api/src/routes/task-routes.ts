@@ -13,9 +13,8 @@ import {
   ActiveTaskListQuery,
   TasksByAssigneeQuery
 } from '@dapr-sample/domain';
-import { PartitionKeys, CommandValidationError, SekibanError, AggregateNotFoundError } from '@sekiban/core';
-import { getExecutor, getDaprClient } from '../setup/executor.js';
-import { config } from '../config/index.js';
+import { CommandValidationError, AggregateNotFoundError } from '@sekiban/core';
+import { getExecutor } from '../setup/executor.js';
 
 const router: ExpressRouter = Router();
 
@@ -193,28 +192,21 @@ router.get(
 
       const executor = await getExecutor();
       
-      // Use proper query pattern instead of direct actor access
+      // Use GetTaskById query to get from AggregateActor
       const query = new GetTaskById({ taskId });
+      console.log('[GetTaskById] Executing query for taskId:', taskId);
       const result = await executor.queryAsync(query);
+      console.log('[GetTaskById] Query result:', result.isOk() ? 'success' : 'error', result);
       
       if (result.isErr()) {
+        console.log('[GetTaskById] Query error:', result.error);
         const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
       
-      const taskData = result.value;
-      if (!taskData) {
-        const error = new AggregateNotFoundError(taskId, 'Task');
-        return next(error);
-      }
+      const payload = result.value;
       
-      // Handle different possible result structures
-      let payload;
-      if (taskData.payload) {
-        payload = taskData.payload;
-      } else if (typeof taskData === 'object') {
-        payload = taskData;
-      } else {
+      if (!payload || !payload.taskId) {
         const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
@@ -222,18 +214,20 @@ router.get(
       const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
       
       res.json({
-        id: payload.taskId,
-        title: payload.title,
-        description: payload.description,
-        assignedTo: payload.assignedTo,
-        dueDate: payload.dueDate,
-        priority: payload.priority,
-        status: isCompleted ? 'completed' : payload.status,
-        createdAt: payload.createdAt,
-        updatedAt: payload.updatedAt,
-        completedAt: isCompleted ? payload.completedAt : undefined,
-        completedBy: isCompleted ? payload.completedBy : undefined,
-        completionNotes: isCompleted ? payload.completionNotes : undefined
+        data: {
+          id: payload.taskId,
+          title: payload.title,
+          description: payload.description,
+          assignedTo: payload.assignedTo,
+          dueDate: payload.dueDate,
+          priority: payload.priority,
+          status: isCompleted ? 'completed' : payload.status,
+          createdAt: payload.createdAt,
+          updatedAt: payload.updatedAt,
+          completedAt: isCompleted ? payload.completedAt : undefined,
+          completedBy: isCompleted ? payload.completedBy : undefined,
+          completionNotes: isCompleted ? payload.completionNotes : undefined
+        }
       });
     } catch (error) {
       next(error);
@@ -419,18 +413,45 @@ router.post(
   }
 );
 
-// Test aggregate state through proper query
+// Test aggregate state through Dapr actor
 router.get(
   '/tasks/:taskId/aggregate-state',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { taskId } = req.params;
+      
+      // Validate UUID
+      const uuidResult = z.string().uuid().safeParse(taskId);
+      if (!uuidResult.success) {
+        return res.status(400).json({ 
+          error: 'Invalid task ID format',
+          taskId
+        });
+      }
+      
       const executor = await getExecutor();
       
-      const query = new GetTaskById({ taskId });
-      const result = await executor.queryAsync(query);
+      // Query from multi-projector to get the aggregate state
+      const listQuery = new TaskListQuery();
+      const listResult = await executor.queryAsync(listQuery);
       
-      if (result.isErr()) {
+      if (listResult.isErr()) {
+        return res.status(500).json({ 
+          error: 'Failed to query tasks',
+          taskId,
+          details: listResult.error.message
+        });
+      }
+      
+      const queryResult = listResult.value || { items: [] };
+      const tasks = queryResult.items || [];
+      
+      const task = tasks.find((item: any) => {
+        const itemPayload = item.payload || item;
+        return itemPayload.taskId === taskId;
+      });
+      
+      if (!task) {
         return res.status(404).json({ 
           error: 'Task not found',
           taskId
@@ -440,7 +461,7 @@ router.get(
       res.json({ 
         success: true, 
         taskId,
-        aggregateState: result.value,
+        aggregateState: task,
         message: 'Aggregate state loaded successfully' 
       });
     } catch (error) {

@@ -426,16 +426,36 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         return ok(response.data as T);
       }
       
-      // Original single-aggregate query logic
-      const actorId = `${this.configuration.actorIdPrefix || 'sekiban'}.query.${query.queryType}.${query.userId || 'default'}`;
+      // Single-aggregate query logic
+      console.log('[SekibanDaprExecutor] Executing single-aggregate query');
+      console.log('[SekibanDaprExecutor] Query type:', query.constructor.name);
+      console.log('[SekibanDaprExecutor] Query has getPartitionKeys:', typeof query.getPartitionKeys);
+      console.log('[SekibanDaprExecutor] Query has getProjector:', typeof query.getProjector);
       
-      // Create actor proxy
+      // Get partition keys from the query
+      const partitionKeys = query.getPartitionKeys();
+      if (!partitionKeys) {
+        return err(new QueryExecutionError('query', 'Query does not provide partition keys'));
+      }
+      
+      // Get the projector from the query
+      const projector = query.getProjector();
+      if (!projector) {
+        return err(new QueryExecutionError('query', 'Query does not provide projector'));
+      }
+      
+      // Create PartitionKeysAndProjector (matching C# pattern)
+      const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+      
+      // Generate actor ID using the projector grain key format to target the specific aggregate actor
+      const actorId = partitionKeyAndProjector.toProjectorGrainKey();
+      console.log('[SekibanDaprExecutor] Generated actor ID:', actorId);
       const actorProxy = this.createActorProxy(actorId);
       
-      // Execute query through actor with retry
+      // Execute query through aggregate actor with retry
       const response = await this.executeWithRetry(
         () => actorProxy.queryAsync<T>(query),
-        'Query execution'
+        'Single-aggregate query execution'
       );
       
       return ok(response);

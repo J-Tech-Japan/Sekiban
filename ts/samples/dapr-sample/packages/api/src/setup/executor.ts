@@ -14,6 +14,10 @@ interface SekibanExecutor {
   queryAsync<TQuery>(
     query: TQuery
   ): Promise<any>;
+  loadAggregateAsync<TPayload>(
+    projector: any,
+    partitionKeys: any
+  ): Promise<any>;
 }
 
 let executorInstance: SekibanExecutor | null = null;

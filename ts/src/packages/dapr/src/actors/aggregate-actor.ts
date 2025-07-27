@@ -111,8 +111,15 @@ export class AggregateActor extends AbstractActor {
 
   // Additional methods required by the interface
   async queryAsync(query: any): Promise<any> {
-    // TODO: Implement query functionality
-    return { error: 'Query functionality not yet implemented' };
+    // For single-aggregate queries, return the current state
+    const aggregateState = await this.getAggregateStateAsync();
+    
+    if (!aggregateState || !aggregateState.payload) {
+      return null;
+    }
+    
+    // Return the payload which contains the aggregate's current state
+    return aggregateState.payload;
   }
 
   async loadAggregateAsync(partitionKeys: any): Promise<any> {
