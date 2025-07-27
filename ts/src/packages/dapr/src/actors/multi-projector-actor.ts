@@ -92,7 +92,6 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     this.eventStore = cradle.eventStore;
     this.domainTypes = cradle.domainTypes;
     
-    console.log('[MultiProjectorActor] Initialized for projector:', this.actorIdString);
   }
   
   async onActivate(): Promise<void> {
@@ -534,25 +533,9 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         const accessor = state as AggregateAccessor;
         let aggregates = accessor.getAggregates();
         
-        console.log('[Query Debug] State inspection:', {
-          hasAggregatesMap: !!accessor.aggregates,
-          aggregatesMapType: accessor.aggregates ? accessor.aggregates.constructor.name : 'null',
-          aggregatesMapSize: accessor.aggregates ? accessor.aggregates.size : 0,
-          aggregatesKeys: accessor.aggregates ? Array.from(accessor.aggregates.keys()) : [],
-          getAggregatesResult: aggregates,
-          aggregatesCount: aggregates.length,
-          aggregatesType: Array.isArray(aggregates) ? 'array' : typeof aggregates,
-          firstAggregate: aggregates.length > 0 ? aggregates[0] : 'none'
-        });
         
         if (aggregates.length > 0) {
-          console.log('[Query Debug] First aggregate details:', {
-            hasPayload: !!aggregates[0].payload,
-            payloadType: aggregates[0].payload?.constructor?.name,
-            payloadContent: aggregates[0].payload,
-            aggregateStructure: Object.keys(aggregates[0]),
-            fullAggregate: JSON.stringify(aggregates[0])
-          });
+          // Process aggregates - implementation logic should be here
         }
         
         // Apply filter if query has handleFilter method
@@ -589,24 +572,9 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           hasPreviousPage: (Math.floor(skip / take) + 1) > 1
         };
         
-        console.log('[Query Debug] Before serialization - listResult:', {
-          totalCount: listResult.totalCount,
-          itemsCount: listResult.items.length,
-          pageSize: listResult.pageSize,
-          pageNumber: listResult.pageNumber,
-          firstItem: listResult.items[0] ? JSON.stringify(listResult.items[0]) : 'none',
-          itemsType: Array.isArray(listResult.items) ? 'array' : typeof listResult.items,
-          itemsContent: JSON.stringify(listResult.items)
-        });
         
         const serializedResult = await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
         
-        console.log('[Query Debug] After serialization - serializedResult:', {
-          hasCompressedItemsJson: !!serializedResult.compressedItemsJson,
-          compressedItemsJsonLength: serializedResult.compressedItemsJson?.length,
-          totalCount: serializedResult.totalCount,
-          recordTypeName: serializedResult.recordTypeName
-        });
         
         return serializedResult;
       }
@@ -634,13 +602,11 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
    * This is the method called by Dapr actor invocation
    */
   async queryListAsync(query: SerializableListQuery): Promise<ListQueryResponse> {
-    console.log('[MultiProjectorActor.queryListAsync] Called with query:', JSON.stringify(query));
     
     try {
       // Call the existing queryList method
       const result = await this.queryList(query);
       
-      console.log('[MultiProjectorActor.queryListAsync] Result:', JSON.stringify(result));
       
       // Convert to ListQueryResponse format expected by actor interface
       // Note: The result is a SerializableListQueryResult which has compressed data

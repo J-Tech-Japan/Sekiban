@@ -14,42 +14,24 @@ import {
   TasksByAssigneeQuery
 } from '@dapr-sample/domain';
 import { PartitionKeys, CommandValidationError, SekibanError, AggregateNotFoundError } from '@sekiban/core';
-import { getExecutor } from '../setup/executor.js';
+import { getExecutor, getDaprClient } from '../setup/executor.js';
+import { config } from '../config/index.js';
 
 const router: ExpressRouter = Router();
 
-// Test actor directly
+// Test actor health endpoint
 router.get(
   '/test-actor',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      
-      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
-      const { AggregateActorFactory } = await import('@sekiban/dapr');
-      
-      const daprClient = new DaprClient({
-        daprHost: "127.0.0.1",
-        daprPort: "3500"
-      });
-      
-      const AggregateActorClass = AggregateActorFactory.createActorClass();
-      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
-      const actorId = 'test-actor-123';
-      const actor = builder.build(new ActorId(actorId));
-      
-      const testResult = await (actor as any).testMethod();
-      
+      const executor = await getExecutor();
       res.json({ 
         success: true, 
-        actorId,
-        testResult,
-        message: 'Actor test completed' 
+        message: 'Executor is available and ready',
+        executorType: executor.constructor.name
       });
     } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      next(error);
     }
   }
 );
@@ -81,7 +63,7 @@ function validateBody<T>(schema: z.ZodSchema<T>) {
 // Create task
 router.post(
   '/tasks',
-  validateBody((CreateTask as any).schema),
+  validateBody(CreateTask.schema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const executor = await getExecutor();
@@ -129,56 +111,36 @@ router.get(
       
       // Apply pagination
       if (limit) {
-        (query as any).take = parseInt(limit as string);
+        query.take = parseInt(limit as string);
       }
       if (offset) {
-        (query as any).skip = parseInt(offset as string);
+        query.skip = parseInt(offset as string);
       }
       
-      console.log('[GET ALL] Executing task list query:', {
-        queryType: query.constructor.name,
-        assignee,
-        status,
-        limit,
-        offset
-      });
-      
       // Execute multi-projection query
-      console.log('[GET ALL] Executing multi-projection query...');
       
       let result;
       try {
         result = await executor.queryAsync(query);
       } catch (error) {
-        console.error('[GET ALL] Query execution threw error:', error);
-        console.error('[GET ALL] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
         return res.status(500).json({ 
           error: 'Failed to execute query',
-          details: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined
+          details: error instanceof Error ? error.message : String(error)
         });
       }
       
       if (result.isErr()) {
-        console.error('[GET ALL] Query failed:', result.error);
-        console.error('[GET ALL] Error details:', {
-          errorType: result.error.constructor.name,
-          errorCode: (result.error as any).code,
-          errorMessage: result.error.message
-        });
         return res.status(500).json({ 
           error: 'Failed to fetch tasks',
-          details: result.error.message,
-          errorCode: (result.error as any).code
+          details: result.error.message
         });
       }
       
-      console.log('[GET ALL] Query result:', result.value);
       const queryResult = result.value || { items: [] };
       const tasks = queryResult.items || [];
       
       // Transform results to response format
-      const transformedTasks = tasks.map((item: any) => {
+      const transformedTasks = tasks.map((item) => {
         const payload = item.payload || item;
         const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
         
@@ -206,9 +168,7 @@ router.get(
       res.json({
         data: filteredTasks,
         pagination: {
-          total: queryResult.totalCount || filteredTasks.length,
-          limit: query.limit,
-          offset: query.offset
+          total: queryResult.totalCount || filteredTasks.length
         }
       });
     } catch (error) {
@@ -233,125 +193,28 @@ router.get(
 
       const executor = await getExecutor();
       
-      // Get the aggregate state directly from the actor (like in create task)
-      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
-      const { AggregateActorFactory } = await import('@sekiban/dapr');
+      // Use proper query pattern instead of direct actor access
+      const query = new GetTaskById({ taskId });
+      const result = await executor.queryAsync(query);
       
-      const daprClient = new DaprClient({
-        daprHost: "127.0.0.1",
-        daprPort: "3500"
-      });
-      
-      const AggregateActorClass = AggregateActorFactory.createActorClass();
-      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
-      
-      // Use the same actor ID pattern as in command execution
-      const actorId = `default@Task@${taskId}=TaskProjector`;
-      const actor = builder.build(new ActorId(actorId)) as any;
-      
-      let result: { value: any } | undefined;
-      try {
-        const aggregateState = await actor.getAggregateStateAsync();
-        
-        if (!aggregateState) {
-          // Try direct approach: load events from EventHandler and project them manually
-          const { TaskProjector } = await import('@dapr-sample/domain');
-          const projector = new TaskProjector();
-          
-          // Get events from event handler directly
-          const eventHandlerActorId = `Task-${taskId}-default`;
-          const eventHandlerActor = builder.build(new ActorId(eventHandlerActorId));
-          
-          // This won't work with ActorProxyBuilder since it's wrong actor type, let me use direct HTTP call
-          const eventsUrl = `http://127.0.0.1:3501/v1.0/actors/AggregateEventHandlerActor/${eventHandlerActorId}/method/getAllEventsAsync`;
-          
-          const eventsResponse = await fetch(eventsUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-          });
-          
-          const eventsText = await eventsResponse.text();
-          
-          if (eventsResponse.ok && eventsText && eventsText !== '{}') {
-            const events = JSON.parse(eventsText);
-            if (events.length > 0) {
-              // Project the events manually
-              let projectedState: any = null;
-              for (const eventDoc of events) {
-                // Create a simple projection for TaskCreated
-                if (eventDoc.eventType === 'TaskCreated') {
-                  projectedState = {
-                    aggregateType: 'Task',
-                    taskId: eventDoc.payload.taskId,
-                    title: eventDoc.payload.title,
-                    description: eventDoc.payload.description,
-                    priority: eventDoc.payload.priority,
-                    status: 'active',
-                    createdAt: eventDoc.payload.createdAt,
-                    updatedAt: eventDoc.payload.createdAt
-                  };
-                  break;
-                }
-              }
-              
-              if (projectedState) {
-                // Handle different possible result structures
-                let payload: any = projectedState;
-                
-                
-                const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
-                
-                res.json({
-                  id: payload.taskId,
-                  title: payload.title,
-                  description: payload.description,
-                  assignedTo: payload.assignedTo,
-                  dueDate: payload.dueDate,
-                  priority: payload.priority,
-                  status: isCompleted ? 'completed' : payload.status,
-                  createdAt: payload.createdAt,
-                  updatedAt: payload.updatedAt,
-                  completedAt: isCompleted ? payload.completedAt : undefined,
-                  completedBy: isCompleted ? payload.completedBy : undefined,
-                  completionNotes: isCompleted ? payload.completionNotes : undefined
-                });
-                return;
-              }
-            }
-          }
-          
-          const error = new AggregateNotFoundError(taskId, 'Task');
-          return next(error);
-        }
-        
-        result = { value: aggregateState };
-      } catch (actorError) {
+      if (result.isErr()) {
         const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
-
-      if (!result.value) {
+      
+      const taskData = result.value;
+      if (!taskData) {
         const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
-
-      // Transform aggregate to response
       
       // Handle different possible result structures
-      let payload: any;
-      if (result.value && result.value.payload) {
-        payload = result.value.payload;
-      } else if (result.value && typeof result.value === 'object') {
-        // The result might be the payload directly
-        payload = result.value;
+      let payload;
+      if (taskData.payload) {
+        payload = taskData.payload;
+      } else if (typeof taskData === 'object') {
+        payload = taskData;
       } else {
-        const error = new AggregateNotFoundError(taskId, 'Task');
-        return next(error);
-      }
-      
-      // Check if payload has the expected properties
-      if (!payload || typeof payload !== 'object') {
         const error = new AggregateNotFoundError(taskId, 'Task');
         return next(error);
       }
@@ -556,38 +419,28 @@ router.post(
   }
 );
 
-// Test loadAggregateAsync directly
+// Test aggregate state through proper query
 router.get(
   '/tasks/:taskId/aggregate-state',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { taskId } = req.params;
-      // Create the actor ID in the same format as the executor
-      const aggregateId = `default@Task@${taskId}=TaskProjector`;
+      const executor = await getExecutor();
       
-      const { DaprClient, ActorProxyBuilder, ActorId } = await import('@dapr/dapr');
-      const { AggregateActorFactory } = await import('@sekiban/dapr');
+      const query = new GetTaskById({ taskId });
+      const result = await executor.queryAsync(query);
       
-      const daprClient = new DaprClient({
-        daprHost: "127.0.0.1",
-        daprPort: String(process.env.DAPR_HTTP_PORT || "3500")
-      });
-      
-      const AggregateActorClass = AggregateActorFactory.createActorClass();
-      const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
-      const actor = builder.build(new ActorId(aggregateId));
-      
-      const partitionKeys = {
-        aggregateId: taskId,
-        group: 'Task',
-        rootPartitionKey: 'default'
-      };
-      const aggregateState = await (actor as any).loadAggregateAsync(partitionKeys);
+      if (result.isErr()) {
+        return res.status(404).json({ 
+          error: 'Task not found',
+          taskId
+        });
+      }
       
       res.json({ 
         success: true, 
-        aggregateId,
-        aggregateState,
+        taskId,
+        aggregateState: result.value,
         message: 'Aggregate state loaded successfully' 
       });
     } catch (error) {

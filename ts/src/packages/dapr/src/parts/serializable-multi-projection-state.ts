@@ -2,8 +2,20 @@ import {
   SekibanDomainTypes, 
   OptionalValue,
   IMultiProjector, 
-  IMultiProjectorCommon 
+  IMultiProjectorCommon,
+  Result 
 } from '@sekiban/core';
+
+// Define interfaces for domain types with multi-projector support
+interface IMultiProjectorTypes {
+  serializeMultiProjector(projector: IMultiProjectorCommon): Promise<Result<string, string>>;
+  deserializeMultiProjector(payloadJson: string, typeName: string): Promise<Result<IMultiProjectorCommon, string>>;
+  getMultiProjectorNameFromMultiProjector(projector: IMultiProjectorCommon): Result<string, string>;
+}
+
+interface SekibanDomainTypesWithMultiProjector extends SekibanDomainTypes {
+  multiProjectorTypes?: IMultiProjectorTypes;
+}
 
 // Define the interface locally since there's an import issue
 interface IMultiProjectorStateCommon {
@@ -77,13 +89,14 @@ export async function createSerializableMultiProjectionState(
   domainTypes: SekibanDomainTypes
 ): Promise<SerializableMultiProjectionState> {
   const projector = state.projectorCommon;
+  const typedDomainTypes = domainTypes as SekibanDomainTypesWithMultiProjector;
   
-  if (!(domainTypes as any).multiProjectorTypes) {
+  if (!typedDomainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
   // Use IMultiProjectorTypes for serialization
-  const serializedPayloadResult = await (domainTypes as any).multiProjectorTypes.serializeMultiProjector(projector);
+  const serializedPayloadResult = await typedDomainTypes.multiProjectorTypes.serializeMultiProjector(projector);
   
   if (serializedPayloadResult.isErr()) {
     throw new Error(`Failed to serialize projector: ${serializedPayloadResult.error}`);
@@ -95,7 +108,7 @@ export async function createSerializableMultiProjectionState(
   const versionString = projector.getVersion();
   
   // Get the multi-projector name (e.g., "aggregatelistprojector-task") instead of constructor name
-  const multiProjectorNameResult = (domainTypes as any).multiProjectorTypes.getMultiProjectorNameFromMultiProjector(projector);
+  const multiProjectorNameResult = typedDomainTypes.multiProjectorTypes.getMultiProjectorNameFromMultiProjector(projector);
   if (multiProjectorNameResult.isErr()) {
     throw new Error(`Failed to get multi-projector name: ${multiProjectorNameResult.error}`);
   }
@@ -124,7 +137,8 @@ export async function toMultiProjectionState(
     return null;
   }
   
-  if (!(domainTypes as any).multiProjectorTypes) {
+  const typedDomainTypes = domainTypes as SekibanDomainTypesWithMultiProjector;
+  if (!typedDomainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
@@ -133,7 +147,7 @@ export async function toMultiProjectionState(
     const payloadJson = (await gunzipAsync(serialized.compressedPayloadJson)).toString('utf-8');
     
     // Use IMultiProjectorTypes for deserialization
-    const projectorResult = await (domainTypes as any).multiProjectorTypes.deserializeMultiProjector(
+    const projectorResult = await typedDomainTypes.multiProjectorTypes.deserializeMultiProjector(
       payloadJson,
       serialized.payloadTypeName
     );
