@@ -3,7 +3,7 @@
 # Simple test to check event flow through the system
 
 echo "Starting services..."
-./run-with-inmemory.sh > services.log 2>&1 &
+./run-with-postgres.sh > services.log 2>&1 &
 SERVICES_PID=$!
 
 echo "Waiting for services to start..."

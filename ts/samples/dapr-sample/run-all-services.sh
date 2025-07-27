@@ -125,11 +125,8 @@ case "$STORAGE_TYPE" in
         fi
         export COSMOS_DATABASE_NAME="${COSMOS_DATABASE_NAME:-sekiban_events}"
         ;;
-    inmemory)
-        echo "Using in-memory storage (no persistence)"
-        ;;
     *)
-        echo "❌ Invalid STORAGE_TYPE: $STORAGE_TYPE (use inmemory, postgres, or cosmos)"
+        echo "❌ Invalid STORAGE_TYPE: $STORAGE_TYPE (use postgres or cosmos only - in-memory workarounds violate CLAUDE.md)"
         exit 1
         ;;
 esac

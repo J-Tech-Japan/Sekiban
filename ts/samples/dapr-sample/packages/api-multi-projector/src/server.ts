@@ -6,7 +6,7 @@ import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
+import { IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
@@ -121,8 +121,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Choose storage type based on configuration
-  let eventStore: any; // Use any to avoid neverthrow version mismatch
+  // CLAUDE.md: Never create in-memory workarounds - always use proper actor implementation
+  let eventStore: IEventStore;
   
   switch (config.STORAGE_TYPE) {
     case 'postgres': {
@@ -151,15 +151,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
       break;
     }
     
-    case 'inmemory':
     default: {
-      // Initialize in-memory event store
-      logger.info('Using in-memory event store');
-      eventStore = new InMemoryEventStore({
-        type: StorageProviderType.InMemory,
-        enableLogging: config.NODE_ENV === 'development'
-      });
-      break;
+      throw new Error(`CLAUDE.md violation: Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' for proper actor implementation.`);
     }
   }
 
@@ -172,14 +165,21 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory
   const actorProxyFactory: ActorProxyFactory = {
     createActorProxy: (actorId, actorType: string) => {
-      const actorIdObj = typeof actorId === 'string' ? { id: actorId } : actorId;
-      const actorIdStr = 'id' in actorIdObj ? (actorIdObj as { id: string }).id : (actorIdObj as any).getId ? (actorIdObj as any).getId() : String(actorId);
+      // Type-safe actor ID extraction
+      let actorIdStr: string;
+      if (typeof actorId === 'string') {
+        actorIdStr = actorId;
+      } else if (actorId && typeof actorId === 'object' && 'getId' in actorId && typeof (actorId as { getId: () => string }).getId === 'function') {
+        actorIdStr = (actorId as { getId: () => string }).getId();
+      } else {
+        actorIdStr = String(actorId);
+      }
       logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
-        // Type assertion needed due to factory pattern limitations
-        const factory = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryCreateMethod;
+        // Create actor class using factory
+        const factory = MultiProjectorActorFactory as MultiProjectorActorFactoryCreateMethod;
         const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr));
@@ -202,7 +202,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   };
 
   // Configure MultiProjectorActorFactory
-  const configureMethod = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryConfigureMethod;
+  const configureMethod = MultiProjectorActorFactory as MultiProjectorActorFactoryConfigureMethod;
   configureMethod.configure(
     domainTypes,
     {}, // service provider
@@ -211,8 +211,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     eventStore
   );
 
-  // Create actor class - use direct reference to avoid type issues
-  const MultiProjectorActorClass = MultiProjectorActor as any;
+  // Create actor class with proper typing
+  const MultiProjectorActorClass = MultiProjectorActor;
   
   logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
 
