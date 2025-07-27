@@ -90,20 +90,41 @@ export async function createSerializableListQueryResult(
   query: any,
   domainTypes: SekibanDomainTypes
 ): Promise<SerializableListQueryResult> {
+  console.log('[createSerializableListQueryResult] Input:', {
+    resultExists: !!result,
+    itemsExists: !!result.items,
+    itemsCount: result.items?.length,
+    totalCount: result.totalCount,
+    firstItem: result.items?.[0]
+  });
+  
   const queryType = query.constructor.name;
   let recordTypeName = 'unknown';
   
   if (result.items && result.items.length > 0) {
     recordTypeName = result.items[0].constructor.name;
+    console.log('[createSerializableListQueryResult] First item constructor:', recordTypeName);
+    console.log('[createSerializableListQueryResult] First item type:', typeof result.items[0]);
+    console.log('[createSerializableListQueryResult] First item is Object:', result.items[0].constructor === Object);
   }
   
   // Serialize items and query
   const itemsJson = JSON.stringify(result.items || []);
   const queryJson = JSON.stringify(query);
   
+  console.log('[createSerializableListQueryResult] Serialized items:', {
+    itemsJsonLength: itemsJson.length,
+    itemsJsonPreview: itemsJson.substring(0, 200) + (itemsJson.length > 200 ? '...' : '')
+  });
+  
   // Compress
   const compressedItemsJson = await gzipAsync(itemsJson);
   const compressedQueryJson = await gzipAsync(queryJson);
+  
+  console.log('[createSerializableListQueryResult] Compressed sizes:', {
+    compressedItemsSize: compressedItemsJson.length,
+    compressedQuerySize: compressedQueryJson.length
+  });
   
   return {
     totalCount: result.totalCount,
@@ -163,10 +184,40 @@ export async function deserializeListQueryResult(
   domainTypes: SekibanDomainTypes
 ): Promise<Result<ListQueryResult<any>, any>> {
   try {
-    const itemsJson = (await gunzipAsync(serialized.compressedItemsJson)).toString('utf-8');
-    const values = JSON.parse(itemsJson);
+    console.log('[deserializeListQueryResult] Input:', {
+      hasCompressedItemsJson: !!serialized.compressedItemsJson,
+      compressedItemsSize: serialized.compressedItemsJson?.length,
+      totalCount: serialized.totalCount,
+      recordTypeName: serialized.recordTypeName
+    });
     
-    return ok({
+    // Handle Buffer that comes from JSON parsing
+    let buffer: Buffer;
+    if (serialized.compressedItemsJson && typeof serialized.compressedItemsJson === 'object' && 
+        'type' in serialized.compressedItemsJson && serialized.compressedItemsJson.type === 'Buffer' &&
+        'data' in serialized.compressedItemsJson && Array.isArray(serialized.compressedItemsJson.data)) {
+      // It's a JSON representation of a Buffer
+      buffer = Buffer.from(serialized.compressedItemsJson.data);
+      console.log('[deserializeListQueryResult] Converted JSON Buffer to actual Buffer:', buffer.length);
+    } else {
+      // It's already a Buffer
+      buffer = serialized.compressedItemsJson;
+    }
+    
+    const itemsJson = (await gunzipAsync(buffer)).toString('utf-8');
+    console.log('[deserializeListQueryResult] Decompressed items:', {
+      itemsJsonLength: itemsJson.length,
+      itemsJsonPreview: itemsJson.substring(0, 200) + (itemsJson.length > 200 ? '...' : '')
+    });
+    
+    const values = JSON.parse(itemsJson);
+    console.log('[deserializeListQueryResult] Parsed values:', {
+      isArray: Array.isArray(values),
+      valuesCount: values.length,
+      firstValue: values[0]
+    });
+    
+    const result = {
       items: values,
       totalCount: serialized.totalCount || 0,
       totalPages: serialized.totalPages || 0,
@@ -175,8 +226,16 @@ export async function deserializeListQueryResult(
       hasNextPage: (serialized.currentPage || 1) < (serialized.totalPages || 0),
       hasPreviousPage: (serialized.currentPage || 1) > 1,
       query: serialized.queryTypeName
+    };
+    
+    console.log('[deserializeListQueryResult] Result:', {
+      itemsCount: result.items.length,
+      totalCount: result.totalCount
     });
+    
+    return ok(result);
   } catch (error) {
+    console.error('[deserializeListQueryResult] Error:', error);
     return err(error);
   }
 }

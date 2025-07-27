@@ -91,9 +91,16 @@ export async function createSerializableMultiProjectionState(
   
   const versionString = projector.getVersion();
   
+  // Get the multi-projector name (e.g., "aggregatelistprojector-task") instead of constructor name
+  const multiProjectorNameResult = (domainTypes as any).multiProjectorTypes.getMultiProjectorNameFromMultiProjector(projector);
+  if (multiProjectorNameResult.isErr()) {
+    throw new Error(`Failed to get multi-projector name: ${multiProjectorNameResult.error}`);
+  }
+  const multiProjectorName = multiProjectorNameResult.value;
+  
   return {
     compressedPayloadJson: compressedPayload,
-    payloadTypeName: projector.constructor.name,
+    payloadTypeName: multiProjectorName,  // Use the registered name, not constructor.name
     payloadVersion: versionString,
     lastEventId: state.lastEventId,
     lastSortableUniqueId: state.lastSortableUniqueId,

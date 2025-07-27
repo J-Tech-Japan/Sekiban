@@ -295,9 +295,22 @@ class SchemaMultiProjectorTypes implements IMultiProjectorTypes {
   }
   
   project(multiProjector: IMultiProjectorCommon, event: IEvent): Result<IMultiProjectorCommon, SekibanError> {
+    console.log('[SchemaMultiProjectorTypes.project] Called with:', {
+      multiProjectorType: multiProjector.constructor.name,
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      isAggregateListProjector: multiProjector instanceof AggregateListProjector
+    });
+    
     // For AggregateListProjector, we need to pass the projector itself as payload
     if (multiProjector instanceof AggregateListProjector) {
-      return multiProjector.project(multiProjector, event);
+      const result = multiProjector.project(multiProjector, event);
+      console.log('[SchemaMultiProjectorTypes.project] AggregateListProjector result:', {
+        isOk: result.isOk(),
+        error: result.isErr() ? result.error : null,
+        resultAggregatesSize: result.isOk() ? (result.value as any).aggregates?.size : 'unknown'
+      });
+      return result;
     }
     // For other multi-projectors, they might have different signatures
     if ('project' in multiProjector && typeof multiProjector.project === 'function') {
@@ -353,6 +366,22 @@ class SchemaMultiProjectorTypes implements IMultiProjectorTypes {
   
   async serializeMultiProjector(multiProjector: IMultiProjectorCommon): Promise<Result<string, SekibanError>> {
     try {
+      // Special handling for AggregateListProjector to serialize Map properly
+      if (multiProjector instanceof AggregateListProjector) {
+        const aggregatesObj: Record<string, any> = {};
+        const aggregatesMap = (multiProjector as any).aggregates;
+        if (aggregatesMap instanceof Map) {
+          aggregatesMap.forEach((value: any, key: string) => {
+            aggregatesObj[key] = value;
+          });
+        }
+        const serializable = {
+          aggregates: aggregatesObj,
+          // Include other relevant properties if needed
+        };
+        return ok(JSON.stringify(serializable));
+      }
+      
       return ok(JSON.stringify(multiProjector));
     } catch (error) {
       return err(new EventStoreError('serialize', `Failed to serialize multi-projector: ${error}`));
@@ -362,11 +391,31 @@ class SchemaMultiProjectorTypes implements IMultiProjectorTypes {
   async deserializeMultiProjector(json: string, typeFullName: string): Promise<Result<IMultiProjectorCommon, SekibanError>> {
     try {
       const data = JSON.parse(json);
-      const projector = this.getProjectorFromMultiProjectorName(typeFullName);
-      if (!projector) {
+      const templateProjector = this.getProjectorFromMultiProjectorName(typeFullName);
+      if (!templateProjector) {
         return err(new EventStoreError('deserialize', `Unknown projector type: ${typeFullName}`));
       }
-      // In a real implementation, we would need proper deserialization logic
+      
+      // For AggregateListProjector, we need to reconstruct it properly
+      if (typeFullName.startsWith('aggregatelistprojector-')) {
+        const aggregateListProjector = this.aggregateListProjectors.get(typeFullName);
+        if (aggregateListProjector && data.aggregates) {
+          // Reconstruct the AggregateListProjector with the deserialized aggregates
+          const aggregatesMap = new Map(Object.entries(data.aggregates)) as any;
+          const projectorFactory = (aggregateListProjector as any).projectorFactory;
+          return ok(new AggregateListProjector(aggregatesMap, projectorFactory));
+        }
+      }
+      
+      // For other projectors, attempt to reconstruct using constructor
+      if ('generateInitialPayload' in templateProjector && typeof templateProjector.generateInitialPayload === 'function') {
+        const typedProjector = templateProjector as IMultiProjector<any>;
+        const initialPayload = typedProjector.generateInitialPayload();
+        // Merge the deserialized data into the initial payload
+        Object.assign(initialPayload, data);
+        return ok(initialPayload);
+      }
+      
       return ok(data as IMultiProjectorCommon);
     } catch (error) {
       return err(new EventStoreError('deserialize', `Failed to deserialize multi-projector: ${error}`));

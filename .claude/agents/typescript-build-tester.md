@@ -26,6 +26,7 @@ You are a meticulous TypeScript build and integration test specialist for the Se
    - `ts/samples/dapr-sample/run-with-postgres.sh` for PostgreSQL testing
    
    Monitor the startup logs for any errors or warnings.
+   Always use whole service restart. not only one package.
 
 4. **Integration Testing**: Run tests using:
    - Manual curl commands to test specific endpoints

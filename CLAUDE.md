@@ -19,4 +19,6 @@ The Sekiban TypeScript implementation is under development. When you encounter m
 
 Every simplified implementation creates garbage code that must be completely rewritten.
 
-[... rest of the existing content remains unchanged ...]
+## TypeScript Development Notes
+
+- When executing TypeScript code and running tests, use typescript-build-tester for code execution and testing for dapr-sample projects

@@ -399,14 +399,63 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           // The actor returns SerializableListQueryResult, we need to convert it
           // For now, check if it's the expected format or needs conversion
           if (result && typeof result === 'object') {
+            // Check if the result has a data property with compressed items
+            if ('isSuccess' in result && 'data' in result && result.data && 
+                'compressedItemsJson' in result.data && result.data.compressedItemsJson) {
+              console.log(`[SekibanDaprExecutor] Deserializing compressed query result from data property`);
+              const deserializeResult = await deserializeListQueryResult(
+                result.data as any,
+                this.domainTypes
+              );
+              
+              if (deserializeResult.isErr()) {
+                console.error(`[SekibanDaprExecutor] Failed to deserialize:`, deserializeResult.error);
+                return {
+                  isSuccess: false,
+                  error: deserializeResult.error.message
+                };
+              }
+              
+              const listResult = deserializeResult.value;
+              return {
+                isSuccess: true,
+                items: listResult.items,
+                totalCount: listResult.totalCount,
+                data: listResult
+              } as ListQueryResponse;
+            }
+            
+            // Check if it's directly a SerializableListQueryResult
+            if ('compressedItemsJson' in result && result.compressedItemsJson) {
+              console.log(`[SekibanDaprExecutor] Deserializing compressed query result directly`);
+              const deserializeResult = await deserializeListQueryResult(
+                result as any,
+                this.domainTypes
+              );
+              
+              if (deserializeResult.isErr()) {
+                console.error(`[SekibanDaprExecutor] Failed to deserialize:`, deserializeResult.error);
+                return {
+                  isSuccess: false,
+                  error: deserializeResult.error.message
+                };
+              }
+              
+              const listResult = deserializeResult.value;
+              return {
+                isSuccess: true,
+                items: listResult.items,
+                totalCount: listResult.totalCount,
+                data: listResult
+              } as ListQueryResponse;
+            }
+            
             // If it has the expected properties, return as-is
-            if ('isSuccess' in result) {
+            if ('isSuccess' in result && 'items' in result) {
               return result as ListQueryResponse;
             }
             
-            // Otherwise, it's a SerializableListQueryResult, convert it
-            // The result should have compressedItemsJson which needs to be decompressed
-            // For now, we'll create a simple response
+            // Fallback for uncompressed results
             return {
               isSuccess: true,
               items: (result as any).items || [],

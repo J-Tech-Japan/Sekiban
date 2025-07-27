@@ -288,7 +288,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     // Calculate safe border (7 seconds ago)
     const safeBorderDate = new Date(Date.now() - this.SAFE_STATE_WINDOW_MS);
     // Generate a SortableUniqueId with the safe border date
-    const safeBorder = SortableUniqueId.generate();
+    // We use getSafeIdFromUtc which already handles the safe window
+    const safeBorder = SortableUniqueId.fromString(SortableUniqueId.getSafeIdFromUtc()).unwrapOr(SortableUniqueId.generate());
     
     // Find split index - events older than safe border
     let splitIndex = -1;
@@ -304,13 +305,19 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     // Process old events
     if (splitIndex >= 0) {
       console.log('Working on old events');
+      // Use minimum possible sortable unique ID value when no lastSortableUniqueId is set
+      const minSortableUniqueId = SortableUniqueId.fromString('000000000000000000000000000000').unwrapOr(SortableUniqueId.generate());
       const sortableUniqueIdFrom = this.safeState?.lastSortableUniqueId 
-        ? SortableUniqueId.fromString(this.safeState.lastSortableUniqueId).unwrapOr(SortableUniqueId.generate())
-        : SortableUniqueId.generate();
+        ? SortableUniqueId.fromString(this.safeState.lastSortableUniqueId).unwrapOr(minSortableUniqueId)
+        : minSortableUniqueId;
       
       // Get old events
       const oldEvents = this.buffer.slice(0, splitIndex + 1)
-        .filter(e => SortableUniqueId.compare(e.sortableUniqueId, sortableUniqueIdFrom) > 0);
+        .filter(e => {
+          const comparison = SortableUniqueId.compare(e.sortableUniqueId, sortableUniqueIdFrom);
+          console.log(`Comparing event ${e.sortableUniqueId.value} with ${sortableUniqueIdFrom.value}: ${comparison}`);
+          return comparison > 0;
+        });
       
       if (oldEvents.length > 0 && (this.domainTypes as any).multiProjectorTypes) {
         // Apply to safe state
@@ -530,6 +537,16 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           firstAggregate: aggregates.length > 0 ? aggregates[0] : 'none'
         });
         
+        if (aggregates.length > 0) {
+          console.log('[Query Debug] First aggregate details:', {
+            hasPayload: !!aggregates[0].payload,
+            payloadType: aggregates[0].payload?.constructor?.name,
+            payloadContent: aggregates[0].payload,
+            aggregateStructure: Object.keys(aggregates[0]),
+            fullAggregate: JSON.stringify(aggregates[0])
+          });
+        }
+        
         // Apply filter if query has handleFilter method
         if (queryInstance.handleFilter && typeof queryInstance.handleFilter === 'function') {
           aggregates = aggregates.filter((aggregate: any) => 
@@ -564,7 +581,26 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           hasPreviousPage: (Math.floor(skip / take) + 1) > 1
         };
         
-        return await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
+        console.log('[Query Debug] Before serialization - listResult:', {
+          totalCount: listResult.totalCount,
+          itemsCount: listResult.items.length,
+          pageSize: listResult.pageSize,
+          pageNumber: listResult.pageNumber,
+          firstItem: listResult.items[0] ? JSON.stringify(listResult.items[0]) : 'none',
+          itemsType: Array.isArray(listResult.items) ? 'array' : typeof listResult.items,
+          itemsContent: JSON.stringify(listResult.items)
+        });
+        
+        const serializedResult = await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
+        
+        console.log('[Query Debug] After serialization - serializedResult:', {
+          hasCompressedItemsJson: !!serializedResult.compressedItemsJson,
+          compressedItemsJsonLength: serializedResult.compressedItemsJson?.length,
+          totalCount: serializedResult.totalCount,
+          recordTypeName: serializedResult.recordTypeName
+        });
+        
+        return serializedResult;
       }
       
       // Fallback for non-list projectors
@@ -612,12 +648,14 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       console.log('[MultiProjectorActor.queryListAsync] Result:', JSON.stringify(result));
       
       // Convert to ListQueryResponse format expected by actor interface
+      // Note: The result is a SerializableListQueryResult which has compressed data
+      // The items will be extracted when deserializing on the client side
       const response: ListQueryResponse = {
         isSuccess: !(result as any).hasError,
         data: result,
         error: (result as any).error ? String((result as any).error) : undefined,
         totalCount: result.totalCount,
-        items: (result as any).values || []
+        items: [] // Items are in the compressed data, will be extracted during deserialization
       };
       
       return response;

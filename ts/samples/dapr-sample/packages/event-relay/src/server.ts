@@ -74,26 +74,28 @@ async function main() {
     try {
       // Handle CloudEvents format (if content-type is application/cloudevents+json)
       let eventData = req.body;
+      let parsedBody = req.body;
       
       // If body came as text, parse it
       if (typeof req.body === 'string') {
         try {
-          const parsed = JSON.parse(req.body);
-          eventData = parsed.data || parsed;
+          parsedBody = JSON.parse(req.body);
+          logger.info('[PubSub] Parsed text body:', JSON.stringify(parsedBody, null, 2));
+          eventData = parsedBody.data || parsedBody;
         } catch (e) {
           logger.error('[PubSub] Failed to parse text body:', e);
         }
       }
       
       // If it's CloudEvents format, extract the data
-      if (req.body.data) {
-        eventData = req.body.data;
+      if (parsedBody.data) {
+        eventData = parsedBody.data;
       }
       
       // If it's base64 encoded data (CloudEvents format from Dapr)
-      if (req.body.data_base64) {
+      if (parsedBody.data_base64) {
         try {
-          const decodedData = Buffer.from(req.body.data_base64, 'base64').toString('utf-8');
+          const decodedData = Buffer.from(parsedBody.data_base64, 'base64').toString('utf-8');
           const parsedData = JSON.parse(decodedData);
           logger.info('[PubSub] Decoded data_base64:', JSON.stringify(parsedData, null, 2));
           

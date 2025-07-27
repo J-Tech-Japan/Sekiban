@@ -57,18 +57,42 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
       partitionKeys: partitionKeys,
       calculatedPartitionKey: partitionKey,
       currentAggregatesSize: payload.aggregates.size,
-      currentAggregatesKeys: Array.from(payload.aggregates.keys())
+      currentAggregatesKeys: Array.from(payload.aggregates.keys()),
+      projectorCanHandle: projector.canHandle(event.eventType)
     })
+    
+    // Check if projector can handle this event type
+    if (!projector.canHandle(event.eventType)) {
+      console.log('[AggregateListProjector.project] Projector cannot handle event type:', event.eventType)
+      return ok(payload) // Return unchanged payload if can't handle
+    }
     
     // Get existing aggregate or create empty one
     const existingAggregate = payload.aggregates.get(partitionKey)
     const aggregate = existingAggregate ?? Aggregate.emptyFromPartitionKeys(partitionKeys)
     
+    console.log('[AggregateListProjector.project] Aggregate details:', {
+      existingAggregate: !!existingAggregate,
+      aggregatePayloadType: aggregate.payload?.constructor.name,
+      isEmptyPayload: aggregate.payload instanceof EmptyAggregatePayload
+    })
+    
     // Project the event onto the aggregate
     const projectedResult = projector.project(aggregate, event)
     
+    console.log('[AggregateListProjector.project] Projection result:', {
+      isOk: projectedResult.isOk(),
+      error: projectedResult.isErr() ? projectedResult.error.message : null
+    })
+    
     return projectedResult.match(
       (projectedAggregate) => {
+        console.log('[AggregateListProjector.project] Projected aggregate details:', {
+          payloadType: projectedAggregate.payload?.constructor.name,
+          isEmptyPayload: projectedAggregate.payload instanceof EmptyAggregatePayload,
+          payload: projectedAggregate.payload
+        })
+        
         // If the result is empty aggregate, don't update the list
         if (projectedAggregate.payload instanceof EmptyAggregatePayload) {
           console.log('[AggregateListProjector.project] Skipping empty aggregate')
