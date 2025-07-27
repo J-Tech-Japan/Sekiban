@@ -16,7 +16,8 @@ import {
   AggregateEventHandlerActorFactory,
   type EventHandlingResponse
 } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
+import { StorageProviderType } from '@sekiban/core';
+// CLAUDE.md: InMemoryEventStore removed - only proper storage implementations allowed
 import { PostgresEventStore } from '@sekiban/postgres';
 import { createCosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
@@ -199,15 +200,8 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
       break;
     }
     
-    case 'inmemory':
     default: {
-      // Initialize in-memory event store
-      // Using in-memory event store
-      eventStore = new InMemoryEventStore({
-        type: StorageProviderType.InMemory,
-        enableLogging: config.NODE_ENV === 'development'
-      });
-      break;
+      throw new Error(`CLAUDE.md violation: Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos' for proper actor implementation. In-memory workarounds are forbidden.`);
     }
   }
 

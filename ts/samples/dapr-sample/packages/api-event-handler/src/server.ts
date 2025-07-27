@@ -1,13 +1,14 @@
 import express from 'express';
 import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
+// CLAUDE.md: InMemoryEventStore removed - only proper storage implementations allowed
 import { PostgresEventStore } from '@sekiban/postgres';
 import { CosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import pg from 'pg';
 import pino from 'pino';
+// Use environment variables directly
 
 const { Pool } = pg;
 
@@ -24,7 +25,7 @@ const logger = pino({
 
 const PORT = process.env.PORT || 3001;
 const DAPR_HTTP_PORT = process.env.DAPR_HTTP_PORT || 3502;
-const STORAGE_TYPE = process.env.STORAGE_TYPE || 'inmemory';
+const STORAGE_TYPE = process.env.STORAGE_TYPE || 'postgres';
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events';
 const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING || '';
 const COSMOS_DATABASE = process.env.COSMOS_DATABASE || 'sekiban-events';
@@ -113,14 +114,8 @@ async function main() {
       break;
     }
     
-    case 'inmemory':
     default: {
-      logger.info('Using in-memory event store');
-      eventStore = new InMemoryEventStore({
-        type: StorageProviderType.InMemory,
-        enableLogging: true
-      });
-      break;
+      throw new Error(`CLAUDE.md violation: Storage type '${STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos' for proper actor implementation. In-memory workarounds are forbidden.`);
     }
   }
 

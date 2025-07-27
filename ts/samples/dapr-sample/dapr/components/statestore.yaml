@@ -3,8 +3,12 @@ kind: Component
 metadata:
   name: statestore
 spec:
-  type: state.in-memory
+  type: state.postgresql
   version: v1
   metadata:
+  - name: connectionString
+    value: "postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events"
   - name: actorStateStore
     value: "true"
+  - name: actorStateStoreTTL
+    value: "15m"

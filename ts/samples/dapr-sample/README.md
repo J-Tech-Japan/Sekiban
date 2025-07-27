@@ -15,7 +15,7 @@ This sample has been updated with critical fixes for Dapr actor integration:
 This sample implements a simple Task management system using:
 - **Sekiban Core** for event sourcing abstractions
 - **Sekiban Dapr** for distributed actor-based aggregates
-- **Event Store Options**: In-memory, PostgreSQL, or Azure Cosmos DB
+- **Event Store Options**: PostgreSQL or Azure Cosmos DB (CLAUDE.md: no in-memory workarounds)
 - **Express.js** for REST API
 
 ## Project Structure
@@ -33,8 +33,7 @@ dapr-sample/
 │   └── config.yaml        # Dapr runtime configuration
 ├── docker-compose.yml     # Docker services (PostgreSQL, Redis)
 ├── run-with-cosmos.sh     # Run with Cosmos DB storage
-├── run-with-postgres.sh   # Run with PostgreSQL storage
-├── run-with-inmemory.sh   # Run with in-memory storage
+├── run-with-postgres.sh   # Run with PostgreSQL storage (recommended)
 └── run-all-services.sh    # Run all services with specified storage
 ```
 
@@ -159,7 +158,7 @@ PUT /api/tasks/:id/complete
 ## Configuration
 
 Environment variables (see `.env.example`):
-- `STORAGE_TYPE` - Event store type: `inmemory`, `postgres`, or `cosmos` (default: `inmemory`)
+- `STORAGE_TYPE` - Event store type: `inmemory`, `postgres`, or `cosmos` (default: `postgres`)
 - `DAPR_HTTP_PORT` - If set, enables Dapr mode
 - `DATABASE_URL` - PostgreSQL connection string (required when `STORAGE_TYPE=postgres`)
 - `COSMOS_CONNECTION_STRING` - Azure Cosmos DB connection string (required when `STORAGE_TYPE=cosmos`)
