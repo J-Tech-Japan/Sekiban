@@ -20,6 +20,10 @@ interface PubSubEventData {
   data: any;
   rootPartitionKey?: string;
   tenantId?: string;
+  partitionKey?: string;
+  causationId?: string;
+  correlationId?: string;
+  executedUser?: string;
 }
 
 async function main() {
@@ -90,12 +94,15 @@ async function main() {
       if (req.body.data_base64) {
         try {
           const decodedData = Buffer.from(req.body.data_base64, 'base64').toString('utf-8');
-          eventData = JSON.parse(decodedData);
-          logger.info('[PubSub] Decoded data_base64:', JSON.stringify(eventData, null, 2));
+          const parsedData = JSON.parse(decodedData);
+          logger.info('[PubSub] Decoded data_base64:', JSON.stringify(parsedData, null, 2));
           
           // Extract the nested data if it exists
-          if (eventData.data) {
-            eventData = eventData.data;
+          if (parsedData.data) {
+            eventData = parsedData.data;
+            logger.info('[PubSub] Extracted nested data:', JSON.stringify(eventData, null, 2));
+          } else {
+            eventData = parsedData;
           }
         } catch (e) {
           logger.error('[PubSub] Failed to decode data_base64:', e);
@@ -121,14 +128,17 @@ async function main() {
         eventType: eventData.PayloadTypeName || eventData.eventType || eventData.type,
         version: eventData.Version || eventData.version,
         sortKey: eventData.SortableUniqueId || eventData.sortableUniqueId || eventData.sortKey,
-        created: eventData.TimeStamp || eventData.timestamp || eventData.created,
+        created: eventData.TimeStamp || eventData.timestamp || eventData.createdAt || eventData.created,
         data: eventData.payload || eventData.data || eventData,
         rootPartitionKey: eventData.RootPartitionKey || eventData.rootPartitionKey,
         tenantId: eventData.tenantId,
-        partitionKey: eventData.PartitionKey || eventData.partitionKey,
-        causationId: eventData.CausationId || eventData.causationId,
-        correlationId: eventData.CorrelationId || eventData.correlationId,
-        executedUser: eventData.ExecutedUser || eventData.executedUser
+        partitionKey: eventData.PartitionKey || eventData.partitionKey || eventData.PartitionKeys,
+        causationId: eventData.CausationId || eventData.causationId || (eventData.metadata && eventData.metadata.causationId),
+        correlationId: eventData.CorrelationId || eventData.correlationId || (eventData.metadata && eventData.metadata.correlationId),
+        executedUser: eventData.ExecutedUser || eventData.executedUser || (eventData.metadata && eventData.metadata.executedUser),
+        // Additional fields for compatibility
+        partitionKeys: eventData.partitionKeys,
+        metadata: eventData.metadata
       };
       
       logger.info('[PubSub] Mapped event data:', {
@@ -250,11 +260,49 @@ async function distributeEvent(eventData: PubSubEventData) {
       }
       
       // Wrap event in DaprEventEnvelope format
+      // Include both TypeScript and C# field names for compatibility
       const eventEnvelope = {
-        event: eventData,
+        event: {
+          ...eventData,
+          // Ensure C# field names are included
+          Id: eventData.id,
+          AggregateId: eventData.aggregateId,
+          AggregateGroup: eventData.aggregateType,
+          SortableUniqueId: eventData.sortKey,
+          Version: eventData.version,
+          PayloadTypeName: eventData.eventType,
+          TimeStamp: eventData.created,
+          PartitionKey: eventData.partitionKey,
+          CausationId: eventData.causationId,
+          CorrelationId: eventData.correlationId,
+          ExecutedUser: eventData.executedUser,
+          RootPartitionKey: eventData.rootPartitionKey,
+          // Include TypeScript field names
+          id: eventData.id,
+          aggregateId: eventData.aggregateId,
+          aggregateType: eventData.aggregateType,
+          sortableUniqueId: eventData.sortKey,
+          version: eventData.version,
+          eventType: eventData.eventType,
+          createdAt: eventData.created,
+          payload: eventData.data,
+          metadata: {
+            causationId: eventData.causationId,
+            correlationId: eventData.correlationId,
+            executedUser: eventData.executedUser
+          },
+          partitionKeys: {
+            aggregateId: eventData.aggregateId,
+            group: eventData.aggregateType,
+            partitionKey: eventData.partitionKey
+          }
+        },
         topic: 'sekiban-events',
         pubsubName: 'pubsub'
       };
+      
+      // Log the event envelope being sent
+      logger.info(`[Distributor] Sending event envelope to ${actorId}:`, JSON.stringify(eventEnvelope, null, 2));
       
       promises.push(
         fetch(url, {
