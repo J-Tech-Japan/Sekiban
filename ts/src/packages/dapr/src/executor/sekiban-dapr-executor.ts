@@ -11,6 +11,16 @@ import type {
   Metadata
 } from '@sekiban/core';
 import { SekibanError, QueryExecutionError } from '@sekiban/core';
+
+/**
+ * Error class for Dapr actor errors
+ */
+class DaprActorError extends SekibanError {
+  readonly code = 'DAPR_ACTOR_ERROR';
+  constructor(message: string) {
+    super(message);
+  }
+}
 import type { 
   DaprSekibanConfiguration,
   SekibanCommandResponse,
@@ -22,8 +32,7 @@ import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
 import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
-import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor, ActorMultiProjectionState, DaprEventEnvelope, SerializableQueryResult, SerializableListQueryResult } from '../actors/interfaces.js';
-import { deserializeListQueryResult } from '../actors/serializable-query-results.js';
+import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor } from '../actors/interfaces.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -143,7 +152,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       command = commandOrInstance;
       // Extract data from the command instance
       // The command instance has a 'data' property
-      data = (commandOrInstance as any).data || {} as TCommand;
+      // Check if the command instance has a data property
+      const commandWithData = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload> & { data?: TCommand };
+      data = commandWithData.data || {} as TCommand;
     } else {
       // Separate command and data
       command = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
@@ -170,7 +181,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorProxy = this.createActorProxy(actorId);
       
       // Prepare command with metadata in SerializableCommandAndMetadata format (matches C#)
-      const commandTypeName = command.commandType || (command as any).type || command.constructor.name;
+      const commandTypeName = command.commandType || command.constructor.name;
       const projectorTypeName = projector.constructor.name;
       
       const commandWithMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload> = {
@@ -180,7 +191,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         metadata: {
           causationId: metadata?.causationId || crypto.randomUUID(),
           correlationId: metadata?.correlationId || crypto.randomUUID(),
-          executedUser: metadata?.executedUser || (metadata?.custom as any)?.user || 'system',
+          executedUser: metadata?.executedUser || (typeof metadata?.custom?.user === 'string' ? metadata.custom.user : undefined) || 'system',
           timestamp: metadata?.timestamp || new Date(),
           custom: {
             commandId: crypto.randomUUID(),
@@ -243,13 +254,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(commandResponse);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
@@ -321,184 +325,26 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
   }
   
   /**
-   * Create multi-projector actor proxy with HTTP-based implementation
+   * Create multi-projector actor proxy using proper Dapr actor pattern
    */
   private createMultiProjectorActorProxy(projectorName: string): IMultiProjectorActor {
     console.log(`[SekibanDaprExecutor] Creating MultiProjectorActor proxy for: ${projectorName}`);
     
-    const targetAppId = this.configuration.multiProjectorAppId || 'dapr-sample-multi-projector';
-    const actorType = 'MultiProjectorActor';
-    const daprPort = this.daprClient.options.daprPort || '3500';
-    const daprHost = this.daprClient.options.daprHost || '127.0.0.1';
+    // Get the actual actor class from the factory
+    const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
     
-    console.log(`[SekibanDaprExecutor] Target app-id: ${targetAppId}, Actor type: ${actorType}`);
+    // Create ActorProxyBuilder with the actual actor class
+    const actorProxyBuilder = new ActorProxyBuilder<IMultiProjectorActor>(
+      MultiProjectorActorClass,
+      this.daprClient
+    );
     
-    // Create a custom proxy that uses HTTP API directly
-    const proxy: IMultiProjectorActor = {
-      queryAsync: async (query: SerializableQuery): Promise<QueryResponse> => {
-        const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${projectorName}/method/queryAsync`;
-        console.log(`[SekibanDaprExecutor] Calling actor method at: ${url}`);
-        
-        try {
-          const response = await fetch(url, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'dapr-app-id': targetAppId
-            },
-            body: JSON.stringify(query)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[SekibanDaprExecutor] Actor call failed: ${response.status} ${errorText}`);
-            return {
-              isSuccess: false,
-              error: `Actor call failed: ${response.status} ${errorText}`
-            };
-          }
-          
-          const result = await response.json();
-          console.log(`[SekibanDaprExecutor] Actor response:`, result);
-          return result as QueryResponse;
-        } catch (error) {
-          console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
-          return {
-            isSuccess: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          };
-        }
-      },
-      
-      queryListAsync: async (query: SerializableListQuery): Promise<ListQueryResponse> => {
-        const url = `http://${daprHost}:${daprPort}/v1.0/actors/${actorType}/${projectorName}/method/queryListAsync`;
-        console.log(`[SekibanDaprExecutor] Calling list actor method at: ${url}`);
-        
-        try {
-          const response = await fetch(url, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'dapr-app-id': targetAppId
-            },
-            body: JSON.stringify(query)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[SekibanDaprExecutor] Actor list call failed: ${response.status} ${errorText}`);
-            return {
-              isSuccess: false,
-              error: `Actor call failed: ${response.status} ${errorText}`
-            };
-          }
-          
-          const result = await response.json();
-          console.log(`[SekibanDaprExecutor] Actor list response:`, result);
-          
-          // The actor returns SerializableListQueryResult, we need to convert it
-          // For now, check if it's the expected format or needs conversion
-          if (result && typeof result === 'object') {
-            // Check if the result has a data property with compressed items
-            if ('isSuccess' in result && 'data' in result && result.data && 
-                'compressedItemsJson' in result.data && result.data.compressedItemsJson) {
-              console.log(`[SekibanDaprExecutor] Deserializing compressed query result from data property`);
-              const deserializeResult = await deserializeListQueryResult(
-                result.data as any,
-                this.domainTypes
-              );
-              
-              if (deserializeResult.isErr()) {
-                console.error(`[SekibanDaprExecutor] Failed to deserialize:`, deserializeResult.error);
-                return {
-                  isSuccess: false,
-                  error: deserializeResult.error.message
-                };
-              }
-              
-              const listResult = deserializeResult.value;
-              return {
-                isSuccess: true,
-                items: listResult.items,
-                totalCount: listResult.totalCount,
-                data: listResult
-              } as ListQueryResponse;
-            }
-            
-            // Check if it's directly a SerializableListQueryResult
-            if ('compressedItemsJson' in result && result.compressedItemsJson) {
-              console.log(`[SekibanDaprExecutor] Deserializing compressed query result directly`);
-              const deserializeResult = await deserializeListQueryResult(
-                result as any,
-                this.domainTypes
-              );
-              
-              if (deserializeResult.isErr()) {
-                console.error(`[SekibanDaprExecutor] Failed to deserialize:`, deserializeResult.error);
-                return {
-                  isSuccess: false,
-                  error: deserializeResult.error.message
-                };
-              }
-              
-              const listResult = deserializeResult.value;
-              return {
-                isSuccess: true,
-                items: listResult.items,
-                totalCount: listResult.totalCount,
-                data: listResult
-              } as ListQueryResponse;
-            }
-            
-            // If it has the expected properties, return as-is
-            if ('isSuccess' in result && 'items' in result) {
-              return result as ListQueryResponse;
-            }
-            
-            // Fallback for uncompressed results
-            return {
-              isSuccess: true,
-              items: (result as any).items || [],
-              totalCount: (result as any).totalCount || 0,
-              data: result
-            } as ListQueryResponse;
-          }
-          
-          return {
-            isSuccess: false,
-            error: 'Invalid response format'
-          };
-        } catch (error) {
-          console.error(`[SekibanDaprExecutor] Network error calling actor:`, error);
-          return {
-            isSuccess: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          };
-        }
-      },
-      
-      isSortableUniqueIdReceived: async (sortableUniqueId: string): Promise<boolean> => {
-        // Not implemented for now
-        return false;
-      },
-      
-      buildStateAsync: async (): Promise<ActorMultiProjectionState> => {
-        // Not implemented for now
-        throw new Error('Not implemented');
-      },
-      
-      rebuildStateAsync: async (): Promise<void> => {
-        // Not implemented for now
-        throw new Error('Not implemented');
-      },
-      
-      handlePublishedEvent: async (envelope: DaprEventEnvelope): Promise<void> => {
-        // Not implemented for now
-        throw new Error('Not implemented');
-      }
-    };
+    // Build the actor proxy with the actor ID (projectorName is the actor ID)
+    const actor = actorProxyBuilder.build(new ActorId(projectorName));
     
-    return proxy;
+    console.log(`[SekibanDaprExecutor] Created MultiProjectorActor proxy for actor ID: ${projectorName}`);
+    
+    return actor;
   }
   
   /**
@@ -577,13 +423,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
@@ -625,13 +464,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }

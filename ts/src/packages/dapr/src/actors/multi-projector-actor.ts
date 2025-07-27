@@ -9,12 +9,12 @@ import {
   err,
   Result,
   OptionalValue,
-  AggregateGroupStream
+  AggregateGroupStream,
+  IMultiProjector,
+  IMultiProjectorCommon
 } from '@sekiban/core';
-// @ts-ignore - TypeScript is having trouble resolving these exports
-import type { IMultiProjector, IMultiProjectorCommon } from '@sekiban/core';
 
-// Define the interface locally since there's an import issue
+// Define the state interface for multi-projectors
 interface IMultiProjectorStateCommon {
   projectorCommon: IMultiProjectorCommon
   lastEventId: string
@@ -85,7 +85,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     super(daprClient, id);
     
     // Extract actor ID string
-    this.actorIdString = (id as any).id || String(id);
+    this.actorIdString = id.getId();
     
     // Get dependencies from Awilix container
     const cradle = getDaprCradle();
@@ -209,7 +209,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log('SafeState Version:', this.safeState?.version ?? 0);
     
     if (this.safeState?.projectorCommon && 'getAggregates' in this.safeState.projectorCommon) {
-      const accessor = this.safeState.projectorCommon as any;
+      type AggregateAccessor = { getAggregates(): any[] };
+      const accessor = this.safeState.projectorCommon as AggregateAccessor;
       console.log('SafeState list count:', accessor.getAggregates().length);
     }
     
@@ -217,7 +218,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log('UnsafeState Version:', this.unsafeState?.version ?? 0);
     
     if (this.unsafeState?.projectorCommon && 'getAggregates' in this.unsafeState.projectorCommon) {
-      const accessor = this.unsafeState.projectorCommon as any;
+      type AggregateAccessor = { getAggregates(): any[] };
+      const accessor = this.unsafeState.projectorCommon as AggregateAccessor;
       console.log('UnsafeState list count:', accessor.getAggregates().length);
     }
   }
@@ -319,10 +321,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
           return comparison > 0;
         });
       
-      if (oldEvents.length > 0 && (this.domainTypes as any).multiProjectorTypes) {
+      if (oldEvents.length > 0 && this.domainTypes.multiProjectorTypes) {
         // Apply to safe state
         const currentProjector = this.safeState?.projectorCommon ?? projector;
-        const newSafeStateResult = (this.domainTypes as any).multiProjectorTypes.projectEvents(currentProjector, oldEvents);
+        const newSafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(currentProjector, oldEvents);
         
         if (newSafeStateResult.isOk()) {
           const lastOldEvt = oldEvents[oldEvents.length - 1];
@@ -347,8 +349,8 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     console.log(`After worked old events Total ${this.buffer.length} events`);
     
     // Process remaining (newer) events for unsafe state
-    if (this.buffer.length > 0 && this.safeState && (this.domainTypes as any).multiProjectorTypes) {
-      const newUnsafeStateResult = (this.domainTypes as any).multiProjectorTypes.projectEvents(
+    if (this.buffer.length > 0 && this.safeState && this.domainTypes.multiProjectorTypes) {
+      const newUnsafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(
         this.safeState.projectorCommon, 
         this.buffer
       );
@@ -418,12 +420,18 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       
       // Get the query class by name
       if (!this.domainTypes.queryTypes) {
-        throw new Error('Query types not available');
+        return await this.createErrorQueryResult(
+          new Error('Query types not available'),
+          query
+        );
       }
       
       const queryTypeInfo = this.domainTypes.queryTypes.getQueryTypeByName(query.queryType);
       if (!queryTypeInfo) {
-        throw new Error(`Query type not found: ${query.queryType}`);
+        return await this.createErrorQueryResult(
+          new Error(`Query type not found: ${query.queryType}`),
+          query
+        );
       }
       
       // Create query instance
@@ -438,7 +446,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Get the projector state for query
       const projectionState = await this.getProjectorForQuery();
       if (!projectionState) {
-        throw new Error('Failed to get projector state');
+        return await this.createErrorQueryResult(
+          new Error('Failed to get projector state'),
+          query
+        );
       }
       
       // For now, we'll execute the query manually
@@ -460,20 +471,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       return await createSerializableQueryResult(queryResult, queryInstance, this.domainTypes);
     } catch (error) {
       console.error('Error executing query:', error);
-      
-      // Create error result
-      const errorResult = await createSerializableQueryResultFromResult(
-        err(error),
-        query,
-        this.domainTypes
-      );
-      
-      if (errorResult.isErr()) {
-        // If we can't even serialize the error, throw
-        throw errorResult.error;
-      }
-      
-      return errorResult.value;
+      return await this.createErrorQueryResult(error, query);
     }
   }
   
@@ -484,19 +482,28 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Get the appropriate state
       const projectionState = await this.getProjectorForQuery();
       if (!projectionState) {
-        throw new Error('Failed to get projector state');
+        return await this.createErrorListQueryResult(
+          new Error('Failed to get projector state'),
+          query
+        );
       }
       const state = projectionState.projectorCommon;
       
       // Execute the query using domain types
       if (!this.domainTypes.queryTypes) {
-        throw new Error('Query types not available');
+        return await this.createErrorListQueryResult(
+          new Error('Query types not available'),
+          query
+        );
       }
       
       // Get the query class by name
       const queryTypeInfo = this.domainTypes.queryTypes.getQueryTypeByName(query.queryType);
       if (!queryTypeInfo) {
-        throw new Error(`Query type not found: ${query.queryType}`);
+        return await this.createErrorListQueryResult(
+          new Error(`Query type not found: ${query.queryType}`),
+          query
+        );
       }
       
       // Create query instance
@@ -519,11 +526,12 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
         stateExists: !!state,
         stateType: state ? state.constructor.name : 'null',
         hasGetAggregates: state && 'getAggregates' in state,
-        aggregatesProperty: state && 'aggregates' in state ? (state as any).aggregates : 'not found'
+        aggregatesProperty: state && 'aggregates' in state ? (state as AggregateAccessor).aggregates : 'not found'
       });
       
       if (state && 'getAggregates' in state) {
-        const accessor = state as any;
+        type AggregateAccessor = { getAggregates(): any[]; aggregates?: Map<string, any> };
+        const accessor = state as AggregateAccessor;
         let aggregates = accessor.getAggregates();
         
         console.log('[Query Debug] State inspection:', {
@@ -617,20 +625,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       return await createSerializableListQueryResult(emptyResult, queryInstance, this.domainTypes);
     } catch (error) {
       console.error('Error executing list query:', error);
-      
-      // Create error result
-      const errorResult = await createSerializableListQueryResultFromResult(
-        err(error),
-        query,
-        this.domainTypes
-      );
-      
-      if (errorResult.isErr()) {
-        // If we can't even serialize the error, throw
-        throw errorResult.error;
-      }
-      
-      return errorResult.value;
+      return await this.createErrorListQueryResult(error, query);
     }
   }
   
@@ -651,10 +646,10 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       // Note: The result is a SerializableListQueryResult which has compressed data
       // The items will be extracted when deserializing on the client side
       const response: ListQueryResponse = {
-        isSuccess: !(result as any).hasError,
+        isSuccess: true,
         data: result,
-        error: (result as any).error ? String((result as any).error) : undefined,
-        totalCount: result.totalCount,
+        error: undefined,
+        totalCount: result.totalCount || 0,
         items: [] // Items are in the compressed data, will be extracted during deserialization
       };
       
@@ -753,7 +748,7 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   async queryAsync(query: SerializableQuery): Promise<QueryResponse> {
     const result = await this.query(query);
     return {
-      isSuccess: !(result as any).hasError,
+      isSuccess: true,
       data: result
     };
   }
@@ -833,12 +828,12 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
   }
   
   private getProjectorFromName(): IMultiProjector<any> | undefined {
-    if (!(this.domainTypes as any).multiProjectorTypes) {
+    if (!this.domainTypes.multiProjectorTypes) {
       console.error('MultiProjectorTypes not available');
       return undefined;
     }
     
-    return (this.domainTypes as any).multiProjectorTypes.getProjectorFromMultiProjectorName(this.actorIdString);
+    return this.domainTypes.multiProjectorTypes.getProjectorFromMultiProjectorName(this.actorIdString);
   }
   
   private async getProjectorForQuery(): Promise<IMultiProjectorStateCommon | null> {
@@ -884,10 +879,27 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       const serializedEvent = envelope.event;
       
       // Handle field name variations from event-relay
-      const sortableUniqueIdString = serializedEvent.sortableUniqueId || (serializedEvent as any).sortKey || (serializedEvent as any).SortableUniqueId;
-      const aggregateIdValue = serializedEvent.aggregateId || (serializedEvent as any).AggregateId;
-      const eventTypeValue = serializedEvent.eventType || (serializedEvent as any).type || (serializedEvent as any).PayloadTypeName;
-      const createdAtValue = serializedEvent.createdAt || (serializedEvent as any).created || (serializedEvent as any).TimeStamp;
+      // Create a type for the flexible event format
+      type FlexibleEvent = typeof serializedEvent & {
+        sortKey?: string;
+        SortableUniqueId?: string;
+        AggregateId?: string;
+        type?: string;
+        PayloadTypeName?: string;
+        created?: string;
+        TimeStamp?: string;
+        Id?: string;
+        RootPartitionKey?: string;
+        Version?: number;
+        data?: any;
+        PartitionKey?: string;
+      };
+      const flexEvent = serializedEvent as FlexibleEvent;
+      
+      const sortableUniqueIdString = flexEvent.sortableUniqueId || flexEvent.sortKey || flexEvent.SortableUniqueId;
+      const aggregateIdValue = flexEvent.aggregateId || flexEvent.AggregateId;
+      const eventTypeValue = flexEvent.eventType || flexEvent.type || flexEvent.PayloadTypeName;
+      const createdAtValue = flexEvent.createdAt || flexEvent.created || flexEvent.TimeStamp;
       
       if (!sortableUniqueIdString || !aggregateIdValue) {
         console.error('Missing required fields in event:', { sortableUniqueIdString, aggregateIdValue });
@@ -896,16 +908,16 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       
       // Convert SerializableEventDocument to IEvent
       const event: IEvent = {
-        id: SortableUniqueId.fromString(serializedEvent.id || (serializedEvent as any).Id || '').unwrapOr(SortableUniqueId.generate()),
+        id: SortableUniqueId.fromString(flexEvent.id || flexEvent.Id || '').unwrapOr(SortableUniqueId.generate()),
         sortableUniqueId: SortableUniqueId.fromString(sortableUniqueIdString).unwrapOr(SortableUniqueId.generate()),
         aggregateId: aggregateIdValue,
         partitionKeys: serializedEvent.partitionKeys || {
           aggregateId: aggregateIdValue,
-          group: (serializedEvent as any).RootPartitionKey || serializedEvent.aggregateType || 'default'
+          group: flexEvent.RootPartitionKey || flexEvent.aggregateType || 'default'
         },
-        version: serializedEvent.version || (serializedEvent as any).Version || 1,
+        version: flexEvent.version || flexEvent.Version || 1,
         eventType: eventTypeValue,
-        payload: serializedEvent.payload || (serializedEvent as any).data || serializedEvent,
+        payload: flexEvent.payload || flexEvent.data || serializedEvent,
         metadata: serializedEvent.metadata || {},
         timestamp: createdAtValue ? new Date(createdAtValue) : new Date(),
         partitionKey: serializedEvent.PartitionKey || '',
@@ -927,5 +939,59 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
       console.error('Event data:', envelope.event);
       return null;
     }
+  }
+  
+  /**
+   * Helper method to create error query result
+   */
+  private async createErrorQueryResult(error: any, query: SerializableQuery): Promise<SerializableQueryResult> {
+    const errorResult = await createSerializableQueryResultFromResult(
+      err(error),
+      query,
+      this.domainTypes
+    );
+    
+    if (errorResult.isErr()) {
+      // If we can't even serialize the error, return a basic error result
+      console.error('Failed to serialize error result:', errorResult.error);
+      return {
+        resultTypeName: 'Error',
+        queryTypeName: query.queryType,
+        compressedResultJson: Buffer.from(JSON.stringify({ error: String(error) })),
+        compressedQueryJson: Buffer.from(JSON.stringify(query)),
+        resultAssemblyVersion: '0.0.0.0'
+      };
+    }
+    
+    return errorResult.value;
+  }
+  
+  /**
+   * Helper method to create error list query result
+   */
+  private async createErrorListQueryResult(error: any, query: SerializableListQuery): Promise<SerializableListQueryResult> {
+    const errorResult = await createSerializableListQueryResultFromResult(
+      err(error),
+      query,
+      this.domainTypes
+    );
+    
+    if (errorResult.isErr()) {
+      // If we can't even serialize the error, return a basic error result
+      console.error('Failed to serialize error result:', errorResult.error);
+      return {
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: 1,
+        pageSize: 0,
+        recordTypeName: 'Error',
+        queryTypeName: query.queryType,
+        compressedItemsJson: Buffer.from(JSON.stringify({ error: String(error) })),
+        compressedQueryJson: Buffer.from(JSON.stringify(query)),
+        itemsAssemblyVersion: '0.0.0.0'
+      };
+    }
+    
+    return errorResult.value;
   }
 }

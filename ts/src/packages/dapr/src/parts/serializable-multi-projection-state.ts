@@ -1,6 +1,9 @@
-import { SekibanDomainTypes, OptionalValue } from '@sekiban/core';
-// @ts-ignore - TypeScript is having trouble resolving these exports
-import type { IMultiProjector, IMultiProjectorCommon } from '@sekiban/core';
+import { 
+  SekibanDomainTypes, 
+  OptionalValue,
+  IMultiProjector, 
+  IMultiProjectorCommon 
+} from '@sekiban/core';
 
 // Define the interface locally since there's an import issue
 interface IMultiProjectorStateCommon {
