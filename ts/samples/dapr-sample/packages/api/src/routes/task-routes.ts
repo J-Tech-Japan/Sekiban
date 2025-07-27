@@ -174,7 +174,8 @@ router.get(
       }
       
       console.log('[GET ALL] Query result:', result.value);
-      const tasks = result.value || [];
+      const queryResult = result.value || { items: [] };
+      const tasks = queryResult.items || [];
       
       // Transform results to response format
       const transformedTasks = tasks.map((item: any) => {
@@ -203,9 +204,9 @@ router.get(
         transformedTasks;
       
       res.json({
-        data: filteredTasks.slice(query.offset, query.offset + query.limit),
+        data: filteredTasks,
         pagination: {
-          total: filteredTasks.length,
+          total: queryResult.totalCount || filteredTasks.length,
           limit: query.limit,
           offset: query.offset
         }

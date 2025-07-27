@@ -33,6 +33,7 @@ import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
 import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
 import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor } from '../actors/interfaces.js';
+import { deserializeListQueryResult } from '../actors/serializable-query-results.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -404,8 +405,25 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           return err(new QueryExecutionError('query', response.error || 'Query execution failed'));
         }
         
+        // Handle list query response - need to deserialize the compressed data
+        if (isListQuery && response.data) {
+          console.log(`[SekibanDaprExecutor] Deserializing list query response`);
+          const deserializedResult = await deserializeListQueryResult(
+            response.data,
+            this.domainTypes
+          );
+          
+          if (deserializedResult.isErr()) {
+            console.error(`[SekibanDaprExecutor] Failed to deserialize list query result:`, deserializedResult.error);
+            return err(new QueryExecutionError('query', 'Failed to deserialize query result'));
+          }
+          
+          console.log(`[SekibanDaprExecutor] Deserialized items count: ${deserializedResult.value.items.length}`);
+          return ok(deserializedResult.value as T);
+        }
+        
         // Return the data from the response
-        return ok((isListQuery ? (response as ListQueryResponse).items : response.data) as T);
+        return ok(response.data as T);
       }
       
       // Original single-aggregate query logic
