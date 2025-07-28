@@ -8,6 +8,8 @@ import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorPro
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
+import { CosmosClient } from '@azure/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -151,8 +153,40 @@ async function setupDaprActorsWithApp(app: express.Express) {
       break;
     }
     
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      logger.info('Using Cosmos DB event store');
+      
+      if (!config.COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING is required when using cosmos storage');
+      }
+      
+      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+      eventStore = new CosmosEventStore(
+        cosmosClient,
+        config.COSMOS_DATABASE!,
+        config.COSMOS_CONTAINER!
+      );
+      
+      // Initialize the Cosmos DB container
+      logger.info('Initializing Cosmos DB container...');
+      try {
+        const result = await eventStore.initialize();
+        if (result.isOk()) {
+          logger.info('Cosmos DB container initialized successfully');
+        } else {
+          logger.error('Failed to initialize Cosmos DB container:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize Cosmos DB:', error);
+        throw error;
+      }
+      break;
+    }
+    
     default: {
-      throw new Error(`CLAUDE.md violation: Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' for proper actor implementation.`);
+      throw new Error(`Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos'.`);
     }
   }
 
