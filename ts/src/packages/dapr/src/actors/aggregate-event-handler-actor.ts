@@ -1,8 +1,5 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
-import type { PartitionKeys } from '@sekiban/core';
-// @ts-ignore - These are exported from core
-import type { IEventStore } from '@sekiban/core';
-// @ts-ignore - These are exported from core
+import type { PartitionKeys, IEventStore } from '@sekiban/core';
 import { EventRetrievalInfo, AggregateGroupStream, SortableUniqueId } from '@sekiban/core';
 import { getDaprCradle } from '../container/index.js';
 import type {

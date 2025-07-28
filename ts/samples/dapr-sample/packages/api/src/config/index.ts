@@ -18,7 +18,7 @@ const ConfigSchema = z.object({
   ACTOR_SERVER_PORT: z.string().default('50010').transform(Number),
   
   // Storage configuration
-  STORAGE_TYPE: z.enum(['inmemory', 'postgres', 'cosmos']).default('inmemory'),
+  STORAGE_TYPE: z.enum(['postgres', 'cosmos']).default('postgres'),
   
   // PostgreSQL configuration
   DATABASE_URL: z.string().default('postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'),

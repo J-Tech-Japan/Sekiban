@@ -1,4 +1,31 @@
-import { SekibanDomainTypes, IMultiProjectorCommon, OptionalValue } from '@sekiban/core';
+import { 
+  SekibanDomainTypes, 
+  OptionalValue,
+  IMultiProjector, 
+  IMultiProjectorCommon,
+  Result 
+} from '@sekiban/core';
+
+// Define interfaces for domain types with multi-projector support
+interface IMultiProjectorTypes {
+  serializeMultiProjector(projector: IMultiProjectorCommon): Promise<Result<string, string>>;
+  deserializeMultiProjector(payloadJson: string, typeName: string): Promise<Result<IMultiProjectorCommon, string>>;
+  getMultiProjectorNameFromMultiProjector(projector: IMultiProjectorCommon): Result<string, string>;
+}
+
+interface SekibanDomainTypesWithMultiProjector extends SekibanDomainTypes {
+  multiProjectorTypes?: IMultiProjectorTypes;
+}
+
+// Define the interface locally since there's an import issue
+interface IMultiProjectorStateCommon {
+  projectorCommon: IMultiProjectorCommon
+  lastEventId: string
+  lastSortableUniqueId: string
+  version: number
+  appliedSnapshotVersion: number
+  rootPartitionKey: string
+}
 import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
@@ -12,7 +39,7 @@ const gunzipAsync = promisify(gunzip);
  */
 export interface SerializableMultiProjectionState {
   /**
-   * The compressed JSON representation of the IMultiProjectorCommon Payload
+   * The compressed JSON representation of the IMultiProjector Payload
    */
   compressedPayloadJson?: Buffer;
   
@@ -52,14 +79,7 @@ export interface SerializableMultiProjectionState {
   rootPartitionKey: string;
 }
 
-export interface MultiProjectionState {
-  projectorCommon: IMultiProjectorCommon;
-  lastEventId: string;
-  lastSortableUniqueId: string;
-  version: number;
-  appliedSnapshotVersion: number;
-  rootPartitionKey: string;
-}
+export type MultiProjectionState = IMultiProjectorStateCommon;
 
 /**
  * Creates a SerializableMultiProjectionState from a MultiProjectionState
@@ -69,13 +89,14 @@ export async function createSerializableMultiProjectionState(
   domainTypes: SekibanDomainTypes
 ): Promise<SerializableMultiProjectionState> {
   const projector = state.projectorCommon;
+  const typedDomainTypes = domainTypes as SekibanDomainTypesWithMultiProjector;
   
-  if (!domainTypes.multiProjectorTypes) {
+  if (!typedDomainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
   // Use IMultiProjectorTypes for serialization
-  const serializedPayloadResult = await domainTypes.multiProjectorTypes.serializeMultiProjector(projector);
+  const serializedPayloadResult = await typedDomainTypes.multiProjectorTypes.serializeMultiProjector(projector);
   
   if (serializedPayloadResult.isErr()) {
     throw new Error(`Failed to serialize projector: ${serializedPayloadResult.error}`);
@@ -86,9 +107,16 @@ export async function createSerializableMultiProjectionState(
   
   const versionString = projector.getVersion();
   
+  // Get the multi-projector name (e.g., "aggregatelistprojector-task") instead of constructor name
+  const multiProjectorNameResult = typedDomainTypes.multiProjectorTypes.getMultiProjectorNameFromMultiProjector(projector);
+  if (multiProjectorNameResult.isErr()) {
+    throw new Error(`Failed to get multi-projector name: ${multiProjectorNameResult.error}`);
+  }
+  const multiProjectorName = multiProjectorNameResult.value;
+  
   return {
     compressedPayloadJson: compressedPayload,
-    payloadTypeName: projector.constructor.name,
+    payloadTypeName: multiProjectorName,  // Use the registered name, not constructor.name
     payloadVersion: versionString,
     lastEventId: state.lastEventId,
     lastSortableUniqueId: state.lastSortableUniqueId,
@@ -109,7 +137,8 @@ export async function toMultiProjectionState(
     return null;
   }
   
-  if (!domainTypes.multiProjectorTypes) {
+  const typedDomainTypes = domainTypes as SekibanDomainTypesWithMultiProjector;
+  if (!typedDomainTypes.multiProjectorTypes) {
     throw new Error('MultiProjectorTypes not available');
   }
   
@@ -118,7 +147,7 @@ export async function toMultiProjectionState(
     const payloadJson = (await gunzipAsync(serialized.compressedPayloadJson)).toString('utf-8');
     
     // Use IMultiProjectorTypes for deserialization
-    const projectorResult = await domainTypes.multiProjectorTypes.deserializeMultiProjector(
+    const projectorResult = await typedDomainTypes.multiProjectorTypes.deserializeMultiProjector(
       payloadJson,
       serialized.payloadTypeName
     );

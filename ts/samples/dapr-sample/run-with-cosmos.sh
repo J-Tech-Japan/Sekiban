@@ -59,5 +59,7 @@ export COSMOS_DATABASE
 export COSMOS_CONTAINER
 
 # Run all services with Cosmos DB configuration
+# Note: Uses in-memory state store for Dapr actors
 echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
+echo -e "${YELLOW}ℹ️  Using in-memory state store for Dapr actors${NC}"
 ./run-all-services.sh

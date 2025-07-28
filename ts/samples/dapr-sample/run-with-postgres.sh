@@ -47,5 +47,7 @@ else
 fi
 
 # Run all services with PostgreSQL configuration
+# Note: Uses in-memory state store for Dapr actors
 echo -e "${GREEN}🚀 Starting all services with PostgreSQL...${NC}"
+echo -e "${YELLOW}ℹ️  Using in-memory state store for Dapr actors${NC}"
 ./run-all-services.sh

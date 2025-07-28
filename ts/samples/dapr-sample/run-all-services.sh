@@ -17,6 +17,9 @@ pkill -f "tsx watch src/server.ts" 2>/dev/null || true
 # Kill any remaining dapr processes
 dapr list | grep "dapr-sample" | awk '{print $1}' | xargs -I {} dapr stop --app-id {} 2>/dev/null || true
 
+# Extra cleanup for dapr sidecar processes
+pkill -f "daprd.*dapr-sample" 2>/dev/null || true
+
 # Kill any processes on our ports
 for port in 3000 3001 3002 3003 3500 3501 3502 3503; do
   if lsof -ti:$port > /dev/null 2>&1; then
@@ -39,6 +42,52 @@ for port in 3000 3001 3002 3003; do
 done
 
 sleep 2
+
+# Update dependencies to ensure latest builds are used
+echo "📦 Updating dependencies..."
+pnpm install
+
+# Build all packages before starting services
+echo "📦 Building all packages..."
+
+# First build @sekiban packages
+echo "  Building @sekiban/core..."
+(cd ../../src/packages/core && pnpm build)
+if [ $? -ne 0 ]; then
+    echo "❌ @sekiban/core build failed."
+    exit 1
+fi
+
+echo "  Building @sekiban/postgres..."
+(cd ../../src/packages/postgres && pnpm build)
+if [ $? -ne 0 ]; then
+    echo "❌ @sekiban/postgres build failed."
+    exit 1
+fi
+
+echo "  Building @sekiban/cosmos..."
+(cd ../../src/packages/cosmos && pnpm build)
+if [ $? -ne 0 ]; then
+    echo "❌ @sekiban/cosmos build failed."
+    exit 1
+fi
+
+echo "  Building @sekiban/dapr..."
+(cd ../../src/packages/dapr && pnpm build)
+if [ $? -ne 0 ]; then
+    echo "❌ @sekiban/dapr build failed."
+    exit 1
+fi
+
+# Now build dapr-sample packages
+echo "  Building dapr-sample packages..."
+pnpm build
+if [ $? -ne 0 ]; then
+    echo "❌ dapr-sample build failed."
+    exit 1
+fi
+
+echo "✓ All builds completed successfully"
 
 # Check if Dapr is initialized
 if ! dapr --version > /dev/null 2>&1; then
@@ -76,11 +125,8 @@ case "$STORAGE_TYPE" in
         fi
         export COSMOS_DATABASE_NAME="${COSMOS_DATABASE_NAME:-sekiban_events}"
         ;;
-    inmemory)
-        echo "Using in-memory storage (no persistence)"
-        ;;
     *)
-        echo "❌ Invalid STORAGE_TYPE: $STORAGE_TYPE (use inmemory, postgres, or cosmos)"
+        echo "❌ Invalid STORAGE_TYPE: $STORAGE_TYPE (use postgres or cosmos only - in-memory workarounds violate CLAUDE.md)"
         exit 1
         ;;
 esac
@@ -95,8 +141,10 @@ echo "  3. Multi-Projector (port 3002)"
 echo "  4. Event Relay (port 3003)"
 echo ""
 
-# Create log directory
+# Create log directory and clear old logs
 mkdir -p tmp/logs
+echo "🗑️  Clearing old log files..."
+rm -f tmp/logs/*.log
 
 # Start Event Relay first (it needs to be ready to receive events)
 echo "Starting Event Relay..."
@@ -107,7 +155,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --dapr-http-port 3503 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev > ../../tmp/logs/event-relay.log 2>&1 &
+  -- node dist/server.js > ../../tmp/logs/event-relay.log 2>&1 &
 
 cd ../..
 echo "Waiting for Event Relay to be ready..."
@@ -137,7 +185,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --dapr-http-port 3502 \
   --resources-path ../../dapr/components \
   --log-level info \
-  -- npm run dev > ../../tmp/logs/multi-projector.log 2>&1 &
+  -- node dist/server.js > ../../tmp/logs/multi-projector.log 2>&1 &
 
 cd ../..
 echo "Waiting for Multi-Projector to be ready..."

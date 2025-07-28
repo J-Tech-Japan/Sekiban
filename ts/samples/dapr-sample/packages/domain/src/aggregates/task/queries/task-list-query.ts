@@ -33,53 +33,64 @@ export class TaskListQuery implements IMultiProjectionListQuery<
   TaskListResponse
 > {
   /**
-   * Filter tasks from the projection
+   * Get the aggregate type for this query
    */
-  static handleFilter(
-    projection: MultiProjectionState<AggregateListProjector<TaskProjector>>,
-    query: TaskListQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
-    const tasks = projection.payload.getAggregates()
-      .filter(aggregate => {
-        const payload = aggregate.payload;
-        return (
-          payload && 
-          typeof payload === 'object' && 
-          'aggregateType' in payload &&
-          (payload.aggregateType === 'Task' || payload.aggregateType === 'CompletedTask')
-        );
-      })
-      .map(aggregate => {
-        const payload = aggregate.payload as TaskState | CompletedTaskState;
-        return {
-          taskId: payload.taskId,
-          title: payload.title,
-          description: payload.description,
-          assignedTo: payload.assignedTo,
-          dueDate: payload.dueDate,
-          priority: payload.priority,
-          status: payload.status,
-          createdAt: payload.createdAt,
-          updatedAt: payload.updatedAt
-        };
-      });
-    
-    return ok(tasks);
+  getAggregateType(): string {
+    return 'Task';
   }
   
   /**
-   * Sort tasks by creation date
+   * Get the projector for this query
    */
-  static handleSort(
-    filteredList: TaskListResponse[],
-    query: TaskListQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
-    const sorted = [...filteredList].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
+  
+  /**
+   * Filter tasks from the aggregate
+   */
+  handleFilter(aggregate: any): boolean {
+    const payload = aggregate.payload;
+    return (
+      payload && 
+      typeof payload === 'object' && 
+      'aggregateType' in payload &&
+      (payload.aggregateType === 'Task' || payload.aggregateType === 'CompletedTask')
     );
-    return ok(sorted);
+  }
+  
+  /**
+   * Sort tasks by creation date (newest first)
+   */
+  handleSort(a: any, b: any): number {
+    const payloadA = a.payload as TaskState | CompletedTaskState;
+    const payloadB = b.payload as TaskState | CompletedTaskState;
+    return new Date(payloadB.createdAt).getTime() - new Date(payloadA.createdAt).getTime();
+  }
+  
+  /**
+   * Transform aggregate to response format
+   */
+  transformToResponse(aggregate: any): TaskListResponse {
+    const payload = aggregate.payload as TaskState | CompletedTaskState;
+    return {
+      taskId: payload.taskId,
+      title: payload.title,
+      description: payload.description,
+      assignedTo: payload.assignedTo,
+      dueDate: payload.dueDate,
+      priority: payload.priority,
+      status: payload.status,
+      createdAt: payload.createdAt,
+      updatedAt: payload.updatedAt
+    };
   }
 }
 
@@ -92,57 +103,68 @@ export class ActiveTaskListQuery implements IMultiProjectionListQuery<
   TaskListResponse
 > {
   /**
-   * Filter active tasks from the projection
+   * Get the aggregate type for this query
    */
-  static handleFilter(
-    projection: MultiProjectionState<AggregateListProjector<TaskProjector>>,
-    query: ActiveTaskListQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
-    const tasks = projection.payload.getAggregates()
-      .filter(aggregate => {
-        const payload = aggregate.payload;
-        return (
-          payload && 
-          typeof payload === 'object' && 
-          'aggregateType' in payload &&
-          payload.aggregateType === 'Task' &&
-          (payload as TaskState).status === 'active'
-        );
-      })
-      .map(aggregate => {
-        const payload = aggregate.payload as TaskState;
-        return {
-          taskId: payload.taskId,
-          title: payload.title,
-          description: payload.description,
-          assignedTo: payload.assignedTo,
-          dueDate: payload.dueDate,
-          priority: payload.priority,
-          status: payload.status,
-          createdAt: payload.createdAt,
-          updatedAt: payload.updatedAt
-        };
-      });
-    
-    return ok(tasks);
+  getAggregateType(): string {
+    return 'Task';
+  }
+  
+  /**
+   * Get the projector for this query
+   */
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
+  
+  /**
+   * Filter active tasks from the aggregate
+   */
+  handleFilter(aggregate: any): boolean {
+    const payload = aggregate.payload;
+    return (
+      payload && 
+      typeof payload === 'object' && 
+      'aggregateType' in payload &&
+      payload.aggregateType === 'Task' &&
+      (payload as TaskState).status === 'active'
+    );
   }
   
   /**
    * Sort tasks by priority and then by creation date
    */
-  static handleSort(
-    filteredList: TaskListResponse[],
-    query: ActiveTaskListQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
+  handleSort(a: any, b: any): number {
+    const payloadA = a.payload as TaskState;
+    const payloadB = b.payload as TaskState;
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-    const sorted = [...filteredList].sort((a, b) => {
-      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    return ok(sorted);
+    const priorityDiff = priorityOrder[payloadA.priority] - priorityOrder[payloadB.priority];
+    if (priorityDiff !== 0) return priorityDiff;
+    return new Date(payloadB.createdAt).getTime() - new Date(payloadA.createdAt).getTime();
+  }
+  
+  /**
+   * Transform aggregate to response format
+   */
+  transformToResponse(aggregate: any): TaskListResponse {
+    const payload = aggregate.payload as TaskState;
+    return {
+      taskId: payload.taskId,
+      title: payload.title,
+      description: payload.description,
+      assignedTo: payload.assignedTo,
+      dueDate: payload.dueDate,
+      priority: payload.priority,
+      status: payload.status,
+      createdAt: payload.createdAt,
+      updatedAt: payload.updatedAt
+    };
   }
 }
 
@@ -157,56 +179,67 @@ export class TasksByAssigneeQuery implements IMultiProjectionListQuery<
   constructor(public readonly assigneeId: string) {}
   
   /**
+   * Get the aggregate type for this query
+   */
+  getAggregateType(): string {
+    return 'Task';
+  }
+  
+  /**
+   * Get the projector for this query
+   */
+  getProjector() {
+    return new TaskProjector();
+  }
+  
+  /**
+   * Get the multi-projector name for this query
+   */
+  getMultiProjectorName(): string {
+    return AggregateListProjector.getMultiProjectorName(() => new TaskProjector());
+  }
+  
+  /**
    * Filter tasks by assignee
    */
-  static handleFilter(
-    projection: MultiProjectionState<AggregateListProjector<TaskProjector>>,
-    query: TasksByAssigneeQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
-    const tasks = projection.payload.getAggregates()
-      .filter(aggregate => {
-        const payload = aggregate.payload;
-        return (
-          payload && 
-          typeof payload === 'object' && 
-          'aggregateType' in payload &&
-          (payload.aggregateType === 'Task' || payload.aggregateType === 'CompletedTask') &&
-          (payload as TaskState | CompletedTaskState).assignedTo === query.assigneeId
-        );
-      })
-      .map(aggregate => {
-        const payload = aggregate.payload as TaskState | CompletedTaskState;
-        return {
-          taskId: payload.taskId,
-          title: payload.title,
-          description: payload.description,
-          assignedTo: payload.assignedTo,
-          dueDate: payload.dueDate,
-          priority: payload.priority,
-          status: payload.status,
-          createdAt: payload.createdAt,
-          updatedAt: payload.updatedAt
-        };
-      });
-    
-    return ok(tasks);
+  handleFilter(aggregate: any): boolean {
+    const payload = aggregate.payload;
+    return (
+      payload && 
+      typeof payload === 'object' && 
+      'aggregateType' in payload &&
+      (payload.aggregateType === 'Task' || payload.aggregateType === 'CompletedTask') &&
+      (payload as TaskState | CompletedTaskState).assignedTo === this.assigneeId
+    );
   }
   
   /**
    * Sort tasks by due date
    */
-  static handleSort(
-    filteredList: TaskListResponse[],
-    query: TasksByAssigneeQuery,
-    context: IQueryContext
-  ): Result<TaskListResponse[], never> {
-    const sorted = [...filteredList].sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-    });
-    return ok(sorted);
+  handleSort(a: any, b: any): number {
+    const payloadA = a.payload as TaskState | CompletedTaskState;
+    const payloadB = b.payload as TaskState | CompletedTaskState;
+    if (!payloadA.dueDate && !payloadB.dueDate) return 0;
+    if (!payloadA.dueDate) return 1;
+    if (!payloadB.dueDate) return -1;
+    return new Date(payloadA.dueDate).getTime() - new Date(payloadB.dueDate).getTime();
+  }
+  
+  /**
+   * Transform aggregate to response format
+   */
+  transformToResponse(aggregate: any): TaskListResponse {
+    const payload = aggregate.payload as TaskState | CompletedTaskState;
+    return {
+      taskId: payload.taskId,
+      title: payload.title,
+      description: payload.description,
+      assignedTo: payload.assignedTo,
+      dueDate: payload.dueDate,
+      priority: payload.priority,
+      status: payload.status,
+      createdAt: payload.createdAt,
+      updatedAt: payload.updatedAt
+    };
   }
 }

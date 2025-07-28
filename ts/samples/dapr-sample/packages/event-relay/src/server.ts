@@ -20,6 +20,10 @@ interface PubSubEventData {
   data: any;
   rootPartitionKey?: string;
   tenantId?: string;
+  partitionKey?: string;
+  causationId?: string;
+  correlationId?: string;
+  executedUser?: string;
 }
 
 async function main() {
@@ -70,32 +74,37 @@ async function main() {
     try {
       // Handle CloudEvents format (if content-type is application/cloudevents+json)
       let eventData = req.body;
+      let parsedBody = req.body;
       
       // If body came as text, parse it
       if (typeof req.body === 'string') {
         try {
-          const parsed = JSON.parse(req.body);
-          eventData = parsed.data || parsed;
+          parsedBody = JSON.parse(req.body);
+          logger.info('[PubSub] Parsed text body:', JSON.stringify(parsedBody, null, 2));
+          eventData = parsedBody.data || parsedBody;
         } catch (e) {
           logger.error('[PubSub] Failed to parse text body:', e);
         }
       }
       
       // If it's CloudEvents format, extract the data
-      if (req.body.data) {
-        eventData = req.body.data;
+      if (parsedBody.data) {
+        eventData = parsedBody.data;
       }
       
       // If it's base64 encoded data (CloudEvents format from Dapr)
-      if (req.body.data_base64) {
+      if (parsedBody.data_base64) {
         try {
-          const decodedData = Buffer.from(req.body.data_base64, 'base64').toString('utf-8');
-          eventData = JSON.parse(decodedData);
-          logger.info('[PubSub] Decoded data_base64:', JSON.stringify(eventData, null, 2));
+          const decodedData = Buffer.from(parsedBody.data_base64, 'base64').toString('utf-8');
+          const parsedData = JSON.parse(decodedData);
+          logger.info('[PubSub] Decoded data_base64:', JSON.stringify(parsedData, null, 2));
           
           // Extract the nested data if it exists
-          if (eventData.data) {
-            eventData = eventData.data;
+          if (parsedData.data) {
+            eventData = parsedData.data;
+            logger.info('[PubSub] Extracted nested data:', JSON.stringify(eventData, null, 2));
+          } else {
+            eventData = parsedData;
           }
         } catch (e) {
           logger.error('[PubSub] Failed to decode data_base64:', e);
@@ -121,14 +130,17 @@ async function main() {
         eventType: eventData.PayloadTypeName || eventData.eventType || eventData.type,
         version: eventData.Version || eventData.version,
         sortKey: eventData.SortableUniqueId || eventData.sortableUniqueId || eventData.sortKey,
-        created: eventData.TimeStamp || eventData.timestamp || eventData.created,
+        created: eventData.TimeStamp || eventData.timestamp || eventData.createdAt || eventData.created,
         data: eventData.payload || eventData.data || eventData,
         rootPartitionKey: eventData.RootPartitionKey || eventData.rootPartitionKey,
         tenantId: eventData.tenantId,
-        partitionKey: eventData.PartitionKey || eventData.partitionKey,
-        causationId: eventData.CausationId || eventData.causationId,
-        correlationId: eventData.CorrelationId || eventData.correlationId,
-        executedUser: eventData.ExecutedUser || eventData.executedUser
+        partitionKey: eventData.PartitionKey || eventData.partitionKey || eventData.PartitionKeys,
+        causationId: eventData.CausationId || eventData.causationId || (eventData.metadata && eventData.metadata.causationId),
+        correlationId: eventData.CorrelationId || eventData.correlationId || (eventData.metadata && eventData.metadata.correlationId),
+        executedUser: eventData.ExecutedUser || eventData.executedUser || (eventData.metadata && eventData.metadata.executedUser),
+        // Additional fields for compatibility
+        partitionKeys: eventData.partitionKeys,
+        metadata: eventData.metadata
       };
       
       logger.info('[PubSub] Mapped event data:', {
@@ -215,7 +227,8 @@ async function distributeEvent(eventData: PubSubEventData) {
     {
       appId: 'dapr-sample-multi-projector',
       actorType: 'MultiProjectorActor',
-      projectorTypes: ['TaskProjector', 'UserProjector', 'WeatherForecastProjector'],
+      // These should be aggregate types, not projector class names
+      aggregateTypes: ['Task', 'User', 'WeatherForecast'],
       daprPort: '3502' // Multi-projector port
     },
     {
@@ -232,21 +245,66 @@ async function distributeEvent(eventData: PubSubEventData) {
   const multiProjectorTarget = distributionTargets.find(t => t.appId === 'dapr-sample-multi-projector');
   if (multiProjectorTarget) {
     logger.info('[Distributor] Distributing to MultiProjectorActors');
-    for (const projectorType of multiProjectorTarget.projectorTypes) {
-      const actorId = `aggregatelistprojector-${projectorType.toLowerCase()}`;
-      const url = `http://${daprHost}:${multiProjectorTarget.daprPort}/v1.0/actors/${multiProjectorTarget.actorType}/${actorId}/method/processEvent`;
+    for (const aggregateType of multiProjectorTarget.aggregateTypes) {
+      const actorId = `aggregatelistprojector-${aggregateType.toLowerCase()}`;
+      const url = `http://${daprHost}:${multiProjectorTarget.daprPort}/v1.0/actors/${multiProjectorTarget.actorType}/${actorId}/method/handlePublishedEvent`;
       
       logger.info(`[Distributor] Calling MultiProjectorActor:`, {
-        projectorType,
+        aggregateType,
         actorId,
         url,
         eventAggregateType: eventData.aggregateType
       });
       
-      // Check if this is TaskProjector processing a Task event
-      if (projectorType === 'TaskProjector' && eventData.aggregateType === 'Task') {
-        logger.info('[Distributor] *** SENDING TASK EVENT TO TASK PROJECTOR ***');
+      // Check if this is Task aggregate processing a Task event
+      if (aggregateType === 'Task' && eventData.aggregateType === 'Task') {
+        logger.info('[Distributor] *** SENDING TASK EVENT TO TASK AGGREGATE LIST PROJECTOR ***');
       }
+      
+      // Wrap event in DaprEventEnvelope format
+      // Include both TypeScript and C# field names for compatibility
+      const eventEnvelope = {
+        event: {
+          ...eventData,
+          // Ensure C# field names are included
+          Id: eventData.id,
+          AggregateId: eventData.aggregateId,
+          AggregateGroup: eventData.aggregateType,
+          SortableUniqueId: eventData.sortKey,
+          Version: eventData.version,
+          PayloadTypeName: eventData.eventType,
+          TimeStamp: eventData.created,
+          PartitionKey: eventData.partitionKey,
+          CausationId: eventData.causationId,
+          CorrelationId: eventData.correlationId,
+          ExecutedUser: eventData.executedUser,
+          RootPartitionKey: eventData.rootPartitionKey,
+          // Include TypeScript field names
+          id: eventData.id,
+          aggregateId: eventData.aggregateId,
+          aggregateType: eventData.aggregateType,
+          sortableUniqueId: eventData.sortKey,
+          version: eventData.version,
+          eventType: eventData.eventType,
+          createdAt: eventData.created,
+          payload: eventData.data,
+          metadata: {
+            causationId: eventData.causationId,
+            correlationId: eventData.correlationId,
+            executedUser: eventData.executedUser
+          },
+          partitionKeys: {
+            aggregateId: eventData.aggregateId,
+            group: eventData.aggregateType,
+            partitionKey: eventData.partitionKey
+          }
+        },
+        topic: 'sekiban-events',
+        pubsubName: 'pubsub'
+      };
+      
+      // Log the event envelope being sent
+      logger.info(`[Distributor] Sending event envelope to ${actorId}:`, JSON.stringify(eventEnvelope, null, 2));
       
       promises.push(
         fetch(url, {
@@ -254,19 +312,21 @@ async function distributeEvent(eventData: PubSubEventData) {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(eventData)
+          body: JSON.stringify(eventEnvelope)
         }).then(async (res) => {
           const responseText = await res.text();
           if (res.ok) {
             logger.info(`[Distributor] ✓ Successfully sent event to ${multiProjectorTarget.actorType}/${actorId}`, {
               status: res.status,
-              response: responseText
+              response: responseText,
+              aggregateType: aggregateType
             });
           } else {
             logger.error(`[Distributor] ✗ Failed to send event to ${multiProjectorTarget.actorType}/${actorId}:`, {
               status: res.status,
               statusText: res.statusText,
-              body: responseText
+              body: responseText,
+              aggregateType: aggregateType
             });
           }
         }).catch((error: any) => {

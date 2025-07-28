@@ -6,8 +6,10 @@ import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
+import { IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+import { CosmosEventStore } from '@sekiban/cosmos';
+import { CosmosClient } from '@azure/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -28,7 +30,21 @@ async function startServer() {
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
-  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  // Custom morgan format to skip eventCheck reminders
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for eventCheck reminders
+    if (req.url?.includes('/remind/eventCheck')) {
+      return null;
+    }
+    // Use default dev format for other requests
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -36,7 +52,10 @@ async function startServer() {
   app.use((req, res, next) => {
     logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     if (req.path.startsWith('/actors/')) {
-      logger.info(`Actor route called: ${req.method} ${req.path}`);
+      // Only log non-eventCheck actor calls in detail
+      if (!req.path.includes('/remind/eventCheck')) {
+        logger.info(`Actor route called: ${req.method} ${req.path}`);
+      }
     }
     next();
   });
@@ -104,8 +123,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Choose storage type based on configuration
-  let eventStore: any; // Use any to avoid neverthrow version mismatch
+  // CLAUDE.md: Never create in-memory workarounds - always use proper actor implementation
+  let eventStore: IEventStore;
   
   switch (config.STORAGE_TYPE) {
     case 'postgres': {
@@ -134,15 +153,39 @@ async function setupDaprActorsWithApp(app: express.Express) {
       break;
     }
     
-    case 'inmemory':
-    default: {
-      // Initialize in-memory event store
-      logger.info('Using in-memory event store');
-      eventStore = new InMemoryEventStore({
-        type: StorageProviderType.InMemory,
-        enableLogging: config.NODE_ENV === 'development'
-      });
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      logger.info('Using Cosmos DB event store');
+      
+      if (!config.COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING is required when using cosmos storage');
+      }
+      
+      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+      const database = cosmosClient.database(config.COSMOS_DATABASE!);
+      eventStore = new CosmosEventStore(
+        database as any
+      );
+      
+      // Initialize the Cosmos DB container
+      logger.info('Initializing Cosmos DB container...');
+      try {
+        const result = await eventStore.initialize();
+        if (result.isOk()) {
+          logger.info('Cosmos DB container initialized successfully');
+        } else {
+          logger.error('Failed to initialize Cosmos DB container:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize Cosmos DB:', error);
+        throw error;
+      }
       break;
+    }
+    
+    default: {
+      throw new Error(`Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos'.`);
     }
   }
 
@@ -155,14 +198,21 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory
   const actorProxyFactory: ActorProxyFactory = {
     createActorProxy: (actorId, actorType: string) => {
-      const actorIdObj = typeof actorId === 'string' ? { id: actorId } : actorId;
-      const actorIdStr = 'id' in actorIdObj ? (actorIdObj as { id: string }).id : (actorIdObj as any).getId ? (actorIdObj as any).getId() : String(actorId);
+      // Type-safe actor ID extraction
+      let actorIdStr: string;
+      if (typeof actorId === 'string') {
+        actorIdStr = actorId;
+      } else if (actorId && typeof actorId === 'object' && 'getId' in actorId && typeof (actorId as { getId: () => string }).getId === 'function') {
+        actorIdStr = (actorId as { getId: () => string }).getId();
+      } else {
+        actorIdStr = String(actorId);
+      }
       logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
-        // Type assertion needed due to factory pattern limitations
-        const factory = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryCreateMethod;
+        // Create actor class using factory
+        const factory = MultiProjectorActorFactory as MultiProjectorActorFactoryCreateMethod;
         const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr));
@@ -185,7 +235,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   };
 
   // Configure MultiProjectorActorFactory
-  const configureMethod = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryConfigureMethod;
+  const configureMethod = MultiProjectorActorFactory as MultiProjectorActorFactoryConfigureMethod;
   configureMethod.configure(
     domainTypes,
     {}, // service provider
@@ -194,8 +244,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     eventStore
   );
 
-  // Create actor class - use direct reference to avoid type issues
-  const MultiProjectorActorClass = MultiProjectorActor as any;
+  // Create actor class with proper typing
+  const MultiProjectorActorClass = MultiProjectorActor;
   
   logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
 

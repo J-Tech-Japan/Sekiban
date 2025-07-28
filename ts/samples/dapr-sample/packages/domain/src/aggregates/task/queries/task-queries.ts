@@ -26,11 +26,11 @@ export class GetTaskById {
   }
 
   getProjector() {
-    return TaskProjector;
+    return new TaskProjector();
   }
 
   getPartitionKeys() {
-    return PartitionKeys.existing('Task', this.data.taskId);
+    return PartitionKeys.existing(this.data.taskId, 'Task');
   }
 
   get taskId() {

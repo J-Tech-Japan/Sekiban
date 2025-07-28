@@ -155,6 +155,7 @@ export const taskProjectorDefinition = defineProjector<TaskPayloadUnion>({
 // TaskProjector class for command API compatibility
 export class TaskProjector extends AggregateProjector<TaskPayloadUnion> {
   readonly aggregateTypeName = 'Task';
+  readonly multiProjectorName = 'TaskAggregateListProjector';
   
   getInitialState(partitionKeys: PartitionKeys): Aggregate<EmptyAggregatePayload> {
     return taskProjectorDefinition.getInitialState(partitionKeys);
