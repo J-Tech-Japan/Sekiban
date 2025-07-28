@@ -58,22 +58,19 @@ export COSMOS_CONNECTION_STRING
 export COSMOS_DATABASE
 export COSMOS_CONTAINER
 
-# Create custom components directory for Cosmos DB mode
-COSMOS_COMPONENTS_DIR="./dapr/components-cosmos"
-mkdir -p "$COSMOS_COMPONENTS_DIR"
+# Note: This configuration uses Cosmos DB for event storage only.
+# PostgreSQL is still required for Dapr state store (for actors).
+echo -e "${YELLOW}ℹ️  Note: Cosmos DB is used for event storage only.${NC}"
+echo -e "${YELLOW}    PostgreSQL is still required for Dapr state store.${NC}"
+echo ""
 
-# Copy necessary components except statestore
-echo -e "${YELLOW}📦 Setting up Cosmos DB components...${NC}"
-cp ./dapr/components/pubsub.yaml "$COSMOS_COMPONENTS_DIR/" 2>/dev/null || true
-cp ./dapr/components/subscription.yaml "$COSMOS_COMPONENTS_DIR/" 2>/dev/null || true
-cp ./dapr/components/statestore-inmemory.yaml "$COSMOS_COMPONENTS_DIR/statestore.yaml"
-
-# Export components path for Dapr
-export DAPR_COMPONENTS_PATH="$COSMOS_COMPONENTS_DIR"
+# Check if PostgreSQL is running
+if ! pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  PostgreSQL is not running. Starting it now...${NC}"
+    brew services start postgresql@14 2>/dev/null || brew services start postgresql 2>/dev/null || true
+    sleep 2
+fi
 
 # Run all services with Cosmos DB configuration
-echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
+echo -e "${GREEN}🚀 Starting all services with Cosmos DB event storage...${NC}"
 ./run-all-services.sh
-
-# Clean up on exit
-trap 'rm -rf "$COSMOS_COMPONENTS_DIR"' EXIT
