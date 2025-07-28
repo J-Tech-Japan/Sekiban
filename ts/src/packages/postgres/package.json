@@ -1,6 +1,6 @@
 {
   "name": "@sekiban/postgres",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "PostgreSQL storage provider for Sekiban Event Sourcing framework",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -38,7 +38,7 @@
   "author": "Sekiban Team",
   "license": "MIT",
   "dependencies": {
-    "@sekiban/core": "^0.1.0-alpha.4",
+    "@sekiban/core": "^0.1.0-alpha.5",
     "neverthrow": "^8.0.0",
     "pg": "^8.11.3",
     "pg-pool": "^3.6.1"
