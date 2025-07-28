@@ -18,7 +18,7 @@ import {
 } from '@sekiban/dapr';
 import { StorageProviderType } from '@sekiban/core';
 // CLAUDE.md: InMemoryEventStore removed - only proper storage implementations allowed
-import { PostgresEventStore } from '@sekiban/postgres';
+// Dynamic imports for storage providers to avoid module resolution errors
 import { createCosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
@@ -42,24 +42,30 @@ async function startServer() {
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
-  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  // Custom morgan format to skip repetitive requests
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for health checks and actor state checks
+    if (req.url?.includes('/health') || req.url?.includes('/dapr/config') || req.url?.includes('/actors/')) {
+      return null;
+    }
+    // Use default dev format for other requests
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Debug middleware to track actor requests
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/actors/')) {
-      // Actor route called
-    }
-    next();
-  });
 
   // CRITICAL: Convert POST to PUT for actor method calls
   // This middleware MUST come before DaprServer setup
   app.use((req, res, next) => {
     if (req.path.includes('/method/') && req.method === 'POST') {
       req.method = 'PUT';
-      // Converted POST to PUT for actor method
     }
     next();
   });
@@ -125,7 +131,6 @@ async function startServer() {
 }
 
 async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
-  // Setting up Dapr actors with Express app
   
   // Configure AggregateActorFactory FIRST - before creating DaprServer
   // This ensures the container is initialized before any actor instances are created
@@ -142,16 +147,16 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
     {}, // serializationService
     null // eventStore - will be set later
   );
-  
-  // AggregateActorFactory configured
 
   // Choose storage type based on configuration
   let eventStore: any;
   
   switch (config.STORAGE_TYPE) {
     case 'postgres': {
+      // Dynamic import for PostgreSQL
+      const { PostgresEventStore } = await import('@sekiban/postgres');
+      
       // Initialize PostgreSQL event store
-      // Using PostgreSQL event store
       const pool = new Pool({
         connectionString: config.DATABASE_URL
       });
@@ -159,12 +164,9 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
       eventStore = new PostgresEventStore(pool);
       
       // Initialize the database schema
-      // Initializing PostgreSQL schema
       try {
         const result = await eventStore.initialize();
-        if (result.isOk()) {
-          // PostgreSQL schema initialized successfully
-        } else {
+        if (result.isErr()) {
           throw result.error;
         }
       } catch (error) {
@@ -175,20 +177,16 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
     
     case 'cosmos': {
       // Initialize Cosmos DB event store
-      // Using Cosmos DB event store
-      
       if (!config.COSMOS_CONNECTION_STRING) {
         throw new Error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
       }
-      
-      // Cosmos DB connection configured
       
       // Use createCosmosEventStore helper function
       const result = await createCosmosEventStore({
         type: StorageProviderType.CosmosDB,
         connectionString: config.COSMOS_CONNECTION_STRING,
         databaseName: config.COSMOS_DATABASE,
-        enableLogging: config.NODE_ENV === 'development'
+        enableLogging: false // Disable verbose logging
       });
       
       if (!result.isOk()) {
@@ -196,7 +194,6 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
       }
       
       eventStore = result.value;
-      // Cosmos DB event store initialized
       break;
     }
     
@@ -214,7 +211,6 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
   // Create actor proxy factory that uses DaprClient with ActorProxyBuilder
   const actorProxyFactory = {
     createActorProxy: <T>(actorId: any, actorType: string): T => {
-      // Creating actor proxy
       const actorIdStr = actorId.id || actorId;
       
       // Use ActorProxyBuilder for proper actor-to-actor communication
@@ -306,10 +302,8 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
         return builder.build(new ActorId(actorIdStr)) as T;
       } else {
         // Fallback for unknown actor types
-        // Fallback for unknown actor types
         return {
           executeCommandAsync: async (data: any) => {
-            console.log(`[ActorProxy] Calling executeCommandAsync on ${actorType}/${actorIdStr}`);
             return daprClient.invoker.invoke(
               config.DAPR_APP_ID,
               `actors/${actorType}/${actorIdStr}/method/executeCommandAsync`,
@@ -365,16 +359,12 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
     serializationService,
     eventStore
   );
-  
-  // AggregateActorFactory reconfigured with actual dependencies
 
   AggregateEventHandlerActorFactory.configure(eventStore);
 
   // Create actor classes before DaprServer initialization
   const AggregateActorClass = AggregateActorFactory.createActorClass();
   const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
-  
-  // Actor classes created
 
   // Create DaprServer
   const daprServer = new DaprServer({
@@ -391,15 +381,12 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
   
   // Register all actors explicitly before starting the server
   await daprServer.actor.registerActor(AggregateActorClass);
-  // Registered AggregateActor
   
   // Only register AggregateActor in this service
   // AggregateEventHandlerActor is now in a separate service
   
   // Initialize actor runtime
   await daprServer.actor.init();
-  
-  // Dapr actors integrated with Express app
   
   return daprServer;
 }

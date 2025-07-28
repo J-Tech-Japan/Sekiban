@@ -2,7 +2,7 @@ import express from 'express';
 import { DaprServer, CommunicationProtocolEnum, DaprClient } from '@dapr/dapr';
 import { AggregateEventHandlerActorFactory, AggregateEventHandlerActor, initializeDaprContainer } from '@sekiban/dapr';
 // CLAUDE.md: InMemoryEventStore removed - only proper storage implementations allowed
-import { PostgresEventStore } from '@sekiban/postgres';
+// Dynamic imports for storage providers to avoid module resolution errors
 import { CosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import { createTaskDomainTypes } from '@dapr-sample/domain';
@@ -56,6 +56,9 @@ async function main() {
   switch (STORAGE_TYPE) {
     case 'postgres': {
       logger.info('Using PostgreSQL event store');
+      // Dynamic import for PostgreSQL
+      const { PostgresEventStore } = await import('@sekiban/postgres');
+      
       const pool = new Pool({ connectionString: DATABASE_URL });
       
       // Test connection

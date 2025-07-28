@@ -171,7 +171,6 @@ export class PostgresEventStore implements IEventStore {
    * Save events to storage
    */
   async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    console.log('PostgresEventStore.saveEvents called');
     const result = await ResultAsync.fromPromise(
       this.doSaveEvents(events),
       (error) => new StorageError(
@@ -187,7 +186,6 @@ export class PostgresEventStore implements IEventStore {
   }
   
   private async doSaveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    console.log('doSaveEvents called with', events.length, 'events');
     let client: PoolClient | null = null;
     
     try {
@@ -228,9 +226,6 @@ export class PostgresEventStore implements IEventStore {
               correlationId,
               executedUser
             ];
-          
-          console.log('Executing query:', insertQuery);
-          console.log('With params:', insertParams);
           
           try {
             await client.query(insertQuery, insertParams);

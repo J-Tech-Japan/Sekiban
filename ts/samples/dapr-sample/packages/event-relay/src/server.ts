@@ -33,7 +33,26 @@ async function main() {
   app.use(helmet());
   app.use(cors());
   app.use(compression());
-  app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
+  // Custom morgan format to skip health checks
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for health checks
+    if (req.url?.includes('/health') || req.url?.includes('/dapr/config')) {
+      return null;
+    }
+    // Use default combined format for other requests
+    return [
+      tokens['remote-addr'](req, res), '-',
+      tokens['remote-user'](req, res),
+      '[' + tokens.date(req, res, 'clf') + ']',
+      '"' + tokens.method(req, res),
+      tokens.url(req, res),
+      'HTTP/' + tokens['http-version'](req, res) + '"',
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      '"' + tokens.referrer(req, res) + '"',
+      '"' + tokens['user-agent'](req, res) + '"'
+    ].join(' ');
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.text({ type: 'application/cloudevents+json' }));
 
@@ -44,7 +63,6 @@ async function main() {
 
   // Dapr pub/sub subscription endpoint
   app.get('/dapr/subscribe', (_req, res) => {
-    logger.info('[PubSub] Subscription endpoint called');
     res.json([
       {
         pubsubname: 'pubsub',
@@ -59,17 +77,6 @@ async function main() {
 
   // Event handler endpoint
   app.post('/events', async (req, res) => {
-    logger.info('[PubSub] ========== RECEIVED EVENT ==========');
-    logger.info('[PubSub] CloudEvents headers:', {
-      topic: req.headers['ce-topic'],
-      type: req.headers['ce-type'],
-      id: req.headers['ce-id'],
-      source: req.headers['ce-source'],
-      contentType: req.headers['content-type']
-    });
-    logger.info('[PubSub] Request headers:', req.headers);
-    logger.info('[PubSub] Request body type:', typeof req.body);
-    logger.info('[PubSub] Request body:', JSON.stringify(req.body, null, 2));
     
     try {
       // Handle CloudEvents format (if content-type is application/cloudevents+json)
@@ -80,7 +87,6 @@ async function main() {
       if (typeof req.body === 'string') {
         try {
           parsedBody = JSON.parse(req.body);
-          logger.info('[PubSub] Parsed text body:', JSON.stringify(parsedBody, null, 2));
           eventData = parsedBody.data || parsedBody;
         } catch (e) {
           logger.error('[PubSub] Failed to parse text body:', e);
@@ -97,12 +103,10 @@ async function main() {
         try {
           const decodedData = Buffer.from(parsedBody.data_base64, 'base64').toString('utf-8');
           const parsedData = JSON.parse(decodedData);
-          logger.info('[PubSub] Decoded data_base64:', JSON.stringify(parsedData, null, 2));
           
           // Extract the nested data if it exists
           if (parsedData.data) {
             eventData = parsedData.data;
-            logger.info('[PubSub] Extracted nested data:', JSON.stringify(eventData, null, 2));
           } else {
             eventData = parsedData;
           }
@@ -143,19 +147,7 @@ async function main() {
         metadata: eventData.metadata
       };
       
-      logger.info('[PubSub] Mapped event data:', {
-        id: mappedEventData.id,
-        aggregateType: mappedEventData.aggregateType,
-        aggregateId: mappedEventData.aggregateId,
-        eventType: mappedEventData.eventType,
-        version: mappedEventData.version
-      });
       
-      // Check if this is a Task event
-      if (mappedEventData.aggregateType === 'Task') {
-        logger.info('[PubSub] *** TASK EVENT DETECTED ***');
-        logger.info('[PubSub] Task event details:', JSON.stringify(mappedEventData, null, 2));
-      }
       
       // Distribute event to all relevant services
       await distributeEvent(mappedEventData);
@@ -209,14 +201,6 @@ async function main() {
  * Distribute event to all relevant services
  */
 async function distributeEvent(eventData: PubSubEventData) {
-  logger.info('[Distributor] ========== DISTRIBUTING EVENT ==========');
-  logger.info('[Distributor] Processing event:', {
-    type: eventData?.type,
-    aggregateType: eventData?.aggregateType,
-    aggregateId: eventData?.aggregateId,
-    eventType: eventData?.eventType,
-    version: eventData?.version
-  });
 
   // Use fetch to call actors via Dapr HTTP API
   const daprPort = config.DAPR_HTTP_PORT || 3500;
@@ -244,22 +228,10 @@ async function distributeEvent(eventData: PubSubEventData) {
   // Distribute to MultiProjectorActors
   const multiProjectorTarget = distributionTargets.find(t => t.appId === 'dapr-sample-multi-projector');
   if (multiProjectorTarget) {
-    logger.info('[Distributor] Distributing to MultiProjectorActors');
     for (const aggregateType of multiProjectorTarget.aggregateTypes) {
       const actorId = `aggregatelistprojector-${aggregateType.toLowerCase()}`;
       const url = `http://${daprHost}:${multiProjectorTarget.daprPort}/v1.0/actors/${multiProjectorTarget.actorType}/${actorId}/method/handlePublishedEvent`;
       
-      logger.info(`[Distributor] Calling MultiProjectorActor:`, {
-        aggregateType,
-        actorId,
-        url,
-        eventAggregateType: eventData.aggregateType
-      });
-      
-      // Check if this is Task aggregate processing a Task event
-      if (aggregateType === 'Task' && eventData.aggregateType === 'Task') {
-        logger.info('[Distributor] *** SENDING TASK EVENT TO TASK AGGREGATE LIST PROJECTOR ***');
-      }
       
       // Wrap event in DaprEventEnvelope format
       // Include both TypeScript and C# field names for compatibility
@@ -303,8 +275,6 @@ async function distributeEvent(eventData: PubSubEventData) {
         pubsubName: 'pubsub'
       };
       
-      // Log the event envelope being sent
-      logger.info(`[Distributor] Sending event envelope to ${actorId}:`, JSON.stringify(eventEnvelope, null, 2));
       
       promises.push(
         fetch(url, {
@@ -315,13 +285,7 @@ async function distributeEvent(eventData: PubSubEventData) {
           body: JSON.stringify(eventEnvelope)
         }).then(async (res) => {
           const responseText = await res.text();
-          if (res.ok) {
-            logger.info(`[Distributor] ✓ Successfully sent event to ${multiProjectorTarget.actorType}/${actorId}`, {
-              status: res.status,
-              response: responseText,
-              aggregateType: aggregateType
-            });
-          } else {
+          if (!res.ok) {
             logger.error(`[Distributor] ✗ Failed to send event to ${multiProjectorTarget.actorType}/${actorId}:`, {
               status: res.status,
               statusText: res.statusText,
@@ -352,9 +316,7 @@ async function distributeEvent(eventData: PubSubEventData) {
         },
         body: JSON.stringify(eventData)
       }).then(async (res) => {
-        if (res.ok) {
-          logger.info(`[Distributor] Successfully sent event to ${eventHandlerTarget.actorType}/${actorId}`);
-        } else {
+        if (!res.ok) {
           const text = await res.text();
           logger.error(`[Distributor] Failed to send event to ${eventHandlerTarget.actorType}/${actorId}:`, {
             status: res.status,
@@ -371,7 +333,6 @@ async function distributeEvent(eventData: PubSubEventData) {
   // Wait for all distributions to complete
   if (promises.length > 0) {
     await Promise.allSettled(promises);
-    logger.info(`[Distributor] Event distribution completed (${promises.length} targets)`);
   } else {
     logger.warn('[Distributor] No targets found for event distribution');
   }

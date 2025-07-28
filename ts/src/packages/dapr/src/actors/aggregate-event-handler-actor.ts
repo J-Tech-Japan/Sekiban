@@ -45,11 +45,6 @@ export class AggregateEventHandlerActor extends AbstractActor
       // Get eventStore from container
       this.eventStore = cradle.eventStore;
       
-      console.log('[AggregateEventHandlerActor] Initialized with:', {
-        actorId: this.actorIdString,
-        eventStoreType: this.eventStore?.constructor?.name || 'Unknown',
-        hasEventStore: !!this.eventStore
-      });
       
     } catch (error) {
       console.error('[AggregateEventHandlerActor] Constructor error:', error);
@@ -61,7 +56,6 @@ export class AggregateEventHandlerActor extends AbstractActor
     // Create a new DaprClient instance for pubsub operations
     // Using default localhost settings which should work in Dapr sidecar environment
     const daprPort = process.env.DAPR_HTTP_PORT || "3501";
-    console.log('[AggregateEventHandlerActor] Creating DaprClient with port:', daprPort);
     return new DaprClient({
       daprHost: "127.0.0.1",
       daprPort: daprPort
@@ -106,11 +100,6 @@ export class AggregateEventHandlerActor extends AbstractActor
       // Ensure partition info is saved on first method call
       await this.ensurePartitionInfoSaved();
       
-      console.log('[AggregateEventHandlerActor] appendEventsAsync called with:', {
-        expectedLastSortableUniqueId,
-        eventsCount: events.length,
-        partitionInfo: this.partitionInfo
-      });
       
       // Load current state
       const stateManager = await this.getStateManager();
@@ -147,12 +136,7 @@ export class AggregateEventHandlerActor extends AbstractActor
         
         try {
           const deserializedEvents = events.map(e => this.deserializeEvent(e));
-          console.log('[AggregateEventHandlerActor] Saving events to event store:', {
-            eventStoreType: this.eventStore.constructor.name,
-            eventsCount: deserializedEvents.length
-          });
           const saveResult = await this.eventStore.saveEvents(deserializedEvents);
-          console.log('[AggregateEventHandlerActor] Event store save result:', saveResult);
         } catch (saveError) {
           console.error('[AggregateEventHandlerActor] Failed to save to event store:', saveError);
           throw saveError;
@@ -176,37 +160,18 @@ export class AggregateEventHandlerActor extends AbstractActor
         const pubSubName = cradle.configuration?.pubSubName || 'pubsub';
         const topicName = cradle.configuration?.eventTopicName || 'sekiban-events';
         
-        console.log('[AggregateEventHandlerActor] Publishing events to pub/sub:', {
-          pubSubName,
-          topicName,
-          eventsCount: events.length,
-          hasDaprClient: !!daprClient
-        });
         
         // Publish each event as SerializableEventDocument
         for (const event of events) {
-          console.log('[AggregateEventHandlerActor] Publishing SerializableEventDocument:', {
-            id: event.id,
-            eventType: event.eventType,
-            aggregateId: event.aggregateId,
-            aggregateType: event.aggregateType,
-            version: event.version
-          });
-          
-          // Send the event as-is (SerializableEventDocument format)
-          // This is the same format used between aggregateActor and aggregateEventHandler
-          console.log('[AggregateEventHandlerActor] Full event object being published:', JSON.stringify(event, null, 2));
           
           try {
             await daprClient.pubsub.publish(pubSubName, topicName, event);
-            console.log(`[AggregateEventHandlerActor] ✓ Successfully published event ${event.id} to ${topicName}`);
           } catch (publishError) {
             console.error(`[AggregateEventHandlerActor] ✗ Failed to publish event ${event.id}:`, publishError);
             throw publishError;
           }
         }
         
-        console.log('[AggregateEventHandlerActor] Successfully published all events to pub/sub');
       } catch (pubsubError) {
         // Log but don't fail - pub/sub is not critical for event storage
         console.error('[AggregateEventHandlerActor] Failed to publish events to pub/sub:', pubsubError);
@@ -236,11 +201,6 @@ export class AggregateEventHandlerActor extends AbstractActor
         lastSortableUniqueId: newLastId
       };
       
-      console.log('[AggregateEventHandlerActor] appendEventsAsync completed successfully:', {
-        eventsCount: events.length,
-        lastSortableUniqueId: newLastId,
-        aggregateType: this.partitionInfo?.aggregateType
-      });
       
       return response;
     } catch (error) {
