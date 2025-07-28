@@ -153,7 +153,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --app-id dapr-sample-event-relay \
   --app-port 3003 \
   --dapr-http-port 3503 \
-  --resources-path ../../dapr/components \
+  --resources-path ${DAPR_COMPONENTS_PATH:-../../dapr/components} \
   --log-level info \
   -- node dist/server.js > ../../tmp/logs/event-relay.log 2>&1 &
 
@@ -168,7 +168,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --app-id dapr-sample-event-handler \
   --app-port 3001 \
   --dapr-http-port 3501 \
-  --resources-path ../../dapr/components \
+  --resources-path ${DAPR_COMPONENTS_PATH:-../../dapr/components} \
   --log-level info \
   -- npm run dev > ../../tmp/logs/event-handler.log 2>&1 &
 
@@ -183,7 +183,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --app-id dapr-sample-multi-projector \
   --app-port 3002 \
   --dapr-http-port 3502 \
-  --resources-path ../../dapr/components \
+  --resources-path ${DAPR_COMPONENTS_PATH:-../../dapr/components} \
   --log-level info \
   -- node dist/server.js > ../../tmp/logs/multi-projector.log 2>&1 &
 
@@ -199,7 +199,7 @@ STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$
   --app-id dapr-sample-api \
   --app-port 3000 \
   --dapr-http-port 3500 \
-  --resources-path ../../dapr/components \
+  --resources-path ${DAPR_COMPONENTS_PATH:-../../dapr/components} \
   --log-level info \
   -- npm run dev
 

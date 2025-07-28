@@ -58,6 +58,22 @@ export COSMOS_CONNECTION_STRING
 export COSMOS_DATABASE
 export COSMOS_CONTAINER
 
+# Create custom components directory for Cosmos DB mode
+COSMOS_COMPONENTS_DIR="./dapr/components-cosmos"
+mkdir -p "$COSMOS_COMPONENTS_DIR"
+
+# Copy necessary components except statestore
+echo -e "${YELLOW}📦 Setting up Cosmos DB components...${NC}"
+cp ./dapr/components/pubsub.yaml "$COSMOS_COMPONENTS_DIR/" 2>/dev/null || true
+cp ./dapr/components/subscription.yaml "$COSMOS_COMPONENTS_DIR/" 2>/dev/null || true
+cp ./dapr/components/statestore-inmemory.yaml "$COSMOS_COMPONENTS_DIR/statestore.yaml"
+
+# Export components path for Dapr
+export DAPR_COMPONENTS_PATH="$COSMOS_COMPONENTS_DIR"
+
 # Run all services with Cosmos DB configuration
 echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
 ./run-all-services.sh
+
+# Clean up on exit
+trap 'rm -rf "$COSMOS_COMPONENTS_DIR"' EXIT
