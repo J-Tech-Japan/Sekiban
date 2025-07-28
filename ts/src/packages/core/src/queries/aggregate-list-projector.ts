@@ -126,6 +126,12 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
    */
   getMultiProjectorName(): string {
     const projector = this.projectorFactory()
+    
+    // Check if projector has the required properties
+    if (!projector || typeof projector.aggregateTypeName !== 'string') {
+      throw new Error('Invalid projector: missing aggregateTypeName property')
+    }
+    
     const projectorName = projector.aggregateTypeName.toLowerCase()
     const multiProjectorName = `aggregatelistprojector-${projectorName}`
     console.log('[AggregateListProjector.getMultiProjectorName]:', {
@@ -159,6 +165,12 @@ export class AggregateListProjector<TAggregateProjector extends IAggregateProjec
     projectorFactory: () => TProjector
   ): string {
     const projector = projectorFactory()
+    
+    // Check if projector has the required properties
+    if (!projector || typeof projector.aggregateTypeName !== 'string') {
+      throw new Error('Invalid projector: missing aggregateTypeName property')
+    }
+    
     const projectorName = projector.aggregateTypeName.toLowerCase()
     return `aggregatelistprojector-${projectorName}`
   }

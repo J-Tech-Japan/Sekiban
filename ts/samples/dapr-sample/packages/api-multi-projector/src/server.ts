@@ -7,7 +7,7 @@ import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { IEventStore } from '@sekiban/core';
-import { PostgresEventStore } from '@sekiban/postgres';
+// Dynamic imports for storage providers to avoid module resolution errors
 import { CosmosEventStore } from '@sekiban/cosmos';
 import { CosmosClient } from '@azure/cosmos';
 // Import domain types at the top to ensure registration happens
@@ -50,12 +50,9 @@ async function startServer() {
 
   // Debug middleware to log all requests
   app.use((req, res, next) => {
-    logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    if (req.path.startsWith('/actors/')) {
-      // Only log non-eventCheck actor calls in detail
-      if (!req.path.includes('/remind/eventCheck')) {
-        logger.info(`Actor route called: ${req.method} ${req.path}`);
-      }
+    // Skip logging for eventCheck reminders and health checks
+    if (!req.path.includes('/remind/eventCheck') && !req.path.includes('/health')) {
+      logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     }
     next();
   });
@@ -64,7 +61,6 @@ async function startServer() {
   app.use((req, res, next) => {
     if (req.path.includes('/method/') && req.method === 'POST') {
       req.method = 'PUT';
-      logger.debug(`Converted POST to PUT for actor method: ${req.path}`);
     }
     next();
   });
@@ -118,7 +114,6 @@ async function startServer() {
 
 
 async function setupDaprActorsWithApp(app: express.Express) {
-  logger.info('Setting up Dapr actors with Express app...');
 
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
@@ -128,8 +123,10 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   switch (config.STORAGE_TYPE) {
     case 'postgres': {
+      // Dynamic import for PostgreSQL
+      const { PostgresEventStore } = await import('@sekiban/postgres');
+      
       // Initialize PostgreSQL event store
-      logger.info('Using PostgreSQL event store');
       const pool = new Pool({
         connectionString: config.DATABASE_URL
       });
@@ -137,12 +134,9 @@ async function setupDaprActorsWithApp(app: express.Express) {
       eventStore = new PostgresEventStore(pool);
       
       // Initialize the database schema
-      logger.info('Initializing PostgreSQL schema...');
       try {
         const result = await eventStore.initialize();
-        if (result.isOk()) {
-          logger.info('PostgreSQL schema initialized successfully');
-        } else {
+        if (result.isErr()) {
           logger.error('Failed to initialize PostgreSQL schema:', result.error);
           throw result.error;
         }
@@ -155,8 +149,6 @@ async function setupDaprActorsWithApp(app: express.Express) {
     
     case 'cosmos': {
       // Initialize Cosmos DB event store
-      logger.info('Using Cosmos DB event store');
-      
       if (!config.COSMOS_CONNECTION_STRING) {
         throw new Error('COSMOS_CONNECTION_STRING is required when using cosmos storage');
       }
@@ -168,12 +160,9 @@ async function setupDaprActorsWithApp(app: express.Express) {
       );
       
       // Initialize the Cosmos DB container
-      logger.info('Initializing Cosmos DB container...');
       try {
         const result = await eventStore.initialize();
-        if (result.isOk()) {
-          logger.info('Cosmos DB container initialized successfully');
-        } else {
+        if (result.isErr()) {
           logger.error('Failed to initialize Cosmos DB container:', result.error);
           throw result.error;
         }
@@ -207,7 +196,10 @@ async function setupDaprActorsWithApp(app: express.Express) {
       } else {
         actorIdStr = String(actorId);
       }
-      logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
+      // Only log actor proxy creation for non-MultiProjectorActor types
+      if (actorType !== 'MultiProjectorActor') {
+        logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
+      }
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
@@ -247,7 +239,6 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor class with proper typing
   const MultiProjectorActorClass = MultiProjectorActor;
   
-  logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
 
   // Create DaprServer
   const daprServer = new DaprServer({
@@ -264,51 +255,10 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   // Register MultiProjectorActor
   await daprServer.actor.registerActor(MultiProjectorActorClass);
-  logger.info('Registered MultiProjectorActor');
   
   // Initialize actor runtime
-  logger.info('Initializing actor runtime...');
   await daprServer.actor.init();
-  logger.info('Actor runtime initialized');
 
-  // Add diagnostic logging
-  console.log('[DEBUG] Adding diagnostic logging...');
-  
-  // Type assertion for private properties
-  // Type for Express Request and Response
-  interface ExpressRequest {
-    url: string;
-    [key: string]: unknown;
-  }
-  
-  interface ExpressResponse {
-    [key: string]: unknown;
-  }
-  
-  const serverWithActorHandler = daprServer as unknown as {
-    actor?: {
-      actorHandler?: (req: ExpressRequest, res: ExpressResponse) => Promise<void>;
-    };
-  };
-  
-  const originalActorHandler = serverWithActorHandler.actor?.actorHandler;
-  if (originalActorHandler && serverWithActorHandler.actor) {
-    serverWithActorHandler.actor.actorHandler = async (req: ExpressRequest, res: ExpressResponse) => {
-      console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
-      try {
-        await originalActorHandler.call(serverWithActorHandler.actor, req, res);
-      } catch (e) {
-        console.error('[DIAGNOSTIC] Actor handler error:', e);
-        console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);
-        throw e;
-      }
-    };
-    console.log('[DEBUG] Diagnostic handler installed');
-  } else {
-    console.log('[DEBUG] Could not install diagnostic handler');
-  }
-
-  logger.info('Dapr actors integrated with Express app');
   
   return daprServer;
 }

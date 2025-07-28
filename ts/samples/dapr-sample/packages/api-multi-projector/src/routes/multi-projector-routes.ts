@@ -11,7 +11,6 @@ multiProjectorRoutes.get('/multi-projections/:projectorType/:id', async (req, re
   try {
     const { projectorType, id } = req.params;
     
-    logger.info(`Getting multi-projection state for ${projectorType}/${id}`);
     
     const daprClient = new DaprClient({
       daprHost: "127.0.0.1",
@@ -34,7 +33,6 @@ multiProjectorRoutes.get('/multi-projections/:projectorType/:id', async (req, re
       state: response
     });
   } catch (error) {
-    logger.error('Error getting multi-projection:', error);
     next(error);
   }
 });
@@ -44,7 +42,6 @@ multiProjectorRoutes.post('/multi-projections/query', async (req, res, next) => 
   try {
     const { projectorType, query } = req.body;
     
-    logger.info(`Querying multi-projections for ${projectorType}`);
     
     const daprClient = new DaprClient({
       daprHost: "127.0.0.1",
@@ -59,7 +56,6 @@ multiProjectorRoutes.post('/multi-projections/query', async (req, res, next) => 
       query
     });
   } catch (error) {
-    logger.error('Error querying multi-projections:', error);
     next(error);
   }
 });

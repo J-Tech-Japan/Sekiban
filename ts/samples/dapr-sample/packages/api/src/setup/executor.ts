@@ -46,7 +46,6 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     throw new Error('Dapr not available. This sample requires Dapr to run.');
   }
 
-  // Initializing Sekiban with Dapr
 
   // Create Dapr client with proper configuration
   daprClientInstance = new DaprClient({
@@ -74,7 +73,6 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     sekibanConfig
   ) as any; // Cast to match our interface
 
-  // Sekiban Dapr Executor initialized
 
   return executorInstance!; // We know it's initialized at this point
 }
@@ -98,5 +96,5 @@ export function getDaprClient(): DaprClient {
 
 // Cleanup function for graceful shutdown
 export async function cleanup(): Promise<void> {
-  // Cleanup completed
+  // Nothing to cleanup for now
 }
