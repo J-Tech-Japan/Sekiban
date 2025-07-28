@@ -22,7 +22,7 @@ import { StorageProviderType } from '@sekiban/core';
 import { createCosmosEventStore } from '@sekiban/cosmos';
 // Import domain types at the top to ensure registration happens
 import '@dapr-sample/domain';
-import { createTaskDomainTypes } from '@dapr-sample/domain';
+import { createTaskDomainTypes, AggregateEventHandlerActorBase } from '@dapr-sample/domain';
 import { globalRegistry } from '@sekiban/core';
 import logger from './utils/logger.js';
 
@@ -213,129 +213,47 @@ async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
     createActorProxy: <T>(actorId: any, actorType: string): T => {
       const actorIdStr = actorId.id || actorId;
       
-      // Use ActorProxyBuilder for proper actor-to-actor communication
+      // Use ActorProxyBuilder for all actor types
       if (actorType === 'AggregateEventHandlerActor') {
-        // AggregateEventHandlerActor is in a different service, use HTTP invocation
-        return {
-          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]): Promise<EventHandlingResponse> => {
-            // Use service invocation to call actors in remote service
-            // The URL format for cross-service actor invocation is:
-            // /v1.0/invoke/{app-id}/method/actors/{actor-type}/{actor-id}/method/{method-name}
-            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/appendEventsAsync`;
-            
+        // For cross-service actor communication, create a custom proxy using service invocation
+        const proxy = {
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
             try {
-              const response = await fetch(url, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify([expectedLastSortableUniqueId, events])
-              });
-              
-              const responseText = await response.text();
-              
-              // If we get a 500 error but events are actually saved (common Dapr issue)
-              if (response.status === 500 && responseText === '{}') {
-                // Since we can see from logs that events ARE being saved, return success
-                // This is a workaround for a Dapr actor serialization issue
-                const lastEvent = events[events.length - 1];
-                return {
-                  isSuccess: true,
-                  lastSortableUniqueId: lastEvent?.sortableUniqueId || ''
-                };
-              }
-              
-              if (!response.ok) {
-                return {
-                  isSuccess: false,
-                  error: `HTTP ${response.status}: ${responseText}`
-                };
-              }
-              
-              // Parse the response, handling empty responses
-              try {
-                const result: EventHandlingResponse = responseText ? JSON.parse(responseText) : { isSuccess: true };
-                return result;
-              } catch (e) {
-                return {
-                  isSuccess: false,
-                  error: `Failed to parse response: ${responseText}`
-                };
-              }
+              const result = await daprClient.invoker.invoke(
+                'dapr-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
+                HttpMethod.PUT,
+                [expectedLastSortableUniqueId, events]
+              );
+              return result;
             } catch (error) {
-              return {
-                isSuccess: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-              };
+              logger.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
             }
           },
           getAllEventsAsync: async () => {
-            // Use service invocation to call actors in remote service
-            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/getAllEventsAsync`;
-            
-            const response = await fetch(url, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({})
-            });
-            
-            const responseText = await response.text();
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${responseText}`);
-            }
-            
-            // Parse the response, handling empty responses
             try {
-              const result = responseText ? JSON.parse(responseText) : [];
+              const result = await daprClient.invoker.invoke(
+                'dapr-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/getAllEventsAsync`,
+                HttpMethod.PUT,
+                []
+              );
               return result;
-            } catch (e) {
-              throw new Error(`Failed to parse response: ${responseText}`);
+            } catch (error) {
+              logger.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
             }
           }
-        } as T;
+        };
+        return proxy as T;
       } else if (actorType === 'AggregateActor') {
         const AggregateActorClass = AggregateActorFactory.createActorClass();
         const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr)) as T;
       } else {
-        // Fallback for unknown actor types
-        return {
-          executeCommandAsync: async (data: any) => {
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/executeCommandAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          queryAsync: async (data: any) => {
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/queryAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          loadAggregateAsync: async (data: any) => {
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/loadAggregateAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
-              return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
-              HttpMethod.PUT, 
-              [expectedLastSortableUniqueId, events] // Pass as array for proper parameter passing
-            );
-          }
-        } as T;
+        // Unknown actor type
+        throw new Error(`Unknown actor type: ${actorType}`);
       }
     }
   };

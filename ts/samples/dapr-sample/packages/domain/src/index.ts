@@ -39,3 +39,6 @@ export type { TaskListResponse } from './aggregates/task/queries/index.js';
 
 // Export User aggregate
 export * from './aggregates/user/index.js';
+
+// Export actor interfaces
+export * from './actors/interfaces/index.js';

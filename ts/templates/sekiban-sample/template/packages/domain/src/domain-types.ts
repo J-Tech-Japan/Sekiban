@@ -16,8 +16,9 @@ import {
   TaskCompletionReverted
 } from './aggregates/task/events/task-events.js';
 import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
-import { TaskMultiProjector } from './aggregates/task/projectors/task-multi-projector.js';
-import { GetTaskById, GetAllTasks } from './aggregates/task/queries/index.js';
+// TODO: Uncomment when multi-projector is available
+// import { TaskMultiProjector } from './aggregates/task/projectors/task-multi-projector.js';
+// import { GetTaskById, GetAllTasks } from './aggregates/task/queries/index.js';
 import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
 import { userProjectorDefinition } from './aggregates/user/projectors/user-projector.js';
 
@@ -48,11 +49,13 @@ globalRegistry.registerProjector(taskProjectorDefinition);
 globalRegistry.registerProjector(userProjectorDefinition);
 
 // Multi-projectors
-globalRegistry.registerMultiProjector(TaskMultiProjector);
+// TODO: Uncomment when registerMultiProjector is available
+// globalRegistry.registerMultiProjector(TaskMultiProjector);
 
 // Queries
-globalRegistry.registerQuery(GetTaskById);
-globalRegistry.registerQuery(GetAllTasks);
+// TODO: Uncomment when registerQuery is available
+// globalRegistry.registerQuery(GetTaskById);
+// globalRegistry.registerQuery(GetAllTasks);
 
 export function createTaskDomainTypes() {
   const domainTypes = createSchemaDomainTypes(globalRegistry);

@@ -30,3 +30,6 @@ export { GetTaskById } from './aggregates/task/queries/task-queries.js';
 
 // Export User aggregate
 export * from './aggregates/user/index.js';
+
+// Export actor interfaces for cross-service communication
+export * from './actors/interfaces/index.js';

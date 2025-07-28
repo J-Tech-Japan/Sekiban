@@ -146,6 +146,14 @@ mkdir -p tmp/logs
 echo "🗑️  Clearing old log files..."
 rm -f tmp/logs/*.log
 
+echo ""
+echo "📋 To monitor service logs, use these commands in separate terminals:"
+echo "  tail -f tmp/logs/event-relay.log"
+echo "  tail -f tmp/logs/event-handler.log"
+echo "  tail -f tmp/logs/multi-projector.log"
+echo ""
+sleep 2
+
 # Start Event Relay first (it needs to be ready to receive events)
 echo "Starting Event Relay..."
 cd packages/event-relay
@@ -194,6 +202,30 @@ sleep 10
 # Start API (main service) with environment variables
 echo "Starting API..."
 cd packages/api
+
+echo ""
+echo "================================"
+echo "🎯 All background services started!"
+echo ""
+echo "📋 To monitor logs, use these commands in separate terminals:"
+echo ""
+echo "  Event Relay logs:"
+echo "  tail -f $(pwd)/../../tmp/logs/event-relay.log"
+echo ""
+echo "  Event Handler logs:"
+echo "  tail -f $(pwd)/../../tmp/logs/event-handler.log"
+echo ""
+echo "  Multi-Projector logs:"
+echo "  tail -f $(pwd)/../../tmp/logs/multi-projector.log"
+echo ""
+echo "Or from the project root:"
+echo "  tail -f tmp/logs/event-relay.log"
+echo "  tail -f tmp/logs/event-handler.log"
+echo "  tail -f tmp/logs/multi-projector.log"
+echo ""
+echo "================================"
+echo ""
+
 export PORT=3000
 STORAGE_TYPE=$STORAGE_TYPE DATABASE_URL=$DATABASE_URL COSMOS_CONNECTION_STRING=$COSMOS_CONNECTION_STRING COSMOS_DATABASE_NAME=$COSMOS_DATABASE_NAME PORT=$PORT dapr run \
   --app-id dapr-sample-api \

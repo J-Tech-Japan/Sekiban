@@ -21,7 +21,7 @@ import { PostgresEventStore } from '@sekiban/postgres';
 import { createCosmosEventStore } from '@sekiban/cosmos';
 
 const { Pool } = pg;
-import { createTaskDomainTypes } from '@dapr-sample/domain';
+import { createTaskDomainTypes, AggregateEventHandlerActorBase } from '@dapr-sample/domain';
 
 
 async function startServer() {
@@ -178,7 +178,55 @@ async function setupDaprActorsWithApp(app: express.Express) {
   });
 
   // Create actor proxy factory that uses DaprClient with ActorProxyBuilder
-  ￥
+  const actorProxyFactory = {
+    createActorProxy: <T>(actorId: any, actorType: string): T => {
+      const actorIdStr = actorId.id || actorId;
+      
+      // Use ActorProxyBuilder for all actor types
+      if (actorType === 'AggregateEventHandlerActor') {
+        // For cross-service actor communication, create a custom proxy using service invocation
+        const proxy = {
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
+            try {
+              const result = await daprClient.invoker.invoke(
+                'sekiban-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
+                HttpMethod.PUT,
+                [expectedLastSortableUniqueId, events]
+              );
+              return result;
+            } catch (error) {
+              console.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
+            }
+          },
+          getAllEventsAsync: async () => {
+            try {
+              const result = await daprClient.invoker.invoke(
+                'sekiban-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/getAllEventsAsync`,
+                HttpMethod.PUT,
+                []
+              );
+              return result;
+            } catch (error) {
+              console.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
+            }
+          }
+        };
+        return proxy as T;
+      } else if (actorType === 'AggregateActor') {
+        const AggregateActorClass = AggregateActorFactory.createActorClass();
+        const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
+        return builder.build(new ActorId(actorIdStr)) as T;
+      } else {
+        // Unknown actor type
+        throw new Error(`Unknown actor type: ${actorType}`);
+      }
+    }
+  };
+  
   // Create a simple serialization service
   const serializationService = {
     async deserializeAggregateAsync(surrogate: any) {
