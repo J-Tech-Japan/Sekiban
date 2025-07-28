@@ -58,19 +58,6 @@ export COSMOS_CONNECTION_STRING
 export COSMOS_DATABASE
 export COSMOS_CONTAINER
 
-# Note: This configuration uses Cosmos DB for event storage only.
-# PostgreSQL is still required for Dapr state store (for actors).
-echo -e "${YELLOW}ℹ️  Note: Cosmos DB is used for event storage only.${NC}"
-echo -e "${YELLOW}    PostgreSQL is still required for Dapr state store.${NC}"
-echo ""
-
-# Check if PostgreSQL is running
-if ! pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠️  PostgreSQL is not running. Starting it now...${NC}"
-    brew services start postgresql@14 2>/dev/null || brew services start postgresql 2>/dev/null || true
-    sleep 2
-fi
-
 # Run all services with Cosmos DB configuration
-echo -e "${GREEN}🚀 Starting all services with Cosmos DB event storage...${NC}"
+echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
 ./run-all-services.sh
