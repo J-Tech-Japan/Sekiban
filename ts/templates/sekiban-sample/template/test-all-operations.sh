@@ -115,7 +115,7 @@ phase_2() {
         if command -v jq &> /dev/null; then
             echo ""
             echo "Task Details:"
-            echo "$QUERY_RESPONSE" | jq -r '"  ID: \(.id)\n  Title: \(.title)\n  Status: \(.status)\n  Priority: \(.priority)"'
+            echo "$QUERY_RESPONSE" | jq -r '"  ID: \(.data.id)\n  Title: \(.data.title)\n  Status: \(.data.status)\n  Priority: \(.data.priority)"'
         fi
     else
         print_error "Failed to query task"
@@ -123,9 +123,9 @@ phase_2() {
     fi
 }
 
-# Phase 3: Complete Task
+# Phase 3: Assign Task
 phase_3() {
-    print_phase 3 "COMPLETE Task"
+    print_phase 3 "ASSIGN Task"
     
     # Check if task ID was provided as argument
     local provided_id="${1:-}"
@@ -144,9 +144,43 @@ phase_3() {
         return 1
     fi
     
+    ASSIGN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/tasks/$TASK_ID/assign" \
+      -H "Content-Type: application/json" \
+      -d '{"assignedTo": "user@example.com"}')
+    echo "Response: $ASSIGN_RESPONSE"
+    
+    if [[ "$ASSIGN_RESPONSE" == *"success"* ]] || [[ "$ASSIGN_RESPONSE" == *"assigned"* ]]; then
+        print_success "Task assigned successfully"
+    else
+        print_error "Failed to assign task"
+        return 1
+    fi
+}
+
+# Phase 4: Complete Task
+phase_4() {
+    print_phase 4 "COMPLETE Task"
+    
+    # Check if task ID was provided as argument
+    local provided_id="${1:-}"
+    if [ -n "$provided_id" ]; then
+        TASK_ID="$provided_id"
+        print_info "Using provided Task ID: $TASK_ID"
+    elif [ -z "$TASK_ID" ] && [ -f "$TEMP_FILE" ]; then
+        # Load TASK_ID from temp file if not already set
+        TASK_ID=$(cat "$TEMP_FILE")
+        print_info "Using Task ID from previous run: $TASK_ID"
+    fi
+    
+    if [ -z "$TASK_ID" ]; then
+        print_error "No Task ID available. Please run phase 1 first or provide a task ID."
+        print_info "Usage: $0 4 <task-id>"
+        return 1
+    fi
+    
     COMPLETE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/tasks/$TASK_ID/complete" \
       -H "Content-Type: application/json" \
-      -d '{"completedBy": "test@example.com", "notes": "Task completed via test script"}')
+      -d '{"completedBy": "completer@example.com", "notes": "Task completed successfully"}')
     echo "Response: $COMPLETE_RESPONSE"
     
     if [[ "$COMPLETE_RESPONSE" == *"success"* ]] || [[ "$COMPLETE_RESPONSE" == *"completed"* ]]; then
@@ -157,36 +191,53 @@ phase_3() {
     fi
 }
 
-# Phase 4: List All Tasks
-phase_4() {
-    print_phase 4 "LIST All Tasks"
+# Phase 5: List All Tasks
+phase_5() {
+    print_phase 5 "LIST All Tasks"
     
     LIST_RESPONSE=$(curl -s -X GET "$BASE_URL/api/tasks")
     echo "Response: $LIST_RESPONSE"
     
-    if [[ "$LIST_RESPONSE" == *"["* ]]; then
-        print_success "Tasks listed successfully"
-        if command -v jq &> /dev/null; then
-            TASK_COUNT=$(echo "$LIST_RESPONSE" | jq 'length')
-            print_info "Total tasks: $TASK_COUNT"
+    if command -v jq &> /dev/null; then
+        # Count tasks in response
+        TASK_COUNT=$(echo "$LIST_RESPONSE" | jq '.data | length' 2>/dev/null || echo "0")
+        
+        if [ "$TASK_COUNT" -gt 0 ]; then
+            print_success "Found $TASK_COUNT task(s)"
+            echo ""
+            echo "Tasks List:"
+            echo "$LIST_RESPONSE" | jq -r '.data[] | "  - ID: \(.id)\n    Title: \(.title)\n    Status: \(.status)\n    Priority: \(.priority)\n    Created: \(.createdAt)\n"'
+        else
+            print_info "No tasks found"
+        fi
+        
+        # Show pagination info if available
+        if echo "$LIST_RESPONSE" | jq -e '.pagination' &>/dev/null; then
+            echo "Pagination:"
+            echo "$LIST_RESPONSE" | jq '.pagination'
         fi
     else
-        print_error "Failed to list tasks"
-        return 1
+        # Basic check without jq
+        if [[ "$LIST_RESPONSE" == *"data"* ]]; then
+            print_success "Tasks listed successfully"
+        else
+            print_error "Failed to list tasks"
+            return 1
+        fi
     fi
 }
 
-# Phase 5: Wait for projections
-phase_5() {
-    print_phase 5 "Wait for Projections Update"
+# Phase 6: Wait for projections
+phase_6() {
+    print_phase 6 "Wait for Projections Update"
     print_info "Waiting 2 seconds for projections to update..."
     sleep 2
     print_success "Wait completed"
 }
 
-# Phase 6: Final Query
-phase_6() {
-    print_phase 6 "FINAL QUERY (Verify Completion)"
+# Phase 7: Final Query
+phase_7() {
+    print_phase 7 "FINAL QUERY (Verify Completion)"
     
     # Check if task ID was provided as argument
     local provided_id="${1:-}"
@@ -211,10 +262,10 @@ phase_6() {
     if command -v jq &> /dev/null; then
         echo ""
         echo "Final Task Details:"
-        echo "$FINAL_QUERY_RESPONSE" | jq -r '"  ID: \(.id)\n  Title: \(.title)\n  Status: \(.status)\n  Priority: \(.priority)\n  Completed: \(.status == "completed")"'
+        echo "$FINAL_QUERY_RESPONSE" | jq -r '"  ID: \(.data.id)\n  Title: \(.data.title)\n  Status: \(.data.status)\n  Assigned To: \(.data.assignedTo // "Not assigned")\n  Completed: \(.data.status == "completed")\n  Completed By: \(.data.completedBy // "N/A")\n  Completion Date: \(.data.completedAt // "N/A")"'
         
         # Check if task is completed
-        STATUS=$(echo "$FINAL_QUERY_RESPONSE" | jq -r '.status' 2>/dev/null)
+        STATUS=$(echo "$FINAL_QUERY_RESPONSE" | jq -r '.data.status' 2>/dev/null)
         if [ "$STATUS" = "completed" ]; then
             print_success "Task is properly marked as completed"
         else
@@ -230,7 +281,7 @@ run_all_phases() {
     echo -e "${GREEN}=== Running All Test Phases ===${NC}"
     local failed=0
     
-    for i in {0..6}; do
+    for i in {0..7}; do
         if ! phase_$i; then
             failed=1
             print_error "Phase $i failed"
@@ -256,21 +307,23 @@ show_usage() {
     echo "  0 - Health Check"
     echo "  1 - Create Task"
     echo "  2 - Query Task         (optional: provide task ID)"
-    echo "  3 - Complete Task      (optional: provide task ID)"
-    echo "  4 - List All Tasks"
-    echo "  5 - Wait for Projections"
-    echo "  6 - Final Query        (optional: provide task ID)"
+    echo "  3 - Assign Task        (optional: provide task ID)"
+    echo "  4 - Complete Task      (optional: provide task ID)"
+    echo "  5 - List All Tasks"
+    echo "  6 - Wait for Projections"
+    echo "  7 - Final Query        (optional: provide task ID)"
     echo ""
     echo "Examples:"
     echo "  $0                     # Run all phases"
     echo "  $0 1                   # Run only phase 1 (Create Task)"
     echo "  $0 2                   # Run phase 2 (Query Task) using saved task ID"
     echo "  $0 2 abc-123-def       # Run phase 2 with specific task ID"
-    echo "  $0 3 abc-123-def       # Complete specific task"
+    echo "  $0 3 abc-123-def       # Assign specific task"
+    echo "  $0 4 abc-123-def       # Complete specific task"
     echo ""
     echo "Notes:"
     echo "  - Phase 1 saves the created task ID to: ./tmp/sekiban_test_task_id"
-    echo "  - Phases 2,3,6 will use the saved task ID if no ID is provided"
+    echo "  - Phases 2,3,4,7 will use the saved task ID if no ID is provided"
     echo "  - You can override with a specific task ID as the second argument"
 }
 
@@ -280,14 +333,14 @@ if [ $# -eq 0 ]; then
     run_all_phases
 elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     show_usage
-elif [[ "$1" =~ ^[0-6]$ ]]; then
+elif [[ "$1" =~ ^[0-7]$ ]]; then
     # Run specific phase
     phase_num=$1
     task_id="${2:-}"
     
     # Pass task ID to phases that accept it
     case $phase_num in
-        2|3|6)
+        2|3|4|7)
             phase_$phase_num "$task_id"
             ;;
         *)

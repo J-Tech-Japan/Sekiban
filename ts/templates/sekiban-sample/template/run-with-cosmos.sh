@@ -17,9 +17,8 @@ echo "================================"
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
     echo -e "${GREEN}📄 Loading environment variables from .env file...${NC}"
-    set -a  # automatically export all variables
-    source .env
-    set +a  # turn off automatic export
+    # Use export to properly load environment variables with special characters
+    export $(grep -v '^#' .env | xargs)
 else
     echo -e "${YELLOW}⚠️  No .env file found. Please create one from .env.example${NC}"
     exit 1
@@ -37,13 +36,11 @@ fi
 export STORAGE_TYPE=cosmos
 
 # Set default values if not provided in .env
-export COSMOS_DATABASE=${COSMOS_DATABASE:-sekiban-events}
-export COSMOS_CONTAINER=${COSMOS_CONTAINER:-events}
+export COSMOS_DATABASE_NAME=${COSMOS_DATABASE_NAME:-sekiban_events}
 
 echo -e "${GREEN}✅ Configuration loaded:${NC}"
 echo "  Storage Type: $STORAGE_TYPE"
-echo "  Cosmos Database: $COSMOS_DATABASE"
-echo "  Cosmos Container: $COSMOS_CONTAINER"
+echo "  Cosmos Database: $COSMOS_DATABASE_NAME"
 echo "  Connection String: [HIDDEN]"
 echo "  Connection String Length: ${#COSMOS_CONNECTION_STRING}"
 echo ""
@@ -56,9 +53,10 @@ fi
 # Export all necessary environment variables to ensure they're available to child processes
 export STORAGE_TYPE
 export COSMOS_CONNECTION_STRING
-export COSMOS_DATABASE
-export COSMOS_CONTAINER
+export COSMOS_DATABASE_NAME
 
 # Run all services with Cosmos DB configuration
+# Note: Uses in-memory state store for Dapr actors
 echo -e "${GREEN}🚀 Starting all services with Cosmos DB...${NC}"
+echo -e "${YELLOW}ℹ️  Using in-memory state store for Dapr actors${NC}"
 ./run-all-services.sh

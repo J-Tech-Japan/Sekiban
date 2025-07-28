@@ -1,0 +1,11 @@
+# Test scripts
+test-*.sh
+test-*.mjs
+test-*.cjs
+
+# Temporary directories and logs
+tmp/
+*.log
+
+# Build output
+dist/
