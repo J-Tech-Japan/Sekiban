@@ -162,10 +162,9 @@ async function setupDaprActorsWithApp(app: express.Express) {
       }
       
       const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+      const database = cosmosClient.database(config.COSMOS_DATABASE!);
       eventStore = new CosmosEventStore(
-        cosmosClient,
-        config.COSMOS_DATABASE!,
-        config.COSMOS_CONTAINER!
+        database as any
       );
       
       // Initialize the Cosmos DB container

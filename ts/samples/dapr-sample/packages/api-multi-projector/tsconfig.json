@@ -9,6 +9,7 @@
     { "path": "../domain" },
     { "path": "../../../../src/packages/core" },
     { "path": "../../../../src/packages/dapr" },
-    { "path": "../../../../src/packages/postgres" }
+    { "path": "../../../../src/packages/postgres" },
+    { "path": "../../../../src/packages/cosmos" }
   ]
 }
