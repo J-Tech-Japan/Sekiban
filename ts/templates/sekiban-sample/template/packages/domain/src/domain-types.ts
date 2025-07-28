@@ -1,4 +1,4 @@
-import { createSchemaDomainTypes, globalRegistry } from '@sekiban/core';
+import { createSchemaDomainTypes, globalRegistry, SchemaMultiProjectorTypes, SchemaQueryTypes } from '@sekiban/core';
 import { 
   CreateTask, 
   AssignTask, 
@@ -15,10 +15,8 @@ import {
   TaskDeleted,
   TaskCompletionReverted
 } from './aggregates/task/events/task-events.js';
-import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
-// TODO: Uncomment when multi-projector is available
-// import { TaskMultiProjector } from './aggregates/task/projectors/task-multi-projector.js';
-// import { GetTaskById, GetAllTasks } from './aggregates/task/queries/index.js';
+import { taskProjectorDefinition, TaskProjector } from './aggregates/task/projectors/task-projector.js';
+import { TaskListQuery, ActiveTaskListQuery, TasksByAssigneeQuery } from './aggregates/task/queries/index.js';
 import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
 import { userProjectorDefinition } from './aggregates/user/projectors/user-projector.js';
 
@@ -59,6 +57,20 @@ globalRegistry.registerProjector(userProjectorDefinition);
 
 export function createTaskDomainTypes() {
   const domainTypes = createSchemaDomainTypes(globalRegistry);
+  
+  // Register aggregate list projectors
+  if (domainTypes.multiProjectorTypes && domainTypes.multiProjectorTypes instanceof SchemaMultiProjectorTypes) {
+    // Register Task aggregate list projector
+    domainTypes.multiProjectorTypes.registerAggregateListProjector(() => new TaskProjector());
+  }
+  
+  // Register queries
+  if (domainTypes.queryTypes && domainTypes.queryTypes instanceof SchemaQueryTypes) {
+    // Register Task queries
+    domainTypes.queryTypes.registerQuery('TaskListQuery', TaskListQuery);
+    domainTypes.queryTypes.registerQuery('ActiveTaskListQuery', ActiveTaskListQuery);
+    domainTypes.queryTypes.registerQuery('TasksByAssigneeQuery', TasksByAssigneeQuery);
+  }
   
   // Add convenience methods using the public API
   return {

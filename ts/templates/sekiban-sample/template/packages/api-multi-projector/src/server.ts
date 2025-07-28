@@ -8,6 +8,8 @@ import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorPro
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
 import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
 import { PostgresEventStore } from '@sekiban/postgres';
+// Import domain types at the top to ensure registration happens
+import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from './config/index.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -101,11 +103,11 @@ async function setupDaprActorsWithApp(app: express.Express) {
   const domainTypes = createTaskDomainTypes();
 
   // Choose storage type based on environment variable or config
-  const usePostgres = config.USE_POSTGRES;
+  const storageType = config.STORAGE_TYPE;
   
   let eventStore: any; // Use any to avoid neverthrow version mismatch
   
-  if (usePostgres) {
+  if (storageType === 'postgres') {
     // Initialize PostgreSQL event store
     logger.info('Using PostgreSQL event store');
     const pool = new Pool({
@@ -126,6 +128,37 @@ async function setupDaprActorsWithApp(app: express.Express) {
       }
     } catch (error) {
       logger.error('Failed to initialize PostgreSQL:', error);
+      throw error;
+    }
+  } else if (storageType === 'cosmos') {
+    // Initialize Cosmos DB event store
+    logger.info('Using Cosmos DB event store');
+    const { CosmosEventStore } = await import('@sekiban/cosmos');
+    const { CosmosClient } = await import('@azure/cosmos');
+    
+    if (!config.COSMOS_CONNECTION_STRING) {
+      throw new Error('COSMOS_CONNECTION_STRING is required when using Cosmos DB storage');
+    }
+    
+    // Create Cosmos client and database reference
+    const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+    const database = cosmosClient.database(config.COSMOS_DATABASE!);
+    
+    // Create event store with the database object
+    eventStore = new CosmosEventStore(database as any);
+    
+    // Initialize the Cosmos DB container
+    logger.info('Initializing Cosmos DB...');
+    try {
+      const result = await eventStore.initialize();
+      if (result.isOk()) {
+        logger.info('Cosmos DB initialized successfully');
+      } else {
+        logger.error('Failed to initialize Cosmos DB:', result.error);
+        throw result.error;
+      }
+    } catch (error) {
+      logger.error('Failed to initialize Cosmos DB:', error);
       throw error;
     }
   } else {

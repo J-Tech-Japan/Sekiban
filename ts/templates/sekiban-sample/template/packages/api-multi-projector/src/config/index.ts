@@ -10,8 +10,11 @@ interface Config {
   DAPR_APP_ID: string;
   API_PREFIX: string;
   CORS_ORIGIN: string;
-  USE_POSTGRES: boolean;
+  STORAGE_TYPE: 'postgres' | 'cosmos' | 'inmemory';
   DATABASE_URL: string;
+  COSMOS_CONNECTION_STRING?: string;
+  COSMOS_DATABASE?: string;
+  COSMOS_CONTAINER?: string;
 }
 
 export const config: Config = {
@@ -21,6 +24,15 @@ export const config: Config = {
   DAPR_APP_ID: process.env.DAPR_APP_ID || 'dapr-sample-api-multi-projector',
   API_PREFIX: process.env.API_PREFIX || '/api/v1',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
-  USE_POSTGRES: process.env.USE_POSTGRES === 'true',
-  DATABASE_URL: process.env.DATABASE_URL || 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events'
+  STORAGE_TYPE: (process.env.STORAGE_TYPE as 'postgres' | 'cosmos' | 'inmemory') || 'inmemory',
+  DATABASE_URL: process.env.DATABASE_URL || (() => {
+    // WARNING: Default credentials for development only - NEVER use in production
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DATABASE_URL must be explicitly set in production environment');
+    }
+    return 'postgresql://sekiban:sekiban_password@localhost:5432/sekiban_events';
+  })(),
+  COSMOS_CONNECTION_STRING: process.env.COSMOS_CONNECTION_STRING,
+  COSMOS_DATABASE: process.env.COSMOS_DATABASE || 'sekiban-events',
+  COSMOS_CONTAINER: process.env.COSMOS_CONTAINER || 'events'
 };

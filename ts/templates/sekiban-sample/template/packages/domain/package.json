@@ -12,13 +12,13 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --noEmit false",
     "clean": "rm -rf dist",
     "dev": "tsc --watch",
     "test": "vitest"
   },
   "dependencies": {
-    "@sekiban/core": "^0.1.0-alpha.3",
+    "@sekiban/core": "file:../../../../../src/packages/core",
     "zod": "^3.22.4",
     "neverthrow": "^6.1.0"
   },

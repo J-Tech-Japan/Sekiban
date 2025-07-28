@@ -115,7 +115,7 @@ phase_2() {
         if command -v jq &> /dev/null; then
             echo ""
             echo "Task Details:"
-            echo "$QUERY_RESPONSE" | jq -r '"  ID: \(.data.id)\n  Title: \(.data.title)\n  Status: \(.data.status)\n  Priority: \(.data.priority)"'
+            echo "$QUERY_RESPONSE" | jq -r '"  ID: \(.id)\n  Title: \(.title)\n  Status: \(.status)\n  Priority: \(.priority)"'
         fi
     else
         print_error "Failed to query task"
@@ -200,13 +200,13 @@ phase_5() {
     
     if command -v jq &> /dev/null; then
         # Count tasks in response
-        TASK_COUNT=$(echo "$LIST_RESPONSE" | jq '.data | length' 2>/dev/null || echo "0")
+        TASK_COUNT=$(echo "$LIST_RESPONSE" | jq '. | length' 2>/dev/null || echo "0")
         
         if [ "$TASK_COUNT" -gt 0 ]; then
             print_success "Found $TASK_COUNT task(s)"
             echo ""
             echo "Tasks List:"
-            echo "$LIST_RESPONSE" | jq -r '.data[] | "  - ID: \(.id)\n    Title: \(.title)\n    Status: \(.status)\n    Priority: \(.priority)\n    Created: \(.createdAt)\n"'
+            echo "$LIST_RESPONSE" | jq -r '.[] | "  - ID: \(.id)\n    Title: \(.title)\n    Status: \(.status)\n    Priority: \(.priority)\n    Created: \(.createdAt)\n"'
         else
             print_info "No tasks found"
         fi
@@ -262,10 +262,10 @@ phase_7() {
     if command -v jq &> /dev/null; then
         echo ""
         echo "Final Task Details:"
-        echo "$FINAL_QUERY_RESPONSE" | jq -r '"  ID: \(.data.id)\n  Title: \(.data.title)\n  Status: \(.data.status)\n  Assigned To: \(.data.assignedTo // "Not assigned")\n  Completed: \(.data.status == "completed")\n  Completed By: \(.data.completedBy // "N/A")\n  Completion Date: \(.data.completedAt // "N/A")"'
+        echo "$FINAL_QUERY_RESPONSE" | jq -r '"  ID: \(.id)\n  Title: \(.title)\n  Status: \(.status)\n  Assigned To: \(.assignedTo // "Not assigned")\n  Completed: \(.status == "completed")\n  Completed By: \(.completedBy // "N/A")\n  Completion Date: \(.completedAt // "N/A")"'
         
         # Check if task is completed
-        STATUS=$(echo "$FINAL_QUERY_RESPONSE" | jq -r '.data.status' 2>/dev/null)
+        STATUS=$(echo "$FINAL_QUERY_RESPONSE" | jq -r '.status' 2>/dev/null)
         if [ "$STATUS" = "completed" ]; then
             print_success "Task is properly marked as completed"
         else

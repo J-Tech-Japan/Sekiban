@@ -43,9 +43,60 @@ done
 
 sleep 2
 
+# Clean cache and build files to ensure fresh build
+echo "🧹 Cleaning cache and build files..."
+rm -rf node_modules packages/*/node_modules packages/*/dist 2>/dev/null || true
+rm -rf .turbo .next pnpm-lock.yaml 2>/dev/null || true
+# Also clean any TypeScript build info cache
+rm -rf packages/*/tsconfig.tsbuildinfo 2>/dev/null || true
+echo "  ✓ Cleaned node_modules and build artifacts"
+
 # Install dependencies
 echo "📦 Installing dependencies..."
 pnpm install
+
+# Build all packages to ensure latest code is used
+echo "🔨 Building all packages..."
+pnpm build
+
+# Verify all packages have dist directories
+echo "🔍 Verifying build outputs..."
+missing_dist=false
+for package_dir in packages/*/; do
+  package_name=$(basename "$package_dir")
+  if [ "$package_name" != "workflows" ]; then  # Skip workflows package if it doesn't need dist
+    if [ ! -d "${package_dir}dist" ]; then
+      echo "  ⚠️  Missing dist directory for $package_name"
+      missing_dist=true
+    else
+      echo "  ✓ $package_name build output verified"
+    fi
+  fi
+done
+
+if [ "$missing_dist" = true ]; then
+  echo "❌ Some packages failed to build properly. Please check the build output above."
+  exit 1
+fi
+
+echo "✅ All packages built successfully"
+
+# Verify domain package exports are correctly built
+echo "🔍 Verifying domain package exports..."
+if [ -f "packages/domain/dist/index.js" ]; then
+  if grep -q "TaskListQuery\|ActiveTaskListQuery\|TasksByAssigneeQuery" packages/domain/dist/index.js; then
+    echo "  ✓ Query classes exported correctly"
+  else
+    echo "  ⚠️  Query classes not found in domain exports"
+  fi
+  if grep -q "TaskMultiProjector" packages/domain/dist/index.js; then
+    echo "  ✓ TaskMultiProjector exported correctly"
+  else
+    echo "  ⚠️  TaskMultiProjector not found in domain exports"
+  fi
+else
+  echo "  ⚠️  Domain package index.js not found"
+fi
 
 # Check if Dapr is initialized
 if ! dapr --version > /dev/null 2>&1; then

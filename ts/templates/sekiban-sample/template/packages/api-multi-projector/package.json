@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@azure/cosmos": "^4.3.0",
     "@dapr/dapr": "^3.5.2",
     "@dapr-sample/domain": "file:../domain",
     "@sekiban/core": "^0.1.0-alpha.5",

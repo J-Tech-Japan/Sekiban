@@ -1,35 +1,17 @@
 import { 
   IMultiProjectionListQuery,
-  AggregateListProjector,
-  MultiProjectionState,
-  IQueryContext,
-  Result,
-  ok
+  AggregateListProjector
 } from '@sekiban/core';
 import { TaskProjector } from '../projectors/task-projector.js';
 import { TaskState, CompletedTaskState } from '../projectors/task-projector.js';
+import { TaskListResponse } from './task-list-query.js';
 
 /**
- * Response type for task list query
+ * Query to get active tasks only
  */
-export interface TaskListResponse {
-  taskId: string;
-  title: string;
-  description?: string;
-  assignedTo?: string;
-  dueDate?: string;
-  priority: 'low' | 'medium' | 'high';
-  status: 'active' | 'completed' | 'deleted';
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Query to get all tasks
- */
-export class TaskListQuery implements IMultiProjectionListQuery<
+export class ActiveTaskListQuery implements IMultiProjectionListQuery<
   AggregateListProjector<TaskProjector>,
-  TaskListQuery,
+  ActiveTaskListQuery,
   TaskListResponse
 > {
   /**
@@ -54,7 +36,7 @@ export class TaskListQuery implements IMultiProjectionListQuery<
   }
   
   /**
-   * Filter tasks from the aggregate
+   * Filter active tasks from the aggregate
    */
   handleFilter(aggregate: any): boolean {
     const payload = aggregate.payload;
@@ -62,16 +44,20 @@ export class TaskListQuery implements IMultiProjectionListQuery<
       payload && 
       typeof payload === 'object' && 
       'aggregateType' in payload &&
-      (payload.aggregateType === 'Task' || payload.aggregateType === 'CompletedTask')
+      payload.aggregateType === 'Task' &&
+      (payload as TaskState).status === 'active'
     );
   }
   
   /**
-   * Sort tasks by creation date (newest first)
+   * Sort tasks by priority and then by creation date
    */
   handleSort(a: any, b: any): number {
-    const payloadA = a.payload as TaskState | CompletedTaskState;
-    const payloadB = b.payload as TaskState | CompletedTaskState;
+    const payloadA = a.payload as TaskState;
+    const payloadB = b.payload as TaskState;
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const priorityDiff = priorityOrder[payloadA.priority] - priorityOrder[payloadB.priority];
+    if (priorityDiff !== 0) return priorityDiff;
     return new Date(payloadB.createdAt).getTime() - new Date(payloadA.createdAt).getTime();
   }
   
@@ -79,7 +65,7 @@ export class TaskListQuery implements IMultiProjectionListQuery<
    * Transform aggregate to response format
    */
   transformToResponse(aggregate: any): TaskListResponse {
-    const payload = aggregate.payload as TaskState | CompletedTaskState;
+    const payload = aggregate.payload as TaskState;
     return {
       taskId: payload.taskId,
       title: payload.title,

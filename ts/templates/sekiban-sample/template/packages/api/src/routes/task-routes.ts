@@ -8,7 +8,10 @@ import {
   UpdateTask, 
   DeleteTask,
   RevertTaskCompletion,
-  GetTaskById 
+  GetTaskById,
+  TaskListQuery,
+  ActiveTaskListQuery,
+  TasksByAssigneeQuery
 } from '@dapr-sample/domain';
 import { PartitionKeys, CommandValidationError, SekibanError, AggregateNotFoundError } from '@sekiban/core';
 import { getExecutor } from '../setup/executor.js';
@@ -529,6 +532,79 @@ router.get(
       res.status(500).json({ 
         error: error instanceof Error ? error.message : 'Unknown error' 
       });
+    }
+  }
+);
+
+// Get all tasks with filtering and pagination
+router.get(
+  '/tasks',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { status, assignee, limit, offset } = req.query;
+      const executor = await getExecutor();
+      
+      // Choose the appropriate query based on parameters
+      let query;
+      if (assignee) {
+        // Use TasksByAssigneeQuery if assignee is specified
+        query = new TasksByAssigneeQuery(assignee as string);
+      } else if (status === 'active') {
+        // Use ActiveTaskListQuery for active tasks
+        query = new ActiveTaskListQuery();
+      } else {
+        // Use general TaskListQuery
+        query = new TaskListQuery();
+      }
+      
+      // Note: New query implementation handles pagination internally
+      // The multi-projection system will handle limit/offset automatically
+      
+      // Execute multi-projection query
+      let result;
+      try {
+        result = await executor.queryAsync(query);
+      } catch (error) {
+        return res.status(500).json({ 
+          error: 'Failed to execute query',
+          details: error instanceof Error ? error.message : String(error)
+        });
+      }
+      
+      if (result.isErr()) {
+        return res.status(500).json({ 
+          error: 'Failed to fetch tasks',
+          details: result.error.message
+        });
+      }
+      
+      const queryResult = result.value || { items: [] };
+      const tasks = queryResult.items || [];
+      
+      // Transform results to consistent API response format
+      const transformedTasks = tasks.map((item: any) => {
+        const payload = item.payload || item;
+        const isCompleted = payload.aggregateType === 'CompletedTask' || payload.status === 'completed';
+        
+        return {
+          id: payload.taskId,
+          title: payload.title,
+          description: payload.description,
+          assignedTo: payload.assignedTo,
+          dueDate: payload.dueDate,
+          priority: payload.priority,
+          status: isCompleted ? 'completed' : payload.status,
+          createdAt: payload.createdAt,
+          updatedAt: payload.updatedAt,
+          completedAt: isCompleted ? payload.completedAt : undefined,
+          completedBy: isCompleted ? payload.completedBy : undefined,
+          completionNotes: isCompleted ? payload.completionNotes : undefined
+        };
+      });
+      
+      res.json(transformedTasks);
+    } catch (error) {
+      next(error);
     }
   }
 );

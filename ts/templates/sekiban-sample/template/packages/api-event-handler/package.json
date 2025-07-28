@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@azure/cosmos": "^4.3.0",
     "@dapr/dapr": "^3.5.2",
     "@sekiban/core": "^0.1.0-alpha.5",
     "@sekiban/dapr": "^0.1.0-alpha.5",
