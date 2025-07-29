@@ -1,36 +1,39 @@
-# ユニットテスト - Sekiban イベントソーシング
+# Unit Testing - Sekiban Event Sourcing
 
-> **ナビゲーション**
-> - [コアコンセプト](01_core_concepts.md)
-> - [はじめに](02_getting_started.md)
-> - [集約、プロジェクター、コマンド、イベント](03_aggregate_command_events.md)
-> - [複数集約プロジェクター](04_multiple_aggregate_projector.md)
-> - [クエリ](05_query.md)
-> - [ワークフロー](06_workflow.md)
-> - [JSONとOrleansのシリアライゼーション](07_json_orleans_serialization.md)
-> - [API実装](08_api_implementation.md)
-> - [クライアントAPI (Blazor)](09_client_api_blazor.md)
-> - [Orleansセットアップ](10_orleans_setup.md)
-> - [ユニットテスト](11_unit_testing.md) (現在のページ)
-> - [一般的な問題と解決策](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
+> **Navigation**
+> - [Core Concepts](01_core_concepts.md)
+> - [Getting Started](02_getting_started.md)
+> - [Aggregate, Projector, Command and Events](03_aggregate_command_events.md)
+> - [Multiple Aggregate Projector](04_multiple_aggregate_projector.md)
+> - [Query](05_query.md)
+> - [Workflow](06_workflow.md)
+> - [JSON and Orleans Serialization](07_json_orleans_serialization.md)
+> - [API Implementation](08_api_implementation.md)
+> - [Client API (Blazor)](09_client_api_blazor.md)
+> - [Orleans Setup](10_orleans_setup.md)
+> - [Dapr Setup](11_dapr_setup.md)
+> - [Unit Testing](12_unit_testing.md) (You are here)
+> - [Common Issues and Solutions](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [Value Object](15_value_object.md)
+> - [Deployment Guide](16_deployment.md)
 
-## ユニットテスト
+## Unit Testing
 
-Sekibanはイベントソースアプリケーションをテストするための複数のアプローチを提供しています。簡単さを求めるならインメモリテスト、より複雑なシナリオではOrleans基盤のテストを選ぶことができます。
+Sekiban provides several approaches for unit testing your event-sourced applications. You can choose between in-memory testing for simplicity or Orleans-based testing for more complex scenarios.
 
-## テストプロジェクトのセットアップ
+## Setup Testing Project
 
-まず、テストプロジェクトを作成し、必要なNuGetパッケージを追加します：
+First, create a testing project and add the necessary NuGet packages:
 
 ```bash
 dotnet new xunit -n YourProject.Tests
 dotnet add package Sekiban.Testing
 ```
 
-## 1. SekibanInMemoryTestBaseを使用したインメモリテスト
+## 1. In-Memory Testing with SekibanInMemoryTestBase
 
-最も簡単なアプローチは `Sekiban.Pure.xUnit` 名前空間の `SekibanInMemoryTestBase` クラスを使用します：
+The simplest approach uses the `SekibanInMemoryTestBase` class from the `Sekiban.Pure.xUnit` namespace:
 
 ```csharp
 using Sekiban.Pure;
@@ -44,36 +47,36 @@ using YourProject.Domain.Generated;
 
 public class YourTests : SekibanInMemoryTestBase
 {
-    // ドメインタイプを提供するためにオーバーライド
+    // Override to provide your domain types
     protected override SekibanDomainTypes GetDomainTypes() => 
         YourDomainTypes.Generate(YourEventsJsonContext.Default.Options);
 
     [Fact]
     public void SimpleTest()
     {
-        // Given - コマンドを実行して応答を取得
+        // Given - Execute a command and get the response
         var response1 = GivenCommand(new CreateYourEntity("Name", "Value"));
         Assert.Equal(1, response1.Version);
 
-        // When - 同じ集約に対して別のコマンドを実行
+        // When - Execute another command on the same aggregate
         var response2 = WhenCommand(new UpdateYourEntity(response1.PartitionKeys.AggregateId, "NewValue"));
         Assert.Equal(2, response2.Version);
 
-        // Then - 集約を取得してその状態を検証
+        // Then - Get the aggregate and verify its state
         var aggregate = ThenGetAggregate<YourEntityProjector>(response2.PartitionKeys);
         var entity = (YourEntity)aggregate.Payload;
         Assert.Equal("NewValue", entity.Value);
         
-        // Then - クエリを実行して結果を検証
+        // Then - Execute a query and verify the result
         var queryResult = ThenQuery(new YourEntityExistsQuery("Name"));
         Assert.True(queryResult);
     }
 }
 ```
 
-## 2. ResultBoxを使用したメソッドチェーン
+## 2. Method Chaining with ResultBox
 
-より流暢なテストのために、メソッドチェーンをサポートするResultBoxベースのメソッドを使用できます：
+For more fluent tests, you can use the ResultBox-based methods that support method chaining:
 
 ```csharp
 public class YourTests : SekibanInMemoryTestBase
@@ -96,14 +99,14 @@ public class YourTests : SekibanInMemoryTestBase
 }
 ```
 
-重要なポイント：
-- `Conveyor` は操作をチェーンするために使用され、ある操作の結果を次の入力に変換します
-- `Do` はアサーションや副作用を実行するために使用され、結果を変更しません
-- 最後の `UnwrapBox` は最終的なResultBoxをアンラップし、いずれかのステップが失敗した場合は例外をスローします
+Key points:
+- `Conveyor` is used to chain operations, transforming the result of one operation into the input for the next
+- `Do` is used to perform assertions or side effects without changing the result
+- `UnwrapBox` at the end unwraps the final ResultBox, throwing an exception if any step failed
 
-## 3. SekibanOrleansTestBaseを使用したOrleansテスト
+## 3. Orleans Testing with SekibanOrleansTestBase
 
-Orleans統合でテストするには、`Sekiban.Pure.Orleans.xUnit` 名前空間の `SekibanOrleansTestBase` クラスを使用します：
+For testing with Orleans integration, use the `SekibanOrleansTestBase` class from the `Sekiban.Pure.Orleans.xUnit` namespace:
 
 ```csharp
 public class YourOrleansTests : SekibanOrleansTestBase<YourOrleansTests>
@@ -132,28 +135,28 @@ public class YourOrleansTests : SekibanOrleansTestBase<YourOrleansTests>
     [Fact]
     public void TestSerializable()
     {
-        // コマンドがシリアライズ可能かテスト（Orleansにとって重要）
+        // Test that commands are serializable (important for Orleans)
         CheckSerializability(new CreateYourEntity("Name", "Value"));
     }
 }
 ```
 
-## 4. InMemorySekibanExecutorを使用した手動テスト
+## 4. Manual Testing with InMemorySekibanExecutor
 
-より複雑なシナリオやカスタムテストセットアップには、`InMemorySekibanExecutor` を手動で作成できます：
+For more complex scenarios or custom test setups, you can manually create an `InMemorySekibanExecutor`:
 
 ```csharp
 [Fact]
 public async Task ManualExecutorTest()
 {
-    // インメモリエグゼキューターを作成
+    // Create an in-memory executor
     var executor = new InMemorySekibanExecutor(
         YourDomainTypes.Generate(YourEventsJsonContext.Default.Options),
         new FunctionCommandMetadataProvider(() => "test"),
         new Repository(),
         new ServiceCollection().BuildServiceProvider());
 
-    // コマンドを実行
+    // Execute a command
     var result = await executor.CommandAsync(new CreateYourEntity("Name", "Value"));
     Assert.True(result.IsSuccess);
     var value = result.GetValue();
@@ -161,7 +164,7 @@ public async Task ManualExecutorTest()
     Assert.Equal(1, value.Version);
     var aggregateId = value.PartitionKeys.AggregateId;
 
-    // 集約をロード
+    // Load the aggregate
     var aggregateResult = await executor.LoadAggregateAsync<YourEntityProjector>(
         PartitionKeys.Existing<YourEntityProjector>(aggregateId));
     Assert.True(aggregateResult.IsSuccess);
@@ -172,7 +175,7 @@ public async Task ManualExecutorTest()
 }
 ```
 
-## ワークフローのテスト
+## Testing Workflows
 
 ```csharp
 public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
@@ -183,17 +186,17 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
     [Fact]
     public async Task CheckUserIdDuplicate_WhenUserIdExists_ReturnsDuplicate()
     {
-        // Arrange - テストしたいIDを持つユーザーを作成
+        // Arrange - Create a user with the ID we want to test
         var existingUserId = "U12345";
         var command = new RegisterUserCommand(
             "John Doe",
             existingUserId,
             "john@example.com");
 
-        // 同じIDでユーザーを登録して確実に存在するようにする
+        // Register a user with the same ID to ensure it exists
         GivenCommand(command);
 
-        // Act - 同じIDで別のユーザーを登録しようとする
+        // Act - Try to register another user with the same ID
         var result = await DuplicateCheckWorkflows.CheckUserIdDuplicate(command, Executor);
 
         // Assert
@@ -223,15 +226,15 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
 }
 ```
 
-## Given-When-Thenパターンを使用したテスト
+## Testing with Given-When-Then Pattern
 
-Sekibanのテストツールはより表現力豊かなテストのためにGiven-When-Thenパターンをサポートしています：
+Sekiban's testing tools support the Given-When-Then pattern for more expressive tests:
 
 ```csharp
 [Fact]
 public void UserRegistrationAndConfirmation()
 {
-    // Given - 登録済みのユーザー
+    // Given - A registered user
     var registeredUserResponse = GivenCommand(new RegisterUserCommand(
         "John Doe", 
         "john@example.com", 
@@ -239,17 +242,17 @@ public void UserRegistrationAndConfirmation()
     
     var userId = registeredUserResponse.PartitionKeys.AggregateId;
     
-    // Then - ユーザーは未確認状態であるべき
+    // Then - User should be in unconfirmed state
     var unconfirmedAggregate = ThenGetAggregate<UserProjector>(registeredUserResponse.PartitionKeys);
     Assert.IsType<UnconfirmedUser>(unconfirmedAggregate.Payload);
     var unconfirmedUser = (UnconfirmedUser)unconfirmedAggregate.Payload;
     Assert.Equal("John Doe", unconfirmedUser.Name);
     Assert.Equal("john@example.com", unconfirmedUser.Email);
     
-    // When - ユーザーを確認
+    // When - Confirm the user
     var confirmationResponse = WhenCommand(new ConfirmUserCommand(userId));
     
-    // Then - ユーザーは確認済み状態であるべき
+    // Then - User should be in confirmed state
     var confirmedAggregate = ThenGetAggregate<UserProjector>(confirmationResponse.PartitionKeys);
     Assert.IsType<ConfirmedUser>(confirmedAggregate.Payload);
     var confirmedUser = (ConfirmedUser)confirmedAggregate.Payload;
@@ -258,48 +261,48 @@ public void UserRegistrationAndConfirmation()
 }
 ```
 
-## マルチプロジェクターのテスト
+## Testing Multi-Projectors
 
 ```csharp
 [Fact]
 public void MultiProjectorTest()
 {
-    // Given - 注文が行われた
+    // Given - Order placed
     var placeOrderResponse = GivenCommand(new PlaceOrderCommand(
         "customer123",
         new[] { new OrderItemDto("product1", 2, 10.0m) }));
         
-    // When - 別の注文が行われた
+    // When - Another order placed
     var placeOrder2Response = WhenCommand(new PlaceOrderCommand(
         "customer123",
         new[] { new OrderItemDto("product2", 1, 15.0m) }));
         
-    // Then - OrderStatisticsは両方の注文を反映しているべき
+    // Then - OrderStatistics should reflect both orders
     var statistics = ThenGetMultiProjector<OrderStatisticsProjector>();
     
     Assert.Equal(2, statistics.TotalOrders);
     Assert.Equal(35.0m, statistics.TotalRevenue);
     
-    // 顧客統計をチェック
+    // Check customer stats
     Assert.True(statistics.CustomerStatistics.TryGetValue("customer123", out var customerStats));
     Assert.Equal(2, customerStats.OrderCount);
     Assert.Equal(35.0m, customerStats.TotalSpent);
     
-    // 商品販売をチェック
+    // Check product sales
     Assert.Equal(2, statistics.ProductSales["product1"]);
     Assert.Equal(1, statistics.ProductSales["product2"]);
 }
 ```
 
-## ベストプラクティス
+## Best Practices
 
-1. **コマンドをテストする**：コマンドが期待されるイベントと状態変更を生成することを検証する
-2. **プロジェクターをテストする**：プロジェクターが集約状態を構築するためにイベントを正しく適用することを検証する
-3. **クエリをテストする**：クエリが現在の状態に基づいて期待される結果を返すことを検証する
-4. **状態遷移をテストする**：特に異なるペイロードタイプを使用する場合、状態遷移が正しく機能することを検証する
-5. **エラーケースをテストする**：バリデーションが失敗したときにコマンドが適切に失敗することを検証する
-6. **シリアライゼーションをテストする**：Orleansテストでは、コマンドとイベントがシリアライズ可能であることを検証する
-7. **GivenCommandをセットアップに使用する**：テスト状態をセットアップするために `GivenCommand` を使用する
-8. **WhenCommandをアクションに使用する**：テスト対象のアクションには `WhenCommand` を使用する
-9. **ThenGetAggregateとThenQueryをアサーションに使用する**：検証にはこれらのメソッドを使用する
-10. **テストを集中させる**：各テストは単一の動作に焦点を当てるべき
+1. **Test Commands**: Verify that commands produce the expected events and state changes
+2. **Test Projectors**: Verify that projectors correctly apply events to build the aggregate state
+3. **Test Queries**: Verify that queries return the expected results based on the current state
+4. **Test State Transitions**: Verify that state transitions work correctly, especially when using different payload types
+5. **Test Error Cases**: Verify that commands fail appropriately when validation fails
+6. **Test Serialization**: For Orleans tests, verify that commands and events are serializable
+7. **Use GivenCommand for Setup**: Use `GivenCommand` to set up the test state
+8. **Use WhenCommand for Actions**: Use `WhenCommand` for the action being tested
+9. **Use ThenGetAggregate and ThenQuery for Assertions**: Use these methods for verification
+10. **Keep Tests Focused**: Each test should focus on a single behavior

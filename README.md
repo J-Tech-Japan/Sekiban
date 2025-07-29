@@ -1,6 +1,6 @@
 # Sekiban - Event Sourcing and CQRS Framework using C#
 
-Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or AWS Dynamo DB
+Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or PostgreSQL
 
 <p align="center">
   <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
@@ -8,11 +8,11 @@ Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azu
 
 ## (NEW) Sekiban new version - Sekiban.Pure.Orleans
 
-We moved main repository for the new Sekiban.Pure.Orleans project. Past project Sekiban.Core and upto 0.23 version to core_main branch of this repository.
+We moved main repository for the new Sekiban.Pure.Orleans and Sekiban.Pure.Dapr project and Sekiban Typescript Dapr. Past project Sekiban.Core and upto 0.23 version to core_main branch of this repository.
 
 [Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
 
-mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェクトのみを残したものとなっています。旧バージョンは、core_mainブランチに残しています。
+mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェクト、Sekiban.Pure.Daprと Sekiban Typescript Dapr のみを残したものとなっています。旧バージョンは、core_mainブランチに残しています。
 [Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
 
 
@@ -20,25 +20,42 @@ mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェ�
 ## What is Sekiban?
 
 **Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C#
-and .NET Core 9+, it allows developers to use a declarative API to create event sourcing applications. **New Version* of Sekiban is now working with [Microsoft Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/overview) and use of actor model increace its scalability and performance in multi thread environment. Sekiban supports
+and .NET Core 9+, it allows developers to use a declarative API to create event sourcing applications. Sekiban now supports multiple runtime environments including [Microsoft Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/overview) with actor model for enhanced scalability and performance in multi-threaded environments, and [Dapr](https://dapr.io/) for distributed application development. Sekiban supports
 various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)
-, and Postgres, facilitating deployment on either Azure or AWS.
+and PostgreSQL, facilitating deployment on Azure, AWS, or any cloud platform.
 
 ## Available Implementations
 
-Sekiban is available in multiple implementations:
+Sekiban is available in multiple implementations, all supporting Azure Cosmos DB or PostgreSQL as event stores:
+
+### C# with Microsoft Orleans
+The C# implementation with Microsoft Orleans provides high-performance event sourcing using the actor model. This implementation offers exceptional scalability and performance in multi-threaded environments.
+
+Create a new C# Orleans Sekiban application with:
+
+```bash
+dotnet new install Sekiban.Pure.Templates
+dotnet new sekiban-orleans-aspire -n YourProjectName
+```
 
 ### C# with Dapr
-The C# implementation with Dapr integration provides distributed event sourcing using virtual actors. Create a new C# Sekiban application with:
+The C# implementation with Dapr integration provides distributed event sourcing using virtual actors.
+
+Create a new C# Dapr Sekiban application with:
+
+```bash
+dotnet new install Sekiban.Pure.Templates
+dotnet new sekiban-dapr-aspire -n YourProjectName
+```
+
+### TypeScript with Dapr (Alpha)
+The TypeScript implementation with Dapr offers the same event sourcing capabilities for Node.js developers in alpha version. It supports both in-memory storage for development and Azure Cosmos DB or PostgreSQL with Dapr actors for production use. Create a new TypeScript Sekiban application with:
 
 ```bash
 npx create-sekiban-app my-app
 ```
 
-This creates a complete application with domain models, REST API, event handlers, projectors, and Dapr workflow integration.
-
-### TypeScript
-The TypeScript implementation offers the same event sourcing capabilities for Node.js developers. It supports both in-memory storage for development and PostgreSQL with Dapr actors for production use. Learn more in the [TypeScript packages directory](./ts).
+This creates a complete TypeScript application with domain models, REST API, event handlers, and projectors. Learn more in the [TypeScript packages directory](./ts).
 
 ## Getting started
 
@@ -48,8 +65,6 @@ Do you want to start coding? If so, please see [Readme Pure](https://github.com/
 日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_JP.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
 
 ## AI Programming?
-
-You might use coding agent like Devin, Cline or Cursor .. etc. We made [Readme for LLM](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_For_LLM.md) so you can copy and paste for framework instructions.
 
 ## Sekiban MCP (Model Context Protocol)
 

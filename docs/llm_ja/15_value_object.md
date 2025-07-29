@@ -1,20 +1,22 @@
 # Value Object - Sekiban イベントソーシング
 
 > **ナビゲーション**
-> - [コアコンセプト](01_core_concepts.md)
+> - [コア概念](01_core_concepts.md)
 > - [はじめに](02_getting_started.md)
-> - [集約、プロジェクター、コマンド、イベント](03_aggregate_command_events.md)
-> - [複数集約プロジェクター](04_multiple_aggregate_projector.md)
+> - [アグリゲート、プロジェクター、コマンド、イベント](03_aggregate_command_events.md)
+> - [複数アグリゲートプロジェクター](04_multiple_aggregate_projector.md)
 > - [クエリ](05_query.md)
 > - [ワークフロー](06_workflow.md)
-> - [JSONとOrleansのシリアライゼーション](07_json_orleans_serialization.md)
+> - [JSONとOrleansシリアライゼーション](07_json_orleans_serialization.md)
 > - [API実装](08_api_implementation.md)
 > - [クライアントAPI (Blazor)](09_client_api_blazor.md)
-> - [Orleansセットアップ](10_orleans_setup.md)
-> - [ユニットテスト](11_unit_testing.md)
-> - [一般的な問題と解決策](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
-> - [Value Object](14_value_object.md) (現在のページ)
+> - [Orleans設定](10_orleans_setup.md)
+> - [Dapr設定](11_dapr_setup.md)
+> - [ユニットテスト](12_unit_testing.md)
+> - [よくある問題と解決策](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [バリューオブジェクト](15_value_object.md) (現在位置)
+> - [デプロイメントガイド](16_deployment.md)
 
 ## Value Object
 

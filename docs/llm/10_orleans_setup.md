@@ -11,9 +11,12 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client API (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md) (You are here)
-> - [Unit Testing](11_unit_testing.md)
-> - [Common Issues and Solutions](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
+> - [Dapr Setup](11_dapr_setup.md)
+> - [Unit Testing](12_unit_testing.md)
+> - [Common Issues and Solutions](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [Value Object](15_value_object.md)
+> - [Deployment Guide](16_deployment.md)
 
 ## Orleans Setup
 
@@ -339,3 +342,7 @@ Orleans is designed for horizontal scaling, but you should consider:
 2. **Storage Performance**: Choose appropriate storage providers based on your performance needs
 3. **Grain Activation**: Monitor grain activation and deactivation patterns
 4. **Resource Allocation**: Allocate appropriate CPU and memory for your Orleans services
+
+## Alternative: Dapr Setup
+
+For distributed applications requiring language-agnostic support or cloud-native deployment patterns, consider using [Dapr Setup](11_dapr_setup.md) as an alternative to Orleans.
