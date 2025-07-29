@@ -282,8 +282,6 @@ else
 
     private async Task GenerateSampleData()
     {
-        try
-        {
             var results = await WeatherApi.GenerateSampleDataAsync();
             if (results != null && results.Count > 0)
             {
@@ -295,11 +293,7 @@ else
             {
                 await LoadForecasts();
             }
-        }
-        catch (Exception ex)
-        {
-            // Log error
-        }
+        
     }
 
     private class ForecastModel

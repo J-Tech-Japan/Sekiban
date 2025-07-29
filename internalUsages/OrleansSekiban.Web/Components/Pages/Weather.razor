@@ -239,7 +239,7 @@ else
         }
         catch (Exception ex)
         {
-            editLocationModel.Error = "Failed to update location. Please try again.";
+            editLocationModel.Error = $"Failed to update location. Please try again.{ex.Message}";
         }
     }
 
@@ -262,7 +262,7 @@ else
         }
         catch (Exception ex)
         {
-            forecastModel.Error = "Failed to add weather forecast. Please try again.";
+            forecastModel.Error = $"Failed to add weather forecast. Please try again. {ex.Message}";
         }
     }
 }

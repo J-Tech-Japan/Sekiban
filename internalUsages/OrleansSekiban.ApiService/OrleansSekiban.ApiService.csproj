@@ -17,23 +17,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.3.1" />
-    <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.3.1" />
-    <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.3.1" />
+    <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.0" />
+    <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.0" />
+    <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.0" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.6.1" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.0" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview20" />
-    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview20" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview20" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.6.5" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview21" />
+    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview21" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview21" />
   </ItemGroup>
 
 </Project>
