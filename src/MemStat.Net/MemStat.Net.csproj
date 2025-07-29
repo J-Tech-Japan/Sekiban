@@ -24,7 +24,7 @@
     <ItemGroup>
         <PackageReference Include="ComputerInfo" Version="0.2.0"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.7" />
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

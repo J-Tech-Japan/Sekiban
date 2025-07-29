@@ -41,28 +41,33 @@ ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --query loginServer -o tsv)
 echo "Logging into ACR..."
 echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin
 
-# Build and push Docker image
-echo "Building Docker image..."
+# Build and push Docker image with platform specification
+echo "Building Docker image for linux/amd64 platform..."
 pushd "../../"
-docker build -t "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest" -f "${BACKEND_PATH#../../}/Dockerfile" .
+docker buildx build --platform linux/amd64 -t "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest" -f "${BACKEND_PATH#../../}/Dockerfile" --push .
 
-# Check if building image was successful
+# Check if building and pushing image was successful (buildx pushes automatically)
 if [ $? -eq 0 ]; then
-    echo "Building Docker image completed successfully."
+    echo "Building and pushing Docker image completed successfully."
 else
-    echo "Error: Failed to build Docker image"
+    echo "Error: Failed to build and push Docker image"
     exit 1
 fi
 
-echo "Pushing Docker image: $CONTAINER_APP_NAME..."
-docker push "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest"
-
-# Check if Pushing Docker image was successful
-if [ $? -eq 0 ]; then
-    echo "Pushing Docker image to ACR completed successfully."
+# Update the container app with the new image (or show message if first deployment)
+echo "Updating backend container in Azure Container Apps..."
+if az containerapp show --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+    az containerapp update --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$ACR_LOGIN_SERVER/$CONTAINER_APP_NAME:latest"
+    if [ $? -eq 0 ]; then
+        echo "Backend container updated successfully."
+    else
+        echo "Error: Failed to update backend container"
+        exit 1
+    fi
 else
-    echo "Error: Failed to push Docker image to ACR"
-    exit 1
+    echo "Container app '$CONTAINER_APP_NAME' does not exist yet."
+    echo "Please run './runbicep.sh $1 aca_apps.bicep' first to create the container apps."
+    echo "The Docker image has been pushed successfully and is ready for deployment."
 fi
 
 echo "Deployment process completed."

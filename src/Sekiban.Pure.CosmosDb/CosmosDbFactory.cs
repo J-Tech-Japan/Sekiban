@@ -33,11 +33,6 @@ public class CosmosDbFactory(
         {
             // Container doesn't exist - nothing to delete, which is fine for cleanup
         }
-        catch (Exception ex)
-        {
-            // Re-throw non-404 exceptions as they indicate real problems
-            throw;
-        }
     }
 
     public async Task<T> CosmosActionAsync<T>(DocumentType documentType, Func<Container, Task<T>> cosmosAction)
@@ -240,10 +235,6 @@ public class CosmosDbFactory(
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // アイテムが既に削除されている場合は無視
-        }
-        catch (Exception ex)
-        {
-            throw;
         }
     }
 

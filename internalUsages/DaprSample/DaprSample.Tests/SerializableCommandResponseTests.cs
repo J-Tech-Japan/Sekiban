@@ -95,7 +95,7 @@ public class SerializableCommandResponseTests : IAsyncLifetime
         
         Assert.NotNull(deserializedSerializable);
         
-        var roundTripResult = await deserializedSerializable!.ToCommandResponseAsync(_domainTypes);
+        var roundTripResult = await deserializedSerializable!.ToCommandResponseAsync(_domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
         
         // Assert
         if (!roundTripResult.HasValue)
@@ -137,7 +137,7 @@ public class SerializableCommandResponseTests : IAsyncLifetime
         Assert.Empty(deserialized.Events);
         
         // Try to convert to CommandResponse
-        var commandResponseResult = await deserialized.ToCommandResponseAsync(_domainTypes);
+        var commandResponseResult = await deserialized.ToCommandResponseAsync(_domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
         Assert.True(commandResponseResult.HasValue);
         Assert.Empty(commandResponseResult.Value!.Events);
     }
