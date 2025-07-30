@@ -24,9 +24,7 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging
-builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
 // Add service defaults for Aspire integration
 builder.AddServiceDefaults();
@@ -126,96 +124,11 @@ app.MapSekibanEventRelay(new SekibanPubSubRelayOptions
 // Log actor registration before mapping handlers
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
-// Log the configured PubSub relay information
-logger.LogInformation("=== SEKIBAN PUBSUB RELAY CONFIGURED ({Environment} ENVIRONMENT) ===", app.Environment.EnvironmentName);
-logger.LogInformation("Instance ID: {InstanceId}", instanceId);
-logger.LogInformation("PubSub Component: sekiban-pubsub");
-logger.LogInformation("Topic: events.all");
-logger.LogInformation("Endpoint: /internal/pubsub/events");
-logger.LogInformation("Consumer Group: {ConsumerGroup}", consumerGroup);
-logger.LogInformation("Max Concurrency: {MaxConcurrency}", maxConcurrency);
-logger.LogInformation("Continue On Failure: {ContinueOnFailure}", continueOnFailure);
-logger.LogInformation("Dead Letter Queue: {DeadLetterEnabled}", !app.Environment.IsDevelopment());
-if (app.Environment.IsDevelopment())
-{
-    logger.LogInformation("🔧 LOCAL DEVELOPMENT MODE: Relaxed settings for easier debugging");
-}
-else
-{
-    logger.LogInformation("🚀 PRODUCTION MODE: Strict settings for reliability");
-}
-logger.LogInformation("=== END PUBSUB RELAY CONFIG ===");
-try 
-{
-    var actorOptions = app.Services.GetService<Microsoft.Extensions.Options.IOptions<Dapr.Actors.Runtime.ActorRuntimeOptions>>();
-    if (actorOptions?.Value != null && actorOptions.Value.Actors != null)
-    {
-        logger.LogInformation("=== REGISTERED ACTORS ===");
-        var actorCount = 0;
-        try 
-        {
-            // Try to iterate through registered actors
-            var actors = actorOptions.Value.Actors;
-            logger.LogInformation("Actor registration collection exists: {HasActors}", actors != null);
-            actorCount = actors?.Count ?? 0;
-            logger.LogInformation("Number of registered actors: {ActorCount}", actorCount);
-        }
-        catch (Exception innerEx)
-        {
-            logger.LogError(innerEx, "Error accessing actor collection");
-        }
-        logger.LogInformation("=== END REGISTERED ACTORS ===");
-    }
-    else
-    {
-        logger.LogWarning("ActorRuntimeOptions or Actors is null");
-    }
-}
-catch (Exception ex)
-{
-    logger.LogError(ex, "Error logging actor registration info");
-}
-
 app.MapActorsHandlers();
 
 // Wait for Dapr sidecar to be ready and actors to be registered
 var daprClient = app.Services.GetRequiredService<DaprClient>();
 var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
-
-startupLogger.LogInformation("Waiting for Dapr sidecar to be ready...");
-
-// Log Dapr environment information
-startupLogger.LogInformation("=== DAPR & ENVIRONMENT INFO ({Environment}) ===", app.Environment.EnvironmentName);
-startupLogger.LogInformation("  - DAPR_HTTP_PORT: {DaprHttpPort}", Environment.GetEnvironmentVariable("DAPR_HTTP_PORT") ?? "Not Set (Default: 3500)");
-startupLogger.LogInformation("  - DAPR_GRPC_PORT: {DaprGrpcPort}", Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") ?? "Not Set (Default: 50001)");
-startupLogger.LogInformation("  - APP_ID: {AppId}", Environment.GetEnvironmentVariable("APP_ID") ?? "Not Set");
-startupLogger.LogInformation("  - Expected Dapr HTTP: http://localhost:3500");
-startupLogger.LogInformation("  - App Port: {AppPort}", 5000);
-
-if (app.Environment.IsDevelopment())
-{
-    startupLogger.LogInformation("=== LOCAL DEVELOPMENT ENVIRONMENT INFO ===");
-    startupLogger.LogInformation("  - Machine Name: {MachineName}", Environment.MachineName);
-    startupLogger.LogInformation("  - User Name: {UserName}", Environment.UserName ?? "Not Set");
-    startupLogger.LogInformation("  - OS Version: {OSVersion}", Environment.OSVersion);
-    startupLogger.LogInformation("  - Process ID: {ProcessId}", Environment.ProcessId);
-}
-else
-{
-    // ACA specific environment variables
-    startupLogger.LogInformation("=== ACA ENVIRONMENT INFO ===");
-    startupLogger.LogInformation("  - CONTAINER_APP_NAME: {ContainerAppName}", Environment.GetEnvironmentVariable("CONTAINER_APP_NAME") ?? "Not Set");
-    startupLogger.LogInformation("  - CONTAINER_APP_REPLICA_NAME: {ReplicaName}", Environment.GetEnvironmentVariable("CONTAINER_APP_REPLICA_NAME") ?? "Not Set");
-    startupLogger.LogInformation("  - CONTAINER_APP_REVISION: {Revision}", Environment.GetEnvironmentVariable("CONTAINER_APP_REVISION") ?? "Not Set");
-}
-
-startupLogger.LogInformation("=== SEKIBAN CONFIGURATION ===");
-startupLogger.LogInformation("  - HOSTNAME: {Hostname}", Environment.GetEnvironmentVariable("HOSTNAME") ?? Environment.MachineName);
-startupLogger.LogInformation("  - Instance ID: {InstanceId}", instanceId);
-startupLogger.LogInformation("  - Consumer Group: {ConsumerGroup}", consumerGroup);
-startupLogger.LogInformation("  - Max Concurrency: {MaxConcurrency}", maxConcurrency);
-startupLogger.LogInformation("  - Continue On Failure: {ContinueOnFailure}", continueOnFailure);
-startupLogger.LogInformation("=== END ENVIRONMENT INFO ===");
 
 // Wait for basic Dapr health
 var maxWaitTime = TimeSpan.FromSeconds(60); // Increased timeout
@@ -228,12 +141,10 @@ while (DateTime.UtcNow - waitStartTime < maxWaitTime)
     {
         await daprClient.CheckHealthAsync();
         isHealthy = true;
-        startupLogger.LogInformation("Dapr health check passed.");
         break;
     }
     catch (Exception ex)
     {
-        startupLogger.LogDebug(ex, "Dapr health check failed, retrying...");
         await Task.Delay(2000); // Increased retry interval
     }
 }
@@ -244,22 +155,7 @@ if (!isHealthy)
 }
 
 // Additional wait for actor registration to complete
-startupLogger.LogInformation("Giving Dapr additional time for actor registration...");
 await Task.Delay(10000); // Give Dapr 10 seconds to register actors
-startupLogger.LogInformation("Actor registration wait complete. Application is ready.");
-
-// Test actor registration by trying to create a proxy
-try 
-{
-    var testActorId = new Dapr.Actors.ActorId("test-actor-id");
-    var testProxy = app.Services.GetRequiredService<Dapr.Actors.Client.IActorProxyFactory>()
-        .CreateActorProxy<Sekiban.Pure.Dapr.Actors.IAggregateActor>(testActorId, nameof(Sekiban.Pure.Dapr.Actors.AggregateActor));
-    startupLogger.LogInformation("Test actor proxy created successfully.");
-}
-catch (Exception ex)
-{
-    startupLogger.LogError(ex, "Failed to create test actor proxy: {Error}", ex.Message);
-}
 
 // Debug endpoint to check environment variables
 app.MapGet("/debug/env", () =>
@@ -354,15 +250,11 @@ app.MapGet("/debug/pubsub-config", () =>
 .WithTags("Debug");
 
 // Map API endpoints
-app.MapPost("/api/users/create", async ([FromBody]CreateUser command, [FromServices]ISekibanExecutor executor, [FromServices]ILogger<Program> logger) =>
+app.MapPost("/api/users/create", async ([FromBody]CreateUser command, [FromServices]ISekibanExecutor executor) =>
 {
-    logger.LogInformation("=== CreateUser API called with UserId: {UserId}, Name: {Name} ===", command.UserId, command.Name);
-    
     try
     {
-        logger.LogInformation("About to call executor.CommandAsync...");
         var result = await executor.CommandAsync(command);
-        logger.LogInformation("CommandAsync completed. IsSuccess: {IsSuccess}", result.IsSuccess);
         
         return result.IsSuccess 
             ? Results.Ok(new { success = true, aggregateId = command.UserId, version = result.GetValue().Version })
@@ -370,7 +262,6 @@ app.MapPost("/api/users/create", async ([FromBody]CreateUser command, [FromServi
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Exception in CreateUser API");
         return Results.BadRequest(new { success = false, error = ex.Message });
     }
 })
@@ -479,14 +370,26 @@ app.MapGet("/api/users/statistics", async ([FromQuery] string? waitForSortableUn
 
 // Weather Forecast endpoints
 app.MapGet("/api/weatherforecast", 
-        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+        async ([FromQuery] string? waitForSortableUniqueId,[FromQuery] int? pageSize, [FromQuery] int? pageNumber, [FromQuery] string? sortBy, [FromQuery] bool? isAsc, [FromServices] ISekibanExecutor executor) =>
         {
             var query = new WeatherForecastQuery("")
             {
-                WaitForSortableUniqueId = waitForSortableUniqueId
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                SortBy = sortBy,
+                IsAsc = isAsc ?? false
             };
             var list = await executor.QueryAsync(query).UnwrapBox();
-            return list.Items;
+            
+            var items = list.Items.AsEnumerable();
+            
+            // Apply pagination if parameters are provided
+            if (pageSize.HasValue && pageNumber.HasValue && pageNumber.Value > 0)
+            {
+                var skip = (pageNumber.Value - 1) * pageSize.Value;
+                items = items.Skip(skip).Take(pageSize.Value);
+            }
+            
+            return items.ToArray();
         })
     .WithOpenApi()
     .WithName("GetWeatherForecast");
@@ -496,21 +399,10 @@ app
         "/api/inputweatherforecast",
         async (
                 [FromBody] InputWeatherForecastCommand command,
-                [FromServices] ISekibanExecutor executor,
-                [FromServices] ILogger<Program> logger) =>
+                [FromServices] ISekibanExecutor executor) =>
         {
-            try
-            {
-                logger.LogInformation("Attempting to execute InputWeatherForecastCommand for location: {Location}", command.Location);
-                var result = await executor.CommandAsync(command);
-                logger.LogInformation("Command executed successfully");
-                return result.ToSimpleCommandResponse().UnwrapBox();
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error executing InputWeatherForecastCommand: {Message}", ex.Message);
-                throw;
-            }
+            var result = await executor.CommandAsync(command);
+            return result.ToSimpleCommandResponse().UnwrapBox();
         })
     .WithName("InputWeatherForecast")
     .WithOpenApi();

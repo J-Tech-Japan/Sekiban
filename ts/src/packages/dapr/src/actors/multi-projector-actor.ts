@@ -1,37 +1,55 @@
 import { AbstractActor, ActorId, DaprClient } from '@dapr/dapr';
 import { Temporal } from '@js-temporal/polyfill';
-import type { IEventStore } from '@sekiban/core';
-import type { 
-  IEvent
-} from '@sekiban/core';
+import type { IEventStore, IEvent, SekibanDomainTypes, QueryResult, ListQueryResult } from '@sekiban/core';
 import {
   EventRetrievalInfo,
   SortableIdCondition,
-  AggregateGroupStream,
-  OptionalValue,
   SortableUniqueId,
-  PartitionKeys
+  ok,
+  err,
+  Result,
+  OptionalValue,
+  AggregateGroupStream,
+  IMultiProjector,
+  IMultiProjectorCommon
 } from '@sekiban/core';
+
+// Define the state interface for multi-projectors
+interface IMultiProjectorStateCommon {
+  projectorCommon: IMultiProjectorCommon
+  lastEventId: string
+  lastSortableUniqueId: string
+  version: number
+  appliedSnapshotVersion: number
+  rootPartitionKey: string
+}
 import type {
   IMultiProjectorActor,
   SerializableQuery,
   SerializableListQuery,
-  QueryResponse,
-  ListQueryResponse,
-  MultiProjectionState,
+  SerializableQueryResult,
+  SerializableListQueryResult,
   DaprEventEnvelope,
-  BufferedEvent,
-  SerializableEventDocument
+  ListQueryResponse,
+  QueryResponse,
+  ActorMultiProjectionState
 } from './interfaces';
 import { getDaprCradle } from '../container/index.js';
-import { gunzip } from 'node:zlib';
-import { promisify } from 'node:util';
-
-const ungzipAsync = promisify(gunzip);
+import { 
+  SerializableMultiProjectionState,
+  createSerializableMultiProjectionState,
+  toMultiProjectionState
+} from '../parts/serializable-multi-projection-state.js';
+import {
+  createSerializableQueryResult,
+  createSerializableQueryResultFromResult,
+  createSerializableListQueryResult,
+  createSerializableListQueryResultFromResult
+} from './serializable-query-results.js';
 
 /**
  * Handles cross-aggregate projections and queries over multiple aggregates
- * Mirrors C# MultiProjectorActor implementation
+ * Mirrors C# MultiProjectorActor implementation exactly
  */
 export class MultiProjectorActor extends AbstractActor implements IMultiProjectorActor {
   // Explicitly define actor type for Dapr
@@ -39,1000 +57,907 @@ export class MultiProjectorActor extends AbstractActor implements IMultiProjecto
     return "MultiProjectorActor"; 
   }
 
-  private safeState?: MultiProjectionState;     // State older than 7 seconds
-  private unsafeState?: MultiProjectionState;   // Recent state including buffer
-  private eventBuffer: BufferedEvent[] = [];
-  private lastProcessedTimestamp?: Date;
+  // ---------- Tunables ----------
+  private readonly SAFE_STATE_WINDOW_MS = 7000; // 7 seconds
+  private readonly PERSIST_INTERVAL_MS = 300000; // 5 minutes
   
-  // Reminder names
-  private readonly SNAPSHOT_REMINDER = "snapshot";
-  private readonly EVENT_CHECK_REMINDER = "eventCheck";
+  // ---------- State ----------
+  private safeState?: IMultiProjectorStateCommon;
+  private unsafeState?: IMultiProjectorStateCommon;
   
-  // Timers as fallback
-  private snapshotTimer?: NodeJS.Timeout;
-  private eventCheckTimer?: NodeJS.Timeout;
-  
-  // Configuration
-  private readonly SAFE_WINDOW_MS = 7000;        // 7 seconds
-  private readonly SNAPSHOT_INTERVAL_MS = 300000; // 5 minutes
-  private readonly EVENT_CHECK_INTERVAL_MS = 1000; // 1 second
-  
-  // State keys
-  private readonly PROJECTION_STATE_KEY = "projectionState";
-  private readonly PROCESSED_EVENTS_KEY = "processedEvents";
-  
-  // Dependencies
+  // ---------- Infra ----------
   private eventStore: IEventStore;
+  private domainTypes: SekibanDomainTypes;
   private actorIdString: string = '';
-  private projectorType: string = 'unknown';
+  
+  // ---------- Event Buffer ----------
+  private buffer: IEvent[] = [];
+  private bootstrapping = true;
+  private pendingSave = false;
+  private eventDeliveryActive = false;
+  private lastEventReceivedTime = new Date(0);
+  
+  // ---------- State Keys ----------
+  private readonly STATE_KEY = "multiprojector_state";
+  private readonly SNAPSHOT_REMINDER_NAME = "snapshot_reminder";
   
   constructor(daprClient: DaprClient, id: ActorId) {
     super(daprClient, id);
     
-    try {
-      console.log('[MultiProjectorActor] Constructor called');
-      
-      // Extract actor ID string
-      this.actorIdString = (id as any).id || String(id);
-      
-      // Get dependencies from Awilix container
-      const cradle = getDaprCradle();
-      
-      // Get eventStore from container
-      this.eventStore = cradle.eventStore;
-      
-      // Extract projector type from actor ID
-      // Format: aggregatelistprojector-{projectorname}
-      const idParts = this.actorIdString.split('-');
-      this.projectorType = idParts.length > 1 ? idParts[1] : 'unknown';
-      
-      console.log('[MultiProjectorActor] Dependencies injected, eventStore:', !!this.eventStore);
-      console.log('[MultiProjectorActor] Projector type:', this.projectorType);
-    } catch (error) {
-      console.error('[MultiProjectorActor] Constructor error:', error);
-      // Create a dummy event store that returns empty results
-      this.eventStore = {
-        getEvents: async () => ({ isOk: () => true, isErr: () => false, value: [], error: null } as any),
-        appendEvents: async () => ({ isOk: () => true, isErr: () => false, value: [], error: null } as any),
-        initialize: async () => ({ isOk: () => true, isErr: () => false, value: undefined, error: null } as any),
-        close: async () => ({ isOk: () => true, isErr: () => false, value: undefined, error: null } as any)
-      } as any;
-      this.projectorType = 'unknown';
-    }
+    // Extract actor ID string
+    this.actorIdString = id.getId();
+    
+    // Get dependencies from Awilix container
+    const cradle = getDaprCradle();
+    this.eventStore = cradle.eventStore;
+    this.domainTypes = cradle.domainTypes;
+    
   }
   
-  /**
-   * Actor activation - set up reminders/timers
-   */
   async onActivate(): Promise<void> {
-    console.log('[MultiProjectorActor] onActivate called for actor:', this.actorIdString);
-    console.log('[MultiProjectorActor] Projector type:', this.projectorType);
+    await super.onActivate();
+    
+    console.log(`MultiProjectorActor ${this.actorIdString} activated`);
     
     try {
-      // Register reminders - AbstractActor provides registerActorReminder method
+      // Register reminder for periodic snapshot saving
       await this.registerActorReminder(
-        this.SNAPSHOT_REMINDER,
-        Temporal.Duration.from({ minutes: 5 }),
+        this.SNAPSHOT_REMINDER_NAME,
+        Temporal.Duration.from({ minutes: 1 }), // Initial delay
+        Temporal.Duration.from({ minutes: 5 })  // Period
+      );
+      
+      console.log('Snapshot reminder registered successfully');
+    } catch (error) {
+      console.warn('Failed to register reminder, falling back to timer:', error);
+      
+      // Fallback to timer if reminder fails
+      await this.registerActorTimer(
+        'SnapshotTimer',
+        'handleSnapshotTimerAsync',
+        Temporal.Duration.from({ minutes: 1 }),
         Temporal.Duration.from({ minutes: 5 })
       );
-      
-      await this.registerActorReminder(
-        this.EVENT_CHECK_REMINDER,
-        Temporal.Duration.from({ seconds: 1 }),
-        Temporal.Duration.from({ seconds: 1 })
-      );
-      
-      console.log(`[MultiProjectorActor] Registered reminders for ${this.projectorType}`);
-    } catch (error) {
-      // Fall back to timers if reminders fail
-      console.warn('[MultiProjectorActor] Failed to register reminders, falling back to timers:', error);
-      
-      this.snapshotTimer = setInterval(
-        () => this.handleSnapshotReminder(),
-        this.SNAPSHOT_INTERVAL_MS
-      );
-      
-      this.eventCheckTimer = setInterval(
-        () => this.handleEventCheckReminder(),
-        this.EVENT_CHECK_INTERVAL_MS
-      );
     }
     
-    // Load initial state
-    await this.loadStateAsync();
+    // Initial state loading and catch-up will be done via ensureStateLoadedAsync
+    // when the first event arrives via PubSub
+    this.bootstrapping = false;
     
-    // Catch up from event store (following C# MultiProjectorGrain pattern)
-    console.log('[MultiProjectorActor] Catching up from event store...');
-    await this.catchUpFromStoreAsync();
-    
-    console.log('[MultiProjectorActor] Actor activated successfully');
+    // Mark event delivery as active initially to allow batch processing during startup
+    this.eventDeliveryActive = true;
+    this.lastEventReceivedTime = new Date();
   }
   
-  /**
-   * Actor deactivation - clean up
-   */
   async onDeactivate(): Promise<void> {
-    console.log('[MultiProjectorActor] onDeactivate called for actor:', this.actorIdString);
+    console.log(`MultiProjectorActor ${this.actorIdString} deactivating`);
+    
+    // Save pending state if any
+    if (this.pendingSave && this.safeState) {
+      await this.persistStateAsync(this.safeState);
+    }
+    
+    // Unregister snapshot reminder
+    await this.unregisterActorReminder(this.SNAPSHOT_REMINDER_NAME);
+    
+    await super.onDeactivate();
+  }
+  
+  async receiveReminder(reminderName: string): Promise<void> {
+    switch (reminderName) {
+      case this.SNAPSHOT_REMINDER_NAME:
+        await this.handleSnapshotReminder();
+        break;
+      default:
+        // Suppress logging for unknown reminders to reduce noise
+        // console.warn('Unknown reminder:', reminderName);
+        break;
+    }
+  }
+  
+  private async handleSnapshotReminder(): Promise<void> {
+    // First, flush any buffered events to ensure state is up to date
+    if (this.buffer.length > 0) {
+      console.log(`Snapshot reminder triggered - flushing ${this.buffer.length} buffered events`);
+      this.flushBuffer();
+    }
+    
+    // Then persist if needed
+    if (!this.pendingSave || !this.safeState) return;
+    
+    this.pendingSave = false;
+    await this.persistStateAsync(this.safeState);
+  }
+  
+  /**
+   * Timer fallback for snapshot handling when reminders are not available
+   */
+  private async handleSnapshotTimerAsync(): Promise<void> {
+    await this.handleSnapshotReminder();
+  }
+  
+  private async ensureStateLoadedAsync(): Promise<void> {
+    if (this.safeState) return;
+    
+    console.log(`Loading snapshot for MultiProjectorActor ${this.actorIdString}`);
     
     try {
-      // Clean up timers
-      if (this.snapshotTimer) {
-        clearInterval(this.snapshotTimer);
-        this.snapshotTimer = undefined;
+      const [hasState, savedState] = await this.getStateManager().tryGetState(this.STATE_KEY) as [boolean, SerializableMultiProjectionState | undefined];
+      if (hasState && savedState) {
+        const restored = await this.deserializeState(savedState);
+        if (restored) {
+          this.safeState = restored;
+          this.logState();
+        }
       }
-      if (this.eventCheckTimer) {
-        clearInterval(this.eventCheckTimer);
-        this.eventCheckTimer = undefined;
-      }
-      
-      // Save final state
-      if (this.safeState) {
-        await this.persistStateAsync(this.safeState);
-      }
-      
-      console.log('[MultiProjectorActor] Actor deactivated successfully');
     } catch (error) {
-      console.error('[MultiProjectorActor] Error during deactivation:', error);
+      console.error('Failed to load state:', error);
+    }
+    
+    // Initialize state if not loaded
+    if (!this.safeState) {
+      this.initializeState();
+    }
+    
+    // Catch up from store
+    await this.catchUpFromStoreAsync();
+  }
+  
+  private logState(): void {
+    console.log('SafeState:', this.safeState?.projectorCommon.constructor.name ?? 'null');
+    console.log('SafeState Version:', this.safeState?.version ?? 0);
+    
+    if (this.safeState?.projectorCommon && 'getAggregates' in this.safeState.projectorCommon) {
+      type AggregateAccessor = { getAggregates(): any[] };
+      const accessor = this.safeState.projectorCommon as AggregateAccessor;
+      console.log('SafeState list count:', accessor.getAggregates().length);
+    }
+    
+    console.log('UnsafeState:', this.unsafeState?.projectorCommon.constructor.name ?? 'null');
+    console.log('UnsafeState Version:', this.unsafeState?.version ?? 0);
+    
+    if (this.unsafeState?.projectorCommon && 'getAggregates' in this.unsafeState.projectorCommon) {
+      type AggregateAccessor = { getAggregates(): any[] };
+      const accessor = this.unsafeState.projectorCommon as AggregateAccessor;
+      console.log('UnsafeState list count:', accessor.getAggregates().length);
     }
   }
   
-  /**
-   * Execute single-item query
-   */
-  async queryAsync(query: SerializableQuery): Promise<QueryResponse> {
-    console.log('[MultiProjectorActor] queryAsync called for actor:', this.actorIdString);
-    console.log('[MultiProjectorActor] Query type:', query.queryType);
+  private async catchUpFromStoreAsync(): Promise<void> {
+    const lastId = this.safeState?.lastSortableUniqueId || '';
+    const sortableIdCondition = lastId
+      ? SortableIdCondition.between(
+          SortableUniqueId.fromString(lastId).unwrapOr(SortableUniqueId.generate()),
+          SortableUniqueId.generate()
+        )
+      : SortableIdCondition.none();
     
+    const retrieval = new EventRetrievalInfo(
+      OptionalValue.empty<string>(),
+      OptionalValue.empty<AggregateGroupStream>(),
+      OptionalValue.empty<string>(),
+      sortableIdCondition
+    );
+    
+    const eventsResult = await this.eventStore.getEvents(retrieval);
+    if (eventsResult.isErr()) return;
+    
+    const events = eventsResult.value;
+    console.log(`Catch Up Starting Events ${events.length} events`);
+    
+    if (events.length > 0) {
+      // Add events to buffer with duplicate check
+      for (const e of events) {
+        if (!this.buffer.some(existingEvent => existingEvent.sortableUniqueId.value === e.sortableUniqueId.value)) {
+          this.buffer.push(e);
+        } else {
+          console.log(`Skipping duplicate event during catch-up: ${e.sortableUniqueId.value}`);
+        }
+      }
+      this.flushBuffer();
+    }
+    
+    console.log(`Catch Up Finished ${events.length} events`);
+    this.logState();
+  }
+  
+  private flushBuffer(): void {
+    console.log(`Start flush buffer ${this.buffer.length} events`);
+    this.logState();
+    
+    if (!this.safeState && !this.unsafeState) {
+      this.initializeState();
+    }
+    
+    if (this.buffer.length === 0) {
+      // Even with no events, ensure state consistency
+      this.unsafeState = undefined; // No unsafe state when buffer is empty
+      return;
+    }
+    
+    const projector = this.getProjectorFromName();
+    if (!projector) {
+      console.error('Failed to get projector from name');
+      return;
+    }
+    
+    // Sort buffer by sortable unique ID
+    this.buffer.sort((a, b) => {
+      return SortableUniqueId.compare(a.sortableUniqueId, b.sortableUniqueId);
+    });
+    
+    // Calculate safe border (7 seconds ago)
+    const safeBorderDate = new Date(Date.now() - this.SAFE_STATE_WINDOW_MS);
+    // Generate a SortableUniqueId with the safe border date
+    // We use getSafeIdFromUtc which already handles the safe window
+    const safeBorder = SortableUniqueId.fromString(SortableUniqueId.getSafeIdFromUtc()).unwrapOr(SortableUniqueId.generate());
+    
+    // Find split index - events older than safe border
+    let splitIndex = -1;
+    for (let i = this.buffer.length - 1; i >= 0; i--) {
+      if (SortableUniqueId.compare(this.buffer[i].sortableUniqueId, safeBorder) < 0) {
+        splitIndex = i;
+        break;
+      }
+    }
+    
+    console.log(`Splitted Total ${this.buffer.length} events, SplitIndex ${splitIndex}`);
+    
+    // Process old events
+    if (splitIndex >= 0) {
+      console.log('Working on old events');
+      // Use minimum possible sortable unique ID value when no lastSortableUniqueId is set
+      const minSortableUniqueId = SortableUniqueId.fromString('000000000000000000000000000000').unwrapOr(SortableUniqueId.generate());
+      const sortableUniqueIdFrom = this.safeState?.lastSortableUniqueId 
+        ? SortableUniqueId.fromString(this.safeState.lastSortableUniqueId).unwrapOr(minSortableUniqueId)
+        : minSortableUniqueId;
+      
+      // Get old events
+      const oldEvents = this.buffer.slice(0, splitIndex + 1)
+        .filter(e => {
+          const comparison = SortableUniqueId.compare(e.sortableUniqueId, sortableUniqueIdFrom);
+          console.log(`Comparing event ${e.sortableUniqueId.value} with ${sortableUniqueIdFrom.value}: ${comparison}`);
+          return comparison > 0;
+        });
+      
+      if (oldEvents.length > 0 && this.domainTypes.multiProjectorTypes) {
+        // Apply to safe state
+        const currentProjector = this.safeState?.projectorCommon ?? projector;
+        const newSafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(currentProjector, oldEvents);
+        
+        if (newSafeStateResult.isOk()) {
+          const lastOldEvt = oldEvents[oldEvents.length - 1];
+          this.safeState = {
+            projectorCommon: newSafeStateResult.value,
+            lastEventId: lastOldEvt.id.value,
+            lastSortableUniqueId: lastOldEvt.sortableUniqueId.value,
+            version: (this.safeState?.version ?? 0) + 1,
+            appliedSnapshotVersion: 0,
+            rootPartitionKey: this.safeState?.rootPartitionKey ?? 'default'
+          };
+          
+          // Mark for saving
+          this.pendingSave = true;
+        }
+      }
+      
+      // Remove processed events from buffer
+      this.buffer.splice(0, splitIndex + 1);
+    }
+    
+    console.log(`After worked old events Total ${this.buffer.length} events`);
+    
+    // Process remaining (newer) events for unsafe state
+    if (this.buffer.length > 0 && this.safeState && this.domainTypes.multiProjectorTypes) {
+      const newUnsafeStateResult = this.domainTypes.multiProjectorTypes.projectEvents(
+        this.safeState.projectorCommon, 
+        this.buffer
+      );
+      
+      if (newUnsafeStateResult.isOk()) {
+        const lastNewEvt = this.buffer[this.buffer.length - 1];
+        this.unsafeState = {
+          projectorCommon: newUnsafeStateResult.value,
+          lastEventId: lastNewEvt.id.value,
+          lastSortableUniqueId: lastNewEvt.sortableUniqueId.value,
+          version: this.safeState.version + 1,
+          appliedSnapshotVersion: 0,
+          rootPartitionKey: this.safeState.rootPartitionKey
+        };
+      }
+    } else {
+      this.unsafeState = undefined;
+    }
+    
+    console.log(`Finish flush buffer ${this.buffer.length} events`);
+    this.logState();
+  }
+  
+  private initializeState(): void {
+    const projector = this.getProjectorFromName();
+    if (!projector) {
+      console.error('Failed to get projector from name');
+      return;
+    }
+    
+    // Use generateInitialPayload if available
+    let initialPayload = projector;
+    if ('generateInitialPayload' in projector && typeof projector.generateInitialPayload === 'function') {
+      initialPayload = projector.generateInitialPayload();
+    }
+    
+    this.safeState = {
+      projectorCommon: initialPayload,
+      lastEventId: '',
+      lastSortableUniqueId: '',
+      version: 0,
+      appliedSnapshotVersion: 0,
+      rootPartitionKey: 'default'
+    };
+    
+    console.log('Initialized state with projector:', {
+      projectorType: initialPayload.constructor.name,
+      hasGetAggregates: 'getAggregates' in initialPayload,
+      hasAggregates: 'aggregates' in initialPayload
+    });
+  }
+  
+  private async persistStateAsync(state: IMultiProjectorStateCommon): Promise<void> {
+    if (state.version === 0) return;
+    
+    console.log(`Persisting state version ${state.version}`);
+    
+    const serializableState = await this.serializeState(state);
+    await this.getStateManager().setState(this.STATE_KEY, serializableState);
+    
+    console.log(`Persisting state written version ${state.version}`);
+  }
+  
+  async query(query: SerializableQuery): Promise<SerializableQueryResult> {
     try {
-      await this.flushBuffer();
+      await this.ensureStateLoadedAsync();
       
-      // Use safe state for queries
-      const state = this.safeState || await this.buildStateAsync();
-      
-      console.log('[MultiProjectorActor] Executing query:', {
-        queryType: query.queryType,
-        projectorType: this.projectorType,
-        projectionsCount: Object.keys(state.projections).length
-      });
-      
-      // Basic implementation: return first matching projection based on query payload
-      const projections = state.projections;
-      
-      // If query has an ID field, try to find by ID
-      if (query.payload?.id) {
-        const projection = projections[query.payload.id];
-        if (projection) {
-          return {
-            isSuccess: true,
-            data: projection
-          };
-        }
+      // Get the query class by name
+      if (!this.domainTypes.queryTypes) {
+        return await this.createErrorQueryResult(
+          new Error('Query types not available'),
+          query
+        );
       }
       
-      // Otherwise, search through all projections
-      const projectionEntries = Object.entries(projections);
-      for (const [id, projection] of projectionEntries) {
-        // Simple matching: check if projection matches query filters
-        if (this.matchesQuery(projection, query.payload)) {
-          return {
-            isSuccess: true,
-            data: projection
-          };
-        }
+      const queryTypeInfo = this.domainTypes.queryTypes.getQueryTypeByName(query.queryType);
+      if (!queryTypeInfo) {
+        return await this.createErrorQueryResult(
+          new Error(`Query type not found: ${query.queryType}`),
+          query
+        );
       }
       
-      // No matching projection found
-      return {
-        isSuccess: true,
-        data: null
+      // Create query instance
+      const QueryClass = queryTypeInfo.constructor;
+      const queryInstance = new QueryClass();
+      
+      // If the query has payload data, apply it
+      if (query.payload) {
+        Object.assign(queryInstance, query.payload);
+      }
+      
+      // Get the projector state for query
+      const projectionState = await this.getProjectorForQuery();
+      if (!projectionState) {
+        return await this.createErrorQueryResult(
+          new Error('Failed to get projector state'),
+          query
+        );
+      }
+      
+      // For now, we'll execute the query manually
+      // In a full implementation, this would use the domain query infrastructure
+      let result = { value: null };
+      
+      // If query has an execute method, use it
+      if (queryInstance.execute && typeof queryInstance.execute === 'function') {
+        result.value = await queryInstance.execute(projectionState.projectorCommon);
+      }
+      
+      // Create and return serializable result
+      const queryResult: QueryResult<any> = {
+        value: result.value,
+        query: query.queryType,
+        projectionVersion: projectionState.version
       };
+      
+      return await createSerializableQueryResult(queryResult, queryInstance, this.domainTypes);
     } catch (error) {
-      console.error('[MultiProjectorActor] Query error:', error);
-      return {
-        isSuccess: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      console.error('Error executing query:', error);
+      return await this.createErrorQueryResult(error, query);
     }
   }
   
-  /**
-   * Simple query matcher
-   */
-  private matchesQuery(projection: any, queryPayload: any): boolean {
-    if (!queryPayload || Object.keys(queryPayload).length === 0) {
-      return true; // No filters, match all
-    }
-    
-    // Check each filter property
-    for (const [key, value] of Object.entries(queryPayload)) {
-      if (key === 'id') continue; // Already handled
-      
-      // Simple equality check
-      if (projection[key] !== value) {
-        return false;
-      }
-    }
-    
-    return true;
-  }
-  
-  /**
-   * Execute list query
-   */
-  async queryListAsync(query: SerializableListQuery): Promise<ListQueryResponse> {
-    console.log('[MultiProjectorActor] queryListAsync called for actor:', this.actorIdString);
-    console.log('[MultiProjectorActor] List query type:', query.queryType);
-    
+  async queryList(query: SerializableListQuery): Promise<SerializableListQueryResult> {
     try {
-      await this.flushBuffer();
+      await this.ensureStateLoadedAsync();
       
-      // Use safe state for queries
-      const state = this.safeState || await this.buildStateAsync();
+      // Get the appropriate state
+      const projectionState = await this.getProjectorForQuery();
+      if (!projectionState) {
+        return await this.createErrorListQueryResult(
+          new Error('Failed to get projector state'),
+          query
+        );
+      }
+      const state = projectionState.projectorCommon;
       
-      console.log('[MultiProjectorActor] Executing list query:', {
-        queryType: query.queryType,
-        projectorType: this.projectorType,
-        skip: query.skip,
-        take: query.take,
-        projectionsCount: Object.keys(state.projections).length
-      });
+      // Execute the query using domain types
+      if (!this.domainTypes.queryTypes) {
+        return await this.createErrorListQueryResult(
+          new Error('Query types not available'),
+          query
+        );
+      }
       
-      // Get all matching projections
-      const projections = state.projections;
-      const matchingProjections: any[] = [];
+      // Get the query class by name
+      const queryTypeInfo = this.domainTypes.queryTypes.getQueryTypeByName(query.queryType);
+      if (!queryTypeInfo) {
+        return await this.createErrorListQueryResult(
+          new Error(`Query type not found: ${query.queryType}`),
+          query
+        );
+      }
       
-      // Filter projections based on query
-      for (const [id, projection] of Object.entries(projections)) {
-        if (this.matchesQuery(projection, query.payload)) {
-          matchingProjections.push({ ...projection, id });
-        }
+      // Create query instance
+      const QueryClass = queryTypeInfo.constructor;
+      const queryInstance = new QueryClass();
+      
+      // If the query has filter/sort data, apply it
+      if (query.payload) {
+        Object.assign(queryInstance, query.payload);
       }
       
       // Apply pagination
-      const skip = query.skip || 0;
-      const take = query.take || 10;
-      const paginatedItems = matchingProjections.slice(skip, skip + take);
+      if (query.skip !== undefined) queryInstance.skip = query.skip;
+      if (query.take !== undefined) queryInstance.take = query.take;
+      if (query.limit !== undefined) queryInstance.limit = query.limit;
       
-      return {
-        isSuccess: true,
-        items: paginatedItems,
-        totalCount: matchingProjections.length
+      // For now, we'll manually execute the query against the state
+      // This is a simplified implementation until full query infrastructure is in place
+      console.log('Query state inspection:', {
+        stateExists: !!state,
+        stateType: state ? state.constructor.name : 'null',
+        hasGetAggregates: state && 'getAggregates' in state,
+        aggregatesProperty: state && 'aggregates' in state ? (state as AggregateAccessor).aggregates : 'not found'
+      });
+      
+      if (state && 'getAggregates' in state) {
+        type AggregateAccessor = { getAggregates(): any[]; aggregates?: Map<string, any> };
+        const accessor = state as AggregateAccessor;
+        let aggregates = accessor.getAggregates();
+        
+        
+        if (aggregates.length > 0) {
+          // Process aggregates - implementation logic should be here
+        }
+        
+        // Apply filter if query has handleFilter method
+        if (queryInstance.handleFilter && typeof queryInstance.handleFilter === 'function') {
+          aggregates = aggregates.filter((aggregate: any) => 
+            queryInstance.handleFilter(aggregate)
+          );
+        }
+        
+        // Apply sort if query has handleSort method
+        if (queryInstance.handleSort && typeof queryInstance.handleSort === 'function') {
+          aggregates.sort((a: any, b: any) => queryInstance.handleSort(a, b));
+        }
+        
+        // Transform aggregates to response format if transformToResponse method exists
+        let values = aggregates;
+        if (queryInstance.transformToResponse && typeof queryInstance.transformToResponse === 'function') {
+          values = aggregates.map((aggregate: any) => queryInstance.transformToResponse(aggregate));
+        }
+        
+        // Apply pagination
+        const skip = query.skip || 0;
+        const take = query.take || query.limit || 100;
+        const paginatedValues = values.slice(skip, skip + take);
+        
+        // Create list query result
+        const listResult: ListQueryResult<any> = {
+          items: paginatedValues,
+          totalCount: values.length,
+          pageSize: take,
+          pageNumber: Math.floor(skip / take) + 1,
+          totalPages: Math.ceil(values.length / take),
+          hasNextPage: (Math.floor(skip / take) + 1) < Math.ceil(values.length / take),
+          hasPreviousPage: (Math.floor(skip / take) + 1) > 1
+        };
+        
+        
+        const serializedResult = await createSerializableListQueryResult(listResult, queryInstance, this.domainTypes);
+        
+        
+        return serializedResult;
+      }
+      
+      // Fallback for non-list projectors
+      const emptyResult: ListQueryResult<any> = {
+        items: [],
+        totalCount: 0,
+        pageSize: 0,
+        pageNumber: 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false
       };
+      
+      return await createSerializableListQueryResult(emptyResult, queryInstance, this.domainTypes);
     } catch (error) {
-      console.error('[MultiProjectorActor] List query error:', error);
-      return {
-        isSuccess: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      console.error('Error executing list query:', error);
+      return await this.createErrorListQueryResult(error, query);
     }
   }
   
   /**
-   * Check if event has been processed
+   * Execute list query (actor method)
+   * This is the method called by Dapr actor invocation
    */
-  async isSortableUniqueIdReceived(sortableUniqueId: string): Promise<boolean> {
-    console.log('[MultiProjectorActor] isSortableUniqueIdReceived called for:', sortableUniqueId);
+  async queryListAsync(query: SerializableListQuery): Promise<ListQueryResponse> {
     
-    // Check buffer
-    if (this.eventBuffer.some(e => e.event.sortableUniqueId === sortableUniqueId)) {
+    try {
+      // Call the existing queryList method
+      const result = await this.queryList(query);
+      
+      
+      // Convert to ListQueryResponse format expected by actor interface
+      // Note: The result is a SerializableListQueryResult which has compressed data
+      // The items will be extracted when deserializing on the client side
+      const response: ListQueryResponse = {
+        isSuccess: true,
+        data: result,
+        error: undefined,
+        totalCount: result.totalCount || 0,
+        items: [] // Items are in the compressed data, will be extracted during deserialization
+      };
+      
+      return response;
+    } catch (error) {
+      console.error('[MultiProjectorActor.queryListAsync] Error:', error);
+      
+      // Return error response
+      const errorResponse: ListQueryResponse = {
+        isSuccess: false,
+        data: null,
+        error: error instanceof Error ? error.message : String(error),
+        totalCount: 0,
+        items: []
+      };
+      
+      return errorResponse;
+    }
+  }
+  
+  async isSortableUniqueIdReceived(sortableUniqueId: string): Promise<boolean> {
+    await this.ensureStateLoadedAsync();
+    
+    // Check if exactly this event is in buffer
+    if (this.buffer.some(e => e.sortableUniqueId.value === sortableUniqueId)) {
       return true;
     }
     
-    // Check processed events in state
-    const processedEvents = await this.getProcessedEventsAsync();
-    return processedEvents.has(sortableUniqueId);
+    // Check if already processed in safe state
+    if (this.safeState?.lastSortableUniqueId) {
+      const lastIdResult = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
+      const targetIdResult = SortableUniqueId.fromString(sortableUniqueId);
+      
+      if (lastIdResult.isErr() || targetIdResult.isErr()) {
+        return false;
+      }
+      
+      const lastId = lastIdResult.value;
+      const targetId = targetIdResult.value;
+      
+      if (SortableUniqueId.compare(lastId, targetId) >= 0) {
+        return true;
+      }
+    }
+    
+    // Check if already processed in unsafe state
+    if (this.unsafeState?.lastSortableUniqueId) {
+      const lastIdResult = SortableUniqueId.fromString(this.unsafeState.lastSortableUniqueId);
+      const targetIdResult = SortableUniqueId.fromString(sortableUniqueId);
+      
+      if (lastIdResult.isErr() || targetIdResult.isErr()) {
+        return false;
+      }
+      
+      const lastId = lastIdResult.value;
+      const targetId = targetIdResult.value;
+      
+      if (SortableUniqueId.compare(lastId, targetId) >= 0) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
-  /**
-   * Build current state from buffer
-   */
-  async buildStateAsync(): Promise<MultiProjectionState> {
-    await this.flushBuffer();
-    return this.unsafeState || this.createEmptyState();
+  async buildState(): Promise<void> {
+    await this.ensureStateLoadedAsync();
+    
+    // Check if we're actively receiving events
+    const eventDeliveryTimeout = 30000; // 30 seconds
+    const isActivelyReceivingEvents = this.eventDeliveryActive && 
+      (Date.now() - this.lastEventReceivedTime.getTime()) < eventDeliveryTimeout;
+    
+    if (isActivelyReceivingEvents) {
+      console.log(`Event delivery active, flush buffer ${this.buffer.length} events`);
+      this.flushBuffer();
+      console.log(`Event delivery active, flush buffer finished ${this.buffer.length} events`);
+    } else {
+      console.log('Event delivery inactive, catch up from store');
+      await this.catchUpFromStoreAsync();
+      console.log('Event delivery inactive, catch up from store finished');
+    }
   }
   
-  /**
-   * Rebuild state from scratch
-   */
-  async rebuildStateAsync(): Promise<void> {
-    // Clear buffer and states
-    this.eventBuffer = [];
+  async rebuildState(): Promise<void> {
     this.safeState = undefined;
     this.unsafeState = undefined;
-    
-    // Load all events from store
-    const retrievalInfo = new EventRetrievalInfo(
-      OptionalValue.empty<string>(),
-      OptionalValue.empty<any>(),
-      OptionalValue.empty<string>(),
-      SortableIdCondition.none(),
-      OptionalValue.fromValue(10000) // Get up to 10k events
-    );
-    
-    const eventsResult = await this.eventStore.getEvents(retrievalInfo);
-    if (eventsResult.isErr()) {
-      console.error('Failed to load events for rebuild:', eventsResult.error);
-      return;
-    }
-    
-    const events = eventsResult.value;
-    
-    // Build new state
-    const newState = this.createEmptyState();
-    
-    // Apply all events
-    for (const event of events) {
-      const serializedEvent: SerializableEventDocument = {
-        id: event.id.value,
-        sortableUniqueId: event.id.value,
-        payload: event.payload,
-        eventType: event.eventType,
-        aggregateId: event.aggregateId,
-        partitionKeys: event.partitionKeys,
-        version: event.version,
-        createdAt: event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp),
-        metadata: event.metadata || {},
-        aggregateType: event.aggregateType
-      };
-      
-      newState.projections = await this.applyEventToProjections(
-        newState.projections,
-        serializedEvent
-      );
-      newState.lastProcessedEventId = event.id.value;
-      newState.lastProcessedTimestamp = event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp);
-      newState.version++;
-    }
-    
-    this.safeState = newState;
-    this.unsafeState = { ...newState };
-    
-    // Persist rebuilt state
-    await this.persistStateAsync(newState);
+    this.buffer = [];
+    await this.catchUpFromStoreAsync();
+    this.pendingSave = true;
   }
   
   /**
-   * Process event from event relay service
-   * This method is called by the event-relay service
+   * IMultiProjectorActor interface implementation
    */
-  async processEvent(eventData: any): Promise<void> {
-    console.log('[MultiProjectorActor] processEvent called with data:', {
-      type: eventData?.type,
-      aggregateType: eventData?.aggregateType,
-      aggregateId: eventData?.aggregateId,
-      version: eventData?.version
-    });
-    
-    // Convert the event data to SerializableEventDocument format
-    const eventDocument: SerializableEventDocument = {
-      id: eventData.id,
-      sortableUniqueId: eventData.sortKey || eventData.sortableUniqueId || eventData.id,
-      aggregateId: eventData.aggregateId,
-      aggregateType: eventData.aggregateType,
-      eventType: eventData.type || eventData.eventType,
-      version: eventData.version,
-      createdAt: eventData.created || eventData.timestamp || new Date().toISOString(),
-      payload: eventData.data,
-      metadata: {
-        correlationId: eventData.correlationId || '',
-        causationId: eventData.causationId || '',
-        executedUser: eventData.executedUser || 'system'
-      },
-      partitionKeys: new PartitionKeys(
-        eventData.aggregateId,
-        eventData.rootPartitionKey || 'default',
-        eventData.tenantId
-      )
+  async queryAsync(query: SerializableQuery): Promise<QueryResponse> {
+    const result = await this.query(query);
+    return {
+      isSuccess: true,
+      data: result
     };
-    
-    // Create envelope and call handlePublishedEvent
-    const envelope: DaprEventEnvelope = {
-      event: eventDocument,
-      topic: 'sekiban-events',
-      pubsubName: 'pubsub'
-    };
-    
-    await this.handlePublishedEvent(envelope);
   }
-
+  
+  async buildStateAsync(): Promise<ActorMultiProjectionState> {
+    await this.buildState();
+    const state = this.unsafeState || this.safeState;
+    return {
+      projections: state ? { [this.actorIdString]: state.projectorCommon } : {},
+      lastProcessedEventId: state?.lastEventId || '',
+      lastProcessedTimestamp: state?.lastSortableUniqueId || '',
+      version: state?.version || 0
+    };
+  }
+  
+  async rebuildStateAsync(): Promise<void> {
+    await this.rebuildState();
+  }
+  
   /**
-   * Handle published event from PubSub
+   * Handles events published through Dapr PubSub.
    */
   async handlePublishedEvent(envelope: DaprEventEnvelope): Promise<void> {
-    console.log('[MultiProjectorActor] handlePublishedEvent called for event:', envelope.event.sortableUniqueId);
-    
-    // Check if already processed
-    if (await this.isSortableUniqueIdReceived(envelope.event.sortableUniqueId)) {
-      return;
-    }
-    
-    // Add to buffer with timestamp
-    this.eventBuffer.push({
-      event: envelope.event,
-      receivedAt: new Date()
-    });
-    
-    // Sort buffer by sortableUniqueId
-    this.eventBuffer.sort((a, b) => 
-      a.event.sortableUniqueId.localeCompare(b.event.sortableUniqueId)
-    );
-    
-    // Trim buffer if too large (keep last 10000 events)
-    if (this.eventBuffer.length > 10000) {
-      this.eventBuffer = this.eventBuffer.slice(-10000);
-    }
-  }
-  
-  /**
-   * Reminder handling - Dapr expects this method name
-   */
-  async receiveReminder(data: string): Promise<void> {
-    // Parse the reminder data to get the name
-    let reminderName = data;
     try {
-      const parsed = JSON.parse(data);
-      reminderName = parsed.name || data;
-    } catch {
-      // Use data as-is if not JSON
-    }
-    
-    switch (reminderName) {
-      case this.SNAPSHOT_REMINDER:
-        await this.handleSnapshotReminder();
-        break;
-      case this.EVENT_CHECK_REMINDER:
-        await this.handleEventCheckReminder();
-        break;
-    }
-  }
-  
-  /**
-   * Alias for backward compatibility
-   */
-  async receiveReminderAsync(data: string): Promise<void> {
-    return this.receiveReminder(data);
-  }
-  
-  /**
-   * Process buffered events
-   */
-  private async flushBuffer(): Promise<void> {
-    const now = new Date();
-    
-    // Find events older than safe window
-    const safeEvents = this.eventBuffer.filter(
-      e => now.getTime() - e.receivedAt.getTime() > this.SAFE_WINDOW_MS
-    );
-    
-    if (safeEvents.length > 0) {
-      // Update safe state with safe events
-      const newSafeState = this.safeState || this.createEmptyState();
+      console.log(`Received event from PubSub: EventId=${envelope.event?.id}, AggregateId=${envelope.event?.aggregateId}, Version=${envelope.event?.version}`);
+      console.log('Full envelope received:', JSON.stringify(envelope, null, 2));
       
-      for (const bufferedEvent of safeEvents) {
-        newSafeState.projections = await this.applyEventToProjections(
-          newSafeState.projections,
-          bufferedEvent.event
-        );
-        newSafeState.lastProcessedEventId = bufferedEvent.event.sortableUniqueId;
-        newSafeState.lastProcessedTimestamp = bufferedEvent.event.TimeStamp || bufferedEvent.event.createdAt || new Date().toISOString();
-        newSafeState.version++;
-      }
+      // Mark event delivery as active
+      this.eventDeliveryActive = true;
+      this.lastEventReceivedTime = new Date();
       
-      this.safeState = newSafeState;
+      // Ensure state is loaded before processing
+      await this.ensureStateLoadedAsync();
       
-      // Remove processed events from buffer
-      this.eventBuffer = this.eventBuffer.filter(
-        e => !safeEvents.includes(e)
-      );
-      
-      // Track processed events
-      await this.addProcessedEventsAsync(
-        safeEvents.map(e => e.event.sortableUniqueId)
-      );
-    }
-    
-    // Always update unsafe state with all events
-    const newUnsafeState = this.safeState 
-      ? { ...this.safeState }
-      : this.createEmptyState();
-    
-    // Apply remaining buffer events to unsafe state
-    for (const bufferedEvent of this.eventBuffer) {
-      newUnsafeState.projections = await this.applyEventToProjections(
-        newUnsafeState.projections,
-        bufferedEvent.event
-      );
-    }
-    
-    this.unsafeState = newUnsafeState;
-  }
-  
-  /**
-   * Handle snapshot reminder/timer
-   */
-  private async handleSnapshotReminder(): Promise<void> {
-    if (this.safeState) {
-      await this.persistStateAsync(this.safeState);
-    }
-  }
-  
-  /**
-   * Handle event check reminder/timer
-   */
-  private async handleEventCheckReminder(): Promise<void> {
-    // Catch up from external storage
-    await this.catchUpFromStoreAsync();
-    
-    // Flush buffer
-    await this.flushBuffer();
-  }
-  
-  /**
-   * Catch up from external event store
-   */
-  private async catchUpFromStoreAsync(): Promise<void> {
-    const lastProcessedId = this.safeState?.lastProcessedEventId || '';
-    
-    try {
-      // Create retrieval info to get all events after the last processed one
-      let sortableIdCondition: any;
-      
-      if (lastProcessedId) {
-        const lastIdResult = SortableUniqueId.fromString(lastProcessedId);
-        if (lastIdResult.isOk()) {
-          sortableIdCondition = SortableIdCondition.since(lastIdResult.value);
-        } else {
-          sortableIdCondition = SortableIdCondition.none();
-        }
-      } else {
-        sortableIdCondition = SortableIdCondition.none();
-      }
-      
-      // Create retrieval info for all events with the condition
-      const retrievalInfo = new EventRetrievalInfo(
-        OptionalValue.empty<string>(),
-        OptionalValue.empty<any>(),
-        OptionalValue.empty<string>(),
-        sortableIdCondition,
-        OptionalValue.fromValue(1000) // Batch size
-      );
-      
-      // Load events using the proper interface
-      const eventsResult = await this.eventStore.getEvents(retrievalInfo);
-      
-      if (eventsResult.isErr()) {
-        console.error('[MultiProjectorActor] Failed to get events from store:', eventsResult.error);
+      // Deserialize the event
+      const event = await this.deserializeEvent(envelope);
+      if (!event) {
+        console.warn('Failed to deserialize event from envelope');
         return;
       }
       
-      const newEvents = eventsResult.value;
-      console.log(`[MultiProjectorActor] Retrieved ${newEvents.length} events from store`);
-      
-      // Debug: Check the structure of the first event
-      if (newEvents.length > 0) {
-        const firstEvent = newEvents[0];
-        console.log(`[MultiProjectorActor] First event structure:`, {
-          hasType: 'type' in firstEvent,
-          hasEventType: 'eventType' in firstEvent,
-          type: (firstEvent as any).type,
-          eventType: (firstEvent as any).eventType,
-          aggregateType: firstEvent.aggregateType,
-          aggregateId: firstEvent.aggregateId,
-          payload: firstEvent.payload
-        });
+      // First check if this exact event is already in the buffer
+      if (this.buffer.some(e => e.sortableUniqueId.value === event.sortableUniqueId.value)) {
+        console.log(`Event already in buffer: ${event.sortableUniqueId.value}`);
+        return;
       }
       
-      // Add to buffer if not already present
-      for (const event of newEvents) {
-        const sortableId = event.id.value;
-        
-        if (!await this.isSortableUniqueIdReceived(sortableId)) {
-          // Events from store already have the right structure, just need to convert to SerializableEventDocument
-          let createdAtStr: string;
-          const timestamp = event.timestamp;
-          if (typeof timestamp === 'string') {
-            createdAtStr = timestamp;
-          } else if (timestamp instanceof Date) {
-            createdAtStr = timestamp.toISOString();
-          } else if (timestamp && typeof (timestamp as any).toISOString === 'function') {
-            createdAtStr = (timestamp as any).toISOString();
-          } else {
-            console.warn('[MultiProjectorActor] Invalid timestamp format:', timestamp);
-            createdAtStr = new Date().toISOString();
-          }
-          
-          const serializedEvent: SerializableEventDocument = {
-            id: event.id.value,
-            sortableUniqueId: event.id.value,
-            payload: event.payload,
-            eventType: event.eventType,
-            aggregateId: event.aggregateId,
-            partitionKeys: event.partitionKeys,
-            version: event.version,
-            createdAt: createdAtStr,
-            metadata: event.metadata || {},
-            aggregateType: event.aggregateType
-          };
-          
-          this.eventBuffer.push({
-            event: serializedEvent,
-            receivedAt: new Date()
-          });
+      // Then check if we've already processed this event in state
+      if (this.safeState?.lastSortableUniqueId) {
+        const lastSafeIdResult = SortableUniqueId.fromString(this.safeState.lastSortableUniqueId);
+        if (lastSafeIdResult.isErr()) {
+          return;
         }
-      }
-      
-      // Re-sort buffer
-      this.eventBuffer.sort((a, b) => 
-        a.event.sortableUniqueId.localeCompare(b.event.sortableUniqueId)
-      );
-    } catch (error) {
-      console.error('Failed to catch up from store:', error);
-    }
-  }
-  
-  /**
-   * Load state from actor storage
-   */
-  private async loadStateAsync(): Promise<void> {
-    const stateManager = await this.getStateManager();
-    const [hasState, state] = await stateManager.tryGetState(
-      this.PROJECTION_STATE_KEY
-    );
-    
-    if (hasState && state) {
-      this.safeState = state as MultiProjectionState;
-      this.unsafeState = { ...state } as MultiProjectionState;
-    }
-  }
-  
-  /**
-   * Persist state to actor storage
-   */
-  private async persistStateAsync(state: MultiProjectionState): Promise<void> {
-    const stateManager = await this.getStateManager();
-    await stateManager.setState(
-      this.PROJECTION_STATE_KEY,
-      state
-    );
-  }
-  
-  /**
-   * Get processed events set
-   */
-  private async getProcessedEventsAsync(): Promise<Set<string>> {
-    const stateManager = await this.getStateManager();
-    const [hasEvents, events] = await stateManager.tryGetState(
-      this.PROCESSED_EVENTS_KEY
-    );
-    
-    return new Set((events as string[]) || []);
-  }
-  
-  /**
-   * Add processed events
-   */
-  private async addProcessedEventsAsync(eventIds: string[]): Promise<void> {
-    const processed = await this.getProcessedEventsAsync();
-    
-    for (const id of eventIds) {
-      processed.add(id);
-    }
-    
-    // Keep only last 100000 events to prevent unbounded growth
-    const processedArray = Array.from(processed);
-    if (processedArray.length > 100000) {
-      const trimmed = processedArray.slice(-100000);
-      const stateManager = await this.getStateManager();
-      await stateManager.setState(
-        this.PROCESSED_EVENTS_KEY,
-        trimmed
-      );
-    } else {
-      const stateManager = await this.getStateManager();
-      await stateManager.setState(
-        this.PROCESSED_EVENTS_KEY,
-        processedArray
-      );
-    }
-  }
-  
-  /**
-   * Apply event to projections
-   */
-  private async applyEventToProjections(
-    projections: Record<string, any>,
-    event: SerializableEventDocument
-  ): Promise<Record<string, any>> {
-    try {
-      // Get the domain types from container
-      const cradle = getDaprCradle();
-      const domainTypes = cradle.domainTypes;
-      
-      // Extract the projector name from the actor ID
-      // Format: aggregatelistprojector-{projectorname}
-      const actorIdStr = this.actorIdString;
-      const parts = actorIdStr.split('-');
-      let projectorName = parts.length > 1 ? parts[1] : '';
-      
-      // The projectorName might be like 'taskprojector', but we need 'Task' for aggregateTypeName
-      // Common pattern: remove 'projector' suffix and capitalize
-      if (projectorName.endsWith('projector')) {
-        projectorName = projectorName.slice(0, -9); // Remove 'projector'
-        projectorName = projectorName.charAt(0).toUpperCase() + projectorName.slice(1); // Capitalize
-      }
-      
-      console.log(`[MultiProjectorActor] Applying event to projections:`, {
-        projectorName,
-        eventType: event.eventType,
-        aggregateId: event.aggregateId,
-        actorId: actorIdStr,
-        payload: event.payload
-      });
-      
-      // Find the projector in the registry
-      let projectorInstance = null;
-      
-      if (domainTypes.projectorTypes && typeof domainTypes.projectorTypes.getProjectorTypes === 'function') {
-        const projectorList = domainTypes.projectorTypes.getProjectorTypes();
-        const projectorWrapper = projectorList.find(
-          (p: any) => p.aggregateTypeName.toLowerCase() === projectorName.toLowerCase()
-        );
+        const lastSafeId = lastSafeIdResult.value;
+        const eventId = event.sortableUniqueId;
         
-        if (projectorWrapper) {
-          projectorInstance = projectorWrapper.projector;
+        if (SortableUniqueId.compare(lastSafeId, eventId) >= 0) {
+          console.log(`Event already processed in safe state: ${event.sortableUniqueId.value}`);
+          return;
         }
-      }
-      
-      if (!projectorInstance) {
-        console.warn(`[MultiProjectorActor] Projector not found: ${projectorName}`);
-        console.warn(`[MultiProjectorActor] Available projectors:`, 
-          domainTypes.projectorTypes?.getProjectorTypes?.()?.map((p: any) => p.aggregateTypeName) || 'none'
-        );
-        return projections;
-      }
-      
-      // Debug: Check projector structure
-      console.log(`[MultiProjectorActor] Projector instance type:`, typeof projectorInstance);
-      console.log(`[MultiProjectorActor] Projector has project method:`, typeof projectorInstance.project === 'function');
-      console.log(`[MultiProjectorActor] Projector has getInitialState method:`, typeof projectorInstance.getInitialState === 'function');
-      
-      // IProjector interface doesn't have projections property
-      
-      // Check if this projector can handle this event type
-      // SerializableEventDocument uses PayloadTypeName for event type
-      const eventType = event.PayloadTypeName || event.eventType;
-      // IProjector doesn't have canHandle method, all projectors handle their supported events
-      
-      // Get or create the projection for this aggregate
-      const aggregateId = event.AggregateId || event.aggregateId;
-      let currentProjection = projections[aggregateId];
-      
-      // If no projection exists, create initial state
-      if (!currentProjection) {
-        // Reconstruct partition keys from SerializableEventDocument
-        const partitionKeys = new PartitionKeys(
-          event.AggregateId || event.aggregateId,
-          event.AggregateGroup || event.aggregateType || projectorName,
-          event.RootPartitionKey || 'default'
-        );
-        
-        const initialAggregate = projectorInstance.getInitialState(partitionKeys);
-        currentProjection = initialAggregate;
-      }
-      
-      // Convert SerializableEventDocument to IEvent format
-      const sortableIdResult = SortableUniqueId.fromString(event.SortableUniqueId || event.sortableUniqueId || event.id);
-      const sortableId = sortableIdResult.isOk() ? sortableIdResult.value : SortableUniqueId.create();
-      
-      // Decompress payload if needed
-      let payload: any;
-      try {
-        if (event.CompressedPayloadJson) {
-          // Check if it's actually compressed
-          const payloadBuffer = Buffer.from(event.CompressedPayloadJson, 'base64');
-          
-          // Check for gzip header (1f 8b)
-          if (payloadBuffer[0] === 0x1f && payloadBuffer[1] === 0x8b) {
-            // It's gzipped, decompress it
-            const decompressed = await ungzipAsync(payloadBuffer);
-            const payloadJson = decompressed.toString('utf-8');
-            payload = JSON.parse(payloadJson);
-          } else {
-            // Not gzipped, just base64 encoded JSON
-            const payloadJson = payloadBuffer.toString('utf-8');
-            payload = JSON.parse(payloadJson);
-          }
-        } else {
-          // Fallback if not compressed
-          payload = event.payload || {};
-        }
-      } catch (error) {
-        console.error('[MultiProjectorActor] Error decompressing payload:', error);
-        payload = event.payload || {};
-      }
-      
-      // Reconstruct partition keys
-      const partitionKeys = new PartitionKeys(
-        aggregateId,
-        event.AggregateGroup || event.aggregateType || projectorName,
-        event.RootPartitionKey || 'default'
-      );
-      
-      const iEvent: IEvent = {
-        id: sortableId,
-        aggregateType: event.AggregateGroup || event.aggregateType || 'unknown',
-        aggregateId: aggregateId,
-        eventType: eventType,  // PayloadTypeName is the event type!
-        payload: payload,
-        version: event.Version || event.version || 1,
-        partitionKeys: partitionKeys,
-        sortableUniqueId: sortableId,
-        timestamp: new Date(event.TimeStamp || event.createdAt || new Date()),
-        metadata: {
-          causationId: event.CausationId || event.metadata?.causationId || '',
-          correlationId: event.CorrelationId || event.metadata?.correlationId || '',
-          userId: event.ExecutedUser || event.metadata?.userId || '',
-          executedUser: event.ExecutedUser || event.metadata?.executedUser || '',
-          timestamp: new Date(event.TimeStamp || event.createdAt || new Date())
-        },
-        // Additional fields for IEvent interface
-        partitionKey: event.PartitionKey || '',
-        aggregateGroup: event.AggregateGroup || event.aggregateType || '',
-        eventData: payload
-      };
-      
-      // Project the event
-      console.log(`[MultiProjectorActor] Projecting event:`, {
-        currentProjectionPayload: currentProjection.payload,
-        eventType: iEvent.eventType,
-        eventPayload: iEvent.payload
-      });
-      
-      const result = projectorInstance.project(currentProjection, iEvent);
-      
-      if (result.isOk()) {
-        const newProjection = result.value;
-        console.log(`[MultiProjectorActor] Projection result:`, {
-          newPayload: newProjection.payload,
-          version: newProjection.version,
-          payloadType: newProjection.payload?.aggregateType || typeof newProjection.payload
-        });
-        
-        // Update the projections map
-        projections[aggregateId] = {
-          id: aggregateId,
-          aggregateType: newProjection.aggregateType,
-          version: newProjection.version,
-          lastEventId: event.id,
-          lastSortableUniqueId: event.sortableUniqueId || event.id,
-          payload: newProjection.payload,
-          partitionKeys: newProjection.partitionKeys,
-          createdAt: currentProjection.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        console.log(`[MultiProjectorActor] Projection updated for aggregate: ${aggregateId}`);
-      } else {
-        console.error(`[MultiProjectorActor] Failed to project event:`, result.error);
-      }
-      
-      return projections;
-    } catch (error) {
-      console.error('[MultiProjectorActor] Error in applyEventToProjections:', error);
-      return projections;
-    }
-  }
-  
-  /**
-   * Create empty state
-   */
-  private createEmptyState(): MultiProjectionState {
-    return {
-      projections: {},
-      lastProcessedEventId: '',
-      lastProcessedTimestamp: new Date().toISOString(),
-      version: 0
-    };
-  }
-  
-  /**
-   * Serialize event for storage
-   */
-  private serializeEvent(event: IEvent): SerializableEventDocument {
-    return {
-      id: event.id.value,
-      sortableUniqueId: event.id.value,
-      payload: event.payload,
-      eventType: event.eventType,
-      aggregateId: event.aggregateId,
-      partitionKeys: event.partitionKeys,
-      version: event.version,
-      createdAt: event.timestamp instanceof Date ? event.timestamp.toISOString() : String(event.timestamp),
-      metadata: event.metadata || {},
-      aggregateType: event.aggregateType
-    };
-  }
-  
-  /**
-   * Receive event from pub/sub
-   */
-  async receiveEventAsync(eventData: any): Promise<void> {
-    console.log('[MultiProjectorActor] Received event from pub/sub:', {
-      payloadTypeName: eventData?.PayloadTypeName,
-      aggregateGroup: eventData?.AggregateGroup,
-      aggregateId: eventData?.AggregateId,
-      actorId: this.actorIdString
-    });
-    
-    try {
-      // Check if it's already in SerializableEventDocument format
-      let serializedEvent: SerializableEventDocument;
-      
-      if (eventData.PayloadTypeName && eventData.CompressedPayloadJson) {
-        // It's already in the correct format
-        serializedEvent = eventData as SerializableEventDocument;
-      } else {
-        // Legacy format - convert to SerializableEventDocument
-        console.warn('[MultiProjectorActor] Received event in legacy format, converting...');
-        
-        // Create a simple serialized event for backward compatibility
-        const payload = eventData.payload || eventData;
-        const payloadJson = JSON.stringify(payload);
-        const payloadBase64 = Buffer.from(payloadJson).toString('base64');
-        
-        const id = eventData.id || SortableUniqueId.create().value;
-        const sortableUniqueId = eventData.sortableUniqueId || eventData.id || SortableUniqueId.create().value;
-        
-        serializedEvent = {
-          // Lowercase fields for internal use
-          id,
-          sortableUniqueId,
-          payload: payload,
-          eventType: eventData.eventType || eventData.type || 'UnknownEvent',
-          aggregateId: eventData.aggregateId || '',
-          partitionKeys: eventData.partitionKeys || {
-            aggregateId: eventData.aggregateId || '',
-            group: eventData.aggregateType || eventData.aggregateGroup || 'default',
-            rootPartitionKey: eventData.partitionKeys?.rootPartitionKey || 'default'
-          },
-          version: eventData.version || 1,
-          createdAt: eventData.createdAt || eventData.timestamp || new Date().toISOString(),
-          metadata: eventData.metadata || {},
-          aggregateType: eventData.aggregateType || eventData.aggregateGroup || 'default',
-          
-          // Uppercase fields for C# compatibility
-          Id: id,
-          SortableUniqueId: sortableUniqueId,
-          Version: eventData.version || 1,
-          AggregateId: eventData.aggregateId || '',
-          AggregateGroup: eventData.aggregateType || eventData.aggregateGroup || 'default',
-          RootPartitionKey: eventData.partitionKeys?.rootPartitionKey || 'default',
-          PayloadTypeName: eventData.eventType || eventData.type || 'UnknownEvent',
-          TimeStamp: eventData.createdAt || eventData.timestamp || new Date().toISOString(),
-          PartitionKey: eventData.partitionKey || '',
-          CausationId: eventData.metadata?.causationId || '',
-          CorrelationId: eventData.metadata?.correlationId || '',
-          ExecutedUser: eventData.metadata?.executedUser || eventData.metadata?.userId || '',
-          CompressedPayloadJson: payloadBase64,
-          PayloadAssemblyVersion: '0.0.0.0'
-        };
       }
       
       // Add to buffer
-      this.eventBuffer.push({
-        event: serializedEvent,
-        receivedAt: new Date()
-      });
+      this.buffer.push(event);
+      console.log(`Added event to buffer: ${event.sortableUniqueId.value}`);
       
-      // If we're not already processing, flush immediately
-      if (this.eventBuffer.length === 1) {
-        await this.flushBuffer();
+      // Similar to C#, we don't flush immediately during bootstrapping
+      if (this.bootstrapping) {
+        console.log('Bootstrapping mode - deferring flush');
+      } else {
+        // Buffer will be flushed when queries are made or during periodic snapshots
+        console.log('Event buffered for batch processing');
+      }
+    } catch (error) {
+      console.error('Error handling published event:', error);
+    }
+  }
+  
+  private getProjectorFromName(): IMultiProjector<any> | undefined {
+    if (!this.domainTypes.multiProjectorTypes) {
+      console.error('MultiProjectorTypes not available');
+      return undefined;
+    }
+    
+    return this.domainTypes.multiProjectorTypes.getProjectorFromMultiProjectorName(this.actorIdString);
+  }
+  
+  private async getProjectorForQuery(): Promise<IMultiProjectorStateCommon | null> {
+    await this.ensureStateLoadedAsync();
+    
+    // Check if we're actively receiving events
+    const eventDeliveryTimeout = 30000; // 30 seconds
+    const isActivelyReceivingEvents = this.eventDeliveryActive && 
+      (Date.now() - this.lastEventReceivedTime.getTime()) < eventDeliveryTimeout;
+    
+    if (isActivelyReceivingEvents) {
+      // If actively receiving events, flush buffer to ensure consistency
+      console.log(`Event delivery active, flush buffer ${this.buffer.length} events`);
+      this.flushBuffer();
+      console.log(`Event delivery active, flush buffer finished ${this.buffer.length} events`);
+    } else {
+      // If not actively receiving events, catch up from store
+      console.log('Event delivery inactive, catch up from store');
+      await this.catchUpFromStoreAsync();
+      console.log('Event delivery inactive, catch up from store finished');
+    }
+    
+    const state = this.unsafeState ?? this.safeState;
+    if (!state) {
+      // Initialize state if not available
+      this.initializeState();
+      return this.safeState ?? null;
+    }
+    
+    return state;
+  }
+  
+  private async serializeState(state: IMultiProjectorStateCommon): Promise<SerializableMultiProjectionState> {
+    return createSerializableMultiProjectionState(state, this.domainTypes);
+  }
+  
+  private async deserializeState(serialized: SerializableMultiProjectionState): Promise<IMultiProjectorStateCommon | null> {
+    return toMultiProjectionState(serialized, this.domainTypes);
+  }
+  
+  private async deserializeEvent(envelope: DaprEventEnvelope): Promise<IEvent | null> {
+    try {
+      const serializedEvent = envelope.event;
+      
+      // Handle field name variations from event-relay
+      // Create a type for the flexible event format
+      type FlexibleEvent = typeof serializedEvent & {
+        sortKey?: string;
+        SortableUniqueId?: string;
+        AggregateId?: string;
+        type?: string;
+        PayloadTypeName?: string;
+        created?: string;
+        TimeStamp?: string;
+        Id?: string;
+        RootPartitionKey?: string;
+        Version?: number;
+        data?: any;
+        PartitionKey?: string;
+      };
+      const flexEvent = serializedEvent as FlexibleEvent;
+      
+      const sortableUniqueIdString = flexEvent.sortableUniqueId || flexEvent.sortKey || flexEvent.SortableUniqueId;
+      const aggregateIdValue = flexEvent.aggregateId || flexEvent.AggregateId;
+      const eventTypeValue = flexEvent.eventType || flexEvent.type || flexEvent.PayloadTypeName;
+      const createdAtValue = flexEvent.createdAt || flexEvent.created || flexEvent.TimeStamp;
+      
+      if (!sortableUniqueIdString || !aggregateIdValue) {
+        console.error('Missing required fields in event:', { sortableUniqueIdString, aggregateIdValue });
+        return null;
       }
       
-      console.log('[MultiProjectorActor] Event processed successfully');
+      // Convert SerializableEventDocument to IEvent
+      const event: IEvent = {
+        id: SortableUniqueId.fromString(flexEvent.id || flexEvent.Id || '').unwrapOr(SortableUniqueId.generate()),
+        sortableUniqueId: SortableUniqueId.fromString(sortableUniqueIdString).unwrapOr(SortableUniqueId.generate()),
+        aggregateId: aggregateIdValue,
+        partitionKeys: serializedEvent.partitionKeys || {
+          aggregateId: aggregateIdValue,
+          group: flexEvent.RootPartitionKey || flexEvent.aggregateType || 'default'
+        },
+        version: flexEvent.version || flexEvent.Version || 1,
+        eventType: eventTypeValue,
+        payload: flexEvent.payload || flexEvent.data || serializedEvent,
+        metadata: serializedEvent.metadata || {},
+        timestamp: createdAtValue ? new Date(createdAtValue) : new Date(),
+        partitionKey: serializedEvent.PartitionKey || '',
+        aggregateGroup: serializedEvent.aggregateType || '',
+        aggregateType: serializedEvent.aggregateType || ''
+      };
+      
+      console.log('Deserialized event:', {
+        id: event.id.value,
+        sortableUniqueId: event.sortableUniqueId.value,
+        aggregateId: event.aggregateId,
+        eventType: event.eventType,
+        version: event.version
+      });
+      
+      return event;
     } catch (error) {
-      console.error('[MultiProjectorActor] Error processing pub/sub event:', error);
-      throw error; // Let Dapr retry
+      console.error('Failed to deserialize event:', error);
+      console.error('Event data:', envelope.event);
+      return null;
     }
+  }
+  
+  /**
+   * Helper method to create error query result
+   */
+  private async createErrorQueryResult(error: any, query: SerializableQuery): Promise<SerializableQueryResult> {
+    const errorResult = await createSerializableQueryResultFromResult(
+      err(error),
+      query,
+      this.domainTypes
+    );
+    
+    if (errorResult.isErr()) {
+      // If we can't even serialize the error, return a basic error result
+      console.error('Failed to serialize error result:', errorResult.error);
+      return {
+        resultTypeName: 'Error',
+        queryTypeName: query.queryType,
+        compressedResultJson: Buffer.from(JSON.stringify({ error: String(error) })),
+        compressedQueryJson: Buffer.from(JSON.stringify(query)),
+        resultAssemblyVersion: '0.0.0.0'
+      };
+    }
+    
+    return errorResult.value;
+  }
+  
+  /**
+   * Helper method to create error list query result
+   */
+  private async createErrorListQueryResult(error: any, query: SerializableListQuery): Promise<SerializableListQueryResult> {
+    const errorResult = await createSerializableListQueryResultFromResult(
+      err(error),
+      query,
+      this.domainTypes
+    );
+    
+    if (errorResult.isErr()) {
+      // If we can't even serialize the error, return a basic error result
+      console.error('Failed to serialize error result:', errorResult.error);
+      return {
+        totalCount: 0,
+        totalPages: 0,
+        currentPage: 1,
+        pageSize: 0,
+        recordTypeName: 'Error',
+        queryTypeName: query.queryType,
+        compressedItemsJson: Buffer.from(JSON.stringify({ error: String(error) })),
+        compressedQueryJson: Buffer.from(JSON.stringify(query)),
+        itemsAssemblyVersion: '0.0.0.0'
+      };
+    }
+    
+    return errorResult.value;
   }
 }

@@ -1,31 +1,50 @@
 # はじめに - Sekiban イベントソーシング
 
 > **ナビゲーション**
-> - [コアコンセプト](01_core_concepts.md)
-> - [はじめに](02_getting_started.md) (現在のページ)
-> - [集約、プロジェクター、コマンド、イベント](03_aggregate_command_events.md)
-> - [複数集約プロジェクター](04_multiple_aggregate_projector.md)
+> - [コア概念](01_core_concepts.md)
+> - [はじめに](02_getting_started.md) (現在位置)
+> - [アグリゲート、プロジェクター、コマンド、イベント](03_aggregate_command_events.md)
+> - [複数アグリゲートプロジェクター](04_multiple_aggregate_projector.md)
 > - [クエリ](05_query.md)
 > - [ワークフロー](06_workflow.md)
-> - [JSONとOrleansのシリアライゼーション](07_json_orleans_serialization.md)
+> - [JSONとOrleansシリアライゼーション](07_json_orleans_serialization.md)
 > - [API実装](08_api_implementation.md)
 > - [クライアントAPI (Blazor)](09_client_api_blazor.md)
-> - [Orleansセットアップ](10_orleans_setup.md)
-> - [ユニットテスト](11_unit_testing.md)
-> - [一般的な問題と解決策](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
+> - [Orleans設定](10_orleans_setup.md)
+> - [Dapr設定](11_dapr_setup.md)
+> - [ユニットテスト](12_unit_testing.md)
+> - [よくある問題と解決策](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [バリューオブジェクト](15_value_object.md)
+> - [デプロイメントガイド](16_deployment.md)
 
 ## インストールとセットアップ
+
+Sekibanは2つの実装方法を提供しています：
+
+### Orleans版（推奨）
 
 ```bash
 # Sekibanテンプレートのインストール
 dotnet new install Sekiban.Pure.Templates
 
-# 新しいプロジェクトの作成
+# 新しいOrleansプロジェクトの作成
 dotnet new sekiban-orleans-aspire -n MyProject
 ```
 
 このテンプレートにはOrleans用のAspireホスト、クラスターストレージ、Grain永続ストレージ、キューストレージが含まれています。
+
+### Dapr版
+
+```bash
+# Sekibanテンプレートのインストール
+dotnet new install Sekiban.Pure.Templates
+
+# 新しいDaprプロジェクトの作成
+dotnet new sekiban-dapr-aspire -n MyProject
+```
+
+このテンプレートにはDapr用のAspireホスト、Daprアクター、ステートストア、Pub/Sub機能が含まれています。
 
 ## 重要な注意点
 

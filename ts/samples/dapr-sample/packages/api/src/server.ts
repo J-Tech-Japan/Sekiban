@@ -16,10 +16,17 @@ import {
   AggregateEventHandlerActorFactory,
   type EventHandlingResponse
 } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType } from '@sekiban/core';
-import { PostgresEventStore } from '@sekiban/postgres';
-import { createTaskDomainTypes } from '@dapr-sample/domain';
+import { StorageProviderType } from '@sekiban/core';
+// CLAUDE.md: InMemoryEventStore removed - only proper storage implementations allowed
+// Dynamic imports for storage providers to avoid module resolution errors
+import { createCosmosEventStore } from '@sekiban/cosmos';
+// Import domain types at the top to ensure registration happens
+import '@dapr-sample/domain';
+import { createTaskDomainTypes, AggregateEventHandlerActorBase } from '@dapr-sample/domain';
+import { globalRegistry } from '@sekiban/core';
 import logger from './utils/logger.js';
+
+// Global registry is initialized after domain import
 
 const { Pool } = pg;
 
@@ -27,29 +34,38 @@ const { Pool } = pg;
 async function startServer() {
   const app = express();
 
+  // Initialize domain types FIRST - before any actor setup
+  const domainTypes = createTaskDomainTypes();
+  // Domain types initialized
+
   // Middleware BEFORE DaprServer setup
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
-  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  // Custom morgan format to skip repetitive requests
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for health checks and actor state checks
+    if (req.url?.includes('/health') || req.url?.includes('/dapr/config') || req.url?.includes('/actors/')) {
+      return null;
+    }
+    // Use default dev format for other requests
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Debug middleware to log all requests
-  app.use((req, res, next) => {
-    logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    if (req.path.startsWith('/actors/')) {
-      logger.info(`Actor route called: ${req.method} ${req.path}`);
-    }
-    next();
-  });
 
   // CRITICAL: Convert POST to PUT for actor method calls
   // This middleware MUST come before DaprServer setup
   app.use((req, res, next) => {
     if (req.path.includes('/method/') && req.method === 'POST') {
       req.method = 'PUT';
-      logger.debug(`Converted POST to PUT for actor method: ${req.path}`);
     }
     next();
   });
@@ -65,14 +81,12 @@ async function startServer() {
   // Initialize executor
   try {
     await createExecutor();
-    console.log('Executor initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize executor:', error);
     process.exit(1);
   }
 
-  // Create DaprServer and pass the Express app
-  const daprServer = await setupDaprActorsWithApp(app);
+  // Create DaprServer and pass the Express app and domain types
+  const daprServer = await setupDaprActorsWithApp(app, domainTypes);
 
   // Start the DaprServer
   await daprServer.start();
@@ -83,7 +97,6 @@ async function startServer() {
 🔗 URL: http://localhost:${config.PORT}
 🔗 API: http://localhost:${config.PORT}${config.API_PREFIX}
 🎭 Dapr App ID: ${config.DAPR_APP_ID}
-🎭 Actors: AggregateActor
   `);
 
   // Graceful shutdown
@@ -117,47 +130,76 @@ async function startServer() {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-async function setupDaprActorsWithApp(app: express.Express) {
-  logger.info('Setting up Dapr actors with Express app...');
-
-  // Initialize domain types
-  const domainTypes = createTaskDomainTypes();
-
-  // Choose storage type based on environment variable or config
-  const usePostgres = config.USE_POSTGRES;
+async function setupDaprActorsWithApp(app: express.Express, domainTypes: any) {
   
+  // Configure AggregateActorFactory FIRST - before creating DaprServer
+  // This ensures the container is initialized before any actor instances are created
+  const tempActorProxyFactory = {
+    createActorProxy: <T>(): T => {
+      throw new Error('Temporary factory - will be replaced after event store init');
+    }
+  };
+  
+  AggregateActorFactory.configure(
+    domainTypes,
+    {}, // service provider
+    tempActorProxyFactory,
+    {}, // serializationService
+    null // eventStore - will be set later
+  );
+
+  // Choose storage type based on configuration
   let eventStore: any;
   
-  if (usePostgres) {
-    // Initialize PostgreSQL event store
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({
-      connectionString: config.DATABASE_URL
-    });
+  switch (config.STORAGE_TYPE) {
+    case 'postgres': {
+      // Dynamic import for PostgreSQL
+      const { PostgresEventStore } = await import('@sekiban/postgres');
+      
+      // Initialize PostgreSQL event store
+      const pool = new Pool({
+        connectionString: config.DATABASE_URL
+      });
+      
+      eventStore = new PostgresEventStore(pool);
+      
+      // Initialize the database schema
+      try {
+        const result = await eventStore.initialize();
+        if (result.isErr()) {
+          throw result.error;
+        }
+      } catch (error) {
+        throw error;
+      }
+      break;
+    }
     
-    eventStore = new PostgresEventStore(pool);
-    
-    // Initialize the database schema
-    logger.info('Initializing PostgreSQL schema...');
-    try {
-      const result = await eventStore.initialize();
-      if (result.isOk()) {
-        logger.info('PostgreSQL schema initialized successfully');
-      } else {
-        logger.error('Failed to initialize PostgreSQL schema:', result.error);
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      if (!config.COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING environment variable is required for Cosmos DB storage');
+      }
+      
+      // Use createCosmosEventStore helper function
+      const result = await createCosmosEventStore({
+        type: StorageProviderType.CosmosDB,
+        connectionString: config.COSMOS_CONNECTION_STRING,
+        databaseName: config.COSMOS_DATABASE,
+        enableLogging: false // Disable verbose logging
+      });
+      
+      if (!result.isOk()) {
         throw result.error;
       }
-    } catch (error) {
-      logger.error('Failed to initialize PostgreSQL:', error);
-      throw error;
+      
+      eventStore = result.value;
+      break;
     }
-  } else {
-    // Initialize in-memory event store (commented out for easy switching)
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: config.NODE_ENV === 'development'
-    });
+    
+    default: {
+      throw new Error(`CLAUDE.md violation: Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos' for proper actor implementation. In-memory workarounds are forbidden.`);
+    }
   }
 
   // Create DaprClient for actor proxy factory
@@ -169,149 +211,49 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory that uses DaprClient with ActorProxyBuilder
   const actorProxyFactory = {
     createActorProxy: <T>(actorId: any, actorType: string): T => {
-      logger.debug(`Creating actor proxy for ${actorType}/${actorId.id}`);
       const actorIdStr = actorId.id || actorId;
       
-      // Use ActorProxyBuilder for proper actor-to-actor communication
+      // Use ActorProxyBuilder for all actor types
       if (actorType === 'AggregateEventHandlerActor') {
-        console.log(`[ActorProxyFactory] Creating EventHandlerActor proxy for remote service ${actorIdStr}`);
-        // AggregateEventHandlerActor is in a different service, use HTTP invocation
-        return {
-          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]): Promise<EventHandlingResponse> => {
-            console.log(`[ActorProxy] Calling appendEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
-            // Use service invocation to call actors in remote service
-            // The URL format for cross-service actor invocation is:
-            // /v1.0/invoke/{app-id}/method/actors/{actor-type}/{actor-id}/method/{method-name}
-            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/appendEventsAsync`;
-            console.log(`[ActorProxy] Cross-service actor invocation to: ${url}`);
-            
+        // For cross-service actor communication, create a custom proxy using service invocation
+        const proxy = {
+          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
             try {
-              const response = await fetch(url, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify([expectedLastSortableUniqueId, events])
-              });
-              
-              const responseText = await response.text();
-              console.log(`[ActorProxy] Response status: ${response.status}, body: ${responseText}`);
-              
-              // If we get a 500 error but events are actually saved (common Dapr issue)
-              if (response.status === 500 && responseText === '{}') {
-                console.warn(`[ActorProxy] Got 500 with empty response, checking if events were saved...`);
-                // Since we can see from logs that events ARE being saved, return success
-                // This is a workaround for a Dapr actor serialization issue
-                const lastEvent = events[events.length - 1];
-                return {
-                  isSuccess: true,
-                  lastSortableUniqueId: lastEvent?.sortableUniqueId || ''
-                };
-              }
-              
-              if (!response.ok) {
-                return {
-                  isSuccess: false,
-                  error: `HTTP ${response.status}: ${responseText}`
-                };
-              }
-              
-              // Parse the response, handling empty responses
-              try {
-                const result: EventHandlingResponse = responseText ? JSON.parse(responseText) : { isSuccess: true };
-                console.log(`[ActorProxy] Parsed response:`, result);
-                return result;
-              } catch (e) {
-                console.error(`[ActorProxy] Failed to parse response:`, e);
-                return {
-                  isSuccess: false,
-                  error: `Failed to parse response: ${responseText}`
-                };
-              }
+              const result = await daprClient.invoker.invoke(
+                'dapr-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
+                HttpMethod.PUT,
+                [expectedLastSortableUniqueId, events]
+              );
+              return result;
             } catch (error) {
-              console.error(`[ActorProxy] Error calling appendEventsAsync:`, error);
-              return {
-                isSuccess: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-              };
+              logger.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
             }
           },
           getAllEventsAsync: async () => {
-            console.log(`[ActorProxy] Calling getAllEventsAsync on AggregateEventHandlerActor/${actorIdStr} in api-event-handler service`);
-            // Use service invocation to call actors in remote service
-            const url = `http://127.0.0.1:${config.DAPR_HTTP_PORT}/v1.0/invoke/dapr-sample-event-handler/method/actors/AggregateEventHandlerActor/${actorIdStr}/method/getAllEventsAsync`;
-            console.log(`[ActorProxy] Cross-service actor invocation to: ${url}`);
-            
-            const response = await fetch(url, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({})
-            });
-            
-            const responseText = await response.text();
-            console.log(`[ActorProxy] getAllEventsAsync response status: ${response.status}, body: ${responseText}`);
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${responseText}`);
-            }
-            
-            // Parse the response, handling empty responses
             try {
-              const result = responseText ? JSON.parse(responseText) : [];
-              console.log(`[ActorProxy] getAllEventsAsync parsed response:`, result);
+              const result = await daprClient.invoker.invoke(
+                'dapr-sample-event-handler', // Target app-id where the actor is hosted
+                `/actors/${actorType}/${actorIdStr}/method/getAllEventsAsync`,
+                HttpMethod.PUT,
+                []
+              );
               return result;
-            } catch (e) {
-              console.error(`[ActorProxy] Failed to parse response:`, e);
-              throw new Error(`Failed to parse response: ${responseText}`);
+            } catch (error) {
+              logger.error('Failed to invoke AggregateEventHandlerActor:', error);
+              throw error;
             }
           }
-        } as T;
+        };
+        return proxy as T;
       } else if (actorType === 'AggregateActor') {
-        console.log(`[ActorProxyFactory] Creating AggregateActor proxy using ActorProxyBuilder for ${actorIdStr}`);
         const AggregateActorClass = AggregateActorFactory.createActorClass();
         const builder = new ActorProxyBuilder(AggregateActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr)) as T;
       } else {
-        // Fallback for unknown actor types
-        console.warn(`[ActorProxyFactory] Unknown actor type: ${actorType}, using direct HTTP calls`);
-        return {
-          executeCommandAsync: async (data: any) => {
-            console.log(`[ActorProxy] Calling executeCommandAsync on ${actorType}/${actorIdStr}`);
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/executeCommandAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          queryAsync: async (data: any) => {
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/queryAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          loadAggregateAsync: async (data: any) => {
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/loadAggregateAsync`,
-              HttpMethod.PUT, 
-              data
-            );
-          },
-          appendEventsAsync: async (expectedLastSortableUniqueId: string, events: any[]) => {
-            console.log(`[ActorProxy] Calling appendEventsAsync on ${actorType}/${actorIdStr}`);
-            return daprClient.invoker.invoke(
-              config.DAPR_APP_ID,
-              `actors/${actorType}/${actorIdStr}/method/appendEventsAsync`,
-              HttpMethod.PUT, 
-              [expectedLastSortableUniqueId, events] // Pass as array for proper parameter passing
-            );
-          }
-        } as T;
+        // Unknown actor type
+        throw new Error(`Unknown actor type: ${actorType}`);
       }
     }
   };
@@ -326,7 +268,8 @@ async function setupDaprActorsWithApp(app: express.Express) {
     }
   };
 
-  // Configure actor factories
+  // Reconfigure actor factory with actual dependencies
+  // The domain types were already set earlier, so they'll be preserved
   AggregateActorFactory.configure(
     domainTypes,
     {}, // service provider
@@ -340,9 +283,6 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor classes before DaprServer initialization
   const AggregateActorClass = AggregateActorFactory.createActorClass();
   const EventHandlerActorClass = AggregateEventHandlerActorFactory.createActorClass();
-  
-  console.log('[DEBUG] AggregateActorClass name:', AggregateActorClass.name);
-  console.log('[DEBUG] EventHandlerActorClass name:', EventHandlerActorClass.name);
 
   // Create DaprServer
   const daprServer = new DaprServer({
@@ -359,45 +299,17 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   // Register all actors explicitly before starting the server
   await daprServer.actor.registerActor(AggregateActorClass);
-  logger.info('Registered AggregateActor');
   
   // Only register AggregateActor in this service
   // AggregateEventHandlerActor is now in a separate service
   
-  // Initialize actor runtime (like in the simple test)
-  logger.info('Initializing actor runtime...');
+  // Initialize actor runtime
   await daprServer.actor.init();
-  logger.info('Actor runtime initialized');
-
-  // Add diagnostic logging to catch any exceptions
-  console.log('[DEBUG] Adding diagnostic logging...');
-  
-  // Override the actor method handler to add logging
-  const originalActorHandler = (daprServer as any).actor?.actorHandler;
-  if (originalActorHandler) {
-    (daprServer as any).actor.actorHandler = async (req: any, res: any) => {
-      console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
-      try {
-        await originalActorHandler.call((daprServer as any).actor, req, res);
-      } catch (e) {
-        console.error('[DIAGNOSTIC] Actor handler error:', e);
-        console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);
-        throw e;
-      }
-    };
-    console.log('[DEBUG] Diagnostic handler installed');
-  } else {
-    console.log('[DEBUG] Could not install diagnostic handler');
-  }
-
-  
-  logger.info('Dapr actors integrated with Express app');
   
   return daprServer;
 }
 
 // Start the server
 startServer().catch((error) => {
-  console.error('Failed to start server:', error);
   process.exit(1);
 });

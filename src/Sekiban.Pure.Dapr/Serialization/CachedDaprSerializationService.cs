@@ -45,7 +45,6 @@ public class CachedDaprSerializationService : IDaprSerializationService
         
         if (_cache.TryGetValue<T>(cacheKey, out var cached))
         {
-            _logger.LogDebug("Cache hit for type {Type}", typeof(T).Name);
             return cached;
         }
 
@@ -76,8 +75,6 @@ public class CachedDaprSerializationService : IDaprSerializationService
         
         if (_cache.TryGetValue<IAggregate>(cacheKey, out var cached))
         {
-            _logger.LogDebug("Cache hit for aggregate {AggregateId} version {Version}", 
-                surrogate.AggregateId, surrogate.Version);
             return cached;
         }
 
@@ -108,7 +105,6 @@ public class CachedDaprSerializationService : IDaprSerializationService
         
         if (_cache.TryGetValue<ICommandWithHandlerSerializable>(cacheKey, out var cached))
         {
-            _logger.LogDebug("Cache hit for command type {CommandType}", envelope.CommandType);
             return cached;
         }
 
@@ -139,7 +135,6 @@ public class CachedDaprSerializationService : IDaprSerializationService
         
         if (_cache.TryGetValue<IEvent>(cacheKey, out var cached))
         {
-            _logger.LogDebug("Cache hit for event type {EventType}", envelope.EventType);
             return cached;
         }
 

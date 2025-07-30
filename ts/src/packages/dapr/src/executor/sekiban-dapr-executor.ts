@@ -1,7 +1,6 @@
 import type { Result } from 'neverthrow';
 import { ok, err } from 'neverthrow';
-import type { DaprClient } from '@dapr/dapr';
-import { HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
+import { DaprClient, HttpMethod, ActorProxyBuilder, ActorId, CommunicationProtocolEnum } from '@dapr/dapr';
 import type { 
   ICommandWithHandler,
   IAggregateProjector,
@@ -11,7 +10,17 @@ import type {
   Aggregate,
   Metadata
 } from '@sekiban/core';
-import { SekibanError } from '@sekiban/core';
+import { SekibanError, QueryExecutionError } from '@sekiban/core';
+
+/**
+ * Error class for Dapr actor errors
+ */
+class DaprActorError extends SekibanError {
+  readonly code = 'DAPR_ACTOR_ERROR';
+  constructor(message: string) {
+    super(message);
+  }
+}
 import type { 
   DaprSekibanConfiguration,
   SekibanCommandResponse,
@@ -22,6 +31,9 @@ import type {
 import { PartitionKeysAndProjector } from '../parts/index.js';
 import type { SekibanDomainTypes } from '@sekiban/core';
 import { AggregateActorFactory } from '../actors/aggregate-actor-factory.js';
+import { MultiProjectorActorFactory } from '../actors/multi-projector-actor-factory.js';
+import type { SerializableQuery, SerializableListQuery, QueryResponse, ListQueryResponse, IMultiProjectorActor } from '../actors/interfaces.js';
+import { deserializeListQueryResult } from '../actors/serializable-query-results.js';
 
 /**
  * Main Sekiban executor that uses Dapr for distributed aggregate management
@@ -78,7 +90,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       >(
         commandAndMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload>
       ): Promise<SekibanCommandResponse> => {
-        console.log(`[SekibanDaprExecutor] Calling actor ${actorId} via ActorProxyBuilder`);
         return actor.executeCommandAsync(commandAndMetadata);
       },
       
@@ -142,7 +153,9 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       command = commandOrInstance;
       // Extract data from the command instance
       // The command instance has a 'data' property
-      data = (commandOrInstance as any).data || {} as TCommand;
+      // Check if the command instance has a data property
+      const commandWithData = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload> & { data?: TCommand };
+      data = commandWithData.data || {} as TCommand;
     } else {
       // Separate command and data
       command = commandOrInstance as ICommandWithHandler<TCommand, TProjector, TPayloadUnion, TAggregatePayload>;
@@ -169,7 +182,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       const actorProxy = this.createActorProxy(actorId);
       
       // Prepare command with metadata in SerializableCommandAndMetadata format (matches C#)
-      const commandTypeName = command.commandType || (command as any).type || command.constructor.name;
+      const commandTypeName = command.commandType || command.constructor.name;
       const projectorTypeName = projector.constructor.name;
       
       const commandWithMetadata: SerializableCommandAndMetadata<TCommand, TProjector, TPayloadUnion, TAggregatePayload> = {
@@ -179,7 +192,7 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
         metadata: {
           causationId: metadata?.causationId || crypto.randomUUID(),
           correlationId: metadata?.correlationId || crypto.randomUUID(),
-          executedUser: metadata?.executedUser || (metadata?.custom as any)?.user || 'system',
+          executedUser: metadata?.executedUser || (typeof metadata?.custom?.user === 'string' ? metadata.custom.user : undefined) || 'system',
           timestamp: metadata?.timestamp || new Date(),
           custom: {
             commandId: crypto.randomUUID(),
@@ -190,9 +203,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
           }
         }
       };
-      
-      // Log what we're sending to the actor
-      console.log('[SekibanDaprExecutor] Sending to actor:', JSON.stringify(commandWithMetadata, null, 2));
       
       // Execute command through actor with retry
       const responseData = await this.executeWithRetry(
@@ -245,15 +255,97 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(commandResponse);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
+  }
+  
+  /**
+   * Check if a query is a multi-projection query
+   */
+  private isMultiProjectionQuery(query: any): boolean {
+    console.log('[SekibanDaprExecutor] Checking if multi-projection query:', {
+      hasGetPartitionKeys: !!query.getPartitionKeys,
+      partitionKeys: query.getPartitionKeys ? query.getPartitionKeys() : 'N/A',
+      isMultiProjection: query.isMultiProjection,
+      queryType: query.constructor.name
+    });
+    
+    // Check if query has no partition keys or explicitly marked as multi-projection
+    const result = !query.getPartitionKeys || !query.getPartitionKeys() || query.isMultiProjection === true;
+    console.log('[SekibanDaprExecutor] Is multi-projection:', result);
+    return result;
+  }
+  
+  /**
+   * Get the multi-projector name for a query
+   */
+  private getMultiProjectorName(query: any): string | null {
+    console.log('[SekibanDaprExecutor.getMultiProjectorName] Checking query:', {
+      queryClassName: query.constructor.name,
+      hasGetMultiProjectorName: !!query.getMultiProjectorName,
+      hasGetProjector: !!query.getProjector,
+      hasGetAggregateType: !!query.getAggregateType
+    });
+    
+    // Check if query has a getMultiProjectorName method
+    if (query.getMultiProjectorName && typeof query.getMultiProjectorName === 'function') {
+      const multiProjectorName = query.getMultiProjectorName();
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] From query.getMultiProjectorName():', multiProjectorName);
+      return multiProjectorName;
+    }
+    
+    // If query has a getProjector method and the projector has getMultiProjectorName
+    if (query.getProjector && typeof query.getProjector === 'function') {
+      const projector = query.getProjector();
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] Got projector from query:', {
+        projectorExists: !!projector,
+        projectorType: projector?.constructor?.name,
+        hasGetMultiProjectorName: projector && projector.getMultiProjectorName && typeof projector.getMultiProjectorName === 'function'
+      });
+      
+      if (projector && projector.getMultiProjectorName && typeof projector.getMultiProjectorName === 'function') {
+        const multiProjectorName = projector.getMultiProjectorName();
+        console.log('[SekibanDaprExecutor.getMultiProjectorName] From projector.getMultiProjectorName():', multiProjectorName);
+        return multiProjectorName;
+      }
+    }
+    
+    // Fallback: use aggregate type as projector name
+    if (query.getAggregateType && typeof query.getAggregateType === 'function') {
+      const aggregateType = query.getAggregateType();
+      const multiProjectorName = `${aggregateType}MultiProjector`;
+      console.log('[SekibanDaprExecutor.getMultiProjectorName] Fallback from aggregate type:', {
+        aggregateType,
+        generatedName: multiProjectorName
+      });
+      return multiProjectorName;
+    }
+    
+    console.log('[SekibanDaprExecutor.getMultiProjectorName] No multi-projector name found');
+    return null;
+  }
+  
+  /**
+   * Create multi-projector actor proxy using proper Dapr actor pattern
+   */
+  private createMultiProjectorActorProxy(projectorName: string): IMultiProjectorActor {
+    console.log(`[SekibanDaprExecutor] Creating MultiProjectorActor proxy for: ${projectorName}`);
+    
+    // Get the actual actor class from the factory
+    const MultiProjectorActorClass = MultiProjectorActorFactory.createActorClass();
+    
+    // Create ActorProxyBuilder with the actual actor class
+    const actorProxyBuilder = new ActorProxyBuilder<IMultiProjectorActor>(
+      MultiProjectorActorClass,
+      this.daprClient
+    );
+    
+    // Build the actor proxy with the actor ID (projectorName is the actor ID)
+    const actor = actorProxyBuilder.build(new ActorId(projectorName));
+    
+    console.log(`[SekibanDaprExecutor] Created MultiProjectorActor proxy for actor ID: ${projectorName}`);
+    
+    return actor;
   }
   
   /**
@@ -261,29 +353,114 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
    */
   async queryAsync<T>(query: any): Promise<Result<T, SekibanError>> {
     try {
-      // For queries, determine appropriate actor ID
-      // This is a simplified approach - real implementation would be more sophisticated
-      const actorId = `${this.configuration.actorIdPrefix || 'sekiban'}.query.${query.queryType}.${query.userId || 'default'}`;
+      // Check if this is a multi-projection query
+      if (this.isMultiProjectionQuery(query)) {
+        const projectorName = this.getMultiProjectorName(query);
+        if (!projectorName) {
+          return err(new QueryExecutionError('query', 'Unable to determine multi-projector name for query'));
+        }
+        
+        console.log(`[SekibanDaprExecutor] Executing multi-projection query with projector: ${projectorName}`);
+        
+        // Create multi-projector actor proxy
+        const multiProjectorActor = this.createMultiProjectorActorProxy(projectorName);
+        
+        // Convert query to serializable format
+        const serializableQuery: SerializableQuery = {
+          queryType: query.constructor.name,
+          payload: query,
+          partitionKeys: query.getPartitionKeys ? query.getPartitionKeys() : undefined
+        };
+        
+        // Check if it's a list query
+        // A query is a list query if:
+        // 1. It has limit or offset properties
+        // 2. It implements IMultiProjectionListQuery (check by method existence)
+        // 3. The query type name contains "List"
+        const isListQuery = query.limit !== undefined || 
+                           query.offset !== undefined ||
+                           query.constructor.name.includes('List') ||
+                           (query.handleFilter && typeof query.handleFilter === 'function') ||
+                           (query.constructor.handleFilter && typeof query.constructor.handleFilter === 'function');
+        
+        let response: QueryResponse | ListQueryResponse;
+        if (isListQuery) {
+          const listQuery: SerializableListQuery = {
+            ...serializableQuery,
+            limit: query.limit,
+            skip: query.offset
+          };
+          response = await this.executeWithRetry(
+            () => multiProjectorActor.queryListAsync(listQuery),
+            'Multi-projection list query execution'
+          );
+        } else {
+          response = await this.executeWithRetry(
+            () => multiProjectorActor.queryAsync(serializableQuery),
+            'Multi-projection query execution'
+          );
+        }
+        
+        if (!response.isSuccess) {
+          return err(new QueryExecutionError('query', response.error || 'Query execution failed'));
+        }
+        
+        // Handle list query response - need to deserialize the compressed data
+        if (isListQuery && response.data) {
+          console.log(`[SekibanDaprExecutor] Deserializing list query response`);
+          const deserializedResult = await deserializeListQueryResult(
+            response.data,
+            this.domainTypes
+          );
+          
+          if (deserializedResult.isErr()) {
+            console.error(`[SekibanDaprExecutor] Failed to deserialize list query result:`, deserializedResult.error);
+            return err(new QueryExecutionError('query', 'Failed to deserialize query result'));
+          }
+          
+          console.log(`[SekibanDaprExecutor] Deserialized items count: ${deserializedResult.value.items.length}`);
+          return ok(deserializedResult.value as T);
+        }
+        
+        // Return the data from the response
+        return ok(response.data as T);
+      }
       
-      // Create actor proxy
+      // Single-aggregate query logic
+      console.log('[SekibanDaprExecutor] Executing single-aggregate query');
+      console.log('[SekibanDaprExecutor] Query type:', query.constructor.name);
+      console.log('[SekibanDaprExecutor] Query has getPartitionKeys:', typeof query.getPartitionKeys);
+      console.log('[SekibanDaprExecutor] Query has getProjector:', typeof query.getProjector);
+      
+      // Get partition keys from the query
+      const partitionKeys = query.getPartitionKeys();
+      if (!partitionKeys) {
+        return err(new QueryExecutionError('query', 'Query does not provide partition keys'));
+      }
+      
+      // Get the projector from the query
+      const projector = query.getProjector();
+      if (!projector) {
+        return err(new QueryExecutionError('query', 'Query does not provide projector'));
+      }
+      
+      // Create PartitionKeysAndProjector (matching C# pattern)
+      const partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
+      
+      // Generate actor ID using the projector grain key format to target the specific aggregate actor
+      const actorId = partitionKeyAndProjector.toProjectorGrainKey();
+      console.log('[SekibanDaprExecutor] Generated actor ID:', actorId);
       const actorProxy = this.createActorProxy(actorId);
       
-      // Execute query through actor with retry
+      // Execute query through aggregate actor with retry
       const response = await this.executeWithRetry(
         () => actorProxy.queryAsync<T>(query),
-        'Query execution'
+        'Single-aggregate query execution'
       );
       
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }
@@ -325,13 +502,6 @@ export class SekibanDaprExecutor implements ISekibanDaprExecutor {
       return ok(response);
       
     } catch (error) {
-      // Create a custom error class for Dapr actor errors
-      class DaprActorError extends SekibanError {
-        readonly code = 'DAPR_ACTOR_ERROR';
-        constructor(message: string) {
-          super(message);
-        }
-      }
       return err(new DaprActorError(error instanceof Error ? error.message : 'Unknown actor error'));
     }
   }

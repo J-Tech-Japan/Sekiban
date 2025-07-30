@@ -8,3 +8,5 @@ spec:
   metadata:
   - name: actorStateStore
     value: "true"
+  - name: actorStateStoreTTL
+    value: "15m"

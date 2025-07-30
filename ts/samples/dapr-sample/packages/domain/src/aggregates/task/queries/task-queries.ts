@@ -3,6 +3,9 @@ import { PartitionKeys } from '@sekiban/core';
 import type { TaskState } from '../projectors/task-projector.js';
 import { TaskProjector } from '../projectors/task-projector.js';
 
+// Export GetAllTasks query
+export { GetAllTasks } from './get-all-tasks.js';
+
 // Define the query schema
 const GetTaskByIdSchema = z.object({
   taskId: z.string().uuid()
@@ -23,11 +26,11 @@ export class GetTaskById {
   }
 
   getProjector() {
-    return TaskProjector;
+    return new TaskProjector();
   }
 
   getPartitionKeys() {
-    return PartitionKeys.existing('Task', this.data.taskId);
+    return PartitionKeys.existing(this.data.taskId, 'Task');
   }
 
   get taskId() {

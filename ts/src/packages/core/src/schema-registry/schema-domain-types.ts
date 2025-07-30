@@ -8,6 +8,7 @@ import type {
   IQueryTypes,
   IAggregateTypes,
   ISekibanSerializer,
+  IMultiProjectorTypes,
   EventTypeInfo,
   CommandTypeInfo,
   ProjectorTypeInfo,
@@ -22,7 +23,7 @@ import { createEvent, createEventMetadata } from '../events/event';
 import type { IEventPayload } from '../events/event-payload';
 import type { ICommand } from '../commands/command';
 import type { IAggregatePayload } from '../aggregates/aggregate-payload';
-import type { AggregateProjector, ITypedAggregatePayload } from '../aggregates/aggregate-projector';
+import type { AggregateProjector, ITypedAggregatePayload, IAggregateProjector } from '../aggregates/aggregate-projector';
 import type { ICommandExecutor } from '../commands/executor';
 import type { IProjector } from '../aggregates/projector-interface';
 import { PartitionKeys } from '../documents/partition-keys';
@@ -32,6 +33,9 @@ import { SekibanError, EventStoreError } from '../result/errors';
 import type { EventDefinition } from './event-schema';
 import type { CommandDefinition } from './command-schema';
 import type { ProjectorDefinitionType } from './projector-schema';
+import type { IMultiProjector, IMultiProjectorCommon } from '../projectors/multi-projector';
+import type { IMultiProjectorStateCommon } from '../projectors/multi-projector-types';
+import { AggregateListProjector } from '../queries/aggregate-list-projector';
 
 /**
  * Schema-based implementation of IEventTypes
@@ -219,16 +223,23 @@ class SchemaAggregateTypes implements IAggregateTypes {
  * Schema-based implementation of IQueryTypes
  */
 class SchemaQueryTypes implements IQueryTypes {
+  private queries: Map<string, any> = new Map();
+  
   constructor(private registry: SchemaRegistry) {}
+  
+  registerQuery(name: string, queryClass: any): void {
+    this.queries.set(name, queryClass);
+  }
 
   getQueryTypes(): Array<QueryTypeInfo> {
-    // Schema-based approach doesn't currently have query types
-    // This would need to be extended
-    return [];
+    return Array.from(this.queries.entries()).map(([name, constructor]) => ({
+      name,
+      constructor
+    }));
   }
 
   getQueryTypeByName(name: string): (new (...args: any[]) => any) | undefined {
-    return undefined;
+    return this.queries.get(name);
   }
 }
 
@@ -248,6 +259,171 @@ class SchemaSerializer implements ISekibanSerializer {
 }
 
 /**
+ * Schema-based implementation of IMultiProjectorTypes
+ */
+class SchemaMultiProjectorTypes implements IMultiProjectorTypes {
+  private multiProjectors: Map<string, IMultiProjectorCommon> = new Map();
+  private aggregateListProjectors: Map<string, AggregateListProjector<any>> = new Map();
+  
+  constructor(private registry: SchemaRegistry) {}
+  
+  registerMultiProjector(name: string, projector: IMultiProjectorCommon): void {
+    this.multiProjectors.set(name, projector);
+  }
+  
+  registerAggregateListProjector<TProjector extends IAggregateProjector<any>>(
+    projectorFactory: () => TProjector
+  ): void {
+    console.log('[SchemaMultiProjectorTypes] Starting AggregateListProjector registration');
+    const projectorInstance = projectorFactory();
+    console.log('[SchemaMultiProjectorTypes] Projector factory result:', {
+      aggregateTypeName: projectorInstance.aggregateTypeName,
+      projectorType: projectorInstance.constructor.name
+    });
+    
+    const projector = AggregateListProjector.create(projectorFactory);
+    const name = projector.getMultiProjectorName();
+    
+    console.log('[SchemaMultiProjectorTypes] Registration details:', {
+      aggregateTypeNameFromProjector: projectorInstance.aggregateTypeName,
+      generatedMultiProjectorName: name,
+      projectorClass: projector.constructor.name
+    });
+    
+    this.aggregateListProjectors.set(name, projector);
+    console.log(`[SchemaMultiProjectorTypes] Registered AggregateListProjector with name: ${name}`);
+  }
+  
+  project(multiProjector: IMultiProjectorCommon, event: IEvent): Result<IMultiProjectorCommon, SekibanError> {
+    console.log('[SchemaMultiProjectorTypes.project] Called with:', {
+      multiProjectorType: multiProjector.constructor.name,
+      eventType: event.eventType,
+      aggregateId: event.aggregateId,
+      isAggregateListProjector: multiProjector instanceof AggregateListProjector
+    });
+    
+    // For AggregateListProjector, we need to pass the projector itself as payload
+    if (multiProjector instanceof AggregateListProjector) {
+      const result = multiProjector.project(multiProjector, event);
+      console.log('[SchemaMultiProjectorTypes.project] AggregateListProjector result:', {
+        isOk: result.isOk(),
+        error: result.isErr() ? result.error : null,
+        resultAggregatesSize: result.isOk() ? (result.value as any).aggregates?.size : 'unknown'
+      });
+      return result;
+    }
+    // For other multi-projectors, they might have different signatures
+    if ('project' in multiProjector && typeof multiProjector.project === 'function') {
+      // This is a simplified approach - in reality, we'd need to track the payload separately
+      const typedProjector = multiProjector as IMultiProjector<any>;
+      return typedProjector.project(multiProjector as any, event);
+    }
+    return err(new EventStoreError('project', 'Invalid multi-projector type'));
+  }
+  
+  projectEvents(multiProjector: IMultiProjectorCommon, events: readonly IEvent[]): Result<IMultiProjectorCommon, SekibanError> {
+    let current = multiProjector;
+    for (const event of events) {
+      const result = this.project(current, event);
+      if (result.isErr()) return result;
+      current = result.value;
+    }
+    return ok(current);
+  }
+  
+  getProjectorFromMultiProjectorName(grainName: string): IMultiProjectorCommon | undefined {
+    return this.multiProjectors.get(grainName) || this.aggregateListProjectors.get(grainName);
+  }
+  
+  getMultiProjectorNameFromMultiProjector(multiProjector: IMultiProjectorCommon): Result<string, SekibanError> {
+    if ('getMultiProjectorName' in multiProjector && typeof multiProjector.getMultiProjectorName === 'function') {
+      const typedProjector = multiProjector as IMultiProjector<any>;
+      return ok(typedProjector.getMultiProjectorName());
+    }
+    return err(new EventStoreError('project', 'Invalid multi-projector type'));
+  }
+  
+  toTypedState(state: IMultiProjectorStateCommon): IMultiProjectorStateCommon {
+    // In TypeScript, we don't need runtime type conversion like C#
+    return state;
+  }
+  
+  getMultiProjectorTypes(): string[] {
+    return [...this.multiProjectors.keys(), ...this.aggregateListProjectors.keys()];
+  }
+  
+  generateInitialPayload(projectorType: string): Result<IMultiProjectorCommon, SekibanError> {
+    const projector = this.getProjectorFromMultiProjectorName(projectorType);
+    if (!projector) {
+      return err(new EventStoreError('generateInitialPayload', `Unknown projector type: ${projectorType}`));
+    }
+    if ('generateInitialPayload' in projector && typeof projector.generateInitialPayload === 'function') {
+      const typedProjector = projector as IMultiProjector<any>;
+      return ok(typedProjector.generateInitialPayload());
+    }
+    return err(new EventStoreError('project', 'Invalid multi-projector type'));
+  }
+  
+  async serializeMultiProjector(multiProjector: IMultiProjectorCommon): Promise<Result<string, SekibanError>> {
+    try {
+      // Special handling for AggregateListProjector to serialize Map properly
+      if (multiProjector instanceof AggregateListProjector) {
+        const aggregatesObj: Record<string, any> = {};
+        const aggregatesMap = (multiProjector as any).aggregates;
+        if (aggregatesMap instanceof Map) {
+          aggregatesMap.forEach((value: any, key: string) => {
+            aggregatesObj[key] = value;
+          });
+        }
+        const serializable = {
+          aggregates: aggregatesObj,
+          // Include other relevant properties if needed
+        };
+        return ok(JSON.stringify(serializable));
+      }
+      
+      return ok(JSON.stringify(multiProjector));
+    } catch (error) {
+      return err(new EventStoreError('serialize', `Failed to serialize multi-projector: ${error}`));
+    }
+  }
+  
+  async deserializeMultiProjector(json: string, typeFullName: string): Promise<Result<IMultiProjectorCommon, SekibanError>> {
+    try {
+      const data = JSON.parse(json);
+      const templateProjector = this.getProjectorFromMultiProjectorName(typeFullName);
+      if (!templateProjector) {
+        return err(new EventStoreError('deserialize', `Unknown projector type: ${typeFullName}`));
+      }
+      
+      // For AggregateListProjector, we need to reconstruct it properly
+      if (typeFullName.startsWith('aggregatelistprojector-')) {
+        const aggregateListProjector = this.aggregateListProjectors.get(typeFullName);
+        if (aggregateListProjector && data.aggregates) {
+          // Reconstruct the AggregateListProjector with the deserialized aggregates
+          const aggregatesMap = new Map(Object.entries(data.aggregates)) as any;
+          const projectorFactory = (aggregateListProjector as any).projectorFactory;
+          return ok(new AggregateListProjector(aggregatesMap, projectorFactory));
+        }
+      }
+      
+      // For other projectors, attempt to reconstruct using constructor
+      if ('generateInitialPayload' in templateProjector && typeof templateProjector.generateInitialPayload === 'function') {
+        const typedProjector = templateProjector as IMultiProjector<any>;
+        const initialPayload = typedProjector.generateInitialPayload();
+        // Merge the deserialized data into the initial payload
+        Object.assign(initialPayload, data);
+        return ok(initialPayload);
+      }
+      
+      return ok(data as IMultiProjectorCommon);
+    } catch (error) {
+      return err(new EventStoreError('deserialize', `Failed to deserialize multi-projector: ${error}`));
+    }
+  }
+}
+
+/**
  * Create a SekibanDomainTypes instance from a SchemaRegistry
  */
 export function createSchemaDomainTypes(registry: SchemaRegistry): SekibanDomainTypes {
@@ -257,7 +433,8 @@ export function createSchemaDomainTypes(registry: SchemaRegistry): SekibanDomain
     projectorTypes: new SchemaProjectorTypes(registry),
     aggregateTypes: new SchemaAggregateTypes(registry),
     queryTypes: new SchemaQueryTypes(registry),
-    serializer: new SchemaSerializer(registry)
+    serializer: new SchemaSerializer(registry),
+    multiProjectorTypes: new SchemaMultiProjectorTypes(registry)
   };
 }
 
@@ -269,3 +446,8 @@ export function createSekibanDomainTypesFromGlobalRegistry(): SekibanDomainTypes
   const { globalRegistry } = require('./index.js');
   return createSchemaDomainTypes(globalRegistry);
 }
+
+/**
+ * Export SchemaMultiProjectorTypes and SchemaQueryTypes for external use
+ */
+export { SchemaMultiProjectorTypes, SchemaQueryTypes };

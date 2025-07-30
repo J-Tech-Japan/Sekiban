@@ -8,12 +8,9 @@ cd "$SCRIPT_DIR"
 
 echo "🔨 Building @sekiban/core with declarations..."
 
-# Clean dist
-rm -rf dist
-
-# Build JavaScript with tsup (no dts)
+# Build JavaScript with tsup (no dts, no clean)
 echo "📦 Building JavaScript..."
-npx tsup src/index.ts --format cjs,esm --target node18 --no-dts --sourcemap
+npx tsup src/index.ts --format cjs,esm --target node18 --no-dts --sourcemap --no-clean
 
 # Generate declarations with custom script
 echo "📄 Generating TypeScript declarations..."

@@ -1,4 +1,4 @@
-import { PostgresEventStore } from '@sekiban/postgres';
+// Dynamic import for PostgreSQL
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -20,6 +20,9 @@ async function initializeDatabase() {
     await pool.query('SELECT NOW()');
     console.log('Connected to PostgreSQL successfully');
 
+    // Dynamic import for PostgreSQL
+    const { PostgresEventStore } = await import('@sekiban/postgres');
+    
     // Initialize the event store (creates tables and indexes)
     const eventStore = new PostgresEventStore(pool);
     const result = await eventStore.initialize();

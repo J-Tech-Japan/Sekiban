@@ -8,6 +8,7 @@ import type {
   EmptyAggregatePayload,
   Metadata
 } from '@sekiban/core';
+// SerializableEventDocument is defined in this file, not imported
 
 /**
  * Serializable representation of an aggregate
@@ -35,21 +36,28 @@ export interface ActorSerializableCommandAndMetadata<
 }
 
 /**
- * Serializable event document
+ * SerializableEventDocument for internal actor communication
+ * 
+ * NOTE: This is intentionally different from the one in events/serializable-event-document.ts
+ * This version uses lowercase property names for TypeScript code within actors,
+ * while the other uses uppercase for C# compatibility in pub/sub.
+ * 
+ * DO NOT MERGE THESE - they serve different purposes.
  */
 export interface SerializableEventDocument {
+  // TypeScript style lowercase properties
   id: string;
   sortableUniqueId: string;
-  payload: any; // JSON object
+  payload: any;
   eventType: string;
   aggregateId: string;
   partitionKeys: PartitionKeys;
   version: number;
-  createdAt: string; // ISO date string
+  createdAt: string;
   metadata: any;
   aggregateType?: string;
   
-  // C# compatible uppercase fields (for pub/sub)
+  // C# compatible uppercase fields (added by aggregate-actor-impl)
   Id?: string;
   SortableUniqueId?: string;
   Version?: number;
@@ -113,9 +121,9 @@ export interface ListQueryResponse extends QueryResponse {
 }
 
 /**
- * Multi-projection state
+ * Multi-projection state for actor interface
  */
-export interface MultiProjectionState {
+export interface ActorMultiProjectionState {
   projections: Record<string, any>;
   lastProcessedEventId: string;
   lastProcessedTimestamp: string;
@@ -224,7 +232,7 @@ export interface IMultiProjectorActor {
   /**
    * Build current state from buffer
    */
-  buildStateAsync(): Promise<MultiProjectionState>;
+  buildStateAsync(): Promise<ActorMultiProjectionState>;
   
   /**
    * Rebuild state from scratch
@@ -261,3 +269,6 @@ export interface BufferedEvent {
   event: SerializableEventDocument;
   receivedAt: Date;
 }
+
+// Import serializable query result types
+export type { SerializableQueryResult, SerializableListQueryResult } from './serializable-query-results';

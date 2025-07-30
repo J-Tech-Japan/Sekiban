@@ -72,8 +72,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     {
         await base.OnActivateAsync();
         
-        _logger.LogInformation("MultiProjectorActor {ActorId} activated", Id.GetId());
-        
         try
         {
             // Register reminder for periodic snapshot saving
@@ -82,8 +80,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 null,
                 TimeSpan.FromMinutes(1), // Initial delay
                 PersistInterval);
-                
-            _logger.LogInformation("Snapshot reminder registered successfully for {ActorId}", Id.GetId());
         }
         catch (Exception ex)
         {
@@ -109,8 +105,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 
     protected override async Task OnDeactivateAsync()
     {
-        _logger.LogInformation("MultiProjectorActor {ActorId} deactivating", Id.GetId());
-        
         // Save pending state if any
         if (_pendingSave && _safeState != null)
         {
@@ -145,7 +139,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         // First, flush any buffered events to ensure state is up to date
         if (_buffer.Any())
         {
-            _logger.LogInformation("Snapshot reminder triggered - flushing {count} buffered events", _buffer.Count);
             FlushBuffer();
         }
         
@@ -176,8 +169,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     {
         if (_safeState != null) return;
         
-        _logger.LogInformation("Loading snapshot for MultiProjectorActor {ActorId}", Id.GetId());
-        
         var savedState = await StateManager.TryGetStateAsync<SerializableMultiProjectionState>(StateKey);
         if (savedState.HasValue && savedState.Value != null)
         {
@@ -185,7 +176,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             if (restored.HasValue)
             {
                 _safeState = restored.Value;
-                LogState();
             }
         }
         
@@ -201,21 +191,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 
     private void LogState()
     {
-        _logger.LogInformation("SafeState {SafeState}", _safeState?.ProjectorCommon.GetType().Name ?? "null");
-        _logger.LogInformation("SafeState Version {Version}", _safeState?.Version.ToString() ?? "0");
-        
-        if (_safeState?.ProjectorCommon is IAggregateListProjectorAccessor accessor)
-        {
-            _logger.LogInformation("SafeState list count {Count}", accessor.GetAggregates().Count);
-        }
-        
-        _logger.LogInformation("UnsafeState {UnsafeState}", _unsafeState?.ProjectorCommon.GetType().Name ?? "null");
-        _logger.LogInformation("UnsafeState Version {Version}", _unsafeState?.Version.ToString() ?? "0");
-        
-        if (_unsafeState?.ProjectorCommon is IAggregateListProjectorAccessor accessorUnsafe)
-        {
-            _logger.LogInformation("UnsafeState list count {Count}", accessorUnsafe.GetAggregates().Count);
-        }
+        // State logging removed for production use
     }
 
     private async Task CatchUpFromStoreAsync()
@@ -234,7 +210,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         if (!eventsResult.IsSuccess) return;
         
         var events = eventsResult.GetValue().ToList();
-        _logger.LogInformation("Catch Up Starting Events {count} events", events.Count);
         
         if (events.Count > 0)
         {
@@ -245,21 +220,15 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 {
                     _buffer.Add(e);
                 }
-                else
-                {
-                    _logger.LogDebug("Skipping duplicate event during catch-up: {SortableUniqueId}", e.SortableUniqueId);
-                }
             }
             FlushBuffer();
         }
         
-        _logger.LogInformation("Catch Up Finished {count} events", events.Count);
         LogState();
     }
 
     private void FlushBuffer()
     {
-        _logger.LogInformation("Start flush buffer {count} events", _buffer.Count);
         LogState();
 
         if (_safeState == null && _unsafeState == null)
@@ -291,12 +260,9 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         int splitIndex = _buffer.FindLastIndex(e => 
             new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
         
-        _logger.LogInformation("Splitted Total {count} events, SplitIndex {splitIndex}", _buffer.Count, splitIndex);
-        
         // Process old events
         if (splitIndex >= 0)
         {
-            _logger.LogInformation("Working on old events");
             var sortableUniqueIdFrom = _safeState?.GetLastSortableUniqueId() ?? SortableUniqueIdValue.MinValue;
             
             // Get old events
@@ -330,7 +296,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             _buffer.RemoveRange(0, splitIndex + 1);
         }
         
-        _logger.LogInformation("After worked old events Total {count} events", _buffer.Count);
         
         // Process remaining (newer) events for unsafe state
         if (_buffer.Any() && _safeState != null)
@@ -354,7 +319,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             _unsafeState = null;
         }
         
-        _logger.LogInformation("Finish flush buffer {count} events", _buffer.Count);
         LogState();
     }
 
@@ -374,12 +338,8 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     {
         if (state.Version == 0) return;
         
-        _logger.LogInformation("Persisting state {version}", state.Version);
-        
         var serializableState = await SerializableMultiProjectionState.CreateFromAsync(state, _domainTypes);
         await StateManager.SetStateAsync(StateKey, serializableState);
-        
-        _logger.LogInformation("Persisting state written {version}", state.Version);
     }
 
     #endregion
@@ -546,15 +506,11 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         
         if (isActivelyReceivingEvents)
         {
-            _logger.LogInformation("Event delivery active, flush buffer {count} events", _buffer.Count);
             FlushBuffer();
-            _logger.LogInformation("Event delivery active, flush buffer finished {count} events", _buffer.Count);
         }
         else
         {
-            _logger.LogInformation("Event delivery inactive, catch up from store");
             await CatchUpFromStoreAsync();
-            _logger.LogInformation("Event delivery inactive, catch up from store finished");
         }
     }
 
@@ -579,8 +535,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     {
         try
         {
-            _logger.LogInformation("Received event from PubSub: EventId={EventId}, AggregateId={AggregateId}, Version={Version}", 
-                envelope.EventId, envelope.AggregateId, envelope.Version);
 
             // Mark event delivery as active
             _eventDeliveryActive = true;
@@ -600,7 +554,6 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             // First check if this exact event is already in the buffer
             if (_buffer.Any(e => e.SortableUniqueId == @event.SortableUniqueId))
             {
-                _logger.LogDebug("Event already in buffer: {SortableUniqueId}", @event.SortableUniqueId);
                 return;
             }
             
@@ -612,26 +565,23 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 
                 if (lastSafeId.IsLaterThanOrEqual(eventId))
                 {
-                    _logger.LogDebug("Event already processed in safe state: {SortableUniqueId}", @event.SortableUniqueId);
                     return;
                 }
             }
             
             // Add to buffer
             _buffer.Add(@event);
-            _logger.LogDebug("Added event to buffer: {SortableUniqueId}", @event.SortableUniqueId);
             
             // Similar to Orleans, we don't flush immediately during bootstrapping
             // This allows for batch processing of initial events
             if (_bootstrapping)
             {
-                _logger.LogDebug("Bootstrapping mode - deferring flush");
+                // Bootstrapping mode - deferring flush
             }
             else
             {
                 // Unlike before, we don't flush immediately
                 // Buffer will be flushed when queries are made or during periodic snapshots
-                _logger.LogDebug("Event buffered for batch processing");
             }
         }
         catch (Exception ex)
@@ -662,16 +612,12 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         if (isActivelyReceivingEvents)
         {
             // If actively receiving events, flush buffer to ensure consistency
-            _logger.LogInformation("Event delivery active, flush buffer {count} events", _buffer.Count);
             FlushBuffer();
-            _logger.LogInformation("Event delivery active, flush buffer finished {count} events", _buffer.Count);
         }
         else
         {
             // If not actively receiving events, catch up from store
-            _logger.LogInformation("Event delivery inactive, catch up from store");
             await CatchUpFromStoreAsync();
-            _logger.LogInformation("Event delivery inactive, catch up from store finished");
         }
         
         var state = _unsafeState ?? _safeState;

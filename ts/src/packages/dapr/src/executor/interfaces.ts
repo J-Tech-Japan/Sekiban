@@ -86,6 +86,7 @@ export interface DaprSekibanConfiguration {
   requestTimeoutMs?: number;
   retryAttempts?: number;
   circuitBreakerThreshold?: number;
+  multiProjectorAppId?: string;  // App ID where MultiProjectorActor is hosted
 }
 
 /**

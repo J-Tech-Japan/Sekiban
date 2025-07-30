@@ -1,6 +1,6 @@
 {
   "name": "@sekiban/cosmos",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.5",
   "description": "Azure Cosmos DB storage provider for Sekiban Event Sourcing framework",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -32,7 +32,7 @@
   "author": "Sekiban Team",
   "license": "MIT",
   "dependencies": {
-    "@sekiban/core": "^0.1.0-alpha.1",
+    "@sekiban/core": "^0.1.0-alpha.5",
     "@azure/cosmos": "^4.0.0",
     "neverthrow": "^8.0.0"
   },

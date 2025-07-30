@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
-    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview19" />
+    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview21" />
   </ItemGroup>
 
 </Project>

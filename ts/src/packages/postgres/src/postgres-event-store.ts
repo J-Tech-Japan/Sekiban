@@ -171,7 +171,6 @@ export class PostgresEventStore implements IEventStore {
    * Save events to storage
    */
   async saveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    console.log('PostgresEventStore.saveEvents called');
     const result = await ResultAsync.fromPromise(
       this.doSaveEvents(events),
       (error) => new StorageError(
@@ -187,7 +186,6 @@ export class PostgresEventStore implements IEventStore {
   }
   
   private async doSaveEvents<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    console.log('doSaveEvents called with', events.length, 'events');
     let client: PoolClient | null = null;
     
     try {
@@ -214,9 +212,9 @@ export class PostgresEventStore implements IEventStore {
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`;
           
           const insertParams = [
-              event.id.toString(),
+              event.id,  // id should already be a UUID
               JSON.stringify(event.payload || event.eventData || event),  // Store the event data as payload
-              event.sortableUniqueId.toString(),
+              typeof event.sortableUniqueId === 'string' ? event.sortableUniqueId : event.sortableUniqueId?.value || event.sortableUniqueId?.toString(),
               event.version,
               event.aggregateId,
               event.partitionKeys?.rootPartitionKey || 'default',
@@ -228,9 +226,6 @@ export class PostgresEventStore implements IEventStore {
               correlationId,
               executedUser
             ];
-          
-          console.log('Executing query:', insertQuery);
-          console.log('With params:', insertParams);
           
           try {
             await client.query(insertQuery, insertParams);

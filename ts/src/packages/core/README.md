@@ -145,10 +145,6 @@ const command = CreateUser.create({
 const result = await executor.executeCommand(command);
 ```
 
-## Migration from Class-Based System
-
-See [Migration Guide](../../docs/migration-guide.md) for detailed instructions on migrating from the previous class-based system.
-
 ## Implementation Status
 
 Successfully implemented using t_wada's TDD approach (Red-Green-Refactor).

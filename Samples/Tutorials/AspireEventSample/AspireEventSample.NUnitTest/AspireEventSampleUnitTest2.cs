@@ -9,7 +9,7 @@ namespace AspireEventSample.NUnitTest;
 public class AspireEventSampleUnitTest2 : SekibanInMemoryTestBase
 {
     protected override SekibanDomainTypes GetDomainTypes() => AspireEventSampleApiServiceDomainTypes.Generate(
-        AspireEventSampleApiServiceEventsJsonContext.Default.Options);
+        AspireEventSampleDomainEventsJsonContext.Default.Options);
 
     [Test]
     public void RegisterBranchTest()
@@ -25,8 +25,8 @@ public class AspireEventSampleUnitTest2 : SekibanInMemoryTestBase
     [Test]
     public void RegisterBranchAnd___QueryTest2()
         => GivenCommandWithResult(new RegisterBranch("DDD", "Japan"))
-            .Conveyor(
-                response => GivenCommandWithResult(new ChangeBranchName(response.PartitionKeys.AggregateId, "ES")))
+            .Conveyor(response =>
+                GivenCommandWithResult(new ChangeBranchName(response.PartitionKeys.AggregateId, "ES")))
             .Conveyor(_ => ThenQueryWithResult(new BranchExistsQuery("DDD")))
             .Do(queryResult => Assert.That(queryResult, Is.False))
             .Conveyor(_ => ThenQueryWithResult(new BranchExistsQuery("ES")))
@@ -35,8 +35,8 @@ public class AspireEventSampleUnitTest2 : SekibanInMemoryTestBase
     [Test]
     public void RegisterBranchAndListQuery()
         => GivenCommandWithResult(new RegisterBranch("DDD", "Japan"))
-            .Conveyor(
-                response => GivenCommandWithResult(new ChangeBranchName(response.PartitionKeys.AggregateId, "ES")))
+            .Conveyor(response =>
+                GivenCommandWithResult(new ChangeBranchName(response.PartitionKeys.AggregateId, "ES")))
             .Conveyor(_ => ThenQueryWithResult(new SimpleBranchListQuery("DDD")))
             .Do(queryResult => Assert.That(queryResult.Items.Count(), Is.EqualTo(0)))
             .Conveyor(_ => ThenQueryWithResult(new SimpleBranchListQuery("ES")))

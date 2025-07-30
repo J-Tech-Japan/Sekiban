@@ -6,14 +6,14 @@
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
     <PackageId>Sekiban.Pure.Dapr</PackageId>
-    <Version>1.0.1-preview19</Version>
+    <Version>1.0.1-preview21</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>Sekiban.Pure.Dapr</Title>
     <Description>Event Sourcing and CQRS Framework with Dapr integration</Description>
     <PackageDescription>Sekiban - Pure Event Sourcing Framework Dapr Integration</PackageDescription>
     <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageVersion>1.0.1-preview19</PackageVersion>
+    <PackageVersion>1.0.1-preview21</PackageVersion>
     <AssemblyName>Sekiban.Pure.Dapr</AssemblyName>
     <RootNamespace>Sekiban.Pure.Dapr</RootNamespace>
     <IncludeSymbols>true</IncludeSymbols>
@@ -32,7 +32,7 @@
     <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
     <PackageReference Include="Dapr.Actors" Version="1.15.4" />
     <PackageReference Include="Dapr.Actors.AspNetCore" Version="1.15.4" />
-    <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
+    <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

@@ -11,21 +11,40 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client API (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md)
-> - [Unit Testing](11_unit_testing.md)
-> - [Common Issues and Solutions](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
+> - [Dapr Setup](11_dapr_setup.md)
+> - [Unit Testing](12_unit_testing.md)
+> - [Common Issues and Solutions](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [Value Object](15_value_object.md)
+> - [Deployment Guide](16_deployment.md)
 
 ## Installation and Setup
+
+Sekiban provides two implementation approaches:
+
+### Orleans Version (Recommended)
 
 ```bash
 # Install the Sekiban templates
 dotnet new install Sekiban.Pure.Templates
 
-# Create a new project
+# Create a new Orleans project
 dotnet new sekiban-orleans-aspire -n MyProject
 ```
 
 This template includes Aspire host for Orleans, Cluster Storage, Grain Persistent Storage, and Queue Storage.
+
+### Dapr Version
+
+```bash
+# Install the Sekiban templates
+dotnet new install Sekiban.Pure.Templates
+
+# Create a new Dapr project
+dotnet new sekiban-dapr-aspire -n MyProject
+```
+
+This template includes Aspire host for Dapr, Dapr actors, state store, and pub/sub capabilities.
 
 ## Important Notes
 

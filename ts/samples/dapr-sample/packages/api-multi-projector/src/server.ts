@@ -6,8 +6,12 @@ import morgan from 'morgan';
 import pg from 'pg';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { MultiProjectorActorFactory, getDaprCradle, MultiProjectorActor } from '@sekiban/dapr';
-import { InMemoryEventStore, StorageProviderType, IEventStore } from '@sekiban/core';
-import { PostgresEventStore } from '@sekiban/postgres';
+import { IEventStore } from '@sekiban/core';
+// Dynamic imports for storage providers to avoid module resolution errors
+import { CosmosEventStore } from '@sekiban/cosmos';
+import { CosmosClient } from '@azure/cosmos';
+// Import domain types at the top to ensure registration happens
+import '@dapr-sample/domain';
 import { createTaskDomainTypes } from '@dapr-sample/domain';
 import { config } from './config/index.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -26,15 +30,29 @@ async function startServer() {
   app.use(helmet());
   app.use(cors({ origin: config.CORS_ORIGIN }));
   app.use(compression());
-  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  // Custom morgan format to skip eventCheck reminders
+  app.use(morgan((tokens, req, res) => {
+    // Skip logging for eventCheck reminders
+    if (req.url?.includes('/remind/eventCheck')) {
+      return null;
+    }
+    // Use default dev format for other requests
+    return [
+      tokens.method(req, res),
+      tokens.url(req, res),
+      tokens.status(req, res),
+      tokens.res(req, res, 'content-length'), '-',
+      tokens['response-time'](req, res), 'ms'
+    ].join(' ');
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
   // Debug middleware to log all requests
   app.use((req, res, next) => {
-    logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    if (req.path.startsWith('/actors/')) {
-      logger.info(`Actor route called: ${req.method} ${req.path}`);
+    // Skip logging for eventCheck reminders and health checks
+    if (!req.path.includes('/remind/eventCheck') && !req.path.includes('/health')) {
+      logger.debug(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     }
     next();
   });
@@ -43,7 +61,6 @@ async function startServer() {
   app.use((req, res, next) => {
     if (req.path.includes('/method/') && req.method === 'POST') {
       req.method = 'PUT';
-      logger.debug(`Converted POST to PUT for actor method: ${req.path}`);
     }
     next();
   });
@@ -97,46 +114,68 @@ async function startServer() {
 
 
 async function setupDaprActorsWithApp(app: express.Express) {
-  logger.info('Setting up Dapr actors with Express app...');
 
   // Initialize domain types
   const domainTypes = createTaskDomainTypes();
 
-  // Choose storage type based on environment variable or config
-  const usePostgres = config.USE_POSTGRES;
+  // CLAUDE.md: Never create in-memory workarounds - always use proper actor implementation
+  let eventStore: IEventStore;
   
-  let eventStore: any; // Use any to avoid neverthrow version mismatch
-  
-  if (usePostgres) {
-    // Initialize PostgreSQL event store
-    logger.info('Using PostgreSQL event store');
-    const pool = new Pool({
-      connectionString: config.DATABASE_URL
-    });
-    
-    eventStore = new PostgresEventStore(pool);
-    
-    // Initialize the database schema
-    logger.info('Initializing PostgreSQL schema...');
-    try {
-      const result = await eventStore.initialize();
-      if (result.isOk()) {
-        logger.info('PostgreSQL schema initialized successfully');
-      } else {
-        logger.error('Failed to initialize PostgreSQL schema:', result.error);
-        throw result.error;
+  switch (config.STORAGE_TYPE) {
+    case 'postgres': {
+      // Dynamic import for PostgreSQL
+      const { PostgresEventStore } = await import('@sekiban/postgres');
+      
+      // Initialize PostgreSQL event store
+      const pool = new Pool({
+        connectionString: config.DATABASE_URL
+      });
+      
+      eventStore = new PostgresEventStore(pool);
+      
+      // Initialize the database schema
+      try {
+        const result = await eventStore.initialize();
+        if (result.isErr()) {
+          logger.error('Failed to initialize PostgreSQL schema:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize PostgreSQL:', error);
+        throw error;
       }
-    } catch (error) {
-      logger.error('Failed to initialize PostgreSQL:', error);
-      throw error;
+      break;
     }
-  } else {
-    // Initialize in-memory event store
-    logger.info('Using in-memory event store');
-    eventStore = new InMemoryEventStore({
-      type: StorageProviderType.InMemory,
-      enableLogging: config.NODE_ENV === 'development'
-    });
+    
+    case 'cosmos': {
+      // Initialize Cosmos DB event store
+      if (!config.COSMOS_CONNECTION_STRING) {
+        throw new Error('COSMOS_CONNECTION_STRING is required when using cosmos storage');
+      }
+      
+      const cosmosClient = new CosmosClient(config.COSMOS_CONNECTION_STRING);
+      const database = cosmosClient.database(config.COSMOS_DATABASE!);
+      eventStore = new CosmosEventStore(
+        database as any
+      );
+      
+      // Initialize the Cosmos DB container
+      try {
+        const result = await eventStore.initialize();
+        if (result.isErr()) {
+          logger.error('Failed to initialize Cosmos DB container:', result.error);
+          throw result.error;
+        }
+      } catch (error) {
+        logger.error('Failed to initialize Cosmos DB:', error);
+        throw error;
+      }
+      break;
+    }
+    
+    default: {
+      throw new Error(`Storage type '${config.STORAGE_TYPE}' not supported. Use 'postgres' or 'cosmos'.`);
+    }
   }
 
   // Create DaprClient for actor proxy factory
@@ -148,14 +187,24 @@ async function setupDaprActorsWithApp(app: express.Express) {
   // Create actor proxy factory
   const actorProxyFactory: ActorProxyFactory = {
     createActorProxy: (actorId, actorType: string) => {
-      const actorIdObj = typeof actorId === 'string' ? { id: actorId } : actorId;
-      const actorIdStr = 'id' in actorIdObj ? (actorIdObj as { id: string }).id : (actorIdObj as any).getId ? (actorIdObj as any).getId() : String(actorId);
-      logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
+      // Type-safe actor ID extraction
+      let actorIdStr: string;
+      if (typeof actorId === 'string') {
+        actorIdStr = actorId;
+      } else if (actorId && typeof actorId === 'object' && 'getId' in actorId && typeof (actorId as { getId: () => string }).getId === 'function') {
+        actorIdStr = (actorId as { getId: () => string }).getId();
+      } else {
+        actorIdStr = String(actorId);
+      }
+      // Only log actor proxy creation for non-MultiProjectorActor types
+      if (actorType !== 'MultiProjectorActor') {
+        logger.debug(`Creating actor proxy for ${actorType}/${actorIdStr}`);
+      }
       
       // For now, we only need MultiProjectorActor proxies in this service
       if (actorType === 'MultiProjectorActor') {
-        // Type assertion needed due to factory pattern limitations
-        const factory = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryCreateMethod;
+        // Create actor class using factory
+        const factory = MultiProjectorActorFactory as MultiProjectorActorFactoryCreateMethod;
         const MultiProjectorActorClass = factory.createActorClass();
         const builder = new ActorProxyBuilder(MultiProjectorActorClass, daprClient);
         return builder.build(new ActorId(actorIdStr));
@@ -178,7 +227,7 @@ async function setupDaprActorsWithApp(app: express.Express) {
   };
 
   // Configure MultiProjectorActorFactory
-  const configureMethod = MultiProjectorActorFactory as unknown as MultiProjectorActorFactoryConfigureMethod;
+  const configureMethod = MultiProjectorActorFactory as MultiProjectorActorFactoryConfigureMethod;
   configureMethod.configure(
     domainTypes,
     {}, // service provider
@@ -187,10 +236,9 @@ async function setupDaprActorsWithApp(app: express.Express) {
     eventStore
   );
 
-  // Create actor class - use direct reference to avoid type issues
-  const MultiProjectorActorClass = MultiProjectorActor as any;
+  // Create actor class with proper typing
+  const MultiProjectorActorClass = MultiProjectorActor;
   
-  logger.info('[DEBUG] MultiProjectorActorClass name:', MultiProjectorActorClass.name);
 
   // Create DaprServer
   const daprServer = new DaprServer({
@@ -207,51 +255,10 @@ async function setupDaprActorsWithApp(app: express.Express) {
   
   // Register MultiProjectorActor
   await daprServer.actor.registerActor(MultiProjectorActorClass);
-  logger.info('Registered MultiProjectorActor');
   
   // Initialize actor runtime
-  logger.info('Initializing actor runtime...');
   await daprServer.actor.init();
-  logger.info('Actor runtime initialized');
 
-  // Add diagnostic logging
-  console.log('[DEBUG] Adding diagnostic logging...');
-  
-  // Type assertion for private properties
-  // Type for Express Request and Response
-  interface ExpressRequest {
-    url: string;
-    [key: string]: unknown;
-  }
-  
-  interface ExpressResponse {
-    [key: string]: unknown;
-  }
-  
-  const serverWithActorHandler = daprServer as unknown as {
-    actor?: {
-      actorHandler?: (req: ExpressRequest, res: ExpressResponse) => Promise<void>;
-    };
-  };
-  
-  const originalActorHandler = serverWithActorHandler.actor?.actorHandler;
-  if (originalActorHandler && serverWithActorHandler.actor) {
-    serverWithActorHandler.actor.actorHandler = async (req: ExpressRequest, res: ExpressResponse) => {
-      console.log('[DIAGNOSTIC] Actor handler called for:', req.url);
-      try {
-        await originalActorHandler.call(serverWithActorHandler.actor, req, res);
-      } catch (e) {
-        console.error('[DIAGNOSTIC] Actor handler error:', e);
-        console.error('[DIAGNOSTIC] Stack trace:', (e as Error).stack);
-        throw e;
-      }
-    };
-    console.log('[DEBUG] Diagnostic handler installed');
-  } else {
-    console.log('[DEBUG] Could not install diagnostic handler');
-  }
-
-  logger.info('Dapr actors integrated with Express app');
   
   return daprServer;
 }

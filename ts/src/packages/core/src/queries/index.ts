@@ -20,15 +20,22 @@ export {
  * Export multi-projection interfaces
  */
 export type {
-  IMultiProjector
+  ISimpleMultiProjector
 } from './multi-projection'
 
 export {
-  MultiProjectionState
+  SimpleMultiProjectionState
 } from './multi-projection'
 
 // Note: aggregate-list-projector has been removed.
 // For list queries, use IMultiProjectionListQuery instead.
+
+/**
+ * Export aggregate list projector
+ */
+export {
+  AggregateListProjector
+} from './aggregate-list-projector'
 
 /**
  * Export query handler types

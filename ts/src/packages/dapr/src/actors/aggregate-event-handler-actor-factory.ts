@@ -1,4 +1,3 @@
-// @ts-ignore - IEventStore is exported from core
 import type { IEventStore } from '@sekiban/core';
 import { AggregateEventHandlerActor } from './aggregate-event-handler-actor.js';
 

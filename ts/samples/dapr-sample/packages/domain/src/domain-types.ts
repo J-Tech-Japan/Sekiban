@@ -1,4 +1,4 @@
-import { createSchemaDomainTypes, globalRegistry } from '@sekiban/core';
+import { createSchemaDomainTypes, globalRegistry, AggregateListProjector, SchemaMultiProjectorTypes, SchemaQueryTypes } from '@sekiban/core';
 import { 
   CreateTask, 
   AssignTask, 
@@ -15,10 +15,10 @@ import {
   TaskDeleted,
   TaskCompletionReverted
 } from './aggregates/task/events/task-events.js';
-import { taskProjectorDefinition } from './aggregates/task/projectors/task-projector.js';
-// import { GetTaskById } from './aggregates/task/queries/task-queries.js';
+import { taskProjectorDefinition, TaskProjector } from './aggregates/task/projectors/task-projector.js';
+import { TaskListQuery, ActiveTaskListQuery, TasksByAssigneeQuery } from './aggregates/task/queries/index.js';
 import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
-import { userProjectorDefinition } from './aggregates/user/projectors/user-projector.js';
+import { userProjectorDefinition, UserProjector } from './aggregates/user/projectors/user-projector.js';
 
 // Register all domain types with the global registry
 // Events
@@ -51,6 +51,23 @@ globalRegistry.registerProjector(userProjectorDefinition);
 
 export function createTaskDomainTypes() {
   const domainTypes = createSchemaDomainTypes(globalRegistry);
+  
+  // Register aggregate list projectors
+  if (domainTypes.multiProjectorTypes && domainTypes.multiProjectorTypes instanceof SchemaMultiProjectorTypes) {
+    // Register Task aggregate list projector
+    domainTypes.multiProjectorTypes.registerAggregateListProjector(() => new TaskProjector());
+    
+    // Register User aggregate list projector
+    domainTypes.multiProjectorTypes.registerAggregateListProjector(() => new UserProjector());
+  }
+  
+  // Register queries
+  if (domainTypes.queryTypes && domainTypes.queryTypes instanceof SchemaQueryTypes) {
+    // Register Task queries
+    domainTypes.queryTypes.registerQuery('TaskListQuery', TaskListQuery);
+    domainTypes.queryTypes.registerQuery('ActiveTaskListQuery', ActiveTaskListQuery);
+    domainTypes.queryTypes.registerQuery('TasksByAssigneeQuery', TasksByAssigneeQuery);
+  }
   
   // Add convenience methods using the public API
   return {

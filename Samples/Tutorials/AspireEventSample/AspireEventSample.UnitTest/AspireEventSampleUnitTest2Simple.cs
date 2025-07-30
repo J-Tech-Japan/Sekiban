@@ -8,7 +8,7 @@ namespace AspireEventSample.UnitTest;
 public class AspireEventSampleUnitTest2Simple : SekibanInMemoryTestBase
 {
     protected override SekibanDomainTypes GetDomainTypes() => AspireEventSampleApiServiceDomainTypes.Generate(
-        AspireEventSampleApiServiceEventsJsonContext.Default.Options);
+        AspireEventSampleDomainEventsJsonContext.Default.Options);
 
     [Fact]
     public void RegisterBranchTest()

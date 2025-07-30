@@ -1,19 +1,30 @@
-using OrleansSekiban.Domain;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Commands;
 using OrleansSekiban.Domain.Aggregates.WeatherForecasts.Queries;
 using Sekiban.Pure.Command.Executor;
-using Sekiban.Pure.Command.Handlers;
 
 namespace OrleansSekiban.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
 {
-    public async Task<WeatherForecastQuery.WeatherForecastRecord[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
+    public async Task<WeatherForecastQuery.WeatherForecastRecord[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, int? pageSize = null, int? pageNumber = null, string? sortBy = null, bool isAsc = false, CancellationToken cancellationToken = default)
     {
         List<WeatherForecastQuery.WeatherForecastRecord>? forecasts = null;
-        var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
-            ? "/api/weatherforecast"
-            : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+        
+        var queryParams = new List<string>();
+        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
+            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+        if (pageSize.HasValue)
+            queryParams.Add($"pageSize={pageSize.Value}");
+        if (pageNumber.HasValue)
+            queryParams.Add($"pageNumber={pageNumber.Value}");
+        if (!string.IsNullOrEmpty(sortBy))
+            queryParams.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
+        if (isAsc)
+            queryParams.Add("isAsc=true");
+            
+        var requestUri = "/api/weatherforecast";
+        if (queryParams.Count > 0)
+            requestUri += "?" + string.Join("&", queryParams);
             
         await foreach (var forecast in httpClient.GetFromJsonAsAsyncEnumerable<WeatherForecastQuery.WeatherForecastRecord>(requestUri, cancellationToken))
         {

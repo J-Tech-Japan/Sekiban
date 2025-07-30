@@ -14,6 +14,10 @@ interface SekibanExecutor {
   queryAsync<TQuery>(
     query: TQuery
   ): Promise<any>;
+  loadAggregateAsync<TPayload>(
+    projector: any,
+    partitionKeys: any
+  ): Promise<any>;
 }
 
 let executorInstance: SekibanExecutor | null = null;
@@ -42,7 +46,6 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     throw new Error('Dapr not available. This sample requires Dapr to run.');
   }
 
-  console.log('Initializing Sekiban with Dapr...');
 
   // Create Dapr client with proper configuration
   daprClientInstance = new DaprClient({
@@ -70,13 +73,6 @@ export async function createExecutor(): Promise<SekibanExecutor> {
     sekibanConfig
   ) as any; // Cast to match our interface
 
-  console.log('Sekiban Dapr Executor initialized with config:', {
-    actorType: sekibanConfig.actorType,
-    actorIdPrefix: sekibanConfig.actorIdPrefix,
-    stateStore: sekibanConfig.stateStoreName + ' (in-memory)',
-    pubSub: sekibanConfig.pubSubName + ' (in-memory)',
-    eventTopic: sekibanConfig.eventTopicName
-  });
 
   return executorInstance!; // We know it's initialized at this point
 }
@@ -100,5 +96,5 @@ export function getDaprClient(): DaprClient {
 
 // Cleanup function for graceful shutdown
 export async function cleanup(): Promise<void> {
-  console.log('Cleanup completed');
+  // Nothing to cleanup for now
 }

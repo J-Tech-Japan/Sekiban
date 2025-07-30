@@ -11,9 +11,12 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client API (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md)
-> - [Unit Testing](11_unit_testing.md)
-> - [Common Issues and Solutions](12_common_issues.md)
-> - [ResultBox](13_result_box.md)
+> - [Dapr Setup](11_dapr_setup.md)
+> - [Unit Testing](12_unit_testing.md)
+> - [Common Issues and Solutions](13_common_issues.md)
+> - [ResultBox](14_result_box.md)
+> - [Value Object](15_value_object.md)
+> - [Deployment Guide](16_deployment.md)
 
 ## Query (Data Retrieval)
 

@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure</PackageId>
-        <Version>1.0.1-preview19</Version>
+        <Version>1.0.1-preview21</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.1-preview19</PackageVersion>
+        <PackageVersion>1.0.1-preview21</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure</AssemblyName>
         <RootNamespace>Sekiban.Pure</RootNamespace>
@@ -25,9 +25,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.2.0" />
+        <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.2.1" />
         <PackageReference Include="ResultBoxes" Version="0.3.31"/>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.0.3">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
