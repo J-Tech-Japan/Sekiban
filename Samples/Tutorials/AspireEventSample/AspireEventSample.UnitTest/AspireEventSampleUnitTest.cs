@@ -13,7 +13,7 @@ namespace AspireEventSample.UnitTest;
 public class AspireEventSampleUnitTest
 {
     private SekibanDomainTypes SekibanDomainTypes { get; }
-        = AspireEventSampleApiServiceDomainTypes.Generate(AspireEventSampleApiServiceEventsJsonContext.Default.Options);
+        = AspireEventSampleApiServiceDomainTypes.Generate(AspireEventSampleDomainEventsJsonContext.Default.Options);
     private ICommandMetadataProvider CommandMetadataProvider { get; }
         = new FunctionCommandMetadataProvider(() => "test");
     [Fact]

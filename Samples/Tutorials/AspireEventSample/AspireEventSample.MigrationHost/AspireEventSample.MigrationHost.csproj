@@ -8,20 +8,20 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\AspireEventSample.ReadModels\AspireEventSample.ReadModels.csproj" />
+        <ProjectReference Include="..\AspireEventSample.ReadModels\AspireEventSample.ReadModels.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.4">
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.7">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.4">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.7">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
     </ItemGroup>
 
 </Project>
