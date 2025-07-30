@@ -24,6 +24,16 @@ using System.Text.Json.Serialization;
 [JsonSerializable(typeof(PartitionKeys))]
 [JsonSerializable(typeof(SerializableAggregateListProjector))]
 [JsonSerializable(typeof(BranchMultiProjector))]
-public partial class AspireEventSampleApiServiceEventsJsonContext : JsonSerializerContext
+// Add missing aggregate payload types
+[JsonSerializable(typeof(Branch))]
+[JsonSerializable(typeof(BuyingShoppingCart))]
+[JsonSerializable(typeof(PaymentProcessingShoppingCart))]
+[JsonSerializable(typeof(ShoppingCartItems))]
+// Add missing projector types
+[JsonSerializable(typeof(AggregateListProjector<BranchProjector>))]
+[JsonSerializable(typeof(BranchProjector))]
+[JsonSerializable(typeof(AggregateListProjector<ShoppingCartProjector>))]
+[JsonSerializable(typeof(ShoppingCartProjector))]
+public partial class AspireEventSampleDomainEventsJsonContext : JsonSerializerContext
 {
 }

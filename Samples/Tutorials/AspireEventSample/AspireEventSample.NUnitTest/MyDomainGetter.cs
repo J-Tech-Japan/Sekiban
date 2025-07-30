@@ -6,5 +6,5 @@ namespace AspireEventSample.NUnitTest;
 public class MyDomainGetter : IDomainTypesGetter
 {
     public SekibanDomainTypes GetDomainTypes() =>
-        AspireEventSampleApiServiceDomainTypes.Generate(AspireEventSampleApiServiceEventsJsonContext.Default.Options);
+        AspireEventSampleApiServiceDomainTypes.Generate(AspireEventSampleDomainEventsJsonContext.Default.Options);
 }
