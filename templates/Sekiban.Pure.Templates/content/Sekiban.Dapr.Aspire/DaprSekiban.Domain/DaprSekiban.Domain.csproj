@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview20" />
-    <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview20" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview21" />
+    <PackageReference Include="Sekiban.Pure.SourceGenerator" Version="1.0.1-preview21" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
