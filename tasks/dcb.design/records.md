@@ -60,3 +60,72 @@ public record TagStream(
 ```
 
 Links tags to events for efficient tag-based querying.
+
+### TagState
+
+```csharp
+public record TagState(
+    ITagStatePayload Payload,
+    int Version,
+    int LastSortedUniqueId,
+    string TagGroup,
+    string TagContent,
+    string TagProjector
+);
+```
+
+Represents the current state of a tag with versioning and projection information.
+
+### SerializableEvent
+
+```csharp
+public record SerializableEvent(
+    byte[] Payload,
+    string SortableUniqueIdValue,
+    Guid Id,
+    EventMetadata EventMetadata,
+    List<string> Tags,
+    string EventPayloadName
+);
+```
+
+Serialized version of Event record with payload as byte array for storage.
+
+### SerializableTagState
+
+```csharp
+public record SerializableTagState(
+    byte[] Payload,
+    int Version,
+    int LastSortedUniqueId,
+    string TagGroup,
+    string TagContent,
+    string TagProjector,
+    string TagPayloadName
+);
+```
+
+Serialized version of TagState record with payload as byte array for storage.
+
+### TagWriteReservation
+
+```csharp
+public record TagWriteReservation(
+    string ReservationCode,
+    string ExpiredUTC,
+    string Tag
+);
+```
+
+Represents a write reservation for a tag with expiration tracking.
+
+### EventPayloadWithTags
+
+```csharp
+public record EventPayloadWithTags(
+    IEventPayload Event,
+    List<ITag> Tags
+);
+```
+
+Groups an event payload with its associated tags for processing.

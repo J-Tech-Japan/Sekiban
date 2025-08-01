@@ -202,6 +202,34 @@ sequenceDiagram
     end
 ```
 
+## Actor Design
+
+### Actor Identification
+
+Actors in the DCB system use specific ID patterns for routing and isolation:
+
+#### TagConsistentActor ID
+
+```string
+"[tagGroupName]:[tagContentName]"
+```
+
+Example: `"Account:12345"` or `"Order:ABC-789"`
+
+#### TagStateActor ID
+
+```string
+"[tagGroupName]:[tagContentName]:[TagProjectorName]"
+```
+
+Example: `"Account:12345:BalanceProjector"` or `"Order:ABC-789:StatusProjector"`
+
+This naming convention ensures:
+
+- Clear separation between different tag groups
+- Unique identification of consistency boundaries
+- Support for multiple projections per tag
+
 ## Tag Write Reservation Mechanism
 
 The reservation mechanism ensures strong consistency across multiple tags:

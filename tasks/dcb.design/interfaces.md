@@ -40,3 +40,42 @@ public interface ITagStatePayload
 ```
 
 Base interface for all tag state payloads in the system.
+
+### ITagProjector
+
+```csharp
+public interface ITagProjector
+{
+    string GetTagProjectorName();
+    TagState Project(TagState current, Event ev);
+}
+```
+
+Interface for projecting events onto tag states to build read models.
+
+## Actor Interfaces
+
+### ITagStateActorCommon
+
+```csharp
+public interface ITagStateActorCommon
+{
+    SerializableTagState GetState();
+    string GetTagStateActorId();
+}
+```
+
+Common interface for tag state actors providing state access and identification.
+
+### ITagConsistentActorCommon
+
+```csharp
+public interface ITagConsistentActorCommon
+{
+    ResultBox<TagWriteReservation> MakeReservation(string lastSortableUniqueId);
+    bool ConfirmReservation(TagWriteReservation reservation);
+    bool CancelReservation(TagWriteReservation reservation);
+}
+```
+
+Common interface for tag consistent actors managing write reservations.
