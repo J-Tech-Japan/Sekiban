@@ -44,5 +44,11 @@ export type { TaskListResponse } from './aggregates/task/queries/index.js';
 // Export User aggregate
 export * from './aggregates/user/index.js';
 
+// Export WeatherForecast aggregate
+export * from './aggregates/weatherForecast/index.js';
+
+// Export value objects
+export * from './valueObjects/temperature-celsius.js';
+
 // Export actor interfaces for cross-service communication
 export * from './actors/interfaces/index.js';

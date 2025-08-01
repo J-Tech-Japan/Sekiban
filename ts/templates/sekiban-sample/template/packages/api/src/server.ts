@@ -10,6 +10,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { taskRoutes } from './routes/task-routes.js';
 import { eventRoutes } from './routes/event-routes.js';
+import { weatherForecastRoutes } from './routes/weather-forecast-routes.js';
 import { DaprServer, DaprClient, CommunicationProtocolEnum, HttpMethod, ActorProxyBuilder, ActorId } from '@dapr/dapr';
 import { 
   AggregateActorFactory, 
@@ -49,6 +50,7 @@ async function startServer() {
   app.use('/', healthRoutes);
   app.use('/', eventRoutes);
   app.use(config.API_PREFIX, taskRoutes);
+  app.use(config.API_PREFIX, weatherForecastRoutes);
 
   // Error handling (must be last)
   app.use(errorHandler);
