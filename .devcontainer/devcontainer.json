@@ -1,0 +1,64 @@
+{
+  "name": "Sekiban Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:8.0",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "ms-vscode.vscode-typescript-next",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "Anthropic.claude-code"
+      ],
+      "settings": {
+        "dotnet.server.useOmnisharp": false,
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "editor.formatOnSave": true,
+        "[csharp]": {
+          "editor.defaultFormatter": "ms-dotnettools.csharp"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "vscode.typescript-language-features"
+        },
+        "[json]": {
+          "editor.defaultFormatter": "vscode.json-language-features"
+        }
+      }
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "echo 'DevContainer started successfully! 🚀'",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ],
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "forwardPorts": [5000, 5001, 3000, 8080],
+  "portsAttributes": {
+    "5000": {
+      "label": ".NET API HTTP",
+      "onAutoForward": "notify"
+    },
+    "5001": {
+      "label": ".NET API HTTPS",
+      "onAutoForward": "notify"
+    },
+    "3000": {
+      "label": "Node.js Development Server",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Additional Service",
+      "onAutoForward": "notify"
+    }
+  }
+}
