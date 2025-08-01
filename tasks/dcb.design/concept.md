@@ -1,8 +1,8 @@
-# DCB (Distributed Command Bus) Concept
+# DCB (Dynamic Consistency Boundary) Concept
 
 ## Overview
 
-The DCB (Distributed Command Bus) is a distributed event sourcing system that provides consistency and scalability through actor-based architecture.
+The DCB (Dynamic Consistency Boundary) is an event sourcing system that provides dynamic consistency boundaries and scalability through actor-based architecture.
 
 ## Related Documents
 
