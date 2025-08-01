@@ -88,11 +88,11 @@ public class StudentProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(StudentProjector);
 
-    public TagState Project(TagState current, Event ev)
+    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
     {
-        var state = current.Payload as StudentState ?? StudentState.Empty("");
+        var state = current as StudentState ?? StudentState.Empty("");
         
-        var newState = ev.Payload switch
+        return eventPayload switch
         {
             StudentCreated created => state with 
             { 
@@ -118,13 +118,6 @@ public class StudentProjector : ITagProjector
             
             _ => state
         };
-
-        return current with 
-        { 
-            Payload = newState,
-            Version = current.Version + 1,
-            LastSortedUniqueId = int.Parse(ev.SortableUniqueIdValue)
-        };
     }
 }
 
@@ -132,11 +125,11 @@ public class ClassRoomProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(ClassRoomProjector);
 
-    public TagState Project(TagState current, Event ev)
+    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
     {
-        var state = current.Payload as ClassRoomState ?? ClassRoomState.Empty("");
+        var state = current as ClassRoomState ?? ClassRoomState.Empty("");
         
-        var newState = ev.Payload switch
+        return eventPayload switch
         {
             ClassRoomCreated created => state with 
             { 
@@ -163,13 +156,6 @@ public class ClassRoomProjector : ITagProjector
             
             _ => state
         };
-
-        return current with 
-        { 
-            Payload = newState,
-            Version = current.Version + 1,
-            LastSortedUniqueId = int.Parse(ev.SortableUniqueIdValue)
-        };
     }
 }
 // Specialized projector for available seats tracking
@@ -177,16 +163,16 @@ public class AvailableClassRoomProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(AvailableClassRoomProjector);
 
-    public TagState Project(TagState current, Event ev)
+    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
     {
-        var state = current.Payload as AvailableClassRoomState 
-            ?? (current.Payload is EmptyTagStatePayload 
+        var state = current as AvailableClassRoomState 
+            ?? (current is EmptyTagStatePayload 
                 ? new AvailableClassRoomState("", "", 10, 10) 
                 : null);
         
         if (state == null) return current;
         
-        var newState = ev.Payload switch
+        return eventPayload switch
         {
             ClassRoomCreated created => new AvailableClassRoomState(
                 created.ClassRoomId, 
@@ -207,13 +193,6 @@ public class AvailableClassRoomProjector : ITagProjector
             
             _ => state
         };
-
-        return current with 
-        { 
-            Payload = newState,
-            Version = current.Version + 1,
-            LastSortedUniqueId = int.Parse(ev.SortableUniqueIdValue)
-        };
     }
 }
 
@@ -222,10 +201,10 @@ public class FilledClassRoomProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(FilledClassRoomProjector);
 
-    public TagState Project(TagState current, Event ev)
+    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
     {
-        var state = current.Payload as FilledClassRoomState 
-            ?? (current.Payload is EmptyTagStatePayload 
+        var state = current as FilledClassRoomState 
+            ?? (current is EmptyTagStatePayload 
                 ? new FilledClassRoomState("", "", new List<string>(), false) 
                 : null);
         
@@ -233,7 +212,7 @@ public class FilledClassRoomProjector : ITagProjector
         
         var maxStudents = 10; // Default max students
         
-        var newState = ev.Payload switch
+        return eventPayload switch
         {
             ClassRoomCreated created => new FilledClassRoomState(
                 created.ClassRoomId, 
@@ -242,41 +221,27 @@ public class FilledClassRoomProjector : ITagProjector
                 false
             ),
             
-            StudentEnrolledInClassRoom enrolled => 
-            {
-                var newEnrolledList = state.EnrolledStudentIds
+            StudentEnrolledInClassRoom enrolled => state with 
+            { 
+                EnrolledStudentIds = state.EnrolledStudentIds
                     .Concat(new[] { enrolled.StudentId })
                     .Distinct()
-                    .ToList();
-                    
-                return state with 
-                { 
-                    EnrolledStudentIds = newEnrolledList,
-                    IsFull = newEnrolledList.Count >= maxStudents
-                };
+                    .ToList(),
+                IsFull = state.EnrolledStudentIds
+                    .Concat(new[] { enrolled.StudentId })
+                    .Distinct()
+                    .Count() >= maxStudents
             },
             
-            StudentDroppedFromClassRoom dropped =>
+            StudentDroppedFromClassRoom dropped => state with
             {
-                var newEnrolledList = state.EnrolledStudentIds
-                    .Where(id => id \!= dropped.StudentId)
-                    .ToList();
-                    
-                return state with
-                {
-                    EnrolledStudentIds = newEnrolledList,
-                    IsFull = false // No longer full after a drop
-                };
+                EnrolledStudentIds = state.EnrolledStudentIds
+                    .Where(id => id != dropped.StudentId)
+                    .ToList(),
+                IsFull = false // No longer full after a drop
             },
             
             _ => state
-        };
-
-        return current with 
-        { 
-            Payload = newState,
-            Version = current.Version + 1,
-            LastSortedUniqueId = int.Parse(ev.SortableUniqueIdValue)
         };
     }
 }
