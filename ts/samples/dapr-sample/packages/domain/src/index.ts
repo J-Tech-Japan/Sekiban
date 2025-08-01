@@ -40,5 +40,31 @@ export type { TaskListResponse } from './aggregates/task/queries/index.js';
 // Export User aggregate
 export * from './aggregates/user/index.js';
 
+// Export WeatherForecast commands
+export { 
+  InputWeatherForecast, 
+  UpdateWeatherForecastLocation, 
+  DeleteWeatherForecast,
+  RemoveWeatherForecast
+} from './aggregates/weatherForecast/commands/weather-forecast-commands.js';
+
+// Export WeatherForecast events
+export {
+  WeatherForecastInputted,
+  WeatherForecastLocationUpdated,
+  WeatherForecastDeleted
+} from './aggregates/weatherForecast/events/weather-forecast-events.js';
+
+// Export WeatherForecast projector and states
+export { WeatherForecastProjector } from './aggregates/weatherForecast/projectors/weather-forecast-projector.js';
+export type { WeatherForecastState, DeletedWeatherForecastState, WeatherForecastPayloadUnion } from './aggregates/weatherForecast/payloads/weather-forecast-payloads.js';
+
+// Export WeatherForecast queries
+export { WeatherForecastQuery } from './aggregates/weatherForecast/queries/weather-forecast-query.js';
+
+// Export value objects
+export { TemperatureCelsiusSchema, createTemperatureCelsius, toFahrenheit } from './valueObjects/temperature-celsius.js';
+export type { TemperatureCelsius } from './valueObjects/temperature-celsius.js';
+
 // Export actor interfaces
 export * from './actors/interfaces/index.js';

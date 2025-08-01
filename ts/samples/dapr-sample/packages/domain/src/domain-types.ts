@@ -19,6 +19,18 @@ import { taskProjectorDefinition, TaskProjector } from './aggregates/task/projec
 import { TaskListQuery, ActiveTaskListQuery, TasksByAssigneeQuery } from './aggregates/task/queries/index.js';
 import { UserCreated, UserNameChanged, UserEmailChanged } from './aggregates/user/events/index.js';
 import { userProjectorDefinition, UserProjector } from './aggregates/user/projectors/user-projector.js';
+import { 
+  InputWeatherForecast, 
+  UpdateWeatherForecastLocation, 
+  DeleteWeatherForecast 
+} from './aggregates/weatherForecast/commands/weather-forecast-commands.js';
+import {
+  WeatherForecastInputted,
+  WeatherForecastLocationUpdated,
+  WeatherForecastDeleted
+} from './aggregates/weatherForecast/events/weather-forecast-events.js';
+import { weatherForecastProjectorDefinition, WeatherForecastProjector } from './aggregates/weatherForecast/projectors/weather-forecast-projector.js';
+import { WeatherForecastQuery } from './aggregates/weatherForecast/queries/weather-forecast-query.js';
 
 // Register all domain types with the global registry
 // Events
@@ -42,9 +54,20 @@ globalRegistry.registerEvent(UserCreated);
 globalRegistry.registerEvent(UserNameChanged);
 globalRegistry.registerEvent(UserEmailChanged);
 
+// WeatherForecast Events
+globalRegistry.registerEvent(WeatherForecastInputted);
+globalRegistry.registerEvent(WeatherForecastLocationUpdated);
+globalRegistry.registerEvent(WeatherForecastDeleted);
+
+// WeatherForecast Commands
+globalRegistry.registerCommand(InputWeatherForecast);
+globalRegistry.registerCommand(UpdateWeatherForecastLocation);
+globalRegistry.registerCommand(DeleteWeatherForecast);
+
 // Projectors
 globalRegistry.registerProjector(taskProjectorDefinition);
 globalRegistry.registerProjector(userProjectorDefinition);
+globalRegistry.registerProjector(weatherForecastProjectorDefinition);
 
 // TODO: Register queries when supported
 // globalRegistry.registerQuery(GetTaskById);
@@ -59,6 +82,9 @@ export function createTaskDomainTypes() {
     
     // Register User aggregate list projector
     domainTypes.multiProjectorTypes.registerAggregateListProjector(() => new UserProjector());
+    
+    // Register WeatherForecast aggregate list projector
+    domainTypes.multiProjectorTypes.registerAggregateListProjector(() => new WeatherForecastProjector());
   }
   
   // Register queries
@@ -67,6 +93,9 @@ export function createTaskDomainTypes() {
     domainTypes.queryTypes.registerQuery('TaskListQuery', TaskListQuery);
     domainTypes.queryTypes.registerQuery('ActiveTaskListQuery', ActiveTaskListQuery);
     domainTypes.queryTypes.registerQuery('TasksByAssigneeQuery', TasksByAssigneeQuery);
+    
+    // Register WeatherForecast queries
+    domainTypes.queryTypes.registerQuery('WeatherForecastQuery', WeatherForecastQuery);
   }
   
   // Add convenience methods using the public API
