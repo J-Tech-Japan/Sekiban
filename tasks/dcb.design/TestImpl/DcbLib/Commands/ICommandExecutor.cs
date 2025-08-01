@@ -32,23 +32,3 @@ public interface ICommandExecutor
         CancellationToken cancellationToken = default)
         where TCommand : ICommand;
 }
-
-/// <summary>
-/// Successful result of command execution
-/// </summary>
-public record ExecutionResult(
-    Guid EventId,
-    long EventPosition,
-    IReadOnlyList<TagWriteResult> TagWrites,
-    TimeSpan Duration,
-    Dictionary<string, object>? Metadata = null
-);
-
-/// <summary>
-/// Details about a tag write operation
-/// </summary>
-public record TagWriteResult(
-    string Tag,
-    long Version,
-    DateTimeOffset WrittenAt
-);
