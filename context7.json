@@ -1,0 +1,8 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Sekiban Event Sourcing and CQRS Framework",
+  "folders": [],
+  "excludeFolders": ["src", "docs/docfx_project", "ts", "memory-bank", "clinerules_bank", "claude", "clinerules", "devcontainer", "github", "idea", ".vscode", "cline_docs", "internalUsages", "Samples", "Samples/Tutorials", "tasks", "tests"],
+  "excludeFiles": ["CODE_OF_CONDUCT.md","CONTRIBUTING.md","EventOrNone-Version-Fix-Summary.md","README_Sekiban_Pure_For_LLM.md","README_Sekiban_Pure_JP.md","README_Sekiban_Pure.md"],
+  "rules": []
+}
