@@ -57,18 +57,7 @@ public record StudentState(
         new(studentId, string.Empty, new List<string>());
 }
 
-public record ClassRoomState(
-    string ClassRoomId,
-    string Name,
-    int MaxStudents,
-    List<string> EnrolledStudentIds
-) : ITagStatePayload
-{
-    public static ClassRoomState Empty(string classRoomId) => 
-        new(classRoomId, string.Empty, 10, new List<string>());
-}
-
-// Specialized ClassRoom states for different projections
+// ClassRoom states - a classroom is either available or filled
 public record AvailableClassRoomState(
     string ClassRoomId,
     string Name,
@@ -127,121 +116,109 @@ public class ClassRoomProjector : ITagProjector
 
     public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
     {
-        var state = current as ClassRoomState ?? ClassRoomState.Empty("");
-        
-        return eventPayload switch
+        // Handle different state types based on current payload type
+        return current switch
         {
-            ClassRoomCreated created => state with 
-            { 
-                ClassRoomId = created.ClassRoomId, 
-                Name = created.Name,
-                MaxStudents = created.MaxStudents
-            },
-            
-            // Same event affects classroom state
-            StudentEnrolledInClassRoom enrolled => state with 
-            { 
-                EnrolledStudentIds = state.EnrolledStudentIds
-                    .Concat(new[] { enrolled.StudentId })
-                    .Distinct()
-                    .ToList()
-            },
-            
-            StudentDroppedFromClassRoom dropped => state with
-            {
-                EnrolledStudentIds = state.EnrolledStudentIds
-                    .Where(id => id != dropped.StudentId)
-                    .ToList()
-            },
-            
-            _ => state
+            AvailableClassRoomState state => ProjectAvailableClassRoomState(state, eventPayload),
+            FilledClassRoomState state => ProjectFilledClassRoomState(state, eventPayload),
+            EmptyTagStatePayload => InitializeFromEvent(eventPayload),
+            _ => current
         };
     }
-}
-// Specialized projector for available seats tracking
-public class AvailableClassRoomProjector : ITagProjector
-{
-    public string GetTagProjectorName() => nameof(AvailableClassRoomProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
+    private ITagStatePayload InitializeFromEvent(IEventPayload eventPayload)
     {
-        var state = current as AvailableClassRoomState 
-            ?? (current is EmptyTagStatePayload 
-                ? new AvailableClassRoomState("", "", 10, 10) 
-                : null);
-        
-        if (state == null) return current;
-        
+        // For empty state, we default to AvailableClassRoomState (new classroom starts with all seats available)
         return eventPayload switch
         {
             ClassRoomCreated created => new AvailableClassRoomState(
-                created.ClassRoomId, 
+                created.ClassRoomId,
                 created.Name,
                 created.MaxStudents,
-                created.MaxStudents // Initially all seats are available
+                created.MaxStudents // All seats available initially
             ),
-            
-            StudentEnrolledInClassRoom _ => state with 
-            { 
-                AvailableSeats = state.AvailableSeats - 1
-            },
-            
-            StudentDroppedFromClassRoom _ => state with
-            {
-                AvailableSeats = state.AvailableSeats + 1
-            },
-            
-            _ => state
+            _ => new EmptyTagStatePayload()
         };
     }
-}
 
-// Specialized projector for tracking filled classrooms
-public class FilledClassRoomProjector : ITagProjector
-{
-    public string GetTagProjectorName() => nameof(FilledClassRoomProjector);
-
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload)
+    private ITagStatePayload ProjectAvailableClassRoomState(AvailableClassRoomState state, IEventPayload eventPayload)
     {
-        var state = current as FilledClassRoomState 
-            ?? (current is EmptyTagStatePayload 
-                ? new FilledClassRoomState("", "", new List<string>(), false) 
-                : null);
-        
-        if (state == null) return current;
-        
-        var maxStudents = 10; // Default max students
-        
-        return eventPayload switch
+        switch (eventPayload)
         {
-            ClassRoomCreated created => new FilledClassRoomState(
-                created.ClassRoomId, 
-                created.Name,
-                new List<string>(),
-                false
-            ),
+            case ClassRoomCreated created:
+                return new AvailableClassRoomState(
+                    created.ClassRoomId, 
+                    created.Name,
+                    created.MaxStudents,
+                    created.MaxStudents // Initially all seats are available
+                );
+                
+            case StudentEnrolledInClassRoom enrolled:
+                var newAvailableSeats = state.AvailableSeats - 1;
+                
+                // If no more seats available, transition to FilledClassRoomState
+                if (newAvailableSeats <= 0)
+                {
+                    return new FilledClassRoomState(
+                        state.ClassRoomId,
+                        state.Name,
+                        new List<string> { enrolled.StudentId }, // Start tracking enrolled students
+                        true
+                    );
+                }
+                
+                return state with { AvailableSeats = newAvailableSeats };
+                
+            case StudentDroppedFromClassRoom:
+                return state with { AvailableSeats = state.AvailableSeats + 1 };
+                
+            default:
+                return state;
+        }
+    }
+
+    private ITagStatePayload ProjectFilledClassRoomState(FilledClassRoomState state, IEventPayload eventPayload)
+    {
+        switch (eventPayload)
+        {
+            case ClassRoomCreated created:
+                return new FilledClassRoomState(
+                    created.ClassRoomId, 
+                    created.Name,
+                    new List<string>(),
+                    false
+                );
             
-            StudentEnrolledInClassRoom enrolled => state with 
-            { 
-                EnrolledStudentIds = state.EnrolledStudentIds
-                    .Concat(new[] { enrolled.StudentId })
-                    .Distinct()
-                    .ToList(),
-                IsFull = state.EnrolledStudentIds
-                    .Concat(new[] { enrolled.StudentId })
-                    .Distinct()
-                    .Count() >= maxStudents
-            },
+            case StudentEnrolledInClassRoom enrolled:
+                return state with 
+                { 
+                    EnrolledStudentIds = state.EnrolledStudentIds
+                        .Concat(new[] { enrolled.StudentId })
+                        .Distinct()
+                        .ToList()
+                    // Note: IsFull remains true as we're already in FilledClassRoomState
+                };
             
-            StudentDroppedFromClassRoom dropped => state with
-            {
-                EnrolledStudentIds = state.EnrolledStudentIds
+            case StudentDroppedFromClassRoom dropped:
+                var newEnrolledList = state.EnrolledStudentIds
                     .Where(id => id != dropped.StudentId)
-                    .ToList(),
-                IsFull = false // No longer full after a drop
-            },
+                    .ToList();
+                
+                // Transition back to AvailableClassRoomState when a seat becomes available
+                // We need to know the max students - assuming it's tracked somewhere
+                // For now, using a default of 10
+                var maxStudents = 10;
+                var availableSeats = maxStudents - newEnrolledList.Count;
+                
+                return new AvailableClassRoomState(
+                    state.ClassRoomId,
+                    state.Name,
+                    maxStudents,
+                    availableSeats
+                );
             
-            _ => state
-        };
+            default:
+                return state;
+        }
     }
 }
