@@ -1,4 +1,4 @@
-namespace DcbLib.Commands;
+namespace DcbLib.Tags;
 
 /// <summary>
 /// Details about a tag write operation

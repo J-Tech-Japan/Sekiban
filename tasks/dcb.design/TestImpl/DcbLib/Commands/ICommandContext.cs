@@ -15,9 +15,18 @@ public interface ICommandContext
     /// <typeparam name="TState">The type of state payload expected</typeparam>
     /// <typeparam name="TProjector">The type of projector to use</typeparam>
     /// <param name="tag">The tag to query</param>
-    /// <returns>ResultBox containing the state or error information</returns>
-    Task<ResultBox<TState>> GetStateAsync<TState, TProjector>(ITag tag) 
+    /// <returns>ResultBox containing the TagStateTyped or error information</returns>
+    Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag) 
         where TState : ITagStatePayload
+        where TProjector : ITagProjector, new();
+
+    /// <summary>
+    /// Gets the current state for a specific tag using the specified projector, returning TagState
+    /// </summary>
+    /// <typeparam name="TProjector">The type of projector to use</typeparam>
+    /// <param name="tag">The tag to query</param>
+    /// <returns>ResultBox containing the TagState or error information</returns>
+    Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) 
         where TProjector : ITagProjector, new();
 
     /// <summary>
