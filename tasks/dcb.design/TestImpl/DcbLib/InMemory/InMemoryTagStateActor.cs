@@ -1,86 +1,214 @@
 using System.Text;
+using System.Text.Json;
 using DcbLib.Actors;
+using DcbLib.Storage;
 using DcbLib.Tags;
+using ResultBoxes;
 
 namespace DcbLib.InMemory;
 
 /// <summary>
 /// In-memory implementation of ITagStateActorCommon for testing
-/// Manages tag state and provides serializable state
+/// Computes tag state by reading events and projecting them
 /// </summary>
 public class InMemoryTagStateActor : ITagStateActorCommon
 {
-    private readonly TagState _tagState;
+    private readonly TagStateId _tagStateId;
+    private readonly IEventStore _eventStore;
+    private readonly DcbDomainTypes _domainTypes;
+    private TagState? _cachedState;
     private readonly object _stateLock = new();
     
-    public InMemoryTagStateActor(TagState tagState)
+    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes)
     {
-        _tagState = tagState ?? throw new ArgumentNullException(nameof(tagState));
+        if (string.IsNullOrWhiteSpace(tagStateId))
+            throw new ArgumentNullException(nameof(tagStateId));
+            
+        _tagStateId = TagStateId.Parse(tagStateId);
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+    }
+    
+    public string GetTagStateActorId()
+    {
+        return _tagStateId.ToString();
     }
     
     public SerializableTagState GetState()
     {
         lock (_stateLock)
         {
-            // Convert payload to bytes (if it exists)
-            byte[] payloadBytes;
-            if (_tagState.Payload != null)
+            var tagState = GetTagState();
+            
+            if (tagState.Payload == null)
             {
-                // For testing, use simple JSON serialization with proper options
-                var options = new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                };
-                var json = System.Text.Json.JsonSerializer.Serialize(_tagState.Payload, _tagState.Payload.GetType(), options);
-                payloadBytes = Encoding.UTF8.GetBytes(json);
+                return new SerializableTagState(
+                    Array.Empty<byte>(),
+                    tagState.Version,
+                    tagState.LastSortedUniqueId,
+                    tagState.TagGroup,
+                    tagState.TagContent,
+                    tagState.TagProjector,
+                    "None"
+                );
             }
-            else
-            {
-                payloadBytes = Array.Empty<byte>();
-            }
+            
+            var jsonOptions = _domainTypes.JsonSerializerOptions;
+            var payloadJson = JsonSerializer.Serialize(tagState.Payload, tagState.Payload.GetType(), jsonOptions);
+            var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
             
             return new SerializableTagState(
                 payloadBytes,
-                _tagState.Version,
-                _tagState.LastSortedUniqueId,
-                _tagState.TagGroup,
-                _tagState.TagContent,
-                _tagState.TagProjector,
-                _tagState.Payload?.GetType().Name ?? "None"
+                tagState.Version,
+                tagState.LastSortedUniqueId,
+                tagState.TagGroup,
+                tagState.TagContent,
+                tagState.TagProjector,
+                tagState.Payload.GetType().Name
             );
         }
     }
     
-    public string GetTagStateActorId()
-    {
-        return $"{_tagState.TagGroup}:{_tagState.TagContent}:state";
-    }
-    
-    /// <summary>
-    /// Updates the internal state (for testing purposes)
-    /// </summary>
-    public void UpdateState(TagState newState)
-    {
-        lock (_stateLock)
-        {
-            // In a real implementation, this would be handled by the actor framework
-            // For testing, we allow direct updates
-            if (newState.TagGroup != _tagState.TagGroup || newState.TagContent != _tagState.TagContent)
-            {
-                throw new InvalidOperationException("Cannot change tag identity");
-            }
-        }
-    }
-    
-    /// <summary>
-    /// Gets the current tag state (for testing purposes)
-    /// </summary>
     public TagState GetTagState()
     {
         lock (_stateLock)
         {
-            return _tagState;
+            // Return cached state if available
+            if (_cachedState != null)
+            {
+                return _cachedState;
+            }
+            
+            // Compute state from events
+            _cachedState = ComputeStateFromEvents();
+            return _cachedState;
+        }
+    }
+    
+    public void UpdateState(TagState newState)
+    {
+        lock (_stateLock)
+        {
+            // Validate that the identity hasn't changed
+            if (newState.TagGroup != _tagStateId.TagGroup || 
+                newState.TagContent != _tagStateId.TagContent ||
+                newState.TagProjector != _tagStateId.TagProjectorName)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot change tag state identity. Expected {_tagStateId}, " +
+                    $"but got {newState.TagGroup}:{newState.TagContent}:{newState.TagProjector}");
+            }
+            
+            _cachedState = newState;
+        }
+    }
+    
+    private TagState ComputeStateFromEvents()
+    {
+        // Create the tag to query events
+        var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
+        
+        // Get the projector
+        var projectorResult = _domainTypes.TagProjectorTypes.GetTagProjector(_tagStateId.TagProjectorName);
+        if (!projectorResult.IsSuccess)
+        {
+            // Return empty state if projector not found
+            return new TagState(
+                null!,
+                0,
+                "",
+                _tagStateId.TagGroup,
+                _tagStateId.TagContent,
+                _tagStateId.TagProjectorName
+            );
+        }
+        
+        var projector = projectorResult.GetValue();
+        
+        // Read all events for this tag
+        var eventsResult = _eventStore.ReadEventsByTagAsync(tag).Result;
+        if (!eventsResult.IsSuccess)
+        {
+            // Return empty state if events cannot be read
+            return new TagState(
+                null!,
+                0,
+                "",
+                _tagStateId.TagGroup,
+                _tagStateId.TagContent,
+                _tagStateId.TagProjectorName
+            );
+        }
+        
+        var events = eventsResult.GetValue().ToList();
+        
+        // Project events to build state
+        ITagStatePayload? currentState = null;
+        var version = 0;
+        var lastSortedUniqueId = "";
+        
+        foreach (var evt in events)
+        {
+            // Project the event - projector should handle null state
+            currentState = projector.Project(currentState!, evt.Payload);
+            version++;
+            
+            // Keep track of the last sortable unique id
+            if (!string.IsNullOrEmpty(evt.SortableUniqueIdValue))
+            {
+                lastSortedUniqueId = evt.SortableUniqueIdValue;
+            }
+        }
+        
+        return new TagState(
+            currentState!,
+            version,
+            lastSortedUniqueId,
+            _tagStateId.TagGroup,
+            _tagStateId.TagContent,
+            _tagStateId.TagProjectorName
+        );
+    }
+    
+    private ITag CreateTag(string tagGroup, string tagContent)
+    {
+        // Create a generic tag implementation for the actor
+        return new GenericTag(tagGroup, tagContent);
+    }
+    
+    private ITagStatePayload? CreateInitialState(string tagGroup)
+    {
+        // Return null to let the projector handle initial state
+        return null;
+    }
+    
+    /// <summary>
+    /// Generic tag implementation for use within the actor
+    /// </summary>
+    private class GenericTag : ITag
+    {
+        private readonly string _tagGroup;
+        private readonly string _tagContent;
+        
+        public GenericTag(string tagGroup, string tagContent)
+        {
+            _tagGroup = tagGroup;
+            _tagContent = tagContent;
+        }
+        
+        public bool IsConsistencyTag() => true; // Assume all tags are consistency tags for now
+        public string GetTagGroup() => _tagGroup;
+        public string GetTag() => $"{_tagGroup}:{_tagContent}";
+    }
+    
+    /// <summary>
+    /// Clears the cached state, forcing recomputation on next access
+    /// </summary>
+    public void ClearCache()
+    {
+        lock (_stateLock)
+        {
+            _cachedState = null;
         }
     }
 }

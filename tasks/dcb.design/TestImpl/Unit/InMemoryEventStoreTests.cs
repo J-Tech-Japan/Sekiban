@@ -249,7 +249,7 @@ public class InMemoryEventStoreTests
         var tagState = new TagState(
             null!, // Payload
             1,
-            100,
+            SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
             studentTag.GetTagGroup(),
             studentTag.GetTag(),
             "TestProjector"
@@ -283,7 +283,7 @@ public class InMemoryEventStoreTests
         var tagState = new TagState(
             null!,
             1,
-            100,
+            SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
             studentTag.GetTagGroup(),
             studentTag.GetTag(),
             "TestProjector"

@@ -94,7 +94,7 @@ public class InMemoryEventStore : IEventStore
                     _tags[tagKey] = existingState with 
                     { 
                         Version = existingState.Version + 1, 
-                        LastSortedUniqueId = (int)_eventCounter 
+                        LastSortedUniqueId = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{_eventCounter:D3}"
                     };
                 }
                 else
@@ -103,7 +103,7 @@ public class InMemoryEventStore : IEventStore
                     _tags[tagKey] = new TagState(
                         null!, // Payload would be computed by projector
                         1,
-                        (int)_eventCounter,
+                        $"{DateTime.UtcNow:yyyyMMddHHmmss}_{_eventCounter:D3}",
                         tag.GetTagGroup(),
                         tag.GetTag(),
                         "InMemoryProjector"
