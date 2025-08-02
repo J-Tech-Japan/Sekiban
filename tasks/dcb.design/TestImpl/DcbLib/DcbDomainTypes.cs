@@ -1,0 +1,42 @@
+using System.Text.Json;
+using DcbLib.Domains;
+
+namespace DcbLib;
+
+/// <summary>
+/// Main class that aggregates all domain type management interfaces for DCB
+/// </summary>
+public record DcbDomainTypes
+{
+    public DcbDomainTypes(
+        IEventTypes eventTypes,
+        ITagTypes tagTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ICommandTypes commandTypes,
+        JsonSerializerOptions? jsonSerializerOptions = null)
+    {
+        EventTypes = eventTypes;
+        TagTypes = tagTypes;
+        TagProjectorTypes = tagProjectorTypes;
+        CommandTypes = commandTypes;
+        JsonSerializerOptions = jsonSerializerOptions ?? new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
+    }
+
+    public IEventTypes EventTypes { get; init; }
+    public ITagTypes TagTypes { get; init; }
+    public ITagProjectorTypes TagProjectorTypes { get; init; }
+    public ICommandTypes CommandTypes { get; init; }
+    public JsonSerializerOptions JsonSerializerOptions { get; init; }
+}
+
+/// <summary>
+/// Interface for providing DcbDomainTypes
+/// </summary>
+public interface IDcbDomainTypesProvider
+{
+    static abstract DcbDomainTypes Generate(JsonSerializerOptions jsonSerializerOptions);
+}
