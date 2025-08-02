@@ -36,7 +36,7 @@ public class InMemoryTagStateActorTests
         await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         var state = actor.GetTagState();
         
         // Assert
@@ -76,7 +76,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         var state = actor.GetTagState();
         
         // Assert
@@ -110,7 +110,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         var state = actor.GetTagState();
         
         // Assert
@@ -146,7 +146,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         var state = actor.GetTagState();
         
         // Assert
@@ -165,7 +165,7 @@ public class InMemoryTagStateActorTests
         var tagStateId = new TagStateId(studentTag, new StudentProjector());
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         var state = actor.GetTagState();
         
         // Assert
@@ -186,7 +186,7 @@ public class InMemoryTagStateActorTests
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new StudentCreated(studentId, "Bob Brown", 4), studentTag));
         
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         // Act - Get state twice
         var state1 = actor.GetTagState();
@@ -224,7 +224,7 @@ public class InMemoryTagStateActorTests
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
         
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         // Act
         var serializableState = actor.GetState();
@@ -263,7 +263,7 @@ public class InMemoryTagStateActorTests
         var studentTag = new StudentTag(studentId);
         var tagStateId = new TagStateId(studentTag, new StudentProjector());
         
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         var newState = new TagState(
             new StudentState(studentId, "Updated Name", 10, new List<Guid> { Guid.NewGuid() }),
@@ -295,7 +295,7 @@ public class InMemoryTagStateActorTests
         var studentTag = new StudentTag(studentId);
         var tagStateId = new TagStateId(studentTag, new StudentProjector());
         
-        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         var differentState = new TagState(
             null!,

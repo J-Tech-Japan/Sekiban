@@ -232,7 +232,7 @@ public class InMemoryEventStoreTests
         
         foreach (var stream in tagStreams)
         {
-            Assert.Equal($"{studentTag.GetTagGroup()}:{studentTag.GetTag()}", stream.Tag);
+            Assert.Equal(studentTag.GetTag(), stream.Tag);
             Assert.NotEqual(Guid.Empty, stream.EventId);
             Assert.NotEmpty(stream.SortableUniqueId);
         }
@@ -259,7 +259,7 @@ public class InMemoryEventStoreTests
         // Assert
         Assert.True(writeResult.IsSuccess);
         var writeResultValue = writeResult.GetValue();
-        Assert.Equal($"{studentTag.GetTagGroup()}:{studentTag.GetTag()}", writeResultValue.Tag);
+        Assert.Equal(studentTag.GetTag(), writeResultValue.Tag);
         Assert.Equal(1, writeResultValue.Version);
         
         // Verify tag exists

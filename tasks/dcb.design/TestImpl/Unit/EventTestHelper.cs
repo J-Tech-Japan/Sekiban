@@ -28,7 +28,7 @@ public static class EventTestHelper
             payload.GetType().Name,
             eventId,
             metadata,
-            tags.Select(t => $"{t.GetTagGroup()}:{t.GetTag()}").ToList()
+            tags.Select(t => t.GetTag()).ToList()
         );
     }
     

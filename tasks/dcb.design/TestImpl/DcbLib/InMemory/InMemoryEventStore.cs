@@ -9,11 +9,12 @@ namespace DcbLib.InMemory;
 
 /// <summary>
 /// In-memory implementation of IEventStore for testing and development
+/// Stores events and tag streams only - no tag state management
 /// </summary>
 public class InMemoryEventStore : IEventStore
 {
     private readonly ConcurrentDictionary<Guid, Event> _events = new();
-    private readonly ConcurrentDictionary<string, TagState> _tags = new();
+    private readonly ConcurrentDictionary<string, List<TagStream>> _tagStreams = new();
     private readonly List<Event> _eventOrder = new();
     private readonly object _eventLock = new();
     
@@ -37,7 +38,7 @@ public class InMemoryEventStore : IEventStore
     {
         lock (_eventLock)
         {
-            var tagString = $"{tag.GetTagGroup()}:{tag.GetTag()}";
+            var tagString = tag.GetTag();
             var events = _eventOrder.Where(e => e.Tags.Contains(tagString));
             
             if (since != null)
@@ -64,37 +65,17 @@ public class InMemoryEventStore : IEventStore
             _events[evt.Id] = evt;
             _eventOrder.Add(evt);
             
-            // Update tag states based on tags in the event
+            // Add tag streams for each tag in the event
             foreach (var tagString in evt.Tags)
             {
-                var tagKey = tagString;
+                var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
                 
-                if (_tags.TryGetValue(tagKey, out var existingState))
+                if (!_tagStreams.ContainsKey(tagString))
                 {
-                    // Update existing tag state
-                    _tags[tagKey] = existingState with 
-                    { 
-                        Version = existingState.Version + 1, 
-                        LastSortedUniqueId = evt.SortableUniqueIdValue
-                    };
+                    _tagStreams[tagString] = new List<TagStream>();
                 }
-                else
-                {
-                    // Parse tag string to get group and content
-                    var tagParts = tagString.Split(':');
-                    if (tagParts.Length >= 2)
-                    {
-                        // Create new tag state
-                        _tags[tagKey] = new TagState(
-                            new EmptyTagStatePayload(), // Initial state
-                            1,
-                            evt.SortableUniqueIdValue,
-                            tagParts[0], // Tag group
-                            tagString,   // Full tag string
-                            "InMemoryProjector"
-                        );
-                    }
-                }
+                
+                _tagStreams[tagString].Add(tagStream);
             }
             
             return Task.FromResult(ResultBox.FromValue(evt.Id));
@@ -103,49 +84,79 @@ public class InMemoryEventStore : IEventStore
     
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
-        var tagString = $"{tag.GetTagGroup()}:{tag.GetTag()}";
+        var tagString = tag.GetTag();
         
         lock (_eventLock)
         {
-            var tagStreams = _eventOrder
-                .Where(e => e.Tags.Contains(tagString))
-                .Select(e => new TagStream(tagString, e.Id, e.SortableUniqueIdValue))
-                .ToList();
-                
-            return Task.FromResult(ResultBox.FromValue(tagStreams.AsEnumerable()));
+            if (_tagStreams.TryGetValue(tagString, out var streams))
+            {
+                return Task.FromResult(ResultBox.FromValue(streams.AsEnumerable()));
+            }
+            
+            return Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
         }
     }
     
     public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
     {
-        var tagKey = $"{tag.GetTagGroup()}:{tag.GetTag()}";
+        var tagString = tag.GetTag();
         
-        return _tags.TryGetValue(tagKey, out var state)
-            ? Task.FromResult(ResultBox.FromValue(state))
-            : Task.FromResult(ResultBox.Error<TagState>(new Exception($"Tag {tagKey} not found")));
+        lock (_eventLock)
+        {
+            if (_tagStreams.TryGetValue(tagString, out var streams) && streams.Any())
+            {
+                var latestStream = streams.OrderBy(s => s.SortableUniqueId).Last();
+                var version = streams.Count;
+                
+                // Parse tag string to get group
+                var tagParts = tagString.Split(':');
+                var tagGroup = tagParts.Length > 0 ? tagParts[0] : "";
+                
+                // Return a simple TagState based on the latest stream
+                var tagState = new TagState(
+                    new EmptyTagStatePayload(),
+                    version,
+                    latestStream.SortableUniqueId,
+                    tagGroup,
+                    tagString,
+                    "InMemoryProjector"
+                );
+                
+                return Task.FromResult(ResultBox.FromValue(tagState));
+            }
+            
+            return Task.FromResult(ResultBox.Error<TagState>(new Exception($"Tag {tagString} not found")));
+        }
     }
     
     public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
-        var tagKey = $"{tag.GetTagGroup()}:{tag.GetTag()}";
-        return Task.FromResult(ResultBox.FromValue(_tags.ContainsKey(tagKey)));
+        var tagString = tag.GetTag();
+        
+        lock (_eventLock)
+        {
+            return Task.FromResult(ResultBox.FromValue(_tagStreams.ContainsKey(tagString)));
+        }
     }
     
     public Task<ResultBox<TagWriteResult>> WriteTagAsync(ITag tag, TagState state)
     {
-        var tagKey = $"{tag.GetTagGroup()}:{tag.GetTag()}";
+        var tagString = tag.GetTag();
         
         lock (_eventLock)
         {
-            if (_tags.ContainsKey(tagKey))
+            // Check if tag already exists
+            if (_tagStreams.ContainsKey(tagString))
             {
                 return Task.FromResult(ResultBox.Error<TagWriteResult>(
-                    new Exception($"Tag {tagKey} already exists")));
+                    new Exception($"Tag {tagString} already exists")));
             }
             
-            _tags[tagKey] = state;
+            // Create an empty tag stream list for this tag
+            _tagStreams[tagString] = new List<TagStream>();
+            
             return Task.FromResult(ResultBox.FromValue(
-                new TagWriteResult(tagKey, state.Version, DateTimeOffset.UtcNow)));
+                new TagWriteResult(tagString, state.Version, DateTimeOffset.UtcNow)));
         }
     }
 }

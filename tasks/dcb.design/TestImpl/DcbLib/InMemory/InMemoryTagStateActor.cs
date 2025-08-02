@@ -31,7 +31,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     
     public string GetTagStateActorId()
     {
-        return _tagStateId.ToString();
+        return _tagStateId.GetTagStateId();
     }
     
     public SerializableTagState GetState()

@@ -34,7 +34,12 @@ public class TagStateId
     /// <summary>
     /// Gets the string representation of the TagStateId
     /// </summary>
-    public override string ToString() => $"{TagGroup}:{TagContent}:{TagProjectorName}";
+    public string GetTagStateId() => $"{TagGroup}:{TagContent}:{TagProjectorName}";
+    
+    /// <summary>
+    /// Override ToString to return the TagStateId string
+    /// </summary>
+    public override string ToString() => GetTagStateId();
     
     /// <summary>
     /// Parses a string into a TagStateId
