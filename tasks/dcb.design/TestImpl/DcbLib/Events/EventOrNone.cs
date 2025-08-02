@@ -7,7 +7,7 @@ namespace DcbLib.Events;
 /// Represents either an event with tags or no event.
 /// Used in command handlers to indicate optional event emission.
 /// </summary>
-public record EventOrNone(EventPayloadWithTags? EventWithTags, bool HasEvent)
+public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEvent)
 {
     /// <summary>
     /// Represents no event
@@ -42,6 +42,10 @@ public record EventOrNone(EventPayloadWithTags? EventWithTags, bool HasEvent)
     /// </summary>
     public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventWithTags) => 
         ResultBox.FromValue(FromValue(eventWithTags));
+    public static ResultBox<EventOrNone> EventWithTags(
+        IEventPayload eventPayload,
+        params IEnumerable<ITag> tags) => 
+        ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList())));
 
     /// <summary>
     /// Creates a ResultBox containing an event with tags
@@ -60,8 +64,8 @@ public record EventOrNone(EventPayloadWithTags? EventWithTags, bool HasEvent)
     /// </summary>
     /// <exception cref="ResultsInvalidOperationException">Thrown when there is no event</exception>
     public EventPayloadWithTags GetValue() =>
-        HasEvent && EventWithTags is not null 
-            ? EventWithTags 
+        HasEvent && EventPayloadWithTags is not null 
+            ? EventPayloadWithTags 
             : throw new ResultsInvalidOperationException("No value");
 
     /// <summary>

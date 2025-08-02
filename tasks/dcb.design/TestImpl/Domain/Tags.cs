@@ -3,30 +3,30 @@ using DcbLib.Tags;
 
 namespace Domain;
 
-public static class TagHelper
-{
-    public static List<ITag> GetTagsForEvent(IEventPayload eventPayload)
-    {
-        return eventPayload switch
-        {
-            StudentCreated e => new List<ITag> { new StudentTag(e.StudentId) },
-            ClassRoomCreated e => new List<ITag> { new ClassRoomTag(e.ClassRoomId) },
+// public static class TagHelper
+// {
+//     public static List<ITag> GetTagsForEvent(IEventPayload eventPayload)
+//     {
+//         return eventPayload switch
+//         {
+//             StudentCreated e => new List<ITag> { new StudentTag(e.StudentId) },
+//             ClassRoomCreated e => new List<ITag> { new ClassRoomTag(e.ClassRoomId) },
             
-            StudentEnrolledInClassRoom e => new List<ITag> 
-            { 
-                new StudentTag(e.StudentId), 
-                new ClassRoomTag(e.ClassRoomId) 
-            },
-            StudentDroppedFromClassRoom e => new List<ITag> 
-            { 
-                new StudentTag(e.StudentId), 
-                new ClassRoomTag(e.ClassRoomId) 
-            },
+//             StudentEnrolledInClassRoom e => new List<ITag> 
+//             { 
+//                 new StudentTag(e.StudentId), 
+//                 new ClassRoomTag(e.ClassRoomId) 
+//             },
+//             StudentDroppedFromClassRoom e => new List<ITag> 
+//             { 
+//                 new StudentTag(e.StudentId), 
+//                 new ClassRoomTag(e.ClassRoomId) 
+//             },
             
-            _ => new List<ITag>()
-        };
-    }
-}
+//             _ => new List<ITag>()
+//         };
+//     }
+// }
 
 public record StudentTag(Guid StudentId) : ITag
 {
