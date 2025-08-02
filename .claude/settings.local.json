@@ -68,7 +68,10 @@
       "Bash(pnpm list:*)",
       "Bash(pnpm typecheck:*)",
       "Bash(redis-cli:*)",
-      "Bash(./run-with-postgres.sh:*)"
+      "Bash(./run-with-postgres.sh:*)",
+      "mcp__sekibanDocument__SearchDocumentation",
+      "mcp__sekibanDocument__GetDocument",
+      "mcp__sekibanDocument__GetDocumentSection"
     ],
     "deny": []
   },

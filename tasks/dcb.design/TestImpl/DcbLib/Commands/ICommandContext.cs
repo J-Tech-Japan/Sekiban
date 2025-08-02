@@ -1,4 +1,5 @@
 using DcbLib.Tags;
+using DcbLib.Events;
 using ResultBoxes;
 
 namespace DcbLib.Commands;
@@ -42,4 +43,11 @@ public interface ICommandContext
     /// <param name="tag">The tag to query</param>
     /// <returns>The current version number or 0 if not found</returns>
     Task<long> GetTagVersionAsync(ITag tag);
+
+    /// <summary>
+    /// Appends an event with tags to the context
+    /// </summary>
+    /// <param name="ev">The event with tags to append</param>
+    /// <returns>ResultBox containing EventOrNone representing the appended event</returns>
+    ResultBox<EventOrNone> AppendEvent(EventPayloadWithTags ev);
 }
