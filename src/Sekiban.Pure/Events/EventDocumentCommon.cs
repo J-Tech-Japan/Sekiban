@@ -16,7 +16,7 @@ public record EventDocumentCommon(
     string PayloadTypeName,
     DateTime TimeStamp,
     string PartitionKey,
-    EventMetadata Metadata) : IEventPayload
+    EventMetadata Metadata)
 {
     public ResultBox<IEvent> ToEvent<TEventPayload>(JsonSerializerOptions options) where TEventPayload : IEventPayload
     {
