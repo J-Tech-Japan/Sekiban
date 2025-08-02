@@ -34,7 +34,8 @@ public class InMemoryEventStoreTests
         var tags = new List<ITag> { new StudentTag(studentId) };
         
         // Act
-        var result = await _store.WriteEventAsync(eventPayload, tags);
+        var evt = EventTestHelper.CreateEvent(eventPayload, tags);
+        var result = await _store.WriteEventAsync(evt);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -49,7 +50,8 @@ public class InMemoryEventStoreTests
         var eventPayload = new StudentCreated(studentId, "John Doe", 5);
         var tags = new List<ITag> { new StudentTag(studentId) };
         
-        var writeResult = await _store.WriteEventAsync(eventPayload, tags);
+        var evt = EventTestHelper.CreateEvent(eventPayload, tags);
+        var writeResult = await _store.WriteEventAsync(evt);
         var eventId = writeResult.GetValue();
         
         // Act
@@ -57,11 +59,11 @@ public class InMemoryEventStoreTests
         
         // Assert
         Assert.True(readResult.IsSuccess);
-        var evt = readResult.GetValue();
-        Assert.Equal(eventId, evt.Id);
-        Assert.Equal("StudentCreated", evt.EventType);
-        Assert.IsType<StudentCreated>(evt.Payload);
-        var payload = (StudentCreated)evt.Payload;
+        var readEvent = readResult.GetValue();
+        Assert.Equal(eventId, readEvent.Id);
+        Assert.Equal("StudentCreated", readEvent.EventType);
+        Assert.IsType<StudentCreated>(readEvent.Payload);
+        var payload = (StudentCreated)readEvent.Payload;
         Assert.Equal(studentId, payload.StudentId);
         Assert.Equal("John Doe", payload.Name);
     }
@@ -87,9 +89,9 @@ public class InMemoryEventStoreTests
         var student2 = new StudentCreated(Guid.NewGuid(), "Student 2", 5);
         var classroom = new ClassRoomCreated(Guid.NewGuid(), "Math 101", 20);
         
-        await _store.WriteEventAsync(student1, new List<ITag> { new StudentTag(student1.StudentId) });
-        await _store.WriteEventAsync(student2, new List<ITag> { new StudentTag(student2.StudentId) });
-        await _store.WriteEventAsync(classroom, new List<ITag> { new ClassRoomTag(classroom.ClassRoomId) });
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student1, new StudentTag(student1.StudentId)));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student2, new StudentTag(student2.StudentId)));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(classroom, new ClassRoomTag(classroom.ClassRoomId)));
         
         // Act
         var result = await _store.ReadAllEventsAsync();
@@ -108,9 +110,9 @@ public class InMemoryEventStoreTests
         var student2 = new StudentCreated(Guid.NewGuid(), "Student 2", 5);
         var student3 = new StudentCreated(Guid.NewGuid(), "Student 3", 5);
         
-        await _store.WriteEventAsync(student1, new List<ITag> { new StudentTag(student1.StudentId) });
-        var secondEventResult = await _store.WriteEventAsync(student2, new List<ITag> { new StudentTag(student2.StudentId) });
-        await _store.WriteEventAsync(student3, new List<ITag> { new StudentTag(student3.StudentId) });
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student1, new StudentTag(student1.StudentId)));
+        var secondEventResult = await _store.WriteEventAsync(EventTestHelper.CreateEvent(student2, new StudentTag(student2.StudentId)));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student3, new StudentTag(student3.StudentId)));
         
         // Get the sortable ID of the second event
         var secondEvent = (await _store.ReadEventAsync(secondEventResult.GetValue())).GetValue();
@@ -140,9 +142,9 @@ public class InMemoryEventStoreTests
         var studentTag = new StudentTag(studentId);
         var classRoomTag = new ClassRoomTag(classRoomId);
         
-        await _store.WriteEventAsync(studentCreated, new List<ITag> { studentTag });
-        await _store.WriteEventAsync(enrolled, new List<ITag> { studentTag, classRoomTag });
-        await _store.WriteEventAsync(classRoomCreated, new List<ITag> { classRoomTag });
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(studentCreated, studentTag));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(enrolled, new List<ITag> { studentTag, classRoomTag }));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(classRoomCreated, classRoomTag));
         
         // Act
         var studentEvents = await _store.ReadEventsByTagAsync(studentTag);
@@ -167,7 +169,7 @@ public class InMemoryEventStoreTests
         var studentTag = new StudentTag(studentId);
         var eventPayload = new StudentCreated(studentId, "John", 5);
         
-        await _store.WriteEventAsync(eventPayload, new List<ITag> { studentTag });
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(eventPayload, studentTag));
         
         // Act
         var exists = await _store.TagExistsAsync(studentTag);
@@ -190,12 +192,10 @@ public class InMemoryEventStoreTests
         
         // Create multiple events for the same tag
         await _store.WriteEventAsync(
-            new StudentCreated(studentId, "John", 5), 
-            new List<ITag> { studentTag });
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "John", 5), studentTag));
             
         await _store.WriteEventAsync(
-            new StudentEnrolledInClassRoom(studentId, classRoomId),
-            new List<ITag> { studentTag });
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag));
         
         // Act
         var result = await _store.GetLatestTagAsync(studentTag);
@@ -217,12 +217,10 @@ public class InMemoryEventStoreTests
         var classRoomId = Guid.NewGuid();
         
         await _store.WriteEventAsync(
-            new StudentCreated(studentId, "John", 5), 
-            new List<ITag> { studentTag });
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "John", 5), studentTag));
             
         await _store.WriteEventAsync(
-            new StudentEnrolledInClassRoom(studentId, classRoomId),
-            new List<ITag> { studentTag });
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag));
         
         // Act
         var result = await _store.ReadTagsAsync(studentTag);
@@ -278,7 +276,7 @@ public class InMemoryEventStoreTests
         var eventPayload = new StudentCreated(studentId, "John", 5);
         
         // Write an event which creates the tag
-        await _store.WriteEventAsync(eventPayload, new List<ITag> { studentTag });
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(eventPayload, studentTag));
         
         var tagState = new TagState(
             null!,
@@ -307,8 +305,7 @@ public class InMemoryEventStoreTests
             var studentId = Guid.NewGuid();
             events.Add(($"Student {i}", studentId));
             await _store.WriteEventAsync(
-                new StudentCreated(studentId, $"Student {i}", 5),
-                new List<ITag> { new StudentTag(studentId) });
+                EventTestHelper.CreateEvent(new StudentCreated(studentId, $"Student {i}", 5), new StudentTag(studentId)));
             
             // Small delay to ensure different timestamps
             await Task.Delay(10);
@@ -351,8 +348,8 @@ public class InMemoryEventStoreTests
         
         // Act
         await _store.WriteEventAsync(
-            new StudentEnrolledInClassRoom(studentId, classRoomId),
-            new List<ITag> { studentTag, classRoomTag });
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), 
+                new List<ITag> { studentTag, classRoomTag }));
         
         // Assert
         var studentExists = await _store.TagExistsAsync(studentTag);
@@ -385,8 +382,8 @@ public class InMemoryEventStoreTests
             classRoomIds.Add(classRoomId);
             
             await _store.WriteEventAsync(
-                new StudentEnrolledInClassRoom(studentId, classRoomId),
-                new List<ITag> { studentTag, new ClassRoomTag(classRoomId) });
+                EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId),
+                    new List<ITag> { studentTag, new ClassRoomTag(classRoomId) }));
             
             await Task.Delay(10); // Ensure different timestamps
         }
@@ -428,8 +425,7 @@ public class InMemoryEventStoreTests
         for (int i = 0; i < 5; i++)
         {
             var writeResult = await _store.WriteEventAsync(
-                new StudentCreated(studentId, $"Student Version {i}", 5),
-                new List<ITag> { studentTag });
+                EventTestHelper.CreateEvent(new StudentCreated(studentId, $"Student Version {i}", 5), studentTag));
             
             var eventId = writeResult.GetValue();
             eventIds.Add(eventId);
@@ -486,23 +482,21 @@ public class InMemoryEventStoreTests
         
         // Create events in specific order
         await _store.WriteEventAsync(
-            new StudentCreated(studentId, "John", 5),
-            new List<ITag> { studentTag });
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "John", 5), studentTag));
         await Task.Delay(10);
         
         await _store.WriteEventAsync(
-            new ClassRoomCreated(classRoomId, "Math", 20),
-            new List<ITag> { classRoomTag });
+            EventTestHelper.CreateEvent(new ClassRoomCreated(classRoomId, "Math", 20), classRoomTag));
         await Task.Delay(10);
         
         await _store.WriteEventAsync(
-            new StudentEnrolledInClassRoom(studentId, classRoomId),
-            new List<ITag> { studentTag, classRoomTag });
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), 
+                new List<ITag> { studentTag, classRoomTag }));
         await Task.Delay(10);
         
         await _store.WriteEventAsync(
-            new StudentDroppedFromClassRoom(studentId, classRoomId),
-            new List<ITag> { studentTag, classRoomTag });
+            EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), 
+                new List<ITag> { studentTag, classRoomTag }));
         
         // Act
         var allEvents = (await _store.ReadAllEventsAsync()).GetValue().ToList();

@@ -40,7 +40,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         {
             var tagState = GetTagState();
             
-            if (tagState.Payload == null)
+            if (tagState.Payload is EmptyTagStatePayload)
             {
                 return new SerializableTagState(
                     Array.Empty<byte>(),
@@ -49,7 +49,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
                     tagState.TagGroup,
                     tagState.TagContent,
                     tagState.TagProjector,
-                    "None"
+                    "EmptyTagStatePayload"
                 );
             }
             
@@ -114,7 +114,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         {
             // Return empty state if projector not found
             return new TagState(
-                null!,
+                new EmptyTagStatePayload(),
                 0,
                 "",
                 _tagStateId.TagGroup,
@@ -131,7 +131,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         {
             // Return empty state if events cannot be read
             return new TagState(
-                null!,
+                new EmptyTagStatePayload(),
                 0,
                 "",
                 _tagStateId.TagGroup,
@@ -149,8 +149,14 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         
         foreach (var evt in events)
         {
-            // Project the event - projector should handle null state
-            currentState = projector.Project(currentState!, evt.Payload);
+            // Initialize state with EmptyTagStatePayload if needed
+            if (currentState == null)
+            {
+                currentState = new EmptyTagStatePayload();
+            }
+            
+            // Project the event
+            currentState = projector.Project(currentState, evt.Payload);
             version++;
             
             // Keep track of the last sortable unique id
@@ -160,8 +166,14 @@ public class InMemoryTagStateActor : ITagStateActorCommon
             }
         }
         
+        // If no events were processed, ensure we have at least EmptyTagStatePayload
+        if (currentState == null)
+        {
+            currentState = new EmptyTagStatePayload();
+        }
+        
         return new TagState(
-            currentState!,
+            currentState,
             version,
             lastSortedUniqueId,
             _tagStateId.TagGroup,

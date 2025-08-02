@@ -33,7 +33,7 @@ public interface IEventStore
     /// <summary>
     /// Writes an event to the event store
     /// </summary>
-    Task<ResultBox<Guid>> WriteEventAsync(IEventPayload eventPayload, List<ITag> tags);
+    Task<ResultBox<Guid>> WriteEventAsync(Event evt);
     
     // Tag operations
     

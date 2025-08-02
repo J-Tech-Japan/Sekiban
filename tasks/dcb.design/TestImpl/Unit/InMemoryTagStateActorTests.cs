@@ -1,0 +1,312 @@
+using DcbLib;
+using DcbLib.Common;
+using DcbLib.Events;
+using DcbLib.InMemory;
+using DcbLib.Tags;
+using Domain;
+using ResultBoxes;
+using Xunit;
+
+namespace Unit;
+
+/// <summary>
+/// Tests for InMemoryTagStateActor with real domain events
+/// </summary>
+public class InMemoryTagStateActorTests
+{
+    private readonly InMemoryEventStore _eventStore;
+    private readonly DcbDomainTypes _domainTypes;
+    
+    public InMemoryTagStateActorTests()
+    {
+        _eventStore = new InMemoryEventStore();
+        _domainTypes = DomainType.GetDomainTypes();
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Compute_State_From_Events()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        // Add StudentCreated event
+        var studentCreatedEvent = new StudentCreated(studentId, "John Doe", 5);
+        await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag));
+        
+        // Act
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var state = actor.GetTagState();
+        
+        // Assert
+        Assert.NotNull(state);
+        Assert.Equal("Student", state.TagGroup);
+        Assert.Equal(studentId.ToString(), state.TagContent);
+        Assert.Equal("StudentProjector", state.TagProjector);
+        Assert.Equal(1, state.Version);
+        Assert.NotEmpty(state.LastSortedUniqueId);
+        
+        var studentState = state.Payload as StudentState;
+        Assert.NotNull(studentState);
+        Assert.Equal(studentId, studentState.StudentId);
+        Assert.Equal("John Doe", studentState.Name);
+        Assert.Equal(5, studentState.MaxClassCount);
+        Assert.Empty(studentState.EnrolledClassRoomIds);
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Handle_Multiple_Events()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var classRoomId1 = Guid.NewGuid();
+        var classRoomId2 = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        // Add multiple events
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Smith", 3), studentTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag));
+        
+        // Act
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var state = actor.GetTagState();
+        
+        // Assert
+        Assert.Equal(3, state.Version);
+        var studentState = state.Payload as StudentState;
+        Assert.NotNull(studentState);
+        Assert.Equal(2, studentState.EnrolledClassRoomIds.Count);
+        Assert.Contains(classRoomId1, studentState.EnrolledClassRoomIds);
+        Assert.Contains(classRoomId2, studentState.EnrolledClassRoomIds);
+        Assert.Equal(1, studentState.GetRemaining()); // MaxClassCount(3) - Enrolled(2) = 1
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Handle_ClassRoom_State()
+    {
+        // Arrange
+        var classRoomId = Guid.NewGuid();
+        var studentId1 = Guid.NewGuid();
+        var studentId2 = Guid.NewGuid();
+        var classRoomTag = new ClassRoomTag(classRoomId);
+        var tagStateId = new TagStateId(classRoomTag, new ClassRoomProjector());
+        
+        // Add ClassRoom events
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new ClassRoomCreated(classRoomId, "Math 101", 10), classRoomTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId1, classRoomId), classRoomTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag));
+        
+        // Act
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var state = actor.GetTagState();
+        
+        // Assert
+        Assert.Equal(3, state.Version);
+        var classRoomState = state.Payload as AvailableClassRoomState;
+        Assert.NotNull(classRoomState);
+        Assert.Equal(classRoomId, classRoomState.ClassRoomId);
+        Assert.Equal("Math 101", classRoomState.Name);
+        Assert.Equal(10, classRoomState.MaxStudents);
+        Assert.Equal(2, classRoomState.EnrolledStudentIds.Count);
+        Assert.Contains(studentId1, classRoomState.EnrolledStudentIds);
+        Assert.Contains(studentId2, classRoomState.EnrolledStudentIds);
+        Assert.Equal(8, classRoomState.GetRemaining());
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Handle_Student_Dropped_From_ClassRoom()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var classRoomId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        // Add events
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Alice Johnson", 5), studentTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag));
+            
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag));
+        
+        // Act
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var state = actor.GetTagState();
+        
+        // Assert
+        Assert.Equal(3, state.Version);
+        var studentState = state.Payload as StudentState;
+        Assert.NotNull(studentState);
+        Assert.Empty(studentState.EnrolledClassRoomIds);
+    }
+    
+    [Fact]
+    public void TagStateActor_Should_Return_Empty_State_When_No_Events()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        // Act
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        var state = actor.GetTagState();
+        
+        // Assert
+        Assert.NotNull(state);
+        Assert.Equal(0, state.Version);
+        Assert.Equal("", state.LastSortedUniqueId);
+        Assert.IsType<EmptyTagStatePayload>(state.Payload);
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Cache_State()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Bob Brown", 4), studentTag));
+        
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        
+        // Act - Get state twice
+        var state1 = actor.GetTagState();
+        var state2 = actor.GetTagState();
+        
+        // Assert - Should return the same cached instance
+        Assert.Same(state1, state2);
+        
+        // Add another event
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag));
+        
+        // State should still be cached (not updated)
+        var state3 = actor.GetTagState();
+        Assert.Same(state1, state3);
+        Assert.Equal(1, state3.Version); // Still version 1
+        
+        // Clear cache and get state again
+        actor.ClearCache();
+        var state4 = actor.GetTagState();
+        
+        // Now should have updated state
+        Assert.NotSame(state1, state4);
+        Assert.Equal(2, state4.Version);
+    }
+    
+    [Fact]
+    public async Task TagStateActor_Should_Return_SerializableState()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
+        
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        
+        // Act
+        var serializableState = actor.GetState();
+        
+        // Assert
+        Assert.NotNull(serializableState);
+        Assert.NotEmpty(serializableState.Payload);
+        Assert.Equal("StudentState", serializableState.TagPayloadName);
+        Assert.Equal(1, serializableState.Version);
+        Assert.NotEmpty(serializableState.LastSortedUniqueId);
+        Assert.Equal("Student", serializableState.TagGroup);
+        Assert.Equal(studentId.ToString(), serializableState.TagContent);
+        Assert.Equal("StudentProjector", serializableState.TagProjector);
+        
+        // Verify payload can be deserialized
+        var json = System.Text.Encoding.UTF8.GetString(serializableState.Payload);
+        Assert.Contains("Carol Davis", json);
+    }
+    
+    [Fact]
+    public void TagStateActor_Should_Handle_Invalid_TagStateId()
+    {
+        // Arrange & Act & Assert
+        Assert.Throws<ArgumentException>(() => 
+            new InMemoryTagStateActor("InvalidFormat", _eventStore, _domainTypes));
+            
+        Assert.Throws<ArgumentException>(() => 
+            new InMemoryTagStateActor("Only:Two", _eventStore, _domainTypes));
+    }
+    
+    [Fact]
+    public void TagStateActor_Should_Update_State()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        
+        var newState = new TagState(
+            new StudentState(studentId, "Updated Name", 10, new List<Guid> { Guid.NewGuid() }),
+            5,
+            SortableUniqueId.GenerateNew(),
+            "Student",
+            studentId.ToString(),
+            "StudentProjector"
+        );
+        
+        // Act
+        actor.UpdateState(newState);
+        var retrievedState = actor.GetTagState();
+        
+        // Assert
+        Assert.Equal(5, retrievedState.Version);
+        var studentState = retrievedState.Payload as StudentState;
+        Assert.NotNull(studentState);
+        Assert.Equal("Updated Name", studentState.Name);
+        Assert.Equal(10, studentState.MaxClassCount);
+        Assert.Single(studentState.EnrolledClassRoomIds);
+    }
+    
+    [Fact]
+    public void TagStateActor_Should_Reject_UpdateState_With_Different_Identity()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var studentTag = new StudentTag(studentId);
+        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        
+        var actor = new InMemoryTagStateActor(tagStateId.ToString(), _eventStore, _domainTypes);
+        
+        var differentState = new TagState(
+            null!,
+            1,
+            "",
+            "ClassRoom", // Different tag group
+            studentId.ToString(),
+            "StudentProjector"
+        );
+        
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => actor.UpdateState(differentState));
+    }
+}

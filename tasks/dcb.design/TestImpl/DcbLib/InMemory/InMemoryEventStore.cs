@@ -16,7 +16,6 @@ public class InMemoryEventStore : IEventStore
     private readonly ConcurrentDictionary<string, TagState> _tags = new();
     private readonly List<Event> _eventOrder = new();
     private readonly object _eventLock = new();
-    private long _eventCounter = 0;
     
     public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
@@ -58,35 +57,17 @@ public class InMemoryEventStore : IEventStore
             : Task.FromResult(ResultBox.Error<Event>(new Exception($"Event {eventId} not found")));
     }
     
-    public Task<ResultBox<Guid>> WriteEventAsync(IEventPayload eventPayload, List<ITag> tags)
+    public Task<ResultBox<Guid>> WriteEventAsync(Event evt)
     {
         lock (_eventLock)
         {
-            var eventId = Guid.NewGuid();
-            var timestamp = DateTime.UtcNow;
-            var sortableId = new SortableUniqueId($"{timestamp:yyyyMMddHHmmssfffffff}_{Interlocked.Increment(ref _eventCounter):D10}");
-            var metadata = new EventMetadata(
-                eventId.ToString(),
-                eventId.ToString(),
-                "InMemoryUser"
-            );
-            
-            var evt = new Event(
-                eventPayload,
-                sortableId.Value,
-                eventPayload.GetType().Name,
-                eventId,
-                metadata,
-                tags.Select(t => $"{t.GetTagGroup()}:{t.GetTag()}").ToList()
-            );
-            
-            _events[eventId] = evt;
+            _events[evt.Id] = evt;
             _eventOrder.Add(evt);
             
-            // Update tag states
-            foreach (var tag in tags)
+            // Update tag states based on tags in the event
+            foreach (var tagString in evt.Tags)
             {
-                var tagKey = $"{tag.GetTagGroup()}:{tag.GetTag()}";
+                var tagKey = tagString;
                 
                 if (_tags.TryGetValue(tagKey, out var existingState))
                 {
@@ -94,24 +75,29 @@ public class InMemoryEventStore : IEventStore
                     _tags[tagKey] = existingState with 
                     { 
                         Version = existingState.Version + 1, 
-                        LastSortedUniqueId = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{_eventCounter:D3}"
+                        LastSortedUniqueId = evt.SortableUniqueIdValue
                     };
                 }
                 else
                 {
-                    // Create new tag state
-                    _tags[tagKey] = new TagState(
-                        null!, // Payload would be computed by projector
-                        1,
-                        $"{DateTime.UtcNow:yyyyMMddHHmmss}_{_eventCounter:D3}",
-                        tag.GetTagGroup(),
-                        tag.GetTag(),
-                        "InMemoryProjector"
-                    );
+                    // Parse tag string to get group and content
+                    var tagParts = tagString.Split(':');
+                    if (tagParts.Length >= 2)
+                    {
+                        // Create new tag state
+                        _tags[tagKey] = new TagState(
+                            new EmptyTagStatePayload(), // Initial state
+                            1,
+                            evt.SortableUniqueIdValue,
+                            tagParts[0], // Tag group
+                            tagString,   // Full tag string
+                            "InMemoryProjector"
+                        );
+                    }
                 }
             }
             
-            return Task.FromResult(ResultBox.FromValue(eventId));
+            return Task.FromResult(ResultBox.FromValue(evt.Id));
         }
     }
     
