@@ -14,6 +14,7 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
     private readonly string _tagName;
     private readonly ConcurrentDictionary<string, TagWriteReservation> _activeReservations = new();
     private readonly object _reservationLock = new();
+    private string _latestSortableUniqueId = "";
     
     public InMemoryTagConsistentActor(string tagName)
     {
@@ -23,6 +24,14 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
     public string GetTagActorId()
     {
         return _tagName;
+    }
+    
+    public string GetLatestSortableUniqueId()
+    {
+        lock (_reservationLock)
+        {
+            return _latestSortableUniqueId;
+        }
     }
     
     public ResultBox<TagWriteReservation> MakeReservation(string lastSortableUniqueId)
@@ -37,6 +46,12 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
             {
                 return ResultBox.Error<TagWriteReservation>(
                     new Exception($"Tag {GetTagActorId()} is currently reserved"));
+            }
+            
+            // Update the latest sortable unique ID
+            if (!string.IsNullOrEmpty(lastSortableUniqueId))
+            {
+                _latestSortableUniqueId = lastSortableUniqueId;
             }
             
             // Create new reservation

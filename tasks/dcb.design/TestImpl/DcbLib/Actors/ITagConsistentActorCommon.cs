@@ -12,6 +12,13 @@ public interface ITagConsistentActorCommon
     /// <returns>The actor ID string</returns>
     string GetTagActorId();
     
+    /// <summary>
+    /// Gets the latest sortable unique ID known to this actor
+    /// Used by TagStateActor to determine the newest state without querying TagReader
+    /// </summary>
+    /// <returns>The latest sortable unique ID or empty string if none</returns>
+    string GetLatestSortableUniqueId();
+    
     ResultBox<TagWriteReservation> MakeReservation(string lastSortableUniqueId);
     bool ConfirmReservation(TagWriteReservation reservation);
     bool CancelReservation(TagWriteReservation reservation);

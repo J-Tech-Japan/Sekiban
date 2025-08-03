@@ -16,10 +16,16 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     private readonly TagStateId _tagStateId;
     private readonly IEventStore _eventStore;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IActorObjectAccessor _actorAccessor;
     private TagState? _cachedState;
     private readonly object _stateLock = new();
     
     public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes)
+        : this(tagStateId, eventStore, domainTypes, null!)
+    {
+    }
+    
+    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor actorAccessor)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
             throw new ArgumentNullException(nameof(tagStateId));
@@ -27,6 +33,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         _tagStateId = TagStateId.Parse(tagStateId);
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _actorAccessor = actorAccessor!;
     }
     
     public string GetTagStateActorId()
@@ -108,6 +115,19 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
         
+        // Get the latest sortable unique ID from TagConsistentActor if available
+        string? latestSortableUniqueId = null;
+        if (_actorAccessor != null)
+        {
+            var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
+            var tagConsistentActorResult = _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId).Result;
+            if (tagConsistentActorResult.IsSuccess)
+            {
+                var tagConsistentActor = tagConsistentActorResult.GetValue();
+                latestSortableUniqueId = tagConsistentActor.GetLatestSortableUniqueId();
+            }
+        }
+        
         // Get the projector
         var projectorResult = _domainTypes.TagProjectorTypes.GetTagProjector(_tagStateId.TagProjectorName);
         if (!projectorResult.IsSuccess)
@@ -141,6 +161,14 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         }
         
         var events = eventsResult.GetValue().ToList();
+        
+        // Filter events up to the latest sortable unique ID if provided
+        if (!string.IsNullOrEmpty(latestSortableUniqueId))
+        {
+            events = events
+                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+                .ToList();
+        }
         
         // Project events to build state
         ITagStatePayload? currentState = null;

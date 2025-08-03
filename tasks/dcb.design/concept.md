@@ -23,6 +23,8 @@ stateDiagram-v2
     CommandExecutor --> Handle: Process with Context
     
     CommandContext --> TagStateActor: Request State
+    TagStateActor --> TagConsistentActor: Get Latest SortableUniqueId
+    TagConsistentActor --> TagStateActor: Latest SortableUniqueId
     
     Handle --> CommandContext: Use Context
     Handle --> CommandExecutor: Return (Tags, Events)
@@ -91,11 +93,13 @@ stateDiagram-v2
 - Supports reservation cancellation and expiration
 - Releases reservation upon receiving "Tag Write Completed" signal
 - Prevents concurrent modifications through reservation mechanism
+- Provides latest sortable unique ID to TagStateActor to ensure state consistency without additional TagReader queries
 
 ### TagStateActor
 
 - Manages the current state of a specific tag
-- Reads events from EventReader to reconstruct state
+- Asks TagConsistentActor for the latest sortable unique ID to determine what's newest without querying TagReader
+- Reads events from EventReader to reconstruct state up to the latest sortable unique ID
 - Caches state in memory for performance
 - Provides state to CommandContext for queries
 - Does not write state directly (read-only actor)
@@ -154,7 +158,9 @@ sequenceDiagram
     
     Handle->>CommandContext: Request Tag State
     CommandContext->>TagStateActor: Get State
-    TagStateActor->>EventReader: Read Events
+    TagStateActor->>TagConsistentActor: Get Latest SortableUniqueId
+    TagConsistentActor-->>TagStateActor: Latest SortableUniqueId
+    TagStateActor->>EventReader: Read Events (up to Latest SortableUniqueId)
     EventReader->>EventsTagsStore: Query Events
     EventsTagsStore-->>EventReader: Event Data
     EventReader-->>TagStateActor: Events
