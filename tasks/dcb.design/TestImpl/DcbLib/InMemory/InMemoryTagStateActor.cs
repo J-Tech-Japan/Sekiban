@@ -16,16 +16,16 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     private readonly TagStateId _tagStateId;
     private readonly IEventStore _eventStore;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly IActorObjectAccessor _actorAccessor;
+    private readonly IActorObjectAccessor? _actorAccessor;
     private TagState? _cachedState;
-    private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _stateLock = new(1, 1);
     
     public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes)
-        : this(tagStateId, eventStore, domainTypes, null!)
+        : this(tagStateId, eventStore, domainTypes, null)
     {
     }
     
-    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor actorAccessor)
+    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor? actorAccessor)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
             throw new ArgumentNullException(nameof(tagStateId));
@@ -33,68 +33,88 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         _tagStateId = TagStateId.Parse(tagStateId);
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _actorAccessor = actorAccessor!;
+        _actorAccessor = actorAccessor;
     }
     
-    public string GetTagStateActorId()
+    public Task<string> GetTagStateActorIdAsync()
     {
-        return _tagStateId.GetTagStateId();
+        return Task.FromResult(_tagStateId.GetTagStateId());
     }
     
-    public SerializableTagState GetState()
+    public async Task<SerializableTagState> GetStateAsync()
     {
-        lock (_stateLock)
+        var tagState = await GetTagStateAsync();
+        
+        if (tagState.Payload is EmptyTagStatePayload)
         {
-            var tagState = GetTagState();
-            
-            if (tagState.Payload is EmptyTagStatePayload)
-            {
-                return new SerializableTagState(
-                    Array.Empty<byte>(),
-                    tagState.Version,
-                    tagState.LastSortedUniqueId,
-                    tagState.TagGroup,
-                    tagState.TagContent,
-                    tagState.TagProjector,
-                    "EmptyTagStatePayload"
-                );
-            }
-            
-            var jsonOptions = _domainTypes.JsonSerializerOptions;
-            var payloadJson = JsonSerializer.Serialize(tagState.Payload, tagState.Payload.GetType(), jsonOptions);
-            var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
-            
             return new SerializableTagState(
-                payloadBytes,
+                Array.Empty<byte>(),
                 tagState.Version,
                 tagState.LastSortedUniqueId,
                 tagState.TagGroup,
                 tagState.TagContent,
                 tagState.TagProjector,
-                tagState.Payload.GetType().Name
+                "EmptyTagStatePayload"
             );
         }
+        
+        var jsonOptions = _domainTypes.JsonSerializerOptions;
+        var payloadJson = JsonSerializer.Serialize(tagState.Payload, tagState.Payload.GetType(), jsonOptions);
+        var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+        
+        return new SerializableTagState(
+            payloadBytes,
+            tagState.Version,
+            tagState.LastSortedUniqueId,
+            tagState.TagGroup,
+            tagState.TagContent,
+            tagState.TagProjector,
+            tagState.Payload.GetType().Name
+        );
     }
     
-    public TagState GetTagState()
+    public async Task<TagState> GetTagStateAsync()
     {
-        lock (_stateLock)
+        // Check if we have cached state
+        await _stateLock.WaitAsync();
+        try
         {
-            // Return cached state if available
+            if (_cachedState != null)
+            {
+                return _cachedState;
+            }
+        }
+        finally
+        {
+            _stateLock.Release();
+        }
+        
+        // Compute state from events (outside the lock to avoid deadlock)
+        var computedState = await ComputeStateFromEventsAsync();
+        
+        // Update cache
+        await _stateLock.WaitAsync();
+        try
+        {
+            // Double-check in case another thread computed it
             if (_cachedState != null)
             {
                 return _cachedState;
             }
             
-            // Compute state from events
-            _cachedState = ComputeStateFromEvents();
+            _cachedState = computedState;
             return _cachedState;
+        }
+        finally
+        {
+            _stateLock.Release();
         }
     }
     
-    public void UpdateState(TagState newState)
+    public async Task UpdateStateAsync(TagState newState)
     {
-        lock (_stateLock)
+        await _stateLock.WaitAsync();
+        try
         {
             // Validate that the identity hasn't changed
             if (newState.TagGroup != _tagStateId.TagGroup || 
@@ -108,9 +128,13 @@ public class InMemoryTagStateActor : ITagStateActorCommon
             
             _cachedState = newState;
         }
+        finally
+        {
+            _stateLock.Release();
+        }
     }
     
-    private TagState ComputeStateFromEvents()
+    private async Task<TagState> ComputeStateFromEventsAsync()
     {
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
@@ -120,11 +144,11 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         if (_actorAccessor != null)
         {
             var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
-            var tagConsistentActorResult = _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId).Result;
+            var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
             if (tagConsistentActorResult.IsSuccess)
             {
                 var tagConsistentActor = tagConsistentActorResult.GetValue();
-                latestSortableUniqueId = tagConsistentActor.GetLatestSortableUniqueId();
+                latestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
             }
         }
         
@@ -146,7 +170,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         var projector = projectorResult.GetValue();
         
         // Read all events for this tag
-        var eventsResult = _eventStore.ReadEventsByTagAsync(tag).Result;
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
         if (!eventsResult.IsSuccess)
         {
             // Return empty state if events cannot be read
@@ -216,12 +240,6 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         return new GenericTag(tagGroup, tagContent);
     }
     
-    private ITagStatePayload? CreateInitialState(string tagGroup)
-    {
-        // Return null to let the projector handle initial state
-        return null;
-    }
-    
     /// <summary>
     /// Generic tag implementation for use within the actor
     /// </summary>
@@ -244,11 +262,16 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     /// <summary>
     /// Clears the cached state, forcing recomputation on next access
     /// </summary>
-    public void ClearCache()
+    public async Task ClearCacheAsync()
     {
-        lock (_stateLock)
+        await _stateLock.WaitAsync();
+        try
         {
             _cachedState = null;
+        }
+        finally
+        {
+            _stateLock.Release();
         }
     }
 }

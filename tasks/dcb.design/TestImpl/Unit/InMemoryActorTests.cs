@@ -16,20 +16,20 @@ public class InMemoryActorTests
     #region TagConsistentActor Tests
     
     [Fact]
-    public void TagConsistentActor_Should_Return_Correct_ActorId()
+    public async Task TagConsistentActor_Should_Return_Correct_ActorId()
     {
         // Arrange
         var actor = new InMemoryTagConsistentActor("Student:student-123");
         
         // Act
-        var actorId = actor.GetTagActorId();
+        var actorId = await actor.GetTagActorIdAsync();
         
         // Assert
         Assert.Equal("Student:student-123", actorId);
     }
     
     [Fact]
-    public void MakeReservation_Should_Create_Valid_Reservation()
+    public async Task MakeReservation_Should_Create_Valid_Reservation()
     {
         // Arrange
         var studentId = Guid.NewGuid();
@@ -38,7 +38,7 @@ public class InMemoryActorTests
         var lastSortableId = SortableUniqueId.GenerateNew();
         
         // Act
-        var result = actor.MakeReservation(lastSortableId);
+        var result = await actor.MakeReservationAsync(lastSortableId);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -52,7 +52,7 @@ public class InMemoryActorTests
     }
     
     [Fact]
-    public void MakeReservation_Should_Fail_When_Tag_Already_Reserved()
+    public async Task MakeReservation_Should_Fail_When_Tag_Already_Reserved()
     {
         // Arrange
         var studentId = Guid.NewGuid();
@@ -61,37 +61,37 @@ public class InMemoryActorTests
         var lastSortableId = SortableUniqueId.GenerateNew();
         
         // Make first reservation
-        var firstResult = actor.MakeReservation(lastSortableId);
+        var firstResult = await actor.MakeReservationAsync(lastSortableId);
         Assert.True(firstResult.IsSuccess);
         
         // Act - Try to make second reservation
-        var secondResult = actor.MakeReservation(lastSortableId);
+        var secondResult = await actor.MakeReservationAsync(lastSortableId);
         
         // Assert
         Assert.False(secondResult.IsSuccess);
     }
     
     [Fact]
-    public void ConfirmReservation_Should_Remove_Reservation()
+    public async Task ConfirmReservation_Should_Remove_Reservation()
     {
         // Arrange
         var actor = new InMemoryTagConsistentActor("Student:student-123");
-        var reservation = actor.MakeReservation(SortableUniqueId.GenerateNew()).GetValue();
+        var reservation = (await actor.MakeReservationAsync(SortableUniqueId.GenerateNew())).GetValue();
         
         // Act
-        var confirmed = actor.ConfirmReservation(reservation);
+        var confirmed = await actor.ConfirmReservationAsync(reservation);
         
         // Assert
         Assert.True(confirmed);
-        Assert.Empty(actor.GetActiveReservations());
+        Assert.Empty(await actor.GetActiveReservationsAsync());
         
         // Should be able to make new reservation after confirmation
-        var newReservation = actor.MakeReservation(SortableUniqueId.GenerateNew());
+        var newReservation = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
         Assert.True(newReservation.IsSuccess);
     }
     
     [Fact]
-    public void ConfirmReservation_Should_Return_False_For_Invalid_Reservation()
+    public async Task ConfirmReservation_Should_Return_False_For_Invalid_Reservation()
     {
         // Arrange
         var actor = new InMemoryTagConsistentActor("Student:student-123");
@@ -102,28 +102,28 @@ public class InMemoryActorTests
         );
         
         // Act
-        var confirmed = actor.ConfirmReservation(fakeReservation);
+        var confirmed = await actor.ConfirmReservationAsync(fakeReservation);
         
         // Assert
         Assert.False(confirmed);
     }
     
     [Fact]
-    public void CancelReservation_Should_Remove_Reservation()
+    public async Task CancelReservation_Should_Remove_Reservation()
     {
         // Arrange
         var actor = new InMemoryTagConsistentActor("Student:student-123");
-        var reservation = actor.MakeReservation(SortableUniqueId.GenerateNew()).GetValue();
+        var reservation = (await actor.MakeReservationAsync(SortableUniqueId.GenerateNew())).GetValue();
         
         // Act
-        var cancelled = actor.CancelReservation(reservation);
+        var cancelled = await actor.CancelReservationAsync(reservation);
         
         // Assert
         Assert.True(cancelled);
-        Assert.Empty(actor.GetActiveReservations());
+        Assert.Empty(await actor.GetActiveReservationsAsync());
         
         // Should be able to make new reservation after cancellation
-        var newReservation = actor.MakeReservation(SortableUniqueId.GenerateNew());
+        var newReservation = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
         Assert.True(newReservation.IsSuccess);
     }
     
@@ -136,7 +136,7 @@ public class InMemoryActorTests
         var actor = new InMemoryTagConsistentActor(tagName);
         
         // Create reservation
-        var reservationResult = actor.MakeReservation(SortableUniqueId.GenerateNew());
+        var reservationResult = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
         Assert.True(reservationResult.IsSuccess);
         var reservation = reservationResult.GetValue();
         
@@ -150,12 +150,12 @@ public class InMemoryActorTests
         
         // Since we can't modify the timeout easily, let's test that 
         // the reservation mechanism works correctly
-        Assert.Single(actor.GetActiveReservations());
+        Assert.Single(await actor.GetActiveReservationsAsync());
         
         // Cancel the reservation to allow new one
-        actor.CancelReservation(reservation);
+        await actor.CancelReservationAsync(reservation);
         
-        var newReservation = actor.MakeReservation(SortableUniqueId.GenerateNew());
+        var newReservation = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
         
         // Assert
         Assert.True(newReservation.IsSuccess);

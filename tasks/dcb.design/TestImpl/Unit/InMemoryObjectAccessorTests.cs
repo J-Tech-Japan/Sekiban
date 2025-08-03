@@ -38,7 +38,7 @@ public class InMemoryObjectAccessorTests
         Assert.True(result.IsSuccess);
         var actor = result.GetValue();
         Assert.NotNull(actor);
-        Assert.Equal(actorId, actor.GetTagActorId());
+        Assert.Equal(actorId, await actor.GetTagActorIdAsync());
     }
     
     [Fact]
@@ -54,7 +54,7 @@ public class InMemoryObjectAccessorTests
         Assert.True(result.IsSuccess);
         var actor = result.GetValue();
         Assert.NotNull(actor);
-        Assert.Equal(actorId, actor.GetTagStateActorId());
+        Assert.Equal(actorId, await actor.GetTagStateActorIdAsync());
     }
     
     [Fact]
@@ -179,7 +179,7 @@ public class InMemoryObjectAccessorTests
         var tagConsistentActor = tagConsistentActorResult.GetValue();
         
         // Make a reservation with the event's sortable unique ID
-        var reservationResult = tagConsistentActor.MakeReservation(event1.SortableUniqueIdValue);
+        var reservationResult = await tagConsistentActor.MakeReservationAsync(event1.SortableUniqueIdValue);
         Assert.True(reservationResult.IsSuccess);
         
         // Add another event (this should not be included in the state)
@@ -194,7 +194,7 @@ public class InMemoryObjectAccessorTests
         var tagStateActor = tagStateActorResult.GetValue();
         
         // Get state
-        var state = tagStateActor.GetState();
+        var state = await tagStateActor.GetStateAsync();
         
         // Assert - should only have processed the first event
         Assert.Equal(1, state.Version);

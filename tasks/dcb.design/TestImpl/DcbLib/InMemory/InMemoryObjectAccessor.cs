@@ -98,7 +98,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor
         {
             // Format: "TagGroup:TagContent"
             var tagName = actorId;
-            return new InMemoryTagConsistentActor(tagName) as T;
+            return new InMemoryTagConsistentActor(tagName, _eventStore) as T;
         }
         
         // Create TagStateActor

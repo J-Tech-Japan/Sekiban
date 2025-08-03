@@ -10,16 +10,16 @@ public interface ITagConsistentActorCommon
     /// Format: "[tagGroupName]:[tagContentName]"
     /// </summary>
     /// <returns>The actor ID string</returns>
-    string GetTagActorId();
+    Task<string> GetTagActorIdAsync();
     
     /// <summary>
     /// Gets the latest sortable unique ID known to this actor
     /// Used by TagStateActor to determine the newest state without querying TagReader
     /// </summary>
     /// <returns>The latest sortable unique ID or empty string if none</returns>
-    string GetLatestSortableUniqueId();
+    Task<string> GetLatestSortableUniqueIdAsync();
     
-    ResultBox<TagWriteReservation> MakeReservation(string lastSortableUniqueId);
-    bool ConfirmReservation(TagWriteReservation reservation);
-    bool CancelReservation(TagWriteReservation reservation);
+    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId);
+    Task<bool> ConfirmReservationAsync(TagWriteReservation reservation);
+    Task<bool> CancelReservationAsync(TagWriteReservation reservation);
 }

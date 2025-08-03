@@ -37,7 +37,7 @@ public class InMemoryTagStateActorTests
         
         // Act
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
-        var state = actor.GetTagState();
+        var state = await actor.GetTagStateAsync();
         
         // Assert
         Assert.NotNull(state);
@@ -77,7 +77,7 @@ public class InMemoryTagStateActorTests
         
         // Act
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
-        var state = actor.GetTagState();
+        var state = await actor.GetTagStateAsync();
         
         // Assert
         Assert.Equal(3, state.Version);
@@ -111,7 +111,7 @@ public class InMemoryTagStateActorTests
         
         // Act
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
-        var state = actor.GetTagState();
+        var state = await actor.GetTagStateAsync();
         
         // Assert
         Assert.Equal(3, state.Version);
@@ -147,7 +147,7 @@ public class InMemoryTagStateActorTests
         
         // Act
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
-        var state = actor.GetTagState();
+        var state = await actor.GetTagStateAsync();
         
         // Assert
         Assert.Equal(3, state.Version);
@@ -157,7 +157,7 @@ public class InMemoryTagStateActorTests
     }
     
     [Fact]
-    public void TagStateActor_Should_Return_Empty_State_When_No_Events()
+    public async Task TagStateActor_Should_Return_Empty_State_When_No_Events()
     {
         // Arrange
         var studentId = Guid.NewGuid();
@@ -166,7 +166,7 @@ public class InMemoryTagStateActorTests
         
         // Act
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
-        var state = actor.GetTagState();
+        var state = await actor.GetTagStateAsync();
         
         // Assert
         Assert.NotNull(state);
@@ -189,8 +189,8 @@ public class InMemoryTagStateActorTests
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         // Act - Get state twice
-        var state1 = actor.GetTagState();
-        var state2 = actor.GetTagState();
+        var state1 = await actor.GetTagStateAsync();
+        var state2 = await actor.GetTagStateAsync();
         
         // Assert - Should return the same cached instance
         Assert.Same(state1, state2);
@@ -200,13 +200,13 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag));
         
         // State should still be cached (not updated)
-        var state3 = actor.GetTagState();
+        var state3 = await actor.GetTagStateAsync();
         Assert.Same(state1, state3);
         Assert.Equal(1, state3.Version); // Still version 1
         
         // Clear cache and get state again
-        actor.ClearCache();
-        var state4 = actor.GetTagState();
+        await actor.ClearCacheAsync();
+        var state4 = await actor.GetTagStateAsync();
         
         // Now should have updated state
         Assert.NotSame(state1, state4);
@@ -227,7 +227,7 @@ public class InMemoryTagStateActorTests
         var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes);
         
         // Act
-        var serializableState = actor.GetState();
+        var serializableState = await actor.GetStateAsync();
         
         // Assert
         Assert.NotNull(serializableState);
@@ -256,7 +256,7 @@ public class InMemoryTagStateActorTests
     }
     
     [Fact]
-    public void TagStateActor_Should_Update_State()
+    public async Task TagStateActor_Should_Update_State()
     {
         // Arrange
         var studentId = Guid.NewGuid();
@@ -275,8 +275,8 @@ public class InMemoryTagStateActorTests
         );
         
         // Act
-        actor.UpdateState(newState);
-        var retrievedState = actor.GetTagState();
+        await actor.UpdateStateAsync(newState);
+        var retrievedState = await actor.GetTagStateAsync();
         
         // Assert
         Assert.Equal(5, retrievedState.Version);
@@ -288,7 +288,7 @@ public class InMemoryTagStateActorTests
     }
     
     [Fact]
-    public void TagStateActor_Should_Reject_UpdateState_With_Different_Identity()
+    public async Task TagStateActor_Should_Reject_UpdateState_With_Different_Identity()
     {
         // Arrange
         var studentId = Guid.NewGuid();
@@ -307,6 +307,6 @@ public class InMemoryTagStateActorTests
         );
         
         // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => actor.UpdateState(differentState));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => actor.UpdateStateAsync(differentState));
     }
 }
