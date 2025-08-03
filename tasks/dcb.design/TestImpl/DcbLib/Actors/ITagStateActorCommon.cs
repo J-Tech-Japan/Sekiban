@@ -4,6 +4,6 @@ namespace DcbLib.Actors;
 
 public interface ITagStateActorCommon
 {
-    SerializableTagState GetState();
-    string GetTagStateActorId();
+    Task<SerializableTagState> GetStateAsync();
+    Task<string> GetTagStateActorIdAsync();
 }

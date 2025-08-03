@@ -18,7 +18,7 @@ public record TagStateTyped<TPayload>(
     public TagState ToTagState() => new(
         Payload,
         (int)Version,
-        0, // LastSortedUniqueId - needs to be provided
+        "", // LastSortedUniqueId - needs to be provided
         Tag.GetTagGroup(),
         Tag.GetTag().Replace($"{Tag.GetTagGroup()}:", ""),
         string.Empty // TagProjector - needs to be provided

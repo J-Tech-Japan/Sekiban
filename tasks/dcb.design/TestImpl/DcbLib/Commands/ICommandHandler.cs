@@ -1,3 +1,6 @@
+using DcbLib.Events;
+using ResultBoxes;
+
 namespace DcbLib.Commands;
 
 /// <summary>
@@ -8,10 +11,10 @@ namespace DcbLib.Commands;
 public interface ICommandHandler<in TCommand> where TCommand : ICommand
 {
     /// <summary>
-    /// Processes the command and returns the result containing tags and events
+    /// Processes the command and returns the result containing an event with tags or none
     /// </summary>
     /// <param name="command">The command to process</param>
     /// <param name="context">The command context providing access to current state</param>
-    /// <returns>The command result with tags and events, or validation errors</returns>
-    Task<CommandResult> HandleAsync(TCommand command, ICommandContext context);
+    /// <returns>ResultBox containing EventOrNone (event with tags) or error information</returns>
+    Task<ResultBox<EventOrNone>> HandleAsync(TCommand command, ICommandContext context);
 }
