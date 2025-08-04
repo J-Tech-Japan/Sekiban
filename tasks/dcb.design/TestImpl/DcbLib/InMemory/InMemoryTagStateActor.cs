@@ -75,13 +75,32 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     
     public async Task<TagState> GetTagStateAsync()
     {
-        // Check if we have cached state
+        // First, check if we can use cached state
+        string? currentLatestSortableUniqueId = null;
+        if (_actorAccessor != null)
+        {
+            var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
+            var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+            if (tagConsistentActorResult.IsSuccess)
+            {
+                var tagConsistentActor = tagConsistentActorResult.GetValue();
+                currentLatestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            }
+        }
+        
+        // Check if we have cached state and if it's still valid
         await _stateLock.WaitAsync();
         try
         {
             if (_cachedState != null)
             {
-                return _cachedState;
+                // If no TagConsistentActor or if cached state matches current state, return cached
+                if (_actorAccessor == null || 
+                    currentLatestSortableUniqueId == null ||
+                    _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
+                {
+                    return _cachedState;
+                }
             }
         }
         finally
@@ -97,7 +116,10 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         try
         {
             // Double-check in case another thread computed it
-            if (_cachedState != null)
+            if (_cachedState != null && 
+                (_actorAccessor == null || 
+                 currentLatestSortableUniqueId == null ||
+                 _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId))
             {
                 return _cachedState;
             }
