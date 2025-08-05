@@ -12,14 +12,12 @@ public record DcbDomainTypes
         IEventTypes eventTypes,
         ITagTypes tagTypes,
         ITagProjectorTypes tagProjectorTypes,
-        ICommandTypes commandTypes,
         ITagStatePayloadTypes tagStatePayloadTypes,
         JsonSerializerOptions? jsonSerializerOptions = null)
     {
         EventTypes = eventTypes;
         TagTypes = tagTypes;
         TagProjectorTypes = tagProjectorTypes;
-        CommandTypes = commandTypes;
         TagStatePayloadTypes = tagStatePayloadTypes;
         JsonSerializerOptions = jsonSerializerOptions ?? new JsonSerializerOptions
         {
@@ -31,7 +29,6 @@ public record DcbDomainTypes
     public IEventTypes EventTypes { get; init; }
     public ITagTypes TagTypes { get; init; }
     public ITagProjectorTypes TagProjectorTypes { get; init; }
-    public ICommandTypes CommandTypes { get; init; }
     public ITagStatePayloadTypes TagStatePayloadTypes { get; init; }
     public JsonSerializerOptions JsonSerializerOptions { get; init; }
 }

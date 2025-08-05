@@ -32,7 +32,7 @@ public class InMemoryCommandExecutor : ICommandExecutor
     
     public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
-        ICommandHandler<TCommand> handler,
+        Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         CancellationToken cancellationToken = default)
         where TCommand : ICommand
     {
@@ -43,8 +43,8 @@ public class InMemoryCommandExecutor : ICommandExecutor
             // Step 1: Create command context
             var commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
             
-            // Step 2: Execute handler with context
-            var handlerResult = await handler.HandleAsync(command, commandContext);
+            // Step 2: Execute handler function with context
+            var handlerResult = await handlerFunc(command, commandContext);
             if (!handlerResult.IsSuccess)
             {
                 return ResultBox.Error<ExecutionResult>(handlerResult.GetException());
@@ -178,6 +178,25 @@ public class InMemoryCommandExecutor : ICommandExecutor
         {
             return ResultBox.Error<ExecutionResult>(ex);
         }
+    }
+    
+    public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+        TCommand command,
+        ICommandHandler<TCommand> handler,
+        CancellationToken cancellationToken = default)
+        where TCommand : ICommand
+    {
+        // Delegate to the function-based implementation
+        return await ExecuteAsync(command, handler.HandleAsync, cancellationToken);
+    }
+    
+    public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+        TCommand command,
+        CancellationToken cancellationToken = default)
+        where TCommand : ICommandWithHandler<TCommand>
+    {
+        // Delegate to the function-based implementation using the command's own handler
+        return await ExecuteAsync(command, (cmd, context) => cmd.HandleAsync(context), cancellationToken);
     }
     
     private async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(

@@ -7,26 +7,25 @@ using ResultBoxes;
 namespace Domain;
 
 // Commands
-public record CreateStudent(Guid StudentId, string Name, int MaxClassCount = 5) : ICommand;
-
-public record CreateClassRoom(Guid ClassRoomId, string Name, int MaxStudents = 10) : ICommand;
-
-public record EnrollStudentInClassRoom(Guid StudentId, Guid ClassRoomId) : ICommand;
-
-public record DropStudentFromClassRoom(Guid StudentId, Guid ClassRoomId) : ICommand;
-
-public class CreateStudentHandler : ICommandHandler<CreateStudent>
+public record CreateStudent(Guid StudentId, string Name, int MaxClassCount = 5) 
+    : ICommandWithHandler<CreateStudent>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(CreateStudent command, ICommandContext context)
-        => ResultBox.Start.Remap(_ => new StudentTag(command.StudentId))
+    public Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+        => ResultBox.Start.Remap(_ => new StudentTag(StudentId))
             .Combine(tag => context.TagExistsAsync(tag).ToResultBox())
             .Verify((_, exists) =>
                 exists
                     ? ExceptionOrNone.FromException(new ApplicationException("Student Already Exists"))
                     : ExceptionOrNone.None)
             .Conveyor((tag, _) =>
-                EventOrNone.EventWithTags(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag));
+                EventOrNone.EventWithTags(new StudentCreated(StudentId, Name, MaxClassCount), tag));
 }
+
+public record CreateClassRoom(Guid ClassRoomId, string Name, int MaxStudents = 10) : ICommand;
+
+public record EnrollStudentInClassRoom(Guid StudentId, Guid ClassRoomId) : ICommand;
+
+public record DropStudentFromClassRoom(Guid StudentId, Guid ClassRoomId) : ICommand;
 
 
 public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>

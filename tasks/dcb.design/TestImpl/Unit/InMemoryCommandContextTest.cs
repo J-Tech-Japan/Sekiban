@@ -74,8 +74,6 @@ public class InMemoryCommandContextTest
         tagProjectorTypes.RegisterProjector(new TestProjector());
         tagProjectorTypes.RegisterProjector(new TestProjector2());
         
-        var commandTypes = new SimpleCommandTypes();
-        
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
         tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>(nameof(TestStatePayload));
         
@@ -89,7 +87,6 @@ public class InMemoryCommandContextTest
             eventTypes,
             tagTypes,
             tagProjectorTypes,
-            commandTypes,
             tagStatePayloadTypes,
             jsonOptions
         );

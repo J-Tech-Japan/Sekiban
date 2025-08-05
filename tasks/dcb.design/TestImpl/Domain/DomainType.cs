@@ -18,7 +18,6 @@ public static class DomainType
         var eventTypes = new SimpleEventTypes();
         var tagTypes = new SimpleTagTypes();
         var tagProjectorTypes = new SimpleTagProjectorTypes();
-        var commandTypes = new SimpleCommandTypes();
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
         
         // Register domain-specific tag state payload types
@@ -30,11 +29,8 @@ public static class DomainType
         tagProjectorTypes.RegisterProjector(new StudentProjector());
         tagProjectorTypes.RegisterProjector(new ClassRoomProjector());
         
-        // Register command handlers
-        commandTypes.RegisterHandler<CreateStudent>(new CreateStudentHandler());
-        commandTypes.RegisterHandler<CreateClassRoom>(new CreateClassRoomHandler());
-        commandTypes.RegisterHandler<EnrollStudentInClassRoom>(new EnrollStudentInClassRoomHandler());
-        commandTypes.RegisterHandler<DropStudentFromClassRoom>(new DropStudentFromClassRoomHandler());
+        // Note: Command handlers are no longer registered here
+        // Commands either implement ICommandWithHandler or are passed with their handlers to ICommandExecutor
         
         // Configure JSON serialization options
         var jsonOptions = new JsonSerializerOptions
@@ -47,7 +43,6 @@ public static class DomainType
             eventTypes,
             tagTypes,
             tagProjectorTypes,
-            commandTypes,
             tagStatePayloadTypes,
             jsonOptions
         );

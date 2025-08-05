@@ -291,16 +291,173 @@ public class InMemoryCommandExecutorDomainTests
     }
     
     
+    // Example command that includes its own handler logic
+    public record CreateTeacherCommand(Guid TeacherId, string Name, string Subject) 
+        : ICommandWithHandler<CreateTeacherCommand>
+    {
+        public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+        {
+            var tag = new TeacherTag(TeacherId);
+            var exists = await context.TagExistsAsync(tag);
+            
+            if (exists)
+            {
+                return ResultBox.Error<EventOrNone>(
+                    new ApplicationException($"Teacher {TeacherId} already exists"));
+            }
+            
+            return EventOrNone.EventWithTags(
+                new TeacherCreated(TeacherId, Name, Subject),
+                tag);
+        }
+    }
+    
+    // Supporting types for the test
+    public record TeacherTag(Guid TeacherId) : ITag
+    {
+        public bool IsConsistencyTag() => true;
+        public string GetTagGroup() => "Teacher";
+        public string GetTag() => $"Teacher:{TeacherId}";
+    }
+    
+    public record TeacherCreated(Guid TeacherId, string Name, string Subject) : IEventPayload;
+    
+    [Fact]
+    public async Task ExecuteAsync_With_ICommandWithHandler_Should_Work()
+    {
+        // Arrange
+        var teacherId = Guid.NewGuid();
+        var command = new CreateTeacherCommand(teacherId, "Dr. Smith", "Mathematics");
+        
+        // Act - Execute command with its built-in handler
+        var result = await _commandExecutor.ExecuteAsync(command);
+        
+        // Assert
+        Assert.True(result.IsSuccess);
+        var executionResult = result.GetValue();
+        Assert.NotEqual(Guid.Empty, executionResult.EventId);
+        Assert.Single(executionResult.TagWrites);
+        Assert.Equal($"Teacher:{teacherId}", executionResult.TagWrites[0].Tag);
+        
+        // Verify teacher was created
+        var teacherTag = new TeacherTag(teacherId);
+        var tagExists = await _eventStore.TagExistsAsync(teacherTag);
+        Assert.True(tagExists.GetValue());
+        
+        // Verify event was written
+        var events = await _eventStore.ReadEventsByTagAsync(teacherTag);
+        var eventsList = events.GetValue().ToList();
+        Assert.Single(eventsList);
+        var payload = eventsList[0].Payload as TeacherCreated;
+        Assert.NotNull(payload);
+        Assert.Equal(teacherId, payload.TeacherId);
+        Assert.Equal("Dr. Smith", payload.Name);
+        Assert.Equal("Mathematics", payload.Subject);
+    }
+    
+    [Fact]
+    public async Task CreateStudent_With_Built_In_Handler_Should_Work()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var command = new CreateStudent(studentId, "Alice Johnson", 6);
+        
+        // Act - Execute command using its built-in handler (no separate handler needed)
+        var result = await _commandExecutor.ExecuteAsync(command);
+        
+        // Assert
+        Assert.True(result.IsSuccess);
+        var executionResult = result.GetValue();
+        Assert.NotEqual(Guid.Empty, executionResult.EventId);
+        Assert.Single(executionResult.TagWrites);
+        Assert.Equal($"Student:{studentId}", executionResult.TagWrites[0].Tag);
+        
+        // Verify student was created
+        var studentTag = new StudentTag(studentId);
+        var tagExists = await _eventStore.TagExistsAsync(studentTag);
+        Assert.True(tagExists.GetValue());
+        
+        // Verify the event
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag);
+        var eventsList = events.GetValue().ToList();
+        Assert.Single(eventsList);
+        var payload = eventsList[0].Payload as StudentCreated;
+        Assert.NotNull(payload);
+        Assert.Equal("Alice Johnson", payload.Name);
+        Assert.Equal(6, payload.MaxClassCount);
+    }
+    
+    [Fact]
+    public async Task ExecuteAsync_With_ICommandWithHandler_Should_Fail_When_Already_Exists()
+    {
+        // Arrange
+        var teacherId = Guid.NewGuid();
+        var command = new CreateTeacherCommand(teacherId, "Dr. Smith", "Mathematics");
+        
+        // Create the teacher first
+        var firstResult = await _commandExecutor.ExecuteAsync(command);
+        Assert.True(firstResult.IsSuccess);
+        
+        // Act - Try to create the same teacher again
+        var secondResult = await _commandExecutor.ExecuteAsync(command);
+        
+        // Assert
+        Assert.False(secondResult.IsSuccess);
+        var exception = secondResult.GetException();
+        Assert.IsType<ApplicationException>(exception);
+        Assert.Contains("already exists", exception.Message);
+    }
+    
+    [Fact]
+    public async Task ExecuteAsync_With_Function_Should_Work()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var command = new CreateStudent(studentId, "Jane Doe", 4);
+        
+        // Define handler as a function
+        Func<CreateStudent, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc = 
+            async (cmd, context) =>
+            {
+                var tag = new StudentTag(cmd.StudentId);
+                var exists = await context.TagExistsAsync(tag);
+                
+                if (exists)
+                {
+                    return ResultBox.Error<EventOrNone>(
+                        new ApplicationException("Student Already Exists"));
+                }
+                
+                return EventOrNone.EventWithTags(
+                    new StudentCreated(cmd.StudentId, cmd.Name, cmd.MaxClassCount), 
+                    tag);
+            };
+        
+        // Act
+        var result = await _commandExecutor.ExecuteAsync(command, handlerFunc);
+        
+        // Assert
+        Assert.True(result.IsSuccess);
+        var executionResult = result.GetValue();
+        Assert.NotEqual(Guid.Empty, executionResult.EventId);
+        Assert.Single(executionResult.TagWrites);
+        Assert.Equal($"Student:{studentId}", executionResult.TagWrites[0].Tag);
+        
+        // Verify student was created
+        var studentTag = new StudentTag(studentId);
+        var tagExists = await _eventStore.TagExistsAsync(studentTag);
+        Assert.True(tagExists.GetValue());
+    }
+    
     [Fact]
     public async Task CreateStudent_Should_Create_New_Student()
     {
         // Arrange
         var studentId = Guid.NewGuid();
         var command = new CreateStudent(studentId, "John Doe", 3);
-        var handler = new CreateStudentHandler();
         
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -331,13 +488,12 @@ public class InMemoryCommandExecutorDomainTests
         // Arrange
         var studentId = Guid.NewGuid();
         var command = new CreateStudent(studentId, "John Doe");
-        var handler = new CreateStudentHandler();
         
         // Create the student first
-        await _commandExecutor.ExecuteAsync(command, handler);
+        await _commandExecutor.ExecuteAsync(command);
         
         // Act - Try to create the same student again
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command);
         
         // Assert
         Assert.False(result.IsSuccess);
@@ -378,8 +534,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Create student
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(studentId, "John Doe", 5),
-            new CreateStudentHandler());
+            new CreateStudent(studentId, "John Doe", 5));
         
         // Create classroom
         await _commandExecutor.ExecuteAsync(
@@ -416,8 +571,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Create student with max 2 classes
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(studentId, "John Doe", 2),
-            new CreateStudentHandler());
+            new CreateStudent(studentId, "John Doe", 2));
         
         // Create and enroll in 2 classrooms
         for (int i = 0; i < 2; i++)
@@ -470,8 +624,7 @@ public class InMemoryCommandExecutorDomainTests
             studentIds.Add(studentId);
             
             await _commandExecutor.ExecuteAsync(
-                new CreateStudent(studentId, $"Student {i}", 5),
-                new CreateStudentHandler());
+                new CreateStudent(studentId, $"Student {i}", 5));
             
             await _commandExecutor.ExecuteAsync(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
@@ -481,8 +634,7 @@ public class InMemoryCommandExecutorDomainTests
         // Create a third student
         var thirdStudentId = Guid.NewGuid();
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(thirdStudentId, "Student 3", 5),
-            new CreateStudentHandler());
+            new CreateStudent(thirdStudentId, "Student 3", 5));
         
         // Act - Try to enroll third student
         var result = await _commandExecutor.ExecuteAsync(
@@ -504,8 +656,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Create student and classroom
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(studentId, "John Doe"),
-            new CreateStudentHandler());
+            new CreateStudent(studentId, "John Doe"));
         
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Math 101"),
@@ -536,8 +687,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Create and enroll
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(studentId, "John Doe"),
-            new CreateStudentHandler());
+            new CreateStudent(studentId, "John Doe"));
         
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Math 101"),
@@ -578,8 +728,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Create student and classroom but don't enroll
         await _commandExecutor.ExecuteAsync(
-            new CreateStudent(studentId, "John Doe"),
-            new CreateStudentHandler());
+            new CreateStudent(studentId, "John Doe"));
         
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Math 101"),
@@ -607,9 +756,9 @@ public class InMemoryCommandExecutorDomainTests
         var classRoom2 = Guid.NewGuid();
         
         // Create all entities
-        await _commandExecutor.ExecuteAsync(new CreateStudent(student1, "Alice", 3), new CreateStudentHandler());
-        await _commandExecutor.ExecuteAsync(new CreateStudent(student2, "Bob", 3), new CreateStudentHandler());
-        await _commandExecutor.ExecuteAsync(new CreateStudent(student3, "Charlie", 3), new CreateStudentHandler());
+        await _commandExecutor.ExecuteAsync(new CreateStudent(student1, "Alice", 3));
+        await _commandExecutor.ExecuteAsync(new CreateStudent(student2, "Bob", 3));
+        await _commandExecutor.ExecuteAsync(new CreateStudent(student3, "Charlie", 3));
         await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom1, "Math", 3), new CreateClassRoomHandler());
         await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom2, "Science", 3), new CreateClassRoomHandler());
         
@@ -651,8 +800,7 @@ public class InMemoryCommandExecutorDomainTests
         // Create all students
         var createTasks = studentIds.Select(id =>
             _commandExecutor.ExecuteAsync(
-                new CreateStudent(id, $"Student {id}", 5),
-                new CreateStudentHandler())).ToList();
+                new CreateStudent(id, $"Student {id}", 5))).ToList();
         
         await Task.WhenAll(createTasks);
         
