@@ -2,6 +2,7 @@ using DcbLib;
 using DcbLib.Actors;
 using DcbLib.Common;
 using DcbLib.InMemory;
+using DcbLib.Storage;
 using DcbLib.Tags;
 using Domain;
 using Xunit;

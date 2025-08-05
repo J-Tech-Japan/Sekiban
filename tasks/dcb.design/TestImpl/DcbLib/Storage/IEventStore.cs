@@ -31,9 +31,11 @@ public interface IEventStore
     Task<ResultBox<Event>> ReadEventAsync(Guid eventId);
     
     /// <summary>
-    /// Writes an event to the event store
+    /// Writes multiple events to the event store atomically
+    /// Also updates tag states for all affected tags
     /// </summary>
-    Task<ResultBox<Guid>> WriteEventAsync(Event evt);
+    /// <returns>ResultBox containing the written events and tag write results</returns>
+    Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events);
     
     // Tag operations
     
@@ -51,9 +53,4 @@ public interface IEventStore
     /// Checks if a tag exists
     /// </summary>
     Task<ResultBox<bool>> TagExistsAsync(ITag tag);
-    
-    /// <summary>
-    /// Writes a new tag state
-    /// </summary>
-    Task<ResultBox<TagWriteResult>> WriteTagAsync(ITag tag, TagState state);
 }

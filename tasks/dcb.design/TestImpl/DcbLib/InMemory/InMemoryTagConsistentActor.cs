@@ -123,7 +123,12 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
             if (_activeReservations.TryRemove(reservation.ReservationCode, out var existingReservation))
             {
                 // Verify it's the same reservation
-                return existingReservation.Equals(reservation);
+                if (existingReservation.Equals(reservation))
+                {
+                    // After confirming reservation, force a re-catch up to get the latest state
+                    _catchUpCompleted = false;
+                    return true;
+                }
             }
             
             return false;

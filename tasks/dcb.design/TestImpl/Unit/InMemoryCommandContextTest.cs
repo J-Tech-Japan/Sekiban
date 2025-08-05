@@ -8,6 +8,7 @@ using DcbLib.Common;
 using DcbLib.Domains;
 using DcbLib.Events;
 using DcbLib.InMemory;
+using DcbLib.Storage;
 using DcbLib.Tags;
 using Domain;
 using Xunit;

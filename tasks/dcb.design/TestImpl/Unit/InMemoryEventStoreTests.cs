@@ -1,6 +1,7 @@
 using DcbLib.Common;
 using DcbLib.Events;
 using DcbLib.InMemory;
+using DcbLib.Storage;
 using DcbLib.Tags;
 using Domain;
 using ResultBoxes;
@@ -39,7 +40,7 @@ public class InMemoryEventStoreTests
         
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.NotEqual(Guid.Empty, result.GetValue());
+        Assert.NotEqual(Guid.Empty, result.GetValue().Id);
     }
     
     [Fact]
@@ -52,7 +53,7 @@ public class InMemoryEventStoreTests
         
         var evt = EventTestHelper.CreateEvent(eventPayload, tags);
         var writeResult = await _store.WriteEventAsync(evt);
-        var eventId = writeResult.GetValue();
+        var eventId = writeResult.GetValue().Id;
         
         // Act
         var readResult = await _store.ReadEventAsync(eventId);
@@ -115,7 +116,7 @@ public class InMemoryEventStoreTests
         await _store.WriteEventAsync(EventTestHelper.CreateEvent(student3, new StudentTag(student3.StudentId)));
         
         // Get the sortable ID of the second event
-        var secondEvent = (await _store.ReadEventAsync(secondEventResult.GetValue())).GetValue();
+        var secondEvent = (await _store.ReadEventAsync(secondEventResult.GetValue().Id)).GetValue();
         var since = new SortableUniqueId(secondEvent.SortableUniqueIdValue);
         
         // Act
@@ -238,61 +239,63 @@ public class InMemoryEventStoreTests
         }
     }
     
-    [Fact]
-    public async Task WriteTagAsync_Should_Write_New_Tag_State()
-    {
-        // Arrange
-        var studentId = Guid.NewGuid();
-        var studentTag = new StudentTag(studentId);
-        var tagState = new TagState(
-            null!, // Payload
-            1,
-            SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
-            studentTag.GetTagGroup(),
-            studentTag.GetTag(),
-            "TestProjector"
-        );
-        
-        // Act
-        var writeResult = await _store.WriteTagAsync(studentTag, tagState);
-        
-        // Assert
-        Assert.True(writeResult.IsSuccess);
-        var writeResultValue = writeResult.GetValue();
-        Assert.Equal(studentTag.GetTag(), writeResultValue.Tag);
-        Assert.Equal(1, writeResultValue.Version);
-        
-        // Verify tag exists
-        var exists = await _store.TagExistsAsync(studentTag);
-        Assert.True(exists.GetValue());
-    }
+    // WriteTagAsync is no longer part of the interface - tags are written automatically with events
+    // [Fact]
+    // public async Task WriteTagAsync_Should_Write_New_Tag_State()
+    // {
+    //     // Arrange
+    //     var studentId = Guid.NewGuid();
+    //     var studentTag = new StudentTag(studentId);
+    //     var tagState = new TagState(
+    //         null!, // Payload
+    //         1,
+    //         SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
+    //         studentTag.GetTagGroup(),
+    //         studentTag.GetTag(),
+    //         "TestProjector"
+    //     );
+    //     
+    //     // Act
+    //     var writeResult = await _store.WriteTagAsync(studentTag, tagState);
+    //     
+    //     // Assert
+    //     Assert.True(writeResult.IsSuccess);
+    //     var writeResultValue = writeResult.GetValue();
+    //     Assert.Equal(studentTag.GetTag(), writeResultValue.Tag);
+    //     Assert.Equal(1, writeResultValue.Version);
+    //     
+    //     // Verify tag exists
+    //     var exists = await _store.TagExistsAsync(studentTag);
+    //     Assert.True(exists.GetValue());
+    // }
     
-    [Fact]
-    public async Task WriteTagAsync_Should_Fail_For_Existing_Tag()
-    {
-        // Arrange
-        var studentId = Guid.NewGuid();
-        var studentTag = new StudentTag(studentId);
-        var eventPayload = new StudentCreated(studentId, "John", 5);
-        
-        // Write an event which creates the tag
-        await _store.WriteEventAsync(EventTestHelper.CreateEvent(eventPayload, studentTag));
-        
-        var tagState = new TagState(
-            null!,
-            1,
-            SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
-            studentTag.GetTagGroup(),
-            studentTag.GetTag(),
-            "TestProjector"
-        );
-        
-        // Act
-        var result = await _store.WriteTagAsync(studentTag, tagState);
-        
-        // Assert
-        Assert.False(result.IsSuccess);
-    }
+    // WriteTagAsync is no longer part of the interface - tags are written automatically with events
+    // [Fact]
+    // public async Task WriteTagAsync_Should_Fail_For_Existing_Tag()
+    // {
+    //     // Arrange
+    //     var studentId = Guid.NewGuid();
+    //     var studentTag = new StudentTag(studentId);
+    //     var eventPayload = new StudentCreated(studentId, "John", 5);
+    //     
+    //     // Write an event which creates the tag
+    //     await _store.WriteEventAsync(EventTestHelper.CreateEvent(eventPayload, studentTag));
+    //     
+    //     var tagState = new TagState(
+    //         null!,
+    //         1,
+    //         SortableUniqueId.Generate(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000064")),
+    //         studentTag.GetTagGroup(),
+    //         studentTag.GetTag(),
+    //         "TestProjector"
+    //     );
+    //     
+    //     // Act
+    //     var result = await _store.WriteTagAsync(studentTag, tagState);
+    //     
+    //     // Assert
+    //     Assert.False(result.IsSuccess);
+    // }
     
     [Fact]
     public async Task Events_Should_Be_Ordered_By_SortableUniqueId()
@@ -427,7 +430,7 @@ public class InMemoryEventStoreTests
             var writeResult = await _store.WriteEventAsync(
                 EventTestHelper.CreateEvent(new StudentCreated(studentId, $"Student Version {i}", 5), studentTag));
             
-            var eventId = writeResult.GetValue();
+            var eventId = writeResult.GetValue().Id;
             eventIds.Add(eventId);
             
             var evt = (await _store.ReadEventAsync(eventId)).GetValue();
