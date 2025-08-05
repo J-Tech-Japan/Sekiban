@@ -38,11 +38,11 @@ public interface ICommandContext
     Task<bool> TagExistsAsync(ITag tag);
 
     /// <summary>
-    /// Gets the current version for a tag (for optimistic concurrency)
+    /// Gets the latest sortable unique ID for a tag (for optimistic concurrency)
     /// </summary>
     /// <param name="tag">The tag to query</param>
-    /// <returns>The current version number or 0 if not found</returns>
-    Task<long> GetTagVersionAsync(ITag tag);
+    /// <returns>The latest sortable unique ID or empty string if not found</returns>
+    Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag);
 
     /// <summary>
     /// Appends an event with tags to the context

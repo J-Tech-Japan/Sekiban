@@ -58,27 +58,74 @@ public class InMemoryEventStore : IEventStore
             : Task.FromResult(ResultBox.Error<Event>(new Exception($"Event {eventId} not found")));
     }
     
-    public Task<ResultBox<Guid>> WriteEventAsync(Event evt)
+    public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
     {
         lock (_eventLock)
         {
-            _events[evt.Id] = evt;
-            _eventOrder.Add(evt);
+            var eventList = events.ToList();
+            var writtenEvents = new List<Event>();
+            var tagWriteResults = new List<TagWriteResult>();
+            var tagVersions = new Dictionary<string, long>();
             
-            // Add tag streams for each tag in the event
-            foreach (var tagString in evt.Tags)
+            // Track current versions for all affected tags
+            var affectedTags = new HashSet<string>();
+            foreach (var evt in eventList)
             {
-                var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
-                
-                if (!_tagStreams.ContainsKey(tagString))
+                foreach (var tagString in evt.Tags)
                 {
-                    _tagStreams[tagString] = new List<TagStream>();
+                    affectedTags.Add(tagString);
                 }
-                
-                _tagStreams[tagString].Add(tagStream);
             }
             
-            return Task.FromResult(ResultBox.FromValue(evt.Id));
+            // Get current versions
+            foreach (var tagString in affectedTags)
+            {
+                if (_tagStreams.TryGetValue(tagString, out var streams))
+                {
+                    tagVersions[tagString] = streams.Count;
+                }
+                else
+                {
+                    tagVersions[tagString] = 0;
+                }
+            }
+            
+            // Write events
+            foreach (var evt in eventList)
+            {
+                _events[evt.Id] = evt;
+                _eventOrder.Add(evt);
+                writtenEvents.Add(evt);
+                
+                // Add tag streams for each tag in the event
+                foreach (var tagString in evt.Tags)
+                {
+                    var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
+                    
+                    if (!_tagStreams.ContainsKey(tagString))
+                    {
+                        _tagStreams[tagString] = new List<TagStream>();
+                    }
+                    
+                    _tagStreams[tagString].Add(tagStream);
+                }
+            }
+            
+            // Create tag write results
+            foreach (var tagString in affectedTags)
+            {
+                var newVersion = _tagStreams[tagString].Count;
+                tagWriteResults.Add(new TagWriteResult(
+                    tagString,
+                    newVersion,
+                    DateTimeOffset.UtcNow
+                ));
+            }
+            
+            return Task.FromResult(ResultBox.FromValue((
+                Events: (IReadOnlyList<Event>)writtenEvents,
+                TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults
+            )));
         }
     }
     
@@ -139,24 +186,4 @@ public class InMemoryEventStore : IEventStore
         }
     }
     
-    public Task<ResultBox<TagWriteResult>> WriteTagAsync(ITag tag, TagState state)
-    {
-        var tagString = tag.GetTag();
-        
-        lock (_eventLock)
-        {
-            // Check if tag already exists
-            if (_tagStreams.ContainsKey(tagString))
-            {
-                return Task.FromResult(ResultBox.Error<TagWriteResult>(
-                    new Exception($"Tag {tagString} already exists")));
-            }
-            
-            // Create an empty tag stream list for this tag
-            _tagStreams[tagString] = new List<TagStream>();
-            
-            return Task.FromResult(ResultBox.FromValue(
-                new TagWriteResult(tagString, state.Version, DateTimeOffset.UtcNow)));
-        }
-    }
 }

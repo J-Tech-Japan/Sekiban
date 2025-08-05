@@ -16,16 +16,17 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     private readonly TagStateId _tagStateId;
     private readonly IEventStore _eventStore;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly IActorObjectAccessor? _actorAccessor;
+    private readonly IActorObjectAccessor _actorAccessor;
+    private readonly TagStateOptions _options;
     private TagState? _cachedState;
     private readonly SemaphoreSlim _stateLock = new(1, 1);
     
-    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes)
-        : this(tagStateId, eventStore, domainTypes, null)
+    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor actorAccessor)
+        : this(tagStateId, eventStore, domainTypes, new TagStateOptions(), actorAccessor)
     {
     }
     
-    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor? actorAccessor)
+    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, TagStateOptions options, IActorObjectAccessor actorAccessor)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
             throw new ArgumentNullException(nameof(tagStateId));
@@ -33,7 +34,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         _tagStateId = TagStateId.Parse(tagStateId);
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _actorAccessor = actorAccessor;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
     }
     
     public Task<string> GetTagStateActorIdAsync()
@@ -75,13 +77,28 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     
     public async Task<TagState> GetTagStateAsync()
     {
-        // Check if we have cached state
+        // First, check if we can use cached state
+        string? currentLatestSortableUniqueId = null;
+        var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
+        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (tagConsistentActorResult.IsSuccess)
+        {
+            var tagConsistentActor = tagConsistentActorResult.GetValue();
+            currentLatestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        }
+        
+        // Check if we have cached state and if it's still valid
         await _stateLock.WaitAsync();
         try
         {
             if (_cachedState != null)
             {
-                return _cachedState;
+                // If cached state matches current state, return cached
+                if (currentLatestSortableUniqueId == null ||
+                    _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
+                {
+                    return _cachedState;
+                }
             }
         }
         finally
@@ -97,7 +114,9 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         try
         {
             // Double-check in case another thread computed it
-            if (_cachedState != null)
+            if (_cachedState != null && 
+                (currentLatestSortableUniqueId == null ||
+                 _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId))
             {
                 return _cachedState;
             }
@@ -139,17 +158,14 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
         
-        // Get the latest sortable unique ID from TagConsistentActor if available
+        // Get the latest sortable unique ID from TagConsistentActor
         string? latestSortableUniqueId = null;
-        if (_actorAccessor != null)
+        var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
+        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (tagConsistentActorResult.IsSuccess)
         {
-            var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
-            var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-            if (tagConsistentActorResult.IsSuccess)
-            {
-                var tagConsistentActor = tagConsistentActorResult.GetValue();
-                latestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
-            }
+            var tagConsistentActor = tagConsistentActorResult.GetValue();
+            latestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
         }
         
         // Get the projector
@@ -185,6 +201,19 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         }
         
         var events = eventsResult.GetValue().ToList();
+        
+        // If TagConsistentActor has no LastSortableUniqueId, return empty state
+        if (string.IsNullOrEmpty(latestSortableUniqueId))
+        {
+            return new TagState(
+                new EmptyTagStatePayload(),
+                0,
+                "",
+                _tagStateId.TagGroup,
+                _tagStateId.TagContent,
+                _tagStateId.TagProjectorName
+            );
+        }
         
         // Filter events up to the latest sortable unique ID if provided
         if (!string.IsNullOrEmpty(latestSortableUniqueId))
