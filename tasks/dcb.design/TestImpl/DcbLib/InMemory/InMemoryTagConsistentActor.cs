@@ -15,6 +15,7 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
 {
     private readonly string _tagName;
     private readonly IEventStore? _eventStore;
+    private readonly TagConsistentActorOptions _options;
     private readonly ConcurrentDictionary<string, TagWriteReservation> _activeReservations = new();
     private readonly SemaphoreSlim _reservationLock = new(1, 1);
     private readonly SemaphoreSlim _catchUpLock = new(1, 1);
@@ -22,14 +23,25 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
     private volatile bool _catchUpCompleted = false;
     
     public InMemoryTagConsistentActor(string tagName)
-        : this(tagName, null)
+        : this(tagName, null, new TagConsistentActorOptions())
     {
     }
     
     public InMemoryTagConsistentActor(string tagName, IEventStore? eventStore)
+        : this(tagName, eventStore, new TagConsistentActorOptions())
+    {
+    }
+    
+    public InMemoryTagConsistentActor(string tagName, TagConsistentActorOptions options)
+        : this(tagName, null, options)
+    {
+    }
+    
+    public InMemoryTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options)
     {
         _tagName = tagName ?? throw new ArgumentNullException(nameof(tagName));
         _eventStore = eventStore;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
     
     public Task<string> GetTagActorIdAsync()
@@ -80,7 +92,7 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
             
             // Create new reservation
             var reservationCode = Guid.NewGuid().ToString();
-            var expiredUtc = DateTime.UtcNow.AddSeconds(30); // 30 second timeout
+            var expiredUtc = DateTime.UtcNow.AddSeconds(_options.CancellationWindowSeconds);
             var reservation = new TagWriteReservation(
                 reservationCode,
                 expiredUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'"),

@@ -19,6 +19,12 @@ public static class DomainType
         var tagTypes = new SimpleTagTypes();
         var tagProjectorTypes = new SimpleTagProjectorTypes();
         var commandTypes = new SimpleCommandTypes();
+        var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
+        
+        // Register domain-specific tag state payload types
+        tagStatePayloadTypes.RegisterPayloadType<StudentState>(nameof(StudentState));
+        tagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>(nameof(AvailableClassRoomState));
+        tagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>(nameof(FilledClassRoomState));
         
         // Register tag projectors
         tagProjectorTypes.RegisterProjector(new StudentProjector());
@@ -42,6 +48,7 @@ public static class DomainType
             tagTypes,
             tagProjectorTypes,
             commandTypes,
+            tagStatePayloadTypes,
             jsonOptions
         );
     }
