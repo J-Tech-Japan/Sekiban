@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
-using DcbLib.Actors;
-using DcbLib.Storage;
-using DcbLib.Tags;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
 using ResultBoxes;
 
-namespace DcbLib.InMemory;
+namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
 /// In-memory implementation of ITagConsistentActorCommon for testing
@@ -137,6 +137,12 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
                     // After confirming reservation, force a re-catch up to get the latest state
                     _catchUpCompleted = false;
                     return true;
+                }
+                else
+                {
+                    // Put it back if it doesn't match
+                    _activeReservations[reservation.ReservationCode] = existingReservation;
+                    return false;
                 }
             }
             

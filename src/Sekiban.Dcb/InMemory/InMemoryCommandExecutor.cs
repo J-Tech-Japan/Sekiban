@@ -1,13 +1,13 @@
 using System.Diagnostics;
-using DcbLib.Actors;
-using DcbLib.Commands;
-using DcbLib.Common;
-using DcbLib.Events;
-using DcbLib.Storage;
-using DcbLib.Tags;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
 using ResultBoxes;
 
-namespace DcbLib.InMemory;
+namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
 /// In-memory implementation of ICommandExecutor
