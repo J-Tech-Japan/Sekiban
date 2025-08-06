@@ -25,6 +25,18 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
     {
         var projector = new T();
         var projectorName = name ?? typeof(T).Name;
+        var newType = typeof(T);
+        
+        if (_projectors.TryGetValue(projectorName, out var existingProjector))
+        {
+            var existingType = existingProjector.GetType();
+            if (existingType != newType)
+            {
+                throw new InvalidOperationException(
+                    $"Tag projector name '{projectorName}' is already registered with type '{existingType.FullName}'. " +
+                    $"Cannot register it with different type '{newType.FullName}'.");
+            }
+        }
         _projectors[projectorName] = projector;
     }
     

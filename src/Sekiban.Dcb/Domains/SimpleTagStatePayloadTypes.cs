@@ -71,6 +71,17 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
     public void RegisterPayloadType<T>(string? name = null) where T : ITagStatePayload
     {
         var payloadName = name ?? typeof(T).Name;
-        _payloadTypes[payloadName] = typeof(T);
+        var newType = typeof(T);
+        
+        if (_payloadTypes.TryGetValue(payloadName, out var existingType))
+        {
+            if (existingType != newType)
+            {
+                throw new InvalidOperationException(
+                    $"Tag state payload name '{payloadName}' is already registered with type '{existingType.FullName}'. " +
+                    $"Cannot register it with different type '{newType.FullName}'.");
+            }
+        }
+        _payloadTypes[payloadName] = newType;
     }
 }
