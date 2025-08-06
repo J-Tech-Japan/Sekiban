@@ -5,5 +5,5 @@ public record ClassRoomTag(Guid ClassRoomId) : ITag
 {
     public bool IsConsistencyTag() => true;
     public string GetTagGroup() => "ClassRoom";
-    public string GetTag() => $"ClassRoom:{ClassRoomId}";
+    public string GetTagContent() => ClassRoomId.ToString();
 }

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Tags;
 using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.ClassRoom;

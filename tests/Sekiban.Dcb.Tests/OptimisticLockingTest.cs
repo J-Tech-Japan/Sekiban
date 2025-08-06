@@ -27,7 +27,7 @@ public class OptimisticLockingTest
     private record TestTag(string Id) : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => $"Test:{Id}";
+        public string GetTagContent() => Id;
         public string GetTagGroup() => "Test";
     }
     

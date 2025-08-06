@@ -9,7 +9,7 @@ public record NonConsistencyTag(ITag InnerTag) : ITag
 
     public string GetTagGroup() => InnerTag.GetTagGroup();
 
-    public string GetTag() => InnerTag.GetTag();
+    public string GetTagContent() => InnerTag.GetTagContent();
 
     /// <summary>
     /// Creates a non-consistency tag from any tag

@@ -86,7 +86,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
     private record SimpleTag(string TagValue) : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => TagValue;
+        public string GetTagContent() => TagValue.Split(':').Length > 1 ? string.Join(':', TagValue.Split(':').Skip(1)) : "";
         public string GetTagGroup() => TagValue.Split(':')[0];
     }
     

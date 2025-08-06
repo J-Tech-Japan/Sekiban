@@ -31,14 +31,14 @@ public class GeneralCommandContextTest
     private record TestTag : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup:Test123";
+        public string GetTagContent() => "Test123";
         public string GetTagGroup() => "TestGroup";
     }
     
     private record TestTag2 : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup2:Test456";
+        public string GetTagContent() => "Test456";
         public string GetTagGroup() => "TestGroup2";
     }
     

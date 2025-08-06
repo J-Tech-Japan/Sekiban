@@ -73,7 +73,7 @@ public class GeneralSekibanExecutorTest
     private record TestTag : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup:Test123";
+        public string GetTagContent() => "Test123";
         public string GetTagGroup() => "TestGroup";
     }
     
@@ -268,7 +268,7 @@ public class GeneralSekibanExecutorTest
     private record TestTag2 : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup2:Test456";
+        public string GetTagContent() => "Test456";
         public string GetTagGroup() => "TestGroup2";
     }
 }
@@ -324,7 +324,7 @@ public class GeneralSekibanExecutorDomainTests
     {
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => "Teacher";
-        public string GetTag() => $"Teacher:{TeacherId}";
+        public string GetTagContent() => TeacherId.ToString();
     }
     
     public record TeacherCreated(Guid TeacherId, string Name, string Subject) : IEventPayload;

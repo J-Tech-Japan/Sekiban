@@ -4,5 +4,5 @@ public interface ITag
 {
     bool IsConsistencyTag();
     string GetTagGroup();
-    string GetTag();
+    string GetTagContent();
 }
