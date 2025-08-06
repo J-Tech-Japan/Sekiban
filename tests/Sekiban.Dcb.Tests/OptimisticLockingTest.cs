@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -20,7 +21,7 @@ public class OptimisticLockingTest
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryCommandExecutor _commandExecutor;
+    private readonly GeneralCommandExecutor _commandExecutor;
     
     // Test-specific types
     private record TestTag(string Id) : ITag
@@ -99,7 +100,7 @@ public class OptimisticLockingTest
         _eventStore = new InMemoryEventStore();
         _domainTypes = CreateTestDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new InMemoryCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     [Fact]
@@ -113,7 +114,7 @@ public class OptimisticLockingTest
         
         // Get the current version of the tag by using the command context
         var tag = new TestTag(tagId);
-        var commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
+        var commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
         var stateResult = await commandContext.GetStateAsync<TestProjector>(tag);
         
         SortableUniqueId currentVersion;
@@ -150,7 +151,7 @@ public class OptimisticLockingTest
         
         // Get the initial version
         var tag = new TestTag(tagId);
-        var commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
+        var commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
         var initialStateResult = await commandContext.GetStateAsync<TestProjector>(tag);
         Assert.True(initialStateResult.IsSuccess);
         var initialVersion = new SortableUniqueId(initialStateResult.GetValue().LastSortedUniqueId);
@@ -207,7 +208,7 @@ public class OptimisticLockingTest
         
         // Get the current version using command context
         var tag = new TestTag(tagId);
-        var commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
+        var commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
         var stateResult = await commandContext.GetStateAsync<TestProjector>(tag);
         
         SortableUniqueId currentVersion;

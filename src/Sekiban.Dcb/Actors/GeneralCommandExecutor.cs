@@ -7,20 +7,21 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using ResultBoxes;
 
-namespace Sekiban.Dcb.InMemory;
+namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// In-memory implementation of ICommandExecutor
+/// General implementation of ICommandExecutor
 /// Orchestrates command execution including context creation, handler invocation,
 /// tag reservation, and event/tag persistence.
+/// Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class InMemoryCommandExecutor : ICommandExecutor
+public class GeneralCommandExecutor : ICommandExecutor
 {
     private readonly IEventStore _eventStore;
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
     
-    public InMemoryCommandExecutor(
+    public GeneralCommandExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
         DcbDomainTypes domainTypes)
@@ -41,7 +42,7 @@ public class InMemoryCommandExecutor : ICommandExecutor
         try
         {
             // Step 1: Create command context
-            var commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
+            var commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
             
             // Step 2: Execute handler function with context
             var handlerResult = await handlerFunc(command, commandContext);

@@ -19,12 +19,12 @@ using ResultBoxes;
 
 namespace Sekiban.Dcb.Tests;
 
-public class InMemoryCommandContextTest
+public class GeneralCommandContextTest
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryCommandContext _commandContext;
+    private readonly GeneralCommandContext _commandContext;
     
     // Test event and tag types
     private record TestEvent(string Name) : IEventPayload;
@@ -58,12 +58,12 @@ public class InMemoryCommandContextTest
     {
     }
     
-    public InMemoryCommandContextTest()
+    public GeneralCommandContextTest()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = CreateTestDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandContext = new InMemoryCommandContext(_actorAccessor, _domainTypes);
+        _commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
     }
     
     private DcbDomainTypes CreateTestDomainTypes()

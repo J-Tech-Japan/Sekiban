@@ -4,20 +4,21 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 using ResultBoxes;
 
-namespace Sekiban.Dcb.InMemory;
+namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// In-memory implementation of ICommandContext and ICommandContextResultAccessor
+/// General implementation of ICommandContext and ICommandContextResultAccessor
 /// Provides access to tag states during command processing and tracks accessed states
+/// Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class InMemoryCommandContext : ICommandContext, ICommandContextResultAccessor
+public class GeneralCommandContext : ICommandContext, ICommandContextResultAccessor
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
     private readonly List<EventPayloadWithTags> _appendedEvents = new();
     private readonly Dictionary<ITag, TagState> _accessedTagStates = new();
     
-    public InMemoryCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
+    public GeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
     {
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
