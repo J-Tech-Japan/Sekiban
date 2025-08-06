@@ -31,6 +31,55 @@ public record DcbDomainTypes
     public ITagProjectorTypes TagProjectorTypes { get; init; }
     public ITagStatePayloadTypes TagStatePayloadTypes { get; init; }
     public JsonSerializerOptions JsonSerializerOptions { get; init; }
+    
+    /// <summary>
+    /// Simple builder class for configuring domain types
+    /// </summary>
+    public class Builder
+    {
+        public SimpleEventTypes EventTypes { get; }
+        public SimpleTagTypes TagTypes { get; }
+        public SimpleTagProjectorTypes TagProjectorTypes { get; }
+        public SimpleTagStatePayloadTypes TagStatePayloadTypes { get; }
+        public JsonSerializerOptions JsonOptions { get; }
+        
+        internal Builder(JsonSerializerOptions? jsonOptions = null)
+        {
+            JsonOptions = jsonOptions ?? new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = true
+            };
+            
+            EventTypes = new SimpleEventTypes(JsonOptions);
+            TagTypes = new SimpleTagTypes();
+            TagProjectorTypes = new SimpleTagProjectorTypes();
+            TagStatePayloadTypes = new SimpleTagStatePayloadTypes();
+        }
+        
+        internal DcbDomainTypes Build()
+        {
+            return new DcbDomainTypes(
+                EventTypes,
+                TagTypes,
+                TagProjectorTypes,
+                TagStatePayloadTypes,
+                JsonOptions
+            );
+        }
+    }
+    
+    /// <summary>
+    /// Creates a simple DcbDomainTypes configuration with manual type registration
+    /// </summary>
+    public static DcbDomainTypes Simple(
+        Action<Builder> configure,
+        JsonSerializerOptions? jsonOptions = null)
+    {
+        var builder = new Builder(jsonOptions);
+        configure(builder);
+        return builder.Build();
+    }
 }
 
 /// <summary>

@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Sekiban.Dcb;
-using Sekiban.Dcb.Domains;
 
 namespace Dcb.Domain;
 
@@ -14,43 +12,22 @@ public static class DomainType
     /// </summary>
     public static DcbDomainTypes GetDomainTypes()
     {
-        // Configure JSON serialization options
-        var jsonOptions = new JsonSerializerOptions
+        return DcbDomainTypes.Simple(types =>
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
-        
-        // Create instances of the domain type managers
-        var eventTypes = new SimpleEventTypes(jsonOptions);
-        var tagTypes = new SimpleTagTypes();
-        var tagProjectorTypes = new SimpleTagProjectorTypes();
-        var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
-        
-        // Register event types
-        eventTypes.RegisterEventType<StudentCreated>();
-        eventTypes.RegisterEventType<ClassRoomCreated>();
-        eventTypes.RegisterEventType<StudentEnrolledInClassRoom>();
-        eventTypes.RegisterEventType<StudentDroppedFromClassRoom>();
-        
-        // Register domain-specific tag state payload types
-        tagStatePayloadTypes.RegisterPayloadType<StudentState>(nameof(StudentState));
-        tagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>(nameof(AvailableClassRoomState));
-        tagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>(nameof(FilledClassRoomState));
-        
-        // Register tag projectors
-        tagProjectorTypes.RegisterProjector(new StudentProjector());
-        tagProjectorTypes.RegisterProjector(new ClassRoomProjector());
-        
-        // Note: Command handlers are no longer registered here
-        // Commands either implement ICommandWithHandler or are passed with their handlers to ICommandExecutor
-        
-        return new DcbDomainTypes(
-            eventTypes,
-            tagTypes,
-            tagProjectorTypes,
-            tagStatePayloadTypes,
-            jsonOptions
-        );
+            // Register event types
+            types.EventTypes.RegisterEventType<StudentCreated>();
+            types.EventTypes.RegisterEventType<ClassRoomCreated>();
+            types.EventTypes.RegisterEventType<StudentEnrolledInClassRoom>();
+            types.EventTypes.RegisterEventType<StudentDroppedFromClassRoom>();
+            
+            // Register tag projectors
+            types.TagProjectorTypes.RegisterProjector(new StudentProjector());
+            types.TagProjectorTypes.RegisterProjector(new ClassRoomProjector());
+            
+            // Register tag state payload types
+            types.TagStatePayloadTypes.RegisterPayloadType<StudentState>(nameof(StudentState));
+            types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>(nameof(AvailableClassRoomState));
+            types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>(nameof(FilledClassRoomState));
+        });
     }
 }
