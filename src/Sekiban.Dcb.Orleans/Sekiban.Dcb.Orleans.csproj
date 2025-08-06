@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>Sekiban.Dcb.Orleans</PackageId>
+        <Version>1.0.0-preview1</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Dynamic Consistency Boundary Orleans Integration</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>1.0.0-preview1</PackageVersion>
+        <Description>Orleans integration for Sekiban DCB</Description>
+        <AssemblyName>Sekiban.Dcb.Orleans</AssemblyName>
+        <RootNamespace>Sekiban.Dcb.Orleans</RootNamespace>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <TargetFramework>net9.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Dcb\Sekiban.Dcb.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -14,12 +14,12 @@ using Xunit;
 
 namespace Sekiban.Dcb.Tests;
 
-public class GeneralCommandExecutorTest
+public class GeneralSekibanExecutorTest
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly GeneralCommandExecutor _commandExecutor;
+    private readonly GeneralSekibanExecutor _commandExecutor;
     
     // Test command and handler
     private record TestCommand(string Name, int Value) : ICommand;
@@ -83,12 +83,12 @@ public class GeneralCommandExecutorTest
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload _) => current;
     }
     
-    public GeneralCommandExecutorTest()
+    public GeneralSekibanExecutorTest()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     [Fact]
@@ -274,22 +274,22 @@ public class GeneralCommandExecutorTest
 }
 
 /// <summary>
-/// Comprehensive tests for GeneralCommandExecutor using domain types
+/// Comprehensive tests for GeneralSekibanExecutor using domain types
 /// Testing the actual business rules and command execution flow
 /// </summary>
-public class GeneralCommandExecutorDomainTests
+public class GeneralSekibanExecutorDomainTests
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly GeneralCommandExecutor _commandExecutor;
+    private readonly GeneralSekibanExecutor _commandExecutor;
     
-    public GeneralCommandExecutorDomainTests()
+    public GeneralSekibanExecutorDomainTests()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     

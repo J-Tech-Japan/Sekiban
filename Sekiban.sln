@@ -93,6 +93,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Dcb.Postgres.Migrat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Dcb.Postgres.Tests", "tests\Sekiban.Dcb.Postgres.Tests\Sekiban.Dcb.Postgres.Tests.csproj", "{F15E6E29-15B4-45D8-8399-853800F8FF66}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Dcb.Orleans", "src\Sekiban.Dcb.Orleans\Sekiban.Dcb.Orleans.csproj", "{80DCD87C-DDBE-447A-B09A-E527BE7F289A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -583,6 +585,18 @@ Global
 		{F15E6E29-15B4-45D8-8399-853800F8FF66}.Release|x64.Build.0 = Release|Any CPU
 		{F15E6E29-15B4-45D8-8399-853800F8FF66}.Release|x86.ActiveCfg = Release|Any CPU
 		{F15E6E29-15B4-45D8-8399-853800F8FF66}.Release|x86.Build.0 = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|x64.Build.0 = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Debug|x86.Build.0 = Debug|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|x64.ActiveCfg = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|x64.Build.0 = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|x86.ActiveCfg = Release|Any CPU
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -628,6 +642,7 @@ Global
 		{4B302592-CE38-4B51-878F-6454D62948AE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{EBFAEA93-08AE-493B-AD51-0C60AD8262D4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F15E6E29-15B4-45D8-8399-853800F8FF66} = {4C34F748-F223-44DD-899D-029F9CEF7780}
+		{80DCD87C-DDBE-447A-B09A-E527BE7F289A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}
