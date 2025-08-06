@@ -1,4 +1,7 @@
 using Sekiban.Dcb;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 
 namespace Dcb.Domain;
 
