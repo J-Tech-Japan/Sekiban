@@ -14,7 +14,7 @@ public record ConsistencyTag(ITag InnerTag) : ITag
 
     public string GetTagGroup() => InnerTag.GetTagGroup();
 
-    public string GetTag() => InnerTag.GetTag();
+    public string GetTagContent() => InnerTag.GetTagContent();
 
     /// <summary>
     /// Creates a consistency tag from any tag

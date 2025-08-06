@@ -14,12 +14,12 @@ using Xunit;
 
 namespace Sekiban.Dcb.Tests;
 
-public class GeneralCommandExecutorTest
+public class GeneralSekibanExecutorTest
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly GeneralCommandExecutor _commandExecutor;
+    private readonly GeneralSekibanExecutor _commandExecutor;
     
     // Test command and handler
     private record TestCommand(string Name, int Value) : ICommand;
@@ -73,7 +73,7 @@ public class GeneralCommandExecutorTest
     private record TestTag : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup:Test123";
+        public string GetTagContent() => "Test123";
         public string GetTagGroup() => "TestGroup";
     }
     
@@ -83,12 +83,12 @@ public class GeneralCommandExecutorTest
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload _) => current;
     }
     
-    public GeneralCommandExecutorTest()
+    public GeneralSekibanExecutorTest()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     [Fact]
@@ -268,28 +268,28 @@ public class GeneralCommandExecutorTest
     private record TestTag2 : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => "TestGroup2:Test456";
+        public string GetTagContent() => "Test456";
         public string GetTagGroup() => "TestGroup2";
     }
 }
 
 /// <summary>
-/// Comprehensive tests for GeneralCommandExecutor using domain types
+/// Comprehensive tests for GeneralSekibanExecutor using domain types
 /// Testing the actual business rules and command execution flow
 /// </summary>
-public class GeneralCommandExecutorDomainTests
+public class GeneralSekibanExecutorDomainTests
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly GeneralCommandExecutor _commandExecutor;
+    private readonly GeneralSekibanExecutor _commandExecutor;
     
-    public GeneralCommandExecutorDomainTests()
+    public GeneralSekibanExecutorDomainTests()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     
@@ -324,7 +324,7 @@ public class GeneralCommandExecutorDomainTests
     {
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => "Teacher";
-        public string GetTag() => $"Teacher:{TeacherId}";
+        public string GetTagContent() => TeacherId.ToString();
     }
     
     public record TeacherCreated(Guid TeacherId, string Name, string Subject) : IEventPayload;
@@ -422,8 +422,8 @@ public class GeneralCommandExecutorDomainTests
         var studentId = Guid.NewGuid();
         var command = new CreateStudent(studentId, "Jane Doe", 4);
         
-        // Define handler as a function
-        Func<CreateStudent, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc = 
+        // Act - Execute with inline handler function
+        var result = await _commandExecutor.ExecuteAsync(command, 
             async (cmd, context) =>
             {
                 var tag = new StudentTag(cmd.StudentId);
@@ -443,10 +443,7 @@ public class GeneralCommandExecutorDomainTests
                 return EventOrNone.EventWithTags(
                     new StudentCreated(cmd.StudentId, cmd.Name, cmd.MaxClassCount), 
                     tag);
-            };
-        
-        // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handlerFunc);
+            });
         
         // Assert
         Assert.True(result.IsSuccess);

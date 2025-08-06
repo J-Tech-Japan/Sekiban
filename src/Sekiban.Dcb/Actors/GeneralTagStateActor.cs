@@ -283,7 +283,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         
         public bool IsConsistencyTag() => true; // Assume all tags are consistency tags for now
         public string GetTagGroup() => _tagGroup;
-        public string GetTag() => $"{_tagGroup}:{_tagContent}";
+        public string GetTagContent() => _tagContent;
     }
     
     /// <summary>

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Tags;
 using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.ClassRoom;
@@ -20,7 +21,7 @@ public class PostgresWithActorsTests : PostgresTestBase
     public async Task Should_Execute_Commands_With_InMemory_Actors_And_Postgres_Storage()
     {
         // Arrange
-        var commandExecutor = new GeneralCommandExecutor(
+        var commandExecutor = new GeneralSekibanExecutor(
             Fixture.EventStore,
             Fixture.ActorAccessor,
             Fixture.DomainTypes);
@@ -66,7 +67,7 @@ public class PostgresWithActorsTests : PostgresTestBase
     public async Task Should_Handle_Concurrent_Commands_With_Actors()
     {
         // Arrange
-        var commandExecutor = new GeneralCommandExecutor(
+        var commandExecutor = new GeneralSekibanExecutor(
             Fixture.EventStore,
             Fixture.ActorAccessor,
             Fixture.DomainTypes);
@@ -138,7 +139,7 @@ public class PostgresWithActorsTests : PostgresTestBase
     {
         // This test demonstrates the expected behavior with sequential (non-concurrent) execution
         // Arrange
-        var commandExecutor = new GeneralCommandExecutor(
+        var commandExecutor = new GeneralSekibanExecutor(
             Fixture.EventStore,
             Fixture.ActorAccessor,
             Fixture.DomainTypes);
@@ -201,7 +202,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         var studentTag = new StudentTag(studentId);
         
         // Create student via command executor
-        var commandExecutor = new GeneralCommandExecutor(
+        var commandExecutor = new GeneralSekibanExecutor(
             Fixture.EventStore,
             Fixture.ActorAccessor,
             Fixture.DomainTypes);
@@ -240,7 +241,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         var tagConsistentActorId = studentTag.GetTag();
         
         // Create student
-        var commandExecutor = new GeneralCommandExecutor(
+        var commandExecutor = new GeneralSekibanExecutor(
             Fixture.EventStore,
             Fixture.ActorAccessor,
             Fixture.DomainTypes);

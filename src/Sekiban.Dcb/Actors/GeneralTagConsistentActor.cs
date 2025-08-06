@@ -306,6 +306,6 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => _tagGroup;
-        public string GetTag() => $"{_tagGroup}:{_tagContent}";
+        public string GetTagContent() => _tagContent;
     }
 }

@@ -21,13 +21,13 @@ public class OptimisticLockingTest
     private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly GeneralCommandExecutor _commandExecutor;
+    private readonly GeneralSekibanExecutor _commandExecutor;
     
     // Test-specific types
     private record TestTag(string Id) : ITag
     {
         public bool IsConsistencyTag() => true;
-        public string GetTag() => $"Test:{Id}";
+        public string GetTagContent() => Id;
         public string GetTagGroup() => "Test";
     }
     
@@ -100,7 +100,7 @@ public class OptimisticLockingTest
         _eventStore = new InMemoryEventStore();
         _domainTypes = CreateTestDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _commandExecutor = new GeneralCommandExecutor(_eventStore, _actorAccessor, _domainTypes);
+        _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
     
     [Fact]

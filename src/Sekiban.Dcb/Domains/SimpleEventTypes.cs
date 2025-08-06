@@ -25,7 +25,17 @@ public class SimpleEventTypes : IEventTypes
     /// </summary>
     public void RegisterEventType<T>(string eventTypeName) where T : IEventPayload
     {
-        _eventTypes[eventTypeName] = typeof(T);
+        var newType = typeof(T);
+        if (_eventTypes.TryGetValue(eventTypeName, out var existingType))
+        {
+            if (existingType != newType)
+            {
+                throw new InvalidOperationException(
+                    $"Event type name '{eventTypeName}' is already registered with type '{existingType.FullName}'. " +
+                    $"Cannot register it with different type '{newType.FullName}'.");
+            }
+        }
+        _eventTypes[eventTypeName] = newType;
     }
     
     /// <summary>
@@ -34,7 +44,7 @@ public class SimpleEventTypes : IEventTypes
     public void RegisterEventType<T>() where T : IEventPayload
     {
         var type = typeof(T);
-        _eventTypes[type.Name] = type;
+        RegisterEventType<T>(type.Name);
     }
     
     /// <inheritdoc/>

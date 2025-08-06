@@ -10,18 +10,19 @@ using ResultBoxes;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// General implementation of ICommandExecutor
+/// General implementation of ISekibanExecutor
 /// Orchestrates command execution including context creation, handler invocation,
 /// tag reservation, and event/tag persistence.
+/// Also provides tag state retrieval capabilities.
 /// Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class GeneralCommandExecutor : ICommandExecutor
+public class GeneralSekibanExecutor : ISekibanExecutor
 {
     private readonly IEventStore _eventStore;
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
     
-    public GeneralCommandExecutor(
+    public GeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
         DcbDomainTypes domainTypes)
@@ -141,7 +142,7 @@ public class GeneralCommandExecutor : ICommandExecutor
                 var metadata = new EventMetadata(
                     eventId.ToString(),
                     command.GetType().Name,
-                    "InMemoryCommandExecutor"
+                    "GeneralSekibanExecutor"
                 );
                 
                 var evt = new Event(
@@ -211,6 +212,74 @@ public class GeneralCommandExecutor : ICommandExecutor
     {
         // Delegate to the function-based implementation using the command's own handler
         return await ExecuteAsync(command, (cmd, context) => cmd.HandleAsync(context), cancellationToken);
+    }
+    
+    public async Task<ResultBox<TagState>> GetTagStateAsync(ITag tag)
+    {
+        try
+        {
+            // Get the tag state actor for this tag
+            var tagStateActorId = tag.GetTag();
+            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+            
+            if (!actorResult.IsSuccess)
+            {
+                return ResultBox.Error<TagState>(actorResult.GetException());
+            }
+            
+            var actor = actorResult.GetValue();
+            
+            // Get the state from the actor
+            var state = await actor.GetStateAsync();
+            
+            // Convert SerializableTagState to TagState
+            // We need to deserialize the payload from the serializable state
+            if (state.TagPayloadName == nameof(EmptyTagStatePayload))
+            {
+                return ResultBox.FromValue(new TagState(
+                    new EmptyTagStatePayload(),
+                    state.Version,
+                    state.LastSortedUniqueId,
+                    state.TagProjector,
+                    state.ProjectorVersion,
+                    $"{state.TagGroup}:{state.TagContent}",
+                    state.TagContent
+                ));
+            }
+            
+            // Deserialize the payload using domain types
+            var payloadTypeResult = _domainTypes.TagStatePayloadTypes.GetPayloadType(state.TagPayloadName);
+            if (payloadTypeResult == null)
+            {
+                return ResultBox.Error<TagState>(
+                    new InvalidOperationException($"Unknown payload type: {state.TagPayloadName}"));
+            }
+            
+            var deserializeResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
+                state.TagPayloadName, 
+                state.Payload);
+            
+            if (!deserializeResult.IsSuccess)
+            {
+                return ResultBox.Error<TagState>(deserializeResult.GetException());
+            }
+            
+            var payload = deserializeResult.GetValue();
+            
+            return ResultBox.FromValue(new TagState(
+                payload,
+                state.Version,
+                state.LastSortedUniqueId,
+                state.TagProjector,
+                state.ProjectorVersion,
+                $"{state.TagGroup}:{state.TagContent}",
+                state.TagContent
+            ));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<TagState>(ex);
+        }
     }
     
     private async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(

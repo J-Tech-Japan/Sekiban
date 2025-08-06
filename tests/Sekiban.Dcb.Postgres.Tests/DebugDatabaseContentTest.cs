@@ -2,6 +2,7 @@ using Xunit;
 using FluentAssertions;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Tags;
 using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.ClassRoom;
