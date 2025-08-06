@@ -84,7 +84,16 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
                     new Exception($"Tag {await GetTagActorIdAsync()} is currently reserved"));
             }
             
-            // Update the latest sortable unique ID
+            // Check for optimistic concurrency - if a specific version was requested, it must match
+            if (!string.IsNullOrEmpty(lastSortableUniqueId) && 
+                !string.IsNullOrEmpty(_latestSortableUniqueId) &&
+                lastSortableUniqueId != _latestSortableUniqueId)
+            {
+                return ResultBox.Error<TagWriteReservation>(
+                    new Exception($"Tag {await GetTagActorIdAsync()} has been modified. Expected version: {lastSortableUniqueId}, Current version: {_latestSortableUniqueId}"));
+            }
+            
+            // Update the latest sortable unique ID if provided
             if (!string.IsNullOrEmpty(lastSortableUniqueId))
             {
                 _latestSortableUniqueId = lastSortableUniqueId;
