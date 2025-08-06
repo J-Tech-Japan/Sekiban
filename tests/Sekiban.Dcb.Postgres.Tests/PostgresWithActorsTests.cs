@@ -4,6 +4,9 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.InMemory;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 

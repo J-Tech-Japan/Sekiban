@@ -1,17 +1,17 @@
 using System.Collections.Concurrent;
-using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using ResultBoxes;
 
-namespace Sekiban.Dcb.InMemory;
+namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// In-memory implementation of ITagConsistentActorCommon for testing
+/// General implementation of ITagConsistentActorCommon
 /// Manages tag write reservations to ensure consistency
 /// Supports lazy initialization by catching up from event store
+/// Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class InMemoryTagConsistentActor : ITagConsistentActorCommon
+public class GeneralTagConsistentActor : ITagConsistentActorCommon
 {
     private readonly string _tagName;
     private readonly IEventStore? _eventStore;
@@ -22,22 +22,22 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
     private string _latestSortableUniqueId = "";
     private volatile bool _catchUpCompleted = false;
     
-    public InMemoryTagConsistentActor(string tagName)
+    public GeneralTagConsistentActor(string tagName)
         : this(tagName, null, new TagConsistentActorOptions())
     {
     }
     
-    public InMemoryTagConsistentActor(string tagName, IEventStore? eventStore)
+    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore)
         : this(tagName, eventStore, new TagConsistentActorOptions())
     {
     }
     
-    public InMemoryTagConsistentActor(string tagName, TagConsistentActorOptions options)
+    public GeneralTagConsistentActor(string tagName, TagConsistentActorOptions options)
         : this(tagName, null, options)
     {
     }
     
-    public InMemoryTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options)
+    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options)
     {
         _tagName = tagName ?? throw new ArgumentNullException(nameof(tagName));
         _eventStore = eventStore;

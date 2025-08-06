@@ -6,6 +6,9 @@ using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Testcontainers.PostgreSql;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using Xunit;
 
 namespace Sekiban.Dcb.Postgres.Tests;

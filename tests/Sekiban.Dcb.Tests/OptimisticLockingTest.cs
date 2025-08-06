@@ -7,6 +7,9 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using ResultBoxes;
 using Xunit;
 

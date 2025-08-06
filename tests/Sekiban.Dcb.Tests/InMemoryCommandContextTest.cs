@@ -11,6 +11,9 @@ using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using Xunit;
 using ResultBoxes;
 

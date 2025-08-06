@@ -1,15 +1,19 @@
 using System.Text;
 using System.Text.Json;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-/// Tests for InMemoryTagConsistentActor and InMemoryTagStateActor
+/// Tests for GeneralTagConsistentActor and GeneralTagStateActor
 /// </summary>
 public class InMemoryActorTests
 {
@@ -19,7 +23,7 @@ public class InMemoryActorTests
     public async Task TagConsistentActor_Should_Return_Correct_ActorId()
     {
         // Arrange
-        var actor = new InMemoryTagConsistentActor("Student:student-123");
+        var actor = new GeneralTagConsistentActor("Student:student-123");
         
         // Act
         var actorId = await actor.GetTagActorIdAsync();
@@ -34,7 +38,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new InMemoryTagConsistentActor(tagName);
+        var actor = new GeneralTagConsistentActor(tagName);
         var lastSortableId = SortableUniqueId.GenerateNew();
         
         // Act
@@ -57,7 +61,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new InMemoryTagConsistentActor(tagName);
+        var actor = new GeneralTagConsistentActor(tagName);
         var lastSortableId = SortableUniqueId.GenerateNew();
         
         // Make first reservation
@@ -75,7 +79,7 @@ public class InMemoryActorTests
     public async Task ConfirmReservation_Should_Remove_Reservation()
     {
         // Arrange
-        var actor = new InMemoryTagConsistentActor("Student:student-123");
+        var actor = new GeneralTagConsistentActor("Student:student-123");
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
         
         // Act
@@ -94,7 +98,7 @@ public class InMemoryActorTests
     public async Task ConfirmReservation_Should_Return_False_For_Invalid_Reservation()
     {
         // Arrange
-        var actor = new InMemoryTagConsistentActor("Student:student-123");
+        var actor = new GeneralTagConsistentActor("Student:student-123");
         var fakeReservation = new TagWriteReservation(
             Guid.NewGuid().ToString(),
             DateTime.UtcNow.AddSeconds(30).ToString("O"),
@@ -112,7 +116,7 @@ public class InMemoryActorTests
     public async Task CancelReservation_Should_Remove_Reservation()
     {
         // Arrange
-        var actor = new InMemoryTagConsistentActor("Student:student-123");
+        var actor = new GeneralTagConsistentActor("Student:student-123");
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
         
         // Act
@@ -133,7 +137,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new InMemoryTagConsistentActor(tagName);
+        var actor = new GeneralTagConsistentActor(tagName);
         
         // Create reservation
         var reservationResult = await actor.MakeReservationAsync("");
@@ -165,7 +169,7 @@ public class InMemoryActorTests
     
     #region TagStateActor Tests
     
-    /* TODO: Update these tests to work with the new InMemoryTagStateActor constructor
+    /* TODO: Update these tests to work with the new GeneralTagStateActor constructor
     [Fact]
     public void TagStateActor_Should_Return_Correct_ActorId()
     {
@@ -178,7 +182,7 @@ public class InMemoryActorTests
             "student-123",
             "StudentProjector"
         );
-        var actor = new InMemoryTagStateActor(tagState);
+        var actor = new GeneralTagStateActor(tagState);
         
         // Act
         var actorId = actor.GetTagStateActorId();
@@ -201,7 +205,7 @@ public class InMemoryActorTests
             "student-123",
             "StudentProjector"
         );
-        var actor = new InMemoryTagStateActor(tagState);
+        var actor = new GeneralTagStateActor(tagState);
         
         // Act
         var serializableState = actor.GetState();
@@ -236,7 +240,7 @@ public class InMemoryActorTests
             "student-123",
             "StudentProjector"
         );
-        var actor = new InMemoryTagStateActor(tagState);
+        var actor = new GeneralTagStateActor(tagState);
         
         // Act
         var serializableState = actor.GetState();
@@ -260,7 +264,7 @@ public class InMemoryActorTests
             "student-123",
             "StudentProjector"
         );
-        var actor = new InMemoryTagStateActor(tagState);
+        var actor = new GeneralTagStateActor(tagState);
         
         // Act
         var retrievedState = actor.GetTagState();
@@ -282,7 +286,7 @@ public class InMemoryActorTests
             "student-123",
             "StudentProjector"
         );
-        var actor = new InMemoryTagStateActor(tagState);
+        var actor = new GeneralTagStateActor(tagState);
         
         var newState = new TagState(
             null!,
@@ -313,7 +317,7 @@ public class InMemoryActorTests
         
         // Create actors
         var tagName = $"{tagGroup}:{tagContent}";
-        var consistentActor = new InMemoryTagConsistentActor(tagName);
+        var consistentActor = new GeneralTagConsistentActor(tagName);
         var studentState = new StudentState(studentId, "John", 5, new List<Guid>());
         var tagState = new TagState(
             studentState,
@@ -323,7 +327,7 @@ public class InMemoryActorTests
             tagContent,
             "StudentProjector"
         );
-        var stateActor = new InMemoryTagStateActor(tagState);
+        var stateActor = new GeneralTagStateActor(tagState);
         
         // Act - Simulate command flow
         // 1. Make reservation

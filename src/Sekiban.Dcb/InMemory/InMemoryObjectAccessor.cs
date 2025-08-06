@@ -98,14 +98,14 @@ public class InMemoryObjectAccessor : IActorObjectAccessor
         {
             // Format: "TagGroup:TagContent"
             var tagName = actorId;
-            return new InMemoryTagConsistentActor(tagName, _eventStore) as T;
+            return new GeneralTagConsistentActor(tagName, _eventStore) as T;
         }
         
         // Create TagStateActor
         if (typeof(T) == typeof(ITagStateActorCommon) && parts.Length >= 3)
         {
             // Format: "TagGroup:TagContent:TagProjectorName"
-            return new InMemoryTagStateActor(actorId, _eventStore, _domainTypes, this) as T;
+            return new GeneralTagStateActor(actorId, _eventStore, _domainTypes, this) as T;
         }
         
         return null;

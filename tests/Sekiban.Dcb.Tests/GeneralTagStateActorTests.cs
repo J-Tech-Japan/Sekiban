@@ -1,25 +1,29 @@
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using ResultBoxes;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-/// Tests for InMemoryTagStateActor with real domain events
+/// Tests for GeneralTagStateActor with real domain events
 /// </summary>
-public class InMemoryTagStateActorTests
+public class GeneralTagStateActorTests
 {
     private readonly InMemoryEventStore _eventStore;
     private readonly DcbDomainTypes _domainTypes;
     private readonly InMemoryObjectAccessor _accessor;
     
-    public InMemoryTagStateActorTests()
+    public GeneralTagStateActorTests()
     {
         _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
@@ -39,7 +43,7 @@ public class InMemoryTagStateActorTests
         await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         var state = await actor.GetTagStateAsync();
         
         // Assert
@@ -79,7 +83,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         var state = await actor.GetTagStateAsync();
         
         // Assert
@@ -113,7 +117,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         var state = await actor.GetTagStateAsync();
         
         // Assert
@@ -149,7 +153,7 @@ public class InMemoryTagStateActorTests
             EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag));
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         var state = await actor.GetTagStateAsync();
         
         // Assert
@@ -168,7 +172,7 @@ public class InMemoryTagStateActorTests
         var tagStateId = new TagStateId(studentTag, new StudentProjector());
         
         // Act
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         var state = await actor.GetTagStateAsync();
         
         // Assert
@@ -192,7 +196,7 @@ public class InMemoryTagStateActorTests
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
         
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         
         // Act
         var serializableState = await actor.GetStateAsync();
@@ -217,10 +221,10 @@ public class InMemoryTagStateActorTests
     {
         // Arrange & Act & Assert
         Assert.Throws<ArgumentException>(() => 
-            new InMemoryTagStateActor("InvalidFormat", _eventStore, _domainTypes, _accessor));
+            new GeneralTagStateActor("InvalidFormat", _eventStore, _domainTypes, _accessor));
             
         Assert.Throws<ArgumentException>(() => 
-            new InMemoryTagStateActor("Only:Two", _eventStore, _domainTypes, _accessor));
+            new GeneralTagStateActor("Only:Two", _eventStore, _domainTypes, _accessor));
     }
     
     // Removed: UpdateState test is no longer valid with required TagConsistentActor
@@ -234,7 +238,7 @@ public class InMemoryTagStateActorTests
         var studentTag = new StudentTag(studentId);
         var tagStateId = new TagStateId(studentTag, new StudentProjector());
         
-        var actor = new InMemoryTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
         
         var differentState = new TagState(
             null!,

@@ -3,6 +3,9 @@ using FluentAssertions;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using Microsoft.EntityFrameworkCore;
 using Xunit.Abstractions;
 

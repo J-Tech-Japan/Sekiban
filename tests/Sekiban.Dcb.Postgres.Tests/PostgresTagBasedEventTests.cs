@@ -4,6 +4,9 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
+using Dcb.Domain.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.Enrollment;
 using Sekiban.Dcb.Actors;
 
 namespace Sekiban.Dcb.Postgres.Tests;

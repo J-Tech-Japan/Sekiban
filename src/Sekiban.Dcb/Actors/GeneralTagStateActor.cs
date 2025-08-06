@@ -1,32 +1,37 @@
 using System.Text;
 using System.Text.Json;
-using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.InMemory;
 using ResultBoxes;
 
-namespace Sekiban.Dcb.InMemory;
+namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// In-memory implementation of ITagStateActorCommon for testing
+/// General implementation of ITagStateActorCommon
 /// Computes tag state by reading events and projecting them
+/// Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class InMemoryTagStateActor : ITagStateActorCommon
+public class GeneralTagStateActor : ITagStateActorCommon
 {
     private readonly TagStateId _tagStateId;
     private readonly IEventStore _eventStore;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly TagStateOptions _options;
-    private TagState? _cachedState;
-    private readonly SemaphoreSlim _stateLock = new(1, 1);
+    private readonly ITagStatePersistent _statePersistent;
     
-    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor actorAccessor)
-        : this(tagStateId, eventStore, domainTypes, new TagStateOptions(), actorAccessor)
+    public GeneralTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, IActorObjectAccessor actorAccessor)
+        : this(tagStateId, eventStore, domainTypes, new TagStateOptions(), actorAccessor, new InMemoryTagStatePersistent())
     {
     }
     
-    public InMemoryTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, TagStateOptions options, IActorObjectAccessor actorAccessor)
+    public GeneralTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, TagStateOptions options, IActorObjectAccessor actorAccessor)
+        : this(tagStateId, eventStore, domainTypes, options, actorAccessor, new InMemoryTagStatePersistent())
+    {
+    }
+    
+    public GeneralTagStateActor(string tagStateId, IEventStore eventStore, DcbDomainTypes domainTypes, TagStateOptions options, IActorObjectAccessor actorAccessor, ITagStatePersistent statePersistent)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
             throw new ArgumentNullException(nameof(tagStateId));
@@ -36,6 +41,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
+        _statePersistent = statePersistent ?? throw new ArgumentNullException(nameof(statePersistent));
     }
     
     public Task<string> GetTagStateActorIdAsync()
@@ -94,69 +100,47 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         }
         
         // Check if we have cached state and if it's still valid
-        await _stateLock.WaitAsync();
-        try
+        var cachedState = await _statePersistent.LoadStateAsync();
+        if (cachedState != null)
         {
-            if (_cachedState != null)
+            // If cached state matches current state, return cached
+            if (currentLatestSortableUniqueId == null ||
+                cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
             {
-                // If cached state matches current state, return cached
-                if (currentLatestSortableUniqueId == null ||
-                    _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
-                {
-                    return _cachedState;
-                }
+                return cachedState;
             }
-        }
-        finally
-        {
-            _stateLock.Release();
         }
         
         // Compute state from events (outside the lock to avoid deadlock)
         var computedState = await ComputeStateFromEventsAsync();
         
         // Update cache
-        await _stateLock.WaitAsync();
-        try
+        // Double-check in case another thread computed it
+        cachedState = await _statePersistent.LoadStateAsync();
+        if (cachedState != null && 
+            (currentLatestSortableUniqueId == null ||
+             cachedState.LastSortedUniqueId == currentLatestSortableUniqueId))
         {
-            // Double-check in case another thread computed it
-            if (_cachedState != null && 
-                (currentLatestSortableUniqueId == null ||
-                 _cachedState.LastSortedUniqueId == currentLatestSortableUniqueId))
-            {
-                return _cachedState;
-            }
-            
-            _cachedState = computedState;
-            return _cachedState;
+            return cachedState;
         }
-        finally
-        {
-            _stateLock.Release();
-        }
+        
+        await _statePersistent.SaveStateAsync(computedState);
+        return computedState;
     }
     
     public async Task UpdateStateAsync(TagState newState)
     {
-        await _stateLock.WaitAsync();
-        try
+        // Validate that the identity hasn't changed
+        if (newState.TagGroup != _tagStateId.TagGroup || 
+            newState.TagContent != _tagStateId.TagContent ||
+            newState.TagProjector != _tagStateId.TagProjectorName)
         {
-            // Validate that the identity hasn't changed
-            if (newState.TagGroup != _tagStateId.TagGroup || 
-                newState.TagContent != _tagStateId.TagContent ||
-                newState.TagProjector != _tagStateId.TagProjectorName)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot change tag state identity. Expected {_tagStateId}, " +
-                    $"but got {newState.TagGroup}:{newState.TagContent}:{newState.TagProjector}");
-            }
-            
-            _cachedState = newState;
+            throw new InvalidOperationException(
+                $"Cannot change tag state identity. Expected {_tagStateId}, " +
+                $"but got {newState.TagGroup}:{newState.TagContent}:{newState.TagProjector}");
         }
-        finally
-        {
-            _stateLock.Release();
-        }
+        
+        await _statePersistent.SaveStateAsync(newState);
     }
     
     private async Task<TagState> ComputeStateFromEventsAsync()
@@ -307,14 +291,6 @@ public class InMemoryTagStateActor : ITagStateActorCommon
     /// </summary>
     public async Task ClearCacheAsync()
     {
-        await _stateLock.WaitAsync();
-        try
-        {
-            _cachedState = null;
-        }
-        finally
-        {
-            _stateLock.Release();
-        }
+        await _statePersistent.ClearStateAsync();
     }
 }

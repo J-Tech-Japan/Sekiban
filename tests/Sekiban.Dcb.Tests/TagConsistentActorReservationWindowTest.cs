@@ -19,7 +19,7 @@ public class TagConsistentActorReservationWindowTest
         {
             CancellationWindowSeconds = 2.0 // Short window for testing
         };
-        var actor = new InMemoryTagConsistentActor(tagName, null, options);
+        var actor = new GeneralTagConsistentActor(tagName, null, options);
         
         // Act & Assert
         
@@ -54,7 +54,7 @@ public class TagConsistentActorReservationWindowTest
     {
         // Arrange
         var tagName = "TestTag:456";
-        var actor = new InMemoryTagConsistentActor(tagName);
+        var actor = new GeneralTagConsistentActor(tagName);
         
         // Act & Assert
         
@@ -76,7 +76,7 @@ public class TagConsistentActorReservationWindowTest
     {
         // Arrange
         var tagName = "TestTag:789";
-        var actor = new InMemoryTagConsistentActor(tagName);
+        var actor = new GeneralTagConsistentActor(tagName);
         
         // Act & Assert
         
@@ -102,7 +102,7 @@ public class TagConsistentActorReservationWindowTest
         {
             CancellationWindowSeconds = 1.0 // Very short window
         };
-        var actor = new InMemoryTagConsistentActor(tagName, null, options);
+        var actor = new GeneralTagConsistentActor(tagName, null, options);
         
         // Make reservation
         var reservationResult = await actor.MakeReservationAsync("");

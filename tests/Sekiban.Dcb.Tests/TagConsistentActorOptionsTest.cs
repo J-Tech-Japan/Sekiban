@@ -29,7 +29,7 @@ public class TagConsistentActorOptionsTest
             CancellationWindowSeconds = 60.0 // 1 minute instead of default 30 seconds
         };
         
-        var actor = new InMemoryTagConsistentActor(tagName, customOptions);
+        var actor = new GeneralTagConsistentActor(tagName, customOptions);
         
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");
@@ -56,7 +56,7 @@ public class TagConsistentActorOptionsTest
     {
         // Arrange
         var tagName = "TestTag:456";
-        var actor = new InMemoryTagConsistentActor(tagName); // Using default constructor
+        var actor = new GeneralTagConsistentActor(tagName); // Using default constructor
         
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");
