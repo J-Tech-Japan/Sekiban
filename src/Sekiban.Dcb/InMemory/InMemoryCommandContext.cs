@@ -168,7 +168,7 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
         }
     }
     
-    public async Task<bool> TagExistsAsync(ITag tag)
+    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
         try
         {
@@ -178,11 +178,19 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
             var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
             if (!actorResult.IsSuccess)
             {
-                return false;
+                // Actor doesn't exist means tag doesn't exist (not an error, just no data)
+                return ResultBox.FromValue(false);
             }
             
             var actor = actorResult.GetValue();
-            var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
+            
+            if (!latestSortableUniqueIdResult.IsSuccess)
+            {
+                return ResultBox.Error<bool>(latestSortableUniqueIdResult.GetException());
+            }
+            
+            var latestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
             
             // If there's a latest sortable unique ID, the tag exists
             if (!string.IsNullOrEmpty(latestSortableUniqueId))
@@ -190,18 +198,19 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
                 // Since we're checking existence, we need to get the full state for tracking
                 // We can't track without having the full TagState
                 // For now, we'll skip tracking in TagExistsAsync to avoid double-fetching
-                return true;
+                return ResultBox.FromValue(true);
             }
             
-            return false;
+            return ResultBox.FromValue(false);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            // Return error for actual exceptions
+            return ResultBox.Error<bool>(ex);
         }
     }
     
-    public async Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag)
+    public async Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag)
     {
         try
         {
@@ -211,21 +220,27 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
             var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
             if (!actorResult.IsSuccess)
             {
-                // If actor doesn't exist, return empty string
-                return "";
+                // If actor doesn't exist, return empty string (not an error, just no data)
+                return ResultBox.FromValue("");
             }
             
             var actor = actorResult.GetValue();
-            var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
+            
+            if (!latestSortableUniqueIdResult.IsSuccess)
+            {
+                return ResultBox.Error<string>(latestSortableUniqueIdResult.GetException());
+            }
             
             // For now, we'll skip tracking in GetTagLatestSortableUniqueIdAsync to avoid double-fetching
             // The state will be tracked when GetStateAsync is called
             
-            return latestSortableUniqueId;
+            return ResultBox.FromValue(latestSortableUniqueIdResult.GetValue());
         }
-        catch
+        catch (Exception ex)
         {
-            return "";
+            // Return error for actual exceptions
+            return ResultBox.Error<string>(ex);
         }
     }
     

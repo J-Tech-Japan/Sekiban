@@ -42,10 +42,11 @@ public class InMemoryTagConsistentActorTests
         var actor = new InMemoryTagConsistentActor(tagName, _eventStore);
         
         // Act - Get latest sortable unique ID (should trigger catch-up)
-        var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
+        var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
         
         // Assert
-        Assert.Equal(event2.SortableUniqueIdValue, latestSortableUniqueId);
+        Assert.True(latestSortableUniqueIdResult.IsSuccess);
+        Assert.Equal(event2.SortableUniqueIdValue, latestSortableUniqueIdResult.GetValue());
     }
     
     [Fact]
@@ -60,10 +61,11 @@ public class InMemoryTagConsistentActorTests
         var actor = new InMemoryTagConsistentActor(tagName, _eventStore);
         
         // Act
-        var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
+        var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
         
         // Assert
-        Assert.Equal("", latestSortableUniqueId);
+        Assert.True(latestSortableUniqueIdResult.IsSuccess);
+        Assert.Equal("", latestSortableUniqueIdResult.GetValue());
     }
     
     [Fact]
@@ -81,7 +83,9 @@ public class InMemoryTagConsistentActorTests
         
         // Assert
         Assert.True(reservationResult.IsSuccess);
-        Assert.Equal(newSortableUniqueId, await actor.GetLatestSortableUniqueIdAsync());
+        var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal(newSortableUniqueId, latestIdResult.GetValue());
     }
     
     [Fact]
@@ -92,11 +96,12 @@ public class InMemoryTagConsistentActorTests
         var actor = new InMemoryTagConsistentActor(tagName);
         
         // Act
-        var latestSortableUniqueId = await actor.GetLatestSortableUniqueIdAsync();
+        var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
         var reservationResult = await actor.MakeReservationAsync("");
         
         // Assert
-        Assert.Equal("", latestSortableUniqueId);
+        Assert.True(latestSortableUniqueIdResult.IsSuccess);
+        Assert.Equal("", latestSortableUniqueIdResult.GetValue());
         Assert.True(reservationResult.IsSuccess);
     }
     
@@ -114,18 +119,20 @@ public class InMemoryTagConsistentActorTests
         
         // Create actor and trigger catch-up
         var actor = new InMemoryTagConsistentActor(tagName, _eventStore);
-        var firstId = await actor.GetLatestSortableUniqueIdAsync();
+        var firstIdResult = await actor.GetLatestSortableUniqueIdAsync();
         
         // Write another event after actor creation
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
         await _eventStore.WriteEventAsync(event2);
         
         // Act - Get latest ID again (should not catch up again)
-        var secondId = await actor.GetLatestSortableUniqueIdAsync();
+        var secondIdResult = await actor.GetLatestSortableUniqueIdAsync();
         
         // Assert - Should still have the first event's ID
-        Assert.Equal(event1.SortableUniqueIdValue, firstId);
-        Assert.Equal(firstId, secondId);
+        Assert.True(firstIdResult.IsSuccess);
+        Assert.True(secondIdResult.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, firstIdResult.GetValue());
+        Assert.Equal(firstIdResult.GetValue(), secondIdResult.GetValue());
     }
     
     [Fact]
@@ -144,10 +151,11 @@ public class InMemoryTagConsistentActorTests
         var actor = new InMemoryTagConsistentActor(tagName, _eventStore);
         
         // Act - Get the latest ID after catch up
-        var latestId = await actor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
         
         // Assert - Should have the event's ID after catch up
-        Assert.Equal(event1.SortableUniqueIdValue, latestId);
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, latestIdResult.GetValue());
     }
     
     [Fact]
@@ -166,27 +174,37 @@ public class InMemoryTagConsistentActorTests
         
         // Test GetLatestSortableUniqueId
         var actor1 = new InMemoryTagConsistentActor(tagName, _eventStore);
-        Assert.Equal(event1.SortableUniqueIdValue, await actor1.GetLatestSortableUniqueIdAsync());
+        var result1 = await actor1.GetLatestSortableUniqueIdAsync();
+        Assert.True(result1.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, result1.GetValue());
         
         // Test MakeReservation
         var actor2 = new InMemoryTagConsistentActor(tagName, _eventStore);
         var reservation = await actor2.MakeReservationAsync("");
         Assert.True(reservation.IsSuccess);
-        Assert.Equal(event1.SortableUniqueIdValue, await actor2.GetLatestSortableUniqueIdAsync());
+        var result2 = await actor2.GetLatestSortableUniqueIdAsync();
+        Assert.True(result2.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, result2.GetValue());
         
         // Test ConfirmReservation
         var actor3 = new InMemoryTagConsistentActor(tagName, _eventStore);
         await actor3.ConfirmReservationAsync(null!);
-        Assert.Equal(event1.SortableUniqueIdValue, await actor3.GetLatestSortableUniqueIdAsync());
+        var result3 = await actor3.GetLatestSortableUniqueIdAsync();
+        Assert.True(result3.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, result3.GetValue());
         
         // Test CancelReservation
         var actor4 = new InMemoryTagConsistentActor(tagName, _eventStore);
         await actor4.CancelReservationAsync(null!);
-        Assert.Equal(event1.SortableUniqueIdValue, await actor4.GetLatestSortableUniqueIdAsync());
+        var result4 = await actor4.GetLatestSortableUniqueIdAsync();
+        Assert.True(result4.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, result4.GetValue());
         
         // Test GetActiveReservations
         var actor5 = new InMemoryTagConsistentActor(tagName, _eventStore);
         await actor5.GetActiveReservationsAsync();
-        Assert.Equal(event1.SortableUniqueIdValue, await actor5.GetLatestSortableUniqueIdAsync());
+        var result5 = await actor5.GetLatestSortableUniqueIdAsync();
+        Assert.True(result5.IsSuccess);
+        Assert.Equal(event1.SortableUniqueIdValue, result5.GetValue());
     }
 }

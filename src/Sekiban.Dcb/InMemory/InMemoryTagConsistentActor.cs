@@ -49,19 +49,26 @@ public class InMemoryTagConsistentActor : ITagConsistentActorCommon
         return Task.FromResult(_tagName);
     }
     
-    public async Task<string> GetLatestSortableUniqueIdAsync()
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
     {
-        // Ensure catch-up is completed before acquiring lock
-        await EnsureCatchUpCompletedAsync();
-        
-        await _reservationLock.WaitAsync();
         try
         {
-            return _latestSortableUniqueId;
+            // Ensure catch-up is completed before acquiring lock
+            await EnsureCatchUpCompletedAsync();
+            
+            await _reservationLock.WaitAsync();
+            try
+            {
+                return ResultBox.FromValue(_latestSortableUniqueId);
+            }
+            finally
+            {
+                _reservationLock.Release();
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            _reservationLock.Release();
+            return ResultBox.Error<string>(ex);
         }
     }
     

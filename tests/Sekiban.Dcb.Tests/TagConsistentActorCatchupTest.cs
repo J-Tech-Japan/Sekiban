@@ -47,8 +47,9 @@ public class TagConsistentActorCatchupTest
         
         // Create TagConsistentActor without event store (so it won't catch up)
         var tagConsistentActor = new InMemoryTagConsistentActor(tagConsistentId);
-        var latestId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
-        Assert.Equal("", latestId); // Verify it's empty
+        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal("", latestIdResult.GetValue()); // Verify it's empty
         
         // Create accessor that returns our TagConsistentActor
         var accessor = new TestActorAccessor(tagConsistentActor);
@@ -87,10 +88,11 @@ public class TagConsistentActorCatchupTest
         Assert.True(actorResult.IsSuccess);
         
         var tagConsistentActor = actorResult.GetValue();
-        var latestId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
         
         // Assert - should have caught up to the latest event
-        Assert.Equal(event2.SortableUniqueIdValue, latestId);
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal(event2.SortableUniqueIdValue, latestIdResult.GetValue());
     }
     
     [Fact]
@@ -125,8 +127,9 @@ public class TagConsistentActorCatchupTest
         var actorResult = await accessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentId);
         Assert.True(actorResult.IsSuccess);
         var tagConsistentActor = actorResult.GetValue();
-        var latestId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
-        Assert.Equal(event2.SortableUniqueIdValue, latestId);
+        var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal(event2.SortableUniqueIdValue, latestIdResult.GetValue());
     }
     
     /// <summary>

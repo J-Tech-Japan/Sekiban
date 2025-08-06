@@ -84,7 +84,11 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         if (tagConsistentActorResult.IsSuccess)
         {
             var tagConsistentActor = tagConsistentActorResult.GetValue();
-            currentLatestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            if (latestSortableUniqueIdResult.IsSuccess)
+            {
+                currentLatestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
+            }
         }
         
         // Check if we have cached state and if it's still valid
@@ -165,7 +169,11 @@ public class InMemoryTagStateActor : ITagStateActorCommon
         if (tagConsistentActorResult.IsSuccess)
         {
             var tagConsistentActor = tagConsistentActorResult.GetValue();
-            latestSortableUniqueId = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            var latestSortableUniqueIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            if (latestSortableUniqueIdResult.IsSuccess)
+            {
+                latestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
+            }
         }
         
         // Get the projector

@@ -71,7 +71,8 @@
       "Bash(./run-with-postgres.sh:*)",
       "mcp__sekibanDocument__SearchDocumentation",
       "mcp__sekibanDocument__GetDocument",
-      "mcp__sekibanDocument__GetDocumentSection"
+      "mcp__sekibanDocument__GetDocumentSection",
+      "Bash(dotnet sln add:*)"
     ],
     "deny": []
   },

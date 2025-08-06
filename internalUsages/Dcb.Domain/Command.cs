@@ -12,9 +12,9 @@ public record CreateStudent(Guid StudentId, string Name, int MaxClassCount = 5)
 {
     public Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
         => ResultBox.Start.Remap(_ => new StudentTag(StudentId))
-            .Combine(tag => context.TagExistsAsync(tag).ToResultBox())
-            .Verify((_, exists) =>
-                exists
+            .Combine(tag => context.TagExistsAsync(tag))
+            .Verify((_, existsResult) =>
+                existsResult
                     ? ExceptionOrNone.FromException(new ApplicationException("Student Already Exists"))
                     : ExceptionOrNone.None)
             .Conveyor((tag, _) =>
@@ -32,9 +32,9 @@ public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
 {
     public Task<ResultBox<EventOrNone>> HandleAsync(CreateClassRoom command, ICommandContext context)
         => ResultBox.Start.Remap(_ => new ClassRoomTag(command.ClassRoomId))
-            .Combine(tag => context.TagExistsAsync(tag).ToResultBox())
-            .Verify((_, exists) =>
-                exists
+            .Combine(tag => context.TagExistsAsync(tag))
+            .Verify((_, existsResult) =>
+                existsResult
                     ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom Already Exists"))
                     : ExceptionOrNone.None)
             .Conveyor((tag, _) =>
@@ -84,9 +84,9 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
                     ? ExceptionOrNone.FromException(new ApplicationException("Student is not enrolled in this classroom"))
                     : ExceptionOrNone.None)
             .Remap((studentTag, studentState) => new ClassRoomTag(command.ClassRoomId))
-            .Combine(classRoomTag => context.TagExistsAsync(classRoomTag).ToResultBox())
-            .Verify((_, classRoomExists) =>
-                !classRoomExists
+            .Combine(classRoomTag => context.TagExistsAsync(classRoomTag))
+            .Verify((_, classRoomExistsResult) =>
+                !classRoomExistsResult
                     ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom not found"))
                     : ExceptionOrNone.None)
             .Conveyor((classRoomTag, _) =>

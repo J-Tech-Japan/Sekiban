@@ -50,8 +50,9 @@ public class ActorRecreationTests
         Assert.True(reservationResult.IsSuccess);
         
         // Verify the state
-        var latestId1 = await actor1.GetLatestSortableUniqueIdAsync();
-        Assert.Equal(event2.SortableUniqueIdValue, latestId1);
+        var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestId1Result.IsSuccess);
+        Assert.Equal(event2.SortableUniqueIdValue, latestId1Result.GetValue());
         
         // Step 2: Remove the actor
         var removed = _accessor.RemoveActor(actorId);
@@ -64,8 +65,9 @@ public class ActorRecreationTests
         var actor2 = actorResult2.GetValue();
         
         // Step 4: Verify catch-up happened as expected
-        var latestId2 = await actor2.GetLatestSortableUniqueIdAsync();
-        Assert.Equal(event2.SortableUniqueIdValue, latestId2);
+        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestId2Result.IsSuccess);
+        Assert.Equal(event2.SortableUniqueIdValue, latestId2Result.GetValue());
         
         // Verify it's a different instance
         Assert.NotSame(actor1, actor2);
@@ -161,11 +163,14 @@ public class ActorRecreationTests
         var actor1Recreated = actor1RecreatedResult.GetValue();
         
         // Verify both actors have their own correct state
-        var latestId1 = await actor1Recreated.GetLatestSortableUniqueIdAsync();
-        var latestId2 = await actor2.GetLatestSortableUniqueIdAsync();
+        var latestId1Result = await actor1Recreated.GetLatestSortableUniqueIdAsync();
+        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        
+        Assert.True(latestId1Result.IsSuccess);
+        Assert.True(latestId2Result.IsSuccess);
         
         // They should have different latest IDs (from their respective events)
-        Assert.NotEqual(latestId1, latestId2);
+        Assert.NotEqual(latestId1Result.GetValue(), latestId2Result.GetValue());
     }
     
     [Fact]
@@ -181,8 +186,9 @@ public class ActorRecreationTests
         Assert.True(actorResult1.IsSuccess);
         var actor1 = actorResult1.GetValue();
         
-        var latestId1 = await actor1.GetLatestSortableUniqueIdAsync();
-        Assert.Equal("", latestId1); // Should be empty
+        var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestId1Result.IsSuccess);
+        Assert.Equal("", latestId1Result.GetValue()); // Should be empty
         
         // Step 2: Remove and recreate
         _accessor.RemoveActor(actorId);
@@ -192,8 +198,9 @@ public class ActorRecreationTests
         var actor2 = actorResult2.GetValue();
         
         // Step 3: Verify it's still empty (no events to catch up)
-        var latestId2 = await actor2.GetLatestSortableUniqueIdAsync();
-        Assert.Equal("", latestId2);
+        var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
+        Assert.True(latestId2Result.IsSuccess);
+        Assert.Equal("", latestId2Result.GetValue());
     }
     
     [Fact]

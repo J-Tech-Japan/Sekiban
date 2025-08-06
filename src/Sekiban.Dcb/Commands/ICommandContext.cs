@@ -34,15 +34,15 @@ public interface ICommandContext
     /// Checks if a tag exists (has any events)
     /// </summary>
     /// <param name="tag">The tag to check</param>
-    /// <returns>True if the tag has associated events</returns>
-    Task<bool> TagExistsAsync(ITag tag);
+    /// <returns>ResultBox containing true if the tag has associated events, false if not, or error if something went wrong</returns>
+    Task<ResultBox<bool>> TagExistsAsync(ITag tag);
 
     /// <summary>
     /// Gets the latest sortable unique ID for a tag (for optimistic concurrency)
     /// </summary>
     /// <param name="tag">The tag to query</param>
-    /// <returns>The latest sortable unique ID or empty string if not found</returns>
-    Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag);
+    /// <returns>ResultBox containing the latest sortable unique ID or empty string if not found, or error if something went wrong</returns>
+    Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag);
 
     /// <summary>
     /// Appends an event with tags to the context

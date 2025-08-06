@@ -136,10 +136,11 @@ public class InMemoryCommandContextTest
         var tag = new TestTag();
         
         // Act
-        var exists = await _commandContext.TagExistsAsync(tag);
+        var existsResult = await _commandContext.TagExistsAsync(tag);
         
         // Assert
-        Assert.False(exists);
+        Assert.True(existsResult.IsSuccess);
+        Assert.False(existsResult.GetValue());
     }
     
     [Fact]
@@ -158,10 +159,11 @@ public class InMemoryCommandContextTest
         await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
         
         // Act
-        var exists = await _commandContext.TagExistsAsync(tag);
+        var existsResult = await _commandContext.TagExistsAsync(tag);
         
         // Assert
-        Assert.True(exists);
+        Assert.True(existsResult.IsSuccess);
+        Assert.True(existsResult.GetValue());
     }
     
     [Fact]
@@ -171,10 +173,11 @@ public class InMemoryCommandContextTest
         var tag = new TestTag();
         
         // Act
-        var latestId = await _commandContext.GetTagLatestSortableUniqueIdAsync(tag);
+        var latestIdResult = await _commandContext.GetTagLatestSortableUniqueIdAsync(tag);
         
         // Assert
-        Assert.Equal("", latestId);
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal("", latestIdResult.GetValue());
     }
     
     [Fact]
@@ -193,10 +196,11 @@ public class InMemoryCommandContextTest
         await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
         
         // Act
-        var latestId = await _commandContext.GetTagLatestSortableUniqueIdAsync(tag);
+        var latestIdResult = await _commandContext.GetTagLatestSortableUniqueIdAsync(tag);
         
         // Assert
-        Assert.Equal(sortableUniqueId, latestId);
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.Equal(sortableUniqueId, latestIdResult.GetValue());
     }
     
     [Fact]

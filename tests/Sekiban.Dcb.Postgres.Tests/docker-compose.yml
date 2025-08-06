@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: sekiban-dcb-test-db
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: sekiban_dcb_test
+    ports:
+      - "5433:5432"
+    # No volumes defined - database will be cleared when container is removed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d sekiban_dcb_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

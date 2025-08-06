@@ -16,8 +16,8 @@ public interface ITagConsistentActorCommon
     /// Gets the latest sortable unique ID known to this actor
     /// Used by TagStateActor to determine the newest state without querying TagReader
     /// </summary>
-    /// <returns>The latest sortable unique ID or empty string if none</returns>
-    Task<string> GetLatestSortableUniqueIdAsync();
+    /// <returns>ResultBox containing the latest sortable unique ID (empty string if none) or error if something went wrong</returns>
+    Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
     
     Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId);
     Task<bool> ConfirmReservationAsync(TagWriteReservation reservation);

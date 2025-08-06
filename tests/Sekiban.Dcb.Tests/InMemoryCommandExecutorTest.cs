@@ -298,9 +298,14 @@ public class InMemoryCommandExecutorDomainTests
         public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
         {
             var tag = new TeacherTag(TeacherId);
-            var exists = await context.TagExistsAsync(tag);
+            var existsResult = await context.TagExistsAsync(tag);
             
-            if (exists)
+            if (!existsResult.IsSuccess)
+            {
+                return ResultBox.Error<EventOrNone>(existsResult.GetException());
+            }
+            
+            if (existsResult.GetValue())
             {
                 return ResultBox.Error<EventOrNone>(
                     new ApplicationException($"Teacher {TeacherId} already exists"));
@@ -420,9 +425,14 @@ public class InMemoryCommandExecutorDomainTests
             async (cmd, context) =>
             {
                 var tag = new StudentTag(cmd.StudentId);
-                var exists = await context.TagExistsAsync(tag);
+                var existsResult = await context.TagExistsAsync(tag);
                 
-                if (exists)
+                if (!existsResult.IsSuccess)
+                {
+                    return ResultBox.Error<EventOrNone>(existsResult.GetException());
+                }
+                
+                if (existsResult.GetValue())
                 {
                     return ResultBox.Error<EventOrNone>(
                         new ApplicationException("Student Already Exists"));
