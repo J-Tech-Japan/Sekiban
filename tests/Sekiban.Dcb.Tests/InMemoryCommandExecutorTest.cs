@@ -422,8 +422,8 @@ public class GeneralCommandExecutorDomainTests
         var studentId = Guid.NewGuid();
         var command = new CreateStudent(studentId, "Jane Doe", 4);
         
-        // Define handler as a function
-        Func<CreateStudent, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc = 
+        // Act - Execute with inline handler function
+        var result = await _commandExecutor.ExecuteAsync(command, 
             async (cmd, context) =>
             {
                 var tag = new StudentTag(cmd.StudentId);
@@ -443,10 +443,7 @@ public class GeneralCommandExecutorDomainTests
                 return EventOrNone.EventWithTags(
                     new StudentCreated(cmd.StudentId, cmd.Name, cmd.MaxClassCount), 
                     tag);
-            };
-        
-        // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handlerFunc);
+            });
         
         // Assert
         Assert.True(result.IsSuccess);
