@@ -21,13 +21,13 @@ public static class DomainType
             types.EventTypes.RegisterEventType<StudentDroppedFromClassRoom>();
             
             // Register tag projectors
-            types.TagProjectorTypes.RegisterProjector(new StudentProjector());
-            types.TagProjectorTypes.RegisterProjector(new ClassRoomProjector());
+            types.TagProjectorTypes.RegisterProjector<StudentProjector>();
+            types.TagProjectorTypes.RegisterProjector<ClassRoomProjector>();
             
             // Register tag state payload types
-            types.TagStatePayloadTypes.RegisterPayloadType<StudentState>(nameof(StudentState));
-            types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>(nameof(AvailableClassRoomState));
-            types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>(nameof(FilledClassRoomState));
+            types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
+            types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>();
+            types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>();
         });
     }
 }

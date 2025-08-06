@@ -166,7 +166,8 @@ public class InMemoryEventStore : IEventStore
                     latestStream.SortableUniqueId,
                     tagGroup,
                     tagString,
-                    "InMemoryProjector"
+                    "InMemoryProjector",
+                    string.Empty
                 );
                 
                 return Task.FromResult(ResultBox.FromValue(tagState));

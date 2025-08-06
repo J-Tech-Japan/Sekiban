@@ -243,6 +243,7 @@ public class PostgresEventStore : IEventStore
                     string.Empty,
                     tagGroup,
                     tagContent,
+                    string.Empty,
                     string.Empty
                 ));
             }
@@ -255,6 +256,7 @@ public class PostgresEventStore : IEventStore
                 dbTag.SortableUniqueId,
                 tagGroup,
                 tagContent,
+                string.Empty,
                 string.Empty
             ));
         }

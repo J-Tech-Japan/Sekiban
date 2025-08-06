@@ -41,19 +41,19 @@ public class InMemoryCommandContextTest
     
     private class TestProjector : ITagProjector
     {
-        public string GetProjectorName() => "TestProjector";
-        public string GetTagProjectorName() => "TestProjector";
+        public string GetProjectorVersion() => "1.0.0";
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
     }
     
     private class TestProjector2 : ITagProjector
     {
-        public string GetProjectorName() => "TestProjector2";
-        public string GetTagProjectorName() => "TestProjector2";
+        public string GetProjectorVersion() => "1.0.0";
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
     }
     
-    private record TestStatePayload(string State, int Count) : ITagStatePayload;
+    private record TestStatePayload(string State, int Count) : ITagStatePayload
+    {
+    }
     
     public InMemoryCommandContextTest()
     {
@@ -71,11 +71,11 @@ public class InMemoryCommandContextTest
         var tagTypes = new SimpleTagTypes();
         
         var tagProjectorTypes = new SimpleTagProjectorTypes();
-        tagProjectorTypes.RegisterProjector(new TestProjector());
-        tagProjectorTypes.RegisterProjector(new TestProjector2());
+        tagProjectorTypes.RegisterProjector<TestProjector>();
+        tagProjectorTypes.RegisterProjector<TestProjector2>();
         
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
-        tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>(nameof(TestStatePayload));
+        tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>();
         
         var jsonOptions = new JsonSerializerOptions
         {
@@ -225,7 +225,8 @@ public class InMemoryCommandContextTest
             "TestGroup",
             "Test123",
             "TestProjector",
-            nameof(TestStatePayload)
+            nameof(TestStatePayload),
+            "1.0.0"
         );
         
         // Create mock TagStateActor that returns the serializable state

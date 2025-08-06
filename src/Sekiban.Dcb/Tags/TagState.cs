@@ -6,5 +6,6 @@ public record TagState(
     string LastSortedUniqueId,
     string TagGroup,
     string TagContent,
-    string TagProjector
+    string TagProjector,
+    string ProjectorVersion
 );

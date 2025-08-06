@@ -56,7 +56,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
                 tagState.TagGroup,
                 tagState.TagContent,
                 tagState.TagProjector,
-                "EmptyTagStatePayload"
+                "EmptyTagStatePayload",
+                tagState.ProjectorVersion
             );
         }
         
@@ -71,7 +72,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
             tagState.TagGroup,
             tagState.TagContent,
             tagState.TagProjector,
-            tagState.Payload.GetType().Name
+            tagState.Payload.GetType().Name,
+            tagState.ProjectorVersion
         );
     }
     
@@ -187,7 +189,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
                 "",
                 _tagStateId.TagGroup,
                 _tagStateId.TagContent,
-                _tagStateId.TagProjectorName
+                _tagStateId.TagProjectorName,
+                string.Empty
             );
         }
         
@@ -204,7 +207,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
                 "",
                 _tagStateId.TagGroup,
                 _tagStateId.TagContent,
-                _tagStateId.TagProjectorName
+                _tagStateId.TagProjectorName,
+                projector.GetProjectorVersion()
             );
         }
         
@@ -219,7 +223,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
                 "",
                 _tagStateId.TagGroup,
                 _tagStateId.TagContent,
-                _tagStateId.TagProjectorName
+                _tagStateId.TagProjectorName,
+                projector.GetProjectorVersion()
             );
         }
         
@@ -267,7 +272,8 @@ public class InMemoryTagStateActor : ITagStateActorCommon
             lastSortedUniqueId,
             _tagStateId.TagGroup,
             _tagStateId.TagContent,
-            _tagStateId.TagProjectorName
+            _tagStateId.TagProjectorName,
+            projector.GetProjectorVersion()
         );
     }
     

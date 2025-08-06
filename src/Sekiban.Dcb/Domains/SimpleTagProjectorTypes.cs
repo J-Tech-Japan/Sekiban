@@ -1,5 +1,6 @@
 using System.Reflection;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Events;
 using ResultBoxes;
 
 namespace Sekiban.Dcb.Domains;
@@ -17,11 +18,14 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
     }
     
     /// <summary>
-    /// Register a tag projector
+    /// Register a tag projector type
     /// </summary>
-    public void RegisterProjector(ITagProjector projector)
+    /// <param name="name">Optional name for the projector. If null, uses the type name</param>
+    public void RegisterProjector<T>(string? name = null) where T : ITagProjector, new()
     {
-        _projectors[projector.GetTagProjectorName()] = projector;
+        var projector = new T();
+        var projectorName = name ?? typeof(T).Name;
+        _projectors[projectorName] = projector;
     }
     
     public ResultBox<ITagProjector> GetTagProjector(string tagProjectorName)

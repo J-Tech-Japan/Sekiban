@@ -81,7 +81,8 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
                 serializableState.LastSortedUniqueId,
                 serializableState.TagGroup,
                 serializableState.TagContent,
-                serializableState.TagProjector
+                serializableState.TagProjector,
+                serializableState.ProjectorVersion
             );
             _accessedTagStates[tag] = tagState;
             
@@ -127,7 +128,8 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
                     "",
                     tag.GetTagGroup(),
                     tag.GetTag().Substring(tag.GetTagGroup().Length + 1),
-                    projector.GetType().Name
+                    projector.GetType().Name,
+                    projector.GetProjectorVersion()
                 ));
             }
             
@@ -154,7 +156,8 @@ public class InMemoryCommandContext : ICommandContext, ICommandContextResultAcce
                 serializableState.LastSortedUniqueId,
                 serializableState.TagGroup,
                 serializableState.TagContent,
-                serializableState.TagProjector
+                serializableState.TagProjector,
+                serializableState.ProjectorVersion
             );
             
             // Track the accessed state

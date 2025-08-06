@@ -242,7 +242,8 @@ public class InMemoryTagStateActorTests
             "",
             "ClassRoom", // Different tag group
             studentId.ToString(),
-            "StudentProjector"
+            "StudentProjector",
+            "1.0.0"
         );
         
         // Act & Assert

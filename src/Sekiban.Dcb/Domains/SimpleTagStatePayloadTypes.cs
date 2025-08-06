@@ -68,8 +68,9 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
         }
     }
     
-    public void RegisterPayloadType<T>(string payloadName) where T : ITagStatePayload
+    public void RegisterPayloadType<T>(string? name = null) where T : ITagStatePayload
     {
+        var payloadName = name ?? typeof(T).Name;
         _payloadTypes[payloadName] = typeof(T);
     }
 }

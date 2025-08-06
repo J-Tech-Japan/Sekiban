@@ -42,11 +42,13 @@ public record FilledClassRoomState(
     string Name,
     List<Guid> EnrolledStudentIds,
     bool IsFull
-) : ITagStatePayload;
+) : ITagStatePayload
+{
+}
 
 public class StudentProjector : ITagProjector
 {
-    public string GetTagProjectorName() => nameof(StudentProjector);
+    public string GetProjectorVersion() => "1.0.0";
 
     public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
         (current, eventPayload) switch
@@ -82,7 +84,7 @@ public class StudentProjector : ITagProjector
 
 public class ClassRoomProjector : ITagProjector
 {
-    public string GetTagProjectorName() => nameof(ClassRoomProjector);
+    public string GetProjectorVersion() => "1.0.0";
 
     public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
         (current, eventPayload) switch

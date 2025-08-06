@@ -4,6 +4,6 @@ namespace Sekiban.Dcb.Tags;
 
 public interface ITagProjector
 {
-    string GetTagProjectorName();
+    string GetProjectorVersion();
     ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload);
 }

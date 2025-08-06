@@ -7,5 +7,6 @@ public record SerializableTagState(
     string TagGroup,
     string TagContent,
     string TagProjector,
-    string TagPayloadName
+    string TagPayloadName,
+    string ProjectorVersion
 );

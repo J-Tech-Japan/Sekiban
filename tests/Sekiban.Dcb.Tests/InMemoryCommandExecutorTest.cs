@@ -76,8 +76,7 @@ public class InMemoryCommandExecutorTest
     
     private class TestProjector : ITagProjector
     {
-        public string GetProjectorName() => "TestProjector";
-        public string GetTagProjectorName() => "TestProjector";
+        public string GetProjectorVersion() => "1.0.0";
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload _) => current;
     }
     

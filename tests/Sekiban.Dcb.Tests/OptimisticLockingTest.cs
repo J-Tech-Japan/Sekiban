@@ -29,12 +29,13 @@ public class OptimisticLockingTest
     
     private record TestEvent(string Name, int Version) : IEventPayload;
     
-    private record TestStatePayload(string State, int Count) : ITagStatePayload;
+    private record TestStatePayload(string State, int Count) : ITagStatePayload
+    {
+    }
     
     private class TestProjector : ITagProjector
     {
-        public string GetProjectorName() => "TestProjector";
-        public string GetTagProjectorName() => "TestProjector";
+        public string GetProjectorVersion() => "1.0.0";
         public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => 
             current ?? new TestStatePayload("", 0);
     }
@@ -291,10 +292,10 @@ public class OptimisticLockingTest
         var tagTypes = new SimpleTagTypes();
         
         var tagProjectorTypes = new SimpleTagProjectorTypes();
-        tagProjectorTypes.RegisterProjector(new TestProjector());
+        tagProjectorTypes.RegisterProjector<TestProjector>();
         
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
-        tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>(nameof(TestStatePayload));
+        tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>();
         
         var jsonOptions = new JsonSerializerOptions
         {

@@ -23,11 +23,4 @@ public interface ITagStatePayloadTypes
     /// <param name="jsonBytes">The JSON bytes to deserialize</param>
     /// <returns>ResultBox containing the deserialized payload or error</returns>
     ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes);
-    
-    /// <summary>
-    /// Registers a tag state payload type
-    /// </summary>
-    /// <typeparam name="T">The type of the payload</typeparam>
-    /// <param name="payloadName">The name to register the payload type with</param>
-    void RegisterPayloadType<T>(string payloadName) where T : ITagStatePayload;
 }

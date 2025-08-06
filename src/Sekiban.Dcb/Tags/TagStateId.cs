@@ -21,7 +21,21 @@ public class TagStateId
         
         TagGroup = tag.GetTagGroup();
         TagContent = parts[1];
-        TagProjectorName = tagProjector.GetTagProjectorName();
+        TagProjectorName = tagProjector.GetType().Name;
+    }
+    
+    public TagStateId(ITag tag, string tagProjectorName)
+    {
+        var fullTag = tag.GetTag();
+        var parts = fullTag.Split(':');
+        if (parts.Length != 2)
+        {
+            throw new ArgumentException($"Invalid tag format: {fullTag}. Expected format: 'TagGroup:TagContent'");
+        }
+        
+        TagGroup = tag.GetTagGroup();
+        TagContent = parts[1];
+        TagProjectorName = tagProjectorName;
     }
     
     private TagStateId(string tagGroup, string tagContent, string tagProjectorName)
