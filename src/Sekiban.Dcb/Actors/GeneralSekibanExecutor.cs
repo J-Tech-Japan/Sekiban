@@ -67,41 +67,40 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             
             var eventWithTags = eventOrNone.GetValue();
             
-            // Step 3: Get all tags that need reservations
-            var allTags = new HashSet<ITag>();
-            foreach (var tag in eventWithTags.Tags)
-            {
-                allTags.Add(tag);
-            }
-            
-            // Step 4: Request write reservations from TagConsistentActors
-            var reservations = new Dictionary<ITag, TagWriteReservation>(); // tag -> reservation
+            // Step 3: Collect tags + build reservation requests based on consistency rules
+            var allTags = new HashSet<ITag>(eventWithTags.Tags);
+
+            // Step 4: According to spec:
+            //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
+            //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
+            //  - If tag.IsConsistencyTag() == true AND (ConsistencyTag without SortableUniqueId OR not ConsistencyTag class) ->
+            //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
+            var reservations = new Dictionary<ITag, TagWriteReservation>();
             var reservationTasks = new List<Task<(ITag Tag, ResultBox<TagWriteReservation> Result)>>();
-            
-            // Get the latest sortable unique ID for each tag from accessed states
             var accessedStates = commandContext.GetAccessedTagStates();
-            
+
             foreach (var tag in allTags)
             {
-                var lastSortableUniqueId = "";
-                
-                // Check if this is a ConsistencyTag with a specific version requirement
-                if (tag is ConsistencyTag consistencyTag && consistencyTag.SortableUniqueId.HasValue)
+                if (!tag.IsConsistencyTag())
                 {
-                    // Use the specified SortableUniqueId for optimistic locking
-                    lastSortableUniqueId = consistencyTag.SortableUniqueId.GetValue().Value;
+                    continue; // skip non-consistency tags (no reservation)
                 }
-                else 
+
+                string lastSortableUniqueId = "";
+
+                if (tag is ConsistencyTag ctWithVersion && ctWithVersion.SortableUniqueId.HasValue)
                 {
-                    // For ConsistencyTag without version, use the InnerTag to look up accessed state
+                    lastSortableUniqueId = ctWithVersion.SortableUniqueId.GetValue().Value;
+                }
+                else
+                {
                     var lookupTag = tag is ConsistencyTag ct ? ct.InnerTag : tag;
                     if (accessedStates.TryGetValue(lookupTag, out var state))
                     {
-                        // Use the last accessed state's sortable unique ID
                         lastSortableUniqueId = state.LastSortedUniqueId;
                     }
                 }
-                
+
                 var task = RequestReservationAsync(tag, lastSortableUniqueId, cancellationToken)
                     .ContinueWith(t => (tag, t.Result), cancellationToken);
                 reservationTasks.Add(task);
