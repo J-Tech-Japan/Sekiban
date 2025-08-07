@@ -2,6 +2,7 @@ using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Storage;
@@ -11,7 +12,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Orleans;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Dcb.Domain;
@@ -23,6 +24,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
+
+// Add PostgreSQL connection
+builder.AddNpgsqlDbContext<SekibanDcbDbContext>("DcbPostgres");
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
@@ -162,9 +166,14 @@ builder.Services.AddScoped<ISekibanExecutor, OrleansCommandExecutor>();
 builder.Services.AddScoped<ICommandExecutor>(sp => sp.GetRequiredService<ISekibanExecutor>());
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
-// Add in-memory event store for development
-builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
-builder.Services.AddSingleton<ITagStatePersistent, InMemoryTagStatePersistent>();
+// Add PostgreSQL event store
+// Note: TagStatePersistent is not needed when using Orleans as Orleans grains have their own persistence
+builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
+// Register DbContextFactory for PostgresEventStore
+builder.Services.AddDbContextFactory<SekibanDcbDbContext>(options =>
+{
+    // The connection string will be configured by Aspire's AddNpgsqlDbContext above
+});
 
 // Add CORS services
 builder.Services.AddCors(options =>
@@ -176,6 +185,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Run database migrations
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<SekibanDcbDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 var apiRoute = app.MapGroup("/api");
 
@@ -217,14 +233,15 @@ apiRoute
         async (Guid studentId, [FromServices] ISekibanExecutor executor) =>
         {
             var tag = new StudentTag(studentId);
-            var result = await executor.GetTagStateAsync(tag);
+            var tagStateId = new TagStateId(tag, nameof(StudentProjector));
+            var result = await executor.GetTagStateAsync(tagStateId);
             if (result.IsSuccess)
             {
                 var state = result.GetValue();
                 return Results.Ok(new
                 {
                     studentId = studentId,
-                    payload = state.Payload,
+                    payload = state.Payload as StudentState,
                     version = state.Version
                 });
             }
@@ -260,7 +277,8 @@ apiRoute
         async (Guid classRoomId, [FromServices] ISekibanExecutor executor) =>
         {
             var tag = new ClassRoomTag(classRoomId);
-            var result = await executor.GetTagStateAsync(tag);
+            var tagStateId = new TagStateId(tag, nameof(ClassRoomProjector));
+            var result = await executor.GetTagStateAsync(tagStateId);
             if (result.IsSuccess)
             {
                 var state = result.GetValue();

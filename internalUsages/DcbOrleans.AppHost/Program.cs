@@ -25,7 +25,8 @@ var orleans = builder.AddOrleans("default")
 // Add the API Service
 var apiService = builder.AddProject<Projects.DcbOrleans_ApiService>("apiservice")
     .WithReference(postgres)
-    .WithReference(orleans);
+    .WithReference(orleans)
+    .WaitFor(postgres);
 
 // Add the Web frontend
 builder.AddProject<Projects.DcbOrleans_Web>("webfrontend")

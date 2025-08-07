@@ -66,10 +66,10 @@ public class OrleansCommandExecutor : ISekibanExecutor
     }
     
     /// <summary>
-    /// Get the current state for a specific tag
+    /// Get the current state for a specific tag state
     /// </summary>
-    public Task<ResultBox<TagState>> GetTagStateAsync(ITag tag)
+    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId)
     {
-        return _generalExecutor.GetTagStateAsync(tag);
+        return _generalExecutor.GetTagStateAsync(tagStateId);
     }
 }
