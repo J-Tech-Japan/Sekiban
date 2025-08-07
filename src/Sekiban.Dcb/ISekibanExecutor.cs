@@ -11,9 +11,9 @@ namespace Sekiban.Dcb;
 public interface ISekibanExecutor : ICommandExecutor
 {
     /// <summary>
-    /// Get the current state for a specific tag
+    /// Get the current state for a specific tag state
     /// </summary>
-    /// <param name="tag">The tag to get state for</param>
+    /// <param name="tagStateId">The tag state identifier</param>
     /// <returns>ResultBox containing the tag state or error</returns>
-    Task<ResultBox<TagState>> GetTagStateAsync(ITag tag);
+    Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId);
 }

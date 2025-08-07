@@ -214,12 +214,12 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         return await ExecuteAsync(command, (cmd, context) => cmd.HandleAsync(context), cancellationToken);
     }
     
-    public async Task<ResultBox<TagState>> GetTagStateAsync(ITag tag)
+    public async Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId)
     {
         try
         {
-            // Get the tag state actor for this tag
-            var tagStateActorId = tag.GetTag();
+            // Get the tag state actor for this tag state ID
+            var tagStateActorId = tagStateId.GetTagStateId();
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
             
             if (!actorResult.IsSuccess)
@@ -240,10 +240,10 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                     new EmptyTagStatePayload(),
                     state.Version,
                     state.LastSortedUniqueId,
+                    state.TagGroup,
+                    state.TagContent,
                     state.TagProjector,
-                    state.ProjectorVersion,
-                    $"{state.TagGroup}:{state.TagContent}",
-                    state.TagContent
+                    state.ProjectorVersion
                 ));
             }
             
@@ -270,10 +270,10 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                 payload,
                 state.Version,
                 state.LastSortedUniqueId,
+                state.TagGroup,
+                state.TagContent,
                 state.TagProjector,
-                state.ProjectorVersion,
-                $"{state.TagGroup}:{state.TagContent}",
-                state.TagContent
+                state.ProjectorVersion
             ));
         }
         catch (Exception ex)

@@ -23,11 +23,11 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
         _domainTypes = domainTypes;
     }
     
-    public async Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
+    public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
     {
         if (string.IsNullOrEmpty(actorId))
         {
-            return ResultBox.Error<T>(new ArgumentException("Actor ID cannot be empty"));
+            return Task.FromResult(ResultBox.Error<T>(new ArgumentException("Actor ID cannot be empty")));
         }
         
         try
@@ -38,22 +38,22 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
             {
                 var grain = _clusterClient.GetGrain<Grains.ITagConsistentGrain>(actorId);
                 var wrapper = new TagConsistentGrainWrapper(grain);
-                return ResultBox.FromValue((T)(object)wrapper);
+                return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
             }
             else if (actorType == typeof(ITagStateActorCommon))
             {
                 var grain = _clusterClient.GetGrain<Grains.ITagStateGrain>(actorId);
                 var wrapper = new TagStateGrainWrapper(grain);
-                return ResultBox.FromValue((T)(object)wrapper);
+                return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
             }
             else
             {
-                return ResultBox.Error<T>(new NotSupportedException($"Actor type {actorType.Name} is not supported"));
+                return Task.FromResult(ResultBox.Error<T>(new NotSupportedException($"Actor type {actorType.Name} is not supported")));
             }
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<T>(ex);
+            return Task.FromResult(ResultBox.Error<T>(ex));
         }
     }
     

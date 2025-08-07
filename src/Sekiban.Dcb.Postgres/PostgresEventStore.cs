@@ -133,46 +133,54 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            await using var transaction = await context.Database.BeginTransactionAsync();
             
-            var eventsList = events.ToList();
-            var writtenEvents = new List<Event>();
-            var tagWriteResults = new List<TagWriteResult>();
+            // Use the execution strategy for retry logic
+            var strategy = context.Database.CreateExecutionStrategy();
             
-            // Process each event
-            foreach (var ev in eventsList)
+            return await strategy.ExecuteAsync(async () =>
             {
-                // Serialize the event payload
-                var serializedPayload = SerializeEventPayload(ev.Payload);
+                // Begin transaction inside the execution strategy
+                await using var transaction = await context.Database.BeginTransactionAsync();
                 
-                // Create and add the database event
-                var dbEvent = DbEvent.FromEvent(ev, serializedPayload);
-                context.Events.Add(dbEvent);
-                writtenEvents.Add(ev);
+                var eventsList = events.ToList();
+                var writtenEvents = new List<Event>();
+                var tagWriteResults = new List<TagWriteResult>();
                 
-                // Process tags associated with this event
-                foreach (var tagString in ev.Tags)
+                // Process each event
+                foreach (var ev in eventsList)
                 {
-                    // Create a tag entry for this event
-                    var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id);
-                    context.Tags.Add(dbTag);
+                    // Serialize the event payload
+                    var serializedPayload = SerializeEventPayload(ev.Payload);
                     
-                    tagWriteResults.Add(new TagWriteResult(
-                        tagString,
-                        1, // Version placeholder
-                        DateTimeOffset.UtcNow
-                    ));
+                    // Create and add the database event
+                    var dbEvent = DbEvent.FromEvent(ev, serializedPayload);
+                    context.Events.Add(dbEvent);
+                    writtenEvents.Add(ev);
+                    
+                    // Process tags associated with this event
+                    foreach (var tagString in ev.Tags)
+                    {
+                        // Create a tag entry for this event
+                        var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id);
+                        context.Tags.Add(dbTag);
+                        
+                        tagWriteResults.Add(new TagWriteResult(
+                            tagString,
+                            1, // Version placeholder
+                            DateTimeOffset.UtcNow
+                        ));
+                    }
                 }
-            }
-            
-            // Save changes
-            await context.SaveChangesAsync();
-            await transaction.CommitAsync();
-            
-            return ResultBox.FromValue((
-                Events: (IReadOnlyList<Event>)writtenEvents,
-                TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults
-            ));
+                
+                // Save changes
+                await context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                
+                return ResultBox.FromValue((
+                    Events: (IReadOnlyList<Event>)writtenEvents,
+                    TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults
+                ));
+            });
         }
         catch (Exception ex)
         {

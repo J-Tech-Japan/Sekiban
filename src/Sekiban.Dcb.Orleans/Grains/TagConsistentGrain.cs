@@ -17,16 +17,10 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
     private readonly TagConsistentActorOptions _options;
     private GeneralTagConsistentActor? _actor;
     
-    public TagConsistentGrain(IEventStore eventStore)
+    public TagConsistentGrain(IEventStore eventStore, TagConsistentActorOptions? options = null)
     {
         _eventStore = eventStore;
-        _options = new TagConsistentActorOptions();
-    }
-    
-    public TagConsistentGrain(IEventStore eventStore, TagConsistentActorOptions options)
-    {
-        _eventStore = eventStore;
-        _options = options;
+        _options = options ?? new TagConsistentActorOptions();
     }
     
     public override Task OnActivateAsync(CancellationToken cancellationToken)
