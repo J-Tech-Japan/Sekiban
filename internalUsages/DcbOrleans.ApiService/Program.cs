@@ -175,15 +175,20 @@ builder.Services.AddDbContextFactory<SekibanDcbDbContext>(options =>
     // The connection string will be configured by Aspire's AddNpgsqlDbContext above
 });
 
-// Add CORS services
-builder.Services.AddCors(options =>
+if (builder.Environment.IsDevelopment())
 {
-    options.AddDefaultPolicy(policy =>
+    // Add CORS services
+    builder.Services.AddCors(options =>
     {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        options.AddDefaultPolicy(policy =>
+        {
+            // Allow any origin in development for easier testing
+            policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+        });
     });
-});
-
+}
 var app = builder.Build();
 
 // Run database migrations
@@ -241,7 +246,7 @@ apiRoute
                 return Results.Ok(new
                 {
                     studentId = studentId,
-                    payload = state.Payload as StudentState,
+                    payload = state.Payload as dynamic,
                     version = state.Version
                 });
             }
