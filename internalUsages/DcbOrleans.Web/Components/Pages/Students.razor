@@ -1,0 +1,193 @@
+@page "/students"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<Students> Logger
+
+<PageTitle>Students</PageTitle>
+
+<h1>Student Management</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <h3>Create Student</h3>
+        <EditForm Model="@newStudent" OnValidSubmit="@CreateStudent">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <InputText id="name" class="form-control" @bind-Value="newStudent.Name" />
+            </div>
+            
+            <div class="mb-3">
+                <label for="grade" class="form-label">Grade</label>
+                <InputNumber id="grade" class="form-control" @bind-Value="newStudent.Grade" />
+            </div>
+            
+            <button type="submit" class="btn btn-primary" disabled="@isCreating">
+                @if (isCreating)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                Create Student
+            </button>
+        </EditForm>
+        
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3" role="alert">
+                @message
+            </div>
+        }
+    </div>
+    
+    <div class="col-md-6">
+        <h3>Find Student</h3>
+        <div class="mb-3">
+            <label for="studentId" class="form-label">Student ID</label>
+            <InputText id="studentId" class="form-control" @bind-Value="searchStudentId" />
+        </div>
+        
+        <button class="btn btn-secondary" @onclick="FindStudent" disabled="@isSearching">
+            @if (isSearching)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            }
+            Find Student
+        </button>
+        
+        @if (foundStudent != null)
+        {
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title">Student Details</h5>
+                    <p class="card-text">
+                        <strong>ID:</strong> @foundStudent.StudentId<br />
+                        <strong>Version:</strong> @foundStudent.Version<br />
+                        <strong>Payload:</strong> @System.Text.Json.JsonSerializer.Serialize(foundStudent.Payload)
+                    </p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private CreateStudentModel newStudent = new();
+    private string searchStudentId = "";
+    private StudentResponse? foundStudent;
+    private bool isCreating = false;
+    private bool isSearching = false;
+    private string message = "";
+    private bool isError = false;
+    
+    private async Task CreateStudent()
+    {
+        isCreating = true;
+        message = "";
+        
+        try
+        {
+            var client = HttpClientFactory.CreateClient("ApiService");
+            
+            var command = new
+            {
+                StudentId = Guid.NewGuid(),
+                Name = newStudent.Name,
+                Grade = newStudent.Grade
+            };
+            
+            var response = await client.PostAsJsonAsync("/api/students", command);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CreateStudentResponse>();
+                message = $"Student created successfully! ID: {result?.StudentId}";
+                isError = false;
+                newStudent = new();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                message = $"Error creating student: {error}";
+                isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating student");
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+    
+    private async Task FindStudent()
+    {
+        if (!Guid.TryParse(searchStudentId, out var studentId))
+        {
+            message = "Invalid Student ID format";
+            isError = true;
+            return;
+        }
+        
+        isSearching = true;
+        foundStudent = null;
+        message = "";
+        
+        try
+        {
+            var client = HttpClientFactory.CreateClient("ApiService");
+            var response = await client.GetAsync($"/api/students/{studentId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                foundStudent = await response.Content.ReadFromJsonAsync<StudentResponse>();
+                message = "";
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                message = "Student not found";
+                isError = true;
+            }
+            else
+            {
+                message = $"Error: {response.StatusCode}";
+                isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error finding student");
+            message = $"Error: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+    
+    public class CreateStudentModel
+    {
+        public string Name { get; set; } = "";
+        public int Grade { get; set; } = 1;
+    }
+    
+    public class CreateStudentResponse
+    {
+        public Guid StudentId { get; set; }
+        public Guid EventId { get; set; }
+        public string Message { get; set; } = "";
+    }
+    
+    public class StudentResponse
+    {
+        public Guid StudentId { get; set; }
+        public object? Payload { get; set; }
+        public int Version { get; set; }
+    }
+}
