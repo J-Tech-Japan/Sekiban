@@ -1,5 +1,4 @@
 using Sekiban.Dcb.Tags;
-
 namespace Dcb.Domain.Student;
 
 public record StudentTag(Guid StudentId) : ITag

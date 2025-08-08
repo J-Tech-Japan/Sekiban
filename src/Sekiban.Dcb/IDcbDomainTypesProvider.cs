@@ -2,7 +2,7 @@ using System.Text.Json;
 namespace Sekiban.Dcb;
 
 /// <summary>
-/// Interface for providing DcbDomainTypes
+///     Interface for providing DcbDomainTypes
 /// </summary>
 public interface IDcbDomainTypesProvider
 {

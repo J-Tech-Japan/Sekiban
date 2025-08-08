@@ -1,55 +1,29 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Sekiban.Dcb;
+using Dcb.Domain;
+using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
-using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using ResultBoxes;
-using Xunit;
-using Dcb.Domain;
-
 namespace Sekiban.Dcb.Tests;
 
 public class EventPublishingTests
 {
-    private readonly InMemoryEventStore _eventStore;
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemorySekibanStream _stream;
-    private readonly InMemoryEventPublisher _publisher;
+    private readonly InMemoryEventStore _eventStore;
     private readonly GeneralSekibanExecutor _executor;
-
-    private record TestPublishCommand(string Name) : ICommand;
-    private record TestPublishEvent(string Name) : IEventPayload;
-    private record TestPublishTag : ITag
-    {
-        public bool IsConsistencyTag() => true;
-        public string GetTagGroup() => "PubTest";
-        public string GetTagContent() => "One";
-    }
-
-    private class TestPublishHandler : ICommandHandler<TestPublishCommand>
-    {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
-        {
-            var tag = new TestPublishTag();
-            var evt = new TestPublishEvent(command.Name);
-            return Task.FromResult(EventOrNone.Event(evt, tag));
-        }
-    }
+    private readonly InMemoryEventPublisher _publisher;
+    private readonly InMemorySekibanStream _stream;
 
     public EventPublishingTests()
     {
         _eventStore = new InMemoryEventStore();
-    _domainTypes = DomainType.GetDomainTypes();
+        _domainTypes = DomainType.GetDomainTypes();
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-    _stream = new InMemorySekibanStream("test.topic");
-    var resolver = new InMemoryStreamDestinationResolver(_stream);
-    _publisher = new InMemoryEventPublisher(resolver);
+        _stream = new InMemorySekibanStream("test.topic");
+        var resolver = new InMemoryStreamDestinationResolver(_stream);
+        _publisher = new InMemoryEventPublisher(resolver);
         _executor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes, _publisher);
     }
 
@@ -92,6 +66,25 @@ public class EventPublishingTests
         Assert.Equal(2, _publisher.Published.Count);
     }
 
+    private record TestPublishCommand(string Name) : ICommand;
+    private record TestPublishEvent(string Name) : IEventPayload;
+    private record TestPublishTag : ITag
+    {
+        public bool IsConsistencyTag() => true;
+        public string GetTagGroup() => "PubTest";
+        public string GetTagContent() => "One";
+    }
+
+    private class TestPublishHandler : ICommandHandler<TestPublishCommand>
+    {
+        public Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
+        {
+            var tag = new TestPublishTag();
+            var evt = new TestPublishEvent(command.Name);
+            return Task.FromResult(EventOrNone.Event(evt, tag));
+        }
+    }
+
     private class MultiEventHandler : ICommandHandler<TestPublishCommand>
     {
         public Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
@@ -101,7 +94,7 @@ public class EventPublishingTests
             var evt2 = new TestPublishEvent(command.Name + "2");
 
             // Append first event via context to simulate multi-event production
-            context.AppendEvent(new EventPayloadWithTags(evt1, new System.Collections.Generic.List<ITag> { tag }));
+            context.AppendEvent(new EventPayloadWithTags(evt1, new List<ITag> { tag }));
 
             // Return second event as the handler result
             return Task.FromResult(EventOrNone.Event(evt2, tag));

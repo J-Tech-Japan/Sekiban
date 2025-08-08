@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="ResultBoxes" Version="0.3.31" />
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
     </ItemGroup>
 
 </Project>

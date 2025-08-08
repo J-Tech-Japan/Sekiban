@@ -1,15 +1,14 @@
-using Sekiban.Dcb.Events;
 using ResultBoxes;
-
+using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.Storage;
 
 /// <summary>
-/// Extension methods for IEventStore
+///     Extension methods for IEventStore
 /// </summary>
 public static class EventStoreExtensions
 {
     /// <summary>
-    /// Helper method to write a single event using WriteEventsAsync
+    ///     Helper method to write a single event using WriteEventsAsync
     /// </summary>
     public static async Task<ResultBox<Event>> WriteEventAsync(this IEventStore eventStore, Event evt)
     {
@@ -19,7 +18,7 @@ public static class EventStoreExtensions
             var (events, _) = result.GetValue();
             return ResultBox.FromValue(events.First());
         }
-        
+
         return ResultBox.Error<Event>(result.GetException());
     }
 }

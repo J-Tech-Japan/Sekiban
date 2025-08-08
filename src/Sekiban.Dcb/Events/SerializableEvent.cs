@@ -6,5 +6,4 @@ public record SerializableEvent(
     Guid Id,
     EventMetadata EventMetadata,
     List<string> Tags,
-    string EventPayloadName
-);
+    string EventPayloadName);
