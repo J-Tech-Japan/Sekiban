@@ -48,8 +48,8 @@ public class StudentProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(StudentProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
-        (current, eventPayload) switch
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, StudentCreated created) => 
                 new StudentState(
@@ -84,8 +84,8 @@ public class ClassRoomProjector : ITagProjector
 {
     public string GetTagProjectorName() => nameof(ClassRoomProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
-        (current, eventPayload) switch
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, ClassRoomCreated created) => 
                 new AvailableClassRoomState(

@@ -7,5 +7,4 @@ public record TagState(
     string TagGroup,
     string TagContent,
     string TagProjector,
-    string ProjectorVersion
-);
+    string ProjectorVersion);

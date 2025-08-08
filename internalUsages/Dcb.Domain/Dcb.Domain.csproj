@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <RootNamespace>Dcb.Domain</RootNamespace>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Dcb.Domain</RootNamespace>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="ResultBoxes" Version="0.3.31" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
+    </ItemGroup>
 
 </Project>

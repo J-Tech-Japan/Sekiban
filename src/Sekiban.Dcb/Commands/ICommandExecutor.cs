@@ -1,17 +1,15 @@
-using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Tags;
 using ResultBoxes;
-
+using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
-/// Orchestrates command execution including context creation, handler invocation,
-/// tag reservation, and event/tag persistence.
+///     Orchestrates command execution including context creation, handler invocation,
+///     tag reservation, and event/tag persistence.
 /// </summary>
 public interface ICommandExecutor
 {
     /// <summary>
-    /// Executes a command with a handler function
+    ///     Executes a command with a handler function
     /// </summary>
     /// <typeparam name="TCommand">The type of command to execute</typeparam>
     /// <param name="command">The command to execute</param>
@@ -19,13 +17,12 @@ public interface ICommandExecutor
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>ResultBox containing the execution result or error</returns>
     Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
-        TCommand command, 
+        TCommand command,
         Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
-        CancellationToken cancellationToken = default)
-        where TCommand : ICommand;
-    
+        CancellationToken cancellationToken = default) where TCommand : ICommand;
+
     /// <summary>
-    /// Executes a command with a specific handler instance
+    ///     Executes a command with a specific handler instance
     /// </summary>
     /// <typeparam name="TCommand">The type of command to execute</typeparam>
     /// <param name="command">The command to execute</param>
@@ -33,13 +30,12 @@ public interface ICommandExecutor
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>ResultBox containing the execution result or error</returns>
     Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
-        TCommand command, 
+        TCommand command,
         ICommandHandler<TCommand> handler,
-        CancellationToken cancellationToken = default)
-        where TCommand : ICommand;
-    
+        CancellationToken cancellationToken = default) where TCommand : ICommand;
+
     /// <summary>
-    /// Executes a command that includes its own handler logic
+    ///     Executes a command that includes its own handler logic
     /// </summary>
     /// <typeparam name="TCommand">The type of command to execute</typeparam>
     /// <param name="command">The command with handler to execute</param>
@@ -47,6 +43,5 @@ public interface ICommandExecutor
     /// <returns>ResultBox containing the execution result or error</returns>
     Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
-        CancellationToken cancellationToken = default)
-        where TCommand : ICommandWithHandler<TCommand>;
+        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>;
 }

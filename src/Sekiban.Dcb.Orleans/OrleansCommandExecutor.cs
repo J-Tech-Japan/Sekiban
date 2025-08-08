@@ -22,12 +22,13 @@ public class OrleansCommandExecutor : ISekibanExecutor
     public OrleansCommandExecutor(
         IClusterClient clusterClient,
         IEventStore eventStore,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher = null)
     {
         _eventStore = eventStore;
         _domainTypes = domainTypes;
         _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes);
-        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes);
+        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher);
     }
     
     /// <summary>

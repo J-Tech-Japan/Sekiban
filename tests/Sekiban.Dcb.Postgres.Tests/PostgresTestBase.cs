@@ -25,7 +25,3 @@ public abstract class PostgresTestBase : IAsyncLifetime
 }
 
 // Collection definition for shared fixture
-[CollectionDefinition("PostgresTests")]
-public class PostgresTestCollection : ICollectionFixture<PostgresTestFixture>
-{
-}

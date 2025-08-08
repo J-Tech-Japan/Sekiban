@@ -1,5 +1,4 @@
 using Sekiban.Dcb.Tags;
-
 namespace Sekiban.Dcb.Actors;
 
 public interface ITagStateActorCommon

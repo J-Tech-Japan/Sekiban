@@ -12,7 +12,7 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0"/>
         <PackageReference Include="xunit" Version="2.9.2"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2"/>
-        <PackageReference Include="ResultBoxes" Version="0.3.31" />
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -20,8 +20,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj" />
-        <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
     </ItemGroup>
 
 </Project>

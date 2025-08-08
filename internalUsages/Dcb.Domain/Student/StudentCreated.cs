@@ -1,5 +1,4 @@
 using Sekiban.Dcb.Events;
-
 namespace Dcb.Domain.Student;
 
 // DCB Pattern: One command produces ONE event that represents a business fact.

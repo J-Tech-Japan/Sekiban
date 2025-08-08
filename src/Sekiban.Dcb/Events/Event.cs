@@ -6,5 +6,4 @@ public record Event(
     string EventType,
     Guid Id,
     EventMetadata EventMetadata,
-    List<string> Tags
-);
+    List<string> Tags);
