@@ -11,9 +11,9 @@ public record Event(
     /// <summary>
     ///     Convert string tags to ITag list in the format "group:content".
     /// </summary>
-    public System.Collections.Generic.List<Sekiban.Dcb.Tags.ITagCommon> GetTags()
+    public System.Collections.Generic.List<Sekiban.Dcb.Tags.ITag> GetTags()
     {
-        var result = new System.Collections.Generic.List<Sekiban.Dcb.Tags.ITagCommon>();
+        var result = new System.Collections.Generic.List<Sekiban.Dcb.Tags.ITag>();
         if (Tags is null || Tags.Count == 0)
         {
             return result;
@@ -27,7 +27,7 @@ public record Event(
         return result;
     }
 
-    private sealed record EventTag(string TagValue) : Sekiban.Dcb.Tags.ITagCommon
+    private sealed record EventTag(string TagValue) : Sekiban.Dcb.Tags.ITag
     {
         private bool _parsed;
         private string _group = string.Empty;

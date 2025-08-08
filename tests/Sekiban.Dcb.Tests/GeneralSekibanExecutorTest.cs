@@ -197,7 +197,7 @@ public class GeneralSekibanExecutorTest
     // Test types
     private record TestEvent(string Name, int Value) : IEventPayload;
 
-    private record TestTag : ITagCommon
+    private record TestTag : ITag
     {
         public bool IsConsistencyTag() => true;
         public string GetTagContent() => "Test123";
@@ -206,11 +206,6 @@ public class GeneralSekibanExecutorTest
 
     private class TestProjector : ITagProjector
     {
-    /// <summary>
-    /// Returns the tag group name this projector targets.
-    /// </summary>
-    /// <returns>Tag group name.</returns>
-    public string ForTagGroupName() => "TestGroup";
         public string GetProjectorVersion() => "1.0.0";
     public ITagStatePayload Project(ITagStatePayload current, Event _) => current;
     }
@@ -248,7 +243,7 @@ public class GeneralSekibanExecutorTest
         }
     }
 
-    private record TestTag2 : ITagCommon
+    private record TestTag2 : ITag
     {
         public bool IsConsistencyTag() => true;
         public string GetTagContent() => "Test456";

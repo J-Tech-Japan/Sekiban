@@ -86,15 +86,15 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
 
             // Step 3: Collect tags across all events
-            var allTags = new HashSet<ITagCommon>(collectedEvents.SelectMany(e => e.Tags));
+            var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
 
             // Step 4: According to spec:
             //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
             //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
             //  - If tag.IsConsistencyTag() == true AND (ConsistencyTag without SortableUniqueId OR not ConsistencyTag class) ->
             //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
-            var reservations = new Dictionary<ITagCommon, TagWriteReservation>();
-            var reservationTasks = new List<Task<(ITagCommon Tag, ResultBox<TagWriteReservation> Result)>>();
+            var reservations = new Dictionary<ITag, TagWriteReservation>();
+            var reservationTasks = new List<Task<(ITag Tag, ResultBox<TagWriteReservation> Result)>>();
             var accessedStates = commandContext.GetAccessedTagStates();
 
             foreach (var tag in allTags)
@@ -126,7 +126,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             var reservationResults = await Task.WhenAll(reservationTasks);
 
             // Check if all reservations succeeded
-            var failedReservations = new List<(ITagCommon Tag, Exception Error)>();
+            var failedReservations = new List<(ITag Tag, Exception Error)>();
             foreach (var (tag, result) in reservationResults)
             {
                 if (result.IsSuccess)
@@ -192,7 +192,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                 {
                     var publishEvents = writtenEvents
                         .Select((we, idx) => (Event: we,
-                            Tags: (IReadOnlyCollection<ITagCommon>)collectedEvents[idx].Tags.AsReadOnly()))
+                            Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
                         .ToList()
                         .AsReadOnly();
                     _ = Task.Run(() => _eventPublisher.PublishAsync(publishEvents, CancellationToken.None));
@@ -308,7 +308,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     private async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(
-        ITagCommon tag,
+        ITag tag,
         string lastSortableUniqueId,
         CancellationToken cancellationToken)
     {
@@ -332,7 +332,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     private async Task CancelReservationsAsync(
-        Dictionary<ITagCommon, TagWriteReservation> reservations,
+        Dictionary<ITag, TagWriteReservation> reservations,
         CancellationToken cancellationToken)
     {
         var cancelTasks = new List<Task>();
@@ -347,7 +347,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     private async Task CancelReservationAsync(
-        ITagCommon tag,
+        ITag tag,
         TagWriteReservation reservation,
         CancellationToken cancellationToken)
     {
@@ -369,7 +369,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     private async Task ConfirmReservationsAsync(
-        Dictionary<ITagCommon, TagWriteReservation> reservations,
+        Dictionary<ITag, TagWriteReservation> reservations,
         CancellationToken cancellationToken)
     {
         var confirmTasks = new List<Task>();
@@ -384,7 +384,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     private async Task ConfirmReservationAsync(
-        ITagCommon tag,
+        ITag tag,
         TagWriteReservation reservation,
         CancellationToken cancellationToken)
     {

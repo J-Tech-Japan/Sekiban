@@ -143,11 +143,6 @@ public class DuplicateRegistrationTests
         public record TestEvent(string Value) : IEventPayload;
         public class TestProjector : ITagProjector
         {
-            /// <summary>
-            /// Returns the tag group name this projector targets.
-            /// </summary>
-            /// <returns>Tag group name.</returns>
-            public string ForTagGroupName() => "TestGroup";
             public string GetProjectorVersion() => "1.0.0";
             public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }
@@ -159,11 +154,6 @@ public class DuplicateRegistrationTests
         public record TestEvent(int Number) : IEventPayload;
         public class TestProjector : ITagProjector
         {
-            /// <summary>
-            /// Returns the tag group name this projector targets.
-            /// </summary>
-            /// <returns>Tag group name.</returns>
-            public string ForTagGroupName() => "TestGroup";
             public string GetProjectorVersion() => "2.0.0";
             public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }

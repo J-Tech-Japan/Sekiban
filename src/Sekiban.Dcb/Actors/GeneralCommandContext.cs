@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public class GeneralCommandContext : ICommandContext, ICommandContextResultAccessor
 {
-    private readonly Dictionary<ITagCommon, TagState> _accessedTagStates = new();
+    private readonly Dictionary<ITag, TagState> _accessedTagStates = new();
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly List<EventPayloadWithTags> _appendedEvents = new();
     private readonly DcbDomainTypes _domainTypes;
@@ -22,7 +22,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
-    public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITagCommon tag)
+    public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
         where TState : ITagStatePayload where TProjector : ITagProjector, new()
     {
         try
@@ -102,7 +102,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITagCommon tag) where TProjector : ITagProjector, new()
+    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector, new()
     {
         try
         {
@@ -162,7 +162,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public async Task<ResultBox<bool>> TagExistsAsync(ITagCommon tag)
+    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
         try
         {
@@ -204,7 +204,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public async Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITagCommon tag)
+    public async Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag)
     {
         try
         {
@@ -267,7 +267,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     /// <summary>
     ///     Gets the list of tags and their states that were accessed during command execution
     /// </summary>
-    public IReadOnlyDictionary<ITagCommon, TagState> GetAccessedTagStates() => _accessedTagStates.AsReadOnly();
+    public IReadOnlyDictionary<ITag, TagState> GetAccessedTagStates() => _accessedTagStates.AsReadOnly();
 
     /// <summary>
     ///     Clears all tracked state accesses and appended events

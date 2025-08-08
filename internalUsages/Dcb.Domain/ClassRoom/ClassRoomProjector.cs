@@ -5,12 +5,6 @@ namespace Dcb.Domain.ClassRoom;
 
 public class ClassRoomProjector : ITagProjector
 {
-    /// <summary>
-    /// Returns the tag group name this projector targets.
-    /// </summary>
-    /// <returns>Tag group name.</returns>
-    public string ForTagGroupName() => "ClassRoom";
-
     public string GetProjectorVersion() => "1.0.0";
 
     public ITagStatePayload Project(ITagStatePayload current, Event ev) =>

@@ -16,7 +16,7 @@ public interface ICommandContext
     /// <typeparam name="TProjector">The type of projector to use</typeparam>
     /// <param name="tag">The tag to query</param>
     /// <returns>ResultBox containing the TagStateTyped or error information</returns>
-    Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITagCommon tag) where TState : ITagStatePayload
+    Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag) where TState : ITagStatePayload
         where TProjector : ITagProjector, new();
 
     /// <summary>
@@ -25,14 +25,14 @@ public interface ICommandContext
     /// <typeparam name="TProjector">The type of projector to use</typeparam>
     /// <param name="tag">The tag to query</param>
     /// <returns>ResultBox containing the TagState or error information</returns>
-    Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITagCommon tag) where TProjector : ITagProjector, new();
+    Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector, new();
 
     /// <summary>
     ///     Checks if a tag exists (has any events)
     /// </summary>
     /// <param name="tag">The tag to check</param>
     /// <returns>ResultBox containing true if the tag has associated events, false if not, or error if something went wrong</returns>
-    Task<ResultBox<bool>> TagExistsAsync(ITagCommon tag);
+    Task<ResultBox<bool>> TagExistsAsync(ITag tag);
 
     /// <summary>
     ///     Gets the latest sortable unique ID for a tag (for optimistic concurrency)
@@ -42,7 +42,7 @@ public interface ICommandContext
     ///     ResultBox containing the latest sortable unique ID or empty string if not found, or error if something went
     ///     wrong
     /// </returns>
-    Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITagCommon tag);
+    Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag);
 
     /// <summary>
     ///     Appends an event with tags to the context

@@ -13,7 +13,7 @@ public interface ICommandContextResultAccessor
     ///     This indicates which states the command depends on
     /// </summary>
     /// <returns>Dictionary of tag to TagState</returns>
-    IReadOnlyDictionary<ITagCommon, TagState> GetAccessedTagStates();
+    IReadOnlyDictionary<ITag, TagState> GetAccessedTagStates();
 
     /// <summary>
     ///     Gets all events that were appended during command execution

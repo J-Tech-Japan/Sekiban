@@ -70,7 +70,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
         return result.IsSuccess && result.GetValue();
     }
     
-    private ITagCommon? ParseTagFromActorId(string actorId)
+    private ITag? ParseTagFromActorId(string actorId)
     {
         if (string.IsNullOrEmpty(actorId))
         {
@@ -83,7 +83,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
     /// <summary>
     /// Simple tag implementation for wrapping actor IDs
     /// </summary>
-    private record SimpleTag(string TagValue) : ITagCommon
+    private record SimpleTag(string TagValue) : ITag
     {
         public bool IsConsistencyTag() => true;
         public string GetTagContent() => TagValue.Split(':').Length > 1 ? string.Join(':', TagValue.Split(':').Skip(1)) : "";

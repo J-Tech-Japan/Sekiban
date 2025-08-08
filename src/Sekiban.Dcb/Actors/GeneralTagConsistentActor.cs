@@ -290,7 +290,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     /// <summary>
     ///     Generic tag implementation for use within the actor
     /// </summary>
-    private class GenericTag : ITagCommon
+    private class GenericTag : ITag
     {
         private readonly string _tagContent;
         private readonly string _tagGroup;

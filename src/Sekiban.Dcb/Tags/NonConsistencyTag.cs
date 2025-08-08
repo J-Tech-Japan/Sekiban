@@ -3,7 +3,7 @@ namespace Sekiban.Dcb.Tags;
 /// <summary>
 ///     A wrapper that ensures any ITag is treated as a non-consistency tag
 /// </summary>
-public record NonConsistencyTag(ITagCommon InnerTag) : ITagCommon
+public record NonConsistencyTag(ITag InnerTag) : ITag
 {
     public bool IsConsistencyTag() => false;
 
@@ -14,5 +14,5 @@ public record NonConsistencyTag(ITagCommon InnerTag) : ITagCommon
     /// <summary>
     ///     Creates a non-consistency tag from any tag
     /// </summary>
-    public static NonConsistencyTag From(ITagCommon tag) => new(tag);
+    public static NonConsistencyTag From(ITag tag) => new(tag);
 }
