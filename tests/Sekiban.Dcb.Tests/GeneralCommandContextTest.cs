@@ -45,7 +45,8 @@ public class GeneralCommandContextTest
             WriteIndented = true
         };
 
-        return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, jsonOptions);
+    var multiProjectorTypes = new SimpleMultiProjectorTypes();
+    return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, multiProjectorTypes, jsonOptions);
     }
 
     [Fact]
