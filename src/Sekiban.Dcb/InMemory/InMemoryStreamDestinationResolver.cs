@@ -9,7 +9,7 @@ public class InMemoryStreamDestinationResolver : IStreamDestinationResolver
 
     public InMemoryStreamDestinationResolver(ISekibanStream stream) => _stream = stream;
 
-    public IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITag> tags)
+    public IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITagCommon> tags)
     {
         yield return _stream;
     }

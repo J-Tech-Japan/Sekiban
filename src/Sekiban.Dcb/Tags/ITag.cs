@@ -1,6 +1,6 @@
 namespace Sekiban.Dcb.Tags;
 
-public interface ITag
+public interface ITagCommon
 {
     bool IsConsistencyTag();
     string GetTagGroup();

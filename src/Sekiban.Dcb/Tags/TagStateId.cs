@@ -10,7 +10,7 @@ public class TagStateId
     public string TagContent { get; }
     public string TagProjectorName { get; }
 
-    public TagStateId(ITag tag, ITagProjector tagProjector)
+    public TagStateId(ITagCommon tag, ITagProjector tagProjector)
     {
         var fullTag = tag.GetTag();
         var parts = fullTag.Split(':');
@@ -24,7 +24,7 @@ public class TagStateId
         TagProjectorName = tagProjector.GetType().Name;
     }
 
-    public TagStateId(ITag tag, string tagProjectorName)
+    public TagStateId(ITagCommon tag, string tagProjectorName)
     {
         var fullTag = tag.GetTag();
         var parts = fullTag.Split(':');

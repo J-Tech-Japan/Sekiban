@@ -8,6 +8,6 @@ namespace Sekiban.Dcb.Actors;
 public interface IEventPublisher
 {
     Task PublishAsync(
-        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITagCommon> Tags)> events,
         CancellationToken cancellationToken = default);
 }

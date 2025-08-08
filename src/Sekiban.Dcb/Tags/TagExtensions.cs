@@ -8,5 +8,5 @@ public static class TagExtensions
     /// <summary>
     ///     Gets the full tag string in the format "group:content"
     /// </summary>
-    public static string GetTag(this ITag tag) => $"{tag.GetTagGroup()}:{tag.GetTagContent()}";
+    public static string GetTag(this ITagCommon tag) => $"{tag.GetTagGroup()}:{tag.GetTagContent()}";
 }

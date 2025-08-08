@@ -277,7 +277,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             projector.GetProjectorVersion());
     }
 
-    private ITag CreateTag(string tagGroup, string tagContent) =>
+    private ITagCommon CreateTag(string tagGroup, string tagContent) =>
         // Create a generic tag implementation for the actor
         new GenericTag(tagGroup, tagContent);
 
@@ -292,7 +292,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
     /// <summary>
     ///     Generic tag implementation for use within the actor
     /// </summary>
-    private class GenericTag : ITag
+    private class GenericTag : ITagCommon
     {
         private readonly string _tagContent;
         private readonly string _tagGroup;

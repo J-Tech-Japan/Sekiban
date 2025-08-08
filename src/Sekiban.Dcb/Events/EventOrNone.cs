@@ -27,13 +27,13 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
     /// <summary>
     ///     Creates an EventOrNone from an event payload and tags
     /// </summary>
-    public static EventOrNone FromValue(IEventPayload eventPayload, params ITag[] tags) =>
+    public static EventOrNone FromValue(IEventPayload eventPayload, params ITagCommon[] tags) =>
         new(new EventPayloadWithTags(eventPayload, tags.ToList()), true);
 
     /// <summary>
     ///     Creates an EventOrNone from an event payload and a list of tags
     /// </summary>
-    public static EventOrNone FromValue(IEventPayload eventPayload, List<ITag> tags) =>
+    public static EventOrNone FromValue(IEventPayload eventPayload, List<ITagCommon> tags) =>
         new(new EventPayloadWithTags(eventPayload, tags), true);
 
     /// <summary>
@@ -41,19 +41,19 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
     /// </summary>
     public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventWithTags) =>
         ResultBox.FromValue(FromValue(eventWithTags));
-    public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params IEnumerable<ITag> tags) =>
+    public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params IEnumerable<ITagCommon> tags) =>
         ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList())));
 
     /// <summary>
     ///     Creates a ResultBox containing an event with tags
     /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, params ITag[] tags) =>
+    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, params ITagCommon[] tags) =>
         ResultBox.FromValue(FromValue(eventPayload, tags));
 
     /// <summary>
     ///     Creates a ResultBox containing an event with tags
     /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, List<ITag> tags) =>
+    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, List<ITagCommon> tags) =>
         ResultBox.FromValue(FromValue(eventPayload, tags));
 
     /// <summary>

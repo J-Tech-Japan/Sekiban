@@ -566,7 +566,7 @@ public class GeneralSekibanExecutorDomainTests
     }
 
     // Supporting types for the test
-    public record TeacherTag(Guid TeacherId) : ITag
+    public record TeacherTag(Guid TeacherId) : ITagCommon
     {
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => "Teacher";

@@ -36,7 +36,7 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITagCommon tag, SortableUniqueId? since = null)
     {
         lock (_eventLock)
         {
@@ -128,7 +128,7 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
-    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITagCommon tag)
     {
         var tagString = tag.GetTag();
 
@@ -143,7 +143,7 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
-    public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public Task<ResultBox<TagState>> GetLatestTagAsync(ITagCommon tag)
     {
         var tagString = tag.GetTag();
 
@@ -175,7 +175,7 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
-    public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public Task<ResultBox<bool>> TagExistsAsync(ITagCommon tag)
     {
         var tagString = tag.GetTag();
 

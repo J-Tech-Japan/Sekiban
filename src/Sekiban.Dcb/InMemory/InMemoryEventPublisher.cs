@@ -6,16 +6,16 @@ namespace Sekiban.Dcb.InMemory;
 
 public class InMemoryEventPublisher : IEventPublisher
 {
-    private readonly ConcurrentBag<(string Topic, Event Event, IReadOnlyCollection<ITag> Tags)> _published = new();
+    private readonly ConcurrentBag<(string Topic, Event Event, IReadOnlyCollection<ITagCommon> Tags)> _published = new();
     private readonly IStreamDestinationResolver _resolver;
 
-    public IReadOnlyCollection<(string Topic, Event Event, IReadOnlyCollection<ITag> Tags)> Published =>
+    public IReadOnlyCollection<(string Topic, Event Event, IReadOnlyCollection<ITagCommon> Tags)> Published =>
         _published.ToArray();
 
     public InMemoryEventPublisher(IStreamDestinationResolver resolver) => _resolver = resolver;
 
     public Task PublishAsync(
-        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITagCommon> Tags)> events,
         CancellationToken cancellationToken = default)
     {
         foreach (var (evt, tags) in events)

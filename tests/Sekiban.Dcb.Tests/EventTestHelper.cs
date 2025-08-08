@@ -11,7 +11,7 @@ public static class EventTestHelper
     /// <summary>
     ///     Creates an Event from an event payload and tags
     /// </summary>
-    public static Event CreateEvent(IEventPayload payload, List<ITag> tags)
+    public static Event CreateEvent(IEventPayload payload, List<ITagCommon> tags)
     {
         var eventId = Guid.NewGuid();
         var sortableId = SortableUniqueId.GenerateNew();
@@ -29,5 +29,5 @@ public static class EventTestHelper
     /// <summary>
     ///     Creates an Event from an event payload and a single tag
     /// </summary>
-    public static Event CreateEvent(IEventPayload payload, ITag tag) => CreateEvent(payload, new List<ITag> { tag });
+    public static Event CreateEvent(IEventPayload payload, ITagCommon tag) => CreateEvent(payload, new List<ITagCommon> { tag });
 }

@@ -68,7 +68,7 @@ public class EventPublishingTests
 
     private record TestPublishCommand(string Name) : ICommand;
     private record TestPublishEvent(string Name) : IEventPayload;
-    private record TestPublishTag : ITag
+    private record TestPublishTag : ITagCommon
     {
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => "PubTest";
@@ -94,7 +94,7 @@ public class EventPublishingTests
             var evt2 = new TestPublishEvent(command.Name + "2");
 
             // Append first event via context to simulate multi-event production
-            context.AppendEvent(new EventPayloadWithTags(evt1, new List<ITag> { tag }));
+            context.AppendEvent(new EventPayloadWithTags(evt1, new List<ITagCommon> { tag }));
 
             // Return second event as the handler result
             return Task.FromResult(EventOrNone.Event(evt2, tag));

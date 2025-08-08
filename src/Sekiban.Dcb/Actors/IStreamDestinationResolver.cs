@@ -4,5 +4,5 @@ namespace Sekiban.Dcb.Actors;
 
 public interface IStreamDestinationResolver
 {
-    IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITag> tags);
+    IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITagCommon> tags);
 }

@@ -14,6 +14,6 @@ public sealed class NonEventPublisher : IEventPublisher
     /// <summary>
     /// Does nothing and completes immediately.
     /// </summary>
-    public Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events, CancellationToken cancellationToken = default)
+    public Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITagCommon> Tags)> events, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }

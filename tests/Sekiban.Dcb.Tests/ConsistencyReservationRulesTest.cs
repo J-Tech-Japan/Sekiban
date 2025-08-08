@@ -86,7 +86,7 @@ public class ConsistencyReservationRulesTest
     }
 
     private record DummyEvent(string Name) : IEventPayload;
-    private record BaseTag(string Id) : ITag
+    private record BaseTag(string Id) : ITagCommon
     {
         public bool IsConsistencyTag() => true;
         public string GetTagGroup() => "Base";
@@ -97,6 +97,11 @@ public class ConsistencyReservationRulesTest
 
     private class DummyProjector : ITagProjector
     {
+    /// <summary>
+    /// Returns the tag group name this projector targets.
+    /// </summary>
+    /// <returns>Tag group name.</returns>
+    public string ForTagGroupName() => "Base";
         public string GetProjectorVersion() => "1";
     public ITagStatePayload Project(ITagStatePayload current, Event e) => current;
     }

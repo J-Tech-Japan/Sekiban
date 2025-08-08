@@ -4,7 +4,7 @@ namespace Sekiban.Dcb.Tags;
 ///     Strongly typed version of TagState for easier use
 /// </summary>
 /// <typeparam name="TPayload">The type of the state payload</typeparam>
-public record TagStateTyped<TPayload>(ITag Tag, TPayload Payload, long Version, DateTimeOffset LastModified)
+public record TagStateTyped<TPayload>(ITagCommon Tag, TPayload Payload, long Version, DateTimeOffset LastModified)
     where TPayload : ITagStatePayload
 {
     /// <summary>

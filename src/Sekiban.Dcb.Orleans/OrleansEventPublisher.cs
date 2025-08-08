@@ -25,7 +25,7 @@ public class OrleansEventPublisher : IEventPublisher
         _resolver = resolver;
     }
 
-    public async Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITagCommon> Tags)> events, CancellationToken cancellationToken = default)
     {
         foreach (var (evt, tags) in events)
         {

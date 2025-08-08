@@ -22,7 +22,7 @@ public interface IEventStore
     /// </summary>
     /// <param name="tag">The tag to filter events by</param>
     /// <param name="since">Optional: Only return events after this ID</param>
-    Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null);
+    Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITagCommon tag, SortableUniqueId? since = null);
 
     /// <summary>
     ///     Reads a specific event by ID
@@ -42,15 +42,15 @@ public interface IEventStore
     /// <summary>
     ///     Reads tag streams for a specific tag
     /// </summary>
-    Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag);
+    Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITagCommon tag);
 
     /// <summary>
     ///     Gets the latest tag state
     /// </summary>
-    Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag);
+    Task<ResultBox<TagState>> GetLatestTagAsync(ITagCommon tag);
 
     /// <summary>
     ///     Checks if a tag exists
     /// </summary>
-    Task<ResultBox<bool>> TagExistsAsync(ITag tag);
+    Task<ResultBox<bool>> TagExistsAsync(ITagCommon tag);
 }

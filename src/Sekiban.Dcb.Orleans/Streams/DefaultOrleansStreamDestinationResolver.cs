@@ -26,7 +26,7 @@ public class DefaultOrleansStreamDestinationResolver : IStreamDestinationResolve
         _streamId = streamId ?? Guid.Empty;
     }
 
-    public IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITag> tags)
+    public IEnumerable<ISekibanStream> Resolve(Event evt, IReadOnlyCollection<ITagCommon> tags)
     {
         yield return new OrleansSekibanStream(_providerName, _namespace, _streamId);
     }

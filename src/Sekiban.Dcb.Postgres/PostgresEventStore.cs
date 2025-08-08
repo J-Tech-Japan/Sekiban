@@ -59,7 +59,7 @@ public class PostgresEventStore : IEventStore
         }
     }
     
-    public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITagCommon tag, SortableUniqueId? since = null)
     {
         try
         {
@@ -194,7 +194,7 @@ public class PostgresEventStore : IEventStore
         }
     }
     
-    public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+    public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITagCommon tag)
     {
         try
         {
@@ -226,7 +226,7 @@ public class PostgresEventStore : IEventStore
         }
     }
     
-    public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+    public async Task<ResultBox<TagState>> GetLatestTagAsync(ITagCommon tag)
     {
         try
         {
@@ -274,7 +274,7 @@ public class PostgresEventStore : IEventStore
         }
     }
     
-    public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+    public async Task<ResultBox<bool>> TagExistsAsync(ITagCommon tag)
     {
         try
         {

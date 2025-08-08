@@ -214,7 +214,7 @@ public class OptimisticLockingTest
     }
 
     // Test-specific types
-    private record TestTag(string Id) : ITag
+    private record TestTag(string Id) : ITagCommon
     {
         public bool IsConsistencyTag() => true;
         public string GetTagContent() => Id;
@@ -229,6 +229,11 @@ public class OptimisticLockingTest
 
     private class TestProjector : ITagProjector
     {
+    /// <summary>
+    /// Returns the tag group name this projector targets.
+    /// </summary>
+    /// <returns>Tag group name.</returns>
+    public string ForTagGroupName() => "Test";
         public string GetProjectorVersion() => "1.0.0";
         public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
             current ?? new TestStatePayload("", 0);
