@@ -207,10 +207,10 @@ public class GeneralSekibanExecutorTest
     private class TestProjector : ITagProjector
     {
         public string GetProjectorVersion() => "1.0.0";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload _) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event _) => current;
     }
 
-    // Handler that accesses state
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     private class AccessStateCommandHandler : ICommandHandler<TestCommand>
     {
         public async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)

@@ -361,13 +361,13 @@ public class GeneralCommandContextTest
     private class TestProjector : ITagProjector
     {
         public string GetProjectorVersion() => "1.0.0";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
 
     private class TestProjector2 : ITagProjector
     {
         public string GetProjectorVersion() => "1.0.0";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
 
     private record TestStatePayload(string State, int Count) : ITagStatePayload

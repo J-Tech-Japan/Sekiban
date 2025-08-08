@@ -7,8 +7,8 @@ public class ClassRoomProjector : ITagProjector
 {
     public string GetProjectorVersion() => "1.0.0";
 
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
-        (current, eventPayload) switch
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, ClassRoomCreated created) => new AvailableClassRoomState(
                 created.ClassRoomId,

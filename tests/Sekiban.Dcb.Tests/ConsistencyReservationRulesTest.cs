@@ -98,6 +98,6 @@ public class ConsistencyReservationRulesTest
     private class DummyProjector : ITagProjector
     {
         public string GetProjectorVersion() => "1";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload e) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event e) => current;
     }
 }

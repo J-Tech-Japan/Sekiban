@@ -144,7 +144,7 @@ public class DuplicateRegistrationTests
         public class TestProjector : ITagProjector
         {
             public string GetProjectorVersion() => "1.0.0";
-            public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+            public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }
         public record TestPayload(string Data) : ITagStatePayload;
     }
@@ -155,7 +155,7 @@ public class DuplicateRegistrationTests
         public class TestProjector : ITagProjector
         {
             public string GetProjectorVersion() => "2.0.0";
-            public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+            public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }
         public record TestPayload(int Count) : ITagStatePayload;
     }

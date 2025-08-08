@@ -237,7 +237,7 @@ public class InMemoryTagStateActor : ITagStateActorCommon
             }
             
             // Project the event
-            currentState = projector.Project(currentState, evt.Payload);
+            currentState = projector.Project(currentState, evt);
             version++;
             
             // Keep track of the last sortable unique id

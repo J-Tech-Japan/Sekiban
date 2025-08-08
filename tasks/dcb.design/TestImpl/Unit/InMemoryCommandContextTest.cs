@@ -43,14 +43,14 @@ public class InMemoryCommandContextTest
     {
         public string GetProjectorName() => "TestProjector";
         public string GetTagProjectorName() => "TestProjector";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
     
     private class TestProjector2 : ITagProjector
     {
         public string GetProjectorName() => "TestProjector2";
         public string GetTagProjectorName() => "TestProjector2";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => current;
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
     
     private record TestStatePayload(string State, int Count) : ITagStatePayload;

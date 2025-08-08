@@ -7,8 +7,8 @@ public class StudentProjector : ITagProjector
 {
     public string GetProjectorVersion() => "1.0.0";
 
-    public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
-        (current, eventPayload) switch
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, StudentCreated created) => new StudentState(
                 created.StudentId,

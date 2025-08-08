@@ -35,7 +35,7 @@ public class OptimisticLockingTest
     {
         public string GetProjectorName() => "TestProjector";
         public string GetTagProjectorName() => "TestProjector";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) => 
+    public ITagStatePayload Project(ITagStatePayload current, Event ev) => 
             current ?? new TestStatePayload("", 0);
     }
     

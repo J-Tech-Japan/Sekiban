@@ -229,7 +229,7 @@ public class OptimisticLockingTest
     private class TestProjector : ITagProjector
     {
         public string GetProjectorVersion() => "1.0.0";
-        public ITagStatePayload Project(ITagStatePayload current, IEventPayload eventPayload) =>
+        public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
             current ?? new TestStatePayload("", 0);
     }
 
