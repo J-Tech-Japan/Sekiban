@@ -209,7 +209,8 @@ public class OptimisticLockingTest
             WriteIndented = true
         };
 
-        return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, jsonOptions);
+    var multiProjectorTypes = new SimpleMultiProjectorTypes();
+    return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, multiProjectorTypes, jsonOptions);
     }
 
     // Test-specific types

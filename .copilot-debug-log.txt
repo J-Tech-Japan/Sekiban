@@ -1,0 +1,1 @@
+SerializedEvent.cs deletion attempted twice via apply_patch, but file persists according to list_dir. Will remove using git rm next in a terminal if allowed.

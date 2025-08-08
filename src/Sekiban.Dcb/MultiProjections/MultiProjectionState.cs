@@ -7,6 +7,8 @@ namespace Sekiban.Dcb.MultiProjections;
 /// </summary>
 public record MultiProjectionState(
     IMultiProjectionPayload Payload,
+    string ProjectorName,
+    string ProjectorVersion,
     string LastSortableUniqueId,
     Guid LastEventId,
     int Version);

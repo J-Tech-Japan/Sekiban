@@ -8,6 +8,8 @@ namespace Sekiban.Dcb.MultiProjections;
 public record SerializableMultiProjectionState(
     byte[] Payload,
     string MultiProjectionPayloadType,
+    string ProjectorName,
+    string ProjectorVersion,
     string LastSortableUniqueId,
     Guid LastEventId,
     int Version);
