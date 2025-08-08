@@ -12,6 +12,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Orleans;
+using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -162,7 +163,22 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 // Register command executor
-builder.Services.AddScoped<ISekibanExecutor, OrleansCommandExecutor>();
+// PubSub: Orleans AllEvents (EventStreamProvider / AllEvents / Guid.Empty)
+builder.Services.AddSingleton<IStreamDestinationResolver>(
+    sp => new DefaultOrleansStreamDestinationResolver(
+        providerName: "EventStreamProvider",
+        @namespace: "AllEvents",
+        streamId: Guid.Empty));
+builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
+
+builder.Services.AddScoped<ISekibanExecutor>(sp =>
+{
+    var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
+    var eventStore = sp.GetRequiredService<IEventStore>();
+    var domainTypes = sp.GetRequiredService<DcbDomainTypes>();
+    var publisher = sp.GetRequiredService<IEventPublisher>();
+    return new OrleansCommandExecutor(clusterClient, eventStore, domainTypes, publisher);
+});
 builder.Services.AddScoped<ICommandExecutor>(sp => sp.GetRequiredService<ISekibanExecutor>());
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
