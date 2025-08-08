@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
 namespace SekibanDocumentMcpSse;
@@ -307,80 +306,4 @@ public class SekibanDocumentService : IDisposable
 }
 
 #region Models
-
-/// <summary>
-/// Basic information about a document
-/// </summary>
-public class DocumentInfo
-{
-    public string FileName { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public List<string> Sections { get; set; } = new();
-}
-
-/// <summary>
-/// Navigation item for UI
-/// </summary>
-public class NavigationItem
-{
-    public string Title { get; set; } = string.Empty;
-    public string FileName { get; set; } = string.Empty;
-    public List<NavigationSection> Sections { get; set; } = new();
-}
-
-/// <summary>
-/// Section in navigation
-/// </summary>
-public class NavigationSection
-{
-    public string Title { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Content of a specific section
-/// </summary>
-public class SectionContent
-{
-    public string DocumentTitle { get; set; } = string.Empty;
-    public string SectionTitle { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Search result
-/// </summary>
-public class SearchResult
-{
-    public string DocumentTitle { get; set; } = string.Empty;
-    public string FileName { get; set; } = string.Empty;
-    public bool MatchedInTitle { get; set; }
-    public List<string> MatchedSections { get; set; } = new();
-}
-
-/// <summary>
-/// Code sample with context
-/// </summary>
-public class SekibanCodeSample
-{
-    public string Title { get; set; } = string.Empty;
-    public string Language { get; set; } = string.Empty;
-    public string Code { get; set; } = string.Empty;
-    public string DocumentTitle { get; set; } = string.Empty;
-    public string FileName { get; set; } = string.Empty;
-}
-
 #endregion
-
-/// <summary>
-/// JSON serialization context
-/// </summary>
-[JsonSerializable(typeof(List<DocumentInfo>))]
-[JsonSerializable(typeof(DocumentInfo))]
-[JsonSerializable(typeof(List<NavigationItem>))]
-[JsonSerializable(typeof(NavigationItem))]
-[JsonSerializable(typeof(SectionContent))]
-[JsonSerializable(typeof(List<SearchResult>))]
-[JsonSerializable(typeof(SearchResult))]
-[JsonSerializable(typeof(List<SekibanCodeSample>))]
-[JsonSerializable(typeof(SekibanCodeSample))]
-internal sealed partial class SekibanContext : JsonSerializerContext { }

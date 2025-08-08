@@ -1,18 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
-using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Pure.Domain.xUnit;
 
 // Extension method for IEventReader to get all events
-public static class EventReaderExtensions
-{
-    public static async Task<IReadOnlyList<IEvent>> GetAllEventsAsync(this IEventReader eventReader)
-    {
-        var result = await eventReader.GetEvents(EventRetrievalInfo.All);
-        return result.UnwrapBox();
-    }
-}
 public class CosmosDbEventRemovalTests : CosmosDbTestBase
 {
     private readonly IEventWriter _eventWriter;

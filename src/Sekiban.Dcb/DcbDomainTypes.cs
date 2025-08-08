@@ -81,11 +81,3 @@ public record DcbDomainTypes
         return builder.Build();
     }
 }
-
-/// <summary>
-/// Interface for providing DcbDomainTypes
-/// </summary>
-public interface IDcbDomainTypesProvider
-{
-    static abstract DcbDomainTypes Generate(JsonSerializerOptions jsonSerializerOptions);
-}

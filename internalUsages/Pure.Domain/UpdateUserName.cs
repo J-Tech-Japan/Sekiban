@@ -26,6 +26,3 @@ public record UpdateUserName(Guid UserId, string NewName) : ICommandWithHandler<
         return EventOrNone.Event(new UserNameUpdated(user.Name, command.NewName));
     }
 }
-
-[GenerateSerializer]
-public record UserNameUpdated(string OldName, string NewName) : IEventPayload;

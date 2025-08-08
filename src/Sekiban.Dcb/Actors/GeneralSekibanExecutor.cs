@@ -21,15 +21,18 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     private readonly IEventStore _eventStore;
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventPublisher? _eventPublisher;
     
     public GeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher = null)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventPublisher = eventPublisher;
     }
     
     public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
@@ -53,9 +56,34 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
             
             var eventOrNone = handlerResult.GetValue();
-            
-            // If no events to append, return early
-            if (!eventOrNone.HasEvent)
+
+            // Collect events appended explicitly via context (multi-event support)
+            var appended = commandContext.GetAppendedEvents();
+
+            // If handler returned an event (EventOrNone.HasEvent), include it only if it is not already in appended list
+            // Current AppendEvent returns EventOrNone.Event for the appended event; some handlers may both AppendEvent and return the last event.
+            // We treat appended list as the source of truth for multiple events; if none appended but return has event, use that single one.
+            var collectedEvents = new List<EventPayloadWithTags>();
+            if (appended.Count > 0)
+            {
+                collectedEvents.AddRange(appended);
+                // If handler also returned an event that is different reference (just in case), append if not duplicate
+                if (eventOrNone.HasEvent)
+                {
+                    var returned = eventOrNone.GetValue();
+                    if (!collectedEvents.Contains(returned))
+                    {
+                        collectedEvents.Add(returned);
+                    }
+                }
+            }
+            else if (eventOrNone.HasEvent)
+            {
+                collectedEvents.Add(eventOrNone.GetValue());
+            }
+
+            // If still no events, return early
+            if (collectedEvents.Count == 0)
             {
                 return ResultBox.FromValue(new ExecutionResult(
                     Guid.Empty,
@@ -64,11 +92,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                     stopwatch.Elapsed
                 ));
             }
-            
-            var eventWithTags = eventOrNone.GetValue();
-            
-            // Step 3: Collect tags + build reservation requests based on consistency rules
-            var allTags = new HashSet<ITag>(eventWithTags.Tags);
+
+            // Step 3: Collect tags across all events
+            var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
 
             // Step 4: According to spec:
             //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
@@ -144,16 +170,26 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                     "GeneralSekibanExecutor"
                 );
                 
-                var evt = new Event(
-                    eventWithTags.Event,
-                    sortableId,
-                    eventWithTags.Event.GetType().Name,
-                    eventId,
-                    metadata,
-                    eventWithTags.Tags.Select(t => t.GetTag()).ToList()
-                );
-                
-                var events = new List<Event> { evt };
+                // Build Event objects for each collected event payload
+                var events = new List<Event>();
+                foreach (var e in collectedEvents)
+                {
+                    var eId = Guid.NewGuid();
+                    var sortable = SortableUniqueId.GenerateNew();
+                    var meta = new EventMetadata(
+                        eId.ToString(),
+                        command.GetType().Name,
+                        "GeneralSekibanExecutor"
+                    );
+                    events.Add(new Event(
+                        e.Event,
+                        sortable,
+                        e.Event.GetType().Name,
+                        eId,
+                        meta,
+                        e.Tags.Select(t => t.GetTag()).ToList()
+                    ));
+                }
                 
                 var writeResult = await _eventStore.WriteEventsAsync(events);
                 if (!writeResult.IsSuccess)
@@ -166,12 +202,22 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                 
                 // Step 6: Confirm reservations with TagConsistentActors
                 await ConfirmReservationsAsync(reservations, cancellationToken);
+
+                var firstEvent = writtenEvents.First();
+
+                if (_eventPublisher != null)
+                {
+                    var publishEvents = writtenEvents
+                        .Select((we, idx) => (Event: we, Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
+                        .ToList()
+                        .AsReadOnly();
+                    _ = Task.Run(() => _eventPublisher.PublishAsync(publishEvents, CancellationToken.None));
+                }
                 
                 // Return success result
-                var firstEvent = writtenEvents.First();
                 return ResultBox.FromValue(new ExecutionResult(
                     firstEvent.Id,
-                    1, // TODO: Get actual event position
+                    writtenEvents.Count, // event count as a placeholder for position (multi-event)
                     tagWriteResults.ToList(),
                     stopwatch.Elapsed,
                     new Dictionary<string, object>

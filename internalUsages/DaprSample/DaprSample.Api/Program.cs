@@ -814,6 +814,3 @@ foreach (var endpoint in endpointDataSource.Endpoints)
 // This allows waitForSortableUniqueId to work properly
 
 app.Run();
-
-public record UpdateUserNameRequest(string NewName);
-public record UpdateLocationRequest(string Location);
