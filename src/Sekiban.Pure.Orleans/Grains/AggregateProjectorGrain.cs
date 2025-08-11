@@ -114,8 +114,9 @@ public class AggregateProjectorGrain(
             }
         }
         
-        UpdatedAfterWrite = true;
-        return await RebuildStateInternalAsync();
+    // state が無い / 復元失敗の場合はイベントGrainから全イベントを取得して再構築
+    UpdatedAfterWrite = true;
+    return await RebuildStateInternalAsync();
     }
 
     private async Task WriteSerializableStateAsync()
