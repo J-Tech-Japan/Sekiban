@@ -19,8 +19,12 @@ public class AggregateEventHandlerGrain(
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
         var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(sekibanDomainTypes.EventTypes);
         var currentLast = state.State?.LastSortableUniqueId ?? string.Empty;
+        
+        // 楽観的並行性制御: 期待される最後のIDと現在の最後のIDが一致するかチェック
         if (!string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) && currentLast != expectedLastSortableUniqueId)
             throw new InvalidCastException("Expected last event ID does not match");
+        
+        // 順序チェック: 現在の最後のイベントより前のタイムスタンプのイベントは受け入れない
         if (!string.IsNullOrWhiteSpace(currentLast) &&
             toStoreEvents.Any() &&
             string.Compare(
@@ -31,11 +35,14 @@ public class AggregateEventHandlerGrain(
 
         if (toStoreEvents.Any())
         {
-            var persist = AggregateEventHandlerGrainToPersist.FromEvents(toStoreEvents);
+            // 全イベント（既存 + 新規）から最新の状態を作成
+            _events.AddRange(toStoreEvents);
+            var allEvents = _events.ToList();
+            var persist = AggregateEventHandlerGrainToPersist.FromEvents(allEvents);
             state.State = persist;
             await state.WriteStateAsync();
         }
-        _events.AddRange(toStoreEvents);
+        
         var orleansEvents = toStoreEvents;
         if (toStoreEvents.Count != 0) await eventWriter.SaveEvents(toStoreEvents);
         var stream = streamProvider.GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
@@ -65,7 +72,7 @@ public class AggregateEventHandlerGrain(
         return events.ToList();
     }
 
-    public Task<string> GetLastSortableUniqueIdAsync() => Task.FromResult(state.State.LastSortableUniqueId);
+    public Task<string> GetLastSortableUniqueIdAsync() => Task.FromResult(state.State?.LastSortableUniqueId ?? string.Empty);
 
     public Task RegisterProjectorAsync(string projectorKey) =>
         // No-op for in-memory implementation
