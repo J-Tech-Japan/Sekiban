@@ -93,15 +93,25 @@ public class AggregateEventHandlerGrain(
         {
             state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
         }
-        if (!string.IsNullOrWhiteSpace(state.State.LastSortableUniqueId))
+        // 永続化された state から最後のイベントID情報を取得
+        var persistedLastId = state.State.LastSortableUniqueId;
+        
+        // 実際のイベントストアから全イベントを取得
+        var retrievalInfo = PartitionKeys
+            .FromPrimaryKeysString(this.GetPrimaryKeyString())
+            .Remap(EventRetrievalInfo.FromPartitionKeys)
+            .UnwrapBox();
+        var events = await eventReader.GetEvents(retrievalInfo).UnwrapBox();
+        _events.Clear();
+        _events.AddRange(events);
+        
+        // 実際のイベントの最後のIDと永続化されたIDが異なる場合は state を更新
+        var actualLastId = events.LastOrDefault()?.SortableUniqueId ?? string.Empty;
+        if (actualLastId != persistedLastId)
         {
-            var retrievalInfo = PartitionKeys
-                .FromPrimaryKeysString(this.GetPrimaryKeyString())
-                .Remap(EventRetrievalInfo.FromPartitionKeys)
-                .UnwrapBox();
-            var events = await eventReader.GetEvents(retrievalInfo).UnwrapBox();
-            _events.Clear();
-            _events.AddRange(events);
+            var persist = AggregateEventHandlerGrainToPersist.FromEvents(events);
+            state.State = persist;
+            await state.WriteStateAsync();
         }
     }
 
