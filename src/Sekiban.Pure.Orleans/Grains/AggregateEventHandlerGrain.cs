@@ -18,23 +18,23 @@ public class AggregateEventHandlerGrain(
     {
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
         var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(sekibanDomainTypes.EventTypes);
-        if (string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) &&
-            _events.Count > 0 &&
-            _events.Last().SortableUniqueId != expectedLastSortableUniqueId)
+        var currentLast = state.State?.LastSortableUniqueId ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) && currentLast != expectedLastSortableUniqueId)
             throw new InvalidCastException("Expected last event ID does not match");
-        // if last sortable unique id is not empty and it is later than newEvents, throw exception
-        if (_events.Any() &&
+        if (!string.IsNullOrWhiteSpace(currentLast) &&
             toStoreEvents.Any() &&
             string.Compare(
-                _events.Last().SortableUniqueId,
+                currentLast,
                 toStoreEvents.First().SortableUniqueId,
-                StringComparison.Ordinal) >
-            0)
+                StringComparison.Ordinal) > 0)
             throw new InvalidCastException("Expected last event ID is later than new events");
 
-        var persist = AggregateEventHandlerGrainToPersist.FromEvents(toStoreEvents);
-        state.State = persist;
-        await state.WriteStateAsync();
+        if (toStoreEvents.Any())
+        {
+            var persist = AggregateEventHandlerGrainToPersist.FromEvents(toStoreEvents);
+            state.State = persist;
+            await state.WriteStateAsync();
+        }
         _events.AddRange(toStoreEvents);
         var orleansEvents = toStoreEvents;
         if (toStoreEvents.Count != 0) await eventWriter.SaveEvents(toStoreEvents);
@@ -47,10 +47,10 @@ public class AggregateEventHandlerGrain(
     public Task<IReadOnlyList<IEvent>> GetDeltaEventsAsync(string fromSortableUniqueId, int? limit = null)
     {
         var index = _events.FindIndex(e => e.SortableUniqueId == fromSortableUniqueId);
-
         if (index < 0)
+        {
             return Task.FromResult<IReadOnlyList<IEvent>>(new List<IEvent>());
-
+        }
         return Task.FromResult<IReadOnlyList<IEvent>>(_events.Skip(index + 1).Take(limit ?? int.MaxValue).ToList());
     }
 
@@ -74,9 +74,28 @@ public class AggregateEventHandlerGrain(
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         await base.OnActivateAsync(cancellationToken);
-        await state.ReadStateAsync();
-        if (state.State == null || string.IsNullOrWhiteSpace(state.State.LastSortableUniqueId))
-            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty};
+        try
+        {
+            await state.ReadStateAsync();
+        }
+        catch
+        {
+            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
+        }
+        if (state.State == null)
+        {
+            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
+        }
+        if (!string.IsNullOrWhiteSpace(state.State.LastSortableUniqueId))
+        {
+            var retrievalInfo = PartitionKeys
+                .FromPrimaryKeysString(this.GetPrimaryKeyString())
+                .Remap(EventRetrievalInfo.FromPartitionKeys)
+                .UnwrapBox();
+            var events = await eventReader.GetEvents(retrievalInfo).UnwrapBox();
+            _events.Clear();
+            _events.AddRange(events);
+        }
     }
 
 }
