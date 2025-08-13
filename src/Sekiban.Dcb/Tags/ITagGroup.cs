@@ -4,4 +4,5 @@ public interface ITagGroup<TTagGroup> :ITag where TTagGroup : ITagGroup<TTagGrou
 {
     static abstract string GetTagGroupName();
     string ITag.GetTagGroup() => TTagGroup.GetTagGroupName();
+    static abstract TTagGroup FromContent(string content);
 }
