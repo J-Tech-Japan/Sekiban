@@ -27,9 +27,15 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     {
         try
         {
+            // Validate tag before calling actor
+            var validationErrors = TagValidator.ValidateTag(tag);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<TagStateTyped<TState>>(new TagValidationErrorsException(validationErrors));
+            }
             // Get the TagStateActor
             var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector);
+            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -106,9 +112,15 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     {
         try
         {
+            // Validate tag before calling actor
+            var validationErrors = TagValidator.ValidateTag(tag);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<TagState>(new TagValidationErrorsException(validationErrors));
+            }
             // Get the TagStateActor
             var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector);
+            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -166,6 +178,12 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     {
         try
         {
+            // Validate tag before calling actor
+            var validationErrors = TagValidator.ValidateTag(tag);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<bool>(new TagValidationErrorsException(validationErrors));
+            }
             // Get the TagConsistentActor for this tag
             var tagConsistentActorId = tag.GetTag();
 
@@ -208,6 +226,12 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     {
         try
         {
+            // Validate tag before calling actor
+            var validationErrors = TagValidator.ValidateTag(tag);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<string>(new TagValidationErrorsException(validationErrors));
+            }
             // Get the TagConsistentActor for this tag
             var tagConsistentActorId = tag.GetTag();
 
@@ -245,6 +269,13 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             if (ev == null)
             {
                 return ResultBox.Error<EventOrNone>(new ArgumentNullException(nameof(ev)));
+            }
+
+            // Validate all tags in the event before appending
+            var validationErrors = TagValidator.ValidateTags(ev.Tags);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<EventOrNone>(new TagValidationErrorsException(validationErrors));
             }
 
             // Store the event for later processing by CommandExecutor

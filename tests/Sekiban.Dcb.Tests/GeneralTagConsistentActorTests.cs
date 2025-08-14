@@ -38,7 +38,7 @@ public class GeneralTagConsistentActorTests
         await _eventStore.WriteEventAsync(event2);
 
         // Create actor (it should catch up lazily)
-        var actor = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
 
         // Act - Get latest sortable unique ID (should trigger catch-up)
         var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
@@ -57,7 +57,7 @@ public class GeneralTagConsistentActorTests
         var tagName = studentTag.GetTag();
 
         // Create actor without any existing state
-        var actor = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
 
         // Act
         var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
@@ -74,7 +74,7 @@ public class GeneralTagConsistentActorTests
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
         var tagName = studentTag.GetTag();
-        var actor = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
 
         // Act
         var newSortableUniqueId = SortableUniqueId.GenerateNew();
@@ -92,7 +92,7 @@ public class GeneralTagConsistentActorTests
     {
         // Arrange
         var tagName = "Student:12345";
-        var actor = new GeneralTagConsistentActor(tagName);
+    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
 
         // Act
         var latestSortableUniqueIdResult = await actor.GetLatestSortableUniqueIdAsync();
@@ -117,7 +117,7 @@ public class GeneralTagConsistentActorTests
         await _eventStore.WriteEventAsync(event1);
 
         // Create actor and trigger catch-up
-        var actor = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         var firstIdResult = await actor.GetLatestSortableUniqueIdAsync();
 
         // Write another event after actor creation
@@ -147,7 +147,7 @@ public class GeneralTagConsistentActorTests
         await _eventStore.WriteEventAsync(event1);
 
         // Create actor - it will catch up from event store
-        var actor = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
 
         // Act - Get the latest ID after catch up
         var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
@@ -172,13 +172,13 @@ public class GeneralTagConsistentActorTests
         // Test each method triggers catch-up
 
         // Test GetLatestSortableUniqueId
-        var actor1 = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor1 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         var result1 = await actor1.GetLatestSortableUniqueIdAsync();
         Assert.True(result1.IsSuccess);
         Assert.Equal(event1.SortableUniqueIdValue, result1.GetValue());
 
         // Test MakeReservation
-        var actor2 = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor2 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         var reservation = await actor2.MakeReservationAsync("");
         Assert.True(reservation.IsSuccess);
         var result2 = await actor2.GetLatestSortableUniqueIdAsync();
@@ -186,21 +186,21 @@ public class GeneralTagConsistentActorTests
         Assert.Equal(event1.SortableUniqueIdValue, result2.GetValue());
 
         // Test ConfirmReservation
-        var actor3 = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor3 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         await actor3.ConfirmReservationAsync(null!);
         var result3 = await actor3.GetLatestSortableUniqueIdAsync();
         Assert.True(result3.IsSuccess);
         Assert.Equal(event1.SortableUniqueIdValue, result3.GetValue());
 
         // Test CancelReservation
-        var actor4 = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor4 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         await actor4.CancelReservationAsync(null!);
         var result4 = await actor4.GetLatestSortableUniqueIdAsync();
         Assert.True(result4.IsSuccess);
         Assert.Equal(event1.SortableUniqueIdValue, result4.GetValue());
 
         // Test GetActiveReservations
-        var actor5 = new GeneralTagConsistentActor(tagName, _eventStore);
+    var actor5 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes);
         await actor5.GetActiveReservationsAsync();
         var result5 = await actor5.GetLatestSortableUniqueIdAsync();
         Assert.True(result5.IsSuccess);

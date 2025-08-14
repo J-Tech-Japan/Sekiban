@@ -4,7 +4,7 @@ namespace Dcb.Domain.Student;
 public record StudentTag(Guid StudentId) : ITagGroup<StudentTag>
 {
     public bool IsConsistencyTag() => true;
-    public static string GetTagGroupName() => "Student";
+    public static string TagGroupName => "Student";
     public string GetTagContent() => StudentId.ToString();
     /// <summary>
     /// content 文字列 (Guid) からタグインスタンスを生成します。

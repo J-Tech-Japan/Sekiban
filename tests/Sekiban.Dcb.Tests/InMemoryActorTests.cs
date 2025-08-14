@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Actors;
+using Dcb.Domain;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Tags;
 using System.Globalization;
@@ -9,12 +10,13 @@ namespace Sekiban.Dcb.Tests;
 /// </summary>
 public class InMemoryActorTests
 {
+    private readonly DcbDomainTypes _domainTypes = DomainType.GetDomainTypes();
     #region TagConsistentActor Tests
     [Fact]
     public async Task TagConsistentActor_Should_Return_Correct_ActorId()
     {
         // Arrange
-        var actor = new GeneralTagConsistentActor("Student:student-123");
+    var actor = new GeneralTagConsistentActor("Student:student-123", null, new TagConsistentActorOptions(), _domainTypes);
 
         // Act
         var actorId = await actor.GetTagActorIdAsync();
@@ -29,7 +31,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName);
+    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
         var lastSortableId = SortableUniqueId.GenerateNew();
 
         // Act
@@ -54,7 +56,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName);
+    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
         var lastSortableId = SortableUniqueId.GenerateNew();
 
         // Make first reservation
@@ -72,7 +74,7 @@ public class InMemoryActorTests
     public async Task ConfirmReservation_Should_Remove_Reservation()
     {
         // Arrange
-        var actor = new GeneralTagConsistentActor("Student:student-123");
+    var actor = new GeneralTagConsistentActor("Student:student-123", null, new TagConsistentActorOptions(), _domainTypes);
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
 
         // Act
@@ -91,7 +93,7 @@ public class InMemoryActorTests
     public async Task ConfirmReservation_Should_Return_False_For_Invalid_Reservation()
     {
         // Arrange
-        var actor = new GeneralTagConsistentActor("Student:student-123");
+    var actor = new GeneralTagConsistentActor("Student:student-123", null, new TagConsistentActorOptions(), _domainTypes);
         var fakeReservation = new TagWriteReservation(
             Guid.NewGuid().ToString(),
             DateTime.UtcNow.AddSeconds(30).ToString("O"),
@@ -108,7 +110,7 @@ public class InMemoryActorTests
     public async Task CancelReservation_Should_Remove_Reservation()
     {
         // Arrange
-        var actor = new GeneralTagConsistentActor("Student:student-123");
+    var actor = new GeneralTagConsistentActor("Student:student-123", null, new TagConsistentActorOptions(), _domainTypes);
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
 
         // Act
@@ -129,7 +131,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName);
+    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
 
         // Create reservation
         var reservationResult = await actor.MakeReservationAsync("");
@@ -306,7 +308,7 @@ public class InMemoryActorTests
 
         // Create actors
         var tagName = $"{tagGroup}:{tagContent}";
-        var consistentActor = new GeneralTagConsistentActor(tagName);
+    var consistentActor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
         var studentState = new StudentState(studentId, "John", 5, new List<Guid>());
         var tagState = new TagState(
             studentState,

@@ -31,7 +31,7 @@ public class GeneralTagStateActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         // Add StudentCreated event
         var studentCreatedEvent = new StudentCreated(studentId, "John Doe");
@@ -65,7 +65,7 @@ public class GeneralTagStateActorTests
         var classRoomId1 = Guid.NewGuid();
         var classRoomId2 = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         // Add multiple events
         await _eventStore.WriteEventAsync(
@@ -99,7 +99,7 @@ public class GeneralTagStateActorTests
         var studentId1 = Guid.NewGuid();
         var studentId2 = Guid.NewGuid();
         var classRoomTag = new ClassRoomTag(classRoomId);
-        var tagStateId = new TagStateId(classRoomTag, new ClassRoomProjector());
+        var tagStateId = new TagStateId(classRoomTag, new ClassRoomProjector(), _domainTypes.TagProjectorTypes);
 
         // Add ClassRoom events
         await _eventStore.WriteEventAsync(
@@ -135,7 +135,7 @@ public class GeneralTagStateActorTests
         var studentId = Guid.NewGuid();
         var classRoomId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         // Add events
         await _eventStore.WriteEventAsync(
@@ -164,7 +164,7 @@ public class GeneralTagStateActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         // Act
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
@@ -186,7 +186,7 @@ public class GeneralTagStateActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
@@ -237,7 +237,7 @@ public class GeneralTagStateActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
 
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
 

@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Validation;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -8,8 +9,13 @@ namespace Sekiban.Dcb.Domains;
 public class SimpleTagProjectorTypes : ITagProjectorTypes
 {
     private readonly Dictionary<string, ITagProjector> _projectors;
+    private readonly Dictionary<Type, string> _typeToNameMapping;
 
-    public SimpleTagProjectorTypes() => _projectors = new Dictionary<string, ITagProjector>();
+    public SimpleTagProjectorTypes()
+    {
+        _projectors = new Dictionary<string, ITagProjector>();
+        _typeToNameMapping = new Dictionary<Type, string>();
+    }
 
     public ResultBox<ITagProjector> GetTagProjector(string tagProjectorName)
     {
@@ -29,6 +35,10 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
     {
         var projector = new T();
         var projectorName = name ?? typeof(T).Name;
+        
+        // Validate projector name before registration
+        NameValidator.ValidateProjectorNameAndThrow(projectorName);
+        
         var newType = typeof(T);
 
         if (_projectors.TryGetValue(projectorName, out var existingProjector))
@@ -42,5 +52,14 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
             }
         }
         _projectors[projectorName] = projector;
+        _typeToNameMapping[newType] = projectorName;
+    }
+    
+    /// <summary>
+    ///     Gets the registered name for a projector type
+    /// </summary>
+    public string? GetProjectorName(Type projectorType)
+    {
+        return _typeToNameMapping.TryGetValue(projectorType, out var name) ? name : null;
     }
 }

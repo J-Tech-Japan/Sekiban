@@ -80,7 +80,7 @@ public class ActorRecreationTests
         // Arrange
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
-        var tagStateId = new TagStateId(studentTag, new StudentProjector());
+        var tagStateId = new TagStateId(studentTag, new StudentProjector(), _domainTypes.TagProjectorTypes);
         var actorId = tagStateId.GetTagStateId();
 
         // Step 1: Write events first (before creating actor)

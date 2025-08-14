@@ -19,29 +19,16 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     private readonly TagConsistentActorOptions _options;
     private readonly SemaphoreSlim _reservationLock = new(1, 1);
     private readonly string _tagName;
+    private readonly DcbDomainTypes _domainTypes; // Non-nullable per new requirement
     private volatile bool _catchUpCompleted;
     private string _latestSortableUniqueId = "";
 
-    public GeneralTagConsistentActor(string tagName) : this(tagName, null, new TagConsistentActorOptions())
-    {
-    }
-
-    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore) : this(
-        tagName,
-        eventStore,
-        new TagConsistentActorOptions())
-    {
-    }
-
-    public GeneralTagConsistentActor(string tagName, TagConsistentActorOptions options) : this(tagName, null, options)
-    {
-    }
-
-    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options)
+    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options, DcbDomainTypes domainTypes)
     {
         _tagName = tagName ?? throw new ArgumentNullException(nameof(tagName));
         _eventStore = eventStore;
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
     public Task<string> GetTagActorIdAsync() => Task.FromResult(_tagName);
@@ -212,15 +199,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     {
         try
         {
-            // Parse tag name to create tag
-            var tagParts = _tagName.Split(':');
-            if (tagParts.Length < 2)
-            {
-                // Invalid tag format, mark as caught up
-                return;
-            }
-
-            var tag = new GenericTag(tagParts[0], tagParts[1]);
+            // Parse tag name using ITagTypes from DcbDomainTypes instead of GenericTag
+            var tag = _domainTypes.TagTypes.GetTag(_tagName);
 
             // Get the latest tag state
             var latestTagResult = await _eventStore!.GetLatestTagAsync(tag);
@@ -287,22 +267,4 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         }
     }
 
-    /// <summary>
-    ///     Generic tag implementation for use within the actor
-    /// </summary>
-    private class GenericTag : ITag
-    {
-        private readonly string _tagContent;
-        private readonly string _tagGroup;
-
-        public GenericTag(string tagGroup, string tagContent)
-        {
-            _tagGroup = tagGroup;
-            _tagContent = tagContent;
-        }
-
-        public bool IsConsistencyTag() => true;
-        public string GetTagGroup() => _tagGroup;
-        public string GetTagContent() => _tagContent;
-    }
 }

@@ -5,7 +5,7 @@ public record ClassRoomTag(Guid ClassRoomId) : ITagGroup<ClassRoomTag>
 {
     public bool IsConsistencyTag() => true;
     public string GetTagContent() => ClassRoomId.ToString();
-    public static string GetTagGroupName() => "ClassRoom";
+    public static string TagGroupName => "ClassRoom";
     /// <summary>
     /// content 文字列 (Guid) からタグインスタンスを生成します。
     /// </summary>

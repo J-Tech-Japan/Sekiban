@@ -12,7 +12,7 @@ using Sekiban.Dcb.Postgres;
 namespace Sekiban.Dcb.Postgres.Migrations
 {
     [DbContext(typeof(SekibanDcbDbContext))]
-    [Migration("20250806011134_Initial")]
+    [Migration("20250814030530_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -85,6 +85,10 @@ namespace Sekiban.Dcb.Postgres.Migrations
 
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("SortableUniqueId")
                         .IsRequired()

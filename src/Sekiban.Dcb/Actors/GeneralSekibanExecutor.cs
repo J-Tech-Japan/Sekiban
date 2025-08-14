@@ -4,6 +4,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Validation;
 using System.Diagnostics;
 namespace Sekiban.Dcb.Actors;
 
@@ -42,6 +43,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor
 
         try
         {
+            // Step 0: Validate command using DataAnnotations attributes
+            var commandValidationErrors = CommandValidator.ValidateCommand(command);
+            if (commandValidationErrors.Count > 0)
+            {
+                return ResultBox.Error<ExecutionResult>(new CommandValidationException(commandValidationErrors));
+            }
+
             // Step 1: Create command context
             var commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
 
@@ -87,6 +95,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor
 
             // Step 3: Collect tags across all events
             var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
+
+            // Step 3.1: Validate all tags
+            TagValidator.ValidateTagsAndThrow(allTags);
 
             // Step 4: According to spec:
             //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)

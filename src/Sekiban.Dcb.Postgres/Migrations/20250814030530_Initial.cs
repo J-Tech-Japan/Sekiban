@@ -38,6 +38,7 @@ namespace Sekiban.Dcb.Postgres.Migrations
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Tag = table.Column<string>(type: "text", nullable: false),
+                    EventType = table.Column<string>(type: "text", nullable: false),
                     SortableUniqueId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     EventId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)

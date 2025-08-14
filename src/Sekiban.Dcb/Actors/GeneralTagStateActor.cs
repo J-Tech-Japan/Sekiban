@@ -277,9 +277,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
             projector.GetProjectorVersion());
     }
 
-    private ITag CreateTag(string tagGroup, string tagContent) =>
-        // Create a generic tag implementation for the actor
-        new GenericTag(tagGroup, tagContent);
+    private ITag CreateTag(string tagGroup, string tagContent)
+    {
+        // Create tag string in "group:content" format
+        var tagString = $"{tagGroup}:{tagContent}";
+        return _domainTypes.TagTypes.GetTag(tagString);
+    }
 
     /// <summary>
     ///     Clears the cached state, forcing recomputation on next access
@@ -289,22 +292,4 @@ public class GeneralTagStateActor : ITagStateActorCommon
         await _statePersistent.ClearStateAsync();
     }
 
-    /// <summary>
-    ///     Generic tag implementation for use within the actor
-    /// </summary>
-    private class GenericTag : ITag
-    {
-        private readonly string _tagContent;
-        private readonly string _tagGroup;
-
-        public GenericTag(string tagGroup, string tagContent)
-        {
-            _tagGroup = tagGroup;
-            _tagContent = tagContent;
-        }
-
-        public bool IsConsistencyTag() => true; // Assume all tags are consistency tags for now
-        public string GetTagGroup() => _tagGroup;
-        public string GetTagContent() => _tagContent;
-    }
 }

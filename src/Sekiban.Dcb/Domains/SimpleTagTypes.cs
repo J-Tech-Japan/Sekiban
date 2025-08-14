@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Validation;
 
 namespace Sekiban.Dcb.Domains;
 
@@ -16,10 +17,15 @@ public class SimpleTagTypes : ITagTypes
 	/// </summary>
 	public void RegisterTagGroupType<TTagGroup>() where TTagGroup : ITagGroup<TTagGroup>
 	{
-		var groupName = TTagGroup.GetTagGroupName();
-		_tagGroupFactories.AddOrUpdate(groupName,
-			_ => content => TTagGroup.FromContent(content),
-			(_, __) => content => TTagGroup.FromContent(content));
+		var groupName = TTagGroup.TagGroupName;
+		
+		// Validate tag group name before registration
+		NameValidator.ValidateTagGroupNameAndThrow(groupName);
+		
+		if (!_tagGroupFactories.TryAdd(groupName, content => TTagGroup.FromContent(content)))
+		{
+			throw new InvalidOperationException($"Tag group already registered: {groupName}");
+		}
 	}
 
 	/// <summary>
