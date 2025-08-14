@@ -35,7 +35,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             }
             // Get the TagStateActor
             var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector);
+            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -120,7 +120,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             }
             // Get the TagStateActor
             var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector);
+            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);

@@ -1,3 +1,5 @@
+using Sekiban.Dcb.Domains;
+
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
@@ -10,7 +12,7 @@ public class TagStateId
     public string TagContent { get; }
     public string TagProjectorName { get; }
 
-    public TagStateId(ITag tag, ITagProjector tagProjector)
+    public TagStateId(ITag tag, ITagProjector tagProjector, ITagProjectorTypes projectorTypes)
     {
         var fullTag = tag.GetTag();
         var parts = fullTag.Split(':');
@@ -21,7 +23,10 @@ public class TagStateId
 
         TagGroup = tag.GetTagGroup();
         TagContent = parts[1];
-        TagProjectorName = tagProjector.GetType().Name;
+        
+        // Get the registered name for this projector type
+        var registeredName = projectorTypes.GetProjectorName(tagProjector.GetType());
+        TagProjectorName = registeredName ?? tagProjector.GetType().Name;
     }
 
     public TagStateId(ITag tag, string tagProjectorName)

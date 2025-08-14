@@ -164,7 +164,7 @@ public class GeneralCommandContextTest
         // Arrange
         var tag = new TestTag();
         var projector = new TestProjector();
-        var tagStateId = new TagStateId(tag, projector);
+        var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
 
         // Create a custom state payload
         var testPayload = new TestStatePayload("Active", 5);

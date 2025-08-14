@@ -9,8 +9,13 @@ namespace Sekiban.Dcb.Domains;
 public class SimpleTagProjectorTypes : ITagProjectorTypes
 {
     private readonly Dictionary<string, ITagProjector> _projectors;
+    private readonly Dictionary<Type, string> _typeToNameMapping;
 
-    public SimpleTagProjectorTypes() => _projectors = new Dictionary<string, ITagProjector>();
+    public SimpleTagProjectorTypes()
+    {
+        _projectors = new Dictionary<string, ITagProjector>();
+        _typeToNameMapping = new Dictionary<Type, string>();
+    }
 
     public ResultBox<ITagProjector> GetTagProjector(string tagProjectorName)
     {
@@ -47,5 +52,14 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
             }
         }
         _projectors[projectorName] = projector;
+        _typeToNameMapping[newType] = projectorName;
+    }
+    
+    /// <summary>
+    ///     Gets the registered name for a projector type
+    /// </summary>
+    public string? GetProjectorName(Type projectorType)
+    {
+        return _typeToNameMapping.TryGetValue(projectorType, out var name) ? name : null;
     }
 }
