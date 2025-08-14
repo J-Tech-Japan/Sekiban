@@ -83,6 +83,10 @@ namespace Sekiban.Dcb.Postgres.Migrations
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("SortableUniqueId")
                         .IsRequired()
                         .HasMaxLength(100)

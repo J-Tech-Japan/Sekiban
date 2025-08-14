@@ -16,6 +16,9 @@ public class DbTag
     
     [Required]
     public string Tag { get; set; } = string.Empty;
+
+    [Required]
+    public string EventType { get; set; } = string.Empty;
     
     [Required]
     public string SortableUniqueId { get; set; } = string.Empty;
@@ -24,11 +27,12 @@ public class DbTag
     
     public DateTime CreatedAt { get; set; }
     
-    public static DbTag FromEventTag(string tag, string sortableUniqueId, Guid eventId)
+    public static DbTag FromEventTag(string tag, string sortableUniqueId, Guid eventId, string eventType)
     {
         return new DbTag
         {
             Tag = tag,
+            EventType = eventType,
             SortableUniqueId = sortableUniqueId,
             EventId = eventId,
             CreatedAt = DateTime.UtcNow

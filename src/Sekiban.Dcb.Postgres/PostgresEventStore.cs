@@ -161,7 +161,7 @@ public class PostgresEventStore : IEventStore
                     foreach (var tagString in ev.Tags)
                     {
                         // Create a tag entry for this event
-                        var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id);
+                        var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id, ev.EventType);
                         context.Tags.Add(dbTag);
                         
                         tagWriteResults.Add(new TagWriteResult(
