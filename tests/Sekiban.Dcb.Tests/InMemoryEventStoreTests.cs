@@ -202,7 +202,7 @@ public class InMemoryEventStoreTests
         Assert.True(result.IsSuccess);
         var tagState = result.GetValue();
         Assert.Equal(2, tagState.Version);
-        Assert.Equal(studentTag.GetTagGroup(), tagState.TagGroup);
+        Assert.Equal(((ITag)studentTag).GetTagGroup(), tagState.TagGroup);
         Assert.Equal(studentTag.GetTag(), tagState.TagContent);
     }
 

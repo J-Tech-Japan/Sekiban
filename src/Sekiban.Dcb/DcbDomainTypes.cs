@@ -12,18 +12,21 @@ public record DcbDomainTypes
     public ITagTypes TagTypes { get; init; }
     public ITagProjectorTypes TagProjectorTypes { get; init; }
     public ITagStatePayloadTypes TagStatePayloadTypes { get; init; }
+    public IMultiProjectorTypes MultiProjectorTypes { get; init; }
     public JsonSerializerOptions JsonSerializerOptions { get; init; }
     public DcbDomainTypes(
         IEventTypes eventTypes,
         ITagTypes tagTypes,
         ITagProjectorTypes tagProjectorTypes,
         ITagStatePayloadTypes tagStatePayloadTypes,
+        IMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions? jsonSerializerOptions = null)
     {
         EventTypes = eventTypes;
         TagTypes = tagTypes;
         TagProjectorTypes = tagProjectorTypes;
         TagStatePayloadTypes = tagStatePayloadTypes;
+        MultiProjectorTypes = multiProjectorTypes;
         JsonSerializerOptions = jsonSerializerOptions ??
             new JsonSerializerOptions
             {
@@ -51,6 +54,7 @@ public record DcbDomainTypes
         public SimpleTagTypes TagTypes { get; }
         public SimpleTagProjectorTypes TagProjectorTypes { get; }
         public SimpleTagStatePayloadTypes TagStatePayloadTypes { get; }
+    public SimpleMultiProjectorTypes MultiProjectorTypes { get; }
         public JsonSerializerOptions JsonOptions { get; }
 
         internal Builder(JsonSerializerOptions? jsonOptions = null)
@@ -66,9 +70,10 @@ public record DcbDomainTypes
             TagTypes = new SimpleTagTypes();
             TagProjectorTypes = new SimpleTagProjectorTypes();
             TagStatePayloadTypes = new SimpleTagStatePayloadTypes();
+            MultiProjectorTypes = new SimpleMultiProjectorTypes();
         }
 
         internal DcbDomainTypes Build() =>
-            new(EventTypes, TagTypes, TagProjectorTypes, TagStatePayloadTypes, JsonOptions);
+            new(EventTypes, TagTypes, TagProjectorTypes, TagStatePayloadTypes, MultiProjectorTypes, JsonOptions);
     }
 }

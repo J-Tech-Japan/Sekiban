@@ -30,6 +30,9 @@ public static class DomainType
             types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
             types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>();
             types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>();
+
+            types.TagTypes.RegisterTagGroupType<StudentTag>();
+            types.TagTypes.RegisterTagGroupType<ClassRoomTag>();
         });
     }
 }

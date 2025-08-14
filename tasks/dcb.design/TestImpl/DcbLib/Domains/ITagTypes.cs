@@ -1,5 +1,3 @@
-using DcbLib.Tags;
-
 namespace DcbLib.Domains;
 
 /// <summary>
@@ -7,4 +5,9 @@ namespace DcbLib.Domains;
 /// </summary>
 public interface ITagTypes
 {
+	/// <summary>
+	/// 文字列表現 (group:content) からタグを復元します。
+	/// 未登録時や失敗時は FallbackTag を返します。
+	/// </summary>
+	DcbLib.Tags.ITag GetTag(string tag);
 }

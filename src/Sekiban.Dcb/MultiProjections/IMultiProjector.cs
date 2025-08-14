@@ -1,12 +1,14 @@
+using ResultBoxes;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-/// Type-safe multi projector over events.
+/// Generic specialisation of multi projector with a fixed payload type.
 /// </summary>
-public interface IMultiProjector<T> where T : IMultiProjectionPayload
+public interface IMultiProjector<T> : IMultiProjectorCommon where T : notnull
 {
-    string GetVersion();
-    IMultiProjectionPayload Project(IMultiProjectionPayload current, Event ev);
+    ResultBox<T> Project(T payload, Event ev);
+    static abstract T GenerateInitialPayload();
+    static abstract string GetMultiProjectorName();
 }
