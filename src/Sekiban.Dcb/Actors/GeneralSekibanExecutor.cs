@@ -88,6 +88,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             // Step 3: Collect tags across all events
             var allTags = new HashSet<ITag>(collectedEvents.SelectMany(e => e.Tags));
 
+            // Step 3.1: Validate all tags
+            TagValidator.ValidateTagsAndThrow(allTags);
+
             // Step 4: According to spec:
             //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
             //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
