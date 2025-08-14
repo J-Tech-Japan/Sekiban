@@ -45,10 +45,10 @@ public class TagGroupDuplicateRegistrationTests
     {
         public readonly record struct TestTagGroup(string Content) : ITagGroup<TestTagGroup>
         {
-            public static string GetTagGroupName() => "TestTagGroup";
+            public static string TagGroupName => "TestTagGroup";
             public static TestTagGroup FromContent(string content) => new(content);
-            public string GetTagGroup() => GetTagGroupName();
-            public string GetTag() => $"{GetTagGroupName()}:{Content}";
+            public string GetTagGroup() => TagGroupName;
+            public string GetTag() => $"{TagGroupName}:{Content}";
             public string GetTagContent() => Content;
             public bool IsConsistencyTag() => false;
         }
@@ -58,10 +58,10 @@ public class TagGroupDuplicateRegistrationTests
     {
         public readonly record struct TestTagGroup(string Content) : ITagGroup<TestTagGroup>
         {
-            public static string GetTagGroupName() => "TestTagGroup";
+            public static string TagGroupName => "TestTagGroup";
             public static TestTagGroup FromContent(string content) => new(content);
-            public string GetTagGroup() => GetTagGroupName();
-            public string GetTag() => $"{GetTagGroupName()}:{Content}";
+            public string GetTagGroup() => TagGroupName;
+            public string GetTag() => $"{TagGroupName}:{Content}";
             public string GetTagContent() => Content;
             public bool IsConsistencyTag() => false;
         }

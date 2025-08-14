@@ -16,7 +16,7 @@ public class SimpleTagTypes : ITagTypes
 	/// </summary>
 	public void RegisterTagGroupType<TTagGroup>() where TTagGroup : ITagGroup<TTagGroup>
 	{
-		var groupName = TTagGroup.GetTagGroupName();
+		var groupName = TTagGroup.TagGroupName;
 		if (!_tagGroupFactories.TryAdd(groupName, content => TTagGroup.FromContent(content)))
 		{
 			throw new InvalidOperationException($"Tag group already registered: {groupName}");
