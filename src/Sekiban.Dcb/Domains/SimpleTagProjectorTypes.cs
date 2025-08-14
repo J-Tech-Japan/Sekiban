@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Validation;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -29,6 +30,10 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
     {
         var projector = new T();
         var projectorName = name ?? typeof(T).Name;
+        
+        // Validate projector name before registration
+        NameValidator.ValidateProjectorNameAndThrow(projectorName);
+        
         var newType = typeof(T);
 
         if (_projectors.TryGetValue(projectorName, out var existingProjector))

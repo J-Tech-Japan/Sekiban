@@ -34,7 +34,7 @@ public class GeneralCommandContextTest
 
         var tagProjectorTypes = new SimpleTagProjectorTypes();
         tagProjectorTypes.RegisterProjector<TestProjector>();
-        tagProjectorTypes.RegisterProjector<TestProjector2>();
+        tagProjectorTypes.RegisterProjector<TestProjectorTwo>();
 
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
         tagStatePayloadTypes.RegisterPayloadType<TestStatePayload>();
@@ -330,7 +330,7 @@ public class GeneralCommandContextTest
 
         // Act - Access states for both tags
         await _commandContext.GetStateAsync<TestProjector>(tag1);
-        await _commandContext.GetStateAsync<TestProjector2>(tag2);
+        await _commandContext.GetStateAsync<TestProjectorTwo>(tag2);
 
         // Assert
         var accessedStates = _commandContext.GetAccessedTagStates();
@@ -365,7 +365,7 @@ public class GeneralCommandContextTest
     public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
 
-    private class TestProjector2 : ITagProjector
+    private class TestProjectorTwo : ITagProjector
     {
         public string GetProjectorVersion() => "1.0.0";
     public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
