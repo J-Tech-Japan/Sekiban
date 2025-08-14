@@ -1,0 +1,311 @@
+@page "/classrooms"
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+@using Dcb.Domain.ClassRoom
+@using Dcb.Domain.Enrollment
+@using System.Net.Http
+@using System.Net.Http.Json
+
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Classrooms</PageTitle>
+
+<h1>Classroom Management</h1>
+
+<div>
+    <button class="btn btn-primary mb-3" @onclick="OpenAddClassroomModal">Add New Classroom</button>
+</div>
+
+@if (classrooms == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (classrooms.Count == 0)
+{
+    <p>No classrooms available. Click "Add New Classroom" to create one.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+        <tr>
+            <th>Classroom Name</th>
+            <th>Max Capacity</th>
+            <th>Enrolled Students</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+            @foreach (var classroom in classrooms)
+            {
+                <tr>
+                    <td>@classroom.ClassName</td>
+                    <td>@classroom.MaxCapacity</td>
+                    <td>@classroom.EnrolledStudents.Count</td>
+                    <td>
+                        @if (classroom.EnrolledStudents.Count >= classroom.MaxCapacity)
+                        {
+                            <span class="badge bg-danger">Full</span>
+                        }
+                        else if (classroom.EnrolledStudents.Count > classroom.MaxCapacity * 0.8)
+                        {
+                            <span class="badge bg-warning">Almost Full</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">Available</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-info btn-sm me-2" @onclick="() => ViewClassroomDetails(classroom)">Details</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteClassroom(classroom.ClassRoomId)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<!-- Add Classroom Modal -->
+<div class="modal fade" id="addClassroomModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Classroom</h5>
+                <button type="button" class="btn-close" @onclick="CloseModal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="className" class="form-label">Classroom Name</label>
+                    <input id="className" class="form-control" @bind="classroomModel.ClassName" />
+                </div>
+                <div class="mb-3">
+                    <label for="maxCapacity" class="form-label">Maximum Capacity</label>
+                    <input type="number" id="maxCapacity" class="form-control" @bind="classroomModel.MaxCapacity" min="1" max="100" />
+                </div>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @errorMessage
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="HandleAddClassroomSubmit">Add Classroom</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Classroom Details Modal -->
+<div class="modal fade" id="classroomDetailsModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Classroom Details</h5>
+                <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
+            </div>
+            <div class="modal-body">
+                @if (selectedClassroom != null)
+                {
+                    <h6>Classroom Information</h6>
+                    <dl class="row">
+                        <dt class="col-sm-3">Name:</dt>
+                        <dd class="col-sm-9">@selectedClassroom.ClassName</dd>
+                        
+                        <dt class="col-sm-3">Classroom ID:</dt>
+                        <dd class="col-sm-9">@selectedClassroom.ClassRoomId</dd>
+                        
+                        <dt class="col-sm-3">Max Capacity:</dt>
+                        <dd class="col-sm-9">@selectedClassroom.MaxCapacity</dd>
+                        
+                        <dt class="col-sm-3">Enrolled Students:</dt>
+                        <dd class="col-sm-9">@selectedClassroom.EnrolledStudents.Count / @selectedClassroom.MaxCapacity</dd>
+                    </dl>
+
+                    <h6 class="mt-4">Enrolled Students</h6>
+                    @if (selectedClassroom.EnrolledStudents.Any())
+                    {
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Student ID</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var student in selectedClassroom.EnrolledStudents)
+                                {
+                                    <tr>
+                                        <td>@student.StudentName</td>
+                                        <td>@student.StudentId</td>
+                                        <td>
+                                            <button class="btn btn-warning btn-sm" 
+                                                    @onclick="() => HandleRemoveStudent(student.StudentId, selectedClassroom.ClassRoomId)">
+                                                Remove
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p>No students enrolled in this classroom.</p>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseDetailsModal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ClassroomView>? classrooms;
+    private ClassroomView? selectedClassroom;
+    private ClassroomModel classroomModel = new();
+    private string errorMessage = string.Empty;
+
+    public class ClassroomView
+    {
+        public Guid ClassRoomId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public int MaxCapacity { get; set; }
+        public List<EnrolledStudentView> EnrolledStudents { get; set; } = new();
+    }
+
+    public class EnrolledStudentView
+    {
+        public Guid StudentId { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+    }
+
+    public class ClassroomModel
+    {
+        public string ClassName { get; set; } = string.Empty;
+        public int MaxCapacity { get; set; } = 20;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClassrooms();
+    }
+
+    private async Task LoadClassrooms()
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var response = await httpClient.GetFromJsonAsync<List<ClassroomView>>("api/classrooms");
+            classrooms = response ?? new List<ClassroomView>();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading classrooms: {ex.Message}");
+            classrooms = new List<ClassroomView>();
+        }
+    }
+
+    private async Task HandleDeleteClassroom(Guid classRoomId)
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var response = await httpClient.DeleteAsync($"api/classrooms/{classRoomId}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadClassrooms();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error deleting classroom: {ex.Message}");
+        }
+    }
+
+    private async Task HandleRemoveStudent(Guid studentId, Guid classRoomId)
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var command = new DropStudentFromClassRoom(studentId, classRoomId);
+            var response = await httpClient.PostAsJsonAsync("api/enrollments/drop", command);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadClassrooms();
+                if (selectedClassroom?.ClassRoomId == classRoomId)
+                {
+                    selectedClassroom = classrooms?.FirstOrDefault(c => c.ClassRoomId == classRoomId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error removing student from classroom: {ex.Message}");
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        classroomModel = new();
+        errorMessage = string.Empty;
+        await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('hide')");
+    }
+
+    private async Task CloseDetailsModal()
+    {
+        selectedClassroom = null;
+        await JsRuntime.InvokeVoidAsync("eval", "$('#classroomDetailsModal').modal('hide')");
+    }
+
+    private async Task OpenAddClassroomModal()
+    {
+        classroomModel = new();
+        errorMessage = string.Empty;
+        await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('show')");
+    }
+
+    private async Task ViewClassroomDetails(ClassroomView classroom)
+    {
+        selectedClassroom = classroom;
+        await JsRuntime.InvokeVoidAsync("eval", "$('#classroomDetailsModal').modal('show')");
+    }
+
+    private async Task HandleAddClassroomSubmit()
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var command = new CreateClassRoom(
+                Guid.NewGuid(),
+                classroomModel.ClassName,
+                classroomModel.MaxCapacity);
+                
+            var response = await httpClient.PostAsJsonAsync("api/classrooms", command);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadClassrooms();
+                await CloseModal();
+            }
+            else
+            {
+                errorMessage = "Failed to add classroom. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to add classroom: {ex.Message}";
+        }
+    }
+}

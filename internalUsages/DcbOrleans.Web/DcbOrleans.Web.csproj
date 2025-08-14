@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DcbOrleans.ServiceDefaults\DcbOrleans.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Dcb.Domain\Dcb.Domain.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
