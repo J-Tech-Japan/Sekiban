@@ -43,7 +43,7 @@ public class TagConsistentActorCatchupTest
         await _eventStore.WriteEventAsync(event3);
 
         // Create TagConsistentActor without event store (so it won't catch up)
-        var tagConsistentActor = new GeneralTagConsistentActor(tagConsistentId);
+    var tagConsistentActor = new GeneralTagConsistentActor(tagConsistentId, null, new TagConsistentActorOptions(), _domainTypes);
         var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
         Assert.True(latestIdResult.IsSuccess);
         Assert.Equal("", latestIdResult.GetValue()); // Verify it's empty

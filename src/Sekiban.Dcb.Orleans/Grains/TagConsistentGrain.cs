@@ -15,11 +15,13 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
 {
     private readonly IEventStore _eventStore;
     private readonly TagConsistentActorOptions _options;
+    private readonly DcbDomainTypes _domainTypes;
     private GeneralTagConsistentActor? _actor;
     
-    public TagConsistentGrain(IEventStore eventStore, TagConsistentActorOptions? options = null)
+    public TagConsistentGrain(IEventStore eventStore, DcbDomainTypes domainTypes, TagConsistentActorOptions? options = null)
     {
         _eventStore = eventStore;
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _options = options ?? new TagConsistentActorOptions();
     }
     
@@ -29,7 +31,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
         var tagName = this.GetPrimaryKeyString();
         
         // Create the actor instance
-        _actor = new GeneralTagConsistentActor(tagName, _eventStore, _options);
+    _actor = new GeneralTagConsistentActor(tagName, _eventStore, _options, _domainTypes);
         
         return base.OnActivateAsync(cancellationToken);
     }

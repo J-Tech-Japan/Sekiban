@@ -103,7 +103,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor
         {
             // Format: "TagGroup:TagContent"
             var tagName = actorId;
-            return new GeneralTagConsistentActor(tagName, _eventStore) as T;
+            return new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes) as T;
         }
 
         // Create TagStateActor
