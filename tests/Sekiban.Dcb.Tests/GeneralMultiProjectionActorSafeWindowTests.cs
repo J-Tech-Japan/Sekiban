@@ -82,7 +82,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
         
         // Act
         await actor.AddEventsAsync(new[] { recentEvent });
-        var safeState = await actor.GetStateAsync();
+        var safeState = await actor.GetStateAsync(canGetUnsafeState: false); // Explicitly get safe state
         var unsafeState = await actor.GetUnsafeStateAsync();
         
         // Assert
@@ -118,7 +118,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
         
         // Act
         await actor.AddEventsAsync(events);
-        var safeState = await actor.GetStateAsync();
+        var safeState = await actor.GetStateAsync(canGetUnsafeState: false); // Explicitly get safe state
         var unsafeState = await actor.GetUnsafeStateAsync();
         
         // Assert
@@ -153,7 +153,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
         
         // Act
         await actor.AddEventsAsync(new[] { createEvent, updateEvent });
-        var safeState = await actor.GetStateAsync();
+        var safeState = await actor.GetStateAsync(canGetUnsafeState: false); // Explicitly get safe state
         var unsafeState = await actor.GetUnsafeStateAsync();
         
         // Assert
@@ -191,7 +191,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
         await actor2.AddEventsAsync(new[] { recentEvent });
         
         // Act
-        var safeState = await actor2.GetStateAsync();
+        var safeState = await actor2.GetStateAsync(canGetUnsafeState: false); // Explicitly get safe state
         var unsafeState = await actor2.GetUnsafeStateAsync();
         
         // Assert
