@@ -15,22 +15,31 @@ namespace Sekiban.Dcb.Actors
         /// Apply a batch of events to the current projector state.
         /// </summary>
         /// <param name="events">Events to apply.</param>
-        Task AddEventsAsync(System.Collections.Generic.IReadOnlyList<Event> events);
+        /// <param name="finishedCatchUp">Whether the event stream has finished catching up. 
+        /// When false, the actor is in catching up state and data is incomplete.</param>
+        Task AddEventsAsync(System.Collections.Generic.IReadOnlyList<Event> events, bool finishedCatchUp = true);
 
     /// <summary>
     /// Apply a batch of serialized events to the current projector state.
     /// </summary>
-    Task AddSerializableEventsAsync(System.Collections.Generic.IReadOnlyList<Sekiban.Dcb.Events.SerializableEvent> events);
+    /// <param name="events">Events to apply.</param>
+    /// <param name="finishedCatchUp">Whether the event stream has finished catching up.
+    /// When false, the actor is in catching up state and data is incomplete.</param>
+    Task AddSerializableEventsAsync(System.Collections.Generic.IReadOnlyList<Sekiban.Dcb.Events.SerializableEvent> events, bool finishedCatchUp = true);
 
         /// <summary>
         /// Get the current in-memory state of the projector.
         /// </summary>
-        Task<ResultBox<MultiProjections.MultiProjectionState>> GetStateAsync();
+        /// <param name="canGetUnsafeState">Whether to allow returning unsafe state. 
+        /// When false, only safe state is returned.</param>
+        Task<ResultBox<MultiProjections.MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
 
     /// <summary>
     /// Get the current state serialized to bytes for transport or storage.
     /// </summary>
-    Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync();
+    /// <param name="canGetUnsafeState">Whether to allow returning unsafe state. 
+    /// When false, only safe state (suitable for snapshots) is returned.</param>
+    Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync(bool canGetUnsafeState = true);
 
         /// <summary>
         /// Overwrite current state from a serialized snapshot.

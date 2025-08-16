@@ -11,4 +11,6 @@ public record MultiProjectionState(
     string ProjectorVersion,
     string LastSortableUniqueId,
     Guid LastEventId,
-    int Version);
+    int Version,
+    bool IsCatchedUp = true,
+    bool IsSafeState = true);

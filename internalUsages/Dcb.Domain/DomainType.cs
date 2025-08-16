@@ -1,6 +1,7 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
+using Dcb.Domain.Weather;
 using Sekiban.Dcb;
 namespace Dcb.Domain;
 
@@ -21,18 +22,24 @@ public static class DomainType
             types.EventTypes.RegisterEventType<ClassRoomCreated>();
             types.EventTypes.RegisterEventType<StudentEnrolledInClassRoom>();
             types.EventTypes.RegisterEventType<StudentDroppedFromClassRoom>();
+            types.EventTypes.RegisterEventType<WeatherForecastCreated>();
+            types.EventTypes.RegisterEventType<WeatherForecastUpdated>();
+            types.EventTypes.RegisterEventType<WeatherForecastDeleted>();
 
             // Register tag projectors
             types.TagProjectorTypes.RegisterProjector<StudentProjector>();
             types.TagProjectorTypes.RegisterProjector<ClassRoomProjector>();
+            types.TagProjectorTypes.RegisterProjector<WeatherForecastProjector>();
 
             // Register tag state payload types
             types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
             types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>();
             types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>();
+            types.TagStatePayloadTypes.RegisterPayloadType<WeatherForecastState>();
 
             types.TagTypes.RegisterTagGroupType<StudentTag>();
             types.TagTypes.RegisterTagGroupType<ClassRoomTag>();
+            types.TagTypes.RegisterTagGroupType<WeatherForecastTag>();
         });
     }
 }
