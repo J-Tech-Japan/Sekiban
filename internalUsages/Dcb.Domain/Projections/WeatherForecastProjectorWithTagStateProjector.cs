@@ -20,10 +20,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
     /// </summary>
     public SafeUnsafeProjectionStateV3<TagState> State { get; init; } = new();
     
-    /// <summary>
-    /// Instance of the WeatherForecastProjector for projecting events
-    /// </summary>
-    private static readonly WeatherForecastProjector Projector = new();
+    // We no longer need an instance since we'll use static methods
     
     /// <summary>
     /// SafeWindow threshold (20 seconds by default)
@@ -73,26 +70,9 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
         Event ev,
         List<WeatherForecastTag> tags)
     {
-        // Process event with the actual payload type
-        // The projector will handle unknown event types by returning state unchanged
-        var payloadType = ev.Payload.GetType();
-        
-        // Use reflection to call ProcessEvent with the correct type parameter
-        var method = GetType().GetMethod(nameof(ProcessEventGeneric), 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var genericMethod = method!.MakeGenericMethod(payloadType);
-        return (SafeUnsafeProjectionStateV3<TagState>)genericMethod.Invoke(this, new object[] { state, ev, tags })!;
-    }
-    
-    /// <summary>
-    /// Generic helper to process events
-    /// </summary>
-    private SafeUnsafeProjectionStateV3<TagState> ProcessEventGeneric<TPayload>(
-        SafeUnsafeProjectionStateV3<TagState> state,
-        Event ev,
-        List<WeatherForecastTag> tags) where TPayload : class
-    {
-        return state.ProcessEvent<TPayload>(ev, _ => CreateProjectionRequests(tags, ev));
+        // Create projection requests directly without type parameters or reflection
+        var requests = CreateProjectionRequests(tags, ev);
+        return state.ProcessEventWithRequests(ev, requests);
     }
     
     /// <summary>
@@ -105,7 +85,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
         return tags.Select(tag =>
         {
             // Create TagStateId for this tag
-            var tagStateId = new TagStateId(tag, Projector.GetType().Name);
+            var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
             
             return new ProjectionRequest<TagState>(
                 tag.ForecastId,
@@ -115,7 +95,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
                     var tagState = current ?? TagState.GetEmpty(tagStateId);
                     
                     // Use WeatherForecastProjector to project the event
-                    var newPayload = Projector.Project(tagState.Payload, ev);
+                    var newPayload = WeatherForecastProjector.Project(tagState.Payload, ev);
                     
                     // Check if the item was deleted
                     if (newPayload is WeatherForecastState { IsDeleted: true })
@@ -129,7 +109,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
                         Payload = newPayload,
                         Version = tagState.Version + 1,
                         LastSortedUniqueId = ev.SortableUniqueIdValue,
-                        ProjectorVersion = Projector.GetProjectorVersion()
+                        ProjectorVersion = WeatherForecastProjector.ProjectorVersion
                     };
                 }
             );

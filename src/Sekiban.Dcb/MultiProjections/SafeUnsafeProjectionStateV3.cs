@@ -41,6 +41,38 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
     }
     
     /// <summary>
+    /// Process an event with projections (without type parameter)
+    /// </summary>
+    /// <param name="evt">Event to process</param>
+    /// <param name="requestProvider">Function that returns projection requests for the event</param>
+    /// <returns>New state after processing</returns>
+    public SafeUnsafeProjectionStateV3<T> ProcessEventWithRequests(
+        Event evt,
+        IEnumerable<ProjectionRequest<T>> requests)
+    {
+        var requestList = requests.ToList();
+        if (requestList.Count == 0)
+        {
+            return this; // No projections requested
+        }
+        
+        var isEventSafe = string.Compare(evt.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0;
+        
+        // First, process any events that have become safe
+        var currentState = ProcessNewlySafeEvents();
+        
+        // Now process the current event
+        if (isEventSafe)
+        {
+            return currentState.ProcessSafeProjection(requestList, evt);
+        }
+        else
+        {
+            return currentState.ProcessUnsafeProjection(requestList, evt);
+        }
+    }
+    
+    /// <summary>
     /// Process an event with handler
     /// </summary>
     /// <typeparam name="TPayload">Event payload type</typeparam>

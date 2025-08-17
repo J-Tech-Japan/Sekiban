@@ -12,22 +12,8 @@ public class TagStateId
     public string TagContent { get; }
     public string TagProjectorName { get; }
 
-    public TagStateId(ITag tag, ITagProjector tagProjector, ITagProjectorTypes projectorTypes)
-    {
-        var fullTag = tag.GetTag();
-        var parts = fullTag.Split(':');
-        if (parts.Length != 2)
-        {
-            throw new ArgumentException($"Invalid tag format: {fullTag}. Expected format: 'TagGroup:TagContent'");
-        }
-
-        TagGroup = tag.GetTagGroup();
-        TagContent = parts[1];
-        
-        // Get the registered name for this projector type
-        var registeredName = projectorTypes.GetProjectorName(tagProjector.GetType());
-        TagProjectorName = registeredName ?? tagProjector.GetType().Name;
-    }
+    // Removed constructor with ITagProjector instance since we use static projectors now
+    // Use the constructor with string tagProjectorName instead
 
     public TagStateId(ITag tag, string tagProjectorName)
     {
@@ -41,6 +27,14 @@ public class TagStateId
         TagGroup = tag.GetTagGroup();
         TagContent = parts[1];
         TagProjectorName = tagProjectorName;
+    }
+
+    /// <summary>
+    ///     Creates a TagStateId from a tag and projector type
+    /// </summary>
+    public static TagStateId FromProjector<T>(ITag tag) where T : ITagProjector<T>
+    {
+        return new TagStateId(tag, T.ProjectorName);
     }
 
     private TagStateId(string tagGroup, string tagContent, string tagProjectorName)

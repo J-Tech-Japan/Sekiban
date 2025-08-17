@@ -204,13 +204,12 @@ public class GeneralSekibanExecutorTest
         public string GetTagGroup() => "TestGroup";
     }
 
-    private class TestProjector : ITagProjector
+    private class TestProjector : ITagProjector<TestProjector>
     {
-        public string GetProjectorVersion() => "1.0.0";
-    public ITagStatePayload Project(ITagStatePayload current, Event _) => current;
+        public static string ProjectorVersion => "1.0.0";
+        public static string ProjectorName => nameof(TestProjector);
+        public static ITagStatePayload Project(ITagStatePayload current, Event _) => current;
     }
-
-    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     private class AccessStateCommandHandler : ICommandHandler<TestCommand>
     {
         public async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)

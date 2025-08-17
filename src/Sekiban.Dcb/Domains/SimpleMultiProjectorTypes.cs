@@ -6,6 +6,7 @@ using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Domains;
 
@@ -48,7 +49,10 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         try
         {
             dynamic dyn = multiProjector;
-            dynamic result = dyn.Project(dyn, ev); // IMultiProjector<T>.Project(T, Event) -> ResultBox<T>
+            // Extract tags from the event for the Project method
+            // For now, we'll pass an empty list as tag string to ITag conversion would require domain knowledge
+            var tags = new List<ITag>();
+            dynamic result = dyn.Project(dyn, ev, tags); // IMultiProjector<T>.Project(T, Event, List<ITag>) -> ResultBox<T>
             if (result.IsSuccess)
             {
                 IMultiProjectorCommon value = (IMultiProjectorCommon)result.GetValue();

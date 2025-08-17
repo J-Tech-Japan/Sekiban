@@ -1,5 +1,8 @@
+using System;
 using ResultBoxes;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
+
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -8,14 +11,12 @@ namespace Sekiban.Dcb.Domains;
 public interface ITagProjectorTypes
 {
     /// <summary>
-    ///     Gets a tag projector instance by its name
+    ///     Gets a tag projector function by its name
     /// </summary>
-    ResultBox<ITagProjector> GetTagProjector(string tagProjectorName);
+    ResultBox<Func<ITagStatePayload, Event, ITagStatePayload>> GetProjectorFunction(string tagProjectorName);
     
     /// <summary>
-    ///     Gets the registered name for a projector type
+    ///     Gets the version of a projector by its name
     /// </summary>
-    /// <param name="projectorType">The type of the projector</param>
-    /// <returns>The registered name of the projector, or null if not registered</returns>
-    string? GetProjectorName(Type projectorType);
+    ResultBox<string> GetProjectorVersion(string tagProjectorName);
 }

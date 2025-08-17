@@ -3,11 +3,12 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.ClassRoom;
 
-public class ClassRoomProjector : ITagProjector
+public class ClassRoomProjector : ITagProjector<ClassRoomProjector>
 {
-    public string GetProjectorVersion() => "1.0.0";
+    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorName => nameof(ClassRoomProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+    public static ITagStatePayload Project(ITagStatePayload current, Event ev) =>
         (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, ClassRoomCreated created) => new AvailableClassRoomState(

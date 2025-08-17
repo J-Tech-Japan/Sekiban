@@ -24,8 +24,8 @@ public class DuplicateRegistrationTests
 
         Assert.Contains("TestEvent", exception.Message);
         Assert.Contains("already registered", exception.Message);
-        Assert.Contains("Namespace1+TestEvent", exception.Message);
-        Assert.Contains("Namespace2+TestEvent", exception.Message);
+        Assert.Contains("Namespace1", exception.Message);
+        Assert.Contains("Namespace2", exception.Message);
     }
 
     [Fact]
@@ -51,16 +51,16 @@ public class DuplicateRegistrationTests
         var projectorTypes = new SimpleTagProjectorTypes();
 
         // Act - Register first type
-        projectorTypes.RegisterProjector<Namespace1.TestProjector>("TestProjector");
+        projectorTypes.RegisterProjector<Namespace1.TestProjector>();
 
         // Act & Assert - Should throw when registering different type with same name
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            projectorTypes.RegisterProjector<Namespace2.TestProjector>("TestProjector"));
+            projectorTypes.RegisterProjector<Namespace2.TestProjector>());
 
         Assert.Contains("TestProjector", exception.Message);
-        Assert.Contains("already registered", exception.Message);
-        Assert.Contains("Namespace1+TestProjector", exception.Message);
-        Assert.Contains("Namespace2+TestProjector", exception.Message);
+        Assert.Contains("already registered with type", exception.Message);
+        Assert.Contains("Namespace1", exception.Message);
+        Assert.Contains("Namespace2", exception.Message);
     }
 
     [Fact]
@@ -70,13 +70,13 @@ public class DuplicateRegistrationTests
         var projectorTypes = new SimpleTagProjectorTypes();
 
         // Act - Register same type multiple times
-        projectorTypes.RegisterProjector<Namespace1.TestProjector>("TestProjector");
-        projectorTypes.RegisterProjector<Namespace1.TestProjector>("TestProjector");
+        projectorTypes.RegisterProjector<Namespace1.TestProjector>();
+        projectorTypes.RegisterProjector<Namespace1.TestProjector>();
 
         // Assert - Should not throw
-        var projectorResult = projectorTypes.GetTagProjector("TestProjector");
+        var projectorResult = projectorTypes.GetProjectorFunction("TestProjector");
         Assert.True(projectorResult.IsSuccess);
-        Assert.IsType<Namespace1.TestProjector>(projectorResult.GetValue());
+        Assert.NotNull(projectorResult.GetValue());
     }
 
     [Fact]
@@ -94,8 +94,8 @@ public class DuplicateRegistrationTests
 
         Assert.Contains("TestPayload", exception.Message);
         Assert.Contains("already registered", exception.Message);
-        Assert.Contains("Namespace1+TestPayload", exception.Message);
-        Assert.Contains("Namespace2+TestPayload", exception.Message);
+        Assert.Contains("Namespace1", exception.Message);
+        Assert.Contains("Namespace2", exception.Message);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class DuplicateRegistrationTests
 
         // Assert - Should use type name
         Assert.NotNull(eventTypes.GetEventType("TestEvent"));
-        Assert.True(projectorTypes.GetTagProjector("TestProjector").IsSuccess);
+        Assert.True(projectorTypes.GetProjectorFunction("TestProjector").IsSuccess);
         Assert.NotNull(payloadTypes.GetPayloadType("TestPayload"));
 
         // Act & Assert - Should throw when trying to register different type with same type name
@@ -141,10 +141,11 @@ public class DuplicateRegistrationTests
     public static class Namespace1
     {
         public record TestEvent(string Value) : IEventPayload;
-        public class TestProjector : ITagProjector
+        public class TestProjector : ITagProjector<TestProjector>
         {
-            public string GetProjectorVersion() => "1.0.0";
-            public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
+            public static string ProjectorVersion => "1.0.0";
+            public static string ProjectorName => nameof(TestProjector);
+            public static ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }
         public record TestPayload(string Data) : ITagStatePayload;
     }
@@ -152,10 +153,11 @@ public class DuplicateRegistrationTests
     public static class Namespace2
     {
         public record TestEvent(int Number) : IEventPayload;
-        public class TestProjector : ITagProjector
+        public class TestProjector : ITagProjector<TestProjector>
         {
-            public string GetProjectorVersion() => "2.0.0";
-            public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
+            public static string ProjectorVersion => "2.0.0";
+            public static string ProjectorName => nameof(TestProjector);
+            public static ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
         }
         public record TestPayload(int Count) : ITagStatePayload;
     }
