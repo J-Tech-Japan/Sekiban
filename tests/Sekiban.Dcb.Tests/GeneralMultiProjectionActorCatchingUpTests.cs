@@ -418,7 +418,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
     public record TestEventUpdated(string OldName, string NewName) : IEventPayload;
 
     // Test multi-projector
-    public record TestMultiProjector : IMultiProjector<TestMultiProjector>, IMultiProjectionPayload
+    public record TestMultiProjector : IMultiProjector<TestMultiProjector>
     {
         public const string MultiProjectorName = "TestMultiProjector";
         
@@ -435,9 +435,9 @@ public class GeneralMultiProjectionActorCatchingUpTests
         
         public static string GetMultiProjectorName() => MultiProjectorName;
         
-        public string GetVersion() => "1.0.0";
+        public static string GetVersion() => "1.0.0";
         
-        public ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
+        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
         {
             var result = ev.Payload switch
             {

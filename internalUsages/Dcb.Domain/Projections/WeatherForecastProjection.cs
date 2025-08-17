@@ -9,7 +9,7 @@ namespace Dcb.Domain.Projections;
 /// <summary>
 /// Weather forecast projection state using SafeUnsafeProjectionStateV3
 /// </summary>
-public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>, IMultiProjectionPayload
+public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
     /// <summary>
     /// Internal state managed by SafeUnsafeProjectionStateV3
@@ -25,12 +25,12 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     
     public static WeatherForecastProjection GenerateInitialPayload() => new();
     
-    public string GetVersion() => "1.0.0";
+    public static string GetVersion() => "1.0.0";
     
     /// <summary>
     /// Project with tag filtering - only processes events with WeatherForecastTag
     /// </summary>
-    public ResultBox<WeatherForecastProjection> Project(WeatherForecastProjection payload, Event ev, List<ITag> tags)
+    public static ResultBox<WeatherForecastProjection> Project(WeatherForecastProjection payload, Event ev, List<ITag> tags)
     {
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags

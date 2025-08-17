@@ -11,7 +11,7 @@ namespace Dcb.Domain.Student;
 /// <summary>
 /// 複数の学生の在籍サマリを集計するマルチプロジェクタです。
 /// </summary>
-public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students) : IMultiProjector<StudentSummaries>, Sekiban.Dcb.MultiProjections.IMultiProjectionPayload
+public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students) : IMultiProjector<StudentSummaries>
 {
     public StudentSummaries() : this(new Dictionary<Guid, Item>()) {}
     /// <summary>
@@ -19,9 +19,9 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
     /// </summary>
     public record Item(string Name, int EnrolledCount);
 
-    public string GetVersion() => "1.0.0";
+    public static string GetVersion() => "1.0.0";
 
-    public ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags)
+    public static ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags)
     {
         var next = new Dictionary<Guid, Item>(payload.Students);
         switch (ev.Payload)

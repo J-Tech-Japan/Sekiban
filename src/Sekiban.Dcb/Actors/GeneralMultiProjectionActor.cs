@@ -23,13 +23,13 @@ namespace Sekiban.Dcb.Actors
         private readonly GeneralMultiProjectionActorOptions _options;
         
         // Safe state - events older than SafeWindow
-        private IMultiProjectorCommon? _safeProjector;
+        private IMultiProjectionPayload? _safeProjector;
         private Guid _safeLastEventId;
         private string _safeLastSortableUniqueId = string.Empty;
         private int _safeVersion;
         
         // Unsafe state - includes all events
-        private IMultiProjectorCommon? _unsafeProjector;
+        private IMultiProjectionPayload? _unsafeProjector;
         private Guid _unsafeLastEventId;
         private string _unsafeLastSortableUniqueId = string.Empty;
         private int _unsafeVersion;
@@ -71,7 +71,14 @@ namespace Sekiban.Dcb.Actors
                 var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
                 
                 // Always update unsafe state
-                var unsafeProjected = _types.Project(_unsafeProjector!, ev);
+                var projectFuncResult = _types.GetProjectorFunction(_projectorName);
+                if (!projectFuncResult.IsSuccess)
+                {
+                    throw projectFuncResult.GetException();
+                }
+                var projectFunc = projectFuncResult.GetValue();
+                var tags = new List<ITag>(); // Extract tags if needed
+                var unsafeProjected = projectFunc(_unsafeProjector!, ev, tags);
                 if (!unsafeProjected.IsSuccess)
                 {
                     throw unsafeProjected.GetException();
@@ -130,19 +137,21 @@ namespace Sekiban.Dcb.Actors
             // Determine which state to return
             bool useUnsafeState = canGetUnsafeState && _bufferedEvents.Count > 0;
             
+            // Get version from the type
+            var versionResult = _types.GetProjectorVersion(_projectorName);
+            if (!versionResult.IsSuccess)
+            {
+                return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
+            }
+            var version = versionResult.GetValue();
+
             if (useUnsafeState)
             {
                 // Return unsafe state
-                var projectorNameRb = _types.GetMultiProjectorNameFromMultiProjector(_unsafeProjector!);
-                if (!projectorNameRb.IsSuccess)
-                {
-                    return Task.FromResult(ResultBox.Error<MultiProjectionState>(projectorNameRb.GetException()));
-                }
-
                 var unsafeState = new MultiProjectionState(
                     (IMultiProjectionPayload)_unsafeProjector!,
-                    projectorNameRb.GetValue(),
-                    _unsafeProjector!.GetVersion(),
+                    _projectorName,
+                    version,
                     _unsafeLastSortableUniqueId,
                     _unsafeLastEventId,
                     _unsafeVersion,
@@ -154,16 +163,10 @@ namespace Sekiban.Dcb.Actors
             else
             {
                 // Return safe state
-                var projectorNameRb = _types.GetMultiProjectorNameFromMultiProjector(_safeProjector!);
-                if (!projectorNameRb.IsSuccess)
-                {
-                    return Task.FromResult(ResultBox.Error<MultiProjectionState>(projectorNameRb.GetException()));
-                }
-
                 var safeState = new MultiProjectionState(
                     (IMultiProjectionPayload)_safeProjector!,
-                    projectorNameRb.GetValue(),
-                    _safeProjector!.GetVersion(),
+                    _projectorName,
+                    version,
                     _safeLastSortableUniqueId,
                     _safeLastEventId,
                     _safeVersion,
@@ -286,12 +289,14 @@ namespace Sekiban.Dcb.Actors
         {
             if (_safeProjector == null)
             {
-                var init = _types.GenerateInitialPayload(_projectorName);
+                var init = _types.GetInitialPayloadGenerator(_projectorName);
                 if (!init.IsSuccess)
                 {
                     throw init.GetException();
                 }
-                _safeProjector = init.GetValue();
+                var generator = init.GetValue();
+                var payload = generator();
+                _safeProjector = (IMultiProjectionPayload)payload;
                 _unsafeProjector = CloneProjector(_safeProjector);
             }
         }
@@ -391,22 +396,12 @@ namespace Sekiban.Dcb.Actors
             return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
         }
         
-        private IMultiProjectorCommon CloneProjector(IMultiProjectorCommon source)
+        private IMultiProjectionPayload CloneProjector(IMultiProjectionPayload source)
         {
             // Serialize and deserialize to create a deep clone
-            var serialized = _types.Serialize(source, _jsonOptions);
-            if (!serialized.IsSuccess)
-            {
-                throw serialized.GetException();
-            }
-            
-            var deserialized = _types.Deserialize(serialized.GetValue(), source.GetType().FullName ?? source.GetType().Name, _jsonOptions);
-            if (!deserialized.IsSuccess)
-            {
-                throw deserialized.GetException();
-            }
-            
-            return deserialized.GetValue();
+            var json = System.Text.Json.JsonSerializer.Serialize(source, source.GetType(), _jsonOptions);
+            var cloned = System.Text.Json.JsonSerializer.Deserialize(json, source.GetType(), _jsonOptions);
+            return (IMultiProjectionPayload)cloned!;
         }
     }
 }
