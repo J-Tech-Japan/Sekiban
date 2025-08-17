@@ -20,9 +20,9 @@ public record
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV3 for TagState
+    ///     Internal state managed by SafeUnsafeProjectionStateV4 for TagState
     /// </summary>
-    public SafeUnsafeProjectionStateV3<TagState> State { get; init; } = new();
+    public SafeUnsafeProjectionStateV4<TagState> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
 
@@ -47,13 +47,16 @@ public record
             return ResultBox.FromValue(payload);
         }
 
+        // Create projection function
+        Func<Event, IEnumerable<ProjectionRequest<TagState>>> projectionFunction = (evt) =>
+            CreateProjectionRequests(weatherForecastTags, evt);
+        
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
-        var newState = payload.State.UpdateSafeWindowThreshold(threshold);
-
-        // Process the event - the projector will handle unknown event types
-        var requests = CreateProjectionRequests(weatherForecastTags, ev);
-        var updatedState = newState.ProcessEventWithRequests(ev, requests);
+        
+        // Update threshold and process event
+        var newState = payload.State.UpdateSafeWindowThreshold(threshold, projectionFunction);
+        var updatedState = newState.ProcessEvent(ev, projectionFunction);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }

@@ -2,10 +2,10 @@ using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-///     Optimized projection state manager with safe/unsafe handling
+///     Improved projection state manager with unified projection logic
 /// </summary>
 /// <typeparam name="T">The type of data being projected</typeparam>
-public record SafeUnsafeProjectionStateV3<T> where T : class
+public record SafeUnsafeProjectionStateV4<T> where T : class
 {
     /// <summary>
     ///     Current data (includes unsafe modifications)
@@ -24,9 +24,9 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
     /// </summary>
     public string SafeWindowThreshold { get; init; } = string.Empty;
 
-    public SafeUnsafeProjectionStateV3() { }
+    public SafeUnsafeProjectionStateV4() { }
 
-    private SafeUnsafeProjectionStateV3(
+    private SafeUnsafeProjectionStateV4(
         Dictionary<Guid, T> currentData,
         Dictionary<Guid, SafeStateBackup<T>> safeBackup,
         string safeWindowThreshold)
@@ -37,52 +37,17 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
     }
 
     /// <summary>
-    ///     Process an event with projections (without type parameter)
+    ///     Process an event with a unified projection function
     /// </summary>
     /// <param name="evt">Event to process</param>
-    /// <param name="requestProvider">Function that returns projection requests for the event</param>
+    /// <param name="projectionFunction">Function that handles all event types and returns projection requests</param>
     /// <returns>New state after processing</returns>
-    public SafeUnsafeProjectionStateV3<T> ProcessEventWithRequests(
+    public SafeUnsafeProjectionStateV4<T> ProcessEvent(
         Event evt,
-        IEnumerable<ProjectionRequest<T>> requests)
+        Func<Event, IEnumerable<ProjectionRequest<T>>> projectionFunction)
     {
-        var requestList = requests.ToList();
-        if (requestList.Count == 0)
-        {
-            return this; // No projections requested
-        }
-
-        var isEventSafe = string.Compare(evt.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0;
-
-        // First, process any events that have become safe
-        var currentState = ProcessNewlySafeEvents();
-
-        // Now process the current event
-        if (isEventSafe)
-        {
-            return currentState.ProcessSafeProjection(requestList, evt);
-        }
-        return currentState.ProcessUnsafeProjection(requestList, evt);
-    }
-
-    /// <summary>
-    ///     Process an event with handler
-    /// </summary>
-    /// <typeparam name="TPayload">Event payload type</typeparam>
-    /// <param name="evt">The event to process</param>
-    /// <param name="requestHandler">Handler that returns projection requests</param>
-    /// <returns>New state after processing</returns>
-    public SafeUnsafeProjectionStateV3<T> ProcessEvent<TPayload>(
-        Event evt,
-        Func<TPayload, IEnumerable<ProjectionRequest<T>>> requestHandler) where TPayload : class
-    {
-        if (evt.Payload is not TPayload payload)
-        {
-            return this; // Event doesn't match expected type
-        }
-
-        // Get projection requests from handler
-        var requests = requestHandler(payload).ToList();
+        // Get projection requests from the unified function
+        var requests = projectionFunction(evt).ToList();
         if (requests.Count == 0)
         {
             return this; // No projections requested
@@ -91,7 +56,7 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
         var isEventSafe = string.Compare(evt.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0;
 
         // First, process any events that have become safe
-        var currentState = ProcessNewlySafeEvents();
+        var currentState = ProcessNewlySafeEvents(projectionFunction);
 
         // Now process the current event
         if (isEventSafe)
@@ -102,13 +67,32 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
     }
 
     /// <summary>
+    ///     Process multiple events with a unified projection function
+    /// </summary>
+    /// <param name="events">Events to process</param>
+    /// <param name="projectionFunction">Function that handles all event types and returns projection requests</param>
+    /// <returns>New state after processing all events</returns>
+    public SafeUnsafeProjectionStateV4<T> ProcessEvents(
+        IEnumerable<Event> events,
+        Func<Event, IEnumerable<ProjectionRequest<T>>> projectionFunction)
+    {
+        var state = this;
+        foreach (var evt in events)
+        {
+            state = state.ProcessEvent(evt, projectionFunction);
+        }
+        return state;
+    }
+
+    /// <summary>
     ///     Process events that have transitioned from unsafe to safe
     /// </summary>
-    private SafeUnsafeProjectionStateV3<T> ProcessNewlySafeEvents()
+    private SafeUnsafeProjectionStateV4<T> ProcessNewlySafeEvents(
+        Func<Event, IEnumerable<ProjectionRequest<T>>> projectionFunction)
     {
         var newCurrentData = new Dictionary<Guid, T>(_currentData);
         var newSafeBackup = new Dictionary<Guid, SafeStateBackup<T>>();
-        var eventsToReprocess = new List<(Guid ItemId, Event Event)>();
+        var hasChanges = false;
 
         // Check each backup to see if any unsafe events have become safe
         foreach (var kvp in _safeBackup)
@@ -130,42 +114,84 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
 
             if (nowSafeEvents.Count > 0)
             {
-                // Some events have become safe, need to reprocess
-                // Start from the backed-up safe state
+                hasChanges = true;
+                
+                // Reprocess from safe state
                 var currentItemState = backup.SafeState;
-
-                // Collect events to reprocess
+                
+                // Apply each event that became safe
                 foreach (var safeEvent in nowSafeEvents)
                 {
-                    eventsToReprocess.Add((itemId, safeEvent));
+                    var requests = projectionFunction(safeEvent)
+                        .Where(r => r.ItemId == itemId)
+                        .ToList();
+                    
+                    foreach (var request in requests)
+                    {
+                        currentItemState = request.Projector(currentItemState);
+                    }
                 }
 
                 if (stillUnsafeEvents.Count > 0)
                 {
-                    // Still have unsafe events, update backup
-                    newSafeBackup[itemId] = new SafeStateBackup<T>(backup.SafeState, stillUnsafeEvents);
+                    // Update backup with new safe state
+                    newSafeBackup[itemId] = new SafeStateBackup<T>(currentItemState!, stillUnsafeEvents);
+                    
+                    // Reprocess unsafe events on top of new safe state
+                    var unsafeState = currentItemState;
+                    foreach (var unsafeEvent in stillUnsafeEvents)
+                    {
+                        var requests = projectionFunction(unsafeEvent)
+                            .Where(r => r.ItemId == itemId)
+                            .ToList();
+                        
+                        foreach (var request in requests)
+                        {
+                            unsafeState = request.Projector(unsafeState);
+                        }
+                    }
+                    
+                    if (unsafeState != null)
+                    {
+                        newCurrentData[itemId] = unsafeState;
+                    }
+                    else
+                    {
+                        newCurrentData.Remove(itemId);
+                    }
                 }
-                // If no more unsafe events, backup will be removed (not added to newSafeBackup)
-            } else
+                else
+                {
+                    // No more unsafe events, update current data directly
+                    if (currentItemState != null)
+                    {
+                        newCurrentData[itemId] = currentItemState;
+                    }
+                    else
+                    {
+                        newCurrentData.Remove(itemId);
+                    }
+                }
+            }
+            else
             {
                 // All events still unsafe, keep backup as is
                 newSafeBackup[itemId] = backup;
             }
         }
 
-        // Create state with updated backups
-        var state = new SafeUnsafeProjectionStateV3<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        if (!hasChanges)
+        {
+            return this;
+        }
 
-        // Reprocess any events that became safe
-        // This would need to be done through the handler in real usage
-        // For now, we return the state ready for reprocessing
-        return state;
+        return new SafeUnsafeProjectionStateV4<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
     }
 
     /// <summary>
     ///     Process safe projection requests
     /// </summary>
-    private SafeUnsafeProjectionStateV3<T> ProcessSafeProjection(List<ProjectionRequest<T>> requests, Event evt)
+    private SafeUnsafeProjectionStateV4<T> ProcessSafeProjection(List<ProjectionRequest<T>> requests, Event evt)
     {
         var newCurrentData = new Dictionary<Guid, T>(_currentData);
         var newSafeBackup = new Dictionary<Guid, SafeStateBackup<T>>(_safeBackup);
@@ -186,7 +212,8 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
 
                     // Current data stays as is (has unsafe modifications applied)
                     // We don't update current because it has unsafe events applied
-                } else
+                }
+                else
                 {
                     // Item deleted in safe state
                     newSafeBackup.Remove(request.ItemId);
@@ -196,7 +223,8 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
                         newCurrentData.Remove(request.ItemId);
                     }
                 }
-            } else
+            }
+            else
             {
                 // No unsafe modifications, directly update current
                 var currentValue = newCurrentData.TryGetValue(request.ItemId, out var existing) ? existing : null;
@@ -205,20 +233,21 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
                 if (newValue != null)
                 {
                     newCurrentData[request.ItemId] = newValue;
-                } else
+                }
+                else
                 {
                     newCurrentData.Remove(request.ItemId);
                 }
             }
         }
 
-        return new SafeUnsafeProjectionStateV3<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        return new SafeUnsafeProjectionStateV4<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
     }
 
     /// <summary>
     ///     Process unsafe projection requests
     /// </summary>
-    private SafeUnsafeProjectionStateV3<T> ProcessUnsafeProjection(List<ProjectionRequest<T>> requests, Event evt)
+    private SafeUnsafeProjectionStateV4<T> ProcessUnsafeProjection(List<ProjectionRequest<T>> requests, Event evt)
     {
         var newCurrentData = new Dictionary<Guid, T>(_currentData);
         var newSafeBackup = new Dictionary<Guid, SafeStateBackup<T>>(_safeBackup);
@@ -238,12 +267,14 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
                 if (newValue != null)
                 {
                     newCurrentData[request.ItemId] = newValue;
-                } else
+                }
+                else
                 {
                     newCurrentData.Remove(request.ItemId);
                     newSafeBackup.Remove(request.ItemId);
                 }
-            } else
+            }
+            else
             {
                 // First unsafe modification for this item
                 // Backup current (safe) state before modifying
@@ -260,7 +291,8 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
                     if (safeState != null)
                     {
                         newSafeBackup[request.ItemId] = new SafeStateBackup<T>(safeState, new List<Event> { evt });
-                    } else
+                    }
+                    else
                     {
                         // New item created by unsafe event, track it
                         // Use null or a default instance as safe state
@@ -273,16 +305,18 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
             }
         }
 
-        return new SafeUnsafeProjectionStateV3<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        return new SafeUnsafeProjectionStateV4<T>(newCurrentData, newSafeBackup, SafeWindowThreshold);
     }
 
     /// <summary>
-    ///     Update SafeWindow threshold
+    ///     Update SafeWindow threshold and reprocess events if needed
     /// </summary>
-    public SafeUnsafeProjectionStateV3<T> UpdateSafeWindowThreshold(string newThreshold)
+    public SafeUnsafeProjectionStateV4<T> UpdateSafeWindowThreshold(
+        string newThreshold,
+        Func<Event, IEnumerable<ProjectionRequest<T>>> projectionFunction)
     {
         var newState = this with { SafeWindowThreshold = newThreshold };
-        return newState.ProcessNewlySafeEvents();
+        return newState.ProcessNewlySafeEvents(projectionFunction);
     }
 
     /// <summary>
@@ -307,7 +341,8 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
                     result[kvp.Key] = backup.SafeState;
                 }
                 // If SafeState is null, item was created by unsafe event, skip it
-            } else
+            }
+            else
             {
                 // No unsafe modifications, current is safe
                 result[kvp.Key] = kvp.Value;
@@ -334,25 +369,5 @@ public record SafeUnsafeProjectionStateV3<T> where T : class
     public IEnumerable<Event> GetAllUnsafeEvents()
     {
         return _safeBackup.Values.SelectMany(b => b.UnsafeEvents).Distinct().OrderBy(e => e.SortableUniqueIdValue);
-    }
-
-    /// <summary>
-    ///     Get items that need reprocessing when events become safe
-    /// </summary>
-    public IEnumerable<(Guid ItemId, T SafeState, IEnumerable<Event> EventsToReprocess)> GetItemsForReprocessing()
-    {
-        foreach (var kvp in _safeBackup)
-        {
-            var eventsNowSafe = kvp
-                .Value
-                .UnsafeEvents
-                .Where(e => string.Compare(e.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0)
-                .OrderBy(e => e.SortableUniqueIdValue);
-
-            if (eventsNowSafe.Any())
-            {
-                yield return (kvp.Key, kvp.Value.SafeState, eventsNowSafe);
-            }
-        }
     }
 }
