@@ -65,98 +65,94 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         // Process the event based on its type
         var updatedState = ev.Payload switch
         {
-            WeatherForecastCreated created => ProcessWeatherForecastCreated(newState, ev, created, weatherForecastTags),
-            WeatherForecastUpdated updated => ProcessWeatherForecastUpdated(newState, ev, updated, weatherForecastTags),
-            WeatherForecastDeleted deleted => ProcessWeatherForecastDeleted(newState, ev, deleted, weatherForecastTags),
+            WeatherForecastCreated created => ProcessEventWithTags<WeatherForecastCreated>(
+                newState, ev, weatherForecastTags,
+                (tag, current) => CreateOrUpdateForecast(current, tag.ForecastId, created, ev)
+            ),
+            WeatherForecastUpdated updated => ProcessEventWithTags<WeatherForecastUpdated>(
+                newState, ev, weatherForecastTags,
+                (tag, current) => UpdateForecast(current, updated, ev)
+            ),
+            WeatherForecastDeleted _ => ProcessEventWithTags<WeatherForecastDeleted>(
+                newState, ev, weatherForecastTags,
+                (tag, current) => null // Delete the item
+            ),
             _ => newState // Unknown event type, skip
         };
         
         return ResultBox.FromValue(payload with { State = updatedState });
     }
     
-    
-    private SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessWeatherForecastCreated(
+    /// <summary>
+    /// Generic method to process events with tags
+    /// </summary>
+    private SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessEventWithTags<TPayload>(
         SafeUnsafeProjectionStateV3<WeatherForecastItem> state,
         Event ev,
+        List<WeatherForecastTag> tags,
+        Func<WeatherForecastTag, WeatherForecastItem?, WeatherForecastItem?> projector)
+        where TPayload : class
+    {
+        return state.ProcessEvent<TPayload>(ev, _ =>
+            tags.Select(tag => new ProjectionRequest<WeatherForecastItem>(
+                tag.ForecastId,
+                current => projector(tag, current)
+            ))
+        );
+    }
+    
+    /// <summary>
+    /// Create new or update existing forecast
+    /// </summary>
+    private WeatherForecastItem? CreateOrUpdateForecast(
+        WeatherForecastItem? current,
+        Guid forecastId,
         WeatherForecastCreated created,
-        List<WeatherForecastTag> tags)
+        Event ev)
     {
-        return state.ProcessEvent<WeatherForecastCreated>(ev, (_) =>
+        if (current != null)
         {
-            // Create projection requests for each tagged forecast
-            return tags.Select(tag => new ProjectionRequest<WeatherForecastItem>(
-                tag.ForecastId,
-                current =>
-                {
-                    // Should not exist yet
-                    if (current != null)
-                    {
-                        // Already exists, update it
-                        return current with
-                        {
-                            Date = created.Date.ToDateTime(TimeOnly.MinValue),
-                            TemperatureC = created.TemperatureC,
-                            Summary = created.Summary,
-                            LastUpdated = GetEventTimestamp(ev)
-                        };
-                    }
-                    
-                    // Create new
-                    return new WeatherForecastItem(
-                        tag.ForecastId,
-                        created.Date.ToDateTime(TimeOnly.MinValue),
-                        created.TemperatureC,
-                        created.Summary,
-                        GetEventTimestamp(ev)
-                    );
-                }
-            ));
-        });
+            // Already exists, update it
+            return current with
+            {
+                Date = created.Date.ToDateTime(TimeOnly.MinValue),
+                TemperatureC = created.TemperatureC,
+                Summary = created.Summary,
+                LastUpdated = GetEventTimestamp(ev)
+            };
+        }
+        
+        // Create new
+        return new WeatherForecastItem(
+            forecastId,
+            created.Date.ToDateTime(TimeOnly.MinValue),
+            created.TemperatureC,
+            created.Summary,
+            GetEventTimestamp(ev)
+        );
     }
     
-    private SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessWeatherForecastUpdated(
-        SafeUnsafeProjectionStateV3<WeatherForecastItem> state,
-        Event ev,
+    /// <summary>
+    /// Update existing forecast
+    /// </summary>
+    private WeatherForecastItem? UpdateForecast(
+        WeatherForecastItem? current,
         WeatherForecastUpdated updated,
-        List<WeatherForecastTag> tags)
+        Event ev)
     {
-        return state.ProcessEvent<WeatherForecastUpdated>(ev, (_) =>
+        if (current == null)
         {
-            return tags.Select(tag => new ProjectionRequest<WeatherForecastItem>(
-                tag.ForecastId,
-                current =>
-                {
-                    if (current == null)
-                    {
-                        // Item doesn't exist, can't update
-                        return null;
-                    }
-                    
-                    // Update existing item
-                    return current with
-                    {
-                        TemperatureC = updated.TemperatureC,
-                        Summary = updated.Summary,
-                        LastUpdated = GetEventTimestamp(ev)
-                    };
-                }
-            ));
-        });
-    }
-    
-    private SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessWeatherForecastDeleted(
-        SafeUnsafeProjectionStateV3<WeatherForecastItem> state,
-        Event ev,
-        WeatherForecastDeleted deleted,
-        List<WeatherForecastTag> tags)
-    {
-        return state.ProcessEvent<WeatherForecastDeleted>(ev, (_) =>
+            // Item doesn't exist, can't update
+            return null;
+        }
+        
+        // Update existing item
+        return current with
         {
-            return tags.Select(tag => new ProjectionRequest<WeatherForecastItem>(
-                tag.ForecastId,
-                current => null // Delete the item
-            ));
-        });
+            TemperatureC = updated.TemperatureC,
+            Summary = updated.Summary,
+            LastUpdated = GetEventTimestamp(ev)
+        };
     }
     
     /// <summary>
