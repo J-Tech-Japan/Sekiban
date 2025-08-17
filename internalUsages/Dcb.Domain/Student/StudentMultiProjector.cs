@@ -4,6 +4,7 @@ using ResultBoxes;
 using Dcb.Domain.Enrollment;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Tags;
 
 namespace Dcb.Domain.Student;
 
@@ -20,7 +21,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public string GetVersion() => "1.0.0";
 
-    public ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev)
+    public ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags)
     {
         var next = new Dictionary<Guid, Item>(payload.Students);
         switch (ev.Payload)

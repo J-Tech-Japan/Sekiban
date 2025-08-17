@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -8,7 +9,11 @@ namespace Sekiban.Dcb.MultiProjections;
 /// </summary>
 public interface IMultiProjector<T> : IMultiProjectorCommon where T : notnull
 {
-    ResultBox<T> Project(T payload, Event ev);
+    /// <summary>
+    /// Project with tags support for tag-based filtering
+    /// </summary>
+    ResultBox<T> Project(T payload, Event ev, List<ITag> tags);
+    
     static abstract T GenerateInitialPayload();
     static abstract string GetMultiProjectorName();
 }

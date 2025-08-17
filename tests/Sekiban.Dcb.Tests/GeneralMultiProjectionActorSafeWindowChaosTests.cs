@@ -8,6 +8,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Tags;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
@@ -259,7 +260,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         
         public string GetVersion() => "1.0.0";
         
-        public ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev)
+        public ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
         {
             var result = ev.Payload switch
             {

@@ -244,7 +244,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
         
         public string GetVersion() => "1.0.0";
         
-        public ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev)
+        public ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
         {
             var result = ev.Payload switch
             {
