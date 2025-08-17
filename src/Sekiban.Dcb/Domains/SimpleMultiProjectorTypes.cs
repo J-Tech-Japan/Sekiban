@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
@@ -15,10 +17,11 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public class SimpleMultiProjectorTypes : IMultiProjectorTypes
 {
-    private readonly ConcurrentDictionary<string, Func<object, Event, List<ITag>, ResultBox<object>>> _projectorFunctions = new();
+    private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload, Event, List<ITag>, ResultBox<IMultiProjectionPayload>>> _projectorFunctions = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
-    private readonly ConcurrentDictionary<string, Func<object>> _initialPayloadGenerators = new();
+    private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
+    private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
 
     /// <summary>
     ///     Register a multi projector type using its static GetMultiProjectorName
@@ -26,31 +29,21 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     public void RegisterProjector<TProjector>() 
         where TProjector : IMultiProjector<TProjector>, new()
     {
-        RegisterProjector<TProjector, TProjector>();
-    }
-
-    /// <summary>
-    ///     Register a multi projector type with payload type
-    /// </summary>
-    public void RegisterProjector<TProjector, TPayload>() 
-        where TProjector : IMultiProjector<TPayload>, new()
-        where TPayload : IMultiProjector<TPayload>, new()
-    {
         var projectorName = TProjector.GetMultiProjectorName();
         
         // Register the projector function
-        Func<object, Event, List<ITag>, ResultBox<object>> projectFunc = (payload, ev, tags) =>
+        Func<IMultiProjectionPayload, Event, List<ITag>, ResultBox<IMultiProjectionPayload>> projectFunc = (payload, ev, tags) =>
         {
-            if (payload is TPayload typedPayload)
+            if (payload is TProjector typedPayload)
             {
                 var result = TProjector.Project(typedPayload, ev, tags);
                 if (result.IsSuccess)
                 {
-                    return ResultBox.FromValue((object)result.GetValue());
+                    return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());
                 }
-                return ResultBox.Error<object>(result.GetException());
+                return ResultBox.Error<IMultiProjectionPayload>(result.GetException());
             }
-            return ResultBox.Error<object>(new InvalidCastException($"Payload is not of type {typeof(TPayload).Name}"));
+            return ResultBox.Error<IMultiProjectionPayload>(new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
         };
         
         if (!_projectorFunctions.TryAdd(projectorName, projectFunc))
@@ -71,23 +64,24 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         {
             // Only register if function was successfully added
             _projectorTypes[projectorName] = typeof(TProjector);
+            _typeToNameMap[typeof(TProjector)] = projectorName;
         }
         
         // Register the version
         _projectorVersions[projectorName] = TProjector.GetVersion();
         
         // Register the initial payload generator
-        _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        _initialPayloadGenerators[projectorName] = () => (IMultiProjectionPayload)TProjector.GenerateInitialPayload();
     }
 
-    public ResultBox<Func<object, Event, List<ITag>, ResultBox<object>>> GetProjectorFunction(string multiProjectorName)
+    public ResultBox<IMultiProjectionPayload> Project(string multiProjectorName, IMultiProjectionPayload payload, Event ev, List<ITag> tags)
     {
         if (_projectorFunctions.TryGetValue(multiProjectorName, out var projectorFunc))
         {
-            return ResultBox.FromValue(projectorFunc);
+            return projectorFunc(payload, ev, tags);
         }
 
-        return ResultBox.Error<Func<object, Event, List<ITag>, ResultBox<object>>>(
+        return ResultBox.Error<IMultiProjectionPayload>(
             new Exception($"Multi projector '{multiProjectorName}' not found"));
     }
 
@@ -102,17 +96,56 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             new Exception($"Multi projector '{multiProjectorName}' not found"));
     }
 
-    public ResultBox<Func<object>> GetInitialPayloadGenerator(string multiProjectorName)
+    
+    public ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName)
+    {
+        if (_initialPayloadGenerators.TryGetValue(multiProjectorName, out var generator))
+        {
+            return ResultBox.FromValue(generator());
+        }
+
+        return ResultBox.Error<IMultiProjectionPayload>(
+            new Exception($"Multi projector '{multiProjectorName}' not found"));
+    }
+
+    
+    public ResultBox<IMultiProjectionPayload> Deserialize(byte[] data, string multiProjectorName, System.Text.Json.JsonSerializerOptions jsonOptions)
+    {
+        try
+        {
+            // Get the projector type from the multiProjectorName
+            if (!_projectorTypes.TryGetValue(multiProjectorName, out var projectorType))
+            {
+                return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Multi projector '{multiProjectorName}' not found"));
+            }
+            
+            // Since TProjector and TPayload are the same type now, use the projector type directly
+            var json = System.Text.Encoding.UTF8.GetString(data);
+            var result = System.Text.Json.JsonSerializer.Deserialize(json, projectorType, jsonOptions);
+            if (result is IMultiProjectionPayload payload)
+            {
+                return ResultBox.FromValue(payload);
+            }
+            
+            return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Deserialized object is not an IMultiProjectionPayload"));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
+    
+    public ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName)
     {
         if (_initialPayloadGenerators.TryGetValue(multiProjectorName, out var generator))
         {
             return ResultBox.FromValue(generator);
         }
 
-        return ResultBox.Error<Func<object>>(
+        return ResultBox.Error<Func<IMultiProjectionPayload>>(
             new Exception($"Multi projector '{multiProjectorName}' not found"));
     }
-
+    
     public ResultBox<Type> GetProjectorType(string multiProjectorName)
     {
         if (_projectorTypes.TryGetValue(multiProjectorName, out var type))

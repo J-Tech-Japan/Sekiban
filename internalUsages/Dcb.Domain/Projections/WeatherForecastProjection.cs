@@ -92,7 +92,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     /// Generic method to process events with tags
     /// </summary>
-    private SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessEventWithTags<TPayload>(
+    private static SafeUnsafeProjectionStateV3<WeatherForecastItem> ProcessEventWithTags<TPayload>(
         SafeUnsafeProjectionStateV3<WeatherForecastItem> state,
         Event ev,
         List<WeatherForecastTag> tags,

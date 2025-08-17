@@ -29,7 +29,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
         
         var multiProjectorTypes = new SimpleMultiProjectorTypes();
-        multiProjectorTypes.RegisterProjector<TestMultiProjector, TestMultiProjector>(TestMultiProjector.MultiProjectorName);
+        multiProjectorTypes.RegisterProjector<TestMultiProjector>();
 
         _domainTypes = new DcbDomainTypes(
             eventTypes, 

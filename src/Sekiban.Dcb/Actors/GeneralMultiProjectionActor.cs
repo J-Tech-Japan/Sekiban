@@ -7,6 +7,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Actors
 {
@@ -71,14 +72,8 @@ namespace Sekiban.Dcb.Actors
                 var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
                 
                 // Always update unsafe state
-                var projectFuncResult = _types.GetProjectorFunction(_projectorName);
-                if (!projectFuncResult.IsSuccess)
-                {
-                    throw projectFuncResult.GetException();
-                }
-                var projectFunc = projectFuncResult.GetValue();
-                var tags = new List<ITag>(); // Extract tags if needed
-                var unsafeProjected = projectFunc(_unsafeProjector!, ev, tags);
+                var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
+                var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags);
                 if (!unsafeProjected.IsSuccess)
                 {
                     throw unsafeProjected.GetException();
@@ -179,7 +174,7 @@ namespace Sekiban.Dcb.Actors
 
         public Task SetCurrentState(SerializableMultiProjectionState state)
         {
-            var rb = _types.Deserialize(state.Payload, state.MultiProjectionPayloadType, _jsonOptions);
+            var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
             if (!rb.IsSuccess)
             {
                 throw rb.GetException();
@@ -230,25 +225,34 @@ namespace Sekiban.Dcb.Actors
                 version = _safeVersion;
             }
 
-            // Resolve projector name and serialize payload
-            var projectorNameRb = _types.GetMultiProjectorNameFromMultiProjector(projectorToSerialize);
-            if (!projectorNameRb.IsSuccess)
+            // Use the projector name from constructor and serialize payload directly
+            var name = _projectorName;
+            
+            // Get version from the type
+            var versionResult = _types.GetProjectorVersion(_projectorName);
+            if (!versionResult.IsSuccess)
             {
-                return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(projectorNameRb.GetException()));
+                return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(versionResult.GetException()));
             }
-            var name = projectorNameRb.GetValue();
+            var projectorVersion = versionResult.GetValue();
 
-            var payloadBytesRb = _types.Serialize(projectorToSerialize, _jsonOptions);
-            if (!payloadBytesRb.IsSuccess)
+            // Serialize directly using System.Text.Json
+            byte[] payloadBytes;
+            try
             {
-                return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(payloadBytesRb.GetException()));
+                var json = System.Text.Json.JsonSerializer.Serialize(projectorToSerialize, projectorToSerialize.GetType(), _jsonOptions);
+                payloadBytes = System.Text.Encoding.UTF8.GetBytes(json);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(ex));
             }
 
             var state = new SerializableMultiProjectionState(
-                payloadBytesRb.GetValue(),
+                payloadBytes,
                 projectorToSerialize.GetType().FullName ?? projectorToSerialize.GetType().Name,
                 name,
-                projectorToSerialize.GetVersion(),
+                projectorVersion,
                 lastSortableId,
                 lastEventId,
                 version,
@@ -265,17 +269,19 @@ namespace Sekiban.Dcb.Actors
         public Task<ResultBox<MultiProjectionState>> GetUnsafeStateAsync()
         {
             InitializeProjectorsIfNeeded();
-
-            var projectorNameRb = _types.GetMultiProjectorNameFromMultiProjector(_unsafeProjector!);
-            if (!projectorNameRb.IsSuccess)
+            
+            // Get version from the type
+            var versionResult = _types.GetProjectorVersion(_projectorName);
+            if (!versionResult.IsSuccess)
             {
-                return Task.FromResult(ResultBox.Error<MultiProjectionState>(projectorNameRb.GetException()));
+                return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
             }
+            var version = versionResult.GetValue();
 
             var state = new MultiProjectionState(
                 (IMultiProjectionPayload)_unsafeProjector!,
-                projectorNameRb.GetValue(),
-                _unsafeProjector!.GetVersion(),
+                _projectorName,
+                version,
                 _unsafeLastSortableUniqueId,
                 _unsafeLastEventId,
                 _unsafeVersion,
@@ -289,15 +295,13 @@ namespace Sekiban.Dcb.Actors
         {
             if (_safeProjector == null)
             {
-                var init = _types.GetInitialPayloadGenerator(_projectorName);
+                var init = _types.GenerateInitialPayload(_projectorName);
                 if (!init.IsSuccess)
                 {
                     throw init.GetException();
                 }
-                var generator = init.GetValue();
-                var payload = generator();
-                _safeProjector = (IMultiProjectionPayload)payload;
-                _unsafeProjector = CloneProjector(_safeProjector);
+                _safeProjector = init.GetValue();
+                _unsafeProjector = CloneProjector(_safeProjector);  
             }
         }
         
@@ -333,7 +337,8 @@ namespace Sekiban.Dcb.Actors
             
             foreach (var ev in allEvents)
             {
-                var projected = _types.Project(newSafeProjector, ev);
+                var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
+                var projected = _types.Project(_projectorName, newSafeProjector, ev, tags);
                 if (!projected.IsSuccess)
                 {
                     throw projected.GetException();

@@ -65,7 +65,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
     /// <summary>
     /// Process events with tags using WeatherForecastProjector
     /// </summary>
-    private SafeUnsafeProjectionStateV3<TagState> ProcessEventWithTags(
+    private static SafeUnsafeProjectionStateV3<TagState> ProcessEventWithTags(
         SafeUnsafeProjectionStateV3<TagState> state,
         Event ev,
         List<WeatherForecastTag> tags)
@@ -78,7 +78,7 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
     /// <summary>
     /// Create projection requests for each tag
     /// </summary>
-    private IEnumerable<ProjectionRequest<TagState>> CreateProjectionRequests(
+    private static IEnumerable<ProjectionRequest<TagState>> CreateProjectionRequests(
         List<WeatherForecastTag> tags,
         Event ev)
     {

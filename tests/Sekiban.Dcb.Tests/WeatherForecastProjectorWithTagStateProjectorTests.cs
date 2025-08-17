@@ -32,7 +32,7 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result = _projector.Project(_projector, createEvent, new List<ITag> { weatherTag });
+        var result = WeatherForecastProjectorWithTagStateProjector.Project(_projector, createEvent, new List<ITag> { weatherTag });
         var afterCreate = result.GetValue();
         
         // Assert
@@ -73,10 +73,10 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result1 = _projector.Project(_projector, createEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjectorWithTagStateProjector.Project(_projector, createEvent, new List<ITag> { tag });
         var afterCreate = result1.GetValue();
         
-        var result2 = afterCreate.Project(afterCreate, updateEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjectorWithTagStateProjector.Project(afterCreate, updateEvent, new List<ITag> { tag });
         var afterUpdate = result2.GetValue();
         
         // Assert
@@ -117,10 +117,10 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result1 = _projector.Project(_projector, createEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjectorWithTagStateProjector.Project(_projector, createEvent, new List<ITag> { tag });
         var afterCreate = result1.GetValue();
         
-        var result2 = afterCreate.Project(afterCreate, deleteEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjectorWithTagStateProjector.Project(afterCreate, deleteEvent, new List<ITag> { tag });
         var afterDelete = result2.GetValue();
         
         // Assert
@@ -156,10 +156,10 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result1 = _projector.Project(_projector, createEvent1, new List<ITag> { tag1 });
+        var result1 = WeatherForecastProjectorWithTagStateProjector.Project(_projector, createEvent1, new List<ITag> { tag1 });
         var after1 = result1.GetValue();
         
-        var result2 = after1.Project(after1, createEvent2, new List<ITag> { tag2 });
+        var result2 = WeatherForecastProjectorWithTagStateProjector.Project(after1, createEvent2, new List<ITag> { tag2 });
         var after2 = result2.GetValue();
         
         // Assert
@@ -190,10 +190,10 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result1 = _projector.Project(_projector, safeEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjectorWithTagStateProjector.Project(_projector, safeEvent, new List<ITag> { tag });
         var afterSafe = result1.GetValue();
         
-        var result2 = afterSafe.Project(afterSafe, unsafeEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjectorWithTagStateProjector.Project(afterSafe, unsafeEvent, new List<ITag> { tag });
         var afterUnsafe = result2.GetValue();
         
         // Assert
@@ -238,10 +238,10 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
         
         // Act
-        var result1 = _projector.Project(_projector, createEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjectorWithTagStateProjector.Project(_projector, createEvent, new List<ITag> { tag });
         var afterCreate = result1.GetValue();
         
-        var result2 = afterCreate.Project(afterCreate, unknownEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjectorWithTagStateProjector.Project(afterCreate, unknownEvent, new List<ITag> { tag });
         var afterUnknown = result2.GetValue();
         
         // Assert
