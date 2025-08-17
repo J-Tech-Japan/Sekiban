@@ -186,14 +186,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         if (!projectorResult.IsSuccess)
         {
             // Return empty state if projector not found
-            return new TagState(
-                new EmptyTagStatePayload(),
-                0,
-                "",
-                _tagStateId.TagGroup,
-                _tagStateId.TagContent,
-                _tagStateId.TagProjectorName,
-                string.Empty);
+            return TagState.GetEmpty(_tagStateId);
         }
 
         var projector = projectorResult.GetValue();
@@ -203,14 +196,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         if (!eventsResult.IsSuccess)
         {
             // Return empty state if events cannot be read
-            return new TagState(
-                new EmptyTagStatePayload(),
-                0,
-                "",
-                _tagStateId.TagGroup,
-                _tagStateId.TagContent,
-                _tagStateId.TagProjectorName,
-                projector.GetProjectorVersion());
+            return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projector.GetProjectorVersion() };
         }
 
         var events = eventsResult.GetValue().ToList();
@@ -218,14 +204,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         // If TagConsistentActor has no LastSortableUniqueId, return empty state
         if (string.IsNullOrEmpty(latestSortableUniqueId))
         {
-            return new TagState(
-                new EmptyTagStatePayload(),
-                0,
-                "",
-                _tagStateId.TagGroup,
-                _tagStateId.TagContent,
-                _tagStateId.TagProjectorName,
-                projector.GetProjectorVersion());
+            return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projector.GetProjectorVersion() };
         }
 
         // Filter events up to the latest sortable unique ID if provided

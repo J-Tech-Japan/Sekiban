@@ -1,25 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Dcb.Domain.Weather;
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
-using Dcb.Domain.Weather;
-using Sekiban.Dcb.Common;
-
 namespace Dcb.Domain.Projections;
-
-/// <summary>
-/// Weather forecast item in projection
-/// </summary>
-public record WeatherForecastItem(
-    Guid ForecastId,
-    DateTime Date,
-    int TemperatureC,
-    string? Summary,
-    DateTime LastUpdated
-);
 
 /// <summary>
 /// Weather forecast projection state using SafeUnsafeProjectionStateV3
@@ -67,17 +52,38 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         {
             WeatherForecastCreated created => ProcessEventWithTags<WeatherForecastCreated>(
                 newState, ev, weatherForecastTags,
-                (tag, current) => CreateOrUpdateForecast(current, tag.ForecastId, created, ev)
+                (tag, current) => current != null
+                    ? current with  // Update existing
+                    {
+                        Date = created.Date.ToDateTime(TimeOnly.MinValue),
+                        TemperatureC = created.TemperatureC,
+                        Summary = created.Summary,
+                        LastUpdated = GetEventTimestamp(ev)
+                    }
+                    : new WeatherForecastItem(  // Create new
+                        tag.ForecastId,
+                        created.Date.ToDateTime(TimeOnly.MinValue),
+                        created.TemperatureC,
+                        created.Summary,
+                        GetEventTimestamp(ev)
+                    )
             ),
             WeatherForecastUpdated updated => ProcessEventWithTags<WeatherForecastUpdated>(
                 newState, ev, weatherForecastTags,
-                (tag, current) => UpdateForecast(current, updated, ev)
+                (tag, current) => current != null
+                    ? current with  // Update existing
+                    {
+                        TemperatureC = updated.TemperatureC,
+                        Summary = updated.Summary,
+                        LastUpdated = GetEventTimestamp(ev)
+                    }
+                    : null  // Can't update non-existent item
             ),
             WeatherForecastDeleted _ => ProcessEventWithTags<WeatherForecastDeleted>(
                 newState, ev, weatherForecastTags,
-                (tag, current) => null // Delete the item
+                (tag, current) => null  // Delete the item
             ),
-            _ => newState // Unknown event type, skip
+            _ => newState  // Unknown event type, skip
         };
         
         return ResultBox.FromValue(payload with { State = updatedState });
@@ -99,60 +105,6 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 current => projector(tag, current)
             ))
         );
-    }
-    
-    /// <summary>
-    /// Create new or update existing forecast
-    /// </summary>
-    private WeatherForecastItem? CreateOrUpdateForecast(
-        WeatherForecastItem? current,
-        Guid forecastId,
-        WeatherForecastCreated created,
-        Event ev)
-    {
-        if (current != null)
-        {
-            // Already exists, update it
-            return current with
-            {
-                Date = created.Date.ToDateTime(TimeOnly.MinValue),
-                TemperatureC = created.TemperatureC,
-                Summary = created.Summary,
-                LastUpdated = GetEventTimestamp(ev)
-            };
-        }
-        
-        // Create new
-        return new WeatherForecastItem(
-            forecastId,
-            created.Date.ToDateTime(TimeOnly.MinValue),
-            created.TemperatureC,
-            created.Summary,
-            GetEventTimestamp(ev)
-        );
-    }
-    
-    /// <summary>
-    /// Update existing forecast
-    /// </summary>
-    private WeatherForecastItem? UpdateForecast(
-        WeatherForecastItem? current,
-        WeatherForecastUpdated updated,
-        Event ev)
-    {
-        if (current == null)
-        {
-            // Item doesn't exist, can't update
-            return null;
-        }
-        
-        // Update existing item
-        return current with
-        {
-            TemperatureC = updated.TemperatureC,
-            Summary = updated.Summary,
-            LastUpdated = GetEventTimestamp(ev)
-        };
     }
     
     /// <summary>

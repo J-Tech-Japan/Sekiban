@@ -6,23 +6,6 @@ using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-/// Backup of safe state with unsafe events that modified it
-/// </summary>
-public record SafeStateBackup<T>(
-    T SafeState,
-    List<Event> UnsafeEvents
-) where T : class;
-
-/// <summary>
-/// Projection request from handler
-/// </summary>
-public record ProjectionRequest<T>(
-    Guid ItemId,
-    Func<T?, T> Projector  // Transform function (null input means create new)
-) where T : class;
-
-
-/// <summary>
 /// Optimized projection state manager with safe/unsafe handling
 /// </summary>
 /// <typeparam name="T">The type of data being projected</typeparam>
