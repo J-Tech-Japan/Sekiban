@@ -59,13 +59,8 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
         var threshold = GetSafeWindowThreshold();
         var newState = payload.State.UpdateSafeWindowThreshold(threshold);
         
-        // Process the event based on its type
-        var updatedState = ev.Payload switch
-        {
-            WeatherForecastCreated _ or WeatherForecastUpdated _ or WeatherForecastDeleted _ =>
-                ProcessEventWithTags(newState, ev, weatherForecastTags),
-            _ => newState // Unknown event type, skip
-        };
+        // Process the event - the projector will handle unknown event types
+        var updatedState = ProcessEventWithTags(newState, ev, weatherForecastTags);
         
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -78,20 +73,26 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
         Event ev,
         List<WeatherForecastTag> tags)
     {
-        // Use the appropriate event type based on the payload
-        return ev.Payload switch
-        {
-            WeatherForecastCreated => state.ProcessEvent<WeatherForecastCreated>(ev, _ =>
-                CreateProjectionRequests(tags, ev)
-            ),
-            WeatherForecastUpdated => state.ProcessEvent<WeatherForecastUpdated>(ev, _ =>
-                CreateProjectionRequests(tags, ev)
-            ),
-            WeatherForecastDeleted => state.ProcessEvent<WeatherForecastDeleted>(ev, _ =>
-                CreateProjectionRequests(tags, ev)
-            ),
-            _ => state
-        };
+        // Process event with the actual payload type
+        // The projector will handle unknown event types by returning state unchanged
+        var payloadType = ev.Payload.GetType();
+        
+        // Use reflection to call ProcessEvent with the correct type parameter
+        var method = GetType().GetMethod(nameof(ProcessEventGeneric), 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var genericMethod = method!.MakeGenericMethod(payloadType);
+        return (SafeUnsafeProjectionStateV3<TagState>)genericMethod.Invoke(this, new object[] { state, ev, tags })!;
+    }
+    
+    /// <summary>
+    /// Generic helper to process events
+    /// </summary>
+    private SafeUnsafeProjectionStateV3<TagState> ProcessEventGeneric<TPayload>(
+        SafeUnsafeProjectionStateV3<TagState> state,
+        Event ev,
+        List<WeatherForecastTag> tags) where TPayload : class
+    {
+        return state.ProcessEvent<TPayload>(ev, _ => CreateProjectionRequests(tags, ev));
     }
     
     /// <summary>

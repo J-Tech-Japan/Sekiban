@@ -218,6 +218,55 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         Assert.Equal(20, safeForecast.TemperatureC);
     }
     
+    [Fact]
+    public void Projector_IgnoresUnknownEventTypes()
+    {
+        // Arrange
+        var forecastId = Guid.NewGuid();
+        var tag = new WeatherForecastTag(forecastId);
+        
+        // Create a weather forecast first
+        var createEvent = CreateEvent(
+            new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(DateTime.UtcNow), 20, "Sunny"),
+            DateTime.UtcNow.AddSeconds(-30)
+        );
+        
+        // Create an unknown event type
+        var unknownEvent = CreateEvent(
+            new UnknownEventType("Some data"),
+            DateTime.UtcNow.AddSeconds(-25)
+        );
+        
+        // Act
+        var result1 = _projector.Project(_projector, createEvent, new List<ITag> { tag });
+        var afterCreate = result1.GetValue();
+        
+        var result2 = afterCreate.Project(afterCreate, unknownEvent, new List<ITag> { tag });
+        var afterUnknown = result2.GetValue();
+        
+        // Assert
+        Assert.True(result1.IsSuccess);
+        Assert.True(result2.IsSuccess);
+        
+        // State should remain unchanged after unknown event
+        var stateAfterCreate = afterCreate.GetCurrentTagStates();
+        var stateAfterUnknown = afterUnknown.GetCurrentTagStates();
+        
+        Assert.Single(stateAfterCreate);
+        Assert.Single(stateAfterUnknown);
+        
+        var weatherStateCreate = (WeatherForecastState)stateAfterCreate[forecastId].Payload;
+        var weatherStateUnknown = (WeatherForecastState)stateAfterUnknown[forecastId].Payload;
+        
+        // State should be identical
+        Assert.Equal(weatherStateCreate.Location, weatherStateUnknown.Location);
+        Assert.Equal(weatherStateCreate.TemperatureC, weatherStateUnknown.TemperatureC);
+        Assert.Equal(weatherStateCreate.Summary, weatherStateUnknown.Summary);
+    }
+    
+    // Test event type that's not handled by WeatherForecastProjector
+    public record UnknownEventType(string Data) : IEventPayload;
+    
     private Event CreateEvent(IEventPayload payload, DateTime timestamp)
     {
         var sortableId = SortableUniqueId.Generate(timestamp, Guid.NewGuid());
