@@ -1,14 +1,11 @@
-using System;
 using Dcb.Domain;
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-/// TagTypes (SimpleTagTypes) の復元動作テスト。
+///     TagTypes (SimpleTagTypes) の復元動作テスト。
 /// </summary>
 public class TagTypesTests
 {

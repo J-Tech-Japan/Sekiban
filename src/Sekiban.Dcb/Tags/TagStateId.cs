@@ -1,5 +1,3 @@
-using Sekiban.Dcb.Domains;
-
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
@@ -26,20 +24,17 @@ public class TagStateId
         TagProjectorName = tagProjectorName;
     }
 
-    /// <summary>
-    ///     Creates a TagStateId from a tag and projector type
-    /// </summary>
-    public static TagStateId FromProjector<T>(ITag tag) where T : ITagProjector<T>
-    {
-        return new TagStateId(tag, T.ProjectorName);
-    }
-
     private TagStateId(string tagGroup, string tagContent, string tagProjectorName)
     {
         TagGroup = tagGroup;
         TagContent = tagContent;
         TagProjectorName = tagProjectorName;
     }
+
+    /// <summary>
+    ///     Creates a TagStateId from a tag and projector type
+    /// </summary>
+    public static TagStateId FromProjector<T>(ITag tag) where T : ITagProjector<T> => new(tag, T.ProjectorName);
 
     /// <summary>
     ///     Gets the string representation of the TagStateId

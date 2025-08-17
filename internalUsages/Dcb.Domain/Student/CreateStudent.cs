@@ -1,7 +1,7 @@
-using System.ComponentModel.DataAnnotations;
 using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.Student;
 
 // Commands

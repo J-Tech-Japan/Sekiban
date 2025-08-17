@@ -1,7 +1,7 @@
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
-/// Represents a single tag validation error
+///     Represents a single tag validation error
 /// </summary>
 public class TagValidationError
 {

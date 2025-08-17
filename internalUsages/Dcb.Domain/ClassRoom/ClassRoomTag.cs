@@ -7,7 +7,7 @@ public record ClassRoomTag(Guid ClassRoomId) : ITagGroup<ClassRoomTag>
     public string GetTagContent() => ClassRoomId.ToString();
     public static string TagGroupName => "ClassRoom";
     /// <summary>
-    /// content 文字列 (Guid) からタグインスタンスを生成します。
+    ///     content 文字列 (Guid) からタグインスタンスを生成します。
     /// </summary>
     public static ClassRoomTag FromContent(string content) => new(Guid.Parse(content));
 }

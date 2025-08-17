@@ -1,5 +1,5 @@
-using Sekiban.Dcb.Actors;
 using Dcb.Domain;
+using Sekiban.Dcb.Actors;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -17,7 +17,7 @@ public class TagConsistentActorReservationWindowTest
         {
             CancellationWindowSeconds = 2.0 // Short window for testing
         };
-    var actor = new GeneralTagConsistentActor(tagName, null, options, _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, options, _domainTypes);
 
         // Act & Assert
 
@@ -52,7 +52,7 @@ public class TagConsistentActorReservationWindowTest
     {
         // Arrange
         var tagName = "TestTag:456";
-    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
 
         // Act & Assert
 
@@ -74,7 +74,7 @@ public class TagConsistentActorReservationWindowTest
     {
         // Arrange
         var tagName = "TestTag:789";
-    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
 
         // Act & Assert
 
@@ -100,7 +100,7 @@ public class TagConsistentActorReservationWindowTest
         {
             CancellationWindowSeconds = 1.0 // Very short window
         };
-    var actor = new GeneralTagConsistentActor(tagName, null, options, _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, options, _domainTypes);
 
         // Make reservation
         var reservationResult = await actor.MakeReservationAsync("");

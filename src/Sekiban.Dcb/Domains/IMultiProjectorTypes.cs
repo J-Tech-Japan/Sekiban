@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
-
+using System.Text.Json;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -13,15 +10,22 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public interface IMultiProjectorTypes
 {
-    ResultBox<IMultiProjectionPayload> Project(string multiProjectorName, IMultiProjectionPayload payload, Event ev, List<ITag> tags);
-    
+    ResultBox<IMultiProjectionPayload> Project(
+        string multiProjectorName,
+        IMultiProjectionPayload payload,
+        Event ev,
+        List<ITag> tags);
+
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
-    
+
     ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName);
-    
+
     ResultBox<Type> GetProjectorType(string multiProjectorName);
-    
+
     ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName);
-    
-    ResultBox<IMultiProjectionPayload> Deserialize(byte[] data, string multiProjectorName, System.Text.Json.JsonSerializerOptions jsonOptions);
+
+    ResultBox<IMultiProjectionPayload> Deserialize(
+        byte[] data,
+        string multiProjectorName,
+        JsonSerializerOptions jsonOptions);
 }

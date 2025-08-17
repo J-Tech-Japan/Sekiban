@@ -190,7 +190,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         }
 
         var projectFunc = projectorFuncResult.GetValue();
-        
+
         // Get the projector version
         var versionResult = _domainTypes.TagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
@@ -274,5 +274,4 @@ public class GeneralTagStateActor : ITagStateActorCommon
     {
         await _statePersistent.ClearStateAsync();
     }
-
 }

@@ -1,5 +1,5 @@
-using Sekiban.Dcb.Actors;
 using Dcb.Domain;
+using Sekiban.Dcb.Actors;
 using System.Globalization;
 namespace Sekiban.Dcb.Tests;
 
@@ -28,8 +28,8 @@ public class TagConsistentActorOptionsTest
             CancellationWindowSeconds = 60.0 // 1 minute instead of default 30 seconds
         };
 
-    var domainTypes = DomainType.GetDomainTypes();
-    var actor = new GeneralTagConsistentActor(tagName, null, customOptions, domainTypes);
+        var domainTypes = DomainType.GetDomainTypes();
+        var actor = new GeneralTagConsistentActor(tagName, null, customOptions, domainTypes);
 
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");
@@ -59,8 +59,12 @@ public class TagConsistentActorOptionsTest
     {
         // Arrange
         var tagName = "TestTag:456";
-    var domainTypes = DomainType.GetDomainTypes();
-    var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), domainTypes); // Using default options
+        var domainTypes = DomainType.GetDomainTypes();
+        var actor = new GeneralTagConsistentActor(
+            tagName,
+            null,
+            new TagConsistentActorOptions(),
+            domainTypes); // Using default options
 
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");

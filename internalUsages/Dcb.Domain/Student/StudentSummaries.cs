@@ -1,23 +1,16 @@
-using System;
-using System.Collections.Generic;
-using ResultBoxes;
 using Dcb.Domain.Enrollment;
+using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
-
 namespace Dcb.Domain.Student;
 
 /// <summary>
-/// 複数の学生の在籍サマリを集計するマルチプロジェクタです。
+///     複数の学生の在籍サマリを集計するマルチプロジェクタです。
 /// </summary>
 public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students) : IMultiProjector<StudentSummaries>
 {
-    public StudentSummaries() : this(new Dictionary<Guid, Item>()) {}
-    /// <summary>
-    /// 学生ごとのサマリです。
-    /// </summary>
-    public record Item(string Name, int EnrolledCount);
+    public StudentSummaries() : this(new Dictionary<Guid, Item>()) { }
 
     public static string MultiProjectorVersion => "1.0.0";
 
@@ -34,9 +27,11 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
             case StudentEnrolledInClassRoom enrolled:
                 if (next.TryGetValue(enrolled.StudentId, out var existingEnrolled))
                 {
-                    next[enrolled.StudentId] = existingEnrolled with { EnrolledCount = existingEnrolled.EnrolledCount + 1 };
-                }
-                else
+                    next[enrolled.StudentId] = existingEnrolled with
+                    {
+                        EnrolledCount = existingEnrolled.EnrolledCount + 1
+                    };
+                } else
                 {
                     next[enrolled.StudentId] = new Item("", 1);
                 }
@@ -46,8 +41,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
                 {
                     var dec = Math.Max(0, existingDropped.EnrolledCount - 1);
                     next[dropped.StudentId] = existingDropped with { EnrolledCount = dec };
-                }
-                else
+                } else
                 {
                     next[dropped.StudentId] = new Item("", 0);
                 }
@@ -59,4 +53,8 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
     public static StudentSummaries GenerateInitialPayload() => new(new Dictionary<Guid, Item>());
 
     public static string MultiProjectorName => nameof(StudentSummaries);
+    /// <summary>
+    ///     学生ごとのサマリです。
+    /// </summary>
+    public record Item(string Name, int EnrolledCount);
 }

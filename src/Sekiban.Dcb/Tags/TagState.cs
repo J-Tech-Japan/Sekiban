@@ -10,16 +10,8 @@ public record TagState(
     string ProjectorVersion = "")
 {
     /// <summary>
-    /// Creates an empty TagState with EmptyTagStatePayload
+    ///     Creates an empty TagState with EmptyTagStatePayload
     /// </summary>
     public static TagState GetEmpty(TagStateId tagStateId) =>
-        new(
-            new EmptyTagStatePayload(),
-            0,
-            "",
-            tagStateId.TagGroup,
-            tagStateId.TagContent,
-            tagStateId.TagProjectorName,
-            ""
-        );
+        new(new EmptyTagStatePayload(), 0, "", tagStateId.TagGroup, tagStateId.TagContent, tagStateId.TagProjectorName);
 }

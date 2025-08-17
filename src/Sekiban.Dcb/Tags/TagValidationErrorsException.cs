@@ -1,22 +1,17 @@
 using System.Text;
-
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
-/// Exception thrown when one or more tags fail validation
+///     Exception thrown when one or more tags fail validation
 /// </summary>
 public class TagValidationErrorsException : Exception
 {
     public IReadOnlyList<TagValidationError> Errors { get; }
 
-    public TagValidationErrorsException(IEnumerable<TagValidationError> errors)
-        : base(BuildMessage(errors))
-    {
+    public TagValidationErrorsException(IEnumerable<TagValidationError> errors) : base(BuildMessage(errors)) =>
         Errors = errors.ToList().AsReadOnly();
-    }
 
-    public TagValidationErrorsException(TagValidationError error)
-        : this(new[] { error })
+    public TagValidationErrorsException(TagValidationError error) : this(new[] { error })
     {
     }
 

@@ -1,6 +1,5 @@
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
-
 namespace Dcb.Domain.Weather;
 
 public class WeatherForecastProjector : ITagProjector<WeatherForecastProjector>
@@ -23,7 +22,7 @@ public class WeatherForecastProjector : ITagProjector<WeatherForecastProjector>
                 Summary = created.Summary,
                 IsDeleted = false
             },
-            
+
             WeatherForecastUpdated updated => state with
             {
                 Location = updated.Location,
@@ -31,12 +30,12 @@ public class WeatherForecastProjector : ITagProjector<WeatherForecastProjector>
                 TemperatureC = updated.TemperatureC,
                 Summary = updated.Summary
             },
-            
+
             WeatherForecastDeleted => state with
             {
                 IsDeleted = true
             },
-            
+
             _ => state
         };
     }

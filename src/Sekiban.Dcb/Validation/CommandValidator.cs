@@ -1,16 +1,15 @@
+using Sekiban.Dcb.Commands;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
-using Sekiban.Dcb.Commands;
-
 namespace Sekiban.Dcb.Validation;
 
 /// <summary>
-/// Provides validation functionality for commands using DataAnnotations attributes
+///     Provides validation functionality for commands using DataAnnotations attributes
 /// </summary>
 public static class CommandValidator
 {
     /// <summary>
-    /// Validates a command object using DataAnnotations attributes
+    ///     Validates a command object using DataAnnotations attributes
     /// </summary>
     /// <param name="command">The command to validate</param>
     /// <returns>A list of validation errors, empty if valid</returns>
@@ -18,9 +17,9 @@ public static class CommandValidator
     {
         if (command == null)
         {
-            return new List<CommandValidationError> 
-            { 
-                new CommandValidationError("Command", "Command cannot be null") 
+            return new List<CommandValidationError>
+            {
+                new("Command", "Command cannot be null")
             };
         }
 
@@ -35,8 +34,8 @@ public static class CommandValidator
 
             foreach (var attribute in validationAttributes)
             {
-                var validationContext = new ValidationContext(command) 
-                { 
+                var validationContext = new ValidationContext(command)
+                {
                     MemberName = property.Name,
                     DisplayName = property.Name
                 };
@@ -44,10 +43,11 @@ public static class CommandValidator
                 var result = attribute.GetValidationResult(value, validationContext);
                 if (result != ValidationResult.Success && result != null)
                 {
-                    errors.Add(new CommandValidationError(
-                        property.Name,
-                        result.ErrorMessage ?? $"Validation failed for {property.Name}",
-                        value));
+                    errors.Add(
+                        new CommandValidationError(
+                            property.Name,
+                            result.ErrorMessage ?? $"Validation failed for {property.Name}",
+                            value));
                 }
             }
 
@@ -57,10 +57,11 @@ public static class CommandValidator
                 var nestedErrors = ValidateCommand(nestedCommand);
                 foreach (var nestedError in nestedErrors)
                 {
-                    errors.Add(new CommandValidationError(
-                        $"{property.Name}.{nestedError.PropertyName}",
-                        nestedError.ErrorMessage,
-                        nestedError.AttemptedValue));
+                    errors.Add(
+                        new CommandValidationError(
+                            $"{property.Name}.{nestedError.PropertyName}",
+                            nestedError.ErrorMessage,
+                            nestedError.AttemptedValue));
                 }
             }
         }
@@ -69,7 +70,7 @@ public static class CommandValidator
     }
 
     /// <summary>
-    /// Validates a command and throws an exception if validation fails
+    ///     Validates a command and throws an exception if validation fails
     /// </summary>
     /// <param name="command">The command to validate</param>
     /// <exception cref="CommandValidationException">Thrown when validation fails</exception>

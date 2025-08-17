@@ -1,19 +1,16 @@
-using System;
-using System.Collections.Generic;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
-
 namespace Sekiban.Dcb.Orleans.Streams;
 
 /// <summary>
-/// Default resolver that routes all events to Orleans provider "EventStreamProvider",
-/// namespace "AllEvents" and id Guid.Empty, mirroring AggregateEventHandlerGrain.
+///     Default resolver that routes all events to Orleans provider "EventStreamProvider",
+///     namespace "AllEvents" and id Guid.Empty, mirroring AggregateEventHandlerGrain.
 /// </summary>
 public class DefaultOrleansStreamDestinationResolver : IStreamDestinationResolver
 {
-    private readonly string _providerName;
     private readonly string _namespace;
+    private readonly string _providerName;
     private readonly Guid _streamId;
 
     public DefaultOrleansStreamDestinationResolver(

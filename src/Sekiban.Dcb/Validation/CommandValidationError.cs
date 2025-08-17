@@ -1,7 +1,7 @@
 namespace Sekiban.Dcb.Validation;
 
 /// <summary>
-/// Represents a single command validation error
+///     Represents a single command validation error
 /// </summary>
 public class CommandValidationError
 {

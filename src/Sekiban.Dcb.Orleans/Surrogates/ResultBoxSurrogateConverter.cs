@@ -10,14 +10,14 @@ public sealed class ResultBoxSurrogateConverter<T> : IConverter<ResultBox<T>, Re
         {
             return ResultBox.FromValue(surrogate.Value);
         }
-        
+
         if (!string.IsNullOrEmpty(surrogate.ExceptionType) && !string.IsNullOrEmpty(surrogate.ErrorMessage))
         {
             // Create a generic exception with the error details
             var exception = new Exception($"[{surrogate.ExceptionType}] {surrogate.ErrorMessage}");
             return ResultBox.FromException<T>(exception);
         }
-        
+
         return ResultBox.FromException<T>(new Exception(surrogate.ErrorMessage ?? "Unknown error"));
     }
 
@@ -27,18 +27,17 @@ public sealed class ResultBoxSurrogateConverter<T> : IConverter<ResultBox<T>, Re
         {
             IsSuccess = value.IsSuccess
         };
-        
+
         if (value.IsSuccess)
         {
             surrogate.Value = value.GetValue();
-        }
-        else
+        } else
         {
             var exception = value.GetException();
             surrogate.ErrorMessage = exception.Message;
             surrogate.ExceptionType = exception.GetType().Name;
         }
-        
+
         return surrogate;
     }
 }

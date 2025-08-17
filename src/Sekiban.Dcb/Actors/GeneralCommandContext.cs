@@ -107,7 +107,8 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector<TProjector>
+    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag)
+        where TProjector : ITagProjector<TProjector>
     {
         try
         {

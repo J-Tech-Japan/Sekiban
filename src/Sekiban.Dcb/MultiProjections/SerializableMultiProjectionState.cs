@@ -1,9 +1,7 @@
-using System;
-
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-/// Serializable form of a multi-projection state.
+///     Serializable form of a multi-projection state.
 /// </summary>
 public record SerializableMultiProjectionState(
     byte[] Payload,

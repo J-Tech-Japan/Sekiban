@@ -1,7 +1,7 @@
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
-/// Types of tag validation errors
+///     Types of tag validation errors
 /// </summary>
 public enum TagValidationErrorType
 {

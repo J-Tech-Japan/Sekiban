@@ -1,98 +1,74 @@
-﻿using System;
+﻿#nullable disable
+
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+namespace Sekiban.Dcb.Postgres.Migrations;
 
-#nullable disable
-
-namespace Sekiban.Dcb.Postgres.Migrations
+/// <inheritdoc />
+public partial class Initial : Migration
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.CreateTable(
-                name: "dcb_events",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    SortableUniqueId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    EventType = table.Column<string>(type: "text", nullable: false),
-                    Payload = table.Column<string>(type: "json", nullable: false),
-                    Tags = table.Column<string>(type: "jsonb", nullable: false),
-                    Timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CausationId = table.Column<string>(type: "text", nullable: true),
-                    CorrelationId = table.Column<string>(type: "text", nullable: true),
-                    ExecutedUser = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_dcb_events", x => x.Id);
-                });
+        migrationBuilder.CreateTable(
+            "dcb_events",
+            table => new
+            {
+                Id = table.Column<Guid>("uuid", nullable: false),
+                SortableUniqueId = table.Column<string>("character varying(100)", maxLength: 100, nullable: false),
+                EventType = table.Column<string>("text", nullable: false),
+                Payload = table.Column<string>("json", nullable: false),
+                Tags = table.Column<string>("jsonb", nullable: false),
+                Timestamp = table.Column<DateTime>("timestamp with time zone", nullable: false),
+                CausationId = table.Column<string>("text", nullable: true),
+                CorrelationId = table.Column<string>("text", nullable: true),
+                ExecutedUser = table.Column<string>("text", nullable: true)
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("PK_dcb_events", x => x.Id);
+            });
 
-            migrationBuilder.CreateTable(
-                name: "dcb_tags",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Tag = table.Column<string>(type: "text", nullable: false),
-                    EventType = table.Column<string>(type: "text", nullable: false),
-                    SortableUniqueId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    EventId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_dcb_tags", x => x.Id);
-                });
+        migrationBuilder.CreateTable(
+            "dcb_tags",
+            table => new
+            {
+                Id = table
+                    .Column<long>("bigint", nullable: false)
+                    .Annotation(
+                        "Npgsql:ValueGenerationStrategy",
+                        NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                Tag = table.Column<string>("text", nullable: false),
+                EventType = table.Column<string>("text", nullable: false),
+                SortableUniqueId = table.Column<string>("character varying(100)", maxLength: 100, nullable: false),
+                EventId = table.Column<Guid>("uuid", nullable: false),
+                CreatedAt = table.Column<DateTime>("timestamp with time zone", nullable: false)
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("PK_dcb_tags", x => x.Id);
+            });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_dcb_events_EventType",
-                table: "dcb_events",
-                column: "EventType");
+        migrationBuilder.CreateIndex("IX_dcb_events_EventType", "dcb_events", "EventType");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_dcb_events_Timestamp",
-                table: "dcb_events",
-                column: "Timestamp");
+        migrationBuilder.CreateIndex("IX_dcb_events_Timestamp", "dcb_events", "Timestamp");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Events_SortableUniqueId",
-                table: "dcb_events",
-                column: "SortableUniqueId",
-                unique: true);
+        migrationBuilder.CreateIndex("IX_Events_SortableUniqueId", "dcb_events", "SortableUniqueId", unique: true);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Tags_EventId",
-                table: "dcb_tags",
-                column: "EventId");
+        migrationBuilder.CreateIndex("IX_Tags_EventId", "dcb_tags", "EventId");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Tags_SortableUniqueId",
-                table: "dcb_tags",
-                column: "SortableUniqueId");
+        migrationBuilder.CreateIndex("IX_Tags_SortableUniqueId", "dcb_tags", "SortableUniqueId");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Tags_Tag",
-                table: "dcb_tags",
-                column: "Tag");
+        migrationBuilder.CreateIndex("IX_Tags_Tag", "dcb_tags", "Tag");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Tags_Tag_SortableUniqueId",
-                table: "dcb_tags",
-                columns: new[] { "Tag", "SortableUniqueId" });
-        }
+        migrationBuilder.CreateIndex("IX_Tags_Tag_SortableUniqueId", "dcb_tags", new[] { "Tag", "SortableUniqueId" });
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(
-                name: "dcb_events");
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(name: "dcb_events");
 
-            migrationBuilder.DropTable(
-                name: "dcb_tags");
-        }
+        migrationBuilder.DropTable(name: "dcb_tags");
     }
 }

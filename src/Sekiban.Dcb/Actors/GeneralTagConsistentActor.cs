@@ -15,15 +15,19 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 {
     private readonly ConcurrentDictionary<string, TagWriteReservation> _activeReservations = new();
     private readonly SemaphoreSlim _catchUpLock = new(1, 1);
+    private readonly DcbDomainTypes _domainTypes; // Non-nullable per new requirement
     private readonly IEventStore? _eventStore;
     private readonly TagConsistentActorOptions _options;
     private readonly SemaphoreSlim _reservationLock = new(1, 1);
     private readonly string _tagName;
-    private readonly DcbDomainTypes _domainTypes; // Non-nullable per new requirement
     private volatile bool _catchUpCompleted;
     private string _latestSortableUniqueId = "";
 
-    public GeneralTagConsistentActor(string tagName, IEventStore? eventStore, TagConsistentActorOptions options, DcbDomainTypes domainTypes)
+    public GeneralTagConsistentActor(
+        string tagName,
+        IEventStore? eventStore,
+        TagConsistentActorOptions options,
+        DcbDomainTypes domainTypes)
     {
         _tagName = tagName ?? throw new ArgumentNullException(nameof(tagName));
         _eventStore = eventStore;
@@ -266,5 +270,4 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             _reservationLock.Release();
         }
     }
-
 }
