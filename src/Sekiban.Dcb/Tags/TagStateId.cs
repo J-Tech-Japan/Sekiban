@@ -12,9 +12,6 @@ public class TagStateId
     public string TagContent { get; }
     public string TagProjectorName { get; }
 
-    // Removed constructor with ITagProjector instance since we use static projectors now
-    // Use the constructor with string tagProjectorName instead
-
     public TagStateId(ITag tag, string tagProjectorName)
     {
         var fullTag = tag.GetTag();
