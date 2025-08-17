@@ -21,11 +21,11 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     
-    public static string GetMultiProjectorName() => "WeatherForecastProjection";
+    public static string MultiProjectorName => "WeatherForecastProjection";
     
     public static WeatherForecastProjection GenerateInitialPayload() => new();
     
-    public static string GetVersion() => "1.0.0";
+    public static string MultiProjectorVersion => "1.0.0";
     
     /// <summary>
     /// Project with tag filtering - only processes events with WeatherForecastTag

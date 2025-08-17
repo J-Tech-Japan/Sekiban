@@ -15,6 +15,6 @@ public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiPr
     static abstract ResultBox<T> Project(T payload, Event ev, List<ITag> tags);
     
     static abstract T GenerateInitialPayload();
-    static abstract string GetMultiProjectorName();
-    static abstract string GetVersion();
+    static abstract string MultiProjectorName { get; }
+    static abstract string MultiProjectorVersion { get; }
 }

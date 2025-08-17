@@ -243,7 +243,6 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
     // Test multi-projector
     public record TestMultiProjector : IMultiProjector<TestMultiProjector>
     {
-        public const string MultiProjectorName = "TestMultiProjector";
         
         public List<string> Items { get; init; }
         
@@ -256,9 +255,9 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         
         public static TestMultiProjector GenerateInitialPayload() => new(new List<string>());
         
-        public static string GetMultiProjectorName() => MultiProjectorName;
+        public static string MultiProjectorName => "TestMultiProjector";
         
-        public static string GetVersion() => "1.0.0";
+        public static string MultiProjectorVersion => "1.0.0";
         
         public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
         {

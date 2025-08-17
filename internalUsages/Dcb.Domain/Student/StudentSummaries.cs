@@ -19,7 +19,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
     /// </summary>
     public record Item(string Name, int EnrolledCount);
 
-    public static string GetVersion() => "1.0.0";
+    public static string MultiProjectorVersion => "1.0.0";
 
     public static ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags)
     {
@@ -58,5 +58,5 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public static StudentSummaries GenerateInitialPayload() => new(new Dictionary<Guid, Item>());
 
-    public static string GetMultiProjectorName() => nameof(StudentSummaries);
+    public static string MultiProjectorName => nameof(StudentSummaries);
 }

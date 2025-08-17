@@ -27,11 +27,11 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     
-    public static string GetMultiProjectorName() => "WeatherForecastProjectorWithTagStateProjector";
+    public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
     
     public static WeatherForecastProjectorWithTagStateProjector GenerateInitialPayload() => new();
     
-    public static string GetVersion() => "1.0.0";
+    public static string MultiProjectorVersion => "1.0.0";
     
     /// <summary>
     /// Project with tag filtering - only processes events with WeatherForecastTag
@@ -57,24 +57,11 @@ public record WeatherForecastProjectorWithTagStateProjector : IMultiProjector<We
         var newState = payload.State.UpdateSafeWindowThreshold(threshold);
         
         // Process the event - the projector will handle unknown event types
-        var updatedState = ProcessEventWithTags(newState, ev, weatherForecastTags);
+        var requests = CreateProjectionRequests(weatherForecastTags, ev);
+        var updatedState = newState.ProcessEventWithRequests(ev, requests);
         
         return ResultBox.FromValue(payload with { State = updatedState });
     }
-    
-    /// <summary>
-    /// Process events with tags using WeatherForecastProjector
-    /// </summary>
-    private static SafeUnsafeProjectionStateV3<TagState> ProcessEventWithTags(
-        SafeUnsafeProjectionStateV3<TagState> state,
-        Event ev,
-        List<WeatherForecastTag> tags)
-    {
-        // Create projection requests directly without type parameters or reflection
-        var requests = CreateProjectionRequests(tags, ev);
-        return state.ProcessEventWithRequests(ev, requests);
-    }
-    
     /// <summary>
     /// Create projection requests for each tag
     /// </summary>

@@ -29,7 +29,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     public void RegisterProjector<TProjector>() 
         where TProjector : IMultiProjector<TProjector>, new()
     {
-        var projectorName = TProjector.GetMultiProjectorName();
+        var projectorName = TProjector.MultiProjectorName;
         
         // Register the projector function
         Func<IMultiProjectionPayload, Event, List<ITag>, ResultBox<IMultiProjectionPayload>> projectFunc = (payload, ev, tags) =>
@@ -68,7 +68,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         }
         
         // Register the version
-        _projectorVersions[projectorName] = TProjector.GetVersion();
+        _projectorVersions[projectorName] = TProjector.MultiProjectorVersion;
         
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => (IMultiProjectionPayload)TProjector.GenerateInitialPayload();

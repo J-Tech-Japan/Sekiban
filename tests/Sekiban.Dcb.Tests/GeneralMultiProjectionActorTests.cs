@@ -38,7 +38,7 @@ public class GeneralMultiProjectionActorTests
     public async Task Actor_Applies_Events_And_Serializes_State()
     {
     var domain = CreateDomain();
-    var actor = new GeneralMultiProjectionActor(domain, StudentSummaries.GetMultiProjectorName());
+    var actor = new GeneralMultiProjectionActor(domain, StudentSummaries.MultiProjectorName);
 
     var s1 = Guid.NewGuid();
     var s2 = Guid.NewGuid();
@@ -51,7 +51,7 @@ public class GeneralMultiProjectionActorTests
         var stateRb = await actor.GetSerializableStateAsync();
         Assert.True(stateRb.IsSuccess);
         var state = stateRb.GetValue();
-        Assert.Equal(StudentSummaries.GetMultiProjectorName(), state.ProjectorName);
+        Assert.Equal(StudentSummaries.MultiProjectorName, state.ProjectorName);
         Assert.Equal("1.0.0", state.ProjectorVersion);
         Assert.Equal(6, state.Version);
 
@@ -70,7 +70,7 @@ public class GeneralMultiProjectionActorTests
     public async Task Actor_Restores_From_Serialized_State()
     {
     var domain = CreateDomain();
-    var actor = new GeneralMultiProjectionActor(domain, StudentSummaries.GetMultiProjectorName());
+    var actor = new GeneralMultiProjectionActor(domain, StudentSummaries.MultiProjectorName);
 
     var s1 = Guid.NewGuid();
     await actor.AddEventsAsync(new[] { MakeEvent(new StudentCreated(s1, "Hanako", 1)) });
@@ -79,7 +79,7 @@ public class GeneralMultiProjectionActorTests
         Assert.True(savedRb.IsSuccess);
         var saved = savedRb.GetValue();
 
-    var actor2 = new GeneralMultiProjectionActor(domain, StudentSummaries.GetMultiProjectorName());
+    var actor2 = new GeneralMultiProjectionActor(domain, StudentSummaries.MultiProjectorName);
         await actor2.SetCurrentState(saved);
 
     await actor2.AddEventsAsync(new[] { MakeEvent(new StudentDroppedFromClassRoom(s1, Guid.NewGuid())) });
