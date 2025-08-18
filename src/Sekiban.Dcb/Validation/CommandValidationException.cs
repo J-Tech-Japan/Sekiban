@@ -1,22 +1,17 @@
 using System.Text;
-
 namespace Sekiban.Dcb.Validation;
 
 /// <summary>
-/// Exception thrown when command validation fails
+///     Exception thrown when command validation fails
 /// </summary>
 public class CommandValidationException : Exception
 {
     public IReadOnlyList<CommandValidationError> Errors { get; }
 
-    public CommandValidationException(IEnumerable<CommandValidationError> errors)
-        : base(BuildMessage(errors))
-    {
+    public CommandValidationException(IEnumerable<CommandValidationError> errors) : base(BuildMessage(errors)) =>
         Errors = errors.ToList().AsReadOnly();
-    }
 
-    public CommandValidationException(CommandValidationError error)
-        : this(new[] { error })
+    public CommandValidationException(CommandValidationError error) : this(new[] { error })
     {
     }
 

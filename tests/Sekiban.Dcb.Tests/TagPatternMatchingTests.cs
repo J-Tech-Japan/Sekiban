@@ -1,36 +1,32 @@
-using System;
-using System.Collections.Generic;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-/// タグのパターンマッチ記法に関するサンプルテストです。
+///     タグのパターンマッチ記法に関するサンプルテストです。
 /// </summary>
 public class TagPatternMatchingTests
 {
     /// <summary>
-    /// リストパターンを使って StudentTag が含まれるか判定します。
+    ///     リストパターンを使って StudentTag が含まれるか判定します。
     /// </summary>
     [Fact]
     public void ListPattern_ShouldDetectStudentTag()
     {
         var sid = Guid.NewGuid();
-    List<ITag> tags = [ new FallbackTag("Other","X"), new FallbackTag("Foo","Bar"), new StudentTag(sid) ];
-    bool hasStudent = tags is [.., StudentTag _];
+        List<ITag> tags = [new FallbackTag("Other", "X"), new FallbackTag("Foo", "Bar"), new StudentTag(sid)];
+        var hasStudent = tags is [.., StudentTag _];
         Assert.True(hasStudent);
     }
 
     /// <summary>
-    /// List pattern で StudentTag を変数キャプチャし内容を検証します。
+    ///     List pattern で StudentTag を変数キャプチャし内容を検証します。
     /// </summary>
     [Fact]
     public void ListPattern_ShouldCaptureStudentTag()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tags = [ new FallbackTag("Other","X"), new StudentTag(sid) ];
+        List<ITag> tags = [new FallbackTag("Other", "X"), new StudentTag(sid)];
         var content = tags switch
         {
             [.., StudentTag st] => st.GetTagContent(),
@@ -40,13 +36,13 @@ public class TagPatternMatchingTests
     }
 
     /// <summary>
-    /// foreach + switch 式パターンで最初の StudentTag を検出します。
+    ///     foreach + switch 式パターンで最初の StudentTag を検出します。
     /// </summary>
     [Fact]
     public void ForeachSwitch_ShouldFindStudentTag()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tags = [ new FallbackTag("A","1"), new FallbackTag("B","2"), new StudentTag(sid) ];
+        List<ITag> tags = [new FallbackTag("A", "1"), new FallbackTag("B", "2"), new StudentTag(sid)];
         Guid? found = null;
         foreach (var tag in tags)
         {
@@ -57,18 +53,18 @@ public class TagPatternMatchingTests
                     goto End;
             }
         }
-    End:
+        End:
         Assert.Equal(sid, found);
     }
 
     /// <summary>
-    /// FirstOrDefault + switch 式で StudentTag のみ処理。
+    ///     FirstOrDefault + switch 式で StudentTag のみ処理。
     /// </summary>
     [Fact]
     public void FirstOrDefaultSwitch_ShouldProcessStudentTag()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tags = [ new FallbackTag("Other","X"), new StudentTag(sid) ];
+        List<ITag> tags = [new FallbackTag("Other", "X"), new StudentTag(sid)];
         var firstStudentMessage = tags.Find(t => t is StudentTag) switch
         {
             StudentTag s => $"Student:{s.StudentId}",
@@ -78,15 +74,15 @@ public class TagPatternMatchingTests
     }
 
     /// <summary>
-    /// StudentTag が先頭/中央/末尾いずれでも検出できることを確認します。
+    ///     StudentTag が先頭/中央/末尾いずれでも検出できることを確認します。
     /// </summary>
     [Fact]
     public void AnyPosition_ShouldDetectStudentTagRegardlessOfOrder()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tagsMiddle = [ new FallbackTag("A","1"), new StudentTag(sid), new FallbackTag("B","2") ];
-        List<ITag> tagsFirst  = [ new StudentTag(sid), new FallbackTag("A","1"), new FallbackTag("B","2") ];
-        List<ITag> tagsLast   = [ new FallbackTag("A","1"), new FallbackTag("B","2"), new StudentTag(sid) ];
+        List<ITag> tagsMiddle = [new FallbackTag("A", "1"), new StudentTag(sid), new FallbackTag("B", "2")];
+        List<ITag> tagsFirst = [new StudentTag(sid), new FallbackTag("A", "1"), new FallbackTag("B", "2")];
+        List<ITag> tagsLast = [new FallbackTag("A", "1"), new FallbackTag("B", "2"), new StudentTag(sid)];
 
         bool HasStudent(List<ITag> ts) => ts.Exists(t => t is StudentTag);
 
@@ -96,15 +92,15 @@ public class TagPatternMatchingTests
     }
 
     /// <summary>
-    /// スライスパターン [..] を用いて StudentTag が 先頭/中央/末尾 にあるケースを判定します。
+    ///     スライスパターン [..] を用いて StudentTag が 先頭/中央/末尾 にあるケースを判定します。
     /// </summary>
     [Fact]
     public void SlicePatterns_ShouldDetectFirstMiddleLastPositions()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tagsFirst  = [ new StudentTag(sid), new FallbackTag("X","1"), new FallbackTag("Y","2") ];
-        List<ITag> tagsMiddle = [ new FallbackTag("X","1"), new StudentTag(sid), new FallbackTag("Y","2") ];
-        List<ITag> tagsLast   = [ new FallbackTag("X","1"), new FallbackTag("Y","2"), new StudentTag(sid) ];
+        List<ITag> tagsFirst = [new StudentTag(sid), new FallbackTag("X", "1"), new FallbackTag("Y", "2")];
+        List<ITag> tagsMiddle = [new FallbackTag("X", "1"), new StudentTag(sid), new FallbackTag("Y", "2")];
+        List<ITag> tagsLast = [new FallbackTag("X", "1"), new FallbackTag("Y", "2"), new StudentTag(sid)];
 
         // 先頭: [ StudentTag _, .. ]
         Assert.True(tagsFirst is [StudentTag _, ..]);
@@ -123,13 +119,13 @@ public class TagPatternMatchingTests
     }
 
     /// <summary>
-    /// 拡張メソッド HasTag / TryGetTag とパターンマッチの組み合わせを検証します。
+    ///     拡張メソッド HasTag / TryGetTag とパターンマッチの組み合わせを検証します。
     /// </summary>
     [Fact]
     public void ExtensionMethods_ShouldWorkWithPatternMatching()
     {
         var sid = Guid.NewGuid();
-        List<ITag> tags = [ new FallbackTag("Other","X"), new StudentTag(sid) ];
+        List<ITag> tags = [new FallbackTag("Other", "X"), new StudentTag(sid)];
 
         Assert.True(tags.HasTag<StudentTag>());
         Assert.False(tags.HasTag<FallbackTag>() is false); // 常に true になる式の否定チェック(意図的形式)
@@ -138,7 +134,7 @@ public class TagPatternMatchingTests
         Assert.NotNull(student);
 
         // pattern matching switch で型分岐
-        string label = student switch
+        var label = student switch
         {
             StudentTag st => $"Student:{st.StudentId}",
             _ => "Unknown"
@@ -147,15 +143,15 @@ public class TagPatternMatchingTests
     }
 
     /// <summary>
-    /// GetTagGroups で複数 StudentTag が取得できることを確認します。
+    ///     GetTagGroups で複数 StudentTag が取得できることを確認します。
     /// </summary>
     [Fact]
     public void ExtensionMethods_ShouldEnumerateAllStudentTags()
     {
         var sid1 = Guid.NewGuid();
         var sid2 = Guid.NewGuid();
-        List<ITag> tags = [ new StudentTag(sid1), new FallbackTag("Other","X"), new StudentTag(sid2) ];
-    var students = tags.GetTagGroups<StudentTag>();
+        List<ITag> tags = [new StudentTag(sid1), new FallbackTag("Other", "X"), new StudentTag(sid2)];
+        var students = tags.GetTagGroups<StudentTag>();
         Assert.Contains(students, s => s.StudentId == sid1);
         Assert.Contains(students, s => s.StudentId == sid2);
     }

@@ -1,10 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-
+using Sekiban.Dcb.Tags;
+using System.Text.Json;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -12,27 +10,22 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public interface IMultiProjectorTypes
 {
-    ResultBox<IMultiProjectorCommon> GetMultiProjector(string multiProjectorName);
+    ResultBox<IMultiProjectionPayload> Project(
+        string multiProjectorName,
+        IMultiProjectionPayload payload,
+        Event ev,
+        List<ITag> tags);
 
-    ResultBox<IMultiProjectorCommon> Project(IMultiProjectorCommon multiProjector, Event ev);
+    ResultBox<string> GetProjectorVersion(string multiProjectorName);
 
-    ResultBox<IMultiProjectorCommon> Project(IMultiProjectorCommon multiProjector, IReadOnlyList<Event> events)
-    {
-        var acc = ResultBox.FromValue(multiProjector);
-        foreach (var e in events)
-        {
-            if (!acc.IsSuccess) return acc;
-            var current = acc.GetValue();
-            acc = Project(current, e);
-        }
-        return acc;
-    }
+    ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName);
 
-    ResultBox<IMultiProjectorCommon> GenerateInitialPayload(string multiProjectorName);
+    ResultBox<Type> GetProjectorType(string multiProjectorName);
 
-    ResultBox<byte[]> Serialize(IMultiProjectorCommon multiProjector, JsonSerializerOptions options);
+    ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName);
 
-    ResultBox<IMultiProjectorCommon> Deserialize(byte[] jsonBytes, string payloadTypeFullName, JsonSerializerOptions options);
-
-    ResultBox<string> GetMultiProjectorNameFromMultiProjector(IMultiProjectorCommon multiProjector);
+    ResultBox<IMultiProjectionPayload> Deserialize(
+        byte[] data,
+        string multiProjectorName,
+        JsonSerializerOptions jsonOptions);
 }

@@ -209,8 +209,14 @@ public class OptimisticLockingTest
             WriteIndented = true
         };
 
-    var multiProjectorTypes = new SimpleMultiProjectorTypes();
-    return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, multiProjectorTypes, jsonOptions);
+        var multiProjectorTypes = new SimpleMultiProjectorTypes();
+        return new DcbDomainTypes(
+            eventTypes,
+            tagTypes,
+            tagProjectorTypes,
+            tagStatePayloadTypes,
+            multiProjectorTypes,
+            jsonOptions);
     }
 
     // Test-specific types
@@ -227,10 +233,11 @@ public class OptimisticLockingTest
     {
     }
 
-    private class TestProjector : ITagProjector
+    private class TestProjector : ITagProjector<TestProjector>
     {
-        public string GetProjectorVersion() => "1.0.0";
-        public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        public static string ProjectorVersion => "1.0.0";
+        public static string ProjectorName => nameof(TestProjector);
+        public static ITagStatePayload Project(ITagStatePayload current, Event ev) =>
             current ?? new TestStatePayload("", 0);
     }
 

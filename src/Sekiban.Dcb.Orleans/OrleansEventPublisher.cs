@@ -1,18 +1,11 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Orleans;
-using Orleans.Streams;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Orleans.Streams;
-
+using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
-/// Publishes Sekiban Dcb events to Orleans streams using an Orleans cluster client.
+///     Publishes Sekiban Dcb events to Orleans streams using an Orleans cluster client.
 /// </summary>
 public class OrleansEventPublisher : IEventPublisher
 {
@@ -25,7 +18,9 @@ public class OrleansEventPublisher : IEventPublisher
         _resolver = resolver;
     }
 
-    public async Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(
+        IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+        CancellationToken cancellationToken = default)
     {
         foreach (var (evt, tags) in events)
         {

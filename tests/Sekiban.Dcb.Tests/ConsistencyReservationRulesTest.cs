@@ -95,9 +95,10 @@ public class ConsistencyReservationRulesTest
 
     private record SimpleCommand : ICommand;
 
-    private class DummyProjector : ITagProjector
+    private class DummyProjector : ITagProjector<DummyProjector>
     {
-        public string GetProjectorVersion() => "1";
-    public ITagStatePayload Project(ITagStatePayload current, Event e) => current;
+        public static string ProjectorVersion => "1";
+        public static string ProjectorName => nameof(DummyProjector);
+        public static ITagStatePayload Project(ITagStatePayload current, Event e) => current;
     }
 }

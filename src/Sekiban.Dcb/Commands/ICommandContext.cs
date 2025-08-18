@@ -17,7 +17,7 @@ public interface ICommandContext
     /// <param name="tag">The tag to query</param>
     /// <returns>ResultBox containing the TagStateTyped or error information</returns>
     Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag) where TState : ITagStatePayload
-        where TProjector : ITagProjector, new();
+        where TProjector : ITagProjector<TProjector>;
 
     /// <summary>
     ///     Gets the current state for a specific tag using the specified projector, returning TagState
@@ -25,7 +25,7 @@ public interface ICommandContext
     /// <typeparam name="TProjector">The type of projector to use</typeparam>
     /// <param name="tag">The tag to query</param>
     /// <returns>ResultBox containing the TagState or error information</returns>
-    Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector, new();
+    Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector<TProjector>;
 
     /// <summary>
     ///     Checks if a tag exists (has any events)

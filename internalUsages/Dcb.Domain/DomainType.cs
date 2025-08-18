@@ -1,8 +1,10 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
+using Dcb.Domain.Projections;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Sekiban.Dcb;
+using Sekiban.Dcb.MultiProjections;
 namespace Dcb.Domain;
 
 /// <summary>
@@ -37,9 +39,15 @@ public static class DomainType
             types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>();
             types.TagStatePayloadTypes.RegisterPayloadType<WeatherForecastState>();
 
+            // Register tag types
             types.TagTypes.RegisterTagGroupType<StudentTag>();
             types.TagTypes.RegisterTagGroupType<ClassRoomTag>();
             types.TagTypes.RegisterTagGroupType<WeatherForecastTag>();
+
+            // Register multi-projectors
+            types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
+            types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjector>();
+            types.MultiProjectorTypes.RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector>>();
         });
     }
 }

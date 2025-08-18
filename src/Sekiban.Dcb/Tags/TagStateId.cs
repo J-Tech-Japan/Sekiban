@@ -1,5 +1,3 @@
-using Sekiban.Dcb.Domains;
-
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
@@ -11,23 +9,6 @@ public class TagStateId
     public string TagGroup { get; }
     public string TagContent { get; }
     public string TagProjectorName { get; }
-
-    public TagStateId(ITag tag, ITagProjector tagProjector, ITagProjectorTypes projectorTypes)
-    {
-        var fullTag = tag.GetTag();
-        var parts = fullTag.Split(':');
-        if (parts.Length != 2)
-        {
-            throw new ArgumentException($"Invalid tag format: {fullTag}. Expected format: 'TagGroup:TagContent'");
-        }
-
-        TagGroup = tag.GetTagGroup();
-        TagContent = parts[1];
-        
-        // Get the registered name for this projector type
-        var registeredName = projectorTypes.GetProjectorName(tagProjector.GetType());
-        TagProjectorName = registeredName ?? tagProjector.GetType().Name;
-    }
 
     public TagStateId(ITag tag, string tagProjectorName)
     {
@@ -49,6 +30,11 @@ public class TagStateId
         TagContent = tagContent;
         TagProjectorName = tagProjectorName;
     }
+
+    /// <summary>
+    ///     Creates a TagStateId from a tag and projector type
+    /// </summary>
+    public static TagStateId FromProjector<T>(ITag tag) where T : ITagProjector<T> => new(tag, T.ProjectorName);
 
     /// <summary>
     ///     Gets the string representation of the TagStateId

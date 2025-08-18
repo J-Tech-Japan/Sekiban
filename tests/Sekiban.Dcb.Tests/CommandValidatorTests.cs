@@ -1,14 +1,40 @@
-using System.ComponentModel.DataAnnotations;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Validation;
-using Xunit;
-
+using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Dcb.Tests;
 
 public class CommandValidatorTests
 {
+
+    #region Nested Command Validation Tests
+    [Fact]
+    public void ValidateCommand_NestedCommandWithErrors_ReturnsNestedErrors()
+    {
+        // Arrange
+        var command = new NestedTestCommand
+        {
+            Name = "Parent",
+            NestedCommand = new ValidTestCommand
+            {
+                Name = null!, // Invalid
+                Age = 200, // Invalid
+                Email = "invalid" // Invalid
+            }
+        };
+
+        // Act
+        var errors = CommandValidator.ValidateCommand(command);
+
+        // Assert
+        Assert.Equal(3, errors.Count);
+
+        // Check nested property names
+        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Name");
+        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Age");
+        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Email");
+    }
+    #endregion
     #region Test Command Classes
-    
     private class ValidTestCommand : ICommand
     {
         [Required]
@@ -43,11 +69,9 @@ public class CommandValidatorTests
 
         public ValidTestCommand? NestedCommand { get; set; }
     }
-
     #endregion
 
     #region Valid Command Tests
-
     [Fact]
     public void ValidateCommand_ValidCommand_ReturnsNoErrors()
     {
@@ -77,11 +101,9 @@ public class CommandValidatorTests
         // Assert
         Assert.Empty(errors);
     }
-
     #endregion
 
     #region Invalid Command Tests
-
     [Fact]
     public void ValidateCommand_NullCommand_ReturnsError()
     {
@@ -105,7 +127,7 @@ public class CommandValidatorTests
 
         // Assert
         Assert.Equal(4, errors.Count);
-        
+
         // Check for Name required error
         var nameError = errors.FirstOrDefault(e => e.PropertyName == "Name");
         Assert.NotNull(nameError);
@@ -127,11 +149,9 @@ public class CommandValidatorTests
         Assert.NotNull(emailError);
         Assert.Equal("Email must be a valid email address", emailError.ErrorMessage);
     }
-
     #endregion
 
     #region Exception Throwing Tests
-
     [Fact]
     public void ValidateCommandAndThrow_ValidCommand_DoesNotThrow()
     {
@@ -150,48 +170,15 @@ public class CommandValidatorTests
         var command = new InvalidTestCommand();
 
         // Act & Assert
-        var exception = Assert.Throws<CommandValidationException>(() => 
+        var exception = Assert.Throws<CommandValidationException>(() =>
             CommandValidator.ValidateCommandAndThrow(command));
-        
+
         Assert.Equal(4, exception.Errors.Count);
         Assert.Contains("4 error(s)", exception.Message);
     }
-
-    #endregion
-
-    #region Nested Command Validation Tests
-
-    [Fact]
-    public void ValidateCommand_NestedCommandWithErrors_ReturnsNestedErrors()
-    {
-        // Arrange
-        var command = new NestedTestCommand
-        {
-            Name = "Parent",
-            NestedCommand = new ValidTestCommand
-            {
-                Name = null!, // Invalid
-                Age = 200, // Invalid
-                Email = "invalid" // Invalid
-            }
-        };
-
-        // Act
-        var errors = CommandValidator.ValidateCommand(command);
-
-        // Assert
-        Assert.Equal(3, errors.Count);
-        
-        // Check nested property names
-        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Name");
-        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Age");
-        Assert.Contains(errors, e => e.PropertyName == "NestedCommand.Email");
-    }
-
     #endregion
 
     #region Integration with Validation Attributes
-
     private class CustomValidationCommand : ICommand
     {
         [Required]
@@ -222,7 +209,7 @@ public class CommandValidatorTests
 
         // Assert
         Assert.True(errors.Count >= 3);
-        
+
         // Check that pattern validation is triggered
         var nameError = errors.FirstOrDefault(e => e.PropertyName == "Name");
         Assert.NotNull(nameError);
@@ -251,6 +238,5 @@ public class CommandValidatorTests
         // Assert
         Assert.Empty(errors);
     }
-
     #endregion
 }

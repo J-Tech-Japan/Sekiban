@@ -5,6 +5,7 @@ Integration tests for the PostgreSQL implementation of Sekiban DCB using in-memo
 ## Overview
 
 These tests verify that:
+
 - Events are correctly persisted to PostgreSQL
 - Tags are properly tracked in the database
 - In-memory actors work correctly with PostgreSQL storage
@@ -22,6 +23,7 @@ dotnet test tests/Sekiban.Dcb.Postgres.Tests
 ```
 
 Requirements:
+
 - Docker must be installed and running
 - The tests will automatically start and stop PostgreSQL containers
 
@@ -30,6 +32,7 @@ Requirements:
 If you prefer to manage the database manually:
 
 1. Start the test database:
+
 ```bash
 cd tests/Sekiban.Dcb.Postgres.Tests
 docker-compose up -d
@@ -38,11 +41,13 @@ docker-compose up -d
 2. Modify the connection string in `PostgresTestFixture.cs` if needed
 
 3. Run the tests:
+
 ```bash
 dotnet test
 ```
 
 4. Stop the database:
+
 ```bash
 docker-compose down
 ```
@@ -56,7 +61,8 @@ docker-compose down
 
 ## Database Cleanup
 
-The database is automatically cleared between tests using `TRUNCATE` commands, ensuring test isolation without recreating the schema.
+The database is automatically cleared between tests using `TRUNCATE` commands, ensuring test isolation without
+recreating the schema.
 
 ## Key Features Tested
 

@@ -3,11 +3,12 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Student;
 
-public class StudentProjector : ITagProjector
+public class StudentProjector : ITagProjector<StudentProjector>
 {
-    public string GetProjectorVersion() => "1.0.0";
+    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorName => nameof(StudentProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+    public static ITagStatePayload Project(ITagStatePayload current, Event ev) =>
         (current, ev.Payload) switch
         {
             (EmptyTagStatePayload, StudentCreated created) => new StudentState(

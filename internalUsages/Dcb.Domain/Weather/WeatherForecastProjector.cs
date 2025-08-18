@@ -1,13 +1,13 @@
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
-
 namespace Dcb.Domain.Weather;
 
-public class WeatherForecastProjector : ITagProjector
+public class WeatherForecastProjector : ITagProjector<WeatherForecastProjector>
 {
-    public string GetProjectorVersion() => "1.0.0";
+    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorName => nameof(WeatherForecastProjector);
 
-    public ITagStatePayload Project(ITagStatePayload current, Event ev)
+    public static ITagStatePayload Project(ITagStatePayload current, Event ev)
     {
         var state = current as WeatherForecastState ?? new WeatherForecastState();
 
@@ -22,7 +22,7 @@ public class WeatherForecastProjector : ITagProjector
                 Summary = created.Summary,
                 IsDeleted = false
             },
-            
+
             WeatherForecastUpdated updated => state with
             {
                 Location = updated.Location,
@@ -30,12 +30,12 @@ public class WeatherForecastProjector : ITagProjector
                 TemperatureC = updated.TemperatureC,
                 Summary = updated.Summary
             },
-            
+
             WeatherForecastDeleted => state with
             {
                 IsDeleted = true
             },
-            
+
             _ => state
         };
     }

@@ -12,7 +12,7 @@ services:
       - "5433:5432"
     # No volumes defined - database will be cleared when container is removed
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d sekiban_dcb_test"]
+      test: [ "CMD-SHELL", "pg_isready -U test_user -d sekiban_dcb_test" ]
       interval: 5s
       timeout: 5s
       retries: 5

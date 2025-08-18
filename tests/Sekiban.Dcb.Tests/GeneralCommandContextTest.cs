@@ -45,8 +45,14 @@ public class GeneralCommandContextTest
             WriteIndented = true
         };
 
-    var multiProjectorTypes = new SimpleMultiProjectorTypes();
-    return new DcbDomainTypes(eventTypes, tagTypes, tagProjectorTypes, tagStatePayloadTypes, multiProjectorTypes, jsonOptions);
+        var multiProjectorTypes = new SimpleMultiProjectorTypes();
+        return new DcbDomainTypes(
+            eventTypes,
+            tagTypes,
+            tagProjectorTypes,
+            tagStatePayloadTypes,
+            multiProjectorTypes,
+            jsonOptions);
     }
 
     [Fact]
@@ -164,7 +170,7 @@ public class GeneralCommandContextTest
         // Arrange
         var tag = new TestTag();
         var projector = new TestProjector();
-        var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
+        var tagStateId = TagStateId.FromProjector<TestProjector>(tag);
 
         // Create a custom state payload
         var testPayload = new TestStatePayload("Active", 5);
@@ -359,16 +365,18 @@ public class GeneralCommandContextTest
         public string GetTagGroup() => "TestGroup2";
     }
 
-    private class TestProjector : ITagProjector
+    private class TestProjector : ITagProjector<TestProjector>
     {
-        public string GetProjectorVersion() => "1.0.0";
-    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
+        public static string ProjectorVersion => "1.0.0";
+        public static string ProjectorName => nameof(TestProjector);
+        public static ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
 
-    private class TestProjectorTwo : ITagProjector
+    private class TestProjectorTwo : ITagProjector<TestProjectorTwo>
     {
-        public string GetProjectorVersion() => "1.0.0";
-    public ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
+        public static string ProjectorVersion => "1.0.0";
+        public static string ProjectorName => nameof(TestProjectorTwo);
+        public static ITagStatePayload Project(ITagStatePayload current, Event ev) => current;
     }
 
     private record TestStatePayload(string State, int Count) : ITagStatePayload

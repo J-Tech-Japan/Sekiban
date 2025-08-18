@@ -23,7 +23,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     }
 
     public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
-        where TState : ITagStatePayload where TProjector : ITagProjector, new()
+        where TState : ITagStatePayload where TProjector : ITagProjector<TProjector>
     {
         try
         {
@@ -34,8 +34,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
                 return ResultBox.Error<TagStateTyped<TState>>(new TagValidationErrorsException(validationErrors));
             }
             // Get the TagStateActor
-            var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
+            var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -108,7 +107,8 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector, new()
+    public async Task<ResultBox<TagState>> GetStateAsync<TProjector>(ITag tag)
+        where TProjector : ITagProjector<TProjector>
     {
         try
         {
@@ -119,8 +119,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
                 return ResultBox.Error<TagState>(new TagValidationErrorsException(validationErrors));
             }
             // Get the TagStateActor
-            var projector = new TProjector();
-            var tagStateId = new TagStateId(tag, projector, _domainTypes.TagProjectorTypes);
+            var tagStateId = new TagStateId(tag, TProjector.ProjectorName);
             var tagStateActorId = tagStateId.GetTagStateId();
 
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -134,8 +133,8 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
                         "",
                         tag.GetTagGroup(),
                         tag.GetTag().Substring(tag.GetTagGroup().Length + 1),
-                        projector.GetType().Name,
-                        projector.GetProjectorVersion()));
+                        TProjector.ProjectorName,
+                        TProjector.ProjectorVersion));
             }
 
             var actor = actorResult.GetValue();

@@ -54,7 +54,7 @@ public record DcbDomainTypes
         public SimpleTagTypes TagTypes { get; }
         public SimpleTagProjectorTypes TagProjectorTypes { get; }
         public SimpleTagStatePayloadTypes TagStatePayloadTypes { get; }
-    public SimpleMultiProjectorTypes MultiProjectorTypes { get; }
+        public SimpleMultiProjectorTypes MultiProjectorTypes { get; }
         public JsonSerializerOptions JsonOptions { get; }
 
         internal Builder(JsonSerializerOptions? jsonOptions = null)

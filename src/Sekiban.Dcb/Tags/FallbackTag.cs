@@ -1,7 +1,7 @@
 namespace Sekiban.Dcb.Tags;
 
 /// <summary>
-/// フォールバック用の汎用タグを表すレコードです。
+///     フォールバック用の汎用タグを表すレコードです。
 /// </summary>
 public sealed record FallbackTag(string TagGroup, string TagContent) : ITag
 {

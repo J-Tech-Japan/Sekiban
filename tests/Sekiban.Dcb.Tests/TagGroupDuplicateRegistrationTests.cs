@@ -1,6 +1,5 @@
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Tags;
-
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -9,7 +8,7 @@ namespace Sekiban.Dcb.Tests;
 public class TagGroupDuplicateRegistrationTests
 {
     /// <summary>
-    /// 同じグループ名の別 TagGroup 型を登録すると例外になることを検証します。
+    ///     同じグループ名の別 TagGroup 型を登録すると例外になることを検証します。
     /// </summary>
     [Fact]
     public void SimpleTagTypes_Should_Throw_When_Registering_Different_TagGroups_With_Same_Name()
@@ -29,14 +28,15 @@ public class TagGroupDuplicateRegistrationTests
     }
 
     /// <summary>
-    /// 同じ TagGroup 型の再登録も禁止（初回のみ成功し2回目は例外）であることを検証します。
+    ///     同じ TagGroup 型の再登録も禁止（初回のみ成功し2回目は例外）であることを検証します。
     /// </summary>
     [Fact]
     public void SimpleTagTypes_Should_Throw_When_Registering_Same_TagGroup_Twice()
     {
         var tagTypes = new SimpleTagTypes();
         tagTypes.RegisterTagGroupType<Namespace1.TestTagGroup>();
-        var ex = Assert.Throws<InvalidOperationException>(() => tagTypes.RegisterTagGroupType<Namespace1.TestTagGroup>());
+        var ex
+            = Assert.Throws<InvalidOperationException>(() => tagTypes.RegisterTagGroupType<Namespace1.TestTagGroup>());
         Assert.Contains("TestTagGroup", ex.Message);
     }
 
@@ -48,9 +48,9 @@ public class TagGroupDuplicateRegistrationTests
             public static string TagGroupName => "TestTagGroup";
             public static TestTagGroup FromContent(string content) => new(content);
             public string GetTagGroup() => TagGroupName;
-            public string GetTag() => $"{TagGroupName}:{Content}";
             public string GetTagContent() => Content;
             public bool IsConsistencyTag() => false;
+            public string GetTag() => $"{TagGroupName}:{Content}";
         }
     }
 
@@ -61,9 +61,9 @@ public class TagGroupDuplicateRegistrationTests
             public static string TagGroupName => "TestTagGroup";
             public static TestTagGroup FromContent(string content) => new(content);
             public string GetTagGroup() => TagGroupName;
-            public string GetTag() => $"{TagGroupName}:{Content}";
             public string GetTagContent() => Content;
             public bool IsConsistencyTag() => false;
+            public string GetTag() => $"{TagGroupName}:{Content}";
         }
     }
     #endregion

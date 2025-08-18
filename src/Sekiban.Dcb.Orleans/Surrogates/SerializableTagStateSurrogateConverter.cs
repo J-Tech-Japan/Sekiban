@@ -2,11 +2,11 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Surrogates;
 
 [RegisterConverter]
-public sealed class SerializableTagStateSurrogateConverter : IConverter<SerializableTagState, SerializableTagStateSurrogate>
+public sealed class
+    SerializableTagStateSurrogateConverter : IConverter<SerializableTagState, SerializableTagStateSurrogate>
 {
-    public SerializableTagState ConvertFromSurrogate(in SerializableTagStateSurrogate surrogate)
-    {
-        return new SerializableTagState(
+    public SerializableTagState ConvertFromSurrogate(in SerializableTagStateSurrogate surrogate) =>
+        new(
             surrogate.Payload,
             surrogate.Version,
             surrogate.LastSortedUniqueId,
@@ -15,11 +15,9 @@ public sealed class SerializableTagStateSurrogateConverter : IConverter<Serializ
             surrogate.TagProjector,
             surrogate.TagPayloadName,
             surrogate.ProjectorVersion);
-    }
 
-    public SerializableTagStateSurrogate ConvertToSurrogate(in SerializableTagState value)
-    {
-        return new SerializableTagStateSurrogate
+    public SerializableTagStateSurrogate ConvertToSurrogate(in SerializableTagState value) =>
+        new()
         {
             Payload = value.Payload,
             Version = value.Version,
@@ -30,5 +28,4 @@ public sealed class SerializableTagStateSurrogateConverter : IConverter<Serializ
             TagPayloadName = value.TagPayloadName,
             ProjectorVersion = value.ProjectorVersion
         };
-    }
 }
