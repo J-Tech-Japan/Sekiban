@@ -32,11 +32,13 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     private SafeUnsafeProjectionStateV7(
         Dictionary<TKey, TState> currentData,
         Dictionary<TKey, SafeStateBackup<TState>> safeBackup,
-        string safeWindowThreshold)
+        string safeWindowThreshold,
+        HashSet<Guid>? processedEventIds = null)
     {
         _currentData = new Dictionary<TKey, TState>(currentData);
         _safeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(safeBackup);
         SafeWindowThreshold = safeWindowThreshold;
+        _processedEventIds = processedEventIds ?? new HashSet<Guid>();
     }
 
     /// <summary>
@@ -122,9 +124,16 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
                 // Reprocess from safe state
                 var currentItemState = backup.SafeState;
                 
-                // Apply each event that became safe
+                // Apply each event that became safe (filtering duplicates)
+                var seenEventIds = new HashSet<Guid>();
                 foreach (var safeEvent in nowSafeEvents)
                 {
+                    // Skip duplicate events
+                    if (!seenEventIds.Add(safeEvent.Id))
+                    {
+                        continue;
+                    }
+                    
                     // Check if this event affects this item
                     var affectedKeys = getAffectedItemKeys(safeEvent);
                     if (affectedKeys.Contains(itemKey))
@@ -183,8 +192,13 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             return this;
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, _processedEventIds);
     }
+
+    /// <summary>
+    ///     Track processed event IDs to prevent duplicates
+    /// </summary>
+    private readonly HashSet<Guid> _processedEventIds = new();
 
     /// <summary>
     ///     Process a safe event
@@ -194,8 +208,16 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
         List<TKey> affectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
     {
+        // Check for duplicate event
+        if (_processedEventIds.Contains(evt.Id))
+        {
+            // Duplicate event - ignore without error
+            return this;
+        }
+
         var newCurrentData = new Dictionary<TKey, TState>(_currentData);
         var newSafeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(_safeBackup);
+        var newProcessedEventIds = new HashSet<Guid>(_processedEventIds) { evt.Id };
 
         foreach (var itemKey in affectedItemKeys)
         {
@@ -240,7 +262,11 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             }
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        return new SafeUnsafeProjectionStateV7<TKey, TState>(
+            newCurrentData, 
+            newSafeBackup, 
+            SafeWindowThreshold,
+            newProcessedEventIds);
     }
 
     /// <summary>
@@ -251,13 +277,28 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
         List<TKey> affectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
     {
+        // Check for duplicate event at the global level
+        if (_processedEventIds.Contains(evt.Id))
+        {
+            // Duplicate event - ignore without error
+            return this;
+        }
+
         var newCurrentData = new Dictionary<TKey, TState>(_currentData);
         var newSafeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(_safeBackup);
+        var newProcessedEventIds = new HashSet<Guid>(_processedEventIds) { evt.Id };
 
         foreach (var itemKey in affectedItemKeys)
         {
             if (_safeBackup.TryGetValue(itemKey, out var existingBackup))
             {
+                // Check if this event has already been processed (duplicate check in unsafe events list)
+                if (existingBackup.UnsafeEvents.Any(e => e.Id == evt.Id))
+                {
+                    // Duplicate event - skip processing for this item
+                    continue;
+                }
+                
                 // Already has unsafe modifications, add this event to the list
                 var updatedEvents = new List<Event>(existingBackup.UnsafeEvents) { evt };
                 newSafeBackup[itemKey] = existingBackup with { UnsafeEvents = updatedEvents };
@@ -306,7 +347,11 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             }
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold);
+        return new SafeUnsafeProjectionStateV7<TKey, TState>(
+            newCurrentData, 
+            newSafeBackup, 
+            SafeWindowThreshold,
+            newProcessedEventIds);
     }
 
     /// <summary>
