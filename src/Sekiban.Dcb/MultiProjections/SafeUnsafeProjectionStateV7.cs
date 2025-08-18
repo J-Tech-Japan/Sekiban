@@ -98,6 +98,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     {
         var newCurrentData = new Dictionary<TKey, TState>(_currentData);
         var newSafeBackup = new Dictionary<TKey, SafeStateBackup<TState>>();
+        var newProcessedEventIds = new HashSet<Guid>(_processedEventIds);
         var hasChanges = false;
 
         foreach (var kvp in _safeBackup)
@@ -120,6 +121,12 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             if (nowSafeEvents.Count > 0)
             {
                 hasChanges = true;
+                
+                // Remove event IDs that are now safe from the processed set
+                foreach (var safeEvent in nowSafeEvents)
+                {
+                    newProcessedEventIds.Remove(safeEvent.Id);
+                }
                 
                 // Reprocess from safe state
                 var currentItemState = backup.SafeState;
@@ -192,11 +199,11 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             return this;
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, _processedEventIds);
+        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, newProcessedEventIds);
     }
 
     /// <summary>
-    ///     Track processed event IDs to prevent duplicates
+    ///     Track processed event IDs to prevent duplicates (only for unsafe events)
     /// </summary>
     private readonly HashSet<Guid> _processedEventIds = new();
 
@@ -217,7 +224,8 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
 
         var newCurrentData = new Dictionary<TKey, TState>(_currentData);
         var newSafeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(_safeBackup);
-        var newProcessedEventIds = new HashSet<Guid>(_processedEventIds) { evt.Id };
+        // Safe events don't need to be tracked in processedEventIds
+        var newProcessedEventIds = new HashSet<Guid>(_processedEventIds);
 
         foreach (var itemKey in affectedItemKeys)
         {
