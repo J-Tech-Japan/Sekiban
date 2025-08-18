@@ -5,11 +5,12 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-///     Generic multi-projector that works with any tag projector
+///     Generic multi-projector that works with any tag projector and specific tag group
 /// </summary>
-public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericTagMultiProjector<TTagProjector>>,
-    ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector>>
+public record GenericTagMultiProjector<TTagProjector, TTagGroup> : IMultiProjector<GenericTagMultiProjector<TTagProjector, TTagGroup>>,
+    ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>>
     where TTagProjector : ITagProjector<TTagProjector>
+    where TTagGroup : IGuidTagGroup<TTagGroup>
 {
     /// <summary>
     ///     SafeWindow threshold (20 seconds by default)
@@ -21,38 +22,42 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     /// </summary>
     public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
 
-    public static string MultiProjectorName => $"GenericTagMultiProjector_{TTagProjector.ProjectorName}";
+    public static string MultiProjectorName => $"GenericTagMultiProjector_{TTagProjector.ProjectorName}_{TTagGroup.TagGroupName}";
 
     public static string MultiProjectorVersion => TTagProjector.ProjectorVersion;
 
-    public static GenericTagMultiProjector<TTagProjector> GenerateInitialPayload() => new();
+    public static GenericTagMultiProjector<TTagProjector, TTagGroup> GenerateInitialPayload() => new();
 
     /// <summary>
     ///     Project with tag filtering - processes events based on tags
     /// </summary>
-    public static ResultBox<GenericTagMultiProjector<TTagProjector>> Project(
-        GenericTagMultiProjector<TTagProjector> payload,
+    public static ResultBox<GenericTagMultiProjector<TTagProjector, TTagGroup>> Project(
+        GenericTagMultiProjector<TTagProjector, TTagGroup> payload,
         Event ev,
         List<ITag> tags)
     {
-        // Filter tags based on what the projector expects
-        // For now, we'll process all tags and let the projector decide
-        if (tags.Count == 0)
+        // Filter tags to only process tags of the specified tag group type
+        var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
+        
+        if (relevantTags.Count == 0)
         {
-            // No tags, skip this event
+            // No tags of the specified group, skip this event
             return ResultBox.FromValue(payload);
         }
 
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
         
-        // Function to get affected item IDs
+        // Function to get affected item IDs (filter out nulls)
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
-            tags.Select(tag => GetTagId(tag));
+            relevantTags
+                .Select(tag => GetTagId(tag))
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value);
         
         // Function to project a single item
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
-            ProjectTagState(tagId, current, evt, tags);
+            ProjectTagState(tagId, current, evt, relevantTags);
         
         // Update threshold and process the event
         var newState = payload.State with { SafeWindowThreshold = threshold };
@@ -70,8 +75,12 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
         Event ev,
         List<ITag> tags)
     {
-        // Find the tag that corresponds to this ID
-        var tag = tags.FirstOrDefault(t => GetTagId(t) == tagId);
+        // Find the tag that corresponds to this ID (must be of type TTagGroup)
+        var tag = tags.FirstOrDefault(t => 
+        {
+            var id = GetTagId(t);
+            return id.HasValue && id.Value == tagId;
+        });
         if (tag == null)
         {
             return current; // Tag not found, keep current state
@@ -103,21 +112,18 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     }
 
     /// <summary>
-    ///     Get unique ID for a tag
+    ///     Get unique ID for a tag (only for TTagGroup tags)
     /// </summary>
-    private static Guid GetTagId(ITag tag)
+    private static Guid? GetTagId(ITag tag)
     {
-        // Try to extract ID from tag content if it's a GUID
-        if (Guid.TryParse(tag.GetTagContent(), out var guidId))
+        // Only process tags of our specific TTagGroup type
+        if (tag is TTagGroup guidTag)
         {
-            return guidId;
+            return guidTag.GetId();
         }
 
-        // Otherwise, create a deterministic GUID from the tag content
-        var bytes = System.Text.Encoding.UTF8.GetBytes($"{tag.GetTagGroup()}:{tag.GetTagContent()}");
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        var hash = md5.ComputeHash(bytes);
-        return new Guid(hash);
+        // Ignore all other tags
+        return null;
     }
 
     /// <summary>
@@ -184,14 +190,14 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
 
     #region ISafeAndUnsafeStateAccessor Implementation
 
-    private Guid _lastEventId = Guid.Empty;
-    private string _lastSortableUniqueId = string.Empty;
-    private int _version;
+    private Guid LastEventId { get; init; } = Guid.Empty;
+    private string LastSortableUniqueId { get; init; } = string.Empty;
+    private int Version { get; init; }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector> GetSafeState()
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState()
     {
         // The State already manages safe/unsafe internally
         // We return the same instance since SafeUnsafeProjectionState handles it
@@ -201,7 +207,7 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector> GetUnsafeState()
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState()
     {
         // Return current state (includes unsafe)
         return this;
@@ -210,7 +216,7 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
     /// </summary>
-    public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector>> ProcessEvent(
+    public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>> ProcessEvent(
         Event evt, 
         SortableUniqueId safeWindowThreshold)
     {
@@ -229,15 +235,15 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
         // Update tracking information
         return projected with
         {
-            _lastEventId = evt.Id,
-            _lastSortableUniqueId = evt.SortableUniqueIdValue,
-            _version = _version + 1
+            LastEventId = evt.Id,
+            LastSortableUniqueId = evt.SortableUniqueIdValue,
+            Version = Version + 1
         };
     }
 
-    public Guid GetLastEventId() => _lastEventId;
-    public string GetLastSortableUniqueId() => _lastSortableUniqueId;
-    public int GetVersion() => _version;
+    public Guid GetLastEventId() => LastEventId;
+    public string GetLastSortableUniqueId() => LastSortableUniqueId;
+    public int GetVersion() => Version;
 
     /// <summary>
     ///     Simple tag implementation for processing
