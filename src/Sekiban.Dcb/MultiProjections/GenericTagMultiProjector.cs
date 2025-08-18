@@ -7,7 +7,8 @@ namespace Sekiban.Dcb.MultiProjections;
 /// <summary>
 ///     Generic multi-projector that works with any tag projector
 /// </summary>
-public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericTagMultiProjector<TTagProjector>>
+public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericTagMultiProjector<TTagProjector>>,
+    ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector>>
     where TTagProjector : ITagProjector<TTagProjector>
 {
     /// <summary>
@@ -180,4 +181,73 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
             .Select(ts => ts.Payload)
             .Where(p => !ShouldRemoveItem(p));
     }
+
+    #region ISafeAndUnsafeStateAccessor Implementation
+
+    private Guid _lastEventId = Guid.Empty;
+    private string _lastSortableUniqueId = string.Empty;
+    private int _version;
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Get safe state
+    /// </summary>
+    public GenericTagMultiProjector<TTagProjector> GetSafeState()
+    {
+        // The State already manages safe/unsafe internally
+        // We return the same instance since SafeUnsafeProjectionState handles it
+        return this;
+    }
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Get unsafe state
+    /// </summary>
+    public GenericTagMultiProjector<TTagProjector> GetUnsafeState()
+    {
+        // Return current state (includes unsafe)
+        return this;
+    }
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Process event
+    /// </summary>
+    public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector>> ProcessEvent(
+        Event evt, 
+        SortableUniqueId safeWindowThreshold)
+    {
+        // Extract tags from event
+        var tags = evt.Tags.Select(t => new SimpleTag(t)).Cast<ITag>().ToList();
+        
+        // Use the static Project method
+        var result = Project(this, evt, tags);
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
+        }
+        
+        var projected = result.GetValue();
+        
+        // Update tracking information
+        return projected with
+        {
+            _lastEventId = evt.Id,
+            _lastSortableUniqueId = evt.SortableUniqueIdValue,
+            _version = _version + 1
+        };
+    }
+
+    public Guid GetLastEventId() => _lastEventId;
+    public string GetLastSortableUniqueId() => _lastSortableUniqueId;
+    public int GetVersion() => _version;
+
+    /// <summary>
+    ///     Simple tag implementation for processing
+    /// </summary>
+    private record SimpleTag(string Value) : ITag
+    {
+        public bool IsConsistencyTag() => false;
+        public string GetTagGroup() => "";
+        public string GetTagContent() => Value;
+    }
+
+    #endregion
 }

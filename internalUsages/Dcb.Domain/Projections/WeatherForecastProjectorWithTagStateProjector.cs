@@ -10,7 +10,8 @@ namespace Dcb.Domain.Projections;
 ///     Weather forecast projection using TagState with SafeUnsafeProjectionState
 /// </summary>
 public record
-    WeatherForecastProjectorWithTagStateProjector : IMultiProjector<WeatherForecastProjectorWithTagStateProjector>
+    WeatherForecastProjectorWithTagStateProjector : IMultiProjector<WeatherForecastProjectorWithTagStateProjector>,
+        ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 
     // We no longer need an instance since we'll use static methods
@@ -152,4 +153,83 @@ public record
             .OfType<WeatherForecastState>()
             .Where(wfs => !wfs.IsDeleted);
     }
+
+    #region ISafeAndUnsafeStateAccessor Implementation
+
+    private Guid _lastEventId = Guid.Empty;
+    private string _lastSortableUniqueId = string.Empty;
+    private int _version;
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Get safe state
+    /// </summary>
+    public WeatherForecastProjectorWithTagStateProjector GetSafeState()
+    {
+        // The State already manages safe/unsafe internally
+        // We return the same instance since SafeUnsafeProjectionState handles it
+        return this;
+    }
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Get unsafe state
+    /// </summary>
+    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState()
+    {
+        // Return current state (includes unsafe)
+        return this;
+    }
+
+    /// <summary>
+    ///     ISafeAndUnsafeStateAccessor - Process event
+    /// </summary>
+    public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
+        Event evt, 
+        SortableUniqueId safeWindowThreshold)
+    {
+        // Extract tags from event - specifically looking for WeatherForecastTag
+        var tags = evt.Tags
+            .Select(t => 
+            {
+                // Try to parse as WeatherForecastTag
+                if (Guid.TryParse(t, out var id))
+                {
+                    return new WeatherForecastTag(id) as ITag;
+                }
+                return new SimpleTag(t) as ITag;
+            })
+            .ToList();
+        
+        // Use the static Project method
+        var result = Project(this, evt, tags);
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
+        }
+        
+        var projected = result.GetValue();
+        
+        // Update tracking information
+        return projected with
+        {
+            _lastEventId = evt.Id,
+            _lastSortableUniqueId = evt.SortableUniqueIdValue,
+            _version = _version + 1
+        };
+    }
+
+    public Guid GetLastEventId() => _lastEventId;
+    public string GetLastSortableUniqueId() => _lastSortableUniqueId;
+    public int GetVersion() => _version;
+
+    /// <summary>
+    ///     Simple tag implementation for processing
+    /// </summary>
+    private record SimpleTag(string Value) : ITag
+    {
+        public bool IsConsistencyTag() => false;
+        public string GetTagGroup() => "";
+        public string GetTagContent() => Value;
+    }
+
+    #endregion
 }
