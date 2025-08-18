@@ -7,7 +7,7 @@ using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Projections;
 
 /// <summary>
-///     Weather forecast projection using TagState with SafeUnsafeProjectionStateV7
+///     Weather forecast projection using TagState with SafeUnsafeProjectionState
 /// </summary>
 public record
     WeatherForecastProjectorWithTagStateProjector : IMultiProjector<WeatherForecastProjectorWithTagStateProjector>
@@ -20,9 +20,9 @@ public record
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV7 for TagState
+    ///     Internal state managed by SafeUnsafeProjectionState for TagState
     /// </summary>
-    public SafeUnsafeProjectionStateV7<Guid, TagState> State { get; init; } = new();
+    public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
 

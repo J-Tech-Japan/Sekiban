@@ -16,9 +16,9 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
 
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV7 for TagState
+    ///     Internal state managed by SafeUnsafeProjectionState for TagState
     /// </summary>
-    public SafeUnsafeProjectionStateV7<Guid, TagState> State { get; init; } = new();
+    public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
 
     public static string MultiProjectorName => $"GenericTagMultiProjector_{TTagProjector.ProjectorName}";
 

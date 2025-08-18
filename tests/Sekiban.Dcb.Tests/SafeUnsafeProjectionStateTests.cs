@@ -8,7 +8,7 @@ namespace Sekiban.Dcb.Tests;
 /// <summary>
 ///     Tests for SafeUnsafeProjectionStateV7 to verify duplicate event handling and out-of-order processing
 /// </summary>
-public class SafeUnsafeProjectionStateV7Tests
+public class SafeUnsafeProjectionStateTests
 {
     /// <summary>
     ///     Test item for projection
@@ -40,7 +40,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void DuplicateEvents_ShouldBeIgnored_WithoutError()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var eventId = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -106,7 +106,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void OutOfOrderEvents_InUnsafePeriod_ShouldBeProcessedInCorrectOrder()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         
@@ -178,7 +178,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void MixedSafeAndUnsafeEvents_OutOfOrder_ProcessedCorrectly()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         
@@ -251,7 +251,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void DuplicateEventIds_InDifferentBatches_CurrentlyProcessedMultipleTimes()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var eventId = Guid.NewGuid(); // Same event ID for duplicates
         var now = DateTime.UtcNow;
@@ -312,7 +312,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void ProcessedEventIds_CleanedUp_WhenEventsBecomeSafe()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var eventId1 = Guid.NewGuid();
         var eventId2 = Guid.NewGuid();

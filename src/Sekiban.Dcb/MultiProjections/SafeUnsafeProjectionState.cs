@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.MultiProjections;
 /// </summary>
 /// <typeparam name="TKey">The type of the key for items</typeparam>
 /// <typeparam name="TState">The type of data being projected</typeparam>
-public record SafeUnsafeProjectionStateV7<TKey, TState> 
+public record SafeUnsafeProjectionState<TKey, TState> 
     where TKey : notnull
     where TState : class
 {
@@ -27,9 +27,9 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// </summary>
     public string SafeWindowThreshold { get; init; } = string.Empty;
 
-    public SafeUnsafeProjectionStateV7() { }
+    public SafeUnsafeProjectionState() { }
 
-    private SafeUnsafeProjectionStateV7(
+    private SafeUnsafeProjectionState(
         Dictionary<TKey, TState> currentData,
         Dictionary<TKey, SafeStateBackup<TState>> safeBackup,
         string safeWindowThreshold,
@@ -48,7 +48,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <param name="getAffectedItemKeys">Function to determine which items are affected by this event</param>
     /// <param name="projectItem">Function to project a single item given its key, current state, and the event</param>
     /// <returns>New state after processing</returns>
-    public SafeUnsafeProjectionStateV7<TKey, TState> ProcessEvent(
+    public SafeUnsafeProjectionState<TKey, TState> ProcessEvent(
         Event evt,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
@@ -76,7 +76,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <summary>
     ///     Process multiple events with separated logic
     /// </summary>
-    public SafeUnsafeProjectionStateV7<TKey, TState> ProcessEvents(
+    public SafeUnsafeProjectionState<TKey, TState> ProcessEvents(
         IEnumerable<Event> events,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
@@ -92,7 +92,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <summary>
     ///     Process events that have transitioned from unsafe to safe
     /// </summary>
-    private SafeUnsafeProjectionStateV7<TKey, TState> ProcessNewlySafeEvents(
+    private SafeUnsafeProjectionState<TKey, TState> ProcessNewlySafeEvents(
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
     {
@@ -199,7 +199,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             return this;
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, newProcessedEventIds);
+        return new SafeUnsafeProjectionState<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, newProcessedEventIds);
     }
 
     /// <summary>
@@ -210,7 +210,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <summary>
     ///     Process a safe event
     /// </summary>
-    private SafeUnsafeProjectionStateV7<TKey, TState> ProcessSafeEvent(
+    private SafeUnsafeProjectionState<TKey, TState> ProcessSafeEvent(
         Event evt,
         List<TKey> affectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
@@ -270,7 +270,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             }
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(
+        return new SafeUnsafeProjectionState<TKey, TState>(
             newCurrentData, 
             newSafeBackup, 
             SafeWindowThreshold,
@@ -280,7 +280,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <summary>
     ///     Process an unsafe event
     /// </summary>
-    private SafeUnsafeProjectionStateV7<TKey, TState> ProcessUnsafeEvent(
+    private SafeUnsafeProjectionState<TKey, TState> ProcessUnsafeEvent(
         Event evt,
         List<TKey> affectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
@@ -355,7 +355,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
             }
         }
 
-        return new SafeUnsafeProjectionStateV7<TKey, TState>(
+        return new SafeUnsafeProjectionState<TKey, TState>(
             newCurrentData, 
             newSafeBackup, 
             SafeWindowThreshold,
@@ -365,7 +365,7 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
     /// <summary>
     ///     Update SafeWindow threshold and reprocess events if needed
     /// </summary>
-    public SafeUnsafeProjectionStateV7<TKey, TState> UpdateSafeWindowThreshold(
+    public SafeUnsafeProjectionState<TKey, TState> UpdateSafeWindowThreshold(
         string newThreshold,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
@@ -446,10 +446,10 @@ public record SafeUnsafeProjectionStateV7<TKey, TState>
 /// <summary>
 ///     Type alias for backward compatibility with Guid keys
 /// </summary>
-public record SafeUnsafeProjectionStateV7<TState> : SafeUnsafeProjectionStateV7<Guid, TState>
+public record SafeUnsafeProjectionState<TState> : SafeUnsafeProjectionState<Guid, TState>
     where TState : class
 {
-    public SafeUnsafeProjectionStateV7() : base()
+    public SafeUnsafeProjectionState() : base()
     {
     }
 }
@@ -457,45 +457,45 @@ public record SafeUnsafeProjectionStateV7<TState> : SafeUnsafeProjectionStateV7<
 /// <summary>
 ///     Helper factory methods for creating projection states with different key types
 /// </summary>
-public static class ProjectionStateV7Factory
+public static class ProjectionStateFactory
 {
     /// <summary>
     ///     Create a GUID-keyed projection state (default)
     /// </summary>
-    public static SafeUnsafeProjectionStateV7<Guid, T> CreateGuidKeyed<T>() where T : class
+    public static SafeUnsafeProjectionState<Guid, T> CreateGuidKeyed<T>() where T : class
     {
-        return new SafeUnsafeProjectionStateV7<Guid, T>();
+        return new SafeUnsafeProjectionState<Guid, T>();
     }
 
     /// <summary>
     ///     Create a string-keyed projection state
     /// </summary>
-    public static SafeUnsafeProjectionStateV7<string, T> CreateStringKeyed<T>() where T : class
+    public static SafeUnsafeProjectionState<string, T> CreateStringKeyed<T>() where T : class
     {
-        return new SafeUnsafeProjectionStateV7<string, T>();
+        return new SafeUnsafeProjectionState<string, T>();
     }
 
     /// <summary>
     ///     Create a composite-keyed projection state
     /// </summary>
-    public static SafeUnsafeProjectionStateV7<(string Category, Guid Id), T> CreateCompositeKeyed<T>() where T : class
+    public static SafeUnsafeProjectionState<(string Category, Guid Id), T> CreateCompositeKeyed<T>() where T : class
     {
-        return new SafeUnsafeProjectionStateV7<(string Category, Guid Id), T>();
+        return new SafeUnsafeProjectionState<(string Category, Guid Id), T>();
     }
 
     /// <summary>
     ///     Create an int-keyed projection state
     /// </summary>
-    public static SafeUnsafeProjectionStateV7<int, T> CreateIntKeyed<T>() where T : class
+    public static SafeUnsafeProjectionState<int, T> CreateIntKeyed<T>() where T : class
     {
-        return new SafeUnsafeProjectionStateV7<int, T>();
+        return new SafeUnsafeProjectionState<int, T>();
     }
 
     /// <summary>
     ///     Create a long-keyed projection state
     /// </summary>
-    public static SafeUnsafeProjectionStateV7<long, T> CreateLongKeyed<T>() where T : class
+    public static SafeUnsafeProjectionState<long, T> CreateLongKeyed<T>() where T : class
     {
-        return new SafeUnsafeProjectionStateV7<long, T>();
+        return new SafeUnsafeProjectionState<long, T>();
     }
 }
