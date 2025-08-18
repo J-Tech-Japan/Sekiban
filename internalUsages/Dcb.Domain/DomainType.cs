@@ -48,11 +48,6 @@ public static class DomainType
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjector>();
             types.MultiProjectorTypes.RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector>>();
-            
-            // Register V6 projectors for testing
-            types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectionV6>();
-            types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjectorV6>();
-            types.MultiProjectorTypes.RegisterProjector<GenericTagMultiProjectorV6<WeatherForecastProjector>>();
         });
     }
 }

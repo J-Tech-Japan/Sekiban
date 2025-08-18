@@ -16,9 +16,9 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
 
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV4 for TagState
+    ///     Internal state managed by SafeUnsafeProjectionStateV7 for TagState
     /// </summary>
-    public SafeUnsafeProjectionStateV4<TagState> State { get; init; } = new();
+    public SafeUnsafeProjectionStateV7<Guid, TagState> State { get; init; } = new();
 
     public static string MultiProjectorName => $"GenericTagMultiProjector_{TTagProjector.ProjectorName}";
 
@@ -45,58 +45,60 @@ public record GenericTagMultiProjector<TTagProjector> : IMultiProjector<GenericT
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
         
-        // Create projection function for this projector type
-        Func<Event, IEnumerable<ProjectionRequest<TagState>>> projectionFunction = (evt) =>
-            CreateProjectionRequests(tags, evt);
+        // Function to get affected item IDs
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
+            tags.Select(tag => GetTagId(tag));
+        
+        // Function to project a single item
+        Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
+            ProjectTagState(tagId, current, evt, tags);
         
         // Update threshold and process the event
-        var newState = payload.State.UpdateSafeWindowThreshold(threshold, projectionFunction);
-        var updatedState = newState.ProcessEvent(ev, projectionFunction);
+        var newState = payload.State with { SafeWindowThreshold = threshold };
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
 
     /// <summary>
-    ///     Create projection requests for each tag
+    ///     Project a single tag state
     /// </summary>
-    private static IEnumerable<ProjectionRequest<TagState>> CreateProjectionRequests(
-        List<ITag> tags,
-        Event ev)
+    private static TagState? ProjectTagState(
+        Guid tagId,
+        TagState? current,
+        Event ev,
+        List<ITag> tags)
     {
-        return tags.Select(tag =>
+        // Find the tag that corresponds to this ID
+        var tag = tags.FirstOrDefault(t => GetTagId(t) == tagId);
+        if (tag == null)
         {
-            // Create TagStateId for this tag
-            var tagStateId = new TagStateId(tag, TTagProjector.ProjectorName);
+            return current; // Tag not found, keep current state
+        }
 
-            // Get a unique ID for this tag - use tag content hash or similar
-            var tagId = GetTagId(tag);
+        // Create TagStateId for this tag
+        var tagStateId = new TagStateId(tag, TTagProjector.ProjectorName);
 
-            return new ProjectionRequest<TagState>(
-                tagId,
-                current =>
-                {
-                    // If current is null, create empty TagState
-                    var tagState = current ?? TagState.GetEmpty(tagStateId);
+        // If current is null, create empty TagState
+        var tagState = current ?? TagState.GetEmpty(tagStateId);
 
-                    // Use the tag projector to project the event
-                    var newPayload = TTagProjector.Project(tagState.Payload, ev);
+        // Use the tag projector to project the event
+        var newPayload = TTagProjector.Project(tagState.Payload, ev);
 
-                    // Check if the item should be removed (e.g., deleted items)
-                    if (ShouldRemoveItem(newPayload))
-                    {
-                        return null; // Remove the item
-                    }
+        // Check if the item should be removed (e.g., deleted items)
+        if (ShouldRemoveItem(newPayload))
+        {
+            return null; // Remove the item
+        }
 
-                    // Return updated TagState
-                    return tagState with
-                    {
-                        Payload = newPayload,
-                        Version = tagState.Version + 1,
-                        LastSortedUniqueId = ev.SortableUniqueIdValue,
-                        ProjectorVersion = TTagProjector.ProjectorVersion
-                    };
-                });
-        });
+        // Return updated TagState
+        return tagState with
+        {
+            Payload = newPayload,
+            Version = tagState.Version + 1,
+            LastSortedUniqueId = ev.SortableUniqueIdValue,
+            ProjectorVersion = TTagProjector.ProjectorVersion
+        };
     }
 
     /// <summary>

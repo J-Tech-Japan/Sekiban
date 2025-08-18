@@ -7,7 +7,7 @@ using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Projections;
 
 /// <summary>
-///     Weather forecast projection state using SafeUnsafeProjectionStateV4
+///     Weather forecast projection state using SafeUnsafeProjectionStateV7
 /// </summary>
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
@@ -17,9 +17,9 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV4
+    ///     Internal state managed by SafeUnsafeProjectionStateV7
     /// </summary>
-    public SafeUnsafeProjectionStateV4<WeatherForecastItem> State { get; init; } = new();
+    public SafeUnsafeProjectionStateV7<Guid, WeatherForecastItem> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjection";
 
@@ -44,48 +44,46 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             return ResultBox.FromValue(payload);
         }
 
-        // Create projection function
-        Func<Event, IEnumerable<ProjectionRequest<WeatherForecastItem>>> projectionFunction = (evt) =>
+        // Function to get affected item IDs
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
+        {
+            // Return the forecast IDs from the tags
+            return weatherForecastTags.Select(tag => tag.ForecastId);
+        };
+
+        // Function to project a single item
+        Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem = (forecastId, current, evt) =>
         {
             // Process based on event type
             return evt.Payload switch
             {
-                WeatherForecastCreated created => weatherForecastTags.Select(tag =>
-                    new ProjectionRequest<WeatherForecastItem>(
-                        tag.ForecastId,
-                        current => current != null
-                            ? current with // Update existing
-                            {
-                                Date = created.Date.ToDateTime(TimeOnly.MinValue),
-                                TemperatureC = created.TemperatureC,
-                                Summary = created.Summary,
-                                LastUpdated = GetEventTimestamp(evt)
-                            }
-                            : new WeatherForecastItem( // Create new
-                                tag.ForecastId,
-                                created.Date.ToDateTime(TimeOnly.MinValue),
-                                created.TemperatureC,
-                                created.Summary,
-                                GetEventTimestamp(evt)))),
-                                
-                WeatherForecastUpdated updated => weatherForecastTags.Select(tag =>
-                    new ProjectionRequest<WeatherForecastItem>(
-                        tag.ForecastId,
-                        current => current != null
-                            ? current with // Update existing
-                            {
-                                TemperatureC = updated.TemperatureC,
-                                Summary = updated.Summary,
-                                LastUpdated = GetEventTimestamp(evt)
-                            }
-                            : null)), // Can't update non-existent item
-                            
-                WeatherForecastDeleted _ => weatherForecastTags.Select(tag =>
-                    new ProjectionRequest<WeatherForecastItem>(
-                        tag.ForecastId,
-                        _ => null)), // Delete the item
+                WeatherForecastCreated created => current != null
+                    ? current with // Update existing
+                    {
+                        Date = created.Date.ToDateTime(TimeOnly.MinValue),
+                        TemperatureC = created.TemperatureC,
+                        Summary = created.Summary,
+                        LastUpdated = GetEventTimestamp(evt)
+                    }
+                    : new WeatherForecastItem( // Create new
+                        forecastId,
+                        created.Date.ToDateTime(TimeOnly.MinValue),
+                        created.TemperatureC,
+                        created.Summary,
+                        GetEventTimestamp(evt)),
                         
-                _ => Enumerable.Empty<ProjectionRequest<WeatherForecastItem>>() // Unknown event type, skip
+                WeatherForecastUpdated updated => current != null
+                    ? current with // Update existing
+                    {
+                        TemperatureC = updated.TemperatureC,
+                        Summary = updated.Summary,
+                        LastUpdated = GetEventTimestamp(evt)
+                    }
+                    : null, // Can't update non-existent item
+                    
+                WeatherForecastDeleted _ => null, // Delete the item
+                
+                _ => current // Unknown event type, keep current state
             };
         };
         
@@ -93,8 +91,8 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         var threshold = GetSafeWindowThreshold();
         
         // Update threshold and process event
-        var newState = payload.State.UpdateSafeWindowThreshold(threshold, projectionFunction);
-        var updatedState = newState.ProcessEvent(ev, projectionFunction);
+        var newState = payload.State with { SafeWindowThreshold = threshold };
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }

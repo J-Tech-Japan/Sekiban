@@ -7,7 +7,7 @@ using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Projections;
 
 /// <summary>
-///     Weather forecast projection using TagState with SafeUnsafeProjectionStateV3
+///     Weather forecast projection using TagState with SafeUnsafeProjectionStateV7
 /// </summary>
 public record
     WeatherForecastProjectorWithTagStateProjector : IMultiProjector<WeatherForecastProjectorWithTagStateProjector>
@@ -20,9 +20,9 @@ public record
     /// </summary>
     private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionStateV4 for TagState
+    ///     Internal state managed by SafeUnsafeProjectionStateV7 for TagState
     /// </summary>
-    public SafeUnsafeProjectionStateV4<TagState> State { get; init; } = new();
+    public SafeUnsafeProjectionStateV7<Guid, TagState> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
 
@@ -47,57 +47,62 @@ public record
             return ResultBox.FromValue(payload);
         }
 
-        // Create projection function
-        Func<Event, IEnumerable<ProjectionRequest<TagState>>> projectionFunction = (evt) =>
-            CreateProjectionRequests(weatherForecastTags, evt);
+        // Function to get affected item IDs
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
+            weatherForecastTags.Select(tag => tag.ForecastId);
+        
+        // Function to project a single item
+        Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) =>
+            ProjectTagState(forecastId, current, evt, weatherForecastTags);
         
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
         
         // Update threshold and process event
-        var newState = payload.State.UpdateSafeWindowThreshold(threshold, projectionFunction);
-        var updatedState = newState.ProcessEvent(ev, projectionFunction);
+        var newState = payload.State with { SafeWindowThreshold = threshold };
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
     /// <summary>
-    ///     Create projection requests for each tag
+    ///     Project a single tag state
     /// </summary>
-    private static IEnumerable<ProjectionRequest<TagState>> CreateProjectionRequests(
-        List<WeatherForecastTag> tags,
-        Event ev)
+    private static TagState? ProjectTagState(
+        Guid forecastId,
+        TagState? current,
+        Event ev,
+        List<WeatherForecastTag> tags)
     {
-        return tags.Select(tag =>
+        // Find the tag that corresponds to this forecast ID
+        var tag = tags.FirstOrDefault(t => t.ForecastId == forecastId);
+        if (tag == null)
         {
-            // Create TagStateId for this tag
-            var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
+            return current; // Tag not found, keep current state
+        }
 
-            return new ProjectionRequest<TagState>(
-                tag.ForecastId,
-                current =>
-                {
-                    // If current is null, create empty TagState
-                    var tagState = current ?? TagState.GetEmpty(tagStateId);
+        // Create TagStateId for this tag
+        var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
 
-                    // Use WeatherForecastProjector to project the event
-                    var newPayload = WeatherForecastProjector.Project(tagState.Payload, ev);
+        // If current is null, create empty TagState
+        var tagState = current ?? TagState.GetEmpty(tagStateId);
 
-                    // Check if the item was deleted
-                    if (newPayload is WeatherForecastState { IsDeleted: true })
-                    {
-                        return null; // Remove deleted items
-                    }
+        // Use WeatherForecastProjector to project the event
+        var newPayload = WeatherForecastProjector.Project(tagState.Payload, ev);
 
-                    // Return updated TagState
-                    return tagState with
-                    {
-                        Payload = newPayload,
-                        Version = tagState.Version + 1,
-                        LastSortedUniqueId = ev.SortableUniqueIdValue,
-                        ProjectorVersion = WeatherForecastProjector.ProjectorVersion
-                    };
-                });
-        });
+        // Check if the item was deleted
+        if (newPayload is WeatherForecastState { IsDeleted: true })
+        {
+            return null; // Remove deleted items
+        }
+
+        // Return updated TagState
+        return tagState with
+        {
+            Payload = newPayload,
+            Version = tagState.Version + 1,
+            LastSortedUniqueId = ev.SortableUniqueIdValue,
+            ProjectorVersion = WeatherForecastProjector.ProjectorVersion
+        };
     }
 
     /// <summary>
