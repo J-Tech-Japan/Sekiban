@@ -8,7 +8,7 @@ namespace Sekiban.Dcb.Tests;
 /// <summary>
 ///     Tests for SafeUnsafeProjectionStateV7 to verify duplicate event handling and out-of-order processing
 /// </summary>
-public class SafeUnsafeProjectionStateV7Tests
+public class SafeUnsafeProjectionStateTests
 {
     /// <summary>
     ///     Test item for projection
@@ -40,7 +40,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void DuplicateEvents_ShouldBeIgnored_WithoutError()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var eventId = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -106,7 +106,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void OutOfOrderEvents_InUnsafePeriod_ShouldBeProcessedInCorrectOrder()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         
@@ -178,7 +178,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void MixedSafeAndUnsafeEvents_OutOfOrder_ProcessedCorrectly()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         
@@ -251,7 +251,7 @@ public class SafeUnsafeProjectionStateV7Tests
     public void DuplicateEventIds_InDifferentBatches_CurrentlyProcessedMultipleTimes()
     {
         // Arrange
-        var state = new SafeUnsafeProjectionStateV7<Guid, TestItem>();
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
         var itemId = Guid.NewGuid();
         var eventId = Guid.NewGuid(); // Same event ID for duplicates
         var now = DateTime.UtcNow;
@@ -306,5 +306,75 @@ public class SafeUnsafeProjectionStateV7Tests
         // Only one event should be stored (duplicate not added)
         var unsafeEventsForItem = state.GetUnsafeEventsForItem(itemId).ToList();
         Assert.Single(unsafeEventsForItem); // Only one event stored, duplicate ignored
+    }
+
+    [Fact]
+    public void ProcessedEventIds_CleanedUp_WhenEventsBecomeSafe()
+    {
+        // Arrange
+        var state = new SafeUnsafeProjectionState<Guid, TestItem>();
+        var itemId = Guid.NewGuid();
+        var eventId1 = Guid.NewGuid();
+        var eventId2 = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        
+        // Start with old threshold (everything is unsafe)
+        var oldThreshold = SortableUniqueId.Generate(now.AddSeconds(-10), Guid.Empty);
+        state = state with { SafeWindowThreshold = oldThreshold };
+
+        // Create unsafe events
+        var event1 = CreateEvent(eventId1, itemId, "First", now.AddSeconds(-5));
+        var event2 = CreateEvent(eventId2, itemId, "Second", now.AddSeconds(-3));
+        
+        // Functions for projection
+        Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
+        {
+            var payload = evt.Payload as TestEvent;
+            return new[] { payload!.ItemId };
+        };
+        
+        Func<Guid, TestItem?, Event, TestItem?> projectItem = (id, current, evt) =>
+        {
+            var payload = evt.Payload as TestEvent;
+            if (current == null)
+            {
+                return new TestItem(id, payload!.NewName, 1);
+            }
+            return current with 
+            { 
+                Name = current.Name + " -> " + payload!.NewName,
+                UpdateCount = current.UpdateCount + 1 
+            };
+        };
+
+        // Act - Process unsafe events
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        
+        // Try to process duplicates (should be ignored)
+        var stateBeforeDup = state;
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        
+        // Duplicates should have been ignored
+        Assert.Equal(stateBeforeDup, state);
+        
+        // Now move the threshold forward so events become safe
+        var newThreshold = SortableUniqueId.Generate(now, Guid.Empty);
+        state = state.UpdateSafeWindowThreshold(newThreshold, getAffectedIds, projectItem);
+        
+        // After events become safe, try processing them again
+        // They should NOT be blocked as duplicates anymore since they're safe
+        // and no longer tracked in _processedEventIds
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        
+        // Assert - Safe events can be processed again (IDs were cleaned up)
+        var currentState = state.GetCurrentState();
+        var item = currentState[itemId];
+        
+        // The events were applied again after becoming safe
+        Assert.Equal("First -> Second -> First -> Second", item.Name);
+        Assert.Equal(4, item.UpdateCount);
     }
 }
