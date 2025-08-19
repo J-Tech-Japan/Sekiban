@@ -31,8 +31,7 @@ public class EventPublishingTests
     public async Task Executor_Should_Publish_Event_To_Configured_Topic()
     {
         var cmd = new TestPublishCommand("Hello");
-        var handler = new TestPublishHandler();
-        var result = await _executor.ExecuteAsync(cmd, handler);
+        var result = await _executor.ExecuteAsync(cmd, TestPublishHandler.HandleAsync);
         Assert.True(result.IsSuccess);
 
         var attempts = 0;
@@ -51,9 +50,8 @@ public class EventPublishingTests
     [Fact]
     public async Task Executor_Should_Publish_Multiple_Events()
     {
-        var handler = new MultiEventHandler();
         var cmd = new TestPublishCommand("Batch");
-        var result = await _executor.ExecuteAsync(cmd, handler);
+        var result = await _executor.ExecuteAsync(cmd, MultiEventHandler.HandleAsync);
         Assert.True(result.IsSuccess);
 
         var attempts = 0;
@@ -77,7 +75,7 @@ public class EventPublishingTests
 
     private class TestPublishHandler : ICommandHandler<TestPublishCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
         {
             var tag = new TestPublishTag();
             var evt = new TestPublishEvent(command.Name);
@@ -87,7 +85,7 @@ public class EventPublishingTests
 
     private class MultiEventHandler : ICommandHandler<TestPublishCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
         {
             var tag = new TestPublishTag();
             var evt1 = new TestPublishEvent(command.Name + "1");

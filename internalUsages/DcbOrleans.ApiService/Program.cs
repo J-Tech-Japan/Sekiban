@@ -277,8 +277,7 @@ apiRoute
         "/classrooms",
         async ([FromBody] CreateClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
-            var handler = new CreateClassRoomHandler();
-            var result = await executor.ExecuteAsync(command, handler);
+            var result = await executor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
             {
                 return Results.Ok(new { 
@@ -321,8 +320,7 @@ apiRoute
         "/enrollments",
         async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
-            var handler = new EnrollStudentInClassRoomHandler();
-            var result = await executor.ExecuteAsync(command, handler);
+            var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
             {
                 return Results.Ok(new { 
@@ -342,8 +340,7 @@ apiRoute
         "/drop",
         async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
-            var handler = new DropStudentFromClassRoomHandler();
-            var result = await executor.ExecuteAsync(command, handler);
+            var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
             {
                 return Results.Ok(new { 

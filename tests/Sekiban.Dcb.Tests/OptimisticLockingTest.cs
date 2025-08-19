@@ -30,7 +30,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
+        var createResult = await _commandExecutor.ExecuteAsync(createCommand, CreateTestHandler.HandleAsync);
         Assert.True(createResult.IsSuccess);
 
         // Get the current version of the tag by using the command context
@@ -73,7 +73,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
+        var createResult = await _commandExecutor.ExecuteAsync(createCommand, CreateTestHandler.HandleAsync);
         Assert.True(createResult.IsSuccess);
 
         // Get the initial version
@@ -119,7 +119,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
+        var createResult = await _commandExecutor.ExecuteAsync(createCommand, CreateTestHandler.HandleAsync);
         Assert.True(createResult.IsSuccess);
 
         // Update multiple times
@@ -158,7 +158,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
+        var createResult = await _commandExecutor.ExecuteAsync(createCommand, CreateTestHandler.HandleAsync);
         Assert.True(createResult.IsSuccess);
 
         // Get the current version using command context
@@ -219,7 +219,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
+        var createResult = await _commandExecutor.ExecuteAsync(createCommand, CreateTestHandler.HandleAsync);
         Assert.True(createResult.IsSuccess);
 
         // Update multiple times
@@ -239,7 +239,7 @@ public class OptimisticLockingTest
 
         // Act - Use ConsistencyTag.From which uses MinValue (should use latest)
         var finalUpdateCommand = new UpdateTestCommand(tagId, 4);
-        var finalUpdateResult = await _commandExecutor.ExecuteAsync<UpdateTestCommand, UpdateTestHandlerWithConsistencyFrom>(finalUpdateCommand);
+        var finalUpdateResult = await _commandExecutor.ExecuteAsync(finalUpdateCommand, UpdateTestHandlerWithConsistencyFrom.HandleAsync);
 
         // Assert
         Assert.True(finalUpdateResult.IsSuccess);

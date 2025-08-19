@@ -22,20 +22,6 @@ public interface ICommandExecutor
         CancellationToken cancellationToken = default) where TCommand : ICommand;
 
     /// <summary>
-    ///     Executes a command with a specific handler type
-    /// </summary>
-    /// <typeparam name="TCommand">The type of command to execute</typeparam>
-    /// <typeparam name="THandler">The type of handler to use</typeparam>
-    /// <param name="command">The command to execute</param>
-    /// <param name="cancellationToken">Cancellation token for the operation</param>
-    /// <returns>ResultBox containing the execution result or error</returns>
-    Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand, THandler>(
-        TCommand command,
-        CancellationToken cancellationToken = default) 
-        where TCommand : ICommand
-        where THandler : ICommandHandler<TCommand>;
-
-    /// <summary>
     ///     Executes a command that includes its own handler logic
     /// </summary>
     /// <typeparam name="TCommand">The type of command to execute</typeparam>
