@@ -23,7 +23,7 @@ public class InMemoryCommandExecutorTest
     
     private class TestCommandHandler : ICommandHandler<TestCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(
             TestCommand command,
             ICommandContext context)
         {
@@ -44,7 +44,7 @@ public class InMemoryCommandExecutorTest
     // Error handler for testing failures
     private class ErrorCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(
+        public static Task<ResultBox<EventOrNone>> HandleAsync(
             TestCommand command,
             ICommandContext context)
         {
@@ -56,7 +56,7 @@ public class InMemoryCommandExecutorTest
     // No events handler
     private class NoEventsCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(
+        public static Task<ResultBox<EventOrNone>> HandleAsync(
             TestCommand command,
             ICommandContext context)
         {
@@ -94,10 +94,8 @@ public class InMemoryCommandExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new TestCommandHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<TestCommand, TestCommandHandler>(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -124,10 +122,8 @@ public class InMemoryCommandExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new ErrorCommandHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<TestCommand, ErrorCommandHandler>(command);
         
         // Assert
         Assert.False(result.IsSuccess);
@@ -141,10 +137,8 @@ public class InMemoryCommandExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new NoEventsCommandHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<TestCommand, NoEventsCommandHandler>(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -159,11 +153,9 @@ public class InMemoryCommandExecutorTest
         // Arrange
         var command1 = new TestCommand("Test1", 1);
         var command2 = new TestCommand("Test2", 2);
-        var handler = new TestCommandHandler();
-        
         // Act - Execute two commands concurrently
-        var task1 = _commandExecutor.ExecuteAsync(command1, handler);
-        var task2 = _commandExecutor.ExecuteAsync(command2, handler);
+        var task1 = _commandExecutor.ExecuteAsync<TestCommand, TestCommandHandler>(command1);
+        var task2 = _commandExecutor.ExecuteAsync<TestCommand, TestCommandHandler>(command2);
         
         var results = await Task.WhenAll(task1, task2);
         
@@ -188,10 +180,8 @@ public class InMemoryCommandExecutorTest
         var testTag = new TestTag();
         
         // Custom handler that accesses state
-        var handler = new AccessStateCommandHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<TestCommand, AccessStateCommandHandler>(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -203,7 +193,7 @@ public class InMemoryCommandExecutorTest
     // Handler that accesses state
     private class AccessStateCommandHandler : ICommandHandler<TestCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(
             TestCommand command,
             ICommandContext context)
         {
@@ -226,10 +216,8 @@ public class InMemoryCommandExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new MultiTagCommandHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<TestCommand, MultiTagCommandHandler>(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -250,7 +238,7 @@ public class InMemoryCommandExecutorTest
     // Handler that creates events with multiple tags
     private class MultiTagCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(
+        public static Task<ResultBox<EventOrNone>> HandleAsync(
             TestCommand command,
             ICommandContext context)
         {
@@ -508,10 +496,8 @@ public class InMemoryCommandExecutorDomainTests
         // Arrange
         var classRoomId = Guid.NewGuid();
         var command = new CreateClassRoom(classRoomId, "Math 101", 20);
-        var handler = new CreateClassRoomHandler();
-        
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(command);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -537,13 +523,13 @@ public class InMemoryCommandExecutorDomainTests
             new CreateStudent(studentId, "John Doe", 5));
         
         // Create classroom
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Math 101", 10),
             new CreateClassRoomHandler());
         
         // Act - Enroll student
         var enrollCommand = new EnrollStudentInClassRoom(studentId, classRoomId);
-        var result = await _commandExecutor.ExecuteAsync(enrollCommand, new EnrollStudentInClassRoomHandler());
+        var result = await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(enrollCommand);
         
         // Assert
         Assert.True(result.IsSuccess);
@@ -579,23 +565,23 @@ public class InMemoryCommandExecutorDomainTests
             var classRoomId = Guid.NewGuid();
             classRoomIds.Add(classRoomId);
             
-            await _commandExecutor.ExecuteAsync(
+            await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
                 new CreateClassRoom(classRoomId, $"Class {i}", 10),
                 new CreateClassRoomHandler());
             
-            await _commandExecutor.ExecuteAsync(
+            await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
                 new EnrollStudentInClassRoomHandler());
         }
         
         // Create a third classroom
         var thirdClassRoomId = Guid.NewGuid();
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(thirdClassRoomId, "Class 3", 10),
             new CreateClassRoomHandler());
         
         // Act - Try to enroll in third classroom
-        var result = await _commandExecutor.ExecuteAsync(
+        var result = await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
             new EnrollStudentInClassRoom(studentId, thirdClassRoomId),
             new EnrollStudentInClassRoomHandler());
         
@@ -613,7 +599,7 @@ public class InMemoryCommandExecutorDomainTests
         var studentIds = new List<Guid>();
         
         // Create classroom with max 2 students
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Small Class", 2),
             new CreateClassRoomHandler());
         
@@ -626,7 +612,7 @@ public class InMemoryCommandExecutorDomainTests
             await _commandExecutor.ExecuteAsync(
                 new CreateStudent(studentId, $"Student {i}", 5));
             
-            await _commandExecutor.ExecuteAsync(
+            await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
                 new EnrollStudentInClassRoomHandler());
         }
@@ -637,7 +623,7 @@ public class InMemoryCommandExecutorDomainTests
             new CreateStudent(thirdStudentId, "Student 3", 5));
         
         // Act - Try to enroll third student
-        var result = await _commandExecutor.ExecuteAsync(
+        var result = await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
             new EnrollStudentInClassRoom(thirdStudentId, classRoomId),
             new EnrollStudentInClassRoomHandler());
         
@@ -658,17 +644,17 @@ public class InMemoryCommandExecutorDomainTests
         await _commandExecutor.ExecuteAsync(
             new CreateStudent(studentId, "John Doe"));
         
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Math 101"),
             new CreateClassRoomHandler());
         
         // Enroll student
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
             new EnrollStudentInClassRoom(studentId, classRoomId),
             new EnrollStudentInClassRoomHandler());
         
         // Act - Try to enroll again
-        var result = await _commandExecutor.ExecuteAsync(
+        var result = await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
             new EnrollStudentInClassRoom(studentId, classRoomId),
             new EnrollStudentInClassRoomHandler());
         
@@ -689,16 +675,16 @@ public class InMemoryCommandExecutorDomainTests
         await _commandExecutor.ExecuteAsync(
             new CreateStudent(studentId, "John Doe"));
         
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Math 101"),
             new CreateClassRoomHandler());
         
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
             new EnrollStudentInClassRoom(studentId, classRoomId),
             new EnrollStudentInClassRoomHandler());
         
         // Act - Drop student
-        var result = await _commandExecutor.ExecuteAsync(
+        var result = await _commandExecutor.ExecuteAsync<DropStudentFromClassRoom, DropStudentFromClassRoomHandler>(
             new DropStudentFromClassRoom(studentId, classRoomId),
             new DropStudentFromClassRoomHandler());
         
@@ -730,12 +716,12 @@ public class InMemoryCommandExecutorDomainTests
         await _commandExecutor.ExecuteAsync(
             new CreateStudent(studentId, "John Doe"));
         
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Math 101"),
             new CreateClassRoomHandler());
         
         // Act - Try to drop without enrollment
-        var result = await _commandExecutor.ExecuteAsync(
+        var result = await _commandExecutor.ExecuteAsync<DropStudentFromClassRoom, DropStudentFromClassRoomHandler>(
             new DropStudentFromClassRoom(studentId, classRoomId),
             new DropStudentFromClassRoomHandler());
         
@@ -759,14 +745,14 @@ public class InMemoryCommandExecutorDomainTests
         await _commandExecutor.ExecuteAsync(new CreateStudent(student1, "Alice", 3));
         await _commandExecutor.ExecuteAsync(new CreateStudent(student2, "Bob", 3));
         await _commandExecutor.ExecuteAsync(new CreateStudent(student3, "Charlie", 3));
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom1, "Math", 3), new CreateClassRoomHandler());
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom2, "Science", 3), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(new CreateClassRoom(classRoom1, "Math", 3));
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(new CreateClassRoom(classRoom2, "Science", 3));
         
         // Enroll students in various combinations
-        await _commandExecutor.ExecuteAsync(new EnrollStudentInClassRoom(student1, classRoom1), new EnrollStudentInClassRoomHandler());
-        await _commandExecutor.ExecuteAsync(new EnrollStudentInClassRoom(student1, classRoom2), new EnrollStudentInClassRoomHandler());
-        await _commandExecutor.ExecuteAsync(new EnrollStudentInClassRoom(student2, classRoom1), new EnrollStudentInClassRoomHandler());
-        await _commandExecutor.ExecuteAsync(new EnrollStudentInClassRoom(student3, classRoom2), new EnrollStudentInClassRoomHandler());
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(new EnrollStudentInClassRoom(student1, classRoom1));
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(new EnrollStudentInClassRoom(student1, classRoom2));
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(new EnrollStudentInClassRoom(student2, classRoom1));
+        await _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(new EnrollStudentInClassRoom(student3, classRoom2));
         
         // Verify all enrollments succeeded
         var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1));
@@ -778,7 +764,7 @@ public class InMemoryCommandExecutorDomainTests
         Assert.Equal(3, scienceEventsList.Count); // Created + 2 enrollments
         
         // Drop a student and verify
-        await _commandExecutor.ExecuteAsync(new DropStudentFromClassRoom(student1, classRoom1), new DropStudentFromClassRoomHandler());
+        await _commandExecutor.ExecuteAsync<DropStudentFromClassRoom, DropStudentFromClassRoomHandler>(new DropStudentFromClassRoom(student1, classRoom1));
         
         var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1));
         var aliceEventsList = aliceEvents.GetValue().ToList();
@@ -793,7 +779,7 @@ public class InMemoryCommandExecutorDomainTests
         var studentIds = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
         
         // Create classroom with limited capacity
-        await _commandExecutor.ExecuteAsync(
+        await _commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
             new CreateClassRoom(classRoomId, "Limited Class", 3),
             new CreateClassRoomHandler());
         
@@ -806,7 +792,7 @@ public class InMemoryCommandExecutorDomainTests
         
         // Act - Try to enroll all students concurrently
         var enrollTasks = studentIds.Select(id =>
-            _commandExecutor.ExecuteAsync(
+            _commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
                 new EnrollStudentInClassRoom(id, classRoomId),
                 new EnrollStudentInClassRoomHandler())).ToList();
         

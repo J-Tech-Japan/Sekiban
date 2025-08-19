@@ -7,7 +7,7 @@ namespace Dcb.Domain.Enrollment;
 
 public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(EnrollStudentInClassRoom command, ICommandContext context) =>
+    public static Task<ResultBox<EventOrNone>> HandleAsync(EnrollStudentInClassRoom command, ICommandContext context) =>
         ResultBox
             .Start
             .Remap(_ => new StudentTag(command.StudentId))

@@ -30,7 +30,7 @@ public record DropStudentFromClassRoom(Guid StudentId, Guid ClassRoomId) : IComm
 
 public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(CreateClassRoom command, ICommandContext context)
+    public static Task<ResultBox<EventOrNone>> HandleAsync(CreateClassRoom command, ICommandContext context)
         => ResultBox.Start.Remap(_ => new ClassRoomTag(command.ClassRoomId))
             .Combine(tag => context.TagExistsAsync(tag).ToResultBox())
             .Verify((_, exists) =>
@@ -43,7 +43,7 @@ public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
 
 public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(EnrollStudentInClassRoom command, ICommandContext context)
+    public static Task<ResultBox<EventOrNone>> HandleAsync(EnrollStudentInClassRoom command, ICommandContext context)
         => ResultBox.Start
             .Remap(_ => new StudentTag(command.StudentId))
             .Combine(context.GetStateAsync<StudentState, StudentProjector>)
@@ -75,7 +75,7 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 
 public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(DropStudentFromClassRoom command, ICommandContext context)
+    public static Task<ResultBox<EventOrNone>> HandleAsync(DropStudentFromClassRoom command, ICommandContext context)
         => ResultBox.Start
             .Remap(_ => new StudentTag(command.StudentId))
             .Combine(studentTag => context.GetStateAsync<StudentState, StudentProjector>(studentTag))

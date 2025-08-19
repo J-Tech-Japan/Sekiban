@@ -7,7 +7,7 @@ namespace Dcb.Domain.Enrollment;
 
 public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(DropStudentFromClassRoom command, ICommandContext context) =>
+    public static Task<ResultBox<EventOrNone>> HandleAsync(DropStudentFromClassRoom command, ICommandContext context) =>
         ResultBox
             .Start
             .Remap(_ => new StudentTag(command.StudentId))

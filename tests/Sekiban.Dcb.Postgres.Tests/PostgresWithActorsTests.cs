@@ -33,17 +33,15 @@ public class PostgresWithActorsTests : PostgresTestBase
         createStudentResult.GetValue().TagWrites.Should().NotBeEmpty();
 
         // Act - Create classroom
-        var createClassRoomResult = await commandExecutor.ExecuteAsync(
-            new CreateClassRoom(classRoomId, "Physics 101", 20),
-            new CreateClassRoomHandler());
+        var createClassRoomResult = await commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
+            new CreateClassRoom(classRoomId, "Physics 101", 20));
 
         // Assert
         createClassRoomResult.IsSuccess.Should().BeTrue();
 
         // Act - Enroll student
-        var enrollResult = await commandExecutor.ExecuteAsync(
-            new EnrollStudentInClassRoom(studentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+        var enrollResult = await commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
+            new EnrollStudentInClassRoom(studentId, classRoomId));
 
         // Assert
         enrollResult.IsSuccess.Should().BeTrue();
@@ -70,9 +68,8 @@ public class PostgresWithActorsTests : PostgresTestBase
         var classRoomId = Guid.NewGuid();
 
         // Create classroom
-        await commandExecutor.ExecuteAsync(
-            new CreateClassRoom(classRoomId, "Limited Seats", 2),
-            new CreateClassRoomHandler());
+        await commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
+            new CreateClassRoom(classRoomId, "Limited Seats", 2));
 
         // Create multiple students
         var studentIds = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
@@ -84,9 +81,8 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Act - Try to enroll all students concurrently
         var enrollTasks = studentIds
-            .Select(studentId => commandExecutor.ExecuteAsync(
-                new EnrollStudentInClassRoom(studentId, classRoomId),
-                new EnrollStudentInClassRoomHandler()))
+            .Select(studentId => commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
+                new EnrollStudentInClassRoom(studentId, classRoomId)))
             .ToList();
 
         var results = await Task.WhenAll(enrollTasks);
@@ -150,9 +146,8 @@ public class PostgresWithActorsTests : PostgresTestBase
         var classRoomId = Guid.NewGuid();
 
         // Create classroom with limit of 2 students
-        await commandExecutor.ExecuteAsync(
-            new CreateClassRoom(classRoomId, "Sequential Test Room", 2),
-            new CreateClassRoomHandler());
+        await commandExecutor.ExecuteAsync<CreateClassRoom, CreateClassRoomHandler>(
+            new CreateClassRoom(classRoomId, "Sequential Test Room", 2));
 
         // Create 3 students
         var student1Id = Guid.NewGuid();
@@ -164,17 +159,14 @@ public class PostgresWithActorsTests : PostgresTestBase
         await commandExecutor.ExecuteAsync(new CreateStudent(student3Id, "Student 3"));
 
         // Act - Enroll students sequentially
-        var result1 = await commandExecutor.ExecuteAsync(
-            new EnrollStudentInClassRoom(student1Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+        var result1 = await commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
+            new EnrollStudentInClassRoom(student1Id, classRoomId));
 
-        var result2 = await commandExecutor.ExecuteAsync(
-            new EnrollStudentInClassRoom(student2Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+        var result2 = await commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
+            new EnrollStudentInClassRoom(student2Id, classRoomId));
 
-        var result3 = await commandExecutor.ExecuteAsync(
-            new EnrollStudentInClassRoom(student3Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+        var result3 = await commandExecutor.ExecuteAsync<EnrollStudentInClassRoom, EnrollStudentInClassRoomHandler>(
+            new EnrollStudentInClassRoom(student3Id, classRoomId));
 
         // Assert - First two should succeed, third should fail
         result1.IsSuccess.Should().BeTrue("First enrollment should succeed");

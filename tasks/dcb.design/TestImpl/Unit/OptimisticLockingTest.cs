@@ -81,7 +81,7 @@ public class OptimisticLockingTest
     
     private class CreateTestHandler : ICommandHandler<CreateTestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(CreateTestCommand command, ICommandContext context)
+        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTestCommand command, ICommandContext context)
         {
             var tag = new TestTag(command.TagId);
             return Task.FromResult(EventOrNone.EventWithTags(
@@ -104,7 +104,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync(createCommand, new CreateTestHandler());
+        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
         Assert.True(createResult.IsSuccess);
         
         // Get the current version of the tag by using the command context
@@ -141,7 +141,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync(createCommand, new CreateTestHandler());
+        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
         Assert.True(createResult.IsSuccess);
         
         // Get the initial version
@@ -173,7 +173,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync(createCommand, new CreateTestHandler());
+        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
         Assert.True(createResult.IsSuccess);
         
         // Update multiple times
@@ -198,7 +198,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync(createCommand, new CreateTestHandler());
+        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
         Assert.True(createResult.IsSuccess);
         
         // Get the current version using command context
@@ -246,7 +246,7 @@ public class OptimisticLockingTest
         // Arrange - Create initial entity
         var tagId = Guid.NewGuid().ToString();
         var createCommand = new CreateTestCommand(tagId);
-        var createResult = await _commandExecutor.ExecuteAsync(createCommand, new CreateTestHandler());
+        var createResult = await _commandExecutor.ExecuteAsync<CreateTestCommand, CreateTestHandler>(createCommand);
         Assert.True(createResult.IsSuccess);
         
         // Update multiple times
@@ -259,8 +259,7 @@ public class OptimisticLockingTest
         
         // Act - Use ConsistencyTag.From which uses MinValue (should use latest)
         var finalUpdateCommand = new UpdateTestCommand(tagId, 4);
-        var handler = new UpdateTestHandlerWithConsistencyFrom();
-        var finalUpdateResult = await _commandExecutor.ExecuteAsync(finalUpdateCommand, handler);
+        var finalUpdateResult = await _commandExecutor.ExecuteAsync<UpdateTestCommand, UpdateTestHandlerWithConsistencyFrom>(finalUpdateCommand);
         
         // Assert
         Assert.True(finalUpdateResult.IsSuccess);
@@ -268,7 +267,7 @@ public class OptimisticLockingTest
     
     private class UpdateTestHandlerWithConsistencyFrom : ICommandHandler<UpdateTestCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestCommand command, ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestCommand command, ICommandContext context)
         {
             var tag = new TestTag(command.TagId);
             

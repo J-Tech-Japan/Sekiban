@@ -15,5 +15,5 @@ public interface ICommandHandler<in TCommand> where TCommand : ICommand
     /// <param name="command">The command to process</param>
     /// <param name="context">The command context providing access to current state</param>
     /// <returns>ResultBox containing EventOrNone (event with tags) or error information</returns>
-    Task<ResultBox<EventOrNone>> HandleAsync(TCommand command, ICommandContext context);
+    static abstract Task<ResultBox<EventOrNone>> HandleAsync(TCommand command, ICommandContext context);
 }
