@@ -35,7 +35,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         // Act - Create classroom
         var createClassRoomResult = await commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Physics 101", 20),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Assert
         createClassRoomResult.IsSuccess.Should().BeTrue();
@@ -43,7 +43,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         // Act - Enroll student
         var enrollResult = await commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(studentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
         enrollResult.IsSuccess.Should().BeTrue();
@@ -72,7 +72,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         // Create classroom
         await commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Limited Seats", 2),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Create multiple students
         var studentIds = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
@@ -86,7 +86,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         var enrollTasks = studentIds
             .Select(studentId => commandExecutor.ExecuteAsync(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
-                new EnrollStudentInClassRoomHandler()))
+                EnrollStudentInClassRoomHandler.HandleAsync))
             .ToList();
 
         var results = await Task.WhenAll(enrollTasks);
@@ -152,7 +152,7 @@ public class PostgresWithActorsTests : PostgresTestBase
         // Create classroom with limit of 2 students
         await commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Sequential Test Room", 2),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Create 3 students
         var student1Id = Guid.NewGuid();
@@ -166,15 +166,15 @@ public class PostgresWithActorsTests : PostgresTestBase
         // Act - Enroll students sequentially
         var result1 = await commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student1Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         var result2 = await commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student2Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         var result3 = await commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student3Id, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert - First two should succeed, third should fail
         result1.IsSuccess.Should().BeTrue("First enrollment should succeed");

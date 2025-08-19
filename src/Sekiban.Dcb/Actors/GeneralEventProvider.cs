@@ -43,12 +43,28 @@ public class GeneralEventProvider : IGeneralEventProvider
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
 
+    // Interface implementation (backward compatible)
     public async Task<IEventProviderHandle> StartAsync(
         Func<Event, bool, Task> onEvent,
         SortableUniqueId? fromPosition = null,
         string eventTopic = "event.all",
         IEventProviderFilter? filter = null,
         int batchSize = 10000,
+        CancellationToken cancellationToken = default)
+    {
+        return await StartAsyncWithRetry(onEvent, fromPosition, eventTopic, filter, batchSize, 
+            false, null, cancellationToken);
+    }
+    
+    // Overload with retry options
+    public async Task<IEventProviderHandle> StartAsyncWithRetry(
+        Func<Event, bool, Task> onEvent,
+        SortableUniqueId? fromPosition = null,
+        string eventTopic = "event.all",
+        IEventProviderFilter? filter = null,
+        int batchSize = 10000,
+        bool autoRetryOnIncompleteWindow = false,
+        TimeSpan? retryDelay = null,
         CancellationToken cancellationToken = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GeneralEventProvider));
@@ -71,6 +87,8 @@ public class GeneralEventProvider : IGeneralEventProvider
                     eventTopic,
                     filter,
                     batchSize,
+                    autoRetryOnIncompleteWindow,
+                    retryDelay ?? TimeSpan.FromSeconds(5),
                     cancellationToken);
             }
             catch (Exception ex)
@@ -83,6 +101,7 @@ public class GeneralEventProvider : IGeneralEventProvider
         return handle;
     }
 
+    // Interface implementation (backward compatible)
     public async Task<IEventProviderHandle> StartWithActorAsync(
         IMultiProjectionActorCommon actor,
         SortableUniqueId? fromPosition = null,
@@ -91,8 +110,23 @@ public class GeneralEventProvider : IGeneralEventProvider
         int batchSize = 10000,
         CancellationToken cancellationToken = default)
     {
+        return await StartWithActorAsyncWithRetry(actor, fromPosition, eventTopic, filter,
+            batchSize, false, null, cancellationToken);
+    }
+    
+    // Overload with retry options
+    public async Task<IEventProviderHandle> StartWithActorAsyncWithRetry(
+        IMultiProjectionActorCommon actor,
+        SortableUniqueId? fromPosition = null,
+        string eventTopic = "event.all",
+        IEventProviderFilter? filter = null,
+        int batchSize = 10000,
+        bool autoRetryOnIncompleteWindow = false,
+        TimeSpan? retryDelay = null,
+        CancellationToken cancellationToken = default)
+    {
         // Create batch callback that sends to actor
-        return await StartWithBatchCallbackAsync(
+        return await StartWithBatchCallbackAsyncWithRetry(
             async batch =>
             {
                 var events = batch.Select(b => b.evt).ToList();
@@ -106,15 +140,33 @@ public class GeneralEventProvider : IGeneralEventProvider
             eventTopic,
             filter,
             batchSize,
+            autoRetryOnIncompleteWindow,
+            retryDelay,
             cancellationToken);
     }
 
+    // Interface implementation (backward compatible)
     public async Task<IEventProviderHandle> StartWithBatchCallbackAsync(
         Func<IReadOnlyList<(Event evt, bool isSafe)>, Task> onEventBatch,
         SortableUniqueId? fromPosition = null,
         string eventTopic = "event.all",
         IEventProviderFilter? filter = null,
         int batchSize = 10000,
+        CancellationToken cancellationToken = default)
+    {
+        return await StartWithBatchCallbackAsyncWithRetry(onEventBatch, fromPosition, eventTopic,
+            filter, batchSize, false, null, cancellationToken);
+    }
+    
+    // Overload with retry options
+    public async Task<IEventProviderHandle> StartWithBatchCallbackAsyncWithRetry(
+        Func<IReadOnlyList<(Event evt, bool isSafe)>, Task> onEventBatch,
+        SortableUniqueId? fromPosition = null,
+        string eventTopic = "event.all",
+        IEventProviderFilter? filter = null,
+        int batchSize = 10000,
+        bool autoRetryOnIncompleteWindow = false,
+        TimeSpan? retryDelay = null,
         CancellationToken cancellationToken = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GeneralEventProvider));
@@ -137,6 +189,8 @@ public class GeneralEventProvider : IGeneralEventProvider
                     eventTopic,
                     filter,
                     batchSize,
+                    autoRetryOnIncompleteWindow,
+                    retryDelay ?? TimeSpan.FromSeconds(5),
                     cancellationToken);
             }
             catch (Exception ex)
@@ -156,6 +210,8 @@ public class GeneralEventProvider : IGeneralEventProvider
         string eventTopic,
         IEventProviderFilter? filter,
         int batchSize,
+        bool autoRetryOnIncompleteWindow,
+        TimeSpan retryDelay,
         CancellationToken cancellationToken)
     {
         UpdateState(EventProviderState.CatchingUp);
@@ -267,6 +323,35 @@ public class GeneralEventProvider : IGeneralEventProvider
                     // We're in the unsafe zone, time to transition
                     break;
                 }
+                
+                // If we processed a full batch but didn't reach SafeWindow, handle retry logic
+                if (events.Count == batchSize && processedInCurrentBatch >= batchSize)
+                {
+                    processedInCurrentBatch = 0;
+                    
+                    if (autoRetryOnIncompleteWindow)
+                    {
+                        // Wait before retrying
+                        await Task.Delay(retryDelay, cancellationToken);
+                        
+                        // Update safe threshold for next iteration
+                        safeThreshold = GetSafeWindowThreshold();
+                    }
+                    else
+                    {
+                        // Signal that manual retry is needed
+                        ((EventProviderHandle)handle).SetWaitingForManualRetry(true);
+                        
+                        // Wait for manual retry signal
+                        while (((EventProviderHandle)handle).IsWaitingForManualRetry && !cancellationToken.IsCancellationRequested && !handle.IsStopped)
+                        {
+                            await Task.Delay(100, cancellationToken);
+                        }
+                        
+                        // Update safe threshold after manual retry
+                        safeThreshold = GetSafeWindowThreshold();
+                    }
+                }
             }
 
             // Phase 2: Process buffered subscription events
@@ -309,6 +394,8 @@ public class GeneralEventProvider : IGeneralEventProvider
         string eventTopic,
         IEventProviderFilter? filter,
         int batchSize,
+        bool autoRetryOnIncompleteWindow,
+        TimeSpan retryDelay,
         CancellationToken cancellationToken)
     {
         UpdateState(EventProviderState.CatchingUp);
@@ -409,6 +496,32 @@ public class GeneralEventProvider : IGeneralEventProvider
                 if (string.Compare(lastEvent.SortableUniqueIdValue, safeThreshold.Value, StringComparison.Ordinal) > 0)
                 {
                     break;
+                }
+
+                // If we processed a full batch but didn't reach SafeWindow, handle retry logic
+                if (events.Count == batchSize && autoRetryOnIncompleteWindow)
+                {
+                    // Wait before retrying
+                    await Task.Delay(retryDelay, cancellationToken);
+                    
+                    // Update safe threshold for next iteration
+                    safeThreshold = GetSafeWindowThreshold();
+                    continue;
+                }
+                else if (events.Count == batchSize && !autoRetryOnIncompleteWindow)
+                {
+                    // Signal that manual retry is needed
+                    ((EventProviderHandle)handle).SetWaitingForManualRetry(true);
+                    
+                    // Wait for manual retry signal
+                    while (((EventProviderHandle)handle).IsWaitingForManualRetry && !cancellationToken.IsCancellationRequested && !handle.IsStopped)
+                    {
+                        await Task.Delay(100, cancellationToken);
+                    }
+                    
+                    // Update safe threshold after manual retry
+                    safeThreshold = GetSafeWindowThreshold();
+                    continue;
                 }
 
                 // Small delay between batches
@@ -614,6 +727,7 @@ public class GeneralEventProvider : IGeneralEventProvider
         private bool _disposed;
         private readonly TaskCompletionSource<bool> _batchCompletionTcs = new();
         private DateTime _lastBatchTime = DateTime.UtcNow;
+        private volatile bool _isWaitingForManualRetry;
 
         public EventProviderHandle(string providerId, Action onDispose)
         {
@@ -628,6 +742,7 @@ public class GeneralEventProvider : IGeneralEventProvider
         public bool IsSubscriptionStopped => _isSubscriptionStopped;
         public bool IsProcessingBatch => _isProcessingBatch;
         public DateTime LastBatchTime => _lastBatchTime;
+        public bool IsWaitingForManualRetry => _isWaitingForManualRetry;
 
         public void SetState(EventProviderState state) => _state = state;
         
@@ -685,6 +800,16 @@ public class GeneralEventProvider : IGeneralEventProvider
         {
             _isSubscriptionStopped = true;
             await Task.CompletedTask;
+        }
+        
+        public void SetWaitingForManualRetry(bool waiting)
+        {
+            _isWaitingForManualRetry = waiting;
+        }
+        
+        public void RetryManually()
+        {
+            _isWaitingForManualRetry = false;
         }
 
         public async Task<bool> WaitForCatchUpAsync(TimeSpan timeout)

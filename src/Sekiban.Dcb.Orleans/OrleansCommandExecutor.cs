@@ -38,15 +38,6 @@ public class OrleansCommandExecutor : ISekibanExecutor
         _generalExecutor.ExecuteAsync(command, cancellationToken);
 
     /// <summary>
-    ///     Execute a command with a provided handler
-    /// </summary>
-    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
-        TCommand command,
-        ICommandHandler<TCommand> handler,
-        CancellationToken cancellationToken = default) where TCommand : ICommand =>
-        _generalExecutor.ExecuteAsync(command, handler, cancellationToken);
-
-    /// <summary>
     ///     Execute a command with a handler function
     /// </summary>
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(

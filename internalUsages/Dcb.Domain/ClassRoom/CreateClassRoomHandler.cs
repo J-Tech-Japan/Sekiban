@@ -5,7 +5,7 @@ namespace Dcb.Domain.ClassRoom;
 
 public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
 {
-    public Task<ResultBox<EventOrNone>> HandleAsync(CreateClassRoom command, ICommandContext context) => ResultBox
+    public static Task<ResultBox<EventOrNone>> HandleAsync(CreateClassRoom command, ICommandContext context) => ResultBox
         .Start
         .Remap(_ => new ClassRoomTag(command.ClassRoomId))
         .Combine(tag => context.TagExistsAsync(tag))

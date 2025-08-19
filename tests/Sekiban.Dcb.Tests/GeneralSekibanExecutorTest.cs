@@ -27,10 +27,9 @@ public class GeneralSekibanExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new TestCommandHandler();
 
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, TestCommandHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -57,10 +56,9 @@ public class GeneralSekibanExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new ErrorCommandHandler();
 
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, ErrorCommandHandler.HandleAsync);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -74,10 +72,9 @@ public class GeneralSekibanExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new NoEventsCommandHandler();
 
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, NoEventsCommandHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -92,11 +89,10 @@ public class GeneralSekibanExecutorTest
         // Arrange
         var command1 = new TestCommand("Test1", 1);
         var command2 = new TestCommand("Test2", 2);
-        var handler = new TestCommandHandler();
 
         // Act - Execute two commands concurrently
-        var task1 = _commandExecutor.ExecuteAsync(command1, handler);
-        var task2 = _commandExecutor.ExecuteAsync(command2, handler);
+        var task1 = _commandExecutor.ExecuteAsync(command1, TestCommandHandler.HandleAsync);
+        var task2 = _commandExecutor.ExecuteAsync(command2, TestCommandHandler.HandleAsync);
 
         var results = await Task.WhenAll(task1, task2);
 
@@ -121,10 +117,8 @@ public class GeneralSekibanExecutorTest
         var testTag = new TestTag();
 
         // Custom handler that accesses state
-        var handler = new AccessStateCommandHandler();
-
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, AccessStateCommandHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -138,10 +132,9 @@ public class GeneralSekibanExecutorTest
     {
         // Arrange
         var command = new TestCommand("Test", 42);
-        var handler = new MultiTagCommandHandler();
 
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, MultiTagCommandHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -164,7 +157,7 @@ public class GeneralSekibanExecutorTest
 
     private class TestCommandHandler : ICommandHandler<TestCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
         {
             // Create test events
             var testTag = new TestTag();
@@ -183,14 +176,14 @@ public class GeneralSekibanExecutorTest
     // Error handler for testing failures
     private class ErrorCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
             Task.FromResult(ResultBox.Error<EventOrNone>(new InvalidOperationException("Handler error")));
     }
 
     // No events handler
     private class NoEventsCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
             Task.FromResult(EventOrNone.None);
     }
 
@@ -212,7 +205,7 @@ public class GeneralSekibanExecutorTest
     }
     private class AccessStateCommandHandler : ICommandHandler<TestCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
         {
             var testTag = new TestTag();
 
@@ -231,7 +224,7 @@ public class GeneralSekibanExecutorTest
     // Handler that creates events with multiple tags
     private class MultiTagCommandHandler : ICommandHandler<TestCommand>
     {
-        public Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
         {
             var tag1 = new TestTag();
             var tag2 = new TestTag2();

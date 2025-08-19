@@ -215,10 +215,8 @@ public class GeneralSekibanExecutorDomainTests
         // Arrange
         var classRoomId = Guid.NewGuid();
         var command = new CreateClassRoom(classRoomId, "Math 101", 20);
-        var handler = new CreateClassRoomHandler();
-
         // Act
-        var result = await _commandExecutor.ExecuteAsync(command, handler);
+        var result = await _commandExecutor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -243,11 +241,11 @@ public class GeneralSekibanExecutorDomainTests
         await _commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
 
         // Create classroom
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), CreateClassRoomHandler.HandleAsync);
 
         // Act - Enroll student
         var enrollCommand = new EnrollStudentInClassRoom(studentId, classRoomId);
-        var result = await _commandExecutor.ExecuteAsync(enrollCommand, new EnrollStudentInClassRoomHandler());
+        var result = await _commandExecutor.ExecuteAsync(enrollCommand, EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -284,23 +282,23 @@ public class GeneralSekibanExecutorDomainTests
 
             await _commandExecutor.ExecuteAsync(
                 new CreateClassRoom(classRoomId, $"Class {i}"),
-                new CreateClassRoomHandler());
+                CreateClassRoomHandler.HandleAsync);
 
             await _commandExecutor.ExecuteAsync(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
-                new EnrollStudentInClassRoomHandler());
+                EnrollStudentInClassRoomHandler.HandleAsync);
         }
 
         // Create a third classroom
         var thirdClassRoomId = Guid.NewGuid();
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(thirdClassRoomId, "Class 3"),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Act - Try to enroll in third classroom
         var result = await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(studentId, thirdClassRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -318,7 +316,7 @@ public class GeneralSekibanExecutorDomainTests
         // Create classroom with max 2 students
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Small Class", 2),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Create and enroll 2 students
         for (var i = 0; i < 2; i++)
@@ -330,7 +328,7 @@ public class GeneralSekibanExecutorDomainTests
 
             await _commandExecutor.ExecuteAsync(
                 new EnrollStudentInClassRoom(studentId, classRoomId),
-                new EnrollStudentInClassRoomHandler());
+                EnrollStudentInClassRoomHandler.HandleAsync);
         }
 
         // Create a third student
@@ -340,7 +338,7 @@ public class GeneralSekibanExecutorDomainTests
         // Act - Try to enroll third student
         var result = await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(thirdStudentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -358,17 +356,17 @@ public class GeneralSekibanExecutorDomainTests
         // Create student and classroom
         await _commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
 
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), CreateClassRoomHandler.HandleAsync);
 
         // Enroll student
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(studentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Act - Try to enroll again
         var result = await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(studentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -386,16 +384,16 @@ public class GeneralSekibanExecutorDomainTests
         // Create and enroll
         await _commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
 
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), CreateClassRoomHandler.HandleAsync);
 
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(studentId, classRoomId),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Act - Drop student
         var result = await _commandExecutor.ExecuteAsync(
             new DropStudentFromClassRoom(studentId, classRoomId),
-            new DropStudentFromClassRoomHandler());
+            DropStudentFromClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -424,12 +422,12 @@ public class GeneralSekibanExecutorDomainTests
         // Create student and classroom but don't enroll
         await _commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
 
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoomId, "Math 101"), CreateClassRoomHandler.HandleAsync);
 
         // Act - Try to drop without enrollment
         var result = await _commandExecutor.ExecuteAsync(
             new DropStudentFromClassRoom(studentId, classRoomId),
-            new DropStudentFromClassRoomHandler());
+            DropStudentFromClassRoomHandler.HandleAsync);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -451,24 +449,24 @@ public class GeneralSekibanExecutorDomainTests
         await _commandExecutor.ExecuteAsync(new CreateStudent(student1, "Alice", 3));
         await _commandExecutor.ExecuteAsync(new CreateStudent(student2, "Bob", 3));
         await _commandExecutor.ExecuteAsync(new CreateStudent(student3, "Charlie", 3));
-        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom1, "Math", 3), new CreateClassRoomHandler());
+        await _commandExecutor.ExecuteAsync(new CreateClassRoom(classRoom1, "Math", 3), CreateClassRoomHandler.HandleAsync);
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoom2, "Science", 3),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Enroll students in various combinations
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student1, classRoom1),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student1, classRoom2),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student2, classRoom1),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
         await _commandExecutor.ExecuteAsync(
             new EnrollStudentInClassRoom(student3, classRoom2),
-            new EnrollStudentInClassRoomHandler());
+            EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Verify all enrollments succeeded
         var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1));
@@ -482,7 +480,7 @@ public class GeneralSekibanExecutorDomainTests
         // Drop a student and verify
         await _commandExecutor.ExecuteAsync(
             new DropStudentFromClassRoom(student1, classRoom1),
-            new DropStudentFromClassRoomHandler());
+            DropStudentFromClassRoomHandler.HandleAsync);
 
         var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1));
         var aliceEventsList = aliceEvents.GetValue().ToList();
@@ -499,7 +497,7 @@ public class GeneralSekibanExecutorDomainTests
         // Create classroom with limited capacity
         await _commandExecutor.ExecuteAsync(
             new CreateClassRoom(classRoomId, "Limited Class", 3),
-            new CreateClassRoomHandler());
+            CreateClassRoomHandler.HandleAsync);
 
         // Create all students
         var createTasks = studentIds
@@ -512,7 +510,7 @@ public class GeneralSekibanExecutorDomainTests
         var enrollTasks = studentIds
             .Select(id => _commandExecutor.ExecuteAsync(
                 new EnrollStudentInClassRoom(id, classRoomId),
-                new EnrollStudentInClassRoomHandler()))
+                EnrollStudentInClassRoomHandler.HandleAsync))
             .ToList();
 
         var results = await Task.WhenAll(enrollTasks);

@@ -237,13 +237,6 @@ public class GeneralSekibanExecutor : ISekibanExecutor
 
     public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
-        ICommandHandler<TCommand> handler,
-        CancellationToken cancellationToken = default) where TCommand : ICommand =>
-        // Delegate to the function-based implementation
-        await ExecuteAsync(command, handler.HandleAsync, cancellationToken);
-
-    public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
-        TCommand command,
         CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
     {
         // Delegate to the function-based implementation using the command's own handler
