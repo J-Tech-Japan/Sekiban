@@ -54,4 +54,14 @@ public interface IEventProviderHandle : IDisposable
     ///     Check if currently processing a batch
     /// </summary>
     bool IsProcessingBatch { get; }
+    
+    /// <summary>
+    ///     Check if waiting for manual retry
+    /// </summary>
+    bool IsWaitingForManualRetry { get; }
+    
+    /// <summary>
+    ///     Manually trigger retry when SafeWindow wasn't reached
+    /// </summary>
+    void RetryManually();
 }
