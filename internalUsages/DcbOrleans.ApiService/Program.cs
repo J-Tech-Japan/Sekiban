@@ -177,7 +177,7 @@ builder.Services.AddScoped<ISekibanExecutor>(sp =>
     var eventStore = sp.GetRequiredService<IEventStore>();
     var domainTypes = sp.GetRequiredService<DcbDomainTypes>();
     var publisher = sp.GetRequiredService<IEventPublisher>();
-    return new OrleansCommandExecutor(clusterClient, eventStore, domainTypes, publisher);
+    return new OrleansDcbExecutor(clusterClient, eventStore, domainTypes, publisher);
 });
 builder.Services.AddScoped<ICommandExecutor>(sp => sp.GetRequiredService<ISekibanExecutor>());
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
