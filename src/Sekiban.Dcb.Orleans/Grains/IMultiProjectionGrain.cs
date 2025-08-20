@@ -57,18 +57,16 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <summary>
     /// Execute a single-result query against the projection
     /// </summary>
-    /// <typeparam name="TResult">The result type</typeparam>
     /// <param name="query">The query to execute</param>
-    /// <returns>The query result</returns>
-    Task<ResultBox<object>> ExecuteQueryAsync(IQueryCommon query);
+    /// <returns>The query result wrapped in QueryResultGeneral for serialization</returns>
+    Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query);
     
     /// <summary>
     /// Execute a list query against the projection
     /// </summary>
-    /// <typeparam name="TResult">The result type</typeparam>
     /// <param name="query">The list query to execute</param>
-    /// <returns>The paginated query result</returns>
-    Task<ResultBox<object>> ExecuteListQueryAsync(IListQueryCommon query);
+    /// <returns>The paginated query result wrapped in ListQueryResultGeneral for serialization</returns>
+    Task<ListQueryResultGeneral> ExecuteListQueryAsync(IListQueryCommon query);
 }
 
 /// <summary>

@@ -20,6 +20,10 @@ using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
+using Dcb.Domain.Weather;
+using Dcb.Domain.Projections;
+using Dcb.Domain.Queries;
+using Sekiban.Dcb.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -354,6 +358,99 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("DropStudent");
+
+// Weather endpoints
+apiRoute
+    .MapGet(
+        "/weather",
+        async ([FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastListQuery();
+            var result = await executor.QueryAsync(query);
+            if (result.IsSuccess)
+            {
+                var forecasts = result.GetValue().Items.Select(f => new
+                {
+                    forecastId = f.ForecastId,
+                    location = f.Location,
+                    date = f.Date.ToString("yyyy-MM-dd"),
+                    temperatureC = f.TemperatureC,
+                    temperatureF = 32 + (int)(f.TemperatureC / 0.5556),
+                    summary = f.Summary,
+                    lastUpdated = f.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
+                }).ToList();
+                
+                return Results.Ok(new
+                {
+                    forecasts = forecasts,
+                    totalCount = result.GetValue().TotalCount,
+                    message = "Weather forecasts retrieved successfully"
+                });
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecasts");
+
+apiRoute
+    .MapPost(
+        "/weather",
+        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var result = await executor.ExecuteAsync(command);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    forecastId = command.ForecastId, 
+                    eventId = result.GetValue().EventId,
+                    message = "Weather forecast created successfully" 
+                });
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("CreateWeatherForecast");
+
+apiRoute
+    .MapPut(
+        "/weather/{forecastId:guid}",
+        async (Guid forecastId, [FromBody] UpdateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
+        {
+            // Ensure the forecastId matches
+            var updateCommand = command with { ForecastId = forecastId };
+            var result = await executor.ExecuteAsync(updateCommand);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    forecastId = forecastId, 
+                    eventId = result.GetValue().EventId,
+                    message = "Weather forecast updated successfully" 
+                });
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("UpdateWeatherForecast");
+
+apiRoute
+    .MapDelete(
+        "/weather/{forecastId:guid}",
+        async (Guid forecastId, [FromServices] ISekibanExecutor executor) =>
+        {
+            var command = new DeleteWeatherForecast { ForecastId = forecastId };
+            var result = await executor.ExecuteAsync(command);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    forecastId = forecastId, 
+                    eventId = result.GetValue().EventId,
+                    message = "Weather forecast deleted successfully" 
+                });
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("DeleteWeatherForecast");
 
 // Health check endpoint
 apiRoute.MapGet("/health", () => Results.Ok("Healthy"))

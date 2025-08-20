@@ -326,14 +326,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         _isSubscriptionActive = false;
     }
     
-    public async Task<ResultBox<object>> ExecuteQueryAsync(IQueryCommon query)
+    public async Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query)
     {
         await EnsureInitializedAsync();
         
         if (_projectionActor == null)
         {
-            return ResultBox.Error<object>(
-                new InvalidOperationException("Projection actor not initialized"));
+            return new QueryResultGeneral(
+                null!, 
+                string.Empty, 
+                query);
         }
         
         try
@@ -342,7 +344,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var stateResult = await _projectionActor.GetStateAsync(true);
             if (!stateResult.IsSuccess)
             {
-                return ResultBox.Error<object>(stateResult.GetException());
+                return new QueryResultGeneral(
+                    null!, 
+                    string.Empty, 
+                    query);
             }
             
             var state = stateResult.GetValue();
@@ -355,26 +360,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var serviceProvider = ServiceProvider;
             
             // Execute the query using QueryTypes
-            return await _domainTypes.QueryTypes.ExecuteQueryAsync(
+            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
                 query, 
                 projectorProvider, 
                 serviceProvider);
+                
+            if (result.IsSuccess)
+            {
+                var value = result.GetValue();
+                return new QueryResultGeneral(
+                    value, 
+                    value?.GetType().FullName ?? string.Empty, 
+                    query);
+            }
+            
+            return new QueryResultGeneral(
+                null!, 
+                string.Empty, 
+                query);
         }
         catch (Exception ex)
         {
             _lastError = $"Query execution failed: {ex.Message}";
-            return ResultBox.Error<object>(ex);
+            return new QueryResultGeneral(
+                null!, 
+                string.Empty, 
+                query);
         }
     }
     
-    public async Task<ResultBox<object>> ExecuteListQueryAsync(IListQueryCommon query)
+    public async Task<ListQueryResultGeneral> ExecuteListQueryAsync(IListQueryCommon query)
     {
         await EnsureInitializedAsync();
         
         if (_projectionActor == null)
         {
-            return ResultBox.Error<object>(
-                new InvalidOperationException("Projection actor not initialized"));
+            return ListQueryResultGeneral.Empty;
         }
         
         try
@@ -383,7 +404,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var stateResult = await _projectionActor.GetStateAsync(true);
             if (!stateResult.IsSuccess)
             {
-                return ResultBox.Error<object>(stateResult.GetException());
+                return ListQueryResultGeneral.Empty;
             }
             
             var state = stateResult.GetValue();
@@ -396,15 +417,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var serviceProvider = ServiceProvider;
             
             // Execute the list query using QueryTypes
-            return await _domainTypes.QueryTypes.ExecuteListQueryAsync(
+            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
                 query, 
                 projectorProvider, 
                 serviceProvider);
+                
+            if (result.IsSuccess)
+            {
+                var value = result.GetValue();
+                if (value is ListQueryResult<object> listResult)
+                {
+                    return new ListQueryResultGeneral(
+                        listResult.TotalCount,
+                        listResult.TotalPages,
+                        listResult.CurrentPage,
+                        listResult.PageSize,
+                        listResult.Items,
+                        listResult.Items.FirstOrDefault()?.GetType().FullName ?? string.Empty,
+                        query);
+                }
+            }
+            
+            return ListQueryResultGeneral.Empty;
         }
         catch (Exception ex)
         {
             _lastError = $"List query execution failed: {ex.Message}";
-            return ResultBox.Error<object>(ex);
+            return ListQueryResultGeneral.Empty;
         }
     }
 }

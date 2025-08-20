@@ -5,6 +5,7 @@ namespace Dcb.Domain.Projections;
 /// </summary>
 public record WeatherForecastItem(
     Guid ForecastId,
+    string Location,
     DateTime Date,
     int TemperatureC,
     string? Summary,

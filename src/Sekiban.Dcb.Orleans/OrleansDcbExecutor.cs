@@ -96,19 +96,8 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Execute the query on the grain
             var result = await grain.ExecuteQueryAsync(queryCommon);
             
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(result.GetException());
-            }
-            
-            var value = result.GetValue();
-            if (value is TResult typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-            
-            return ResultBox.Error<TResult>(
-                new InvalidCastException($"Query result type mismatch. Expected {typeof(TResult).Name}, got {value?.GetType().Name ?? "null"}"));
+            // Convert QueryResultGeneral back to typed result
+            return result.ToTypedResult<TResult>();
         }
         catch (Exception ex)
         {
@@ -154,19 +143,8 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Execute the list query on the grain
             var result = await grain.ExecuteListQueryAsync(queryCommon);
             
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(result.GetException());
-            }
-            
-            var value = result.GetValue();
-            if (value is ListQueryResult<TResult> typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-            
-            return ResultBox.Error<ListQueryResult<TResult>>(
-                new InvalidCastException($"Query result type mismatch. Expected ListQueryResult<{typeof(TResult).Name}>, got {value?.GetType().Name ?? "null"}"));
+            // Convert ListQueryResultGeneral back to typed result
+            return result.ToTypedResult<TResult>();
         }
         catch (Exception ex)
         {

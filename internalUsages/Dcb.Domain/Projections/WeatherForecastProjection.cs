@@ -60,6 +60,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 WeatherForecastCreated created => current != null
                     ? current with // Update existing
                     {
+                        Location = created.Location,
                         Date = created.Date.ToDateTime(TimeOnly.MinValue),
                         TemperatureC = created.TemperatureC,
                         Summary = created.Summary,
@@ -67,6 +68,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                     }
                     : new WeatherForecastItem( // Create new
                         forecastId,
+                        created.Location,
                         created.Date.ToDateTime(TimeOnly.MinValue),
                         created.TemperatureC,
                         created.Summary,
@@ -75,6 +77,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 WeatherForecastUpdated updated => current != null
                     ? current with // Update existing
                     {
+                        Location = updated.Location,
                         TemperatureC = updated.TemperatureC,
                         Summary = updated.Summary,
                         LastUpdated = GetEventTimestamp(evt)
