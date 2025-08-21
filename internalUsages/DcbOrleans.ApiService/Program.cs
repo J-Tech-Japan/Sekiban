@@ -10,6 +10,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Orleans;
+using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
@@ -421,31 +422,70 @@ apiRoute
 apiRoute
     .MapGet(
         "/weather",
-        async ([FromServices] ISekibanExecutor executor) =>
+        async ([FromServices] ISekibanExecutor executor, [FromServices] IClusterClient clusterClient) =>
         {
-            var query = new GetWeatherForecastListQuery();
-            var result = await executor.QueryAsync(query);
-            if (result.IsSuccess)
+            try
             {
-                var forecasts = result.GetValue().Items.Select(f => new
-                {
-                    forecastId = f.ForecastId,
-                    location = f.Location,
-                    date = f.Date.ToString("yyyy-MM-dd"),
-                    temperatureC = f.TemperatureC,
-                    temperatureF = 32 + (int)(f.TemperatureC / 0.5556),
-                    summary = f.Summary,
-                    lastUpdated = f.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
-                }).ToList();
+                // First, check the grain status
+                var grain = clusterClient.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+                var status = await grain.GetStatusAsync();
+                Console.WriteLine($"[Weather GET] Grain status - Events processed: {status.EventsProcessed}, Is caught up: {status.IsCaughtUp}, Position: {status.CurrentPosition}");
                 
-                return Results.Ok(new
+                // Try to get state directly from grain
+                var stateResult = await grain.GetStateAsync(true);
+                if (stateResult.IsSuccess)
                 {
-                    forecasts = forecasts,
-                    totalCount = result.GetValue().TotalCount,
-                    message = "Weather forecasts retrieved successfully"
-                });
+                    var state = stateResult.GetValue();
+                    Console.WriteLine($"[Weather GET] Grain state - Payload type: {state.Payload?.GetType().Name}");
+                }
+                
+                // Now try the query through executor
+                var query = new GetWeatherForecastListQuery();
+                var result = await executor.QueryAsync(query);
+                
+                Console.WriteLine($"[Weather GET] Query result - IsSuccess: {result.IsSuccess}");
+                
+                if (result.IsSuccess)
+                {
+                    var queryResult = result.GetValue();
+                    Console.WriteLine($"[Weather GET] Query returned {queryResult.TotalCount} items");
+                    
+                    var forecasts = queryResult.Items.Select(f => new
+                    {
+                        forecastId = f.ForecastId,
+                        location = f.Location,
+                        date = f.Date.ToString("yyyy-MM-dd"),
+                        temperatureC = f.TemperatureC,
+                        temperatureF = 32 + (int)(f.TemperatureC / 0.5556),
+                        summary = f.Summary,
+                        lastUpdated = f.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
+                    }).ToList();
+                    
+                    return Results.Ok(new
+                    {
+                        forecasts = forecasts,
+                        totalCount = queryResult.TotalCount,
+                        message = "Weather forecasts retrieved successfully",
+                        debug = new
+                        {
+                            grainEventsProcessed = status.EventsProcessed,
+                            grainIsCaughtUp = status.IsCaughtUp,
+                            grainPosition = status.CurrentPosition
+                        }
+                    });
+                }
+                
+                Console.WriteLine($"[Weather GET] Query failed: {result.GetException()?.Message}");
+                return Results.BadRequest(new { error = result.GetException()?.Message });
             }
-            return Results.BadRequest(new { error = result.GetException().Message });
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Weather GET] Exception: {ex}");
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: 500,
+                    title: "Failed to retrieve weather forecasts");
+            }
         })
     .WithOpenApi()
     .WithName("GetWeatherForecasts");
@@ -453,18 +493,47 @@ apiRoute
 apiRoute
     .MapPost(
         "/weather",
-        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
+        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor, [FromServices] IClusterClient clusterClient) =>
         {
-            var result = await executor.ExecuteAsync(command);
-            if (result.IsSuccess)
+            try
             {
-                return Results.Ok(new { 
-                    forecastId = command.ForecastId, 
-                    eventId = result.GetValue().EventId,
-                    message = "Weather forecast created successfully" 
-                });
+                Console.WriteLine($"[Weather POST] Creating forecast with ID: {command.ForecastId}");
+                
+                var result = await executor.ExecuteAsync(command);
+                if (result.IsSuccess)
+                {
+                    var eventId = result.GetValue().EventId;
+                    Console.WriteLine($"[Weather POST] Event created with ID: {eventId}");
+                    
+                    // Check grain status after creation
+                    await Task.Delay(100); // Small delay to allow event processing
+                    var grain = clusterClient.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+                    var status = await grain.GetStatusAsync();
+                    Console.WriteLine($"[Weather POST] After creation - Grain events processed: {status.EventsProcessed}, Position: {status.CurrentPosition}");
+                    
+                    return Results.Ok(new { 
+                        forecastId = command.ForecastId, 
+                        eventId = eventId,
+                        message = "Weather forecast created successfully",
+                        debug = new
+                        {
+                            grainEventsProcessed = status.EventsProcessed,
+                            grainPosition = status.CurrentPosition
+                        }
+                    });
+                }
+                
+                Console.WriteLine($"[Weather POST] Failed to create forecast: {result.GetException()?.Message}");
+                return Results.BadRequest(new { error = result.GetException()?.Message });
             }
-            return Results.BadRequest(new { error = result.GetException().Message });
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Weather POST] Exception: {ex}");
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: 500,
+                    title: "Failed to create weather forecast");
+            }
         })
     .WithOpenApi()
     .WithName("CreateWeatherForecast");

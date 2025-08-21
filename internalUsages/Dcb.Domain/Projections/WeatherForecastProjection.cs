@@ -1,4 +1,5 @@
 using Dcb.Domain.Weather;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -9,6 +10,7 @@ namespace Dcb.Domain.Projections;
 /// <summary>
 ///     Weather forecast projection state using SafeUnsafeProjectionState
 /// </summary>
+[GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
 
@@ -19,6 +21,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState
     /// </summary>
+    [Id(0)]
     public SafeUnsafeProjectionState<Guid, WeatherForecastItem> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjection";

@@ -12,6 +12,7 @@
     <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.4.1" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.8" />
     <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.1" />
