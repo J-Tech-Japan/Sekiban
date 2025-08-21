@@ -21,6 +21,7 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Weather;
 using Dcb.Domain.Queries;
+using Dcb.Domain.Projections;
 using DcbOrleans.ApiService;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,6 +56,24 @@ builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 // Configure Orleans
 builder.UseOrleans(config =>
 {
+    // Configure services for grains
+    config.ConfigureServices(services =>
+    {
+        // Register the event store for grains
+        services.AddSingleton<IEventStore, PostgresEventStore>();
+        
+        // Register DbContextFactory for PostgresEventStore used by grains
+        services.AddDbContextFactory<SekibanDcbDbContext>((sp, options) =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var connectionString = configuration.GetConnectionString("DcbPostgres");
+            options.UseNpgsql(connectionString);
+        });
+        
+        // Register domain types for grains
+        services.AddSingleton(DomainType.GetDomainTypes());
+    });
+    
     // Add Azure Queue Streams
     config.AddAzureQueueStreams(
         "EventStreamProvider",
@@ -221,6 +240,7 @@ builder.Services.AddDbContextFactory<SekibanDcbDbContext>(options =>
 {
     // The connection string will be configured by Aspire's AddNpgsqlDbContext above
 });
+
 
 if (builder.Environment.IsDevelopment())
 {
@@ -418,6 +438,42 @@ apiRoute
     .WithOpenApi()
     .WithName("DropStudent");
 
+// Debug endpoint to check database
+apiRoute
+    .MapGet(
+        "/debug/events",
+        async ([FromServices] IEventStore eventStore) =>
+        {
+            try
+            {
+                var result = await eventStore.ReadAllEventsAsync();
+                if (result.IsSuccess)
+                {
+                    var events = result.GetValue().ToList();
+                    Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+                    return Results.Ok(new
+                    {
+                        totalEvents = events.Count,
+                        events = events.Select(e => new
+                        {
+                            id = e.Id,
+                            type = e.EventType,
+                            sortableId = e.SortableUniqueIdValue,
+                            tags = e.Tags
+                        })
+                    });
+                }
+                return Results.BadRequest(new { error = result.GetException()?.Message });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Debug] Exception: {ex}");
+                return Results.Problem(detail: ex.Message);
+            }
+        })
+    .WithOpenApi()
+    .WithName("DebugGetEvents");
+
 // Weather endpoints
 apiRoute
     .MapGet(
@@ -437,6 +493,18 @@ apiRoute
                 {
                     var state = stateResult.GetValue();
                     Console.WriteLine($"[Weather GET] Grain state - Payload type: {state.Payload?.GetType().Name}");
+                    
+                    // Try to inspect the payload more directly
+                    if (state.Payload is WeatherForecastProjection projection)
+                    {
+                        var currentForecasts = projection.GetCurrentForecasts();
+                        var safeForecasts = projection.GetSafeForecasts();
+                        Console.WriteLine($"[Weather GET] Projection has {currentForecasts.Count} current forecasts, {safeForecasts.Count} safe forecasts");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[Weather GET] Failed to get grain state: {stateResult.GetException()?.Message}");
                 }
                 
                 // Now try the query through executor

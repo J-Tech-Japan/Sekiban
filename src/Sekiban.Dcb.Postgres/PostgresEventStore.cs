@@ -22,6 +22,8 @@ public class PostgresEventStore : IEventStore
     {
         try
         {
+            Console.WriteLine($"[PostgresEventStore] ReadAllEventsAsync called, since: {since?.Value ?? "null"}");
+            
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             var query = context.Events.AsQueryable();
@@ -32,6 +34,8 @@ public class PostgresEventStore : IEventStore
             }
 
             var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+            
+            Console.WriteLine($"[PostgresEventStore] Found {dbEvents.Count} events in database");
 
             var events = new List<Event>();
             foreach (var dbEvent in dbEvents)

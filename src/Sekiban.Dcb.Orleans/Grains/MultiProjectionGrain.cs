@@ -51,11 +51,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         _eventSubscription = eventSubscription ?? throw new ArgumentNullException(nameof(eventSubscription));
     }
 
-    public override Task OnActivateAsync(CancellationToken cancellationToken)
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Just prepare basic setup during activation
         // Actual initialization happens on first access
         var projectorName = this.GetPrimaryKeyString();
+        
+        Console.WriteLine($"[MultiProjectionGrain] OnActivateAsync for {projectorName}");
         
         // Create the projection actor
         _projectionActor = new GeneralMultiProjectionActor(
@@ -66,13 +68,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                 SafeWindowMs = 20000 // 20 seconds
             });
         
+        // For debugging: Check if event store is available
+        if (_eventStore == null)
+        {
+            Console.WriteLine($"[MultiProjectionGrain] WARNING: _eventStore is null for {projectorName}");
+        }
+        else
+        {
+            Console.WriteLine($"[MultiProjectionGrain] _eventStore is available for {projectorName}");
+            
+            // Try to read events to verify connection
+            try
+            {
+                var testResult = await _eventStore.ReadAllEventsAsync();
+                if (testResult.IsSuccess)
+                {
+                    var count = testResult.GetValue().Count();
+                    Console.WriteLine($"[MultiProjectionGrain] Event store test successful, found {count} events");
+                }
+                else
+                {
+                    Console.WriteLine($"[MultiProjectionGrain] Event store test failed: {testResult.GetException()?.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MultiProjectionGrain] Event store test exception: {ex.Message}");
+            }
+        }
+        
         // Create event provider but don't start it yet
         _eventProvider = new GeneralEventProvider(
             _eventStore,
             _eventSubscription,
             TimeSpan.FromSeconds(20));
         
-        return base.OnActivateAsync(cancellationToken);
+        await base.OnActivateAsync(cancellationToken);
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -231,10 +262,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
 
     private async Task EnsureInitializedAsync()
     {
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] EnsureInitializedAsync called, _isInitialized={_isInitialized}");
+        
         if (_isInitialized)
             return;
         
         _isInitialized = true;
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Initializing grain...");
         
         // Restore state if available
         if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
@@ -273,8 +307,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
 
     private async Task StartSubscriptionInternalAsync()
     {
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] StartSubscriptionInternalAsync called");
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] _isSubscriptionActive={_isSubscriptionActive}, _eventProvider={(_eventProvider != null ? "set" : "null")}, _projectionActor={(_projectionActor != null ? "set" : "null")}");
+        
         if (_isSubscriptionActive || _eventProvider == null || _projectionActor == null)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Skipping subscription start - already active or missing components");
             return;
+        }
         
         try
         {
@@ -297,6 +337,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                 {
                     var historicalEvents = historicalEventsResult.GetValue().ToList();
                     Console.WriteLine($"[{this.GetPrimaryKeyString()}] Loaded {historicalEvents.Count} historical events");
+                    
+                    // Log details of each event for debugging
+                    foreach (var evt in historicalEvents)
+                    {
+                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event: Type={evt.EventType}, ID={evt.Id}, Tags=[{string.Join(", ", evt.Tags)}]");
+                    }
                     
                     if (historicalEvents.Any())
                     {
@@ -367,6 +413,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         
         if (_projectionActor == null)
         {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Projection actor is null");
             return new QueryResultGeneral(
                 null!, 
                 string.Empty, 
@@ -379,6 +426,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var stateResult = await _projectionActor.GetStateAsync(true);
             if (!stateResult.IsSuccess)
             {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Failed to get state - {stateResult.GetException()?.Message}");
                 return new QueryResultGeneral(
                     null!, 
                     string.Empty, 
@@ -386,6 +434,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             }
             
             var state = stateResult.GetValue();
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Got state - Version={state.Version}, IsCaughtUp={state.IsCatchedUp}, LastEventId={state.LastEventId}");
             
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>

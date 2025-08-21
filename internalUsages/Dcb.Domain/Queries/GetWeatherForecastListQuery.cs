@@ -21,9 +21,9 @@ public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherFor
         GetWeatherForecastListQuery query,
         IQueryContext context)
     {
-        var forecasts = query.IncludeDeleted 
-            ? projector.GetCurrentForecasts()
-            : projector.GetSafeForecasts();
+        // Always use GetCurrentForecasts() for queries (includes unsafe state)
+        // GetSafeForecasts() should only be used for special cases requiring guaranteed consistency
+        var forecasts = projector.GetCurrentForecasts();
             
         return ResultBox.FromValue(forecasts.Values.AsEnumerable());
     }
