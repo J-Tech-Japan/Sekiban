@@ -1,7 +1,6 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
-using FluentAssertions;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
@@ -36,39 +35,39 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var writeResult = await Fixture.EventStore.WriteEventsAsync(new[] { event1, event2, event3 });
 
         // Assert - Write was successful
-        writeResult.IsSuccess.Should().BeTrue();
-        writeResult.GetValue().Events.Should().HaveCount(3);
+        Assert.True(writeResult.IsSuccess);
+        Assert.Equal(3, writeResult.GetValue().Events.Count);
 
         // Act - Read all events
         var allEventsResult = await Fixture.EventStore.ReadAllEventsAsync();
 
         // Assert - All events are returned in order
-        allEventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(allEventsResult.IsSuccess);
         var allEvents = allEventsResult.GetValue().ToList();
-        allEvents.Should().HaveCount(3);
-        allEvents[0].Id.Should().Be(event1.Id);
-        allEvents[1].Id.Should().Be(event2.Id);
-        allEvents[2].Id.Should().Be(event3.Id);
+        Assert.Equal(3, allEvents.Count);
+        Assert.Equal(event1.Id, allEvents[0].Id);
+        Assert.Equal(event2.Id, allEvents[1].Id);
+        Assert.Equal(event3.Id, allEvents[2].Id);
 
         // Act - Read events by student tag
         var studentEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag);
 
         // Assert - Only student-related events are returned
-        studentEventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(studentEventsResult.IsSuccess);
         var studentEvents = studentEventsResult.GetValue().ToList();
-        studentEvents.Should().HaveCount(2);
-        studentEvents[0].Id.Should().Be(event1.Id);
-        studentEvents[1].Id.Should().Be(event3.Id);
+        Assert.Equal(2, studentEvents.Count);
+        Assert.Equal(event1.Id, studentEvents[0].Id);
+        Assert.Equal(event3.Id, studentEvents[1].Id);
 
         // Act - Read events by classroom tag
         var classRoomEventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
 
         // Assert - Only classroom-related events are returned
-        classRoomEventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(classRoomEventsResult.IsSuccess);
         var classRoomEvents = classRoomEventsResult.GetValue().ToList();
-        classRoomEvents.Should().HaveCount(2);
-        classRoomEvents[0].Id.Should().Be(event2.Id);
-        classRoomEvents[1].Id.Should().Be(event3.Id);
+        Assert.Equal(2, classRoomEvents.Count);
+        Assert.Equal(event2.Id, classRoomEvents[0].Id);
+        Assert.Equal(event3.Id, classRoomEvents[1].Id);
     }
 
     [Fact]
@@ -93,12 +92,12 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag, sinceId);
 
         // Assert - Only events after the second one are returned
-        eventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(eventsResult.IsSuccess);
         var returnedEvents = eventsResult.GetValue().ToList();
-        returnedEvents.Should().HaveCount(3);
-        returnedEvents[0].Id.Should().Be(events[2].Id);
-        returnedEvents[1].Id.Should().Be(events[3].Id);
-        returnedEvents[2].Id.Should().Be(events[4].Id);
+        Assert.Equal(3, returnedEvents.Count);
+        Assert.Equal(events[2].Id, returnedEvents[0].Id);
+        Assert.Equal(events[3].Id, returnedEvents[1].Id);
+        Assert.Equal(events[4].Id, returnedEvents[2].Id);
     }
 
     [Fact]
@@ -113,8 +112,8 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var existsBeforeResult = await Fixture.EventStore.TagExistsAsync(studentTag);
 
         // Assert
-        existsBeforeResult.IsSuccess.Should().BeTrue();
-        existsBeforeResult.GetValue().Should().BeFalse();
+        Assert.True(existsBeforeResult.IsSuccess);
+        Assert.False(existsBeforeResult.GetValue());
 
         // Arrange - Write an event with the tag
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Doe", 3), studentTag);
@@ -126,11 +125,11 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var nonExistentResult = await Fixture.EventStore.TagExistsAsync(nonExistentTag);
 
         // Assert
-        existsAfterResult.IsSuccess.Should().BeTrue();
-        existsAfterResult.GetValue().Should().BeTrue();
+        Assert.True(existsAfterResult.IsSuccess);
+        Assert.True(existsAfterResult.GetValue());
 
-        nonExistentResult.IsSuccess.Should().BeTrue();
-        nonExistentResult.GetValue().Should().BeFalse();
+        Assert.True(nonExistentResult.IsSuccess);
+        Assert.False(nonExistentResult.GetValue());
     }
 
     [Fact]
@@ -150,17 +149,17 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var tagStreamsResult = await Fixture.EventStore.ReadTagsAsync(studentTag);
 
         // Assert
-        tagStreamsResult.IsSuccess.Should().BeTrue();
+        Assert.True(tagStreamsResult.IsSuccess);
         var tagStreams = tagStreamsResult.GetValue().ToList();
-        tagStreams.Should().HaveCount(2);
+        Assert.Equal(2, tagStreams.Count);
 
-        tagStreams[0].Tag.Should().Be(studentTag.GetTag());
-        tagStreams[0].EventId.Should().Be(event1.Id);
-        tagStreams[0].SortableUniqueId.Should().Be(event1.SortableUniqueIdValue);
+        Assert.Equal(studentTag.GetTag(), tagStreams[0].Tag);
+        Assert.Equal(event1.Id, tagStreams[0].EventId);
+        Assert.Equal(event1.SortableUniqueIdValue, tagStreams[0].SortableUniqueId);
 
-        tagStreams[1].Tag.Should().Be(studentTag.GetTag());
-        tagStreams[1].EventId.Should().Be(event2.Id);
-        tagStreams[1].SortableUniqueId.Should().Be(event2.SortableUniqueIdValue);
+        Assert.Equal(studentTag.GetTag(), tagStreams[1].Tag);
+        Assert.Equal(event2.Id, tagStreams[1].EventId);
+        Assert.Equal(event2.SortableUniqueIdValue, tagStreams[1].SortableUniqueId);
     }
 
     [Fact]
@@ -174,11 +173,11 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var beforeResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
 
         // Assert - Should return empty state
-        beforeResult.IsSuccess.Should().BeTrue();
+        Assert.True(beforeResult.IsSuccess);
         var beforeState = beforeResult.GetValue();
-        beforeState.Payload.Should().BeOfType<EmptyTagStatePayload>();
-        beforeState.Version.Should().Be(0);
-        beforeState.LastSortedUniqueId.Should().BeEmpty();
+        Assert.IsType<EmptyTagStatePayload>(beforeState.Payload);
+        Assert.Equal(0, beforeState.Version);
+        Assert.Empty(beforeState.LastSortedUniqueId);
 
         // Arrange - Write events
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Bob"), studentTag);
@@ -193,10 +192,10 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         var afterResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
 
         // Assert - Should return state with latest sortable unique ID
-        afterResult.IsSuccess.Should().BeTrue();
+        Assert.True(afterResult.IsSuccess);
         var afterState = afterResult.GetValue();
-        afterState.Payload.Should().BeOfType<EmptyTagStatePayload>();
-        afterState.Version.Should().Be(0); // Version is not tracked in simplified implementation
-        afterState.LastSortedUniqueId.Should().Be(event2.SortableUniqueIdValue);
+        Assert.IsType<EmptyTagStatePayload>(afterState.Payload);
+        Assert.Equal(0, afterState.Version); // Version is not tracked in simplified implementation
+        Assert.Equal(event2.SortableUniqueIdValue, afterState.LastSortedUniqueId);
     }
 }

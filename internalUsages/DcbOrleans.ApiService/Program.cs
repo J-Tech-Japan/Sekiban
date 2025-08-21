@@ -246,14 +246,33 @@ using (var scope = app.Services.CreateScope())
     try
     {
         logger.LogInformation("Starting database migration...");
+        
+        // Ensure database exists
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        if (!canConnect)
+        {
+            logger.LogWarning("Cannot connect to database. Will attempt to create it.");
+            await dbContext.Database.EnsureCreatedAsync();
+        }
+        
+        // Run migrations
         await dbContext.Database.MigrateAsync();
         logger.LogInformation("Database migration completed successfully.");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred while migrating the database.");
-        // Continue running the application even if migration fails
-        // This allows the app to start and potentially create the database on first request
+        logger.LogError(ex, "An error occurred while migrating the database. Attempting to ensure database is created...");
+        
+        try
+        {
+            // Fallback: try to create database schema without migrations
+            await dbContext.Database.EnsureCreatedAsync();
+            logger.LogInformation("Database schema created successfully using EnsureCreated.");
+        }
+        catch (Exception fallbackEx)
+        {
+            logger.LogError(fallbackEx, "Failed to create database schema. Application will continue but database operations may fail.");
+        }
     }
 }
 
@@ -495,6 +514,43 @@ apiRoute
 apiRoute.MapGet("/health", () => Results.Ok("Healthy"))
     .WithOpenApi()
     .WithName("HealthCheck");
+
+// Orleans test endpoint
+apiRoute.MapGet("/orleans/test", async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
+{
+    try
+    {
+        logger.LogInformation("Testing Orleans connectivity...");
+        
+        // Try a simple query to test Orleans grains
+        var query = new Dcb.Domain.Queries.GetWeatherForecastListQuery();
+        var result = await executor.QueryAsync(query);
+        
+        if (result.IsSuccess)
+        {
+            return Results.Ok(new { 
+                status = "Orleans is working",
+                message = "Successfully executed query through Orleans",
+                itemCount = result.GetValue().TotalCount
+            });
+        }
+        
+        return Results.Ok(new { 
+            status = "Orleans query failed",
+            error = result.GetException()?.Message ?? "Unknown error"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Orleans test failed");
+        return Results.Ok(new { 
+            status = "Orleans test failed",
+            error = ex.Message
+        });
+    }
+})
+.WithOpenApi()
+.WithName("TestOrleans");
 
 app.MapDefaultEndpoints();
 

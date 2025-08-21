@@ -30,7 +30,7 @@
     <ItemGroup>
         <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview24"/>
         <ProjectReference Include="..\Sekiban.Pure\Sekiban.Pure.csproj"/>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.0">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

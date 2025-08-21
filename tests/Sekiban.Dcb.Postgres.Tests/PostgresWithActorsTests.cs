@@ -1,7 +1,6 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
-using FluentAssertions;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Tags;
 using Xunit;
@@ -29,8 +28,8 @@ public class PostgresWithActorsTests : PostgresTestBase
         var createStudentResult = await commandExecutor.ExecuteAsync(new CreateStudent(studentId, "John Doe"));
 
         // Assert
-        createStudentResult.IsSuccess.Should().BeTrue();
-        createStudentResult.GetValue().TagWrites.Should().NotBeEmpty();
+        Assert.True(createStudentResult.IsSuccess);
+        Assert.NotEmpty(createStudentResult.GetValue().TagWrites);
 
         // Act - Create classroom
         var createClassRoomResult = await commandExecutor.ExecuteAsync(
@@ -38,7 +37,7 @@ public class PostgresWithActorsTests : PostgresTestBase
             CreateClassRoomHandler.HandleAsync);
 
         // Assert
-        createClassRoomResult.IsSuccess.Should().BeTrue();
+        Assert.True(createClassRoomResult.IsSuccess);
 
         // Act - Enroll student
         var enrollResult = await commandExecutor.ExecuteAsync(
@@ -46,16 +45,16 @@ public class PostgresWithActorsTests : PostgresTestBase
             EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert
-        enrollResult.IsSuccess.Should().BeTrue();
-        enrollResult.GetValue().TagWrites.Should().NotBeEmpty();
+        Assert.True(enrollResult.IsSuccess);
+        Assert.NotEmpty(enrollResult.GetValue().TagWrites);
 
         // Verify events are persisted in PostgreSQL
         var studentTag = new StudentTag(studentId);
         var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(studentTag);
 
-        eventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
-        events.Should().HaveCount(2); // StudentCreated and StudentEnrolledInClassRoom
+        Assert.Equal(2, events.Count); // StudentCreated and StudentEnrolledInClassRoom
     }
 
     [Fact]
@@ -104,37 +103,28 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // With race conditions, we might get anywhere from 1 to 5 successes
         // Ideally it would be exactly 2, but without proper locking this varies
-        successCount
-            .Should()
-            .BeGreaterOrEqualTo(
-                1,
-                $"At least one enrollment should succeed. Failed reasons: {string.Join(", ", failedReasons)}");
-        successCount.Should().BeLessOrEqualTo(5, "No more than 5 enrollments should succeed (total students)");
+        Assert.True(
+            successCount >= 1,
+            $"At least one enrollment should succeed. Failed reasons: {string.Join(", ", failedReasons)}");
+        Assert.True(successCount <= 5, "No more than 5 enrollments should succeed (total students)");
 
         // The total should always be 5 (all attempts)
-        (successCount + failureCount).Should().Be(5, "All 5 enrollment attempts should complete");
+        Assert.Equal(5, successCount + failureCount);
 
         // Verify in database - the number of events should match the success count
         var classRoomTag = new ClassRoomTag(classRoomId);
         var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
 
-        eventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
 
         // Should have 1 ClassRoomCreated + number of successful enrollments
         var enrollmentEvents = events.Count(e => e.Payload is StudentEnrolledInClassRoom);
-        events
-            .Count(e => e.Payload is ClassRoomCreated)
-            .Should()
-            .Be(1, "Should have exactly one ClassRoomCreated event");
-        enrollmentEvents
-            .Should()
-            .Be(
-                successCount,
-                $"Database should contain {successCount} enrollment events matching the successful command executions");
+        Assert.Equal(1, events.Count(e => e.Payload is ClassRoomCreated));
+        Assert.Equal(successCount, enrollmentEvents);
 
         // Total events should be 1 (create) + successful enrollments
-        events.Should().HaveCount(1 + successCount);
+        Assert.Equal(1 + successCount, events.Count);
     }
 
     [Fact]
@@ -177,24 +167,24 @@ public class PostgresWithActorsTests : PostgresTestBase
             EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Assert - First two should succeed, third should fail
-        result1.IsSuccess.Should().BeTrue("First enrollment should succeed");
-        result2.IsSuccess.Should().BeTrue("Second enrollment should succeed");
-        result3.IsSuccess.Should().BeFalse("Third enrollment should fail as classroom is full");
+        Assert.True(result1.IsSuccess, "First enrollment should succeed");
+        Assert.True(result2.IsSuccess, "Second enrollment should succeed");
+        Assert.False(result3.IsSuccess, "Third enrollment should fail as classroom is full");
 
         if (!result3.IsSuccess)
         {
-            result3.GetException().Message.Should().Contain("full");
+            Assert.Contains("full", result3.GetException().Message);
         }
 
         // Verify in database
         var classRoomTag = new ClassRoomTag(classRoomId);
         var eventsResult = await Fixture.EventStore.ReadEventsByTagAsync(classRoomTag);
 
-        eventsResult.IsSuccess.Should().BeTrue();
+        Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
-        events.Should().HaveCount(3); // 1 ClassRoomCreated + 2 StudentEnrolledInClassRoom
-        events.Count(e => e.Payload is ClassRoomCreated).Should().Be(1);
-        events.Count(e => e.Payload is StudentEnrolledInClassRoom).Should().Be(2);
+        Assert.Equal(3, events.Count); // 1 ClassRoomCreated + 2 StudentEnrolledInClassRoom
+        Assert.Equal(1, events.Count(e => e.Payload is ClassRoomCreated));
+        Assert.Equal(2, events.Count(e => e.Payload is StudentEnrolledInClassRoom));
     }
 
     [Fact]
@@ -217,21 +207,21 @@ public class PostgresWithActorsTests : PostgresTestBase
         var actorResult = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
 
         // Assert - Actor should exist and have correct state
-        actorResult.IsSuccess.Should().BeTrue();
+        Assert.True(actorResult.IsSuccess);
         var actor = actorResult.GetValue();
 
         var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
-        latestIdResult.IsSuccess.Should().BeTrue();
-        latestIdResult.GetValue().Should().NotBeEmpty();
+        Assert.True(latestIdResult.IsSuccess);
+        Assert.NotEmpty(latestIdResult.GetValue());
 
         // Verify the same data is in database
         var tagExistsResult = await Fixture.EventStore.TagExistsAsync(studentTag);
-        tagExistsResult.IsSuccess.Should().BeTrue();
-        tagExistsResult.GetValue().Should().BeTrue();
+        Assert.True(tagExistsResult.IsSuccess);
+        Assert.True(tagExistsResult.GetValue());
 
         var latestTagResult = await Fixture.EventStore.GetLatestTagAsync(studentTag);
-        latestTagResult.IsSuccess.Should().BeTrue();
-        latestTagResult.GetValue().LastSortedUniqueId.Should().Be(latestIdResult.GetValue());
+        Assert.True(latestTagResult.IsSuccess);
+        Assert.Equal(latestIdResult.GetValue(), latestTagResult.GetValue().LastSortedUniqueId);
     }
 
     [Fact]
@@ -252,27 +242,27 @@ public class PostgresWithActorsTests : PostgresTestBase
 
         // Get initial actor state
         var actor1Result = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-        actor1Result.IsSuccess.Should().BeTrue();
+        Assert.True(actor1Result.IsSuccess);
         var actor1 = actor1Result.GetValue();
         var latestId1Result = await actor1.GetLatestSortableUniqueIdAsync();
-        latestId1Result.IsSuccess.Should().BeTrue();
+        Assert.True(latestId1Result.IsSuccess);
         var latestId1 = latestId1Result.GetValue();
 
         // Act - Remove actor from memory
         var removed = Fixture.ActorAccessor.RemoveActor(tagConsistentActorId);
-        removed.Should().BeTrue();
+        Assert.True(removed);
 
         // Get actor again (should recreate from database)
         var actor2Result = await Fixture.ActorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-        actor2Result.IsSuccess.Should().BeTrue();
+        Assert.True(actor2Result.IsSuccess);
         var actor2 = actor2Result.GetValue();
 
         // Assert - New actor should have same state from database
         var latestId2Result = await actor2.GetLatestSortableUniqueIdAsync();
-        latestId2Result.IsSuccess.Should().BeTrue();
-        latestId2Result.GetValue().Should().Be(latestId1);
+        Assert.True(latestId2Result.IsSuccess);
+        Assert.Equal(latestId1, latestId2Result.GetValue());
 
         // Verify actors are different instances
-        actor1.Should().NotBeSameAs(actor2);
+        Assert.NotSame(actor1, actor2);
     }
 }

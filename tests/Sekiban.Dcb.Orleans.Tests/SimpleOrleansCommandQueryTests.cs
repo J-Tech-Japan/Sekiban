@@ -1,4 +1,3 @@
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans;
@@ -73,10 +72,10 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             });
         
         // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.GetValue().Should().NotBeNull();
-        result.GetValue().EventId.Should().NotBeEmpty();
-        result.GetValue().TagWrites.Should().NotBeEmpty();
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.GetValue());
+        Assert.NotEqual(Guid.Empty, result.GetValue().EventId);
+        Assert.NotEmpty(result.GetValue().TagWrites);
     }
 
     [Fact]
@@ -95,7 +94,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                 return Task.FromResult<ResultBox<EventOrNone>>(EventOrNone.EventWithTags(@event, tag));
             });
         
-        executionResult.IsSuccess.Should().BeTrue();
+        Assert.True(executionResult.IsSuccess);
         
         // Act - Get the tag state using the aggregate ID
         var tag = new TestAggregateTag(aggregateId);
@@ -103,11 +102,11 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var tagStateResult = await _executor.GetTagStateAsync(tagStateId);
         
         // Assert
-        tagStateResult.IsSuccess.Should().BeTrue();
+        Assert.True(tagStateResult.IsSuccess);
         var tagState = tagStateResult.GetValue();
-        tagState.Should().NotBeNull();
-        tagState.Version.Should().Be(1);
-        tagState.Version.Should().BeGreaterThan(0);
+        Assert.NotNull(tagState);
+        Assert.Equal(1, tagState.Version);
+        Assert.True(tagState.Version > 0);
     }
 
     [Fact]
@@ -138,9 +137,9 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var queryResult = await grain.ExecuteListQueryAsync(query);
         
         // Assert
-        queryResult.Should().NotBeNull();
-        queryResult.Query.Should().Be(query);
-        queryResult.Items.Should().NotBeNull();
+        Assert.NotNull(queryResult);
+        Assert.Equal(query, queryResult.Query);
+        Assert.NotNull(queryResult.Items);
     }
 
     [Fact]
@@ -159,7 +158,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                 return Task.FromResult<ResultBox<EventOrNone>>(EventOrNone.EventWithTags(@event, tag));
             });
         
-        createResult.IsSuccess.Should().BeTrue();
+        Assert.True(createResult.IsSuccess);
         
         // Act - Update the aggregate
         var updateCommand = new UpdateTestEntityCommand { AggregateId = aggregateId, NewName = "Updated" };
@@ -180,15 +179,15 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             });
         
         // Assert
-        updateResult.IsSuccess.Should().BeTrue();
-        updateResult.GetValue().Should().NotBeNull();
+        Assert.True(updateResult.IsSuccess);
+        Assert.NotNull(updateResult.GetValue());
         
         // Verify final state using aggregate ID
         var finalTag = new TestAggregateTag(aggregateId);
         var tagStateId = new TagStateId(finalTag, "TestProjector");
         var finalTagState = await _executor.GetTagStateAsync(tagStateId);
-        finalTagState.IsSuccess.Should().BeTrue();
-        finalTagState.GetValue().Version.Should().Be(2);
+        Assert.True(finalTagState.IsSuccess);
+        Assert.Equal(2, finalTagState.GetValue().Version);
     }
 
     // Test domain classes

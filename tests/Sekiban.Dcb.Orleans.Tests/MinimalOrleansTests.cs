@@ -1,4 +1,3 @@
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans;
@@ -37,9 +36,9 @@ public class MinimalOrleansTests : IAsyncLifetime
     public async Task Orleans_TestCluster_Should_Start_Successfully()
     {
         // Assert
-        _cluster.Should().NotBeNull();
-        _client.Should().NotBeNull();
-        _cluster.ServiceProvider.Should().NotBeNull();
+        Assert.NotNull(_cluster);
+        Assert.NotNull(_client);
+        Assert.NotNull(_cluster.ServiceProvider);
     }
 
     [Fact]
@@ -50,10 +49,10 @@ public class MinimalOrleansTests : IAsyncLifetime
         var status = await grain.GetStatusAsync();
 
         // Assert
-        status.Should().NotBeNull();
-        status.ProjectorName.Should().Be("test-projector");
-        status.EventsProcessed.Should().Be(0);
-        status.IsSubscriptionActive.Should().BeFalse();
+        Assert.NotNull(status);
+        Assert.Equal("test-projector", status.ProjectorName);
+        Assert.Equal(0, status.EventsProcessed);
+        Assert.False(status.IsSubscriptionActive);
     }
 
     [Fact]
@@ -67,8 +66,8 @@ public class MinimalOrleansTests : IAsyncLifetime
         var status2 = await grain2.GetStatusAsync();
 
         // Assert
-        status1.ProjectorName.Should().Be("projector-1");
-        status2.ProjectorName.Should().Be("projector-2");
+        Assert.Equal("projector-1", status1.ProjectorName);
+        Assert.Equal("projector-2", status2.ProjectorName);
     }
 
     [Fact]
@@ -89,9 +88,9 @@ public class MinimalOrleansTests : IAsyncLifetime
         var stoppedStatus = await grain.GetStatusAsync();
 
         // Assert
-        initialStatus.IsSubscriptionActive.Should().BeFalse();
-        activeStatus.IsSubscriptionActive.Should().BeTrue();
-        stoppedStatus.IsSubscriptionActive.Should().BeFalse();
+        Assert.False(initialStatus.IsSubscriptionActive);
+        Assert.True(activeStatus.IsSubscriptionActive);
+        Assert.False(stoppedStatus.IsSubscriptionActive);
     }
 
     [Fact]
@@ -104,10 +103,10 @@ public class MinimalOrleansTests : IAsyncLifetime
         var stateResult = await grain.GetSerializableStateAsync(true);
 
         // Assert
-        stateResult.Should().NotBeNull();
-        stateResult.IsSuccess.Should().BeTrue();
+        Assert.NotNull(stateResult);
+        Assert.True(stateResult.IsSuccess);
         var state = stateResult.GetValue();
-        state.ProjectorName.Should().Be("serialization-test");
+        Assert.Equal("serialization-test", state.ProjectorName);
     }
 
     [Fact]
@@ -120,12 +119,12 @@ public class MinimalOrleansTests : IAsyncLifetime
         var persistResult = await grain.PersistStateAsync();
 
         // Assert
-        persistResult.Should().NotBeNull();
-        persistResult.IsSuccess.Should().BeTrue();
+        Assert.NotNull(persistResult);
+        Assert.True(persistResult.IsSuccess);
         
         // Get status to verify persistence details
         var status = await grain.GetStatusAsync();
-        status.LastPersistTime.Should().NotBeNull();
+        Assert.NotNull(status.LastPersistTime);
     }
 
     private class TestSiloConfigurator : ISiloConfigurator

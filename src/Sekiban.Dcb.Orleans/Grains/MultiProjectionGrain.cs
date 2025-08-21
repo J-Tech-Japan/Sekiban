@@ -285,7 +285,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                 fromPosition = new SortableUniqueId(_state.State.LastPosition);
             }
             
-            // Start the event provider
+            // First, catch up with historical events from the event store
+            if (fromPosition == null)
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting initial catchup from beginning");
+                
+                // If no position is saved, load all events from the beginning
+                var historicalEventsResult = await _eventStore.ReadAllEventsAsync(since: null);
+                
+                if (historicalEventsResult.IsSuccess)
+                {
+                    var historicalEvents = historicalEventsResult.GetValue().ToList();
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Loaded {historicalEvents.Count} historical events");
+                    
+                    if (historicalEvents.Any())
+                    {
+                        await _projectionActor.AddEventsAsync(historicalEvents, finishedCatchUp: true);
+                        _eventsProcessed += historicalEvents.Count;
+                        _lastEventTime = DateTime.UtcNow;
+                        
+                        // Update position to the last processed event
+                        var lastEvent = historicalEvents.Last();
+                        fromPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
+                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catchup complete. Last position: {fromPosition.Value}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to load historical events: {historicalEventsResult.GetException()?.Message}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from position: {fromPosition.Value}");
+            }
+            
+            // Start the event provider for ongoing events
             _providerHandle = await _eventProvider.StartAsync(
                 async (evt, isCaughtUp) =>
                 {
@@ -395,6 +430,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         
         if (_projectionActor == null)
         {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null");
             return ListQueryResultGeneral.Empty;
         }
         
@@ -404,10 +440,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var stateResult = await _projectionActor.GetStateAsync(true);
             if (!stateResult.IsSuccess)
             {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to get state: {stateResult.GetException()?.Message}");
                 return ListQueryResultGeneral.Empty;
             }
             
             var state = stateResult.GetValue();
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] State retrieved. Payload type: {state.Payload?.GetType().Name}, Events processed: {_eventsProcessed}");
             
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
