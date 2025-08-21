@@ -5,8 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orleans.Configuration;
 using Orleans.Hosting;
-using Orleans.Storage;
-using ResultBoxes;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -21,9 +19,8 @@ using Dcb.Domain.Student;
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Weather;
-using Dcb.Domain.Projections;
 using Dcb.Domain.Queries;
-using Sekiban.Dcb.Queries;
+using DcbOrleans.ApiService;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +32,15 @@ builder.AddNpgsqlDbContext<SekibanDcbDbContext>("DcbPostgres");
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+
+// Configure JSON options for DateOnly/TimeOnly support
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    // Add support for DateOnly and TimeOnly
+    options.SerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+    options.SerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -122,6 +128,15 @@ builder.UseOrleans(config =>
         });
     });
     
+    // OrleansStorage provider for MultiProjectionGrain
+    config.AddAzureBlobGrainStorage("OrleansStorage", options =>
+    {
+        options.Configure<IServiceProvider>((opt, sp) =>
+        {
+            opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+        });
+    });
+    
     // Additional named storage providers
     config.AddAzureBlobGrainStorage("dcb-orleans-queue", options =>
     {
@@ -139,7 +154,7 @@ builder.UseOrleans(config =>
         });
     });
     
-    // Add grain storage for PubSubStore (used by Orleans streaming)
+    // Add grain storage for PubSub (used by Orleans streaming)
     config.AddAzureTableGrainStorage(
         "PubSubStore",
         options =>

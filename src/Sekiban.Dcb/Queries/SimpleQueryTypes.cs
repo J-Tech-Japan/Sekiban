@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
@@ -5,76 +6,192 @@ using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
-/// Simple implementation of IQueryTypes using reflection
+/// Simple implementation of IQueryTypes using explicit registration
 /// </summary>
 public class SimpleQueryTypes : IQueryTypes
 {
-    private readonly Dictionary<Type, Type> _queryToProjectorMap = new();
-    private readonly Dictionary<Type, Type> _queryToOutputMap = new();
-    private readonly Dictionary<string, Type> _typeNameMap = new();
-    private readonly List<Type> _queryTypes = new();
-    private readonly List<Type> _responseTypes = new();
+    private readonly ConcurrentDictionary<Type, Type> _queryToProjectorMap = new();
+    private readonly ConcurrentDictionary<Type, Type> _queryToOutputMap = new();
+    private readonly ConcurrentDictionary<string, Type> _typeNameMap = new();
+    private readonly ConcurrentBag<Type> _queryTypes = new();
+    private readonly ConcurrentBag<Type> _responseTypes = new();
     
-    public SimpleQueryTypes(params Assembly[] assemblies)
+    /// <summary>
+    /// Register a multi-projection query type
+    /// </summary>
+    /// <typeparam name="TProjector">The multi-projector type</typeparam>
+    /// <typeparam name="TQuery">The query type</typeparam>
+    /// <typeparam name="TOutput">The output type</typeparam>
+    public void RegisterQuery<TProjector, TQuery, TOutput>() 
+        where TProjector : IMultiProjector<TProjector>
+        where TQuery : IMultiProjectionQuery<TProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TOutput : notnull
     {
-        if (assemblies.Length == 0)
-        {
-            assemblies = new[] { Assembly.GetExecutingAssembly() };
-        }
+        var queryType = typeof(TQuery);
+        var projectorType = typeof(TProjector);
+        var outputType = typeof(TOutput);
         
-        ScanAssemblies(assemblies);
-    }
-    
-    private void ScanAssemblies(Assembly[] assemblies)
-    {
-        foreach (var assembly in assemblies)
+        // Check if already registered
+        if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
         {
-            var types = assembly.GetTypes()
-                .Where(t => !t.IsAbstract && !t.IsInterface)
-                .ToList();
-            
-            // Find all query implementations
-            foreach (var type in types)
+            // Check if it's the same registration
+            if (_queryToProjectorMap.TryGetValue(queryType, out var existingProjector) && 
+                _queryToOutputMap.TryGetValue(queryType, out var existingOutput))
             {
-                // Check for IMultiProjectionQuery implementations
-                var queryInterface = type.GetInterfaces()
-                    .FirstOrDefault(i => i.IsGenericType && 
-                        i.GetGenericTypeDefinition() == typeof(IMultiProjectionQuery<,,>));
-                
-                if (queryInterface != null)
+                if (existingProjector != projectorType || existingOutput != outputType)
                 {
-                    var genericArgs = queryInterface.GetGenericArguments();
-                    var projectorType = genericArgs[0];
-                    var outputType = genericArgs[2];
-                    
-                    _queryTypes.Add(type);
-                    _responseTypes.Add(outputType);
-                    _queryToProjectorMap[type] = projectorType;
-                    _queryToOutputMap[type] = outputType;
-                    _typeNameMap[type.Name] = type;
-                    _typeNameMap[type.FullName ?? type.Name] = type;
-                }
-                
-                // Check for IMultiProjectionListQuery implementations
-                var listQueryInterface = type.GetInterfaces()
-                    .FirstOrDefault(i => i.IsGenericType && 
-                        i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQuery<,,>));
-                
-                if (listQueryInterface != null)
-                {
-                    var genericArgs = listQueryInterface.GetGenericArguments();
-                    var projectorType = genericArgs[0];
-                    var outputType = genericArgs[2];
-                    
-                    _queryTypes.Add(type);
-                    _responseTypes.Add(outputType);
-                    _queryToProjectorMap[type] = projectorType;
-                    _queryToOutputMap[type] = outputType;
-                    _typeNameMap[type.Name] = type;
-                    _typeNameMap[type.FullName ?? type.Name] = type;
+                    throw new InvalidOperationException(
+                        $"Query type '{queryType.Name}' is already registered with different types. " +
+                        $"Existing: {existingProjector.Name} -> {existingOutput.Name}, " +
+                        $"New: {projectorType.Name} -> {outputType.Name}");
                 }
             }
+            return; // Already registered with same types
         }
+        
+        _queryToOutputMap[queryType] = outputType;
+        _queryTypes.Add(queryType);
+        _responseTypes.Add(outputType);
+        _typeNameMap[queryType.Name] = queryType;
+        _typeNameMap[queryType.FullName ?? queryType.Name] = queryType;
+    }
+    
+    /// <summary>
+    /// Register a multi-projection query type by extracting generic parameters from the query type
+    /// </summary>
+    /// <typeparam name="TQuery">The query type that implements IMultiProjectionQuery</typeparam>
+    public void RegisterQuery<TQuery>() where TQuery : IQueryCommon
+    {
+        var queryType = typeof(TQuery);
+        
+        // Find the IMultiProjectionQuery interface
+        var queryInterface = queryType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && 
+                i.GetGenericTypeDefinition() == typeof(IMultiProjectionQuery<,,>));
+        
+        if (queryInterface == null)
+        {
+            throw new InvalidOperationException(
+                $"Query type '{queryType.Name}' does not implement IMultiProjectionQuery<,,>");
+        }
+        
+        // Extract the generic arguments
+        var genericArgs = queryInterface.GetGenericArguments();
+        var projectorType = genericArgs[0];
+        var outputType = genericArgs[2];
+        
+        // Check if already registered
+        if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
+        {
+            // Check if it's the same registration
+            if (_queryToProjectorMap.TryGetValue(queryType, out var existingProjector) && 
+                _queryToOutputMap.TryGetValue(queryType, out var existingOutput))
+            {
+                if (existingProjector != projectorType || existingOutput != outputType)
+                {
+                    throw new InvalidOperationException(
+                        $"Query type '{queryType.Name}' is already registered with different types. " +
+                        $"Existing: {existingProjector.Name} -> {existingOutput.Name}, " +
+                        $"New: {projectorType.Name} -> {outputType.Name}");
+                }
+            }
+            return; // Already registered with same types
+        }
+        
+        _queryToOutputMap[queryType] = outputType;
+        _queryTypes.Add(queryType);
+        _responseTypes.Add(outputType);
+        _typeNameMap[queryType.Name] = queryType;
+        _typeNameMap[queryType.FullName ?? queryType.Name] = queryType;
+    }
+    
+    /// <summary>
+    /// Register a multi-projection list query type
+    /// </summary>
+    /// <typeparam name="TProjector">The multi-projector type</typeparam>
+    /// <typeparam name="TQuery">The query type</typeparam>
+    /// <typeparam name="TOutput">The output type</typeparam>
+    public void RegisterListQuery<TProjector, TQuery, TOutput>() 
+        where TProjector : IMultiProjector<TProjector>
+        where TQuery : IMultiProjectionListQuery<TProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TOutput : notnull
+    {
+        var queryType = typeof(TQuery);
+        var projectorType = typeof(TProjector);
+        var outputType = typeof(TOutput);
+        
+        // Check if already registered
+        if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
+        {
+            // Check if it's the same registration
+            if (_queryToProjectorMap.TryGetValue(queryType, out var existingProjector) && 
+                _queryToOutputMap.TryGetValue(queryType, out var existingOutput))
+            {
+                if (existingProjector != projectorType || existingOutput != outputType)
+                {
+                    throw new InvalidOperationException(
+                        $"List query type '{queryType.Name}' is already registered with different types. " +
+                        $"Existing: {existingProjector.Name} -> {existingOutput.Name}, " +
+                        $"New: {projectorType.Name} -> {outputType.Name}");
+                }
+            }
+            return; // Already registered with same types
+        }
+        
+        _queryToOutputMap[queryType] = outputType;
+        _queryTypes.Add(queryType);
+        _responseTypes.Add(outputType);
+        _typeNameMap[queryType.Name] = queryType;
+        _typeNameMap[queryType.FullName ?? queryType.Name] = queryType;
+    }
+    
+    /// <summary>
+    /// Register a multi-projection list query type by extracting generic parameters from the query type
+    /// </summary>
+    /// <typeparam name="TQuery">The query type that implements IMultiProjectionListQuery</typeparam>
+    public void RegisterListQuery<TQuery>() where TQuery : IListQueryCommon
+    {
+        var queryType = typeof(TQuery);
+        
+        // Find the IMultiProjectionListQuery interface
+        var listQueryInterface = queryType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && 
+                i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQuery<,,>));
+        
+        if (listQueryInterface == null)
+        {
+            throw new InvalidOperationException(
+                $"Query type '{queryType.Name}' does not implement IMultiProjectionListQuery<,,>");
+        }
+        
+        // Extract the generic arguments
+        var genericArgs = listQueryInterface.GetGenericArguments();
+        var projectorType = genericArgs[0];
+        var outputType = genericArgs[2];
+        
+        // Check if already registered
+        if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
+        {
+            // Check if it's the same registration
+            if (_queryToProjectorMap.TryGetValue(queryType, out var existingProjector) && 
+                _queryToOutputMap.TryGetValue(queryType, out var existingOutput))
+            {
+                if (existingProjector != projectorType || existingOutput != outputType)
+                {
+                    throw new InvalidOperationException(
+                        $"List query type '{queryType.Name}' is already registered with different types. " +
+                        $"Existing: {existingProjector.Name} -> {existingOutput.Name}, " +
+                        $"New: {projectorType.Name} -> {outputType.Name}");
+                }
+            }
+            return; // Already registered with same types
+        }
+        
+        _queryToOutputMap[queryType] = outputType;
+        _queryTypes.Add(queryType);
+        _responseTypes.Add(outputType);
+        _typeNameMap[queryType.Name] = queryType;
+        _typeNameMap[queryType.FullName ?? queryType.Name] = queryType;
     }
     
     public IEnumerable<Type> GetQueryTypes() => _queryTypes;

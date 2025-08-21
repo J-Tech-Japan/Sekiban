@@ -72,14 +72,15 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
 /// <summary>
 /// Status information for the multi-projection grain
 /// </summary>
+[GenerateSerializer]
 public record MultiProjectionGrainStatus(
-    string ProjectorName,
-    bool IsSubscriptionActive,
-    bool IsCaughtUp,
-    string? CurrentPosition,
-    long EventsProcessed,
-    DateTime? LastEventTime,
-    DateTime? LastPersistTime,
-    long StateSize,
-    bool HasError,
-    string? LastError);
+    [property: Id(0)] string ProjectorName,
+    [property: Id(1)] bool IsSubscriptionActive,
+    [property: Id(2)] bool IsCaughtUp,
+    [property: Id(3)] string? CurrentPosition,
+    [property: Id(4)] long EventsProcessed,
+    [property: Id(5)] DateTime? LastEventTime,
+    [property: Id(6)] DateTime? LastPersistTime,
+    [property: Id(7)] long StateSize,
+    [property: Id(8)] bool HasError,
+    [property: Id(9)] string? LastError);

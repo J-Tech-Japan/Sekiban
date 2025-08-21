@@ -1,15 +1,18 @@
 using Dcb.Domain.Projections;
 using ResultBoxes;
-using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
-public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>, IEquatable<GetWeatherForecastListQuery>
+[global::Orleans.GenerateSerializer]
+public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>
 {
+    [global::Orleans.Id(0)]
     public bool IncludeDeleted { get; init; } = false;
     
     // Paging parameters (from IQueryPagingParameter)
+    [global::Orleans.Id(1)]
     public int? PageNumber { get; init; }
+    [global::Orleans.Id(2)]
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
