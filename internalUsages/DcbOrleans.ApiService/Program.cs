@@ -190,6 +190,17 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(
         streamId: Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 
+// Register IEventSubscription for MultiProjectionGrain
+builder.Services.AddSingleton<IEventSubscription>(sp =>
+{
+    var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
+    return new OrleansEventSubscription(
+        clusterClient,
+        providerName: "EventStreamProvider",
+        streamNamespace: "AllEvents",
+        streamId: Guid.Empty);
+});
+
 builder.Services.AddScoped<ISekibanExecutor>(sp =>
 {
     var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
@@ -230,7 +241,20 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<SekibanDcbDbContext>();
-    await dbContext.Database.MigrateAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        logger.LogInformation("Starting database migration...");
+        await dbContext.Database.MigrateAsync();
+        logger.LogInformation("Database migration completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database.");
+        // Continue running the application even if migration fails
+        // This allows the app to start and potentially create the database on first request
+    }
 }
 
 var apiRoute = app.MapGroup("/api");

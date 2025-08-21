@@ -61,6 +61,6 @@ public record ListQueryResultGeneral(
 /// <summary>
 /// Empty list query for default values
 /// </summary>
-internal class EmptyListQueryCommon : IListQueryCommon
+public class EmptyListQueryCommon : IListQueryCommon
 {
 }
