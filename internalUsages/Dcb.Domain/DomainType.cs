@@ -28,6 +28,7 @@ public static class DomainType
             types.EventTypes.RegisterEventType<WeatherForecastCreated>();
             types.EventTypes.RegisterEventType<WeatherForecastUpdated>();
             types.EventTypes.RegisterEventType<WeatherForecastDeleted>();
+            types.EventTypes.RegisterEventType<LocationNameChanged>();
 
             // Register tag projectors
             types.TagProjectorTypes.RegisterProjector<StudentProjector>();

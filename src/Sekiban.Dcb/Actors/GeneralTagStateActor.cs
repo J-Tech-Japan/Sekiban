@@ -199,20 +199,30 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
             // Read only new events (after cached state's last sortable unique ID)
             var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
-            if (eventsResult.IsSuccess)
+            if (!eventsResult.IsSuccess)
             {
-                var newEvents = eventsResult.GetValue()
-                    .Where(e => string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0 &&
-                               string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
-                    .ToList();
+                // Log the error and throw exception instead of silently returning cached state
+                var error = eventsResult.GetException();
+                Console.WriteLine($"[GeneralTagStateActor] Error reading events for tag {tag.GetTag()}: {error.Message}");
+                
+                // For deserialization errors, we should not use cached state as it may be inconsistent
+                // Instead, throw the error so developers can see and fix the issue
+                throw new InvalidOperationException(
+                    $"Failed to read events for tag {tag.GetTag()}: {error.Message}", 
+                    error);
+            }
 
-                // Project only the new events on top of cached state
-                foreach (var evt in newEvents)
-                {
-                    currentState = projectFunc(currentState, evt);
-                    version++;
-                    lastSortedUniqueId = evt.SortableUniqueIdValue;
-                }
+            var newEvents = eventsResult.GetValue()
+                .Where(e => string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0 &&
+                           string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+                .ToList();
+
+            // Project only the new events on top of cached state
+            foreach (var evt in newEvents)
+            {
+                currentState = projectFunc(currentState, evt);
+                version++;
+                lastSortedUniqueId = evt.SortableUniqueIdValue;
             }
         }
         else
@@ -221,8 +231,15 @@ public class GeneralTagStateActor : ITagStateActorCommon
             var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
             if (!eventsResult.IsSuccess)
             {
-                // Return empty state if events cannot be read
-                return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projectorVersion };
+                // Log the error for debugging
+                var error = eventsResult.GetException();
+                Console.WriteLine($"[GeneralTagStateActor] Error reading events for full rebuild of tag {tag.GetTag()}: {error.Message}");
+                
+                // For full rebuild, if we can't read events, throw the error
+                // This ensures developers see the issue (like missing event type registration)
+                throw new InvalidOperationException(
+                    $"Failed to read events for tag {tag.GetTag()} during full rebuild: {error.Message}", 
+                    error);
             }
 
             var events = eventsResult.GetValue()

@@ -207,8 +207,8 @@ if (builder.Environment.IsDevelopment())
 }
 var app = builder.Build();
 
-// Run database migrations using shared extension method
-await app.MigrateSekibanDcbDatabaseAsync();
+// Database tables will be created automatically by the DatabaseInitializerService
+// configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
 
 var apiRoute = app.MapGroup("/api");
 
@@ -539,6 +539,86 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("UpdateWeatherForecast");
+
+apiRoute
+    .MapPatch(
+        "/weather/{forecastId:guid}/location",
+        async (Guid forecastId, [FromBody] ChangeLocationNameRequest request, [FromServices] ISekibanExecutor executor) =>
+        {
+            // Create the command with the forecastId from URL and name from body
+            var changeCommand = new ChangeLocationName
+            {
+                ForecastId = forecastId,
+                NewLocationName = request.NewLocationName
+            };
+            var result = await executor.ExecuteAsync(changeCommand);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    forecastId = forecastId, 
+                    eventId = result.GetValue().EventId,
+                    message = "Weather forecast location name changed successfully" 
+                });
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("ChangeWeatherForecastLocationName");
+
+apiRoute
+    .MapGet(
+        "/weather/{forecastId:guid}",
+        async (Guid forecastId, [FromServices] ISekibanExecutor executor) =>
+        {
+            try
+            {
+                // Create the tag and tag state ID
+                var tag = new WeatherForecastTag(forecastId);
+                var tagStateId = new TagStateId(tag, nameof(WeatherForecastProjector));
+                
+                // Get the state using GetTagStateAsync
+                var result = await executor.GetTagStateAsync(tagStateId);
+                
+                if (result.IsSuccess)
+                {
+                    var state = result.GetValue();
+                    var payload = state.Payload as WeatherForecastState;
+                    
+                    if (payload == null)
+                    {
+                        return Results.NotFound(new { error = $"Weather forecast {forecastId} not found" });
+                    }
+                    
+                    if (payload.IsDeleted)
+                    {
+                        return Results.NotFound(new { error = $"Weather forecast {forecastId} has been deleted" });
+                    }
+                    
+                    return Results.Ok(new
+                    {
+                        forecastId = payload.ForecastId,
+                        location = payload.Location,
+                        date = payload.Date.ToString("yyyy-MM-dd"),
+                        temperatureC = payload.TemperatureC,
+                        temperatureF = 32 + (int)(payload.TemperatureC / 0.5556),
+                        summary = payload.Summary,
+                        version = state.Version,
+                        lastUpdated = state.LastSortedUniqueId
+                    });
+                }
+                
+                return Results.NotFound(new { error = $"Weather forecast {forecastId} not found" });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(
+                    detail: ex.Message,
+                    statusCode: 500,
+                    title: "Failed to retrieve weather forecast");
+            }
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastById");
 
 apiRoute
     .MapDelete(
