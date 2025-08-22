@@ -1,5 +1,6 @@
 using Orleans;
 using Orleans.Runtime;
+using Orleans.Streams;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
@@ -21,9 +22,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
 {
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
-    private readonly IEventSubscription _eventSubscription;
+    private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     
+    // These are initialized in OnActivateAsync
+    private IEventSubscription? _eventSubscription;
     private GeneralMultiProjectionActor? _projectionActor;
     private GeneralEventProvider? _eventProvider;
     private IEventSubscriptionHandle? _subscriptionHandle;
@@ -43,12 +46,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
-        IEventStore eventStore)
+        IEventStore eventStore,
+        IEventSubscriptionResolver? subscriptionResolver = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _eventSubscription = new OrleansEventSubscription(this.GetStreamProvider("EventStreamProvider"), "AllEvents", Guid.Empty);
+        // Use provided resolver or fall back to default
+        _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -58,6 +63,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         var projectorName = this.GetPrimaryKeyString();
         
         Console.WriteLine($"[MultiProjectionGrain] OnActivateAsync for {projectorName}");
+        
+        // Initialize the event subscription using the resolver
+        _eventSubscription = _subscriptionResolver.Resolve(
+            projectorName,
+            (providerName, streamNamespace, streamId) =>
+            {
+                var streamProvider = this.GetStreamProvider(providerName);
+                return new OrleansEventSubscription(streamProvider, streamNamespace, streamId);
+            });
         
         // Create the projection actor
         _projectionActor = new GeneralMultiProjectionActor(
@@ -98,10 +112,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         }
         
         // Create event provider but don't start it yet
-        _eventProvider = new GeneralEventProvider(
-            _eventStore,
-            _eventSubscription,
-            TimeSpan.FromSeconds(20));
+        if (_eventSubscription != null)
+        {
+            _eventProvider = new GeneralEventProvider(
+                _eventStore,
+                _eventSubscription,
+                TimeSpan.FromSeconds(20));
+        }
+        else
+        {
+            Console.WriteLine($"[MultiProjectionGrain] WARNING: EventSubscription is null for {projectorName}");
+        }
         
         await base.OnActivateAsync(cancellationToken);
     }

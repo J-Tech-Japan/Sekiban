@@ -178,8 +178,13 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(
         providerName: "EventStreamProvider",
         @namespace: "AllEvents",
         streamId: Guid.Empty));
+builder.Services.AddSingleton<IEventSubscriptionResolver>(
+    sp => new DefaultOrleansEventSubscriptionResolver(
+        providerName: "EventStreamProvider",
+        @namespace: "AllEvents",
+        streamId: Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
-builder.Services.AddTransient<IEventSubscription, OrleansEventSubscription>();
+// Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 

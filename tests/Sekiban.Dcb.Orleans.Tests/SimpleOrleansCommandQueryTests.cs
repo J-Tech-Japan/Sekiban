@@ -439,7 +439,11 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             {
                 services.AddSingleton<DcbDomainTypes>(provider => CreateDomainTypes());
                 services.AddSingleton<IEventStore>(SharedEventStore);
-                services.AddSingleton<IEventSubscription, InMemoryEventSubscription>();
+                services.AddSingleton<IEventSubscriptionResolver>(
+                    new DefaultOrleansEventSubscriptionResolver(
+                        "EventStreamProvider",
+                        "AllEvents",
+                        Guid.Empty));
                 services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
             })
             .AddMemoryGrainStorageAsDefault()
