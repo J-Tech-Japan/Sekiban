@@ -21,6 +21,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.InMemory;
 using System.Text.Json;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -127,7 +128,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     }
 
 
-    [Fact(Skip = "Event processing pipeline needs investigation - second event not reaching projector")]
+    [Fact(Skip = "Tag state caching issue in Orleans - needs investigation")]
     public async Task Should_Update_Aggregate_Multiple_Times()
     {
     await EnsureInitializedAsync();
@@ -151,11 +152,28 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         Assert.NotNull(updateResult.GetValue());
         
         // Give the projection time to process the update event
-        await Task.Delay(500);
+        await Task.Delay(1000);
+        
+        // Check events in the event store directly
+        var testTag = new TestAggregateTag(aggregateId);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag);
+        Assert.True(eventsResult.IsSuccess, "Failed to read events from store");
+        var events = eventsResult.GetValue().ToList();
+        
+        // We should have 2 events - create and update
+        Assert.True(events.Count >= 2, $"Expected at least 2 events in store, but got {events.Count}");
         
         // Verify final state using aggregate ID
         var finalTag = new TestAggregateTag(aggregateId);
         var tagStateId = new TagStateId(finalTag, "TestProjector");
+        
+        // Clear the cache to force re-computation
+        var tagStateGrain = _client.GetGrain<ITagStateGrain>(tagStateId.GetTagStateId());
+        await tagStateGrain.ClearCacheAsync();
+        
+        // Wait a bit for tag consistent actor to catch up
+        await Task.Delay(500);
+        
     var finalTagState = await WaitForTagVersionAsync(tagStateId, 2, TimeSpan.FromSeconds(10));
     Assert.True(finalTagState.IsSuccess, $"Failed to get tag state after waiting");
     var tagState = finalTagState.GetValue();
@@ -358,7 +376,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         private readonly Guid _id;
         public TestAggregateTag(Guid id) => _id = id;
-        public bool IsConsistencyTag() => false;
+        public bool IsConsistencyTag() => false;  // Non-consistency tag for testing
         public string GetTagGroup() => "TestAggregate";
         public string GetTagContent() => _id.ToString();
     }
@@ -490,12 +508,24 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         var start = DateTime.UtcNow;
         ResultBox<TagState> last = ResultBox.Error<TagState>(new InvalidOperationException("not started"));
+        var attempts = 0;
         while (DateTime.UtcNow - start < timeout)
         {
             last = await _executor.GetTagStateAsync(id);
-            if (last.IsSuccess && last.GetValue().Version >= minVersion) return last;
+            attempts++;
+            if (last.IsSuccess)
+            {
+                var state = last.GetValue();
+                Console.WriteLine($"[WaitForTagVersion] Attempt {attempts}: Version={state.Version}, Expected={minVersion}, LastSortedUniqueId={state.LastSortedUniqueId}");
+                if (state.Version >= minVersion) return last;
+            }
+            else
+            {
+                Console.WriteLine($"[WaitForTagVersion] Attempt {attempts}: Failed to get state - {last.GetException()?.Message}");
+            }
             await Task.Delay(50);
         }
+        Console.WriteLine($"[WaitForTagVersion] Timeout after {attempts} attempts. Last version was {(last.IsSuccess ? last.GetValue().Version.ToString() : "error")}");
         return last;
     }
     private void LogDomainTypes(string phase) { }

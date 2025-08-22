@@ -578,6 +578,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             return ListQueryResultGeneral.Empty;
         }
     }
+
+    public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
+    {
+        await EnsureInitializedAsync();
+        
+        if (_projectionActor == null)
+        {
+            return false;
+        }
+        
+        return await _projectionActor.IsSortableUniqueIdReceived(sortableUniqueId);
+    }
 }
 
 /// <summary>

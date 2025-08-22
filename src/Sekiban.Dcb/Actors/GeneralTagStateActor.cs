@@ -103,7 +103,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     public async Task<TagState> GetTagStateAsync()
     {
-        // First, check if we can use cached state
+        // Always get the latest sortable unique ID from TagConsistentActor
         string? currentLatestSortableUniqueId = null;
         var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
         var tagConsistentActorResult
@@ -118,31 +118,23 @@ public class GeneralTagStateActor : ITagStateActorCommon
             }
         }
 
-        // Check if we have cached state and if it's still valid
+        // Check if we have cached state
         var cachedState = await _statePersistent.LoadStateAsync();
-        if (cachedState != null)
-        {
-            // If cached state matches current state, return cached
-            if (currentLatestSortableUniqueId == null ||
-                cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
-            {
-                return cachedState;
-            }
-        }
-
-        // Compute state from events (outside the lock to avoid deadlock)
-        var computedState = await ComputeStateFromEventsAsync();
-
-        // Update cache
-        // Double-check in case another thread computed it
-        cachedState = await _statePersistent.LoadStateAsync();
-        if (cachedState != null &&
-            (currentLatestSortableUniqueId == null || cachedState.LastSortedUniqueId == currentLatestSortableUniqueId))
+        
+        // If cached state exists and is up-to-date, return it
+        if (cachedState != null && 
+            cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
         {
             return cachedState;
         }
 
+        // Cache is stale or doesn't exist, compute new state
+        // Pass the latest sortable unique ID and cached state to avoid duplicate calls
+        var computedState = await ComputeStateFromEventsAsync(currentLatestSortableUniqueId, cachedState);
+
+        // Save the newly computed state to cache
         await _statePersistent.SaveStateAsync(computedState);
+        
         return computedState;
     }
 
@@ -161,26 +153,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
         await _statePersistent.SaveStateAsync(newState);
     }
 
-    private async Task<TagState> ComputeStateFromEventsAsync()
+    private async Task<TagState> ComputeStateFromEventsAsync(string? latestSortableUniqueId, TagState? cachedState)
     {
-        // Create the tag to query events
-        var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
-
-        // Get the latest sortable unique ID from TagConsistentActor
-        string? latestSortableUniqueId = null;
-        var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
-        var tagConsistentActorResult
-            = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-        if (tagConsistentActorResult.IsSuccess)
-        {
-            var tagConsistentActor = tagConsistentActorResult.GetValue();
-            var latestSortableUniqueIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
-            if (latestSortableUniqueIdResult.IsSuccess)
-            {
-                latestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
-            }
-        }
-
         // Get the projector function
         var projectorFuncResult = _domainTypes.TagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName);
         if (!projectorFuncResult.IsSuccess)
@@ -195,15 +169,15 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var versionResult = _domainTypes.TagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
-        // Read all events for this tag
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
-        if (!eventsResult.IsSuccess)
-        {
-            // Return empty state if events cannot be read
-            return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projectorVersion };
-        }
+        // Check if we can do incremental update
+        bool canIncrementalUpdate = cachedState != null &&
+                                    cachedState.ProjectorVersion == projectorVersion &&
+                                    !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+                                    !string.IsNullOrEmpty(latestSortableUniqueId) &&
+                                    string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0;
 
-        var events = eventsResult.GetValue().ToList();
+        // Create the tag to query events
+        var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
 
         // If TagConsistentActor has no LastSortableUniqueId, return empty state
         if (string.IsNullOrEmpty(latestSortableUniqueId))
@@ -211,44 +185,74 @@ public class GeneralTagStateActor : ITagStateActorCommon
             return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projectorVersion };
         }
 
-        // Filter events up to the latest sortable unique ID if provided
-        if (!string.IsNullOrEmpty(latestSortableUniqueId))
-        {
-            events = events
-                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <=
-                    0)
-                .ToList();
-        }
-
-        // Project events to build state
         ITagStatePayload? currentState = null;
-        var version = 0;
-        var lastSortedUniqueId = "";
+        int version = 0;
+        string lastSortedUniqueId = "";
 
-        foreach (var evt in events)
+        // Try incremental update if possible
+        if (canIncrementalUpdate && cachedState != null)
         {
-            // Initialize state with EmptyTagStatePayload if needed
-            if (currentState == null)
+            // Use cached state as starting point
+            currentState = cachedState.Payload;
+            version = cachedState.Version;
+            lastSortedUniqueId = cachedState.LastSortedUniqueId;
+
+            // Read only new events (after cached state's last sortable unique ID)
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
+            if (eventsResult.IsSuccess)
             {
-                currentState = new EmptyTagStatePayload();
+                var newEvents = eventsResult.GetValue()
+                    .Where(e => string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0 &&
+                               string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+                    .ToList();
+
+                // Project only the new events on top of cached state
+                foreach (var evt in newEvents)
+                {
+                    currentState = projectFunc(currentState, evt);
+                    version++;
+                    lastSortedUniqueId = evt.SortableUniqueIdValue;
+                }
+            }
+        }
+        else
+        {
+            // Full rebuild: projector version changed or no valid cache
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
+            if (!eventsResult.IsSuccess)
+            {
+                // Return empty state if events cannot be read
+                return TagState.GetEmpty(_tagStateId) with { ProjectorVersion = projectorVersion };
             }
 
-            // Project the event
-            currentState = projectFunc(currentState, evt);
-            version++;
+            var events = eventsResult.GetValue()
+                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+                .ToList();
 
-            // Keep track of the last sortable unique id
-            if (!string.IsNullOrEmpty(evt.SortableUniqueIdValue))
+            // Project all events from scratch
+            currentState = null;
+            version = 0;
+            lastSortedUniqueId = "";
+
+            foreach (var evt in events)
             {
-                lastSortedUniqueId = evt.SortableUniqueIdValue;
+                // Initialize state with EmptyTagStatePayload if needed
+                currentState ??= new EmptyTagStatePayload();
+
+                // Project the event
+                currentState = projectFunc(currentState, evt);
+                version++;
+
+                // Keep track of the last sortable unique id
+                if (!string.IsNullOrEmpty(evt.SortableUniqueIdValue))
+                {
+                    lastSortedUniqueId = evt.SortableUniqueIdValue;
+                }
             }
         }
 
         // If no events were processed, ensure we have at least EmptyTagStatePayload
-        if (currentState == null)
-        {
-            currentState = new EmptyTagStatePayload();
-        }
+        currentState ??= new EmptyTagStatePayload();
 
         return new TagState(
             currentState,

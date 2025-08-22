@@ -67,6 +67,13 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <param name="query">The list query to execute</param>
     /// <returns>The paginated query result wrapped in ListQueryResultGeneral for serialization</returns>
     Task<ListQueryResultGeneral> ExecuteListQueryAsync(IListQueryCommon query);
+    
+    /// <summary>
+    /// Check if a specific sortable unique ID has been received and processed.
+    /// </summary>
+    /// <param name="sortableUniqueId">The sortable unique ID to check for.</param>
+    /// <returns>True if the event with this ID has been processed, false otherwise.</returns>
+    Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
 }
 
 /// <summary>

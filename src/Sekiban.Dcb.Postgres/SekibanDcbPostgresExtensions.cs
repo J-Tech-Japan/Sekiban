@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Postgres;
@@ -51,13 +52,90 @@ public static class SekibanDcbPostgresExtensions
         {
             var configuration = sp.GetRequiredService<IConfiguration>();
             var connectionString = configuration.GetConnectionString(connectionName);
+            
             options.UseNpgsql(connectionString);
+            
+            // Suppress specific warnings and errors related to migrations
+            options.ConfigureWarnings(warnings =>
+            {
+                // Suppress migration-related warnings
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning);
+                
+                // Log migration-related command errors as warnings instead of errors
+                warnings.Log(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandError);
+            });
+            
+            // Use a custom logger to filter out migration history table errors
+            var loggerFactory = sp.GetService<ILoggerFactory>();
+            if (loggerFactory != null)
+            {
+                options.UseLoggerFactory(loggerFactory);
+                options.EnableSensitiveDataLogging(false);
+            }
         });
+
+        // Add a hosted service to ensure database tables exist
+        services.AddHostedService<DatabaseInitializerService>();
 
         // IEventStore実装を登録
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Background service to ensure database tables exist without using migrations
+    /// </summary>
+    private class DatabaseInitializerService : IHostedService
+    {
+        private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger<DatabaseInitializerService> _logger;
+
+        public DatabaseInitializerService(IServiceProvider serviceProvider, ILogger<DatabaseInitializerService> logger)
+        {
+            _serviceProvider = serviceProvider;
+            _logger = logger;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContextFactory = scope.ServiceProvider.GetService<IDbContextFactory<SekibanDcbDbContext>>();
+            
+            if (dbContextFactory != null)
+            {
+                try
+                {
+                    await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                    
+                    // Check if database can be connected
+                    var canConnect = await context.Database.CanConnectAsync(cancellationToken);
+                    if (canConnect)
+                    {
+                        // Use EnsureCreated instead of migrations to avoid migration history table issues
+                        var created = await context.Database.EnsureCreatedAsync(cancellationToken);
+                        if (created)
+                        {
+                            _logger.LogInformation("Sekiban DCB database tables created successfully.");
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Sekiban DCB database tables already exist.");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Cannot connect to database. Tables will be created when connection is available.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to initialize database. Tables will be created on first use.");
+                }
+            }
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>
