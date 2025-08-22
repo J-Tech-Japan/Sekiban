@@ -3,13 +3,18 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
+using Orleans.Serialization;
 using Orleans.Storage;
+using Orleans.Streams;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
@@ -175,7 +180,11 @@ builder.UseOrleans(config =>
     
     // Orleans will automatically discover grains in the same assembly
     config.ConfigureServices(services =>
-        services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>());
+    {
+        services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
+    });
+    
+    // Orleans will automatically discover and use the EventSurrogate
 });
 
 var domainTypes = DomainType.GetDomainTypes();
@@ -536,6 +545,79 @@ apiRoute.MapGet("/orleans/test", async ([FromServices] ISekibanExecutor executor
 })
 .WithOpenApi()
 .WithName("TestOrleans");
+
+// Test stream logger grain endpoint
+app.MapPost("/test-stream-logger", async (IClusterClient orleansClient) =>
+{
+    try
+    {
+        // Get or create the test logger grain
+        var grain = orleansClient.GetGrain<ITestStreamLoggerGrain>("test-logger");
+        
+        // Start logging (this will activate the grain and start the subscription)
+        await grain.StartLogging();
+        
+        return Results.Ok(new { 
+            status = "success",
+            message = "Test stream logger grain activated and subscribed to stream",
+            grainId = "test-logger"
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new { 
+            status = "error",
+            message = ex.Message
+        });
+    }
+})
+.WithOpenApi()
+.WithName("TestStreamLogger");
+
+// Test direct stream publish endpoint
+app.MapPost("/test-direct-stream", async (IClusterClient orleansClient) =>
+{
+    try
+    {
+        // Get stream provider and stream directly
+        var streamProvider = orleansClient.GetStreamProvider("EventStreamProvider");
+        var stream = streamProvider.GetStream<Event>(StreamId.Create("AllEvents", Guid.Empty));
+        
+        // Create a test event
+        var testPayload = new TestEventPayload { Message = "Direct stream test", Timestamp = DateTime.UtcNow };
+        var sortableId = SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid());
+        var metadata = new EventMetadata("test-causation", "test-correlation", "test-user");
+        
+        var testEvent = new Event(
+            testPayload,
+            sortableId,
+            "TestEvent",
+            Guid.NewGuid(),
+            metadata,
+            new List<string> { "TestTag" }
+        );
+        
+        // Publish directly to stream
+        await stream.OnNextAsync(testEvent);
+        
+        return Results.Ok(new { 
+            status = "success",
+            message = "Event published directly to stream",
+            eventId = testEvent.Id,
+            eventType = testEvent.EventType
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new { 
+            status = "error",
+            message = ex.Message,
+            stackTrace = ex.StackTrace
+        });
+    }
+})
+.WithOpenApi()
+.WithName("TestDirectStream");
 
 app.MapDefaultEndpoints();
 

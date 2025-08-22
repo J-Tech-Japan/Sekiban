@@ -18,7 +18,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// <summary>
 /// Orleans grain implementation for multi-projection
 /// </summary>
-public class MultiProjectionGrain : Grain, IMultiProjectionGrain
+public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
@@ -31,6 +31,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     private GeneralEventProvider? _eventProvider;
     private IEventSubscriptionHandle? _subscriptionHandle;
     private IEventProviderHandle? _providerHandle;
+    private StreamSubscriptionHandle<Event>? _orleansStreamHandle;
     
     private bool _isInitialized;
     private bool _isSubscriptionActive;
@@ -44,6 +45,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     private int _eventsSinceLastPersist = 0;
     
     private IDisposable? _persistTimer;
+    private IDisposable? _fallbackTimer;
+    private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -61,19 +64,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Just prepare basic setup during activation
-        // Actual initialization happens on first access
+        // Stream subscription will happen in lifecycle participant
         var projectorName = this.GetPrimaryKeyString();
         
         Console.WriteLine($"[MultiProjectionGrain] OnActivateAsync for {projectorName}");
-        
-        // Initialize the event subscription using the resolver
-        _eventSubscription = _subscriptionResolver.Resolve(
-            projectorName,
-            (providerName, streamNamespace, streamId) =>
-            {
-                var streamProvider = this.GetStreamProvider(providerName);
-                return new OrleansEventSubscription(streamProvider, streamNamespace, streamId);
-            });
+        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Waiting for lifecycle participant to set up stream...");
         
         // Create the projection actor
         _projectionActor = new GeneralMultiProjectionActor(
@@ -113,19 +108,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             }
         }
         
-        // Create event provider but don't start it yet
-        if (_eventSubscription != null)
-        {
-            _eventProvider = new GeneralEventProvider(
-                _eventStore,
-                _eventSubscription,
-                TimeSpan.FromSeconds(20));
-        }
-        else
-        {
-            Console.WriteLine($"[MultiProjectionGrain] WARNING: EventSubscription is null for {projectorName}");
-        }
-        
         await base.OnActivateAsync(cancellationToken);
     }
 
@@ -134,7 +116,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         // Clean up resources
         await StopSubscriptionInternalAsync();
         
+        // Unsubscribe from Orleans stream if we have a direct subscription
+        if (_orleansStreamHandle != null)
+        {
+            try
+            {
+                await _orleansStreamHandle.UnsubscribeAsync();
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Unsubscribed from Orleans stream");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error unsubscribing from stream: {ex.Message}");
+            }
+        }
+        
         _persistTimer?.Dispose();
+        _fallbackTimer?.Dispose();
         _eventProvider?.Dispose();
         
         await base.OnDeactivateAsync(reason, cancellationToken);
@@ -271,12 +268,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             _state.State.StateSize = stateSize;
             
             // Persist to storage
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state to storage - Events processed: {_eventsProcessed}");
             await _state.WriteStateAsync();
             
             _lastPersistTime = DateTime.UtcNow;
             _lastError = null; // Clear error on successful persist
             _eventsSinceLastPersist = 0; // Reset counter after successful persist
             
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] State persisted successfully");
             return ResultBox.FromValue(true); // Return true for success
         }
         catch (Exception ex)
@@ -311,6 +310,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         {
             try
             {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Restoring persisted state - Events processed: {_state.State.EventsProcessed}");
                 var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
                     _state.State.SerializedState,
                     _domainTypes.JsonSerializerOptions);
@@ -319,6 +319,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                 {
                     await _projectionActor.SetCurrentState(deserializedState);
                     _eventsProcessed = _state.State.EventsProcessed;
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] State restored successfully - Events processed: {_eventsProcessed}");
                 }
             }
             catch (Exception ex)
@@ -337,6 +338,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             new() { 
                 DueTime = _persistInterval, 
                 Period = _persistInterval, 
+                Interleave = true 
+            });
+            
+        // Set up fallback timer to check for new events if stream is not working
+        _fallbackTimer = this.RegisterGrainTimer(
+            async () => await FallbackEventCheckAsync(),
+            new() { 
+                DueTime = _fallbackCheckInterval, 
+                Period = _fallbackCheckInterval, 
                 Interleave = true 
             });
     }
@@ -549,6 +559,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             var state = stateResult.GetValue();
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] State retrieved. Payload type: {state.Payload?.GetType().Name}, Events processed: {_eventsProcessed}");
             
+            // Add detailed logging for the projection state
+            if (state.Payload != null)
+            {
+                try
+                {
+                    // Serialize the state to see its contents
+                    var stateJson = JsonSerializer.Serialize(state.Payload, _domainTypes.JsonSerializerOptions);
+                    // Log first 500 chars for brevity
+                    var truncatedJson = stateJson.Length > 500 ? stateJson.Substring(0, 500) + "..." : stateJson;
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Projection state JSON (truncated): {truncatedJson}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Could not serialize projection state: {ex.Message}");
+                }
+            }
+            
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
             {
@@ -658,6 +685,180 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refresh error: {ex}");
         }
     }
+    
+    /// <summary>
+    /// Fallback mechanism to check for new events if stream is not working
+    /// </summary>
+    private async Task FallbackEventCheckAsync()
+    {
+        // Only run fallback if we haven't received events via stream recently
+        if (_lastEventTime == null || DateTime.UtcNow - _lastEventTime > TimeSpan.FromMinutes(1))
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Fallback: No stream events for over 1 minute, checking event store");
+            await RefreshAsync();
+        }
+    }
+    
+    /// <summary>
+    /// Called by GrainEventObserver when an event is received from the Orleans stream
+    /// </summary>
+    internal async Task OnStreamEventReceived(Event evt)
+    {
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] OnStreamEventReceived: {evt.EventType}");
+        
+        // Ensure the grain is initialized before processing stream events
+        if (!_isInitialized)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Grain not initialized yet, initializing now");
+            await EnsureInitializedAsync();
+        }
+        
+        if (_projectionActor == null)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null, cannot process event");
+            return;
+        }
+        
+        try
+        {
+            // Add the event to the projection
+            await _projectionActor.AddEventsAsync(new[] { evt }, finishedCatchUp: true);
+            _eventsProcessed++;
+            _lastEventTime = DateTime.UtcNow;
+            _eventsSinceLastPersist++;
+            
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event processed successfully, total: {_eventsProcessed}");
+            
+            // Persist state after batch or periodically
+            if (_eventsSinceLastPersist >= _persistBatchSize)
+            {
+                await PersistStateAsync();
+                _eventsSinceLastPersist = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Failed to process stream event: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing stream event: {ex}");
+        }
+    }
+    
+    /// <summary>
+    /// Observer class for receiving events from Orleans streams
+    /// </summary>
+    private class GrainEventObserver : IAsyncObserver<Event>
+    {
+        private readonly MultiProjectionGrain _grain;
+        
+        public GrainEventObserver(MultiProjectionGrain grain)
+        {
+            _grain = grain;
+        }
+        
+        public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
+        {
+            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] OnNextAsync called!");
+            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Received event {item.EventType}, ID: {item.Id}");
+            await _grain.OnStreamEventReceived(item);
+        }
+        
+        public Task OnCompletedAsync()
+        {
+            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
+            return Task.CompletedTask;
+        }
+        
+        public Task OnErrorAsync(Exception ex)
+        {
+            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
+            _grain._lastError = $"Stream error: {ex.Message}";
+            return Task.CompletedTask;
+        }
+    }
+    
+    #region ILifecycleParticipant implementation
+    
+    /// <summary>
+    /// Method to participate in the grain lifecycle.
+    /// Registers a custom stage to be executed after the Activate stage.
+    /// </summary>
+    /// <param name="lifecycle">Grain lifecycle</param>
+    public void Participate(IGrainLifecycle lifecycle)
+    {
+        Console.WriteLine($"[MultiProjectionGrain] Participate called - registering lifecycle stage");
+        var stage = GrainLifecycleStage.Activate + 100;
+        lifecycle.Subscribe(this.GetType().FullName!, stage, InitStreamsAsync, CloseStreamsAsync);
+        Console.WriteLine($"[MultiProjectionGrain] Lifecycle stage registered at {stage}");
+    }
+    
+    /// <summary>
+    /// Method to initialize the stream.
+    /// Executed after the Activate stage.
+    /// </summary>
+    private async Task InitStreamsAsync(CancellationToken ct)
+    {
+        var projectorName = this.GetPrimaryKeyString();
+        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] InitStreamsAsync called in lifecycle stage");
+        
+        // Subscribe to the Orleans stream
+        var streamProvider = this.GetStreamProvider("EventStreamProvider");
+        var stream = streamProvider.GetStream<Event>(StreamId.Create("AllEvents", Guid.Empty));
+        
+        try
+        {
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Getting stream for AllEvents/00000000-0000-0000-0000-000000000000");
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Stream created: {stream != null}");
+            
+            // Create an observer for the stream
+            var observer = new GrainEventObserver(this);
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Observer created, subscribing to stream...");
+            
+            _orleansStreamHandle = await stream.SubscribeAsync(observer, token: null);
+            
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Successfully subscribed to Orleans stream!");
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Stream handle: {_orleansStreamHandle != null}");
+            
+            // Create DirectOrleansEventSubscription with the existing handle
+            _eventSubscription = new DirectOrleansEventSubscription(stream, _orleansStreamHandle);
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] DirectOrleansEventSubscription created");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
+            // Fall back to regular subscription
+            _eventSubscription = _subscriptionResolver.Resolve(
+                projectorName,
+                (providerName, streamNamespace, streamId) =>
+                {
+                    var provider = this.GetStreamProvider(providerName);
+                    return new OrleansEventSubscription(provider, streamNamespace, streamId);
+                });
+        }
+        
+        // Create event provider after subscription is set up
+        if (_eventSubscription != null)
+        {
+            _eventProvider = new GeneralEventProvider(
+                _eventStore,
+                _eventSubscription,
+                TimeSpan.FromSeconds(20));
+        }
+        else
+        {
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] WARNING: EventSubscription is null");
+        }
+    }
+    
+    /// <summary>
+    /// Method to clean up the stream.
+    /// Executed when the grain is deactivated.
+    /// </summary>
+    private Task CloseStreamsAsync(CancellationToken ct)
+    {
+        return _orleansStreamHandle?.UnsubscribeAsync() ?? Task.CompletedTask;
+    }
+    
+    #endregion
 }
 
 /// <summary>
