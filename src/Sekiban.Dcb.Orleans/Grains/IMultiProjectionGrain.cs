@@ -23,7 +23,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// </summary>
     /// <param name="canGetUnsafeState">Whether to return unsafe state (default: true)</param>
     /// <returns>The serializable multi-projection state</returns>
-    Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync(bool canGetUnsafeState = true);
+    Task<ResultBox<Orleans.MultiProjections.SerializableMultiProjectionStateDto>> GetSerializableStateAsync(bool canGetUnsafeState = true);
     
     /// <summary>
     /// Manually add events to the projection (mainly for testing)

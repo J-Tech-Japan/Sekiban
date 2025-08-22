@@ -29,20 +29,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
-// Add PostgreSQL connection
-builder.AddNpgsqlDbContext<SekibanDcbDbContext>("DcbPostgres");
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
 
-// Configure JSON options for DateOnly/TimeOnly support
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-    // Add support for DateOnly and TimeOnly
-    options.SerializerOptions.Converters.Add(new DateOnlyJsonConverter());
-    options.SerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
-});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -56,24 +46,6 @@ builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 // Configure Orleans
 builder.UseOrleans(config =>
 {
-    // Configure services for grains
-    config.ConfigureServices(services =>
-    {
-        // Register the event store for grains
-        services.AddSingleton<IEventStore, PostgresEventStore>();
-        
-        // Register DbContextFactory for PostgresEventStore used by grains
-        services.AddDbContextFactory<SekibanDcbDbContext>((sp, options) =>
-        {
-            var configuration = sp.GetRequiredService<IConfiguration>();
-            var connectionString = configuration.GetConnectionString("DcbPostgres");
-            options.UseNpgsql(connectionString);
-        });
-        
-        // Register domain types for grains
-        services.AddSingleton(DomainType.GetDomainTypes());
-    });
-    
     // Add Azure Queue Streams
     config.AddAzureQueueStreams(
         "EventStreamProvider",
@@ -197,50 +169,22 @@ builder.UseOrleans(config =>
         });
 });
 
-// Register DCB domain types
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
-
-// Register command executor
-// PubSub: Orleans AllEvents (EventStreamProvider / AllEvents / Guid.Empty)
+builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
+builder.Services.AddSekibanDcbPostgresWithAspire("DcbPostgres");
 builder.Services.AddSingleton<IStreamDestinationResolver>(
     sp => new DefaultOrleansStreamDestinationResolver(
         providerName: "EventStreamProvider",
         @namespace: "AllEvents",
         streamId: Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
-
-// Register IEventSubscription for MultiProjectionGrain
-builder.Services.AddSingleton<IEventSubscription>(sp =>
-{
-    var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
-    return new OrleansEventSubscription(
-        clusterClient,
-        providerName: "EventStreamProvider",
-        streamNamespace: "AllEvents",
-        streamId: Guid.Empty);
-});
-
-builder.Services.AddScoped<ISekibanExecutor>(sp =>
-{
-    var clusterClient = sp.GetRequiredService<Orleans.IClusterClient>();
-    var eventStore = sp.GetRequiredService<IEventStore>();
-    var domainTypes = sp.GetRequiredService<DcbDomainTypes>();
-    var publisher = sp.GetRequiredService<IEventPublisher>();
-    return new OrleansDcbExecutor(clusterClient, eventStore, domainTypes, publisher);
-});
-builder.Services.AddScoped<ICommandExecutor>(sp => sp.GetRequiredService<ISekibanExecutor>());
+builder.Services.AddTransient<IEventSubscription, OrleansEventSubscription>();
+builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
-// Add PostgreSQL event store
 // Note: TagStatePersistent is not needed when using Orleans as Orleans grains have their own persistence
-builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
-// Register DbContextFactory for PostgresEventStore
-builder.Services.AddDbContextFactory<SekibanDcbDbContext>(options =>
-{
-    // The connection string will be configured by Aspire's AddNpgsqlDbContext above
-});
-
+// IEventStoreとDbContextFactoryは既にAddSekibanDcbPostgresWithAspireで登録済み
 
 if (builder.Environment.IsDevelopment())
 {
@@ -258,44 +202,8 @@ if (builder.Environment.IsDevelopment())
 }
 var app = builder.Build();
 
-// Run database migrations
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<SekibanDcbDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    try
-    {
-        logger.LogInformation("Starting database migration...");
-        
-        // Ensure database exists
-        var canConnect = await dbContext.Database.CanConnectAsync();
-        if (!canConnect)
-        {
-            logger.LogWarning("Cannot connect to database. Will attempt to create it.");
-            await dbContext.Database.EnsureCreatedAsync();
-        }
-        
-        // Run migrations
-        await dbContext.Database.MigrateAsync();
-        logger.LogInformation("Database migration completed successfully.");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "An error occurred while migrating the database. Attempting to ensure database is created...");
-        
-        try
-        {
-            // Fallback: try to create database schema without migrations
-            await dbContext.Database.EnsureCreatedAsync();
-            logger.LogInformation("Database schema created successfully using EnsureCreated.");
-        }
-        catch (Exception fallbackEx)
-        {
-            logger.LogError(fallbackEx, "Failed to create database schema. Application will continue but database operations may fail.");
-        }
-    }
-}
+// Run database migrations using shared extension method
+await app.MigrateSekibanDcbDatabaseAsync();
 
 var apiRoute = app.MapGroup("/api");
 

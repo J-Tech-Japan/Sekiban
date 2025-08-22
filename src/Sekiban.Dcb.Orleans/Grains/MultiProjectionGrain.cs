@@ -6,6 +6,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using System.Text;
@@ -42,13 +43,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
-        IEventStore eventStore,
-        IEventSubscription eventSubscription)
+        IEventStore eventStore)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _eventSubscription = eventSubscription ?? throw new ArgumentNullException(nameof(eventSubscription));
+        _eventSubscription = new OrleansEventSubscription(this.GetStreamProvider("EventStreamProvider"), "AllEvents", Guid.Empty);
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -130,17 +130,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         return await _projectionActor.GetStateAsync(canGetUnsafeState);
     }
 
-    public async Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync(bool canGetUnsafeState = true)
+    public async Task<ResultBox<Sekiban.Dcb.Orleans.MultiProjections.SerializableMultiProjectionStateDto>> GetSerializableStateAsync(bool canGetUnsafeState = true)
     {
         await EnsureInitializedAsync();
         
         if (_projectionActor == null)
         {
-            return ResultBox.Error<SerializableMultiProjectionState>(
+            return ResultBox.Error<Sekiban.Dcb.Orleans.MultiProjections.SerializableMultiProjectionStateDto>(
                 new InvalidOperationException("Projection actor not initialized"));
         }
         
-        return await _projectionActor.GetSerializableStateAsync(canGetUnsafeState);
+        var rb = await _projectionActor.GetSerializableStateAsync(canGetUnsafeState);
+        if (!rb.IsSuccess) return ResultBox.Error<Sekiban.Dcb.Orleans.MultiProjections.SerializableMultiProjectionStateDto>(rb.GetException());
+        var dto = Sekiban.Dcb.Orleans.MultiProjections.SerializableMultiProjectionStateDto.FromCore(rb.GetValue());
+        return ResultBox.FromValue(dto);
     }
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)

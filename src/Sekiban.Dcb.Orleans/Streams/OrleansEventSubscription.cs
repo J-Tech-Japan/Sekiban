@@ -11,8 +11,7 @@ namespace Sekiban.Dcb.Orleans.Streams;
 /// </summary>
 public class OrleansEventSubscription : IEventSubscription
 {
-    private readonly IClusterClient _clusterClient;
-    private readonly string _providerName;
+    private readonly IStreamProvider _streamProvider;
     private readonly string _streamNamespace;
     private readonly Guid _streamId;
     private readonly ConcurrentDictionary<string, OrleansEventSubscriptionHandleEnhanced> _subscriptions;
@@ -21,18 +20,15 @@ public class OrleansEventSubscription : IEventSubscription
     /// <summary>
     /// Initialize Orleans event subscription
     /// </summary>
-    /// <param name="clusterClient">Orleans cluster client</param>
-    /// <param name="providerName">Stream provider name (e.g., "EventStream")</param>
+    /// <param name="streamProvider">Orleans stream provider</param>
     /// <param name="streamNamespace">Stream namespace (e.g., "Sekiban.Events")</param>
     /// <param name="streamId">Optional stream ID (defaults to new Guid if not provided)</param>
     public OrleansEventSubscription(
-        IClusterClient clusterClient,
-        string providerName,
+        IStreamProvider streamProvider,
         string streamNamespace,
         Guid? streamId = null)
     {
-        _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
-        _providerName = providerName ?? throw new ArgumentNullException(nameof(providerName));
+        _streamProvider = streamProvider ?? throw new ArgumentNullException(nameof(streamProvider));
         _streamNamespace = streamNamespace ?? throw new ArgumentNullException(nameof(streamNamespace));
         _streamId = streamId ?? Guid.NewGuid();
         _subscriptions = new ConcurrentDictionary<string, OrleansEventSubscriptionHandleEnhanced>();
@@ -51,8 +47,7 @@ public class OrleansEventSubscription : IEventSubscription
         subscriptionId ??= Guid.NewGuid().ToString();
         
         // Get the Orleans stream
-        var streamProvider = _clusterClient.GetStreamProvider(_providerName);
-        var stream = streamProvider.GetStream<Event>(_streamNamespace, _streamId);
+        var stream = _streamProvider.GetStream<Event>(_streamNamespace, _streamId);
         
         // Create subscription handle
         var handle = new OrleansEventSubscriptionHandleEnhanced(
@@ -85,8 +80,7 @@ public class OrleansEventSubscription : IEventSubscription
         subscriptionId ??= Guid.NewGuid().ToString();
         
         // Get the Orleans stream
-        var streamProvider = _clusterClient.GetStreamProvider(_providerName);
-        var stream = streamProvider.GetStream<Event>(_streamNamespace, _streamId);
+        var stream = _streamProvider.GetStream<Event>(_streamNamespace, _streamId);
         
         // Create subscription handle with starting position
         var handle = new OrleansEventSubscriptionHandleEnhanced(
@@ -123,8 +117,7 @@ public class OrleansEventSubscription : IEventSubscription
         subscriptionId ??= Guid.NewGuid().ToString();
         
         // Get the Orleans stream
-        var streamProvider = _clusterClient.GetStreamProvider(_providerName);
-        var stream = streamProvider.GetStream<Event>(_streamNamespace, _streamId);
+        var stream = _streamProvider.GetStream<Event>(_streamNamespace, _streamId);
         
         // Create subscription handle with filter
         var handle = new OrleansEventSubscriptionHandleEnhanced(

@@ -19,7 +19,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.2.1" />
   </ItemGroup>
 
   <ItemGroup>
