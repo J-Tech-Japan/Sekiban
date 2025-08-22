@@ -74,6 +74,11 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <param name="sortableUniqueId">The sortable unique ID to check for.</param>
     /// <returns>True if the event with this ID has been processed, false otherwise.</returns>
     Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
+    
+    /// <summary>
+    /// Manually refresh the projection by catching up from the event store
+    /// </summary>
+    Task RefreshAsync();
 }
 
 /// <summary>

@@ -361,48 +361,47 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                 fromPosition = new SortableUniqueId(_state.State.LastPosition);
             }
             
-            // First, catch up with historical events from the event store
-            if (fromPosition == null)
+            // Always do a fresh catchup from the event store to ensure we have all events
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting catchup from event store");
+            
+            // Load all events from the event store (or from saved position if available)
+            var historicalEventsResult = fromPosition == null 
+                ? await _eventStore.ReadAllEventsAsync(since: null)
+                : await _eventStore.ReadAllEventsAsync(since: fromPosition.Value);
+            
+            if (historicalEventsResult.IsSuccess)
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting initial catchup from beginning");
+                var historicalEvents = historicalEventsResult.GetValue().ToList();
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Loaded {historicalEvents.Count} events from event store");
                 
-                // If no position is saved, load all events from the beginning
-                var historicalEventsResult = await _eventStore.ReadAllEventsAsync(since: null);
-                
-                if (historicalEventsResult.IsSuccess)
+                // Log details of each event for debugging
+                foreach (var evt in historicalEvents)
                 {
-                    var historicalEvents = historicalEventsResult.GetValue().ToList();
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Loaded {historicalEvents.Count} historical events");
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing event: Type={evt.EventType}, ID={evt.Id}, SortableUniqueId={evt.SortableUniqueIdValue}");
+                }
+                
+                if (historicalEvents.Any())
+                {
+                    await _projectionActor.AddEventsAsync(historicalEvents, finishedCatchUp: true);
+                    _eventsProcessed += historicalEvents.Count;
+                    _lastEventTime = DateTime.UtcNow;
                     
-                    // Log details of each event for debugging
-                    foreach (var evt in historicalEvents)
-                    {
-                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event: Type={evt.EventType}, ID={evt.Id}, Tags=[{string.Join(", ", evt.Tags)}]");
-                    }
+                    // Update position to the last processed event
+                    var lastEvent = historicalEvents.Last();
+                    fromPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catchup complete. Last position: {fromPosition.Value}, Total events processed: {_eventsProcessed}");
                     
-                    if (historicalEvents.Any())
-                    {
-                        await _projectionActor.AddEventsAsync(historicalEvents, finishedCatchUp: true);
-                        _eventsProcessed += historicalEvents.Count;
-                        _lastEventTime = DateTime.UtcNow;
-                        
-                        // Update position to the last processed event
-                        var lastEvent = historicalEvents.Last();
-                        fromPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
-                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catchup complete. Last position: {fromPosition.Value}");
-                        
-                        // Persist state after initial catchup
-                        await PersistStateAsync();
-                    }
+                    // Persist state after catchup
+                    await PersistStateAsync();
                 }
                 else
                 {
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to load historical events: {historicalEventsResult.GetException()?.Message}");
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] No new events found in event store");
                 }
             }
             else
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from position: {fromPosition.Value}");
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to load events from store: {historicalEventsResult.GetException()?.Message}");
             }
             
             // Start the event provider for ongoing events
@@ -524,6 +523,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     {
         await EnsureInitializedAsync();
         
+        // If no events have been processed yet, try to refresh from event store
+        if (_eventsProcessed == 0)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] No events processed yet, refreshing from event store");
+            await RefreshAsync();
+        }
+        
         if (_projectionActor == null)
         {
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null");
@@ -589,6 +595,68 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         }
         
         return await _projectionActor.IsSortableUniqueIdReceived(sortableUniqueId);
+    }
+    
+    public async Task RefreshAsync()
+    {
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] RefreshAsync called - manually catching up from event store");
+        
+        await EnsureInitializedAsync();
+        
+        if (_projectionActor == null || _eventStore == null)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Cannot refresh - missing components");
+            return;
+        }
+        
+        try
+        {
+            // Get current position
+            SortableUniqueId? fromPosition = null;
+            var currentState = await _projectionActor.GetStateAsync(true);
+            if (currentState.IsSuccess && !string.IsNullOrEmpty(currentState.GetValue().LastSortableUniqueId))
+            {
+                fromPosition = new SortableUniqueId(currentState.GetValue().LastSortableUniqueId);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+            }
+            
+            // Load new events from the event store
+            var eventsResult = fromPosition == null 
+                ? await _eventStore.ReadAllEventsAsync(since: null)
+                : await _eventStore.ReadAllEventsAsync(since: fromPosition.Value);
+            
+            if (eventsResult.IsSuccess)
+            {
+                var newEvents = eventsResult.GetValue().ToList();
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Found {newEvents.Count} events in event store");
+                
+                if (newEvents.Any())
+                {
+                    // Process the new events
+                    await _projectionActor.AddEventsAsync(newEvents, finishedCatchUp: true);
+                    _eventsProcessed += newEvents.Count;
+                    _lastEventTime = DateTime.UtcNow;
+                    
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processed {newEvents.Count} new events, total: {_eventsProcessed}");
+                    
+                    // Persist the updated state
+                    await PersistStateAsync();
+                }
+                else
+                {
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] No new events to process");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to read events: {eventsResult.GetException()?.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Refresh failed: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refresh error: {ex}");
+        }
     }
 }
 

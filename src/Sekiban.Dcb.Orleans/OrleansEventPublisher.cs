@@ -22,6 +22,8 @@ public class OrleansEventPublisher : IEventPublisher
         IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
         CancellationToken cancellationToken = default)
     {
+        Console.WriteLine($"[OrleansEventPublisher] Publishing {events.Count} events");
+        
         foreach (var (evt, tags) in events)
         {
             var streams = _resolver.Resolve(evt, tags);
@@ -29,10 +31,14 @@ public class OrleansEventPublisher : IEventPublisher
             {
                 if (s is OrleansSekibanStream os)
                 {
+                    Console.WriteLine($"[OrleansEventPublisher] Publishing event {evt.EventType} to stream {os.ProviderName}/{os.StreamNamespace}/{os.StreamId}");
+                    
                     var provider = _clusterClient.GetStreamProvider(os.ProviderName);
-                    var stream = provider.GetStream<object>(StreamId.Create(os.StreamNamespace, os.StreamId));
-                    // We publish the payload (or entire wrapper) depending on consumer needs; use payload by default.
-                    await stream.OnNextAsync(evt.Payload);
+                    var stream = provider.GetStream<Event>(StreamId.Create(os.StreamNamespace, os.StreamId));
+                    // Publish the entire Event object, not just the payload
+                    await stream.OnNextAsync(evt);
+                    
+                    Console.WriteLine($"[OrleansEventPublisher] Event published successfully");
                 }
             }
         }

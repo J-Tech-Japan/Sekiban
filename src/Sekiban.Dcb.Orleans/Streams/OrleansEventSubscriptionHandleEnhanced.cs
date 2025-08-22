@@ -64,9 +64,16 @@ public class OrleansEventSubscriptionHandleEnhanced : IEventSubscriptionHandle
             if (_orleansHandle != null)
                 return;
 
+            Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] SubscribeAsync starting for subscription {SubscriptionId}");
+            
             _startedAt = DateTime.UtcNow;
             var observer = new EventObserver(HandleEventAsync);
-            _orleansHandle = await _stream.SubscribeAsync(observer);
+            
+            // Orleans Streams require explicit subscription from the beginning
+            // Use null token to receive all events from now on
+            _orleansHandle = await _stream.SubscribeAsync(observer, token: null);
+            
+            Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] SubscribeAsync completed for subscription {SubscriptionId}, handle: {_orleansHandle}");
         }
         finally
         {
@@ -102,6 +109,8 @@ public class OrleansEventSubscriptionHandleEnhanced : IEventSubscriptionHandle
 
     private async Task HandleEventAsync(Event evt, StreamSequenceToken? token)
     {
+        Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] Received event {evt.EventType} for subscription {SubscriptionId}");
+        
         if (_disposed || _isPaused)
             return;
 
@@ -115,10 +124,15 @@ public class OrleansEventSubscriptionHandleEnhanced : IEventSubscriptionHandle
 
         // Apply filter if configured
         if (_filter != null && !_filter.ShouldInclude(evt))
+        {
+            Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] Event filtered out for subscription {SubscriptionId}");
             return;
+        }
 
         try
         {
+            Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] Processing event {evt.EventType} for subscription {SubscriptionId}");
+            
             // Process the event
             await _onEventReceived(evt);
             
@@ -135,6 +149,8 @@ public class OrleansEventSubscriptionHandleEnhanced : IEventSubscriptionHandle
                 if (_processingTimes.Count > 100)
                     _processingTimes.RemoveAt(0);
             }
+            
+            Console.WriteLine($"[OrleansEventSubscriptionHandleEnhanced] Event processed successfully for subscription {SubscriptionId}");
         }
         catch (Exception ex)
         {
