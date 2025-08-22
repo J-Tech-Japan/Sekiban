@@ -268,14 +268,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.StateSize = stateSize;
             
             // Persist to storage
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state to storage - Events processed: {_eventsProcessed}");
             await _state.WriteStateAsync();
             
             _lastPersistTime = DateTime.UtcNow;
             _lastError = null; // Clear error on successful persist
             _eventsSinceLastPersist = 0; // Reset counter after successful persist
             
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] State persisted successfully");
             return ResultBox.FromValue(true); // Return true for success
         }
         catch (Exception ex)
@@ -310,7 +308,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             try
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Restoring persisted state - Events processed: {_state.State.EventsProcessed}");
                 var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
                     _state.State.SerializedState,
                     _domainTypes.JsonSerializerOptions);
@@ -319,7 +316,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     await _projectionActor.SetCurrentState(deserializedState);
                     _eventsProcessed = _state.State.EventsProcessed;
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] State restored successfully - Events processed: {_eventsProcessed}");
                 }
             }
             catch (Exception ex)
@@ -558,23 +554,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             
             var state = stateResult.GetValue();
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] State retrieved. Payload type: {state.Payload?.GetType().Name}, Events processed: {_eventsProcessed}");
-            
-            // Add detailed logging for the projection state
-            if (state.Payload != null)
-            {
-                try
-                {
-                    // Serialize the state to see its contents
-                    var stateJson = JsonSerializer.Serialize(state.Payload, _domainTypes.JsonSerializerOptions);
-                    // Log first 500 chars for brevity
-                    var truncatedJson = stateJson.Length > 500 ? stateJson.Substring(0, 500) + "..." : stateJson;
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Projection state JSON (truncated): {truncatedJson}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Could not serialize projection state: {ex.Message}");
-                }
-            }
             
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
