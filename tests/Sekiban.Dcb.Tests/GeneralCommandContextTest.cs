@@ -2,6 +2,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
@@ -52,6 +53,7 @@ public class GeneralCommandContextTest
             tagProjectorTypes,
             tagStatePayloadTypes,
             multiProjectorTypes,
+            new SimpleQueryTypes(),
             jsonOptions);
     }
 

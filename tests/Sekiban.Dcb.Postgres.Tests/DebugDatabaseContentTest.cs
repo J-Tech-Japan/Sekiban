@@ -1,6 +1,5 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Student;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -46,7 +45,7 @@ public class DebugDatabaseContentTest : PostgresTestBase
 
         // Act - Write events
         var writeResult = await Fixture.EventStore.WriteEventsAsync(events);
-        writeResult.IsSuccess.Should().BeTrue();
+        Assert.True(writeResult.IsSuccess);
 
         // Debug - Check database content directly
         await using var context = await Fixture.GetDbContextAsync();
@@ -70,8 +69,8 @@ public class DebugDatabaseContentTest : PostgresTestBase
         }
 
         // Assertions
-        dbEvents.Should().HaveCount(2);
-        dbTags.Should().HaveCount(2);
+        Assert.Equal(2, dbEvents.Count);
+        Assert.Equal(2, dbTags.Count);
 
         // Keep data for manual inspection (don't clear)
         _output.WriteLine("\nData kept in database for manual inspection.");

@@ -46,4 +46,17 @@ public interface IEventSubscription : IDisposable
         Func<Event, Task> onEventReceived,
         string? subscriptionId = null,
         CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    ///     Get status of all active subscriptions
+    /// </summary>
+    /// <returns>Collection of subscription statuses</returns>
+    IEnumerable<IEventSubscriptionStatus> GetAllSubscriptionStatuses();
+    
+    /// <summary>
+    ///     Get status of a specific subscription
+    /// </summary>
+    /// <param name="subscriptionId">Subscription ID</param>
+    /// <returns>Subscription status if found, null otherwise</returns>
+    IEventSubscriptionStatus? GetSubscriptionStatus(string subscriptionId);
 }

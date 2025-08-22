@@ -194,14 +194,47 @@ else
         try
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<WeatherForecastView>>("api/weather");
-            forecasts = response ?? new List<WeatherForecastView>();
+            var response = await httpClient.GetFromJsonAsync<WeatherApiResponse>("api/weather");
+            if (response != null && response.Forecasts != null)
+            {
+                forecasts = response.Forecasts.Select(f => new WeatherForecastView
+                {
+                    ForecastId = f.ForecastId,
+                    Location = f.Location,
+                    Date = DateOnly.Parse(f.Date),
+                    TemperatureC = f.TemperatureC,
+                    TemperatureF = f.TemperatureF,
+                    Summary = f.Summary
+                }).ToList();
+            }
+            else
+            {
+                forecasts = new List<WeatherForecastView>();
+            }
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error loading forecasts: {ex.Message}");
             forecasts = new List<WeatherForecastView>();
         }
+    }
+    
+    public class WeatherApiResponse
+    {
+        public List<ForecastDto> Forecasts { get; set; } = new();
+        public int? TotalCount { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+    
+    public class ForecastDto
+    {
+        public Guid ForecastId { get; set; }
+        public string Location { get; set; } = string.Empty;
+        public string Date { get; set; } = string.Empty;
+        public int TemperatureC { get; set; }
+        public int TemperatureF { get; set; }
+        public string? Summary { get; set; }
+        public string LastUpdated { get; set; } = string.Empty;
     }
 
     private async Task HandleDeleteForecast(Guid forecastId)

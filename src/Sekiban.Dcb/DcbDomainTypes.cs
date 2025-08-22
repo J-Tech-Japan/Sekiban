@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Queries;
 using System.Text.Json;
 namespace Sekiban.Dcb;
 
@@ -13,6 +14,7 @@ public record DcbDomainTypes
     public ITagProjectorTypes TagProjectorTypes { get; init; }
     public ITagStatePayloadTypes TagStatePayloadTypes { get; init; }
     public IMultiProjectorTypes MultiProjectorTypes { get; init; }
+    public IQueryTypes QueryTypes { get; init; }
     public JsonSerializerOptions JsonSerializerOptions { get; init; }
     public DcbDomainTypes(
         IEventTypes eventTypes,
@@ -20,6 +22,7 @@ public record DcbDomainTypes
         ITagProjectorTypes tagProjectorTypes,
         ITagStatePayloadTypes tagStatePayloadTypes,
         IMultiProjectorTypes multiProjectorTypes,
+        IQueryTypes queryTypes,
         JsonSerializerOptions? jsonSerializerOptions = null)
     {
         EventTypes = eventTypes;
@@ -27,6 +30,7 @@ public record DcbDomainTypes
         TagProjectorTypes = tagProjectorTypes;
         TagStatePayloadTypes = tagStatePayloadTypes;
         MultiProjectorTypes = multiProjectorTypes;
+        QueryTypes = queryTypes;
         JsonSerializerOptions = jsonSerializerOptions ??
             new JsonSerializerOptions
             {
@@ -55,6 +59,7 @@ public record DcbDomainTypes
         public SimpleTagProjectorTypes TagProjectorTypes { get; }
         public SimpleTagStatePayloadTypes TagStatePayloadTypes { get; }
         public SimpleMultiProjectorTypes MultiProjectorTypes { get; }
+        public SimpleQueryTypes QueryTypes { get; }
         public JsonSerializerOptions JsonOptions { get; }
 
         internal Builder(JsonSerializerOptions? jsonOptions = null)
@@ -71,9 +76,10 @@ public record DcbDomainTypes
             TagProjectorTypes = new SimpleTagProjectorTypes();
             TagStatePayloadTypes = new SimpleTagStatePayloadTypes();
             MultiProjectorTypes = new SimpleMultiProjectorTypes();
+            QueryTypes = new SimpleQueryTypes();
         }
 
         internal DcbDomainTypes Build() =>
-            new(EventTypes, TagTypes, TagProjectorTypes, TagStatePayloadTypes, MultiProjectorTypes, JsonOptions);
+            new(EventTypes, TagTypes, TagProjectorTypes, TagStatePayloadTypes, MultiProjectorTypes, QueryTypes, JsonOptions);
     }
 }

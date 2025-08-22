@@ -203,7 +203,10 @@ public class InMemoryEventStoreTests
         var tagState = result.GetValue();
         Assert.Equal(2, tagState.Version);
         Assert.Equal(((ITag)studentTag).GetTagGroup(), tagState.TagGroup);
-        Assert.Equal(studentTag.GetTag(), tagState.TagContent);
+        // TagContent should be just the content part (the GUID), not the full tag string
+        var fullTag = studentTag.GetTag();
+        var expectedContent = fullTag.Split(':')[1];
+        Assert.Equal(expectedContent, tagState.TagContent);
     }
 
     [Fact]

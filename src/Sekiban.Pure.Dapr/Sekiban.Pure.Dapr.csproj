@@ -32,7 +32,7 @@
     <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
     <PackageReference Include="Dapr.Actors" Version="1.15.4" />
     <PackageReference Include="Dapr.Actors.AspNetCore" Version="1.15.4" />
-    <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.0">
+    <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
