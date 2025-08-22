@@ -259,21 +259,24 @@ else
     {
         forecastModel = new();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addForecastModal').modal('hide')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "bootstrap.Modal.getInstance(document.getElementById('addForecastModal'))?.hide()");
     }
 
     private async Task CloseEditModal()
     {
         editForecastModel = new();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#editForecastModal').modal('hide')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "bootstrap.Modal.getInstance(document.getElementById('editForecastModal'))?.hide()");
     }
 
     private async Task OpenAddForecastModal()
     {
         forecastModel = new();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addForecastModal').modal('show')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
     }
 
     private async Task OpenEditForecastModal(WeatherForecastView forecast)
@@ -287,7 +290,8 @@ else
             Summary = forecast.Summary
         };
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#editForecastModal').modal('show')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "new bootstrap.Modal(document.getElementById('editForecastModal')).show()");
     }
 
     private async Task HandleEditForecastSubmit()
