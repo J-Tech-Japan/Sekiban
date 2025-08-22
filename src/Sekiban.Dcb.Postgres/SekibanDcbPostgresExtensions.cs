@@ -130,13 +130,13 @@ public static class SekibanDcbPostgresExtensions
         {
             logger.LogInformation("Starting Sekiban DCB database migration...");
 
-            using var dbContext = dbContextFactory.CreateDbContext();
             var delay = TimeSpan.FromSeconds(delaySeconds);
             var retryCount = 0;
 
             // データベース接続確認とリトライ処理
             while (retryCount < maxRetries)
             {
+                using var dbContext = dbContextFactory.CreateDbContext();
                 try
                 {
                     var canConnect = await dbContext.Database.CanConnectAsync();
@@ -147,7 +147,11 @@ public static class SekibanDcbPostgresExtensions
                     }
                     else
                     {
-                        logger.LogWarning("Cannot connect to database. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
+                        if (retryCount == 0)
+                        {
+                            logger.LogInformation("Waiting for database to be ready...");
+                        }
+                        logger.LogDebug("Cannot connect to database. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
                             retryCount + 1, maxRetries, delaySeconds);
                         await Task.Delay(delay);
                         retryCount++;
@@ -155,7 +159,11 @@ public static class SekibanDcbPostgresExtensions
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Database connection failed. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
+                    if (retryCount == 0)
+                    {
+                        logger.LogInformation("Database not ready yet. Will retry connection...");
+                    }
+                    logger.LogDebug(ex, "Database connection attempt {RetryCount}/{MaxRetries} failed. Retrying in {DelaySeconds} seconds...",
                         retryCount + 1, maxRetries, delaySeconds);
                     await Task.Delay(delay);
                     retryCount++;
@@ -165,22 +173,91 @@ public static class SekibanDcbPostgresExtensions
             if (retryCount >= maxRetries)
             {
                 logger.LogError("Failed to connect to database after {MaxRetries} attempts. Creating database schema...", maxRetries);
+                using var dbContext = dbContextFactory.CreateDbContext();
                 await dbContext.Database.EnsureCreatedAsync();
                 logger.LogInformation("Database schema created successfully using EnsureCreated.");
                 return;
             }
 
-            // マイグレーション実行
-            var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
+            // マイグレーション実行（リトライロジック付き）
+            retryCount = 0;
+            while (retryCount < maxRetries)
             {
-                logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count());
-                await dbContext.Database.MigrateAsync();
-                logger.LogInformation("Sekiban DCB database migration completed successfully.");
+                using var dbContext = dbContextFactory.CreateDbContext();
+                try
+                {
+                    var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+                    if (pendingMigrations.Any())
+                    {
+                        logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count());
+                        await dbContext.Database.MigrateAsync();
+                        logger.LogInformation("Sekiban DCB database migration completed successfully.");
+                    }
+                    else
+                    {
+                        logger.LogInformation("No pending migrations found. Sekiban DCB database is up to date.");
+                    }
+                    break; // Success - exit the retry loop
+                }
+                catch (Exception ex) when (retryCount < maxRetries - 1)
+                {
+                    // Check if it's a transient error (like migration history table not existing yet)
+                    if (ex.Message.Contains("__EFMigrationsHistory") || 
+                        ex.Message.Contains("does not exist") ||
+                        ex.Message.Contains("42P01") || // PostgreSQL table does not exist error code
+                        ex.Message.Contains("connection") ||
+                        ex.InnerException?.Message.Contains("__EFMigrationsHistory") == true)
+                    {
+                        if (retryCount == 0)
+                        {
+                            logger.LogDebug("Migration history table might not exist yet. Creating database structure...");
+                        }
+                        else
+                        {
+                            logger.LogDebug("Migration check attempt {RetryCount}/{MaxRetries} failed. Retrying in {DelaySeconds} seconds...",
+                                retryCount + 1, maxRetries, delaySeconds);
+                        }
+                        await Task.Delay(delay);
+                        retryCount++;
+                    }
+                    else
+                    {
+                        // Not a transient error, rethrow
+                        throw;
+                    }
+                }
             }
-            else
+            
+            if (retryCount >= maxRetries)
             {
-                logger.LogInformation("No pending migrations found. Sekiban DCB database is up to date.");
+                logger.LogInformation("Initial migration check did not complete. Attempting direct migration...");
+                using var dbContext = dbContextFactory.CreateDbContext();
+                try
+                {
+                    await dbContext.Database.MigrateAsync();
+                    logger.LogInformation("Database migration completed successfully.");
+                }
+                catch (Exception migEx)
+                {
+                    // Final attempt - check if it's because the database is already up to date
+                    try
+                    {
+                        var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+                        if (!pendingMigrations.Any())
+                        {
+                            logger.LogInformation("Database is already up to date.");
+                        }
+                        else
+                        {
+                            logger.LogError(migEx, "Migration failed with pending migrations.");
+                            throw;
+                        }
+                    }
+                    catch
+                    {
+                        logger.LogWarning("Could not verify migration status, but database operations may still work.");
+                    }
+                }
             }
         }
         catch (Exception ex)

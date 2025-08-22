@@ -40,6 +40,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
     private string? _lastError;
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly int _maxStateSize = 2 * 1024 * 1024; // 2MB default limit
+    private readonly int _persistBatchSize = 1; // Persist immediately for low-volume scenarios
+    private int _eventsSinceLastPersist = 0;
     
     private IDisposable? _persistTimer;
 
@@ -182,6 +184,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
         if (events.Count > 0)
         {
             _lastEventTime = DateTime.UtcNow;
+            _eventsSinceLastPersist += events.Count;
+            
+            // Persist state after processing a batch of events or if caught up
+            // This balances between data safety and performance
+            if (_eventsSinceLastPersist >= _persistBatchSize || finishedCatchUp)
+            {
+                await PersistStateAsync();
+                _eventsSinceLastPersist = 0;
+            }
         }
     }
 
@@ -264,6 +275,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             
             _lastPersistTime = DateTime.UtcNow;
             _lastError = null; // Clear error on successful persist
+            _eventsSinceLastPersist = 0; // Reset counter after successful persist
             
             return ResultBox.FromValue(true); // Return true for success
         }
@@ -378,6 +390,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                         var lastEvent = historicalEvents.Last();
                         fromPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
                         Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catchup complete. Last position: {fromPosition.Value}");
+                        
+                        // Persist state after initial catchup
+                        await PersistStateAsync();
                     }
                 }
                 else
@@ -397,6 +412,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
                     await _projectionActor.AddEventsAsync(new[] { evt }, isCaughtUp);
                     _eventsProcessed++;
                     _lastEventTime = DateTime.UtcNow;
+                    _eventsSinceLastPersist++;
+                    
+                    // Persist state after batch or when caught up
+                    if (_eventsSinceLastPersist >= _persistBatchSize || isCaughtUp)
+                    {
+                        await PersistStateAsync();
+                        _eventsSinceLastPersist = 0;
+                    }
                 },
                 fromPosition,
                 eventTopic: "event.all",
@@ -462,7 +485,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
-                Task.FromResult(ResultBox.FromValue(state.Payload));
+                Task.FromResult(ResultBox.FromValue(state.Payload!));
             
             // Get service provider from grain context
             var serviceProvider = ServiceProvider;
@@ -522,38 +545,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain
             
             // Create a provider function that returns the payload
             Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
-                Task.FromResult(ResultBox.FromValue(state.Payload));
+            {
+                if (state.Payload == null)
+                {
+                    return Task.FromResult(ResultBox.Error<IMultiProjectionPayload>(
+                        new InvalidOperationException("Projection state payload is null")));
+                }
+                return Task.FromResult(ResultBox.FromValue(state.Payload));
+            };
             
             // Get service provider from grain context
             var serviceProvider = ServiceProvider;
             
-            // Execute the list query using QueryTypes
-            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
+            // Execute the list query using the new method that returns ListQueryResultGeneral directly
+            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
                 query, 
                 projectorProvider, 
                 serviceProvider);
                 
             if (result.IsSuccess)
             {
-                var value = result.GetValue();
-                if (value is ListQueryResult<object> listResult)
-                {
-                    return new ListQueryResultGeneral(
-                        listResult.TotalCount,
-                        listResult.TotalPages,
-                        listResult.CurrentPage,
-                        listResult.PageSize,
-                        listResult.Items,
-                        listResult.Items.FirstOrDefault()?.GetType().FullName ?? string.Empty,
-                        query);
-                }
+                return result.GetValue();
             }
             
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Query execution failed: {result.GetException()?.Message}");
             return ListQueryResultGeneral.Empty;
         }
         catch (Exception ex)
         {
             _lastError = $"List query execution failed: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Exception in ExecuteListQueryAsync: {ex}");
             return ListQueryResultGeneral.Empty;
         }
     }
