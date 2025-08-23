@@ -4,11 +4,7 @@ using System.Text.Json;
 
 namespace DcbOrleans.Web;
 
-public record CommandResponse(bool Success, Guid? EventId, Guid? AggregateId, string? Error)
-{
-    // For now, we'll use EventId as a proxy for SortableUniqueId
-    public string? SortableUniqueId => EventId?.ToString();
-}
+public record CommandResponse(bool Success, Guid? EventId, Guid? AggregateId, string? Error, string? SortableUniqueId);
 
 public class WeatherApiClient(HttpClient httpClient)
 {

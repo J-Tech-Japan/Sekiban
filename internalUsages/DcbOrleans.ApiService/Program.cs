@@ -442,7 +442,8 @@ apiRoute
                 return Results.Ok(new { 
                     success = true,
                     eventId = result.GetValue().EventId,
-                    aggregateId = command.ForecastId
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
                 });
             }
             return Results.BadRequest(new { 
@@ -465,7 +466,8 @@ apiRoute
                 return Results.Ok(new { 
                     success = true,
                     eventId = result.GetValue().EventId,
-                    aggregateId = command.ForecastId
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
                 });
             }
             return Results.BadRequest(new { 
@@ -488,7 +490,8 @@ apiRoute
                 return Results.Ok(new { 
                     success = true,
                     eventId = result.GetValue().EventId,
-                    aggregateId = command.ForecastId
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
                 });
             }
             return Results.BadRequest(new { 

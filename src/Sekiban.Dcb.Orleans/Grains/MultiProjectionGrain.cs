@@ -291,13 +291,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task EnsureInitializedAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] EnsureInitializedAsync called, _isInitialized={_isInitialized}");
-        
         if (_isInitialized)
             return;
         
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Initializing grain for the first time");
         _isInitialized = true;
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Grain marked as initialized");
         
         // Set up periodic persistence timer if not already set
         if (_persistTimer == null)
