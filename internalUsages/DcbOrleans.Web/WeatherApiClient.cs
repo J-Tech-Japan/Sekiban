@@ -8,26 +8,37 @@ public record CommandResponse(bool Success, Guid? EventId, Guid? AggregateId, st
 
 public class WeatherApiClient(HttpClient httpClient)
 {
-    public async Task<WeatherForecastItem[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
+    public async Task<WeatherForecastItem[]> GetWeatherAsync(
+        int? pageNumber = null, 
+        int? pageSize = null, 
+        string? waitForSortableUniqueId = null, 
+        CancellationToken cancellationToken = default)
     {
-        var requestUri = string.IsNullOrEmpty(waitForSortableUniqueId)
-            ? "/api/weatherforecast"
-            : $"/api/weatherforecast?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}";
+        var queryParams = new List<string>();
+        
+        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
+            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+        
+        if (pageNumber.HasValue)
+            queryParams.Add($"pageNumber={pageNumber.Value}");
+            
+        if (pageSize.HasValue)
+            queryParams.Add($"pageSize={pageSize.Value}");
+        
+        var requestUri = queryParams.Count > 0
+            ? $"/api/weatherforecast?{string.Join("&", queryParams)}"
+            : "/api/weatherforecast";
             
         var forecasts = await httpClient.GetFromJsonAsync<List<WeatherForecastItem>>(requestUri, cancellationToken);
         
-        if (forecasts == null)
-        {
-            return [];
-        }
-        
-        // Apply maxItems limit if needed
-        if (forecasts.Count > maxItems)
-        {
-            return forecasts.Take(maxItems).ToArray();
-        }
-        
-        return forecasts.ToArray();
+        return forecasts?.ToArray() ?? [];
+    }
+    
+    // Overload for backward compatibility
+    public async Task<WeatherForecastItem[]> GetWeatherAsync(int maxItems = 10, string? waitForSortableUniqueId = null, CancellationToken cancellationToken = default)
+    {
+        // Use pagination with the maxItems as pageSize
+        return await GetWeatherAsync(pageNumber: 1, pageSize: maxItems, waitForSortableUniqueId: waitForSortableUniqueId, cancellationToken: cancellationToken);
     }
 
     public async Task<CommandResponse> InputWeatherAsync(CreateWeatherForecast command, CancellationToken cancellationToken = default)

@@ -23,6 +23,28 @@
 
 <h3>Weather Forecasts</h3>
 
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="col-form-label">Page Size:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnPageSizeChanged">
+            <option value="5" selected="@(pageSize == 5)">5</option>
+            <option value="10" selected="@(pageSize == 10)">10</option>
+            <option value="20" selected="@(pageSize == 20)">20</option>
+            <option value="50" selected="@(pageSize == 50)">50</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <span class="col-form-label text-muted">
+            @if (forecasts != null)
+            {
+                @:Showing @forecasts.Count items
+            }
+        </span>
+    </div>
+</div>
+
 @if (forecasts == null)
 {
     <p><em>Loading...</em></p>
@@ -61,6 +83,37 @@ else
             }
         </tbody>
     </table>
+    
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+            <nav aria-label="Weather forecast pagination">
+                <ul class="pagination">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)" disabled="@(currentPage == 1)">
+                            Previous
+                        </button>
+                    </li>
+                    @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    {
+                        var pageNumber = i;
+                        <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(pageNumber)">
+                                @pageNumber
+                            </button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages || totalPages == 0 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)" disabled="@(currentPage == totalPages || totalPages == 0)">
+                            Next
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div class="text-muted">
+            Page @currentPage of @(totalPages > 0 ? totalPages : 1)
+        </div>
+    </div>
 }
 
 <!-- Add Forecast Modal -->
@@ -154,6 +207,12 @@ else
     private EditLocationModel editLocationModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
     private string? lastSortableUniqueId;
+    
+    // Pagination fields
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages = 1;
+    private int totalItems = 0;
 
     public class WeatherForecastModel
     {
@@ -192,15 +251,37 @@ else
         try
         {
             var result = await WeatherApiClient.GetWeatherAsync(
-                maxItems: 50,
+                pageNumber: currentPage,
+                pageSize: pageSize,
                 waitForSortableUniqueId: waitForSortableUniqueId);
             
             forecasts = result?.ToList() ?? new List<WeatherForecastItem>();
+            
+            // For now, estimate total pages based on if we got a full page
+            // In a real implementation, the API should return total count
+            if (forecasts.Count < pageSize && currentPage == 1)
+            {
+                totalPages = 1;
+                totalItems = forecasts.Count;
+            }
+            else if (forecasts.Count == pageSize)
+            {
+                // Assume there might be more pages
+                totalPages = Math.Max(totalPages, currentPage + 1);
+                totalItems = forecasts.Count * currentPage;
+            }
+            else
+            {
+                totalPages = currentPage;
+                totalItems = (currentPage - 1) * pageSize + forecasts.Count;
+            }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading forecasts");
             forecasts = new List<WeatherForecastItem>();
+            totalPages = 1;
+            totalItems = 0;
         }
     }
 
@@ -223,6 +304,25 @@ else
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error deleting forecast");
+        }
+    }
+    
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage < 1 || (newPage > totalPages && totalPages > 0))
+            return;
+            
+        currentPage = newPage;
+        await LoadForecasts(lastSortableUniqueId);
+    }
+    
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize))
+        {
+            pageSize = newSize;
+            currentPage = 1; // Reset to first page when changing page size
+            await LoadForecasts(lastSortableUniqueId);
         }
     }
 
@@ -269,6 +369,7 @@ else
             if (response?.SortableUniqueId != null)
             {
                 lastSortableUniqueId = response.SortableUniqueId;
+                // Stay on current page after edit
                 await LoadForecasts(lastSortableUniqueId);
                 await CloseEditLocationModal();
             }
@@ -301,6 +402,7 @@ else
             if (response?.SortableUniqueId != null)
             {
                 lastSortableUniqueId = response.SortableUniqueId;
+                currentPage = 1; // Go to first page to see the new item
                 await LoadForecasts(lastSortableUniqueId);
                 await CloseAddModal();
             }

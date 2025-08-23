@@ -411,11 +411,17 @@ apiRoute
 apiRoute
     .MapGet(
         "/weatherforecast",
-        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
         {
             var query = new GetWeatherForecastListQuery
             {
-                WaitForSortableUniqueId = waitForSortableUniqueId
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
             };
             var result = await executor.QueryAsync(query);
             

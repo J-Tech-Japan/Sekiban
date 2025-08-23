@@ -4,7 +4,7 @@ using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
 [global::Orleans.GenerateSerializer]
-public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>, IWaitForSortableUniqueId
+public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>, IWaitForSortableUniqueId, IQueryPagingParameter
 {
     [global::Orleans.Id(0)]
     public bool IncludeDeleted { get; init; } = false;
