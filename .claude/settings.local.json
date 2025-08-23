@@ -72,7 +72,9 @@
       "mcp__sekibanDocument__SearchDocumentation",
       "mcp__sekibanDocument__GetDocument",
       "mcp__sekibanDocument__GetDocumentSection",
-      "Bash(dotnet sln add:*)"
+      "Bash(dotnet sln add:*)",
+      "mcp__microsoft_docs_mcp__microsoft_docs_search",
+      "Bash(dotnet run:*)"
     ],
     "deny": []
   },

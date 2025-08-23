@@ -1,6 +1,7 @@
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Projections;
+using Dcb.Domain.Queries;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Sekiban.Dcb;
@@ -27,6 +28,7 @@ public static class DomainType
             types.EventTypes.RegisterEventType<WeatherForecastCreated>();
             types.EventTypes.RegisterEventType<WeatherForecastUpdated>();
             types.EventTypes.RegisterEventType<WeatherForecastDeleted>();
+            types.EventTypes.RegisterEventType<LocationNameChanged>();
 
             // Register tag projectors
             types.TagProjectorTypes.RegisterProjector<StudentProjector>();
@@ -48,6 +50,9 @@ public static class DomainType
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjector>();
             types.MultiProjectorTypes.RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
+
+            // Register list queries
+            types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();
         });
     }
 }

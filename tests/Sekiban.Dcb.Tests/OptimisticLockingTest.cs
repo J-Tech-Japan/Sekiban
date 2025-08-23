@@ -5,6 +5,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
 namespace Sekiban.Dcb.Tests;
@@ -271,6 +272,7 @@ public class OptimisticLockingTest
             tagProjectorTypes,
             tagStatePayloadTypes,
             multiProjectorTypes,
+            new SimpleQueryTypes(),
             jsonOptions);
     }
 

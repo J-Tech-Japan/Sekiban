@@ -12,12 +12,14 @@ var queue = storage.AddQueues("DcbOrleansQueue");
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
+    .WithDataVolume()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans
 var orleans = builder.AddOrleans("default")
     .WithClustering(clusteringTable)
     .WithGrainStorage("Default", grainStorage)
+    .WithGrainStorage("OrleansStorage", grainStorage)
     .WithGrainStorage("dcb-orleans-queue", grainStorage)
     .WithGrainStorage("DcbOrleansGrainTable", grainTable)
     .WithStreaming(queue);

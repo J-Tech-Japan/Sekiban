@@ -138,6 +138,23 @@ public class InMemoryEventSubscription : IEventSubscription
         }
     }
 
+    public IEnumerable<IEventSubscriptionStatus> GetAllSubscriptionStatuses()
+    {
+        return _subscriptions.Values
+            .Where(s => s != null)
+            .Select(s => s.GetStatus())
+            .ToList();
+    }
+    
+    public IEventSubscriptionStatus? GetSubscriptionStatus(string subscriptionId)
+    {
+        if (_subscriptions.TryGetValue(subscriptionId, out var handle))
+        {
+            return handle?.GetStatus();
+        }
+        return null;
+    }
+    
     public void Dispose()
     {
         if (_disposed) return;
@@ -221,6 +238,26 @@ public class InMemoryEventSubscription : IEventSubscription
             _isActive = false;
             Dispose();
             return Task.CompletedTask;
+        }
+
+        public IEventSubscriptionStatus GetStatus()
+        {
+            // Simple status for in-memory implementation
+            return new EventSubscriptionStatus(
+                SubscriptionId,
+                IsActive,
+                IsPaused,
+                CurrentPosition,
+                startedAt: null,
+                pausedAt: null,
+                eventsReceived: 0,
+                eventsProcessed: 0,
+                errorCount: 0,
+                lastError: null,
+                lastErrorAt: null,
+                lastEventReceivedAt: null,
+                lastEventProcessedAt: null,
+                averageProcessingTimeMs: null);
         }
 
         public void Dispose()

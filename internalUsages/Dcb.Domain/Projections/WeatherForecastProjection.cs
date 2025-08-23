@@ -1,4 +1,5 @@
 using Dcb.Domain.Weather;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -9,6 +10,7 @@ namespace Dcb.Domain.Projections;
 /// <summary>
 ///     Weather forecast projection state using SafeUnsafeProjectionState
 /// </summary>
+[GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
 
@@ -19,6 +21,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState
     /// </summary>
+    [Id(0)]
     public SafeUnsafeProjectionState<Guid, WeatherForecastItem> State { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjection";
@@ -35,14 +38,19 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Event ev,
         List<ITag> tags)
     {
+        Console.WriteLine($"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
+        
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
 
         if (weatherForecastTags.Count == 0)
         {
+            Console.WriteLine($"[WeatherForecastProjection.Project] No WeatherForecastTag found, skipping event");
             // No WeatherForecastTag, skip this event
             return ResultBox.FromValue(payload);
         }
+        
+        Console.WriteLine($"[WeatherForecastProjection.Project] Found {weatherForecastTags.Count} WeatherForecastTag(s)");
 
         // Function to get affected item IDs
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
@@ -60,6 +68,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 WeatherForecastCreated created => current != null
                     ? current with // Update existing
                     {
+                        Location = created.Location,
                         Date = created.Date.ToDateTime(TimeOnly.MinValue),
                         TemperatureC = created.TemperatureC,
                         Summary = created.Summary,
@@ -67,6 +76,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                     }
                     : new WeatherForecastItem( // Create new
                         forecastId,
+                        created.Location,
                         created.Date.ToDateTime(TimeOnly.MinValue),
                         created.TemperatureC,
                         created.Summary,
@@ -75,8 +85,17 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                 WeatherForecastUpdated updated => current != null
                     ? current with // Update existing
                     {
+                        Location = updated.Location,
                         TemperatureC = updated.TemperatureC,
                         Summary = updated.Summary,
+                        LastUpdated = GetEventTimestamp(evt)
+                    }
+                    : null, // Can't update non-existent item
+                    
+                LocationNameChanged locationChanged => current != null
+                    ? current with // Update location name only
+                    {
+                        Location = locationChanged.NewLocationName,
                         LastUpdated = GetEventTimestamp(evt)
                     }
                     : null, // Can't update non-existent item
@@ -93,6 +112,8 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
         var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        
+        Console.WriteLine($"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}, Safe forecasts: {updatedState.GetSafeState().Count}");
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }

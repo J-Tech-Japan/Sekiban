@@ -41,8 +41,21 @@ public class InMemoryEventStore : IEventStore
 
     public Task<ResultBoxes.ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
-        // For testing, just return all events
-        return ReadAllEventsAsync(since);
+        lock (_lock)
+        {
+            var tagString = tag.GetTag();
+            var events = _events.Where(e => e.Tags.Contains(tagString));
+            
+            if (since != null)
+            {
+                events = events.Where(e => 
+                    string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+            }
+            
+            events = events.OrderBy(e => e.SortableUniqueIdValue);
+            
+            return Task.FromResult(ResultBoxes.ResultBox.FromValue(events.AsEnumerable()));
+        }
     }
 
     public Task<ResultBoxes.ResultBox<Event>> ReadEventAsync(Guid eventId)
@@ -66,8 +79,26 @@ public class InMemoryEventStore : IEventStore
             var eventList = events.ToList();
             _events.AddRange(eventList);
             
-            // Return empty tag writes for testing
+            // Create TagWriteResult for each unique tag
             var tagWrites = new List<TagWriteResult>();
+            var uniqueTags = eventList.SelectMany(e => e.Tags).Distinct();
+            
+            foreach (var tagString in uniqueTags)
+            {
+                // Count how many events have this tag (version)
+                var tagEventCount = _events.Count(e => e.Tags.Contains(tagString));
+                var lastEvent = _events.Where(e => e.Tags.Contains(tagString))
+                                      .OrderBy(e => e.SortableUniqueIdValue)
+                                      .LastOrDefault();
+                
+                if (lastEvent != null)
+                {
+                    tagWrites.Add(new TagWriteResult(
+                        tagString,
+                        tagEventCount,
+                        DateTimeOffset.UtcNow));
+                }
+            }
             
             return Task.FromResult(ResultBoxes.ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
                 (eventList, tagWrites)));
@@ -76,18 +107,60 @@ public class InMemoryEventStore : IEventStore
 
     public Task<ResultBoxes.ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
-        return Task.FromResult(ResultBoxes.ResultBox.FromValue(Enumerable.Empty<TagStream>()));
+        lock (_lock)
+        {
+            var tagString = tag.GetTag();
+            var tagEvents = _events.Where(e => e.Tags.Contains(tagString))
+                                  .OrderBy(e => e.SortableUniqueIdValue)
+                                  .ToList();
+            
+            if (!tagEvents.Any())
+                return Task.FromResult(ResultBoxes.ResultBox.FromValue(Enumerable.Empty<TagStream>()));
+            
+            // Create TagStream for each event with this tag
+            var tagStreams = tagEvents.Select(e => new TagStream(tagString, e.Id, e.SortableUniqueIdValue));
+            
+            return Task.FromResult(ResultBoxes.ResultBox.FromValue(tagStreams));
+        }
     }
 
     public Task<ResultBoxes.ResultBox<TagState>> GetLatestTagAsync(ITag tag)
     {
-        var tagStateId = new TagStateId(tag, "TestProjector");
-        var emptyState = TagState.GetEmpty(tagStateId);
-        return Task.FromResult(ResultBoxes.ResultBox.FromValue(emptyState));
+        lock (_lock)
+        {
+            var tagString = tag.GetTag();
+            var tagEvents = _events.Where(e => e.Tags.Contains(tagString))
+                                  .OrderBy(e => e.SortableUniqueIdValue)
+                                  .ToList();
+            
+            var tagStateId = new TagStateId(tag, "TestProjector");
+            
+            if (!tagEvents.Any())
+            {
+                var emptyState = TagState.GetEmpty(tagStateId);
+                return Task.FromResult(ResultBoxes.ResultBox.FromValue(emptyState));
+            }
+            
+            var lastEvent = tagEvents.Last();
+            var state = new TagState(
+                new EmptyTagStatePayload(),
+                tagEvents.Count,  // Version should be the count of events
+                lastEvent.SortableUniqueIdValue,
+                tagStateId.TagGroup,
+                tagStateId.TagContent,
+                tagStateId.TagProjectorName);
+            
+            return Task.FromResult(ResultBoxes.ResultBox.FromValue(state));
+        }
     }
 
     public Task<ResultBoxes.ResultBox<bool>> TagExistsAsync(ITag tag)
     {
-        return Task.FromResult(ResultBoxes.ResultBox.FromValue(false));
+        lock (_lock)
+        {
+            var tagString = tag.GetTag();
+            var exists = _events.Any(e => e.Tags.Contains(tagString));
+            return Task.FromResult(ResultBoxes.ResultBox.FromValue(exists));
+        }
     }
 }

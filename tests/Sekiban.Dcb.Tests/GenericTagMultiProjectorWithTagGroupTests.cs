@@ -6,6 +6,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
 using Xunit;
@@ -50,7 +51,7 @@ public class GenericTagMultiProjectorWithTagGroupTests
             tagTypes,
             tagProjectorTypes,
             tagStatePayloadTypes,
-            multiProjectorTypes);
+            multiProjectorTypes, new SimpleQueryTypes());
     }
 
     [Fact]

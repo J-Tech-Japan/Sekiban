@@ -85,6 +85,21 @@ claude mcp add sekibanDocument --transport sse https://sekiban-doc-mcp.azurewebs
 
 This integration allows you to access Sekiban documentation, examples, and best practices directly from your AI assistant, making development more efficient and informed.
 
+## DCB (Dynamic Consistency Boundary)
+
+Sekiban is adopting the DCB (Dynamic Consistency Boundary) approach to offer a simpler and more flexible consistency model for event‑driven systems. DCB, introduced by Sara Pellegrini in the blog post "Killing the Aggregate", replaces rigid per‑aggregate transactional boundaries with a context‑sensitive consistency boundary based on the set of events relevant to a decision. Instead of maintaining multiple streams and coordinating cross‑aggregate invariants via sagas and compensating events, DCB allows a single event stream per bounded context where each event can carry multiple tags representing the entities or concepts it affects. Querying becomes a matter of filtering by event types and/or tags, enabling you to enforce strong consistency only where it truly matters while preserving scalability and simplicity. Learn more at https://dcb.events
+
+Current status in Sekiban:
+
+- C# implementation: actively under development inside this repository.
+- Data store: PostgreSQL already supported for the new DCB flow (additional providers may follow).
+- Upcoming query features: composite filtering using combinations of event types and multiple tags to express richer consistency and projection conditions.
+- Preview package: released as [Sekiban.Dcb](https://www.nuget.org/packages/Sekiban.Dcb) on NuGet for early experimentation.
+- Actor model integration: being developed to run DCB seamlessly with Microsoft Orleans so dynamic consistency boundaries can leverage actor-based scalability.
+- Release plan: continuing to refine APIs toward a stable 1.x release while iterating on multi-tag composite query capabilities.
+
+Our goal is to let you model cross‑entity invariants without saga complexity, keeping a clean decision model and leveraging optimistic concurrency over dynamic query scopes instead of fixed aggregate streams.
+
 ## Sponsors
 
 Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
