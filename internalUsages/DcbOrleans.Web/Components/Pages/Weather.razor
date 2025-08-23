@@ -2,13 +2,14 @@
 @attribute [StreamRendering(true)]
 @rendermode InteractiveServer
 
+@using Dcb.Domain.Projections
 @using Dcb.Domain.Weather
 @using System.ComponentModel.DataAnnotations
 @using System.Net.Http
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components.Forms
 
-@inject IHttpClientFactory HttpClientFactory
+@inject WeatherApiClient WeatherApiClient
 @inject IJSRuntime JsRuntime
 @inject ILogger<Weather> Logger
 
@@ -50,7 +51,7 @@ else
                     <td>@forecast.Location</td>
                     <td>@forecast.Date.ToShortDateString()</td>
                     <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
+                    <td>@(32 + (int)(forecast.TemperatureC / 0.5556))</td>
                     <td>@forecast.Summary</td>
                     <td>
                         <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
@@ -148,20 +149,11 @@ else
 </div>
 
 @code {
-    private List<WeatherForecastView>? forecasts;
+    private List<WeatherForecastItem>? forecasts;
     private WeatherForecastModel forecastModel = new();
     private EditLocationModel editLocationModel = new();
     private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
-
-    public class WeatherForecastView
-    {
-        public Guid ForecastId { get; set; }
-        public string Location { get; set; } = string.Empty;
-        public DateOnly Date { get; set; }
-        public int TemperatureC { get; set; }
-        public int TemperatureF { get; set; }
-        public string? Summary { get; set; }
-    }
+    private string? lastSortableUniqueId;
 
     public class WeatherForecastModel
     {
@@ -195,63 +187,37 @@ else
         await LoadForecasts();
     }
 
-    private async Task LoadForecasts()
+    private async Task LoadForecasts(string? waitForSortableUniqueId = null)
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<WeatherForecastDto>>("api/weatherforecast");
+            var result = await WeatherApiClient.GetWeatherAsync(
+                maxItems: 50,
+                waitForSortableUniqueId: waitForSortableUniqueId);
             
-            if (response != null)
-            {
-                forecasts = response.Select(f => new WeatherForecastView
-                {
-                    ForecastId = f.forecastId,
-                    Location = f.location,
-                    Date = DateOnly.Parse(f.date),
-                    TemperatureC = f.temperatureC,
-                    TemperatureF = f.temperatureF,
-                    Summary = f.summary
-                }).ToList();
-            }
-            else
-            {
-                forecasts = new List<WeatherForecastView>();
-            }
+            forecasts = result?.ToList() ?? new List<WeatherForecastItem>();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading forecasts");
-            forecasts = new List<WeatherForecastView>();
+            forecasts = new List<WeatherForecastItem>();
         }
-    }
-    
-    public class WeatherForecastDto
-    {
-        public Guid forecastId { get; set; }
-        public string location { get; set; } = string.Empty;
-        public string date { get; set; } = string.Empty;
-        public int temperatureC { get; set; }
-        public int temperatureF { get; set; }
-        public string? summary { get; set; }
-        public string lastUpdated { get; set; } = string.Empty;
     }
 
     private async Task HandleRemoveForecast(Guid forecastId)
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var deleteCommand = new { ForecastId = forecastId };
-            var response = await httpClient.PostAsJsonAsync("api/removeweatherforecast", deleteCommand);
+            var response = await WeatherApiClient.RemoveWeatherAsync(forecastId);
             
-            if (response.IsSuccessStatusCode)
+            if (response?.SortableUniqueId != null)
             {
-                await LoadForecasts();
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadForecasts(lastSortableUniqueId);
             }
             else
             {
-                Logger.LogError("Failed to delete weather forecast");
+                await LoadForecasts();
             }
         }
         catch (Exception ex)
@@ -281,7 +247,7 @@ else
             "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
     }
 
-    private async Task OpenEditLocationModal(WeatherForecastView forecast)
+    private async Task OpenEditLocationModal(WeatherForecastItem forecast)
     {
         editLocationModel = new EditLocationModel
         {
@@ -296,17 +262,14 @@ else
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var updateLocationCommand = new
-            {
-                ForecastId = editLocationModel.ForecastId,
-                NewLocationName = editLocationModel.NewLocationName
-            };
-            var response = await httpClient.PostAsJsonAsync("api/updateweatherforecastlocation", updateLocationCommand);
+            var response = await WeatherApiClient.UpdateLocationAsync(
+                editLocationModel.ForecastId,
+                editLocationModel.NewLocationName!);
             
-            if (response.IsSuccessStatusCode)
+            if (response?.SortableUniqueId != null)
             {
-                await LoadForecasts();
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadForecasts(lastSortableUniqueId);
                 await CloseEditLocationModal();
             }
             else
@@ -324,7 +287,6 @@ else
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new CreateWeatherForecast
             {
                 ForecastId = Guid.NewGuid(),
@@ -334,11 +296,12 @@ else
                 Summary = forecastModel.Summary
             };
                 
-            var response = await httpClient.PostAsJsonAsync("api/inputweatherforecast", command);
+            var response = await WeatherApiClient.InputWeatherAsync(command);
             
-            if (response.IsSuccessStatusCode)
+            if (response?.SortableUniqueId != null)
             {
-                await LoadForecasts();
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadForecasts(lastSortableUniqueId);
                 await CloseAddModal();
             }
             else

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DcbOrleans.ServiceDefaults\DcbOrleans.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Dcb.Domain\Dcb.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

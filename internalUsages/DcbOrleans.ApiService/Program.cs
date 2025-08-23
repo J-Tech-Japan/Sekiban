@@ -411,24 +411,19 @@ apiRoute
 apiRoute
     .MapGet(
         "/weatherforecast",
-        async ([FromServices] ISekibanExecutor executor) =>
+        async ([FromQuery] string? waitForSortableUniqueId, [FromServices] ISekibanExecutor executor) =>
         {
-            var query = new GetWeatherForecastListQuery();
+            var query = new GetWeatherForecastListQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
             var result = await executor.QueryAsync(query);
             
             if (result.IsSuccess)
             {
                 var queryResult = result.GetValue();
-                return Results.Ok(queryResult.Items.Select(f => new
-                {
-                    forecastId = f.ForecastId,
-                    location = f.Location,
-                    date = f.Date.ToString("yyyy-MM-dd"),
-                    temperatureC = f.TemperatureC,
-                    temperatureF = 32 + (int)(f.TemperatureC / 0.5556),
-                    summary = f.Summary,
-                    lastUpdated = f.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
-                }).ToList());
+                // Return the actual WeatherForecastItem objects for proper deserialization
+                return Results.Ok(queryResult.Items);
             }
             
             return Results.BadRequest(new { error = result.GetException()?.Message });
