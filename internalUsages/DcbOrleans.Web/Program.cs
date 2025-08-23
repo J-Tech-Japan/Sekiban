@@ -1,3 +1,4 @@
+using DcbOrleans.Web;
 using DcbOrleans.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,12 @@ builder.Services.AddRazorComponents()
 
 // Add HttpClient for API calls
 builder.Services.AddHttpClient("ApiService", client =>
+{
+    client.BaseAddress = new Uri("https+http://apiservice");
+});
+
+// Add WeatherApiClient
+builder.Services.AddHttpClient<WeatherApiClient>(client =>
 {
     client.BaseAddress = new Uri("https+http://apiservice");
 });

@@ -385,6 +385,63 @@ public class SimpleQueryTypes : IQueryTypes
         }
     }
     
+    public async Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
+        IListQueryCommon query,
+        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        IServiceProvider serviceProvider)
+    {
+        // First execute the query normally
+        var result = await ExecuteListQueryAsync(query, projectorProvider, serviceProvider);
+        
+        if (!result.IsSuccess)
+        {
+            return ResultBox.Error<ListQueryResultGeneral>(result.GetException());
+        }
+        
+        var value = result.GetValue();
+        
+        // Use reflection to extract the properties from ListQueryResult<T>
+        var valueType = value.GetType();
+        if (!valueType.IsGenericType || valueType.GetGenericTypeDefinition() != typeof(ListQueryResult<>))
+        {
+            return ResultBox.Error<ListQueryResultGeneral>(
+                new InvalidOperationException($"Expected ListQueryResult<T> but got {valueType.Name}"));
+        }
+        
+        // Extract properties using reflection
+        var totalCount = valueType.GetProperty("TotalCount")?.GetValue(value) as int?;
+        var totalPages = valueType.GetProperty("TotalPages")?.GetValue(value) as int?;
+        var currentPage = valueType.GetProperty("CurrentPage")?.GetValue(value) as int?;
+        var pageSize = valueType.GetProperty("PageSize")?.GetValue(value) as int?;
+        var items = valueType.GetProperty("Items")?.GetValue(value) as System.Collections.IEnumerable;
+        
+        // Convert items to IEnumerable<object>
+        var objectItems = new List<object>();
+        if (items != null)
+        {
+            foreach (var item in items)
+            {
+                if (item != null)
+                {
+                    objectItems.Add(item);
+                }
+            }
+        }
+        
+        // Get the item type for RecordType
+        var itemType = valueType.GetGenericArguments()[0];
+        var recordType = itemType.FullName ?? itemType.Name;
+        
+        return ResultBox.FromValue(new ListQueryResultGeneral(
+            totalCount,
+            totalPages,
+            currentPage,
+            pageSize,
+            objectItems,
+            recordType,
+            query));
+    }
+    
     public ResultBox<Type> GetMultiProjectorType(IQueryCommon query)
     {
         var queryType = query.GetType();

@@ -146,14 +146,16 @@ else
     {
         studentModel = new();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addStudentModal').modal('hide')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "bootstrap.Modal.getInstance(document.getElementById('addStudentModal'))?.hide()");
     }
 
     private async Task OpenAddStudentModal()
     {
         studentModel = new();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addStudentModal').modal('show')");
+        await JsRuntime.InvokeVoidAsync("eval", 
+            "new bootstrap.Modal(document.getElementById('addStudentModal')).show()");
     }
 
     private async Task HandleAddStudentSubmit()

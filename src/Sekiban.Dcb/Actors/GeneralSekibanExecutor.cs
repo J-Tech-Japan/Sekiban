@@ -222,7 +222,8 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                         {
                             ["EventCount"] = writtenEvents.Count,
                             ["TagCount"] = allTags.Count
-                        }));
+                        },
+                        firstEvent.SortableUniqueIdValue));
             }
             catch (Exception)
             {

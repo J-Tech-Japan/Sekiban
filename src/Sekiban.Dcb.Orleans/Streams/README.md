@@ -6,7 +6,6 @@ This folder contains the Orleans implementation of the `IEventSubscription` inte
 
 - **Event Subscription**: Subscribe to event streams with customizable callbacks
 - **Filtering**: Filter events by type, tags, or custom predicates
-- **Checkpointing**: Durable subscriptions with automatic checkpoint management
 - **Resume Support**: Resume subscriptions from specific positions after failures
 - **Flexible Usage**: Can be used inside Orleans grains or outside for read models, SignalR, etc.
 
@@ -14,15 +13,11 @@ This folder contains the Orleans implementation of the `IEventSubscription` inte
 
 ### Core Classes
 
-1. **OrleansEventSubscription**: Basic implementation of IEventSubscription
-2. **OrleansEventSubscriptionHandle**: Manages individual subscriptions
-3. **OrleansEventSubscriptionWithCheckpoint**: Enhanced version with checkpoint support
+1. **OrleansEventSubscription**: Basic implementation of IEventSubscription using Orleans streams
+2. **OrleansEventSubscriptionHandleSimple**: Simple handle for managing individual subscriptions
+3. **DirectOrleansEventSubscription**: Implementation for grains that directly subscribe to Orleans streams
 4. **EventFilters**: Common filter implementations
 
-### Supporting Interfaces
-
-- **ICheckpointManager**: Interface for checkpoint persistence
-- **InMemoryCheckpointManager**: In-memory implementation for development/testing
 
 ## Usage Examples
 
@@ -122,59 +117,46 @@ public class ReadModelProjector
 }
 ```
 
-### Durable Subscription with Checkpoints
+### Direct Subscription in Grain
 
 ```csharp
-public class DurableEventProcessor
+public class ProjectionGrain : Grain, IProjectionGrain
 {
-    private readonly IClusterClient _clusterClient;
-    private readonly ICheckpointManager _checkpointManager;
-    private IEventSubscriptionHandle _handle;
+    private StreamSubscriptionHandle<Event> _orleansStreamHandle;
+    private DirectOrleansEventSubscription _subscription;
 
-    public DurableEventProcessor(IClusterClient clusterClient, ICheckpointManager checkpointManager)
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        _clusterClient = clusterClient;
-        _checkpointManager = checkpointManager;
+        // Subscribe directly to Orleans stream
+        var streamProvider = this.GetStreamProvider("EventStreamProvider");
+        var stream = streamProvider.GetStream<Event>(StreamId.Create("AllEvents", Guid.Empty));
+        
+        // Create observer for the stream
+        var observer = new EventObserver(this);
+        _orleansStreamHandle = await stream.SubscribeAsync(observer, token: null);
+        
+        // Create DirectOrleansEventSubscription with existing handle
+        _subscription = new DirectOrleansEventSubscription(stream, _orleansStreamHandle);
+        
+        await base.OnActivateAsync(cancellationToken);
     }
 
-    public async Task StartAsync()
+    private class EventObserver : IAsyncObserver<Event>
     {
-        // Create subscription with checkpoint support
-        var subscription = new OrleansEventSubscriptionWithCheckpoint(
-            _clusterClient,
-            _checkpointManager,
-            "EventStream",
-            "Sekiban.Events"
-        );
-
-        // Subscribe - will automatically resume from last checkpoint
-        _handle = await subscription.SubscribeAsync(
-            async (evt) => await ProcessWithRetryAsync(evt),
-            subscriptionId: "durable-processor-001"
-        );
-    }
-
-    private async Task ProcessWithRetryAsync(Event evt)
-    {
-        // Process event with retry logic
-        var retries = 3;
-        while (retries > 0)
+        private readonly ProjectionGrain _grain;
+        
+        public EventObserver(ProjectionGrain grain)
         {
-            try
-            {
-                // Process the event
-                await ProcessEventAsync(evt);
-                break;
-            }
-            catch (Exception ex)
-            {
-                retries--;
-                if (retries == 0)
-                    throw;
-                
-                await Task.Delay(1000);
-            }
+            _grain = grain;
         }
+        
+        public async Task OnNextAsync(Event item, StreamSequenceToken token = null)
+        {
+            await _grain.ProcessEventAsync(item);
+        }
+        
+        public Task OnCompletedAsync() => Task.CompletedTask;
+        public Task OnErrorAsync(Exception ex) => Task.CompletedTask;
     }
 
     private async Task ProcessEventAsync(Event evt)
@@ -183,12 +165,13 @@ public class DurableEventProcessor
         Console.WriteLine($"Processing: {evt.EventType} at position {evt.SortableUniqueIdValue}");
     }
 
-    public async Task StopAsync()
+    public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
-        if (_handle != null)
+        if (_orleansStreamHandle != null)
         {
-            await _handle.UnsubscribeAsync();
+            await _orleansStreamHandle.UnsubscribeAsync();
         }
+        await base.OnDeactivateAsync(reason, cancellationToken);
     }
 }
 ```

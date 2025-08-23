@@ -35,6 +35,14 @@ public interface IQueryTypes
         IServiceProvider serviceProvider);
     
     /// <summary>
+    /// Execute a list query and return a general result for serialization
+    /// </summary>
+    Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
+        IListQueryCommon query,
+        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        IServiceProvider serviceProvider);
+    
+    /// <summary>
     /// Get the multi-projector type for a query
     /// </summary>
     ResultBox<Type> GetMultiProjectorType(IQueryCommon query);

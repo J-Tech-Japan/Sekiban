@@ -50,4 +50,11 @@ public interface IMultiProjectionActorCommon
     ///     Overwrite current state from a serialized snapshot.
     /// </summary>
     Task SetCurrentState(SerializableMultiProjectionState state);
+
+    /// <summary>
+    ///     Check if a specific sortable unique ID has been received and processed.
+    /// </summary>
+    /// <param name="sortableUniqueId">The sortable unique ID to check for.</param>
+    /// <returns>True if the event with this ID has been processed, false otherwise.</returns>
+    Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
 }

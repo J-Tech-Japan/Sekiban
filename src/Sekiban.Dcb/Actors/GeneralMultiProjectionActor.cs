@@ -530,4 +530,24 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         var cloned = JsonSerializer.Deserialize(json, source.GetType(), _jsonOptions);
         return (IMultiProjectionPayload)cloned!;
     }
+
+    public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
+    {
+        if (string.IsNullOrEmpty(sortableUniqueId))
+        {
+            return Task.FromResult(false);
+        }
+
+        // Check if the sortable unique ID has been processed in the unsafe state
+        // The unsafe state contains all events including the most recent ones
+        if (!string.IsNullOrEmpty(_unsafeLastSortableUniqueId))
+        {
+            // Compare sortable unique IDs - if the requested ID is less than or equal to 
+            // the last processed ID, then it has been received
+            var comparison = string.Compare(sortableUniqueId, _unsafeLastSortableUniqueId, StringComparison.Ordinal);
+            return Task.FromResult(comparison <= 0);
+        }
+
+        return Task.FromResult(false);
+    }
 }

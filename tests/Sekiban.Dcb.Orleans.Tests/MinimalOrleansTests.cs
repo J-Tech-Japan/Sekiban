@@ -179,7 +179,11 @@ public class MinimalOrleansTests : IAsyncLifetime
                     
                     // Add storage
                     services.AddSingleton<IEventStore, Sekiban.Dcb.Tests.InMemoryEventStore>();
-                    services.AddSingleton<IEventSubscription, InMemoryEventSubscription>();
+                    services.AddSingleton<IEventSubscriptionResolver>(
+                        new Sekiban.Dcb.Orleans.Streams.DefaultOrleansEventSubscriptionResolver(
+                            "EventStreamProvider",
+                            "AllEvents",
+                            Guid.Empty));
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("OrleansStorage")

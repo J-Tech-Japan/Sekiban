@@ -3,12 +3,18 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
+using Orleans.Serialization;
+using Orleans.Storage;
+using Orleans.Streams;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
@@ -154,7 +160,9 @@ builder.UseOrleans(config =>
             options.Configure<IServiceProvider>((opt, sp) =>
             {
                 opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
             });
+            options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
         });
 
     // Add grain storage for the stream provider
@@ -165,21 +173,38 @@ builder.UseOrleans(config =>
             options.Configure<IServiceProvider>((opt, sp) =>
             {
                 opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
             });
+            options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
         });
+    
+    // Orleans will automatically discover grains in the same assembly
+    config.ConfigureServices(services =>
+    {
+        services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
+    });
+    
+    // Orleans will automatically discover and use the EventSurrogate
 });
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
 builder.Services.AddSekibanDcbPostgresWithAspire("DcbPostgres");
+builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
+builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(
     sp => new DefaultOrleansStreamDestinationResolver(
         providerName: "EventStreamProvider",
         @namespace: "AllEvents",
         streamId: Guid.Empty));
+builder.Services.AddSingleton<IEventSubscriptionResolver>(
+    sp => new DefaultOrleansEventSubscriptionResolver(
+        providerName: "EventStreamProvider",
+        @namespace: "AllEvents",
+        streamId: Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
-builder.Services.AddTransient<IEventSubscription, OrleansEventSubscription>();
+// Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
@@ -202,8 +227,8 @@ if (builder.Environment.IsDevelopment())
 }
 var app = builder.Build();
 
-// Run database migrations using shared extension method
-await app.MigrateSekibanDcbDatabaseAsync();
+// Database tables will be created automatically by the DatabaseInitializerService
+// configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
 
 var apiRoute = app.MapGroup("/api");
 
@@ -385,175 +410,103 @@ apiRoute
 // Weather endpoints
 apiRoute
     .MapGet(
-        "/weather",
-        async ([FromServices] ISekibanExecutor executor, [FromServices] IClusterClient clusterClient) =>
+        "/weatherforecast",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
         {
-            try
+            var query = new GetWeatherForecastListQuery
             {
-                // First, check the grain status
-                var grain = clusterClient.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-                var status = await grain.GetStatusAsync();
-                Console.WriteLine($"[Weather GET] Grain status - Events processed: {status.EventsProcessed}, Is caught up: {status.IsCaughtUp}, Position: {status.CurrentPosition}");
-                
-                // Try to get state directly from grain
-                var stateResult = await grain.GetStateAsync(true);
-                if (stateResult.IsSuccess)
-                {
-                    var state = stateResult.GetValue();
-                    Console.WriteLine($"[Weather GET] Grain state - Payload type: {state.Payload?.GetType().Name}");
-                    
-                    // Try to inspect the payload more directly
-                    if (state.Payload is WeatherForecastProjection projection)
-                    {
-                        var currentForecasts = projection.GetCurrentForecasts();
-                        var safeForecasts = projection.GetSafeForecasts();
-                        Console.WriteLine($"[Weather GET] Projection has {currentForecasts.Count} current forecasts, {safeForecasts.Count} safe forecasts");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"[Weather GET] Failed to get grain state: {stateResult.GetException()?.Message}");
-                }
-                
-                // Now try the query through executor
-                var query = new GetWeatherForecastListQuery();
-                var result = await executor.QueryAsync(query);
-                
-                Console.WriteLine($"[Weather GET] Query result - IsSuccess: {result.IsSuccess}");
-                
-                if (result.IsSuccess)
-                {
-                    var queryResult = result.GetValue();
-                    Console.WriteLine($"[Weather GET] Query returned {queryResult.TotalCount} items");
-                    
-                    var forecasts = queryResult.Items.Select(f => new
-                    {
-                        forecastId = f.ForecastId,
-                        location = f.Location,
-                        date = f.Date.ToString("yyyy-MM-dd"),
-                        temperatureC = f.TemperatureC,
-                        temperatureF = 32 + (int)(f.TemperatureC / 0.5556),
-                        summary = f.Summary,
-                        lastUpdated = f.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
-                    }).ToList();
-                    
-                    return Results.Ok(new
-                    {
-                        forecasts = forecasts,
-                        totalCount = queryResult.TotalCount,
-                        message = "Weather forecasts retrieved successfully",
-                        debug = new
-                        {
-                            grainEventsProcessed = status.EventsProcessed,
-                            grainIsCaughtUp = status.IsCaughtUp,
-                            grainPosition = status.CurrentPosition
-                        }
-                    });
-                }
-                
-                Console.WriteLine($"[Weather GET] Query failed: {result.GetException()?.Message}");
-                return Results.BadRequest(new { error = result.GetException()?.Message });
-            }
-            catch (Exception ex)
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+            
+            if (result.IsSuccess)
             {
-                Console.WriteLine($"[Weather GET] Exception: {ex}");
-                return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: 500,
-                    title: "Failed to retrieve weather forecasts");
+                var queryResult = result.GetValue();
+                // Return the actual WeatherForecastItem objects for proper deserialization
+                return Results.Ok(queryResult.Items);
             }
+            
+            return Results.BadRequest(new { error = result.GetException()?.Message });
         })
     .WithOpenApi()
-    .WithName("GetWeatherForecasts");
+    .WithName("GetWeatherForecast");
 
 apiRoute
     .MapPost(
-        "/weather",
-        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor, [FromServices] IClusterClient clusterClient) =>
+        "/inputweatherforecast",
+        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
         {
-            try
-            {
-                Console.WriteLine($"[Weather POST] Creating forecast with ID: {command.ForecastId}");
-                
-                var result = await executor.ExecuteAsync(command);
-                if (result.IsSuccess)
-                {
-                    var eventId = result.GetValue().EventId;
-                    Console.WriteLine($"[Weather POST] Event created with ID: {eventId}");
-                    
-                    // Check grain status after creation
-                    await Task.Delay(100); // Small delay to allow event processing
-                    var grain = clusterClient.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-                    var status = await grain.GetStatusAsync();
-                    Console.WriteLine($"[Weather POST] After creation - Grain events processed: {status.EventsProcessed}, Position: {status.CurrentPosition}");
-                    
-                    return Results.Ok(new { 
-                        forecastId = command.ForecastId, 
-                        eventId = eventId,
-                        message = "Weather forecast created successfully",
-                        debug = new
-                        {
-                            grainEventsProcessed = status.EventsProcessed,
-                            grainPosition = status.CurrentPosition
-                        }
-                    });
-                }
-                
-                Console.WriteLine($"[Weather POST] Failed to create forecast: {result.GetException()?.Message}");
-                return Results.BadRequest(new { error = result.GetException()?.Message });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Weather POST] Exception: {ex}");
-                return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: 500,
-                    title: "Failed to create weather forecast");
-            }
-        })
-    .WithOpenApi()
-    .WithName("CreateWeatherForecast");
-
-apiRoute
-    .MapPut(
-        "/weather/{forecastId:guid}",
-        async (Guid forecastId, [FromBody] UpdateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
-        {
-            // Ensure the forecastId matches
-            var updateCommand = command with { ForecastId = forecastId };
-            var result = await executor.ExecuteAsync(updateCommand);
-            if (result.IsSuccess)
-            {
-                return Results.Ok(new { 
-                    forecastId = forecastId, 
-                    eventId = result.GetValue().EventId,
-                    message = "Weather forecast updated successfully" 
-                });
-            }
-            return Results.BadRequest(new { error = result.GetException().Message });
-        })
-    .WithOpenApi()
-    .WithName("UpdateWeatherForecast");
-
-apiRoute
-    .MapDelete(
-        "/weather/{forecastId:guid}",
-        async (Guid forecastId, [FromServices] ISekibanExecutor executor) =>
-        {
-            var command = new DeleteWeatherForecast { ForecastId = forecastId };
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
             {
                 return Results.Ok(new { 
-                    forecastId = forecastId, 
+                    success = true,
                     eventId = result.GetValue().EventId,
-                    message = "Weather forecast deleted successfully" 
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
                 });
             }
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return Results.BadRequest(new { 
+                success = false,
+                error = result.GetException()?.Message 
+            });
         })
-    .WithOpenApi()
-    .WithName("DeleteWeatherForecast");
+    .WithName("InputWeatherForecast")
+    .WithOpenApi();
+
+
+apiRoute
+    .MapPost(
+        "/updateweatherforecastlocation",
+        async ([FromBody] ChangeLocationName command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var result = await executor.ExecuteAsync(command);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    success = true,
+                    eventId = result.GetValue().EventId,
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
+                });
+            }
+            return Results.BadRequest(new { 
+                success = false,
+                error = result.GetException()?.Message 
+            });
+        })
+    .WithName("UpdateWeatherForecastLocation")
+    .WithOpenApi();
+
+
+apiRoute
+    .MapPost(
+        "/removeweatherforecast",
+        async ([FromBody] DeleteWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var result = await executor.ExecuteAsync(command);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(new { 
+                    success = true,
+                    eventId = result.GetValue().EventId,
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.GetValue().SortableUniqueId
+                });
+            }
+            return Results.BadRequest(new { 
+                success = false,
+                error = result.GetException()?.Message 
+            });
+        })
+    .WithName("RemoveWeatherForecast")
+    .WithOpenApi();
 
 // Health check endpoint
 apiRoute.MapGet("/health", () => Results.Ok("Healthy"))

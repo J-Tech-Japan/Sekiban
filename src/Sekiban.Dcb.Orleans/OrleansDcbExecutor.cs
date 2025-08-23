@@ -2,11 +2,13 @@ using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Orleans.Grains;
+using System.Diagnostics;
 
 namespace Sekiban.Dcb.Orleans;
 
@@ -93,6 +95,9 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Get the multi-projection grain directly
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
             
+            // Wait for sortable unique ID if needed
+            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+            
             // Execute the query on the grain
             var result = await grain.ExecuteQueryAsync(queryCommon);
             
@@ -140,6 +145,9 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Get the multi-projection grain directly
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
             
+            // Wait for sortable unique ID if needed
+            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+            
             // Execute the list query on the grain
             var result = await grain.ExecuteListQueryAsync(queryCommon);
             
@@ -149,6 +157,38 @@ public class OrleansDcbExecutor : ISekibanExecutor
         catch (Exception ex)
         {
             return ResultBox.Error<ListQueryResult<TResult>>(ex);
+        }
+    }
+    
+    /// <summary>
+    /// Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId
+    /// </summary>
+    private async Task WaitForSortableUniqueIdIfNeeded(IMultiProjectionGrain grain, object query)
+    {
+        if (query is IWaitForSortableUniqueId waitForQuery && 
+            !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+        {
+            var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+            
+            // Calculate adaptive timeout based on the age of the sortable unique ID
+            var timeoutMs = SortableUniqueIdWaitHelper.CalculateAdaptiveTimeout(sortableUniqueId);
+            var pollingIntervalMs = SortableUniqueIdWaitHelper.DefaultPollingIntervalMs;
+            
+            var stopwatch = Stopwatch.StartNew();
+            
+            while (stopwatch.ElapsedMilliseconds < timeoutMs)
+            {
+                var isReceived = await grain.IsSortableUniqueIdReceived(sortableUniqueId);
+                if (isReceived)
+                {
+                    return;
+                }
+                
+                await Task.Delay(pollingIntervalMs);
+            }
+            
+            // Timeout reached - we proceed with the query anyway
+            // The query might return stale data, but that's better than failing completely
         }
     }
 }

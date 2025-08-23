@@ -92,6 +92,14 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                     }
                     : null, // Can't update non-existent item
                     
+                LocationNameChanged locationChanged => current != null
+                    ? current with // Update location name only
+                    {
+                        Location = locationChanged.NewLocationName,
+                        LastUpdated = GetEventTimestamp(evt)
+                    }
+                    : null, // Can't update non-existent item
+                    
                 WeatherForecastDeleted _ => null, // Delete the item
                 
                 _ => current // Unknown event type, keep current state

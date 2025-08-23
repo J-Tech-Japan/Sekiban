@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Postgres;
@@ -51,13 +52,90 @@ public static class SekibanDcbPostgresExtensions
         {
             var configuration = sp.GetRequiredService<IConfiguration>();
             var connectionString = configuration.GetConnectionString(connectionName);
+            
             options.UseNpgsql(connectionString);
+            
+            // Suppress specific warnings and errors related to migrations
+            options.ConfigureWarnings(warnings =>
+            {
+                // Suppress migration-related warnings
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning);
+                
+                // Log migration-related command errors as warnings instead of errors
+                warnings.Log(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.CommandError);
+            });
+            
+            // Use a custom logger to filter out migration history table errors
+            var loggerFactory = sp.GetService<ILoggerFactory>();
+            if (loggerFactory != null)
+            {
+                options.UseLoggerFactory(loggerFactory);
+                options.EnableSensitiveDataLogging(false);
+            }
         });
+
+        // Add a hosted service to ensure database tables exist
+        services.AddHostedService<DatabaseInitializerService>();
 
         // IEventStore実装を登録
         services.AddSingleton<IEventStore, PostgresEventStore>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Background service to ensure database tables exist without using migrations
+    /// </summary>
+    private class DatabaseInitializerService : IHostedService
+    {
+        private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger<DatabaseInitializerService> _logger;
+
+        public DatabaseInitializerService(IServiceProvider serviceProvider, ILogger<DatabaseInitializerService> logger)
+        {
+            _serviceProvider = serviceProvider;
+            _logger = logger;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var dbContextFactory = scope.ServiceProvider.GetService<IDbContextFactory<SekibanDcbDbContext>>();
+            
+            if (dbContextFactory != null)
+            {
+                try
+                {
+                    await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+                    
+                    // Check if database can be connected
+                    var canConnect = await context.Database.CanConnectAsync(cancellationToken);
+                    if (canConnect)
+                    {
+                        // Use EnsureCreated instead of migrations to avoid migration history table issues
+                        var created = await context.Database.EnsureCreatedAsync(cancellationToken);
+                        if (created)
+                        {
+                            _logger.LogInformation("Sekiban DCB database tables created successfully.");
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Sekiban DCB database tables already exist.");
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Cannot connect to database. Tables will be created when connection is available.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to initialize database. Tables will be created on first use.");
+                }
+            }
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>
@@ -130,13 +208,13 @@ public static class SekibanDcbPostgresExtensions
         {
             logger.LogInformation("Starting Sekiban DCB database migration...");
 
-            using var dbContext = dbContextFactory.CreateDbContext();
             var delay = TimeSpan.FromSeconds(delaySeconds);
             var retryCount = 0;
 
             // データベース接続確認とリトライ処理
             while (retryCount < maxRetries)
             {
+                using var dbContext = dbContextFactory.CreateDbContext();
                 try
                 {
                     var canConnect = await dbContext.Database.CanConnectAsync();
@@ -147,7 +225,11 @@ public static class SekibanDcbPostgresExtensions
                     }
                     else
                     {
-                        logger.LogWarning("Cannot connect to database. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
+                        if (retryCount == 0)
+                        {
+                            logger.LogInformation("Waiting for database to be ready...");
+                        }
+                        logger.LogDebug("Cannot connect to database. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
                             retryCount + 1, maxRetries, delaySeconds);
                         await Task.Delay(delay);
                         retryCount++;
@@ -155,7 +237,11 @@ public static class SekibanDcbPostgresExtensions
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Database connection failed. Attempt {RetryCount}/{MaxRetries}. Retrying in {DelaySeconds} seconds...",
+                    if (retryCount == 0)
+                    {
+                        logger.LogInformation("Database not ready yet. Will retry connection...");
+                    }
+                    logger.LogDebug(ex, "Database connection attempt {RetryCount}/{MaxRetries} failed. Retrying in {DelaySeconds} seconds...",
                         retryCount + 1, maxRetries, delaySeconds);
                     await Task.Delay(delay);
                     retryCount++;
@@ -165,22 +251,91 @@ public static class SekibanDcbPostgresExtensions
             if (retryCount >= maxRetries)
             {
                 logger.LogError("Failed to connect to database after {MaxRetries} attempts. Creating database schema...", maxRetries);
+                using var dbContext = dbContextFactory.CreateDbContext();
                 await dbContext.Database.EnsureCreatedAsync();
                 logger.LogInformation("Database schema created successfully using EnsureCreated.");
                 return;
             }
 
-            // マイグレーション実行
-            var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
+            // マイグレーション実行（リトライロジック付き）
+            retryCount = 0;
+            while (retryCount < maxRetries)
             {
-                logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count());
-                await dbContext.Database.MigrateAsync();
-                logger.LogInformation("Sekiban DCB database migration completed successfully.");
+                using var dbContext = dbContextFactory.CreateDbContext();
+                try
+                {
+                    var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+                    if (pendingMigrations.Any())
+                    {
+                        logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count());
+                        await dbContext.Database.MigrateAsync();
+                        logger.LogInformation("Sekiban DCB database migration completed successfully.");
+                    }
+                    else
+                    {
+                        logger.LogInformation("No pending migrations found. Sekiban DCB database is up to date.");
+                    }
+                    break; // Success - exit the retry loop
+                }
+                catch (Exception ex) when (retryCount < maxRetries - 1)
+                {
+                    // Check if it's a transient error (like migration history table not existing yet)
+                    if (ex.Message.Contains("__EFMigrationsHistory") || 
+                        ex.Message.Contains("does not exist") ||
+                        ex.Message.Contains("42P01") || // PostgreSQL table does not exist error code
+                        ex.Message.Contains("connection") ||
+                        ex.InnerException?.Message.Contains("__EFMigrationsHistory") == true)
+                    {
+                        if (retryCount == 0)
+                        {
+                            logger.LogDebug("Migration history table might not exist yet. Creating database structure...");
+                        }
+                        else
+                        {
+                            logger.LogDebug("Migration check attempt {RetryCount}/{MaxRetries} failed. Retrying in {DelaySeconds} seconds...",
+                                retryCount + 1, maxRetries, delaySeconds);
+                        }
+                        await Task.Delay(delay);
+                        retryCount++;
+                    }
+                    else
+                    {
+                        // Not a transient error, rethrow
+                        throw;
+                    }
+                }
             }
-            else
+            
+            if (retryCount >= maxRetries)
             {
-                logger.LogInformation("No pending migrations found. Sekiban DCB database is up to date.");
+                logger.LogInformation("Initial migration check did not complete. Attempting direct migration...");
+                using var dbContext = dbContextFactory.CreateDbContext();
+                try
+                {
+                    await dbContext.Database.MigrateAsync();
+                    logger.LogInformation("Database migration completed successfully.");
+                }
+                catch (Exception migEx)
+                {
+                    // Final attempt - check if it's because the database is already up to date
+                    try
+                    {
+                        var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+                        if (!pendingMigrations.Any())
+                        {
+                            logger.LogInformation("Database is already up to date.");
+                        }
+                        else
+                        {
+                            logger.LogError(migEx, "Migration failed with pending migrations.");
+                            throw;
+                        }
+                    }
+                    catch
+                    {
+                        logger.LogWarning("Could not verify migration status, but database operations may still work.");
+                    }
+                }
             }
         }
         catch (Exception ex)

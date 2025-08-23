@@ -31,9 +31,9 @@
     <PackageReference Include="OrleansDashboard" Version="8.2.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.6.9" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview24" />
-    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.1-preview24" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview24" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.2-preview01" />
+    <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.2-preview01" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.2-preview01" />
   </ItemGroup>
 
 </Project>

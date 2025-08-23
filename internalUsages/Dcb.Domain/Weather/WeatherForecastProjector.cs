@@ -36,6 +36,11 @@ public class WeatherForecastProjector : ITagProjector<WeatherForecastProjector>
                 IsDeleted = true
             },
 
+            LocationNameChanged locationChanged => state with
+            {
+                Location = locationChanged.NewLocationName
+            },
+
             _ => state
         };
     }

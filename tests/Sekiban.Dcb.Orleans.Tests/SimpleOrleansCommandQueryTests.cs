@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Orleans;
 using Orleans.Hosting;
 using Orleans.TestingHost;
+using Orleans.Streams;
 using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -11,6 +12,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -19,6 +21,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.InMemory;
 using System.Text.Json;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
@@ -45,6 +48,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     builder.Options.ClusterId = $"TestCluster-{uniqueId}";
     builder.Options.ServiceId = $"TestService-{uniqueId}";
     builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
+    builder.AddClientBuilderConfigurator<TestClientConfigurator>();
         
         _cluster = builder.Build();
         await _cluster.DeployAsync();
@@ -124,7 +128,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     }
 
 
-    [Fact(Skip = "Event processing pipeline needs investigation - second event not reaching projector")]
+    [Fact(Skip = "Tag state caching issue in Orleans - needs investigation")]
     public async Task Should_Update_Aggregate_Multiple_Times()
     {
     await EnsureInitializedAsync();
@@ -148,16 +152,179 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         Assert.NotNull(updateResult.GetValue());
         
         // Give the projection time to process the update event
-        await Task.Delay(500);
+        await Task.Delay(1000);
+        
+        // Check events in the event store directly
+        var testTag = new TestAggregateTag(aggregateId);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag);
+        Assert.True(eventsResult.IsSuccess, "Failed to read events from store");
+        var events = eventsResult.GetValue().ToList();
+        
+        // We should have 2 events - create and update
+        Assert.True(events.Count >= 2, $"Expected at least 2 events in store, but got {events.Count}");
         
         // Verify final state using aggregate ID
         var finalTag = new TestAggregateTag(aggregateId);
         var tagStateId = new TagStateId(finalTag, "TestProjector");
+        
+        // Clear the cache to force re-computation
+        var tagStateGrain = _client.GetGrain<ITagStateGrain>(tagStateId.GetTagStateId());
+        await tagStateGrain.ClearCacheAsync();
+        
+        // Wait a bit for tag consistent actor to catch up
+        await Task.Delay(500);
+        
     var finalTagState = await WaitForTagVersionAsync(tagStateId, 2, TimeSpan.FromSeconds(10));
     Assert.True(finalTagState.IsSuccess, $"Failed to get tag state after waiting");
     var tagState = finalTagState.GetValue();
     // Check that we have processed 2 events
     Assert.True(tagState.Version >= 2, $"Expected version >= 2, but got {tagState.Version}");
+    }
+
+    [Fact]
+    public async Task Orleans_PubSub_Should_Work_With_EventPublisher_And_Direct_Stream()
+    {
+        await EnsureInitializedAsync();
+        
+        // Arrange - Setup Orleans streams directly
+        var streamProvider = _cluster.Client.GetStreamProvider("EventStreamProvider");
+        var streamNamespace = "TestEvents";
+        var streamId = Guid.NewGuid();
+        
+        // Subscribe directly to the stream for payloads (matching what publisher sends)
+        var stream = streamProvider.GetStream<object>(StreamId.Create(streamNamespace, streamId));
+        var receivedPayloads = new List<IEventPayload>();
+        
+        var subscriptionHandle = await stream.SubscribeAsync(async (payload, token) =>
+        {
+            if (payload is IEventPayload eventPayload)
+            {
+                receivedPayloads.Add(eventPayload);
+            }
+            await Task.CompletedTask;
+        });
+        
+        // Create Orleans event publisher
+        var resolver = new DefaultOrleansStreamDestinationResolver(
+            "EventStreamProvider",
+            streamNamespace,
+            streamId);
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<OrleansEventPublisher>();
+        var publisher = new OrleansEventPublisher(_cluster.Client, resolver, logger);
+        
+        // Act - Publish events through Orleans publisher
+        var testEvent1 = new Event(
+            new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "Event1" },
+            "TestAggregate",
+            $"TestAggregate:{Guid.NewGuid()}",
+            Guid.NewGuid(),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+            new List<string>());
+            
+        var testEvent2 = new Event(
+            new TestEntityUpdatedEvent { AggregateId = Guid.NewGuid(), Name = "Event2" },
+            "TestAggregate",
+            $"TestAggregate:{Guid.NewGuid()}",
+            Guid.NewGuid(),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+            new List<string>());
+        
+        var eventsToPublish = new List<(Event Event, IReadOnlyCollection<ITag> Tags)>
+        {
+            (testEvent1, new List<ITag> { new TestAggregateTag(Guid.NewGuid()) }),
+            (testEvent2, new List<ITag> { new TestAggregateTag(Guid.NewGuid()) })
+        };
+        
+        await publisher.PublishAsync(eventsToPublish);
+        
+        // Wait for events to be processed
+        await Task.Delay(1000);
+        
+        // Assert - Verify payloads were received
+        Assert.Equal(2, receivedPayloads.Count);
+        Assert.Contains(receivedPayloads, p => 
+            p is TestEntityCreatedEvent created && created.Name == "Event1");
+        Assert.Contains(receivedPayloads, p => 
+            p is TestEntityUpdatedEvent updated && updated.Name == "Event2");
+        
+        // Cleanup
+        await subscriptionHandle.UnsubscribeAsync();
+    }
+
+    [Fact]
+    public async Task Orleans_Stream_Should_Handle_Multiple_Subscribers()
+    {
+        await EnsureInitializedAsync();
+        
+        // Arrange - Setup Orleans streams
+        var streamProvider = _cluster.Client.GetStreamProvider("EventStreamProvider");
+        var streamNamespace = "MultiSubscriberTest";
+        var streamId = Guid.NewGuid();
+        
+        // Create multiple direct stream subscriptions
+        var stream = streamProvider.GetStream<object>(StreamId.Create(streamNamespace, streamId));
+        
+        var receivedPayloads1 = new List<IEventPayload>();
+        var receivedPayloads2 = new List<IEventPayload>();
+        
+        var handle1 = await stream.SubscribeAsync(async (payload, token) =>
+        {
+            if (payload is IEventPayload eventPayload)
+            {
+                receivedPayloads1.Add(eventPayload);
+            }
+            await Task.CompletedTask;
+        });
+        
+        var handle2 = await stream.SubscribeAsync(async (payload, token) =>
+        {
+            if (payload is IEventPayload eventPayload)
+            {
+                receivedPayloads2.Add(eventPayload);
+            }
+            await Task.CompletedTask;
+        });
+        
+        // Create publisher
+        var resolver = new DefaultOrleansStreamDestinationResolver(
+            "EventStreamProvider",
+            streamNamespace,
+            streamId);
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<OrleansEventPublisher>();
+        var publisher = new OrleansEventPublisher(_cluster.Client, resolver, logger);
+        
+        // Act - Publish an event
+        var testEvent = new Event(
+            new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "SharedEvent" },
+            "TestAggregate",
+            $"TestAggregate:{Guid.NewGuid()}",
+            Guid.NewGuid(),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+            new List<string>());
+        
+        await publisher.PublishAsync(new[]
+        {
+            (testEvent, (IReadOnlyCollection<ITag>)new List<ITag>())
+        });
+        
+        // Wait for events to be processed
+        await Task.Delay(1000);
+        
+        // Assert - Both subscribers should receive the payload
+        Assert.Single(receivedPayloads1);
+        Assert.Single(receivedPayloads2);
+        
+        var payload1 = receivedPayloads1.First();
+        var payload2 = receivedPayloads2.First();
+        
+        Assert.IsType<TestEntityCreatedEvent>(payload1);
+        Assert.IsType<TestEntityCreatedEvent>(payload2);
+        Assert.Equal("SharedEvent", ((TestEntityCreatedEvent)payload1).Name);
+        Assert.Equal("SharedEvent", ((TestEntityCreatedEvent)payload2).Name);
+        
+        // Cleanup
+        await handle1.UnsubscribeAsync();
+        await handle2.UnsubscribeAsync();
     }
 
     // Test domain classes
@@ -193,23 +360,25 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         }
     }
     
-    private record TestEntityCreatedEvent : IEventPayload
+    [GenerateSerializer]
+    public record TestEntityCreatedEvent : IEventPayload
     {
-        public Guid AggregateId { get; init; }
-        public string Name { get; init; } = string.Empty;
+        [Id(0)] public Guid AggregateId { get; init; }
+        [Id(1)] public string Name { get; init; } = string.Empty;
     }
     
-    private record TestEntityUpdatedEvent : IEventPayload
+    [GenerateSerializer]
+    public record TestEntityUpdatedEvent : IEventPayload
     {
-        public Guid AggregateId { get; init; }
-        public string Name { get; init; } = string.Empty;
+        [Id(0)] public Guid AggregateId { get; init; }
+        [Id(1)] public string Name { get; init; } = string.Empty;
     }
     
     private record TestAggregateTag : ITag
     {
         private readonly Guid _id;
         public TestAggregateTag(Guid id) => _id = id;
-        public bool IsConsistencyTag() => false;
+        public bool IsConsistencyTag() => false;  // Non-consistency tag for testing
         public string GetTagGroup() => "TestAggregate";
         public string GetTagContent() => _id.ToString();
     }
@@ -290,13 +459,25 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             {
                 services.AddSingleton<DcbDomainTypes>(provider => CreateDomainTypes());
                 services.AddSingleton<IEventStore>(SharedEventStore);
-                services.AddSingleton<IEventSubscription, InMemoryEventSubscription>();
+                services.AddSingleton<IEventSubscriptionResolver>(
+                    new DefaultOrleansEventSubscriptionResolver(
+                        "EventStreamProvider",
+                        "AllEvents",
+                        Guid.Empty));
                 services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
             })
             .AddMemoryGrainStorageAsDefault()
             .AddMemoryGrainStorage("OrleansStorage")
             .AddMemoryGrainStorage("PubSubStore")
             .AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+        }
+    }
+    
+    public class TestClientConfigurator : IClientBuilderConfigurator
+    {
+        public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
+        {
+            clientBuilder.AddMemoryStreams("EventStreamProvider");
         }
     }
 
@@ -329,12 +510,24 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         var start = DateTime.UtcNow;
         ResultBox<TagState> last = ResultBox.Error<TagState>(new InvalidOperationException("not started"));
+        var attempts = 0;
         while (DateTime.UtcNow - start < timeout)
         {
             last = await _executor.GetTagStateAsync(id);
-            if (last.IsSuccess && last.GetValue().Version >= minVersion) return last;
+            attempts++;
+            if (last.IsSuccess)
+            {
+                var state = last.GetValue();
+                Console.WriteLine($"[WaitForTagVersion] Attempt {attempts}: Version={state.Version}, Expected={minVersion}, LastSortedUniqueId={state.LastSortedUniqueId}");
+                if (state.Version >= minVersion) return last;
+            }
+            else
+            {
+                Console.WriteLine($"[WaitForTagVersion] Attempt {attempts}: Failed to get state - {last.GetException()?.Message}");
+            }
             await Task.Delay(50);
         }
+        Console.WriteLine($"[WaitForTagVersion] Timeout after {attempts} attempts. Last version was {(last.IsSuccess ? last.GetValue().Version.ToString() : "error")}");
         return last;
     }
     private void LogDomainTypes(string phase) { }
