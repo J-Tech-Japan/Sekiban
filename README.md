@@ -94,7 +94,9 @@ Current status in Sekiban:
 - C# implementation: actively under development inside this repository.
 - Data store: PostgreSQL already supported for the new DCB flow (additional providers may follow).
 - Upcoming query features: composite filtering using combinations of event types and multiple tags to express richer consistency and projection conditions.
-- Release plan: packaging the DCB components as a NuGet library is in progress; an initial preview will be published soon.
+- Preview package: released as [Sekiban.Dcb](https://www.nuget.org/packages/Sekiban.Dcb) on NuGet for early experimentation.
+- Actor model integration: being developed to run DCB seamlessly with Microsoft Orleans so dynamic consistency boundaries can leverage actor-based scalability.
+- Release plan: continuing to refine APIs toward a stable 1.x release while iterating on multi-tag composite query capabilities.
 
 Our goal is to let you model cross‑entity invariants without saga complexity, keeping a clean decision model and leveraging optimistic concurrency over dynamic query scopes instead of fixed aggregate streams.
 
