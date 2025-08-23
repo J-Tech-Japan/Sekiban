@@ -12,6 +12,7 @@ var queue = storage.AddQueues("DcbOrleansQueue");
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
+    .WithDataVolume()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans

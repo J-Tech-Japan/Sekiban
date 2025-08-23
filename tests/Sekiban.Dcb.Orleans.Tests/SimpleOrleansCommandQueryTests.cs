@@ -209,7 +209,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             "EventStreamProvider",
             streamNamespace,
             streamId);
-        var publisher = new OrleansEventPublisher(_cluster.Client, resolver);
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<OrleansEventPublisher>();
+        var publisher = new OrleansEventPublisher(_cluster.Client, resolver, logger);
         
         // Act - Publish events through Orleans publisher
         var testEvent1 = new Event(
@@ -289,7 +290,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             "EventStreamProvider",
             streamNamespace,
             streamId);
-        var publisher = new OrleansEventPublisher(_cluster.Client, resolver);
+        var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<OrleansEventPublisher>();
+        var publisher = new OrleansEventPublisher(_cluster.Client, resolver, logger);
         
         // Act - Publish an event
         var testEvent = new Event(

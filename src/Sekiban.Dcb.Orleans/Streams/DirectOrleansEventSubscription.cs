@@ -13,7 +13,7 @@ public class DirectOrleansEventSubscription : IEventSubscription
 {
     private readonly StreamSubscriptionHandle<Event> _orleansHandle;
     private readonly IAsyncStream<Event> _stream;
-    private readonly ConcurrentDictionary<string, IEventSubscriptionHandle> _subscriptions;
+    private readonly ConcurrentDictionary<string, DirectEventSubscriptionHandle> _subscriptions;
     private bool _disposed;
 
     /// <summary>
@@ -25,9 +25,22 @@ public class DirectOrleansEventSubscription : IEventSubscription
     {
         _stream = stream ?? throw new ArgumentNullException(nameof(stream));
         _orleansHandle = orleansHandle ?? throw new ArgumentNullException(nameof(orleansHandle));
-        _subscriptions = new ConcurrentDictionary<string, IEventSubscriptionHandle>();
+        _subscriptions = new ConcurrentDictionary<string, DirectEventSubscriptionHandle>();
         
         Console.WriteLine($"[DirectOrleansEventSubscription] Created with existing subscription handle");
+    }
+    
+    /// <summary>
+    /// Process an event received from the Orleans stream
+    /// This is called by the grain's observer when events arrive
+    /// </summary>
+    public async Task ProcessEventFromStream(Event evt)
+    {
+        if (_disposed) return;
+        
+        // Forward the event to all registered handlers
+        var tasks = _subscriptions.Values.Select(handle => handle.ProcessEventAsync(evt));
+        await Task.WhenAll(tasks);
     }
 
     /// <summary>
@@ -92,7 +105,7 @@ public class DirectOrleansEventSubscription : IEventSubscription
     {
         return _subscriptions.Values
             .Where(s => s != null)
-            .Select(s => s.GetStatus())
+            .Select(s => (IEventSubscriptionStatus)s.GetStatus())
             .ToList();
     }
     
