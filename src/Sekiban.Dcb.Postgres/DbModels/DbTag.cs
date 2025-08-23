@@ -17,6 +17,9 @@ public class DbTag
     public string Tag { get; set; } = string.Empty;
 
     [Required]
+    public string TagGroup { get; set; } = string.Empty;
+
+    [Required]
     public string EventType { get; set; } = string.Empty;
 
     [Required]
@@ -26,10 +29,11 @@ public class DbTag
 
     public DateTime CreatedAt { get; set; }
 
-    public static DbTag FromEventTag(string tag, string sortableUniqueId, Guid eventId, string eventType) =>
+    public static DbTag FromEventTag(string tag, string tagGroup, string sortableUniqueId, Guid eventId, string eventType) =>
         new()
         {
             Tag = tag,
+            TagGroup = tagGroup,
             EventType = eventType,
             SortableUniqueId = sortableUniqueId,
             EventId = eventId,

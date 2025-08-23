@@ -12,7 +12,7 @@ using Sekiban.Dcb.Postgres;
 namespace Sekiban.Dcb.Postgres.Migrations
 {
     [DbContext(typeof(SekibanDcbDbContext))]
-    [Migration("20250814030530_Initial")]
+    [Migration("20250823222140_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -96,6 +96,10 @@ namespace Sekiban.Dcb.Postgres.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TagGroup")
                         .IsRequired()
                         .HasColumnType("text");
 

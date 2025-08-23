@@ -150,8 +150,11 @@ public class PostgresEventStore : IEventStore
                     // Process tags associated with this event
                     foreach (var tagString in ev.Tags)
                     {
+                        // Extract tag group from tag string (format: "group:content")
+                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+                        
                         // Create a tag entry for this event
-                        var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id, ev.EventType);
+                        var dbTag = DbTag.FromEventTag(tagString, tagGroup, ev.SortableUniqueIdValue, ev.Id, ev.EventType);
                         context.Tags.Add(dbTag);
 
                         tagWriteResults.Add(
