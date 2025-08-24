@@ -15,5 +15,4 @@ public interface IAggregate
     public IAggregatePayload GetPayload();
     public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload;
-
 }

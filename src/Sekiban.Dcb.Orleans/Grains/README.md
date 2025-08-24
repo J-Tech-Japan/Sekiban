@@ -5,6 +5,7 @@ This folder contains the Orleans grain implementation for multi-projections in S
 ## Overview
 
 The `MultiProjectionGrain` is an Orleans grain that:
+
 - Manages multi-projection state using `GeneralMultiProjectionActor`
 - Handles event streaming using `GeneralEventProvider`
 - Provides automatic state persistence with size limit handling
@@ -304,7 +305,8 @@ public class TestSiloConfigurator : ISiloConfigurator
 The grain handles state persistence with the following considerations:
 
 1. **Automatic Persistence**: State is automatically persisted at configurable intervals (default: 5 minutes)
-2. **Size Limits**: If state exceeds the configured size limit (e.g., 2MB for Cosmos DB), the persistence is skipped with a warning
+2. **Size Limits**: If state exceeds the configured size limit (e.g., 2MB for Cosmos DB), the persistence is skipped
+   with a warning
 3. **Safe State Only**: Only safe state (events outside the safe window) is persisted to ensure consistency
 4. **Graceful Degradation**: If persistence fails, the grain continues operating and logs the error
 
@@ -341,16 +343,16 @@ if (status.StateSize > 300 * 1024) // Warning threshold
 ### Common Issues
 
 1. **State Too Large**: Check logs for "State size exceeds limit" messages
-   - Solution: Reduce projection complexity or increase MaxStateSize
+    - Solution: Reduce projection complexity or increase MaxStateSize
 
 2. **Subscription Not Starting**: Check grain status for errors
-   - Solution: Manually restart subscription or check event store connectivity
+    - Solution: Manually restart subscription or check event store connectivity
 
 3. **Events Not Processing**: Verify IsCaughtUp status
-   - Solution: Wait for catch-up to complete or check for event provider errors
+    - Solution: Wait for catch-up to complete or check for event provider errors
 
 4. **Persistence Failures**: Check storage provider connectivity
-   - Solution: Verify connection strings and permissions
+    - Solution: Verify connection strings and permissions
 
 ### Monitoring Endpoints
 

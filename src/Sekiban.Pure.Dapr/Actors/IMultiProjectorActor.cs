@@ -1,8 +1,5 @@
 using Dapr.Actors;
-using ResultBoxes;
-using Sekiban.Pure.Query;
 using Sekiban.Pure.Dapr.Serialization;
-
 namespace Sekiban.Pure.Dapr.Actors;
 
 public interface IMultiProjectorActor : IActor

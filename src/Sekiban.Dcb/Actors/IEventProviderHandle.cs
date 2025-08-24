@@ -16,6 +16,16 @@ public interface IEventProviderHandle : IDisposable
     EventProviderState State { get; }
 
     /// <summary>
+    ///     Check if currently processing a batch
+    /// </summary>
+    bool IsProcessingBatch { get; }
+
+    /// <summary>
+    ///     Check if waiting for manual retry
+    /// </summary>
+    bool IsWaitingForManualRetry { get; }
+
+    /// <summary>
     ///     Pause event streaming
     /// </summary>
     Task PauseAsync();
@@ -50,16 +60,6 @@ public interface IEventProviderHandle : IDisposable
     /// </summary>
     EventProviderStatistics GetStatistics();
 
-    /// <summary>
-    ///     Check if currently processing a batch
-    /// </summary>
-    bool IsProcessingBatch { get; }
-    
-    /// <summary>
-    ///     Check if waiting for manual retry
-    /// </summary>
-    bool IsWaitingForManualRetry { get; }
-    
     /// <summary>
     ///     Manually trigger retry when SafeWindow wasn't reached
     /// </summary>

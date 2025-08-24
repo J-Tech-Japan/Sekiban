@@ -15,21 +15,20 @@ public class PostgresDbEventWriter : IEventWriter, IEventRemover
         _serializer = sekibanDomainTypes.Serializer;
     }
 
-    public async Task SaveEvents<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent
-    {
-        await _dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                var dbEvents = events.Select(ev => DbEvent.FromEvent(ev, _serializer, _eventTypes)).ToList();
-
-                await dbContext.Events.AddRangeAsync(dbEvents);
-                await dbContext.SaveChangesAsync();
-            });
-    }
-
     /// <summary>
     ///     Removes all events from the PostgreSQL event table
     /// </summary>
     /// <returns>A task that represents the asynchronous operation</returns>
     public Task RemoveAllEvents() => _dbFactory.DeleteAllFromEventContainer();
+
+    public async Task SaveEvents<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent
+    {
+        await _dbFactory.DbActionAsync(async dbContext =>
+        {
+            var dbEvents = events.Select(ev => DbEvent.FromEvent(ev, _serializer, _eventTypes)).ToList();
+
+            await dbContext.Events.AddRangeAsync(dbEvents);
+            await dbContext.SaveChangesAsync();
+        });
+    }
 }

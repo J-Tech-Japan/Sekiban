@@ -15,9 +15,9 @@ public class InMemorySekibanExecutor(
     Repository repository,
     IServiceProvider serviceProvider) : ISekibanExecutor
 {
-    public Repository Repository { get; set; } = repository;
     private readonly CommandExecutor _commandExecutor = new(serviceProvider)
         { EventTypes = sekibanDomainTypes.EventTypes };
+    public Repository Repository { get; set; } = repository;
 
     public SekibanDomainTypes GetDomainTypes() => sekibanDomainTypes;
     public async Task<ResultBox<CommandResponse>> CommandAsync(

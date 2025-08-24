@@ -1,6 +1,7 @@
 # Orleans Event Subscription
 
-This folder contains the Orleans implementation of the `IEventSubscription` interface from Sekiban.Dcb, providing event streaming capabilities for both actors and external consumers.
+This folder contains the Orleans implementation of the `IEventSubscription` interface from Sekiban.Dcb, providing event
+streaming capabilities for both actors and external consumers.
 
 ## Features
 
@@ -17,7 +18,6 @@ This folder contains the Orleans implementation of the `IEventSubscription` inte
 2. **OrleansEventSubscriptionHandleSimple**: Simple handle for managing individual subscriptions
 3. **DirectOrleansEventSubscription**: Implementation for grains that directly subscribe to Orleans streams
 4. **EventFilters**: Common filter implementations
-
 
 ## Usage Examples
 

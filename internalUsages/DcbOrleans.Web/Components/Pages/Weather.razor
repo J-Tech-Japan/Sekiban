@@ -1,13 +1,9 @@
 @page "/weather"
-@attribute [StreamRendering(true)]
-@rendermode InteractiveServer
-
 @using Dcb.Domain.Projections
 @using Dcb.Domain.Weather
 @using System.ComponentModel.DataAnnotations
-@using System.Net.Http
-@using System.Net.Http.Json
-@using Microsoft.AspNetCore.Components.Forms
+@attribute [StreamRendering()]
+@rendermode InteractiveServer
 
 @inject WeatherApiClient WeatherApiClient
 @inject IJSRuntime JsRuntime
@@ -48,12 +44,10 @@
 @if (forecasts == null)
 {
     <p><em>Loading...</em></p>
-}
-else if (forecasts.Count == 0)
+} else if (forecasts.Count == 0)
 {
     <p>No weather forecasts available. Click "Add New Weather Forecast" to create one.</p>
-}
-else
+} else
 {
     <table class="table">
         <thead>
@@ -67,33 +61,38 @@ else
         </tr>
         </thead>
         <tbody>
-            @foreach (var forecast in forecasts)
-            {
-                <tr>
-                    <td>@forecast.Location</td>
-                    <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@(32 + (int)(forecast.TemperatureC / 0.5556))</td>
-                    <td>@forecast.Summary</td>
-                    <td>
-                        <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
-                        <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.ForecastId)">Remove</button>
-                    </td>
-                </tr>
-            }
+        @foreach (var forecast in forecasts)
+        {
+            <tr>
+                <td>@forecast.Location</td>
+                <td>@forecast.Date.ToShortDateString()</td>
+                <td>@forecast.TemperatureC</td>
+                <td>@(32 + (int)(forecast.TemperatureC / 0.5556))</td>
+                <td>@forecast.Summary</td>
+                <td>
+                    <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit
+                        Location
+                    </button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.ForecastId)">
+                        Remove
+                    </button>
+                </td>
+            </tr>
+        }
         </tbody>
     </table>
-    
+
     <div class="d-flex justify-content-between align-items-center mt-3">
         <div>
             <nav aria-label="Weather forecast pagination">
                 <ul class="pagination">
                     <li class="page-item @(currentPage == 1 ? "disabled" : "")">
-                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)" disabled="@(currentPage == 1)">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)"
+                                disabled="@(currentPage == 1)">
                             Previous
                         </button>
                     </li>
-                    @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    @for (var i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
                     {
                         var pageNumber = i;
                         <li class="page-item @(currentPage == pageNumber ? "active" : "")">
@@ -103,7 +102,8 @@ else
                         </li>
                     }
                     <li class="page-item @(currentPage == totalPages || totalPages == 0 ? "disabled" : "")">
-                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)" disabled="@(currentPage == totalPages || totalPages == 0)">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)"
+                                disabled="@(currentPage == totalPages || totalPages == 0)">
                             Next
                         </button>
                     </li>
@@ -117,7 +117,8 @@ else
 }
 
 <!-- Add Forecast Modal -->
-<div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="addForecastModalLabel" aria-hidden="true">
+<div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="addForecastModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="weather-forecast" Model="@forecastModel" OnValidSubmit="HandleAddForecastSubmit">
@@ -126,21 +127,21 @@ else
                     <button type="button" class="btn-close" @onclick="CloseAddModal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <DataAnnotationsValidator />
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="location" class="form-label">Location</label>
-                        <InputText id="location" class="form-control" @bind-Value="forecastModel.Location" />
-                        <ValidationMessage For="@(() => forecastModel.Location)" class="text-danger" />
+                        <InputText id="location" class="form-control" @bind-Value="forecastModel.Location"/>
+                        <ValidationMessage For="@(() => forecastModel.Location)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="date" class="form-label">Date</label>
-                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date" />
-                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger" />
+                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date"/>
+                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="temperatureC" class="form-label">Temperature (°C)</label>
-                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC" />
-                        <ValidationMessage For="@(() => forecastModel.TemperatureC)" class="text-danger" />
+                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC"/>
+                        <ValidationMessage For="@(() => forecastModel.TemperatureC)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="summary" class="form-label">Summary</label>
@@ -151,7 +152,7 @@ else
                                 <option value="@summary">@summary</option>
                             }
                         </InputSelect>
-                        <ValidationMessage For="@(() => forecastModel.Summary)" class="text-danger" />
+                        <ValidationMessage For="@(() => forecastModel.Summary)" class="text-danger"/>
                     </div>
                     @if (!string.IsNullOrEmpty(forecastModel.Error))
                     {
@@ -170,20 +171,23 @@ else
 </div>
 
 <!-- Edit Location Modal -->
-<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="editLocationModalLabel" aria-hidden="true">
+<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="editLocationModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="edit-location" Model="@editLocationModel" OnValidSubmit="HandleEditLocationSubmit">
                 <div class="modal-header">
                     <h5 class="modal-title" id="editLocationModalLabel">Edit Location</h5>
-                    <button type="button" class="btn-close" @onclick="CloseEditLocationModal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" @onclick="CloseEditLocationModal"
+                            aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <DataAnnotationsValidator />
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="newLocation" class="form-label">New Location</label>
-                        <InputText id="newLocation" class="form-control" @bind-Value="editLocationModel.NewLocationName" />
-                        <ValidationMessage For="@(() => editLocationModel.NewLocationName)" class="text-danger" />
+                        <InputText id="newLocation" class="form-control"
+                                   @bind-Value="editLocationModel.NewLocationName"/>
+                        <ValidationMessage For="@(() => editLocationModel.NewLocationName)" class="text-danger"/>
                     </div>
                     @if (!string.IsNullOrEmpty(editLocationModel.Error))
                     {
@@ -205,14 +209,14 @@ else
     private List<WeatherForecastItem>? forecasts;
     private WeatherForecastModel forecastModel = new();
     private EditLocationModel editLocationModel = new();
-    private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
+    private readonly string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
     private string? lastSortableUniqueId;
-    
+
     // Pagination fields
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalPages = 1;
-    private int totalItems = 0;
+    private int totalItems;
 
     public class WeatherForecastModel
     {
@@ -227,17 +231,17 @@ else
 
         [Required(ErrorMessage = "Summary is required")]
         public string? Summary { get; set; }
-        
+
         public string? Error { get; set; }
     }
 
     public class EditLocationModel
     {
         public Guid ForecastId { get; set; }
-        
+
         [Required(ErrorMessage = "New location is required")]
         public string? NewLocationName { get; set; }
-        
+
         public string? Error { get; set; }
     }
 
@@ -250,27 +254,22 @@ else
     {
         try
         {
-            var result = await WeatherApiClient.GetWeatherAsync(
-                pageNumber: currentPage,
-                pageSize: pageSize,
-                waitForSortableUniqueId: waitForSortableUniqueId);
-            
+            var result = await WeatherApiClient.GetWeatherAsync(currentPage, pageSize, waitForSortableUniqueId);
+
             forecasts = result?.ToList() ?? new List<WeatherForecastItem>();
-            
+
             // For now, estimate total pages based on if we got a full page
             // In a real implementation, the API should return total count
             if (forecasts.Count < pageSize && currentPage == 1)
             {
                 totalPages = 1;
                 totalItems = forecasts.Count;
-            }
-            else if (forecasts.Count == pageSize)
+            } else if (forecasts.Count == pageSize)
             {
                 // Assume there might be more pages
                 totalPages = Math.Max(totalPages, currentPage + 1);
                 totalItems = forecasts.Count * currentPage;
-            }
-            else
+            } else
             {
                 totalPages = currentPage;
                 totalItems = (currentPage - 1) * pageSize + forecasts.Count;
@@ -290,13 +289,12 @@ else
         try
         {
             var response = await WeatherApiClient.RemoveWeatherAsync(forecastId);
-            
+
             if (response?.SortableUniqueId != null)
             {
                 lastSortableUniqueId = response.SortableUniqueId;
                 await LoadForecasts(lastSortableUniqueId);
-            }
-            else
+            } else
             {
                 await LoadForecasts();
             }
@@ -306,16 +304,16 @@ else
             Logger.LogError(ex, "Error deleting forecast");
         }
     }
-    
+
     private async Task ChangePage(int newPage)
     {
-        if (newPage < 1 || (newPage > totalPages && totalPages > 0))
+        if (newPage < 1 || newPage > totalPages && totalPages > 0)
             return;
-            
+
         currentPage = newPage;
         await LoadForecasts(lastSortableUniqueId);
     }
-    
+
     private async Task OnPageSizeChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out var newSize))
@@ -328,23 +326,20 @@ else
 
     private async Task CloseAddModal()
     {
-        forecastModel = new();
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "bootstrap.Modal.getInstance(document.getElementById('addForecastModal'))?.hide()");
+        forecastModel = new WeatherForecastModel();
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addForecastModal'))?.hide()");
     }
 
     private async Task CloseEditLocationModal()
     {
-        editLocationModel = new();
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "bootstrap.Modal.getInstance(document.getElementById('editLocationModal'))?.hide()");
+        editLocationModel = new EditLocationModel();
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('editLocationModal'))?.hide()");
     }
 
     private async Task OpenAddForecastModal()
     {
-        forecastModel = new() { Date = DateTime.Today };
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
+        forecastModel = new WeatherForecastModel { Date = DateTime.Today };
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addForecastModal')).show()");
     }
 
     private async Task OpenEditLocationModal(WeatherForecastItem forecast)
@@ -354,26 +349,22 @@ else
             ForecastId = forecast.ForecastId,
             NewLocationName = forecast.Location
         };
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "new bootstrap.Modal(document.getElementById('editLocationModal')).show()");
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('editLocationModal')).show()");
     }
 
     private async Task HandleEditLocationSubmit()
     {
         try
         {
-            var response = await WeatherApiClient.UpdateLocationAsync(
-                editLocationModel.ForecastId,
-                editLocationModel.NewLocationName!);
-            
+            var response = await WeatherApiClient.UpdateLocationAsync(editLocationModel.ForecastId, editLocationModel.NewLocationName!);
+
             if (response?.SortableUniqueId != null)
             {
                 lastSortableUniqueId = response.SortableUniqueId;
                 // Stay on current page after edit
                 await LoadForecasts(lastSortableUniqueId);
                 await CloseEditLocationModal();
-            }
-            else
+            } else
             {
                 editLocationModel.Error = "Failed to update location. Please try again.";
             }
@@ -396,17 +387,16 @@ else
                 TemperatureC = forecastModel.TemperatureC,
                 Summary = forecastModel.Summary
             };
-                
+
             var response = await WeatherApiClient.InputWeatherAsync(command);
-            
+
             if (response?.SortableUniqueId != null)
             {
                 lastSortableUniqueId = response.SortableUniqueId;
                 currentPage = 1; // Go to first page to see the new item
                 await LoadForecasts(lastSortableUniqueId);
                 await CloseAddModal();
-            }
-            else
+            } else
             {
                 forecastModel.Error = "Failed to add weather forecast. Please try again.";
             }

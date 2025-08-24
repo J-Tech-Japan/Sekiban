@@ -1,12 +1,8 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Documents;
-
 namespace DaprSample.Api;
 
 /// <summary>
-/// Temporary patch to make the event handler work with empty events
+///     Temporary patch to make the event handler work with empty events
 /// </summary>
 public static class EventHandlerPatch
 {

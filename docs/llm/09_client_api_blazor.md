@@ -196,7 +196,8 @@ else
 
 ## Using IWaitForSortableUniqueId for Consistent UI
 
-To ensure that your UI shows the most recent data after performing a command, use the `LastSortableUniqueId` returned from command operations:
+To ensure that your UI shows the most recent data after performing a command, use the `LastSortableUniqueId` returned
+from command operations:
 
 ```csharp
 // API Client

@@ -25,9 +25,9 @@ public interface IEventTypes
     /// </summary>
     /// <returns>List of event types</returns>
     List<Type> GetEventTypes();
-    
+
     /// <summary>
-    /// Gets the type from the event type name.
+    ///     Gets the type from the event type name.
     /// </summary>
     /// <param name="eventTypeName">Name of the event type</param>
     /// <returns>The found type, or null if not found</returns>

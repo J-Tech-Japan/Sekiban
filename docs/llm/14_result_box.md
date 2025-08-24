@@ -20,13 +20,15 @@
 
 ## Introduction to ResultBox
 
-ResultBox is a powerful utility type from the `ResultBoxes` package that is essential to Sekiban domain and API code. It helps with error handling, method chaining, and ensuring that operations are properly completed or failing gracefully.
+ResultBox is a powerful utility type from the `ResultBoxes` package that is essential to Sekiban domain and API code. It
+helps with error handling, method chaining, and ensuring that operations are properly completed or failing gracefully.
 
 ## Core Concepts
 
 ### What is ResultBox?
 
-ResultBox is a container that wraps a result value along with information about whether an operation was successful. It provides:
+ResultBox is a container that wraps a result value along with information about whether an operation was successful. It
+provides:
 
 1. **Error Handling** - Safely manages errors without throwing exceptions
 2. **Method Chaining** - Allows fluent composition of operations
@@ -34,7 +36,8 @@ ResultBox is a container that wraps a result value along with information about 
 
 ### Basic Usage
 
-ResultBox is used throughout Sekiban to handle operations that might fail, allowing for fluent error handling. Here's a simple example:
+ResultBox is used throughout Sekiban to handle operations that might fail, allowing for fluent error handling. Here's a
+simple example:
 
 ```csharp
 // A method returning a ResultBox
@@ -83,6 +86,7 @@ public async Task<ActionResult<CommandResponseSimple>> CreateUser(
 ```
 
 In this pattern:
+
 1. `CommandAsync` returns a ResultBox with the command response
 2. `ToSimpleCommandResponse()` transforms it to a more client-friendly format
 3. `UnwrapBox()` extracts the final value or throws an appropriate exception
@@ -107,6 +111,7 @@ public void ChainedTest()
 ```
 
 In this test:
+
 1. Each operation is chained to the next using `Conveyor`
 2. Assertions are made using `Do` without breaking the chain
 3. `UnwrapBox` at the end ensures any failure in the chain throws an exception
@@ -150,4 +155,6 @@ public async Task<ResultBox<CommandResponseSimple>> ExecuteCommand(CreateItemCom
 
 ## Conclusion
 
-ResultBox is a fundamental part of Sekiban that enables fluent error handling, elegant method chaining, and clean API design. By understanding and properly using ResultBox, you can write more robust, readable, and maintainable code in your Sekiban applications.
+ResultBox is a fundamental part of Sekiban that enables fluent error handling, elegant method chaining, and clean API
+design. By understanding and properly using ResultBox, you can write more robust, readable, and maintainable code in
+your Sekiban applications.

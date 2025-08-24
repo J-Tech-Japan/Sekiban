@@ -1,25 +1,26 @@
-using Orleans;
-using SharedDomain.Aggregates.WeatherForecasts.Events;
-using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Command;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-
+using SharedDomain.Aggregates.WeatherForecasts.Events;
+using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 namespace SharedDomain.Aggregates.WeatherForecasts.Commands;
 
 [GenerateSerializer]
 public record UpdateWeatherForecastLocationCommand(
-    [property: Id(0)] Guid WeatherForecastId,
-    [property: Id(1)] string Location) : ICommandWithHandler<UpdateWeatherForecastLocationCommand, WeatherForecastProjector>
+    [property: Id(0)]
+    Guid WeatherForecastId,
+    [property: Id(1)]
+    string Location) : ICommandWithHandler<UpdateWeatherForecastLocationCommand, WeatherForecastProjector>
 {
-    public PartitionKeys SpecifyPartitionKeys(UpdateWeatherForecastLocationCommand command) => 
+    public PartitionKeys SpecifyPartitionKeys(UpdateWeatherForecastLocationCommand command) =>
         PartitionKeys.Existing<WeatherForecastProjector>(command.WeatherForecastId);
 
-    public ResultBox<EventOrNone> Handle(UpdateWeatherForecastLocationCommand command, ICommandContext<IAggregatePayload> context)
+    public ResultBox<EventOrNone> Handle(
+        UpdateWeatherForecastLocationCommand command,
+        ICommandContext<IAggregatePayload> context)
     {
         // Only allow updates on existing WeatherForecast aggregates
         var aggregate = context.GetAggregate();
@@ -27,7 +28,7 @@ public record UpdateWeatherForecastLocationCommand(
         {
             return EventOrNone.None;
         }
-        
+
         return EventOrNone.Event(new WeatherForecastLocationUpdated(command.Location));
     }
 }

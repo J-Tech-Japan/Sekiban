@@ -1,11 +1,9 @@
 using Orleans.TestingHost;
-using Orleans.Hosting;
 using Xunit;
-
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
-/// 最小構成でOrleansクラスタ起動のみを検証するスモークテスト
+///     最小構成でOrleansクラスタ起動のみを検証するスモークテスト
 /// </summary>
 public class BasicOrleansSmokeTest : IAsyncLifetime
 {
@@ -33,7 +31,7 @@ public class BasicOrleansSmokeTest : IAsyncLifetime
     }
 
     /// <summary>
-    /// クラスタとクライアントが取得できることを確認
+    ///     クラスタとクライアントが取得できることを確認
     /// </summary>
     [Fact]
     public void Should_Start_Cluster()

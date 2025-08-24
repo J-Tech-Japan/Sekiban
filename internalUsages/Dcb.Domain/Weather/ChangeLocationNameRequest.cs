@@ -1,9 +1,8 @@
 using System.ComponentModel.DataAnnotations;
-
 namespace Dcb.Domain.Weather;
 
 /// <summary>
-/// Request model for changing location name
+///     Request model for changing location name
 /// </summary>
 public record ChangeLocationNameRequest
 {

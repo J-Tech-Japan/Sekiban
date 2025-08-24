@@ -57,9 +57,8 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m =>
+                    m.OriginalDefinition is not null && m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -93,9 +92,8 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m =>
+                    m.OriginalDefinition is not null && m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -139,11 +137,11 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
             if (typeSymbol != null &&
                 typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandSymbol.Name))
             {
-                var interfaceImplementationAggregate = typeSymbol.AllInterfaces.FirstOrDefault(
-                    m => m.OriginalDefinition.Name == iCommandWithAggregateRestrictionSymbol.Name);
+                var interfaceImplementationAggregate = typeSymbol.AllInterfaces.FirstOrDefault(m =>
+                    m.OriginalDefinition.Name == iCommandWithAggregateRestrictionSymbol.Name);
 
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition.Name == iCommandSymbol.Name);
+                var interfaceImplementation
+                    = typeSymbol.AllInterfaces.First(m => m.OriginalDefinition.Name == iCommandSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -266,14 +264,14 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
         }
         sb.AppendLine("            };");
         sb.AppendLine("        }");
-        
+
         // Add GetCommandTypeByName implementation
         sb.AppendLine();
         sb.AppendLine("        public Type? GetCommandTypeByName(string commandTypeName)");
         sb.AppendLine("        {");
         sb.AppendLine("            return commandTypeName switch");
         sb.AppendLine("            {");
-        
+
         // Generate case statements for each command type
         foreach (var type in commandTypes)
         {
@@ -281,7 +279,7 @@ public class CommandTypesExtensionGenerator : IIncrementalGenerator
             var shortName = type.RecordName.Split('.').Last();
             sb.AppendLine($"                \"{shortName}\" => typeof({type.RecordName}),");
         }
-        
+
         sb.AppendLine("                _ => null");
         sb.AppendLine("            };");
         sb.AppendLine("        }");

@@ -10,20 +10,18 @@ public record SerializableAggregate
     public Guid AggregateId { get; init; } = Guid.Empty;
     public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
     public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
-    
+
     public int Version { get; init; }
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public string ProjectorVersion { get; init; } = string.Empty;
     public string ProjectorTypeName { get; init; } = string.Empty;
     public string PayloadTypeName { get; init; } = string.Empty;
-    
-    public byte[] CompressedPayloadJson { get; init; } = Array.Empty<byte>();
-    
-    public string PayloadAssemblyVersion { get; init; } = string.Empty;
-    
-    public SerializableAggregate() { }
 
-    public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
+    public byte[] CompressedPayloadJson { get; init; } = Array.Empty<byte>();
+
+    public string PayloadAssemblyVersion { get; init; } = string.Empty;
+
+    public SerializableAggregate() { }
 
     private SerializableAggregate(
         Guid aggregateId,
@@ -49,23 +47,20 @@ public record SerializableAggregate
         PayloadAssemblyVersion = payloadAssemblyVersion;
     }
 
-    public static async Task<SerializableAggregate> CreateFromAsync(
-        Aggregate aggregate, 
-        JsonSerializerOptions options)
+    public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
+
+    public static async Task<SerializableAggregate> CreateFromAsync(Aggregate aggregate, JsonSerializerOptions options)
     {
-        byte[] compressedPayloadJson = Array.Empty<byte>();
-        string payloadAssemblyVersion = "0.0.0.0";
+        var compressedPayloadJson = Array.Empty<byte>();
+        var payloadAssemblyVersion = "0.0.0.0";
 
         if (aggregate.Payload != null)
         {
             var payloadType = aggregate.Payload.GetType();
             payloadAssemblyVersion = payloadType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
-            
-            var payloadJson = JsonSerializer.SerializeToUtf8Bytes(
-                aggregate.Payload, 
-                payloadType, 
-                options);
-            
+
+            var payloadJson = JsonSerializer.SerializeToUtf8Bytes(aggregate.Payload, payloadType, options);
+
             compressedPayloadJson = await CompressAsync(payloadJson);
         }
 
@@ -79,12 +74,10 @@ public record SerializableAggregate
             aggregate.ProjectorTypeName,
             aggregate.PayloadTypeName,
             compressedPayloadJson,
-            payloadAssemblyVersion
-        );
+            payloadAssemblyVersion);
     }
 
-    public async Task<OptionalValue<Aggregate>> ToAggregateAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<OptionalValue<Aggregate>> ToAggregateAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -101,7 +94,7 @@ public record SerializableAggregate
 
                 return new OptionalValue<Aggregate>(emptyAggregate);
             }
-            
+
             Type? payloadType = null;
             try
             {
@@ -125,21 +118,20 @@ public record SerializableAggregate
             */
 
             IAggregatePayload? payload = null;
-            
+
             if (CompressedPayloadJson.Length > 0)
             {
                 var decompressedJson = await DecompressAsync(CompressedPayloadJson);
                 payload = (IAggregatePayload?)JsonSerializer.Deserialize(
-                    decompressedJson, 
-                    payloadType, 
+                    decompressedJson,
+                    payloadType,
                     domainTypes.JsonSerializerOptions);
-                
+
                 if (payload == null)
                 {
                     return OptionalValue<Aggregate>.Empty;
                 }
-            }
-            else
+            } else
             {
                 payload = new EmptyAggregatePayload();
             }

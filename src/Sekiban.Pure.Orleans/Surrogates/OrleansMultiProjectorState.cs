@@ -16,5 +16,4 @@ public record struct OrleansMultiProjectorState(
     [property: Id(6)]
     string RootPartitionKey)
 {
-
 }

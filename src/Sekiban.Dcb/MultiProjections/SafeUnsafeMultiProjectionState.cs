@@ -1,8 +1,6 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
-
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
@@ -13,24 +11,18 @@ namespace Sekiban.Dcb.MultiProjections;
 public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload
     where T : IMultiProjector<T>
 {
-    private T _safeState;
+    private readonly HashSet<Guid> _processedEventIds = new();
     private readonly List<(Event evt, T stateBefore)> _unsafeEvents = new();
-    private T? _unsafeStateCache;
-    private bool _unsafeStateCacheValid;
     private Guid _lastEventId = Guid.Empty;
     private string _lastSortableUniqueId = string.Empty;
+    private T _safeState;
+    private T? _unsafeStateCache;
+    private bool _unsafeStateCacheValid;
     private int _version;
-    private readonly HashSet<Guid> _processedEventIds = new();
 
-    public SafeUnsafeMultiProjectionState()
-    {
-        _safeState = T.GenerateInitialPayload();
-    }
+    public SafeUnsafeMultiProjectionState() => _safeState = T.GenerateInitialPayload();
 
-    public SafeUnsafeMultiProjectionState(T initialState)
-    {
-        _safeState = initialState;
-    }
+    public SafeUnsafeMultiProjectionState(T initialState) => _safeState = initialState;
 
     /// <summary>
     ///     Gets the safe state (events outside the safe window)
@@ -91,8 +83,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
 
             // Process any unsafe events that are now safe
             ProcessUnsafeEventsToSafe(safeWindowThreshold, tags);
-        }
-        else
+        } else
         {
             // Unsafe event - add to buffer
             var currentState = GetUnsafeState();
@@ -101,6 +92,10 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
 
         return this;
     }
+
+    public Guid GetLastEventId() => _lastEventId;
+    public string GetLastSortableUniqueId() => _lastSortableUniqueId;
+    public int GetVersion() => _version;
 
     private void ProcessUnsafeEventsToSafe(SortableUniqueId safeWindowThreshold, List<ITag> tags)
     {
@@ -113,8 +108,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
             if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
             {
                 eventsToPromote.Add(item);
-            }
-            else
+            } else
             {
                 eventsToKeep.Add(item);
             }
@@ -143,7 +137,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     private T ComputeUnsafeState()
     {
         var state = _safeState;
-        
+
         // Apply all unsafe events in order
         foreach (var item in _unsafeEvents.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
@@ -157,10 +151,6 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
 
         return state;
     }
-
-    public Guid GetLastEventId() => _lastEventId;
-    public string GetLastSortableUniqueId() => _lastSortableUniqueId;
-    public int GetVersion() => _version;
 
     /// <summary>
     ///     Simple tag implementation for processing

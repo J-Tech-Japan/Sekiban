@@ -1,11 +1,10 @@
+using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Text.Json;
-using ModelContextProtocol.Server;
-
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// MCP tools for accessing Sekiban documentation
+///     MCP tools for accessing Sekiban documentation
 /// </summary>
 [McpServerToolType]
 public sealed class SekibanDocumentTools
@@ -14,7 +13,7 @@ public sealed class SekibanDocumentTools
     private readonly AzureOpenAIService _openAiService;
 
     /// <summary>
-    /// Constructor
+    ///     Constructor
     /// </summary>
     public SekibanDocumentTools(SekibanDocumentService documentService, AzureOpenAIService openAiService)
     {
@@ -23,9 +22,10 @@ public sealed class SekibanDocumentTools
     }
 
     /// <summary>
-    /// Get the navigation structure of the documentation
+    ///     Get the navigation structure of the documentation
     /// </summary>
-    [McpServerTool, Description("Get the navigation structure of Sekiban documentation.")]
+    [McpServerTool]
+    [Description("Get the navigation structure of Sekiban documentation.")]
     public async Task<string> GetDocumentNavigation()
     {
         var navigation = await _documentService.GetNavigationAsync();
@@ -33,9 +33,10 @@ public sealed class SekibanDocumentTools
     }
 
     /// <summary>
-    /// Get a list of all available documents
+    ///     Get a list of all available documents
     /// </summary>
-    [McpServerTool, Description("Get a list of all available Sekiban documents.")]
+    [McpServerTool]
+    [Description("Get a list of all available Sekiban documents.")]
     public async Task<string> GetAllDocuments()
     {
         var documents = await _documentService.GetAllDocumentsAsync();
@@ -43,9 +44,10 @@ public sealed class SekibanDocumentTools
     }
 
     /// <summary>
-    /// Get a specific document by filename
+    ///     Get a specific document by filename
     /// </summary>
-    [McpServerTool, Description("Get a specific Sekiban document by filename.")]
+    [McpServerTool]
+    [Description("Get a specific Sekiban document by filename.")]
     public async Task<string> GetDocument(
         [Description("The filename of the document (e.g., '01_core_concepts.md')")] string fileName)
     {
@@ -55,18 +57,20 @@ public sealed class SekibanDocumentTools
             return JsonSerializer.Serialize(new { error = $"Document '{fileName}' not found" });
         }
 
-        return JsonSerializer.Serialize(new
-        {
-            fileName = document.FileName,
-            title = document.Title,
-            content = document.Content
-        });
+        return JsonSerializer.Serialize(
+            new
+            {
+                fileName = document.FileName,
+                title = document.Title,
+                content = document.Content
+            });
     }
 
     /// <summary>
-    /// Get a specific section from a document
+    ///     Get a specific section from a document
     /// </summary>
-    [McpServerTool, Description("Get a specific section from a Sekiban document.")]
+    [McpServerTool]
+    [Description("Get a specific section from a Sekiban document.")]
     public async Task<string> GetDocumentSection(
         [Description("The filename of the document (e.g., '01_core_concepts.md')")] string fileName,
         [Description("The title of the section")] string sectionTitle)
@@ -74,18 +78,19 @@ public sealed class SekibanDocumentTools
         var section = await _documentService.GetSectionContentAsync(fileName, sectionTitle);
         if (section == null)
         {
-            return JsonSerializer.Serialize(new { error = $"Section '{sectionTitle}' not found in document '{fileName}'" });
+            return JsonSerializer.Serialize(
+                new { error = $"Section '{sectionTitle}' not found in document '{fileName}'" });
         }
 
         return JsonSerializer.Serialize(section, SekibanContext.Default.SectionContent);
     }
 
     /// <summary>
-    /// Search Sekiban documentation
+    ///     Search Sekiban documentation
     /// </summary>
-    [McpServerTool, Description("Search Sekiban documentation by keyword.")]
-    public async Task<string> SearchDocumentation(
-        [Description("The search keyword or phrase")] string query)
+    [McpServerTool]
+    [Description("Search Sekiban documentation by keyword.")]
+    public async Task<string> SearchDocumentation([Description("The search keyword or phrase")] string query)
     {
         var results = await _documentService.SearchAsync(query);
         return JsonSerializer.Serialize(results, SekibanContext.Default.ListSearchResult);
@@ -123,11 +128,11 @@ public sealed class SekibanDocumentTools
     // }
 
     /// <summary>
-    /// Ask a question about Sekiban and get an answer
+    ///     Ask a question about Sekiban and get an answer
     /// </summary>
-    [McpServerTool, Description("Ask a question about Sekiban and get an answer using AI.")]
-    public async Task<string> AskQuestion(
-        [Description("Your question about Sekiban")] string question)
+    [McpServerTool]
+    [Description("Ask a question about Sekiban and get an answer using AI.")]
+    public async Task<string> AskQuestion([Description("Your question about Sekiban")] string question)
     {
         var answer = await _openAiService.AnswerQuestionAsync(question);
         return JsonSerializer.Serialize(new { question, answer });

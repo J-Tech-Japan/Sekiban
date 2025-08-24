@@ -1,15 +1,13 @@
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.Orleans.Grains;
 using System.Diagnostics;
-
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
@@ -18,8 +16,8 @@ namespace Sekiban.Dcb.Orleans;
 /// </summary>
 public class OrleansDcbExecutor : ISekibanExecutor
 {
-    private readonly IClusterClient _clusterClient;
     private readonly IActorObjectAccessor _actorAccessor;
+    private readonly IClusterClient _clusterClient;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _generalExecutor;
@@ -59,12 +57,11 @@ public class OrleansDcbExecutor : ISekibanExecutor
     /// </summary>
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
         _generalExecutor.GetTagStateAsync(tagStateId);
-    
+
     /// <summary>
     ///     Execute a single-result query using Orleans grains
     /// </summary>
-    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) 
-        where TResult : notnull
+    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
         try
         {
@@ -74,33 +71,35 @@ public class OrleansDcbExecutor : ISekibanExecutor
             {
                 return ResultBox.Error<TResult>(projectorTypeResult.GetException());
             }
-            
+
             var projectorType = projectorTypeResult.GetValue();
-            
+
             // Get the multi-projector name
             var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
             if (projectorNameProperty == null)
             {
                 return ResultBox.Error<TResult>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} does not have MultiProjectorName property"));
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
             }
-            
+
             var projectorName = projectorNameProperty.GetValue(null) as string;
             if (string.IsNullOrEmpty(projectorName))
             {
                 return ResultBox.Error<TResult>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
             }
-            
+
             // Get the multi-projection grain directly
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
-            
+
             // Wait for sortable unique ID if needed
             await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
-            
+
             // Execute the query on the grain
             var result = await grain.ExecuteQueryAsync(queryCommon);
-            
+
             // Convert QueryResultGeneral back to typed result
             return result.ToTypedResult<TResult>();
         }
@@ -109,7 +108,7 @@ public class OrleansDcbExecutor : ISekibanExecutor
             return ResultBox.Error<TResult>(ex);
         }
     }
-    
+
     /// <summary>
     ///     Execute a list query with pagination support using Orleans grains
     /// </summary>
@@ -124,33 +123,35 @@ public class OrleansDcbExecutor : ISekibanExecutor
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
             }
-            
+
             var projectorType = projectorTypeResult.GetValue();
-            
+
             // Get the multi-projector name
             var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
             if (projectorNameProperty == null)
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} does not have MultiProjectorName property"));
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
             }
-            
+
             var projectorName = projectorNameProperty.GetValue(null) as string;
             if (string.IsNullOrEmpty(projectorName))
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
             }
-            
+
             // Get the multi-projection grain directly
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
-            
+
             // Wait for sortable unique ID if needed
             await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
-            
+
             // Execute the list query on the grain
             var result = await grain.ExecuteListQueryAsync(queryCommon);
-            
+
             // Convert ListQueryResultGeneral back to typed result
             return result.ToTypedResult<TResult>();
         }
@@ -159,23 +160,23 @@ public class OrleansDcbExecutor : ISekibanExecutor
             return ResultBox.Error<ListQueryResult<TResult>>(ex);
         }
     }
-    
+
     /// <summary>
-    /// Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId
+    ///     Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId
     /// </summary>
     private async Task WaitForSortableUniqueIdIfNeeded(IMultiProjectionGrain grain, object query)
     {
-        if (query is IWaitForSortableUniqueId waitForQuery && 
+        if (query is IWaitForSortableUniqueId waitForQuery &&
             !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
         {
             var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
-            
+
             // Calculate adaptive timeout based on the age of the sortable unique ID
             var timeoutMs = SortableUniqueIdWaitHelper.CalculateAdaptiveTimeout(sortableUniqueId);
             var pollingIntervalMs = SortableUniqueIdWaitHelper.DefaultPollingIntervalMs;
-            
+
             var stopwatch = Stopwatch.StartNew();
-            
+
             while (stopwatch.ElapsedMilliseconds < timeoutMs)
             {
                 var isReceived = await grain.IsSortableUniqueIdReceived(sortableUniqueId);
@@ -183,10 +184,10 @@ public class OrleansDcbExecutor : ISekibanExecutor
                 {
                     return;
                 }
-                
+
                 await Task.Delay(pollingIntervalMs);
             }
-            
+
             // Timeout reached - we proceed with the query anyway
             // The query might return stale data, but that's better than failing completely
         }

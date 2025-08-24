@@ -3,7 +3,6 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using System.IO.Compression;
 using System.Text.Json;
-
 namespace Sekiban.Pure.Command.Executor;
 
 [Serializable]
@@ -12,14 +11,12 @@ public record SerializableCommandResponse
     public Guid AggregateId { get; init; } = Guid.Empty;
     public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
     public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
-    
-    public int Version { get; init; }
-    
-    public List<SerializableEvent> Events { get; init; } = new();
-    
-    public SerializableCommandResponse() { }
 
-    public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
+    public int Version { get; init; }
+
+    public List<SerializableEvent> Events { get; init; } = new();
+
+    public SerializableCommandResponse() { }
 
     private SerializableCommandResponse(
         Guid aggregateId,
@@ -35,12 +32,14 @@ public record SerializableCommandResponse
         Events = events;
     }
 
+    public PartitionKeys GetPartitionKeys() => new(AggregateId, Group, RootPartitionKey);
+
     public static async Task<SerializableCommandResponse> CreateFromAsync(
         CommandResponse response,
         JsonSerializerOptions options)
     {
         var serializableEvents = new List<SerializableEvent>();
-        
+
         foreach (var @event in response.Events)
         {
             var serializableEvent = await SerializableEvent.CreateFromAsync(@event, options);
@@ -52,17 +51,15 @@ public record SerializableCommandResponse
             response.PartitionKeys.Group,
             response.PartitionKeys.RootPartitionKey,
             response.Version,
-            serializableEvents
-        );
+            serializableEvents);
     }
 
-    public async Task<OptionalValue<CommandResponse>> ToCommandResponseAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<OptionalValue<CommandResponse>> ToCommandResponseAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
             var events = new List<IEvent>();
-            
+
             foreach (var serializableEvent in Events)
             {
                 var eventOptional = await serializableEvent.ToEventAsync(domainTypes);
@@ -73,11 +70,7 @@ public record SerializableCommandResponse
                 events.Add(eventOptional.Value!);
             }
 
-            var response = new CommandResponse(
-                GetPartitionKeys(),
-                events,
-                Version
-            );
+            var response = new CommandResponse(GetPartitionKeys(), events, Version);
 
             return new OptionalValue<CommandResponse>(response);
         }
@@ -94,12 +87,12 @@ public record SerializableCommandResponse
         public string SortableUniqueId { get; init; } = string.Empty;
         public byte[] CompressedPayloadJson { get; init; } = Array.Empty<byte>();
         public string PayloadAssemblyVersion { get; init; } = string.Empty;
-        
+
         public Guid AggregateId { get; init; } = Guid.Empty;
         public string Group { get; init; } = PartitionKeys.DefaultAggregateGroupName;
         public string RootPartitionKey { get; init; } = PartitionKeys.DefaultRootPartitionKey;
         public int Version { get; init; }
-        
+
         public SerializableEvent() { }
 
         private SerializableEvent(
@@ -122,19 +115,14 @@ public record SerializableCommandResponse
             Version = version;
         }
 
-        public static async Task<SerializableEvent> CreateFromAsync(
-            IEvent @event,
-            JsonSerializerOptions options)
+        public static async Task<SerializableEvent> CreateFromAsync(IEvent @event, JsonSerializerOptions options)
         {
             var payload = @event.GetPayload();
             var payloadType = payload.GetType();
             var payloadAssemblyVersion = payloadType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
-            
-            var payloadJson = JsonSerializer.SerializeToUtf8Bytes(
-                payload,
-                payloadType,
-                options);
-            
+
+            var payloadJson = JsonSerializer.SerializeToUtf8Bytes(payload, payloadType, options);
+
             var compressedPayloadJson = await CompressAsync(payloadJson);
 
             return new SerializableEvent(
@@ -145,12 +133,10 @@ public record SerializableCommandResponse
                 @event.PartitionKeys.AggregateId,
                 @event.PartitionKeys.Group,
                 @event.PartitionKeys.RootPartitionKey,
-                @event.Version
-            );
+                @event.Version);
         }
 
-        public async Task<OptionalValue<IEvent>> ToEventAsync(
-            SekibanDomainTypes domainTypes)
+        public async Task<OptionalValue<IEvent>> ToEventAsync(SekibanDomainTypes domainTypes)
         {
             try
             {
@@ -166,14 +152,14 @@ public record SerializableCommandResponse
                     decompressedJson,
                     payloadType,
                     domainTypes.JsonSerializerOptions) as IEventPayload;
-                
+
                 if (payload == null)
                 {
                     return OptionalValue<IEvent>.Empty;
                 }
 
                 var partitionKeys = new PartitionKeys(AggregateId, Group, RootPartitionKey);
-                
+
                 // Get the Event type with the correct payload type
                 var genericEventType = typeof(Event<>).MakeGenericType(payload.GetType());
                 var @event = Activator.CreateInstance(

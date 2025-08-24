@@ -49,6 +49,7 @@ This template includes Aspire host for Dapr, Dapr actors, state store, and pub/s
 ## Important Notes
 
 ### Correct Namespaces
+
 The template uses the `Sekiban.Pure.*` namespace hierarchy, not `Sekiban.Core.*`. Always use the following namespaces:
 
 - `Sekiban.Pure.Aggregates` for aggregates and payload interfaces
@@ -61,7 +62,9 @@ The template uses the `Sekiban.Pure.*` namespace hierarchy, not `Sekiban.Core.*`
 - `ResultBoxes` for result handling
 
 ### Project Structure
+
 The template creates a solution with multiple projects:
+
 - `MyProject.Domain` - Contains domain models, events, commands, and queries
 - `MyProject.ApiService` - API endpoints for commands and queries
 - `MyProject.Web` - Web frontend with Blazor
@@ -69,6 +72,7 @@ The template creates a solution with multiple projects:
 - `MyProject.ServiceDefaults` - Common service configurations
 
 ### Running the Application
+
 When running the application with the Aspire host, use the following command:
 
 ```bash

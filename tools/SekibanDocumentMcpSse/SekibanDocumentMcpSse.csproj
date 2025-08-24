@@ -1,25 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <PublishAot>false</PublishAot>
-    <UserSecretsId>22219344-84ed-4531-a1e3-b3eeb66ffceb</UserSecretsId>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>false</PublishAot>
+        <UserSecretsId>22219344-84ed-4531-a1e3-b3eeb66ffceb</UserSecretsId>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.4" />
-    <PackageReference Include="OpenAI" Version="2.3.0" />
-    <PackageReference Include="Markdig" Version="0.41.3" />
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.1" />
-    <PackageReference Include="System.Text.Json" Version="9.0.8" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.4"/>
+        <PackageReference Include="OpenAI" Version="2.3.0"/>
+        <PackageReference Include="Markdig" Version="0.41.3"/>
+        <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.1"/>
+        <PackageReference Include="System.Text.Json" Version="9.0.8"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="../../docs/llm/*.md">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+    <ItemGroup>
+        <Content Include="../../docs/llm/*.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
 
 </Project>

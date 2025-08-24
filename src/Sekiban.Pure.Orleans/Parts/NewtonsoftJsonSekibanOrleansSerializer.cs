@@ -23,12 +23,12 @@ public class NewtonsoftJsonSekibanOrleansSerializer : IGrainStorageSerializer
     {
         var json = input.ToString();
         var result = JsonConvert.DeserializeObject<T>(json, _settings);
-        
+
         if (result is null)
         {
             throw new InvalidOperationException($"Failed to deserialize {typeof(T).Name} from JSON: {json}");
         }
-        
+
         return result;
     }
 }

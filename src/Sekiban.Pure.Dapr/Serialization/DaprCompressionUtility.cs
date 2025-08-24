@@ -1,14 +1,14 @@
 using System.IO.Compression;
-
+using System.Text;
 namespace Sekiban.Pure.Dapr.Serialization;
 
 /// <summary>
-/// Utility class for compressing and decompressing data for Dapr storage
+///     Utility class for compressing and decompressing data for Dapr storage
 /// </summary>
 public static class DaprCompressionUtility
 {
     /// <summary>
-    /// Compresses data using GZip compression
+    ///     Compresses data using GZip compression
     /// </summary>
     /// <param name="data">Data to compress</param>
     /// <returns>Compressed data</returns>
@@ -28,7 +28,7 @@ public static class DaprCompressionUtility
     }
 
     /// <summary>
-    /// Compresses string data using GZip compression
+    ///     Compresses string data using GZip compression
     /// </summary>
     /// <param name="text">Text to compress</param>
     /// <returns>Compressed data</returns>
@@ -39,12 +39,12 @@ public static class DaprCompressionUtility
             return Array.Empty<byte>();
         }
 
-        var bytes = System.Text.Encoding.UTF8.GetBytes(text);
+        var bytes = Encoding.UTF8.GetBytes(text);
         return Compress(bytes);
     }
 
     /// <summary>
-    /// Decompresses data that was compressed with GZip
+    ///     Decompresses data that was compressed with GZip
     /// </summary>
     /// <param name="compressedData">Compressed data</param>
     /// <returns>Decompressed data</returns>
@@ -63,7 +63,7 @@ public static class DaprCompressionUtility
     }
 
     /// <summary>
-    /// Decompresses data to string
+    ///     Decompresses data to string
     /// </summary>
     /// <param name="compressedData">Compressed data</param>
     /// <returns>Decompressed string</returns>
@@ -75,6 +75,6 @@ public static class DaprCompressionUtility
         }
 
         var bytes = Decompress(compressedData);
-        return System.Text.Encoding.UTF8.GetString(bytes);
+        return Encoding.UTF8.GetString(bytes);
     }
 }

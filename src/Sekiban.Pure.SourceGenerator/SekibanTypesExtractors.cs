@@ -4,12 +4,6 @@ namespace Sekiban.Pure.SourceGenerator;
 
 public static class SekibanTypesExtractors
 {
-    public class EventTypeValues
-    {
-        public string InterfaceName { get; set; } = string.Empty;
-        public string RecordName { get; set; } = string.Empty;
-        public int TypeCount { get; set; }
-    }
     public static ImmutableArray<EventTypeValues> GetEventValues(
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
@@ -26,8 +20,9 @@ public static class SekibanTypesExtractors
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default));
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.Equals(
+                    iEventPayloadSymbol,
+                    SymbolEqualityComparer.Default));
                 eventTypes.Add(
                     new EventTypeValues
                     {
@@ -37,13 +32,6 @@ public static class SekibanTypesExtractors
             }
         }
         return eventTypes.ToImmutable();
-    }
-
-    public class AggregateTypesValues
-    {
-        public string InterfaceName { get; set; } = string.Empty;
-        public string RecordName { get; set; } = string.Empty;
-        public int TypeCount { get; set; }
     }
 
     public static ImmutableArray<AggregateTypesValues> GetAggregateTypeValues(
@@ -62,8 +50,9 @@ public static class SekibanTypesExtractors
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default));
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.Equals(
+                    iEventPayloadSymbol,
+                    SymbolEqualityComparer.Default));
                 eventTypes.Add(
                     new AggregateTypesValues
                     {
@@ -73,11 +62,6 @@ public static class SekibanTypesExtractors
             }
         }
         return eventTypes.ToImmutable();
-    }
-
-    public class MultiProjectorValue
-    {
-        public string TypeName { get; set; } = string.Empty;
     }
     public static ImmutableArray<MultiProjectorValue> GetMultiProjectorValues(
         Compilation compilation,
@@ -94,11 +78,13 @@ public static class SekibanTypesExtractors
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
                 throw new ApplicationException("TypeSymbol is null");
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol.AllInterfaces.Any(
-                m => m.Equals(iMultiProjectorCommonSymbol, SymbolEqualityComparer.Default)))
+            if (typeSymbol.AllInterfaces.Any(m => m.Equals(
+                iMultiProjectorCommonSymbol,
+                SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iMultiProjectorCommonSymbol, SymbolEqualityComparer.Default));
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.Equals(
+                    iMultiProjectorCommonSymbol,
+                    SymbolEqualityComparer.Default));
                 multiProjectorTypes.Add(
                     new MultiProjectorValue
                     {
@@ -109,5 +95,22 @@ public static class SekibanTypesExtractors
 
         return multiProjectorTypes.ToImmutable();
     }
+    public class EventTypeValues
+    {
+        public string InterfaceName { get; set; } = string.Empty;
+        public string RecordName { get; set; } = string.Empty;
+        public int TypeCount { get; set; }
+    }
 
+    public class AggregateTypesValues
+    {
+        public string InterfaceName { get; set; } = string.Empty;
+        public string RecordName { get; set; } = string.Empty;
+        public int TypeCount { get; set; }
+    }
+
+    public class MultiProjectorValue
+    {
+        public string TypeName { get; set; } = string.Empty;
+    }
 }

@@ -2,8 +2,6 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 public class InMemoryEventSubscriptionTests
@@ -16,16 +14,8 @@ public class InMemoryEventSubscriptionTests
             sortableId,
             eventType,
             id,
-            new EventMetadata(
-                Guid.NewGuid().ToString(),
-                Guid.NewGuid().ToString(),
-                "TestUser"),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string>());
-    }
-
-    private record TestEventPayload : IEventPayload
-    {
-        public string Data { get; init; } = "";
     }
 
     [Fact]
@@ -34,20 +24,19 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
         var receivedEvents = new List<Event>();
-        var handle = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents.Add(evt);
-                await Task.CompletedTask;
-            });
+        var handle = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents.Add(evt);
+            await Task.CompletedTask;
+        });
 
         // Act
         var event1 = CreateTestEvent(Guid.NewGuid(), "TestEvent1");
         var event2 = CreateTestEvent(Guid.NewGuid(), "TestEvent2");
-        
+
         await subscription.PublishEventAsync(event1);
         await subscription.PublishEventAsync(event2);
-        
+
         // Small delay to ensure async processing completes
         await Task.Delay(100);
 
@@ -62,12 +51,12 @@ public class InMemoryEventSubscriptionTests
     {
         // Arrange
         using var subscription = new InMemoryEventSubscription();
-        
+
         // Publish some events first
         var event1 = CreateTestEvent(Guid.NewGuid(), "TestEvent1", DateTime.UtcNow.AddSeconds(-3));
         var event2 = CreateTestEvent(Guid.NewGuid(), "TestEvent2", DateTime.UtcNow.AddSeconds(-2));
         var event3 = CreateTestEvent(Guid.NewGuid(), "TestEvent3", DateTime.UtcNow.AddSeconds(-1));
-        
+
         await subscription.PublishEventAsync(event1);
         await subscription.PublishEventAsync(event2);
         await subscription.PublishEventAsync(event3);
@@ -85,7 +74,7 @@ public class InMemoryEventSubscriptionTests
         // Act - Publish new event
         var event4 = CreateTestEvent(Guid.NewGuid(), "TestEvent4");
         await subscription.PublishEventAsync(event4);
-        
+
         await Task.Delay(100);
 
         // Assert - Should receive event2, event3 (historical) and event4 (new)
@@ -102,7 +91,7 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
         var filter = new EventTypeFilter(new HashSet<string> { "TypeA", "TypeC" });
-        
+
         var receivedEvents = new List<Event>();
         var handle = await subscription.SubscribeWithFilterAsync(
             filter,
@@ -117,12 +106,12 @@ public class InMemoryEventSubscriptionTests
         var eventB = CreateTestEvent(Guid.NewGuid(), "TypeB");
         var eventC = CreateTestEvent(Guid.NewGuid(), "TypeC");
         var eventD = CreateTestEvent(Guid.NewGuid(), "TypeD");
-        
+
         await subscription.PublishEventAsync(eventA);
         await subscription.PublishEventAsync(eventB);
         await subscription.PublishEventAsync(eventC);
         await subscription.PublishEventAsync(eventD);
-        
+
         await Task.Delay(100);
 
         // Assert
@@ -139,20 +128,19 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
         var receivedEvents = new List<Event>();
-        var handle = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents.Add(evt);
-                await Task.CompletedTask;
-            });
+        var handle = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents.Add(evt);
+            await Task.CompletedTask;
+        });
 
         // Act
         var event1 = CreateTestEvent(Guid.NewGuid(), "Event1");
         await subscription.PublishEventAsync(event1);
         await Task.Delay(100);
-        
+
         await handle.PauseAsync();
-        
+
         var event2 = CreateTestEvent(Guid.NewGuid(), "Event2");
         await subscription.PublishEventAsync(event2);
         await Task.Delay(100);
@@ -169,22 +157,21 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
         var receivedEvents = new List<Event>();
-        var handle = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents.Add(evt);
-                await Task.CompletedTask;
-            });
+        var handle = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents.Add(evt);
+            await Task.CompletedTask;
+        });
 
         // Act
         await handle.PauseAsync();
-        
+
         var event1 = CreateTestEvent(Guid.NewGuid(), "Event1");
         await subscription.PublishEventAsync(event1);
         await Task.Delay(100);
-        
+
         await handle.ResumeAsync();
-        
+
         var event2 = CreateTestEvent(Guid.NewGuid(), "Event2");
         await subscription.PublishEventAsync(event2);
         await Task.Delay(100);
@@ -201,20 +188,19 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
         var receivedEvents = new List<Event>();
-        var handle = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents.Add(evt);
-                await Task.CompletedTask;
-            });
+        var handle = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents.Add(evt);
+            await Task.CompletedTask;
+        });
 
         // Act
         var event1 = CreateTestEvent(Guid.NewGuid(), "Event1");
         await subscription.PublishEventAsync(event1);
         await Task.Delay(100);
-        
+
         await handle.UnsubscribeAsync();
-        
+
         var event2 = CreateTestEvent(Guid.NewGuid(), "Event2");
         await subscription.PublishEventAsync(event2);
         await Task.Delay(100);
@@ -233,20 +219,18 @@ public class InMemoryEventSubscriptionTests
         using var subscription = new InMemoryEventSubscription();
         var receivedEvents1 = new List<Event>();
         var receivedEvents2 = new List<Event>();
-        
-        var handle1 = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents1.Add(evt);
-                await Task.CompletedTask;
-            });
-        
-        var handle2 = await subscription.SubscribeAsync(
-            async evt =>
-            {
-                receivedEvents2.Add(evt);
-                await Task.CompletedTask;
-            });
+
+        var handle1 = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents1.Add(evt);
+            await Task.CompletedTask;
+        });
+
+        var handle2 = await subscription.SubscribeAsync(async evt =>
+        {
+            receivedEvents2.Add(evt);
+            await Task.CompletedTask;
+        });
 
         // Act
         var event1 = CreateTestEvent(Guid.NewGuid(), "Event1");
@@ -269,17 +253,17 @@ public class InMemoryEventSubscriptionTests
 
         // Act & Assert
         Assert.Null(handle.CurrentPosition);
-        
+
         var event1 = CreateTestEvent(Guid.NewGuid(), "Event1");
         await subscription.PublishEventAsync(event1);
         await Task.Delay(100);
-        
+
         Assert.Equal(event1.SortableUniqueIdValue, handle.CurrentPosition);
-        
+
         var event2 = CreateTestEvent(Guid.NewGuid(), "Event2");
         await subscription.PublishEventAsync(event2);
         await Task.Delay(100);
-        
+
         Assert.Equal(event2.SortableUniqueIdValue, handle.CurrentPosition);
     }
 
@@ -288,11 +272,11 @@ public class InMemoryEventSubscriptionTests
     {
         // Arrange
         using var subscription = new InMemoryEventSubscription();
-        
+
         var typeFilter = new EventTypeFilter(new HashSet<string> { "TypeA", "TypeB" });
         var tagFilter = new EventTagFilter(new HashSet<string> { "important" });
         var compositeFilter = new CompositeEventFilter(new List<IEventFilter> { typeFilter, tagFilter });
-        
+
         var receivedEvents = new List<Event>();
         var handle = await subscription.SubscribeWithFilterAsync(
             compositeFilter,
@@ -309,36 +293,27 @@ public class InMemoryEventSubscriptionTests
             SortableUniqueId.Generate(DateTime.UtcNow, eventId1),
             "TypeA",
             eventId1,
-            new EventMetadata(
-                Guid.NewGuid().ToString(),
-                Guid.NewGuid().ToString(),
-                "TestUser"),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string> { "important" }); // TypeA + important tag
-        
+
         var eventId2 = Guid.NewGuid();
         var event2 = new Event(
             new TestEventPayload { Data = "test" },
             SortableUniqueId.Generate(DateTime.UtcNow, eventId2),
             "TypeA",
             eventId2,
-            new EventMetadata(
-                Guid.NewGuid().ToString(),
-                Guid.NewGuid().ToString(),
-                "TestUser"),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string>()); // TypeA but no important tag
-        
+
         var eventId3 = Guid.NewGuid();
         var event3 = new Event(
             new TestEventPayload { Data = "test" },
             SortableUniqueId.Generate(DateTime.UtcNow, eventId3),
             "TypeC",
             eventId3,
-            new EventMetadata(
-                Guid.NewGuid().ToString(),
-                Guid.NewGuid().ToString(),
-                "TestUser"),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string> { "important" }); // Wrong type but has important tag
-        
+
         await subscription.PublishEventAsync(event1);
         await subscription.PublishEventAsync(event2);
         await subscription.PublishEventAsync(event3);
@@ -347,5 +322,10 @@ public class InMemoryEventSubscriptionTests
         // Assert - Only event1 should match both filters
         Assert.Single(receivedEvents);
         Assert.Contains(event1, receivedEvents);
+    }
+
+    private record TestEventPayload : IEventPayload
+    {
+        public string Data { get; init; } = "";
     }
 }

@@ -26,5 +26,4 @@ public interface
         typeof(TAggregatePayload).Name == nameof(IAggregatePayload)
             ? OptionalValue<Type>.Empty
             : new OptionalValue<Type>(typeof(TAggregatePayload));
-
 }

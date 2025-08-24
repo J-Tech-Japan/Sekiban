@@ -6,15 +6,18 @@ namespace Sekiban.Dcb.MultiProjections;
 /// </summary>
 /// <typeparam name="TKey">The type of the key for items</typeparam>
 /// <typeparam name="TState">The type of data being projected</typeparam>
-public record SafeUnsafeProjectionState<TKey, TState> 
-    where TKey : notnull
-    where TState : class
+public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where TState : class
 {
     /// <summary>
     ///     Current data (includes unsafe modifications)
     ///     Optimized for queries
     /// </summary>
     private readonly Dictionary<TKey, TState> _currentData = new();
+
+    /// <summary>
+    ///     Track processed event IDs to prevent duplicates (only for unsafe events)
+    /// </summary>
+    private readonly HashSet<Guid> _processedEventIds = new();
 
     /// <summary>
     ///     Safe state backup with list of unsafe events that modified it
@@ -121,16 +124,16 @@ public record SafeUnsafeProjectionState<TKey, TState>
             if (nowSafeEvents.Count > 0)
             {
                 hasChanges = true;
-                
+
                 // Remove event IDs that are now safe from the processed set
                 foreach (var safeEvent in nowSafeEvents)
                 {
                     newProcessedEventIds.Remove(safeEvent.Id);
                 }
-                
+
                 // Reprocess from safe state
                 var currentItemState = backup.SafeState;
-                
+
                 // Apply each event that became safe (filtering duplicates)
                 var seenEventIds = new HashSet<Guid>();
                 foreach (var safeEvent in nowSafeEvents)
@@ -140,7 +143,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                     {
                         continue;
                     }
-                    
+
                     // Check if this event affects this item
                     var affectedKeys = getAffectedItemKeys(safeEvent);
                     if (affectedKeys.Contains(itemKey))
@@ -153,7 +156,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                 {
                     // Update backup with new safe state
                     newSafeBackup[itemKey] = new SafeStateBackup<TState>(currentItemState!, stillUnsafeEvents);
-                    
+
                     // Reprocess unsafe events on top of new safe state
                     var unsafeState = currentItemState;
                     foreach (var unsafeEvent in stillUnsafeEvents)
@@ -164,30 +167,26 @@ public record SafeUnsafeProjectionState<TKey, TState>
                             unsafeState = projectItem(itemKey, unsafeState, unsafeEvent);
                         }
                     }
-                    
+
                     if (unsafeState != null)
                     {
                         newCurrentData[itemKey] = unsafeState;
-                    }
-                    else
+                    } else
                     {
                         newCurrentData.Remove(itemKey);
                     }
-                }
-                else
+                } else
                 {
                     // No more unsafe events, update current data directly
                     if (currentItemState != null)
                     {
                         newCurrentData[itemKey] = currentItemState;
-                    }
-                    else
+                    } else
                     {
                         newCurrentData.Remove(itemKey);
                     }
                 }
-            }
-            else
+            } else
             {
                 // All events still unsafe, keep backup as is
                 newSafeBackup[itemKey] = backup;
@@ -199,13 +198,12 @@ public record SafeUnsafeProjectionState<TKey, TState>
             return this;
         }
 
-        return new SafeUnsafeProjectionState<TKey, TState>(newCurrentData, newSafeBackup, SafeWindowThreshold, newProcessedEventIds);
+        return new SafeUnsafeProjectionState<TKey, TState>(
+            newCurrentData,
+            newSafeBackup,
+            SafeWindowThreshold,
+            newProcessedEventIds);
     }
-
-    /// <summary>
-    ///     Track processed event IDs to prevent duplicates (only for unsafe events)
-    /// </summary>
-    private readonly HashSet<Guid> _processedEventIds = new();
 
     /// <summary>
     ///     Process a safe event
@@ -241,8 +239,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                     // Update the backup with new safe state
                     newSafeBackup[itemKey] = backup with { SafeState = updatedSafeState };
                     // Current data stays as is (has unsafe modifications applied)
-                }
-                else
+                } else
                 {
                     // Item deleted in safe state
                     newSafeBackup.Remove(itemKey);
@@ -252,8 +249,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                         newCurrentData.Remove(itemKey);
                     }
                 }
-            }
-            else
+            } else
             {
                 // No unsafe modifications, directly update current
                 var currentValue = newCurrentData.TryGetValue(itemKey, out var existing) ? existing : null;
@@ -262,8 +258,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                 if (newValue != null)
                 {
                     newCurrentData[itemKey] = newValue;
-                }
-                else
+                } else
                 {
                     newCurrentData.Remove(itemKey);
                 }
@@ -271,8 +266,8 @@ public record SafeUnsafeProjectionState<TKey, TState>
         }
 
         return new SafeUnsafeProjectionState<TKey, TState>(
-            newCurrentData, 
-            newSafeBackup, 
+            newCurrentData,
+            newSafeBackup,
             SafeWindowThreshold,
             newProcessedEventIds);
     }
@@ -306,7 +301,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                     // Duplicate event - skip processing for this item
                     continue;
                 }
-                
+
                 // Already has unsafe modifications, add this event to the list
                 var updatedEvents = new List<Event>(existingBackup.UnsafeEvents) { evt };
                 newSafeBackup[itemKey] = existingBackup with { UnsafeEvents = updatedEvents };
@@ -318,14 +313,12 @@ public record SafeUnsafeProjectionState<TKey, TState>
                 if (newValue != null)
                 {
                     newCurrentData[itemKey] = newValue;
-                }
-                else
+                } else
                 {
                     newCurrentData.Remove(itemKey);
                     newSafeBackup.Remove(itemKey);
                 }
-            }
-            else
+            } else
             {
                 // First unsafe modification for this item
                 // Backup current (safe) state before modifying
@@ -342,8 +335,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                     if (safeState != null)
                     {
                         newSafeBackup[itemKey] = new SafeStateBackup<TState>(safeState, new List<Event> { evt });
-                    }
-                    else
+                    } else
                     {
                         // New item created by unsafe event, track it
                         newSafeBackup[itemKey] = new SafeStateBackup<TState>(
@@ -356,8 +348,8 @@ public record SafeUnsafeProjectionState<TKey, TState>
         }
 
         return new SafeUnsafeProjectionState<TKey, TState>(
-            newCurrentData, 
-            newSafeBackup, 
+            newCurrentData,
+            newSafeBackup,
             SafeWindowThreshold,
             newProcessedEventIds);
     }
@@ -396,8 +388,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
                     result[kvp.Key] = backup.SafeState;
                 }
                 // If SafeState is null, item was created by unsafe event, skip it
-            }
-            else
+            } else
             {
                 // No unsafe modifications, current is safe
                 result[kvp.Key] = kvp.Value;
@@ -434,7 +425,7 @@ public record SafeUnsafeProjectionState<TKey, TState>
     /// <summary>
     ///     Get all safe item keys
     /// </summary>
-    public IEnumerable<TKey> GetSafeKeys() => 
+    public IEnumerable<TKey> GetSafeKeys() =>
         _currentData.Keys.Where(key => !_safeBackup.ContainsKey(key));
 
     /// <summary>
@@ -442,14 +433,9 @@ public record SafeUnsafeProjectionState<TKey, TState>
     /// </summary>
     public IEnumerable<TKey> GetUnsafeKeys() => _safeBackup.Keys;
 }
-
 /// <summary>
 ///     Type alias for backward compatibility with Guid keys
 /// </summary>
-public record SafeUnsafeProjectionState<TState> : SafeUnsafeProjectionState<Guid, TState>
-    where TState : class
+public record SafeUnsafeProjectionState<TState> : SafeUnsafeProjectionState<Guid, TState> where TState : class
 {
-    public SafeUnsafeProjectionState() : base()
-    {
-    }
 }

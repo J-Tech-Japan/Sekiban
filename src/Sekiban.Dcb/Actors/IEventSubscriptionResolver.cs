@@ -1,20 +1,14 @@
-using Sekiban.Dcb.Events;
-
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
-/// Resolves which event subscription to use for a specific multi-projection
-/// Similar to IStreamDestinationResolver but for subscriptions
+///     Resolves which stream a projector should subscribe to
 /// </summary>
 public interface IEventSubscriptionResolver
 {
     /// <summary>
-    /// Creates an event subscription for the specified projector
+    ///     Resolves which stream a projector should subscribe to
     /// </summary>
-    /// <param name="projectorName">Name of the multi-projector</param>
-    /// <param name="subscriptionFactory">Factory function to create the subscription with specific parameters</param>
-    /// <returns>The configured event subscription</returns>
-    IEventSubscription Resolve(
-        string projectorName,
-        Func<string, string, Guid, IEventSubscription> subscriptionFactory);
+    /// <param name="projectorName">Name of the projector</param>
+    /// <returns>The stream descriptor for the projector</returns>
+    ISekibanStream Resolve(string projectorName);
 }

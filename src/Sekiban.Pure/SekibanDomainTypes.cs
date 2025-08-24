@@ -9,6 +9,15 @@ namespace Sekiban.Pure;
 
 public record SekibanDomainTypes
 {
+
+    public IEventTypes EventTypes { get; init; }
+    public IAggregateTypes AggregateTypes { get; init; }
+    public ICommandTypes CommandTypes { get; init; }
+    public IAggregateProjectorSpecifier AggregateProjectorSpecifier { get; init; }
+    public IQueryTypes QueryTypes { get; init; }
+    public IMultiProjectorTypes MultiProjectorsType { get; init; }
+    public JsonSerializerOptions JsonSerializerOptions { get; init; }
+    public ISekibanSerializer Serializer { get; init; }
     public SekibanDomainTypes(
         IEventTypes eventTypes,
         IAggregateTypes aggregateTypes,
@@ -27,13 +36,4 @@ public record SekibanDomainTypes
         Serializer = SekibanSerializer.FromOptions(jsonSerializerOptions, eventTypes);
         JsonSerializerOptions = Serializer.GetJsonSerializerOptions();
     }
-
-    public IEventTypes EventTypes { get; init; }
-    public IAggregateTypes AggregateTypes { get; init; }
-    public ICommandTypes CommandTypes { get; init; }
-    public IAggregateProjectorSpecifier AggregateProjectorSpecifier { get; init; }
-    public IQueryTypes QueryTypes { get; init; }
-    public IMultiProjectorTypes MultiProjectorsType { get; init; }
-    public JsonSerializerOptions JsonSerializerOptions { get; init; }
-    public ISekibanSerializer Serializer { get; init; }
 }

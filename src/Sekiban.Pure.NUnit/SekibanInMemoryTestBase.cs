@@ -15,6 +15,14 @@ namespace Sekiban.Pure.NUnit;
 [TestFixture]
 public abstract class SekibanInMemoryTestBase
 {
+    [SetUp]
+    public virtual void SetUp()
+    {
+        _commandMetadataProvider = new FunctionCommandMetadataProvider(() => "test");
+        _serviceProvider = new ServiceCollection().BuildServiceProvider();
+        Repository = new Repository();
+        _executor = new InMemorySekibanExecutor(DomainTypes, _commandMetadataProvider, Repository, _serviceProvider);
+    }
     /// <summary>
     ///     Each test case implements domain types through this abstract property
     /// </summary>
@@ -29,14 +37,6 @@ public abstract class SekibanInMemoryTestBase
         get;
         private set;
     } = null!;
-    [SetUp]
-    public virtual void SetUp()
-    {
-        _commandMetadataProvider = new FunctionCommandMetadataProvider(() => "test");
-        _serviceProvider = new ServiceCollection().BuildServiceProvider();
-        Repository = new Repository();
-        _executor = new InMemorySekibanExecutor(DomainTypes, _commandMetadataProvider, Repository, _serviceProvider);
-    }
 
     /// <summary>
     ///     Command execution in Given phase

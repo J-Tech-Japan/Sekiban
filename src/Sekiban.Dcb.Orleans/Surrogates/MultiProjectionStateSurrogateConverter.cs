@@ -1,10 +1,9 @@
-using Orleans;
 using Sekiban.Dcb.MultiProjections;
-
 namespace Sekiban.Dcb.Orleans.Surrogates;
 
 [RegisterConverter]
-public sealed class MultiProjectionStateSurrogateConverter : IConverter<MultiProjectionState, MultiProjectionStateSurrogate>
+public sealed class
+    MultiProjectionStateSurrogateConverter : IConverter<MultiProjectionState, MultiProjectionStateSurrogate>
 {
     public MultiProjectionState ConvertFromSurrogate(in MultiProjectionStateSurrogate surrogate) =>
         new(

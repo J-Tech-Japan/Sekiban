@@ -94,18 +94,18 @@ app.MapSekibanEventRelayMultiTopic(
 
 ### SekibanPubSubRelayOptions
 
-| プロパティ | デフォルト値 | 説明 |
-|-----------|------------|------|
-| `Enabled` | `true` | リレー機能を有効にするかどうか |
-| `PubSubName` | `"sekiban-pubsub"` | PubSubコンポーネント名 |
-| `TopicName` | `"events.all"` | 購読するトピック名 |
-| `EndpointPath` | `"/internal/pubsub/events"` | エンドポイントのパス |
-| `ContinueOnProjectorFailure` | `true` | 個別プロジェクターの失敗時に処理を続行するかどうか |
-| `ConsumerGroup` | `null` | Consumer Group名（Dapr 1.14+でサポート） |
-| `MaxConcurrency` | `10` | 最大並行処理数 |
-| `EnableDeadLetterQueue` | `false` | デッドレターキューを有効にするかどうか |
-| `DeadLetterTopic` | `"events.dead-letter"` | デッドレターキューのトピック名 |
-| `MaxRetryCount` | `3` | リトライの最大回数 |
+| プロパティ                        | デフォルト値                      | 説明                               |
+|------------------------------|-----------------------------|----------------------------------|
+| `Enabled`                    | `true`                      | リレー機能を有効にするかどうか                  |
+| `PubSubName`                 | `"sekiban-pubsub"`          | PubSubコンポーネント名                   |
+| `TopicName`                  | `"events.all"`              | 購読するトピック名                        |
+| `EndpointPath`               | `"/internal/pubsub/events"` | エンドポイントのパス                       |
+| `ContinueOnProjectorFailure` | `true`                      | 個別プロジェクターの失敗時に処理を続行するかどうか        |
+| `ConsumerGroup`              | `null`                      | Consumer Group名（Dapr 1.14+でサポート） |
+| `MaxConcurrency`             | `10`                        | 最大並行処理数                          |
+| `EnableDeadLetterQueue`      | `false`                     | デッドレターキューを有効にするかどうか              |
+| `DeadLetterTopic`            | `"events.dead-letter"`      | デッドレターキューのトピック名                  |
+| `MaxRetryCount`              | `3`                         | リトライの最大回数                        |
 
 ## スケーリングの考慮事項
 
@@ -153,12 +153,14 @@ app.MapSekibanEventRelayIfEnabled(options =>
 ### 従来のControllerからの移行
 
 **従来の方法（非推奨）:**
+
 ```csharp
 // EventPubSubController が自動的に登録される
 // 明示的な制御ができない
 ```
 
 **新しい方法（推奨）:**
+
 ```csharp
 // 明示的にエンドポイントを有効化
 app.MapSekibanEventRelay();
@@ -238,13 +240,17 @@ MinimalAPI拡張メソッドは詳細なログを提供します：
 ## よくある質問
 
 ### Q: 古いEventPubSubControllerはいつ削除されますか？
+
 A: 次のメジャーバージョンで削除予定です。新しいMinimalAPI方式への移行を推奨します。
 
 ### Q: Consumer Groupを使用しないとどうなりますか？
+
 A: 複数インスタンスで同じイベントを重複処理する可能性があります。
 
 ### Q: 1つのアプリケーションで複数のトピックを購読できますか？
+
 A: はい、`MapSekibanEventRelayMultiTopic`を使用してください。
 
 ### Q: カスタムプロジェクターフィルタリングは可能ですか？
+
 A: 現在はサポートされていませんが、将来のバージョンで追加予定です。

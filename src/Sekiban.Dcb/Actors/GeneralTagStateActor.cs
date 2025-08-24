@@ -120,10 +120,9 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         // Check if we have cached state
         var cachedState = await _statePersistent.LoadStateAsync();
-        
+
         // If cached state exists and is up-to-date, return it
-        if (cachedState != null && 
-            cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
+        if (cachedState != null && cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
         {
             return cachedState;
         }
@@ -134,7 +133,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         // Save the newly computed state to cache
         await _statePersistent.SaveStateAsync(computedState);
-        
+
         return computedState;
     }
 
@@ -170,11 +169,11 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
         // Check if we can do incremental update
-        bool canIncrementalUpdate = cachedState != null &&
-                                    cachedState.ProjectorVersion == projectorVersion &&
-                                    !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
-                                    !string.IsNullOrEmpty(latestSortableUniqueId) &&
-                                    string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0;
+        var canIncrementalUpdate = cachedState != null &&
+            cachedState.ProjectorVersion == projectorVersion &&
+            !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
+            !string.IsNullOrEmpty(latestSortableUniqueId) &&
+            string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0;
 
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
@@ -186,8 +185,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
         }
 
         ITagStatePayload? currentState = null;
-        int version = 0;
-        string lastSortedUniqueId = "";
+        var version = 0;
+        var lastSortedUniqueId = "";
 
         // Try incremental update if possible
         if (canIncrementalUpdate && cachedState != null)
@@ -203,18 +202,22 @@ public class GeneralTagStateActor : ITagStateActorCommon
             {
                 // Log the error and throw exception instead of silently returning cached state
                 var error = eventsResult.GetException();
-                Console.WriteLine($"[GeneralTagStateActor] Error reading events for tag {tag.GetTag()}: {error.Message}");
-                
+                Console.WriteLine(
+                    $"[GeneralTagStateActor] Error reading events for tag {tag.GetTag()}: {error.Message}");
+
                 // For deserialization errors, we should not use cached state as it may be inconsistent
                 // Instead, throw the error so developers can see and fix the issue
                 throw new InvalidOperationException(
-                    $"Failed to read events for tag {tag.GetTag()}: {error.Message}", 
+                    $"Failed to read events for tag {tag.GetTag()}: {error.Message}",
                     error);
             }
 
-            var newEvents = eventsResult.GetValue()
-                .Where(e => string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0 &&
-                           string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+            var newEvents = eventsResult
+                .GetValue()
+                .Where(e =>
+                    string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) >
+                    0 &&
+                    string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
                 .ToList();
 
             // Project only the new events on top of cached state
@@ -224,8 +227,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 version++;
                 lastSortedUniqueId = evt.SortableUniqueIdValue;
             }
-        }
-        else
+        } else
         {
             // Full rebuild: projector version changed or no valid cache
             var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
@@ -233,17 +235,20 @@ public class GeneralTagStateActor : ITagStateActorCommon
             {
                 // Log the error for debugging
                 var error = eventsResult.GetException();
-                Console.WriteLine($"[GeneralTagStateActor] Error reading events for full rebuild of tag {tag.GetTag()}: {error.Message}");
-                
+                Console.WriteLine(
+                    $"[GeneralTagStateActor] Error reading events for full rebuild of tag {tag.GetTag()}: {error.Message}");
+
                 // For full rebuild, if we can't read events, throw the error
                 // This ensures developers see the issue (like missing event type registration)
                 throw new InvalidOperationException(
-                    $"Failed to read events for tag {tag.GetTag()} during full rebuild: {error.Message}", 
+                    $"Failed to read events for tag {tag.GetTag()} during full rebuild: {error.Message}",
                     error);
             }
 
-            var events = eventsResult.GetValue()
-                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+            var events = eventsResult
+                .GetValue()
+                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <=
+                    0)
                 .ToList();
 
             // Project all events from scratch

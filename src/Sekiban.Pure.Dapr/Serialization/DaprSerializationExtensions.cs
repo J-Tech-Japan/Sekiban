@@ -1,17 +1,16 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Caching.Memory;
-
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 namespace Sekiban.Pure.Dapr.Serialization;
 
 /// <summary>
-/// Extension methods for configuring Dapr serialization
+///     Extension methods for configuring Dapr serialization
 /// </summary>
 public static class DaprSerializationExtensions
 {
     /// <summary>
-    /// Adds Sekiban Dapr serialization services to the service collection
+    ///     Adds Sekiban Dapr serialization services to the service collection
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="configure">Optional configuration action</param>
@@ -36,13 +35,16 @@ public static class DaprSerializationExtensions
         services.ConfigureHttpJsonOptions(options =>
         {
             var serializationOptions = options.SerializerOptions;
-            var daprOptions = services.BuildServiceProvider().GetRequiredService<IOptions<DaprSerializationOptions>>().Value;
-            
+            var daprOptions = services
+                .BuildServiceProvider()
+                .GetRequiredService<IOptions<DaprSerializationOptions>>()
+                .Value;
+
             // Copy settings from Dapr options
             serializationOptions.DefaultIgnoreCondition = daprOptions.JsonSerializerOptions.DefaultIgnoreCondition;
             serializationOptions.PropertyNamingPolicy = daprOptions.JsonSerializerOptions.PropertyNamingPolicy;
             serializationOptions.WriteIndented = daprOptions.JsonSerializerOptions.WriteIndented;
-            
+
             foreach (var converter in daprOptions.JsonSerializerOptions.Converters)
             {
                 serializationOptions.Converters.Add(converter);
@@ -53,7 +55,7 @@ public static class DaprSerializationExtensions
     }
 
     /// <summary>
-    /// Adds a cached layer on top of the serialization service
+    ///     Adds a cached layer on top of the serialization service
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <returns>The service collection</returns>
@@ -68,7 +70,7 @@ public static class DaprSerializationExtensions
                 sp.GetRequiredService<IOptions<DaprSerializationOptions>>(),
                 sp.GetRequiredService<ILogger<DaprSerializationService>>(),
                 sp.GetRequiredService<SekibanDomainTypes>());
-            
+
             return new CachedDaprSerializationService(
                 innerService,
                 sp.GetRequiredService<IMemoryCache>(),
@@ -78,7 +80,7 @@ public static class DaprSerializationExtensions
     }
 
     /// <summary>
-    /// Registers domain types with the type registry
+    ///     Registers domain types with the type registry
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="registrationAction">Action to register types</param>

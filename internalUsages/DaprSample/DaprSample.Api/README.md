@@ -30,8 +30,9 @@ docker-compose up -d
 ```
 
 これにより以下のサービスが起動します：
+
 - **Redis**: ポート6379（状態ストア・Pub/Sub用）
-- **Dapr Placement Service**: ポート50005（Actor用）  
+- **Dapr Placement Service**: ポート50005（Actor用）
 - **Zipkin**: ポート9411（分散トレーシング用）
 
 ### 2. 環境変数の設定
@@ -109,11 +110,13 @@ dapr run \
 ### Swagger UI
 
 開発環境では、以下のURLでSwagger UIにアクセスできます：
+
 - http://localhost:5000/swagger
 
 ### Zipkin UI
 
 分散トレーシングの確認には、以下のURLでZipkin UIにアクセスできます：
+
 - http://localhost:9411
 
 ## トラブルシューティング
@@ -208,11 +211,13 @@ Placement serviceに接続できない場合：
 ## 便利なコマンド
 
 ### Docker Composeサービスの状態確認
+
 ```bash
 docker-compose ps
 ```
 
 ### ログの確認
+
 ```bash
 # 全サービスのログ
 docker-compose logs
@@ -224,6 +229,7 @@ docker-compose logs zipkin
 ```
 
 ### サービスの再起動
+
 ```bash
 # 特定のサービスの再起動
 docker-compose restart redis

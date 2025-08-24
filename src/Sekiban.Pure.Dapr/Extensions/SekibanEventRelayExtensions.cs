@@ -1,4 +1,3 @@
-using Dapr;
 using Dapr.Actors;
 using Dapr.Actors.Client;
 using Microsoft.AspNetCore.Builder;
@@ -6,21 +5,18 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Dapr.Serialization;
-using Sekiban.Pure;
-
 namespace Sekiban.Pure.Dapr.Extensions;
 
 /// <summary>
-/// Provides PubSub event relay with MinimalAPI extension methods
-/// Must be explicitly enabled on the client side (opt-in approach)
+///     Provides PubSub event relay with MinimalAPI extension methods
+///     Must be explicitly enabled on the client side (opt-in approach)
 /// </summary>
 public static class SekibanEventRelayExtensions
 {
     /// <summary>
-    /// Add Sekiban event relay endpoint as MinimalAPI
+    ///     Add Sekiban event relay endpoint as MinimalAPI
     /// </summary>
     /// <param name="app">IEndpointRouteBuilder</param>
     /// <param name="options">PubSub relay options</param>
@@ -31,21 +27,23 @@ public static class SekibanEventRelayExtensions
     {
         options ??= new SekibanPubSubRelayOptions();
 
-        var builder = app.MapPost(options.EndpointPath,
-            async (
-                DaprEventEnvelope envelope,
-                [FromServices]IActorProxyFactory actorProxyFactory,
-                [FromServices]SekibanDomainTypes domainTypes,
-                [FromServices]ILogger<SekibanEventRelayHandler> logger) =>
-            {
-                return await HandleEventAsync(envelope, actorProxyFactory, domainTypes, logger, options);
-            })
+        var builder = app
+            .MapPost(
+                options.EndpointPath,
+                async (
+                    DaprEventEnvelope envelope,
+                    [FromServices] IActorProxyFactory actorProxyFactory,
+                    [FromServices] SekibanDomainTypes domainTypes,
+                    [FromServices] ILogger<SekibanEventRelayHandler> logger) =>
+                {
+                    return await HandleEventAsync(envelope, actorProxyFactory, domainTypes, logger, options);
+                })
             .WithTopic(options.PubSubName, options.TopicName)
             .WithName("SekibanEventRelay")
             .WithMetadata("Tags", new[] { "Internal" })
             .WithMetadata("Summary", "Sekiban PubSub Event Relay")
             .WithMetadata("Description", "Internal endpoint for relaying Dapr PubSub events to MultiProjectorActors")
-            .Produces<object>(200)
+            .Produces<object>()
             .Produces<ProblemDetails>(500);
 
         if (!string.IsNullOrEmpty(options.ConsumerGroup))
@@ -57,7 +55,7 @@ public static class SekibanEventRelayExtensions
     }
 
     /// <summary>
-    /// Add Sekiban event relay endpoint that supports multiple topics
+    ///     Add Sekiban event relay endpoint that supports multiple topics
     /// </summary>
     /// <param name="app">IEndpointRouteBuilder</param>
     /// <param name="topicConfigs">List of topic configurations</param>
@@ -67,7 +65,7 @@ public static class SekibanEventRelayExtensions
         params SekibanPubSubRelayOptions[] topicConfigs)
     {
         var builders = new List<RouteHandlerBuilder>();
-        
+
         foreach (var config in topicConfigs)
         {
             var builder = app.MapSekibanEventRelay(config);
@@ -78,7 +76,7 @@ public static class SekibanEventRelayExtensions
     }
 
     /// <summary>
-    /// Add Sekiban event relay based on configuration
+    ///     Add Sekiban event relay based on configuration
     /// </summary>
     /// <param name="app">IEndpointRouteBuilder</param>
     /// <param name="configure">Configuration action</param>
@@ -99,7 +97,7 @@ public static class SekibanEventRelayExtensions
     }
 
     /// <summary>
-    /// Add Sekiban event relay only in development environment
+    ///     Add Sekiban event relay only in development environment
     /// </summary>
     /// <param name="app">IEndpointRouteBuilder</param>
     /// <param name="isDevelopment">Whether it's development environment</param>
@@ -119,7 +117,7 @@ public static class SekibanEventRelayExtensions
     }
 
     /// <summary>
-    /// Actual logic for event processing
+    ///     Actual logic for event processing
     /// </summary>
     private static async Task<IResult> HandleEventAsync(
         DaprEventEnvelope envelope,
@@ -135,7 +133,7 @@ public static class SekibanEventRelayExtensions
 
             if (!projectorNames.Any())
             {
-                return Results.Ok(new { Message = "No projectors to process", EventId = envelope.EventId });
+                return Results.Ok(new { Message = "No projectors to process", envelope.EventId });
             }
 
             // Forward the event to each multi-projector actor
@@ -153,7 +151,7 @@ public static class SekibanEventRelayExtensions
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Failed to forward event to projector: {ProjectorName}", projectorName);
-                    
+
                     if (!options.ContinueOnProjectorFailure)
                     {
                         throw;
@@ -163,15 +161,12 @@ public static class SekibanEventRelayExtensions
 
             await Task.WhenAll(tasks);
 
-            return Results.Ok(new { Message = "Event processed successfully", EventId = envelope.EventId });
+            return Results.Ok(new { Message = "Event processed successfully", envelope.EventId });
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error handling event from PubSub: EventId={EventId}", envelope.EventId);
-            return Results.Problem(
-                title: "Event processing failed",
-                detail: ex.Message,
-                statusCode: 500);
+            return Results.Problem(title: "Event processing failed", detail: ex.Message, statusCode: 500);
         }
     }
 }

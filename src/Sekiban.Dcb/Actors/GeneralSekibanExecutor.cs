@@ -2,7 +2,6 @@ using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -314,6 +313,169 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         }
     }
 
+    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
+    {
+        try
+        {
+            // Get the multi-projector type for this query
+            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+            if (!projectorTypeResult.IsSuccess)
+            {
+                return ResultBox.Error<TResult>(projectorTypeResult.GetException());
+            }
+
+            var projectorType = projectorTypeResult.GetValue();
+
+            // Get the multi-projector name
+            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+            if (projectorNameProperty == null)
+            {
+                return ResultBox.Error<TResult>(
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
+            }
+
+            var projectorName = projectorNameProperty.GetValue(null) as string;
+            if (string.IsNullOrEmpty(projectorName))
+            {
+                return ResultBox.Error<TResult>(
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+            }
+
+            // Get the multi-projection actor
+            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            if (!actorResult.IsSuccess)
+            {
+                return ResultBox.Error<TResult>(actorResult.GetException());
+            }
+
+            var actor = actorResult.GetValue();
+
+            // Get the current state
+            var stateResult = await actor.GetStateAsync();
+            if (!stateResult.IsSuccess)
+            {
+                return ResultBox.Error<TResult>(stateResult.GetException());
+            }
+
+            var state = stateResult.GetValue();
+
+            // Create a provider function that returns the payload
+            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload));
+
+            // Execute the query using QueryTypes
+            var serviceProvider = _actorAccessor as IServiceProvider ??
+                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
+
+            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
+                queryCommon,
+                projectorProvider,
+                serviceProvider);
+
+            if (!result.IsSuccess)
+            {
+                return ResultBox.Error<TResult>(result.GetException());
+            }
+
+            var value = result.GetValue();
+            if (value is TResult typedResult)
+            {
+                return ResultBox.FromValue(typedResult);
+            }
+
+            return ResultBox.Error<TResult>(
+                new InvalidCastException(
+                    $"Query result type mismatch. Expected {typeof(TResult).Name}, got {value?.GetType().Name ?? "null"}"));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<TResult>(ex);
+        }
+    }
+
+    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
+        where TResult : notnull
+    {
+        try
+        {
+            // Get the multi-projector type for this query
+            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+            if (!projectorTypeResult.IsSuccess)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
+            }
+
+            var projectorType = projectorTypeResult.GetValue();
+
+            // Get the multi-projector name
+            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+            if (projectorNameProperty == null)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
+            }
+
+            var projectorName = projectorNameProperty.GetValue(null) as string;
+            if (string.IsNullOrEmpty(projectorName))
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(
+                    new InvalidOperationException(
+                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+            }
+
+            // Get the multi-projection actor
+            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            if (!actorResult.IsSuccess)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(actorResult.GetException());
+            }
+
+            var actor = actorResult.GetValue();
+
+            // Get the current state
+            var stateResult = await actor.GetStateAsync();
+            if (!stateResult.IsSuccess)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(stateResult.GetException());
+            }
+
+            var state = stateResult.GetValue();
+
+            // Create a provider function that returns the payload
+            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload));
+
+            // Execute the list query using QueryTypes
+            var serviceProvider = _actorAccessor as IServiceProvider ??
+                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
+
+            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
+                queryCommon,
+                projectorProvider,
+                serviceProvider);
+
+            if (!result.IsSuccess)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(result.GetException());
+            }
+
+            var value = result.GetValue();
+            if (value is ListQueryResult<TResult> typedResult)
+            {
+                return ResultBox.FromValue(typedResult);
+            }
+
+            return ResultBox.Error<ListQueryResult<TResult>>(
+                new InvalidCastException(
+                    $"Query result type mismatch. Expected ListQueryResult<{typeof(TResult).Name}>, got {value?.GetType().Name ?? "null"}"));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<ListQueryResult<TResult>>(ex);
+        }
+    }
+
     private async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(
         ITag tag,
         string lastSortableUniqueId,
@@ -409,166 +571,6 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         catch
         {
             // Best effort - log error in production
-        }
-    }
-    
-    public async Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) 
-        where TResult : notnull
-    {
-        try
-        {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(projectorTypeResult.GetException());
-            }
-            
-            var projectorType = projectorTypeResult.GetValue();
-            
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-            
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} has invalid MultiProjectorName"));
-            }
-            
-            // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(actorResult.GetException());
-            }
-            
-            var actor = actorResult.GetValue();
-            
-            // Get the current state
-            var stateResult = await actor.GetStateAsync(true);
-            if (!stateResult.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(stateResult.GetException());
-            }
-            
-            var state = stateResult.GetValue();
-            
-            // Create a provider function that returns the payload
-            Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
-                Task.FromResult(ResultBox.FromValue(state.Payload));
-            
-            // Execute the query using QueryTypes
-            var serviceProvider = _actorAccessor as IServiceProvider ?? 
-                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
-            
-            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
-                queryCommon, 
-                projectorProvider, 
-                serviceProvider);
-            
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<TResult>(result.GetException());
-            }
-            
-            var value = result.GetValue();
-            if (value is TResult typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-            
-            return ResultBox.Error<TResult>(
-                new InvalidCastException($"Query result type mismatch. Expected {typeof(TResult).Name}, got {value?.GetType().Name ?? "null"}"));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<TResult>(ex);
-        }
-    }
-    
-    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
-        where TResult : notnull
-    {
-        try
-        {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
-            }
-            
-            var projectorType = projectorTypeResult.GetValue();
-            
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-            
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException($"Projector type {projectorType.Name} has invalid MultiProjectorName"));
-            }
-            
-            // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(actorResult.GetException());
-            }
-            
-            var actor = actorResult.GetValue();
-            
-            // Get the current state
-            var stateResult = await actor.GetStateAsync(true);
-            if (!stateResult.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(stateResult.GetException());
-            }
-            
-            var state = stateResult.GetValue();
-            
-            // Create a provider function that returns the payload
-            Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider = () =>
-                Task.FromResult(ResultBox.FromValue(state.Payload));
-            
-            // Execute the list query using QueryTypes
-            var serviceProvider = _actorAccessor as IServiceProvider ?? 
-                throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
-            
-            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
-                queryCommon, 
-                projectorProvider, 
-                serviceProvider);
-            
-            if (!result.IsSuccess)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(result.GetException());
-            }
-            
-            var value = result.GetValue();
-            if (value is ListQueryResult<TResult> typedResult)
-            {
-                return ResultBox.FromValue(typedResult);
-            }
-            
-            return ResultBox.Error<ListQueryResult<TResult>>(
-                new InvalidCastException($"Query result type mismatch. Expected ListQueryResult<{typeof(TResult).Name}>, got {value?.GetType().Name ?? "null"}"));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ListQueryResult<TResult>>(ex);
         }
     }
 }

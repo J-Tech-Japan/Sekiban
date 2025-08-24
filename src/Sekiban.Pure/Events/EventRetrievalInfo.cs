@@ -9,6 +9,11 @@ public record EventRetrievalInfo(
     ISortableIdCondition SortableIdCondition)
 {
     public OptionalValue<int> MaxCount { get; init; } = OptionalValue<int>.Empty;
+    public static EventRetrievalInfo All => new(
+        OptionalValue<string>.Empty,
+        OptionalValue<IAggregatesStream>.Empty,
+        OptionalValue<Guid>.Empty,
+        SortableIdConditionNone.None);
 
     public static EventRetrievalInfo FromNullableValues(
         string? rootPartitionKey,
@@ -27,11 +32,6 @@ public record EventRetrievalInfo(
     {
         MaxCount = OptionalValue.FromNullableValue(MaxCount)
     };
-    public static EventRetrievalInfo All => new(
-        OptionalValue<string>.Empty,
-        OptionalValue<IAggregatesStream>.Empty,
-        OptionalValue<Guid>.Empty,
-        SortableIdConditionNone.None);
 
     public bool GetIsPartition() => AggregateId.HasValue;
     public bool HasAggregateStream() =>
@@ -41,22 +41,19 @@ public record EventRetrievalInfo(
     public ResultBox<string> GetPartitionKey() =>
         ResultBox
             .UnitValue
-            .Verify(
-                () => GetIsPartition() ? ExceptionOrNone.None : new ApplicationException("Partition Key is not set"))
-            .Verify(
-                () => HasAggregateStream()
-                    ? ExceptionOrNone.None
-                    : new ApplicationException("Aggregate Stream is not set"))
+            .Verify(() =>
+                GetIsPartition() ? ExceptionOrNone.None : new ApplicationException("Partition Key is not set"))
+            .Verify(() =>
+                HasAggregateStream() ? ExceptionOrNone.None : new ApplicationException("Aggregate Stream is not set"))
             .Conveyor(() => AggregateStream.GetValue().GetSingleStreamName())
-            .Verify(
-                () => HasRootPartitionKey()
+            .Verify(() =>
+                HasRootPartitionKey()
                     ? ExceptionOrNone.None
                     : new ApplicationException("Root Partition Key is not set"))
-            .Remap(
-                aggregateName =>
-                    PartitionKeys
-                        .Existing(AggregateId.GetValue(), aggregateName, RootPartitionKey.GetValue())
-                        .ToPrimaryKeysString());
+            .Remap(aggregateName =>
+                PartitionKeys
+                    .Existing(AggregateId.GetValue(), aggregateName, RootPartitionKey.GetValue())
+                    .ToPrimaryKeysString());
     public static EventRetrievalInfo FromPartitionKeys(PartitionKeys partitionKeys) =>
         new(
             OptionalValue.FromValue(partitionKeys.RootPartitionKey),

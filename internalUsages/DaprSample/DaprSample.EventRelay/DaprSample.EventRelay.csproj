@@ -1,24 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj" />
-    <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj" />
-    <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj" />
-    <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj" />
-    <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj"/>
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj"/>
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj"/>
+        <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj"/>
+        <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.1" />
-    <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.1" />
-    <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.1" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Dapr.AspNetCore" Version="1.15.4"/>
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.1"/>
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.1"/>
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.1"/>
+    </ItemGroup>
 
 </Project>

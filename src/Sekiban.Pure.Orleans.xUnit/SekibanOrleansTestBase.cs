@@ -8,7 +8,6 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
-using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
@@ -19,17 +18,15 @@ namespace Sekiban.Pure.Orleans.xUnit;
 public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigurator, IAsyncLifetime
     where TDomainTypesGetter : ISiloConfigurator, new()
 {
+    private TestCluster _cluster;
+
+    private ICommandMetadataProvider _commandMetadataProvider;
+    private ISekibanExecutor _executor;
+    private Repository _repository;
     /// <summary>
     ///     Each test case implements domain types through this abstract method.
     /// </summary>
     private SekibanDomainTypes _domainTypes => GetDomainTypes();
-
-    public abstract SekibanDomainTypes GetDomainTypes();
-
-    private ICommandMetadataProvider _commandMetadataProvider;
-    private ISekibanExecutor _executor;
-    private TestCluster _cluster;
-    private Repository _repository;
 
     public SekibanOrleansTestBase() =>
         _repository = new Repository();
@@ -56,6 +53,23 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         _cluster.StopAllSilos();
         await Task.CompletedTask;
     }
+
+    public void Configure(ISiloBuilder siloBuilder)
+    {
+        siloBuilder.AddMemoryGrainStorageAsDefault();
+        siloBuilder.AddMemoryGrainStorage("PubSubStore");
+        siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+        siloBuilder.ConfigureServices(services =>
+        {
+            // Always register DomainTypes
+            services.AddSingleton(_domainTypes);
+
+            // Allow customization of other services
+            ConfigureServices(services);
+        });
+    }
+
+    public abstract SekibanDomainTypes GetDomainTypes();
 
     /// <summary>
     ///     Execute command in Given phase.
@@ -178,21 +192,5 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         services.AddTransient<IEventWriter, InMemoryEventWriter>();
         services.AddTransient<IEventReader, InMemoryEventReader>();
         // Additional services can be registered here.
-    }
-
-    public void Configure(ISiloBuilder siloBuilder)
-    {
-        siloBuilder.AddMemoryGrainStorageAsDefault();
-        siloBuilder.AddMemoryGrainStorage("PubSubStore");
-        siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(
-            services =>
-            {
-                // Always register DomainTypes
-                services.AddSingleton(_domainTypes);
-
-                // Allow customization of other services
-                ConfigureServices(services);
-            });
     }
 }

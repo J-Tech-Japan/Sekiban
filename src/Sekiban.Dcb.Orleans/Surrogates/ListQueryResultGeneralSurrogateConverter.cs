@@ -1,13 +1,12 @@
-using Orleans;
 using Sekiban.Dcb.Queries;
-
 namespace Sekiban.Dcb.Orleans.Surrogates;
 
 /// <summary>
-/// Orleans surrogate converter for ListQueryResultGeneral
+///     Orleans surrogate converter for ListQueryResultGeneral
 /// </summary>
 [RegisterConverter]
-public sealed class ListQueryResultGeneralSurrogateConverter : IConverter<ListQueryResultGeneral, ListQueryResultGeneralSurrogate>
+public sealed class
+    ListQueryResultGeneralSurrogateConverter : IConverter<ListQueryResultGeneral, ListQueryResultGeneralSurrogate>
 {
     public ListQueryResultGeneral ConvertFromSurrogate(in ListQueryResultGeneralSurrogate surrogate) =>
         new(

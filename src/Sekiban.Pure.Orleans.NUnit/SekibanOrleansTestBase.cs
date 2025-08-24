@@ -8,7 +8,6 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
-using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
@@ -18,17 +17,6 @@ namespace Sekiban.Pure.Orleans.NUnit;
 public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigurator
     where TDomainTypesGetter : ISiloConfigurator, new()
 {
-    /// <summary>
-    ///     Each test case implements domain types through this abstract property
-    /// </summary>
-    private SekibanDomainTypes _domainTypes => GetDomainTypes();
-
-    public abstract SekibanDomainTypes GetDomainTypes();
-
-    private ICommandMetadataProvider _commandMetadataProvider;
-    private ISekibanExecutor _executor;
-    private TestCluster _cluster;
-    private Repository _repository = new();
 
     [SetUp]
     public virtual void SetUp()
@@ -50,6 +38,17 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     {
         _cluster.StopAllSilos();
     }
+    /// <summary>
+    ///     Each test case implements domain types through this abstract property
+    /// </summary>
+    private SekibanDomainTypes _domainTypes => GetDomainTypes();
+
+    public abstract SekibanDomainTypes GetDomainTypes();
+
+    private ICommandMetadataProvider _commandMetadataProvider;
+    private ISekibanExecutor _executor;
+    private TestCluster _cluster;
+    private Repository _repository = new();
 
     /// <summary>
     ///     Execute command in Given phase
@@ -145,14 +144,13 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(
-            services =>
-            {
-                // Always register DomainTypes
-                services.AddSingleton(_domainTypes);
+        siloBuilder.ConfigureServices(services =>
+        {
+            // Always register DomainTypes
+            services.AddSingleton(_domainTypes);
 
-                // Allow customization of other services
-                ConfigureServices(services);
-            });
+            // Allow customization of other services
+            ConfigureServices(services);
+        });
     }
 }

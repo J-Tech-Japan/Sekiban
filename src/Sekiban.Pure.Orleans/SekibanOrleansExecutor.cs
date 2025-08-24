@@ -8,6 +8,7 @@ using Sekiban.Pure.Executors;
 using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
+using System.Diagnostics;
 namespace Sekiban.Pure.Orleans;
 
 public class SekibanOrleansExecutor(
@@ -43,13 +44,14 @@ public class SekibanOrleansExecutor(
         if (!nameResult.IsSuccess)
             return ResultBox<TResult>.Error(new ApplicationException("Projector name not found"));
         var multiProjectorGrain = clusterClient.GetGrain<IMultiProjectorGrain>(nameResult.GetValue());
-        
+
         await WaitForSortableUniqueIdIfNeeded(multiProjectorGrain, queryCommon);
-        
+
         var result = await multiProjectorGrain.QueryAsync(queryCommon);
         return result.ToResultBox().Remap(a => a.GetValue()).Cast<TResult>();
     }
-    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon) where TResult : notnull
+    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
+        where TResult : notnull
     {
         var projectorResult = sekibanDomainTypes.QueryTypes.GetMultiProjector(queryCommon);
         if (!projectorResult.IsSuccess)
@@ -60,9 +62,9 @@ public class SekibanOrleansExecutor(
         if (!nameResult.IsSuccess)
             return ResultBox<ListQueryResult<TResult>>.Error(new ApplicationException("Projector name not found"));
         var multiProjectorGrain = clusterClient.GetGrain<IMultiProjectorGrain>(nameResult.GetValue());
-        
+
         await WaitForSortableUniqueIdIfNeeded(multiProjectorGrain, queryCommon);
-        
+
         var result = await multiProjectorGrain.QueryAsync(queryCommon);
         return result.ToResultBox().Cast<IListQueryResult, ListQueryResult<TResult>>();
     }
@@ -79,17 +81,17 @@ public class SekibanOrleansExecutor(
 
     private async Task WaitForSortableUniqueIdIfNeeded(IMultiProjectorGrain multiProjectorGrain, object query)
     {
-        if (query is IWaitForSortableUniqueId waitForQuery && 
+        if (query is IWaitForSortableUniqueId waitForQuery &&
             !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
         {
             var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
-            
+
             var timeoutMs = SortableUniqueIdWaitHelper.CalculateAdaptiveTimeout(sortableUniqueId);
             var pollingIntervalMs = SortableUniqueIdWaitHelper.DefaultPollingIntervalMs;
-            
-            var stopwatch = new System.Diagnostics.Stopwatch();
+
+            var stopwatch = new Stopwatch();
             stopwatch.Start();
-            
+
             while (stopwatch.ElapsedMilliseconds < timeoutMs)
             {
                 var isReceived = await multiProjectorGrain.IsSortableUniqueIdReceived(sortableUniqueId);
@@ -97,12 +99,11 @@ public class SekibanOrleansExecutor(
                 {
                     return;
                 }
-                
+
                 await Task.Delay(pollingIntervalMs);
             }
-            
+
             // Logger.LogWarning($"Timeout waiting for SortableUniqueId {sortableUniqueId} after {timeoutMs}ms");
         }
     }
 }
-

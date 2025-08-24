@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Search result
+///     Search result
 /// </summary>
 public class SearchResult
 {

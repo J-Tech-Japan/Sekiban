@@ -2,7 +2,6 @@ using ResultBoxes;
 using Sekiban.Pure.Query;
 using System.IO.Compression;
 using System.Text.Json;
-
 namespace Sekiban.Pure.Dapr.Serialization;
 
 [Serializable]
@@ -12,17 +11,17 @@ public record SerializableListQueryResult
     public int? TotalPages { get; init; }
     public int? CurrentPage { get; init; }
     public int? PageSize { get; init; }
-    
+
     public string RecordTypeName { get; init; } = string.Empty;
-    
+
     public string QueryTypeName { get; init; } = string.Empty;
-    
+
     public byte[] CompressedItemsJson { get; init; } = Array.Empty<byte>();
-    
+
     public byte[] CompressedQueryJson { get; init; } = Array.Empty<byte>();
-    
+
     public string ItemsAssemblyVersion { get; init; } = string.Empty;
-    
+
     public SerializableListQueryResult() { }
 
     private SerializableListQueryResult(
@@ -48,13 +47,13 @@ public record SerializableListQueryResult
     }
 
     public static async Task<SerializableListQueryResult> CreateFromAsync(
-        ListQueryResultGeneral result, 
+        ListQueryResultGeneral result,
         JsonSerializerOptions options)
     {
         var queryType = result.Query.GetType();
-        string itemsAssemblyVersion = "0.0.0.0";
-        
-        string recordTypeName = result.RecordType;
+        var itemsAssemblyVersion = "0.0.0.0";
+
+        var recordTypeName = result.RecordType;
         if (result.Items.Any())
         {
             var firstItemType = result.Items.First().GetType();
@@ -62,35 +61,27 @@ public record SerializableListQueryResult
             // Use AssemblyQualifiedName for cross-assembly type resolution
             recordTypeName = firstItemType.AssemblyQualifiedName ?? result.RecordType;
         }
-        
+
         byte[] itemsJson;
         try
         {
-            itemsJson = JsonSerializer.SerializeToUtf8Bytes(
-                result.Items.ToList(), 
-                options);
+            itemsJson = JsonSerializer.SerializeToUtf8Bytes(result.Items.ToList(), options);
         }
         catch (NotSupportedException)
         {
-            itemsJson = JsonSerializer.SerializeToUtf8Bytes(
-                result.Items.ToList());
+            itemsJson = JsonSerializer.SerializeToUtf8Bytes(result.Items.ToList());
         }
-        
+
         byte[] queryJson;
         try
         {
-            queryJson = JsonSerializer.SerializeToUtf8Bytes(
-                result.Query,
-                queryType,
-                options);
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(result.Query, queryType, options);
         }
         catch (NotSupportedException)
         {
-            queryJson = JsonSerializer.SerializeToUtf8Bytes(
-                result.Query,
-                queryType);
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(result.Query, queryType);
         }
-        
+
         var compressedItemsJson = await CompressAsync(itemsJson);
         var compressedQueryJson = await CompressAsync(queryJson);
 
@@ -103,8 +94,7 @@ public record SerializableListQueryResult
             queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
             compressedItemsJson,
             compressedQueryJson,
-            itemsAssemblyVersion
-        );
+            itemsAssemblyVersion);
     }
 
     public static async Task<ResultBox<SerializableListQueryResult>> CreateFromResultBoxAsync(
@@ -120,12 +110,11 @@ public record SerializableListQueryResult
         var listQueryResult = resultBox.GetValue();
         var listQueryResultGeneral = listQueryResult.ToGeneral(originalQuery);
         var serializable = await CreateFromAsync(listQueryResultGeneral, options);
-        
+
         return ResultBox<SerializableListQueryResult>.FromValue(serializable);
     }
 
-    public async Task<ResultBox<ListQueryResultGeneral>> ToListQueryResultAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<ResultBox<ListQueryResultGeneral>> ToListQueryResultAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -136,7 +125,7 @@ public record SerializableListQueryResult
                 {
                     // Use GetPayloadTypeByName from QueryTypes for better type resolution
                     recordType = domainTypes.QueryTypes.GetPayloadTypeByName(RecordTypeName);
-                    
+
                     if (recordType == null)
                     {
                         return ResultBox<ListQueryResultGeneral>.FromException(
@@ -155,7 +144,7 @@ public record SerializableListQueryResult
             {
                 // Use GetPayloadTypeByName from QueryTypes for better type resolution
                 queryType = domainTypes.QueryTypes.GetPayloadTypeByName(QueryTypeName);
-                
+
                 if (queryType == null)
                 {
                     return ResultBox<ListQueryResultGeneral>.FromException(
@@ -177,24 +166,22 @@ public record SerializableListQueryResult
                 try
                 {
                     itemsList = JsonSerializer.Deserialize(
-                        decompressedJson, 
-                        listType, 
+                        decompressedJson,
+                        listType,
                         domainTypes.JsonSerializerOptions) as IEnumerable<object>;
                 }
                 catch (NotSupportedException)
                 {
                     // Fallback to default options
-                    itemsList = JsonSerializer.Deserialize(
-                        decompressedJson, 
-                        listType) as IEnumerable<object>;
+                    itemsList = JsonSerializer.Deserialize(decompressedJson, listType) as IEnumerable<object>;
                 }
-                
+
                 if (itemsList == null)
                 {
                     return ResultBox<ListQueryResultGeneral>.FromException(
                         new InvalidOperationException($"Failed to deserialize items: {RecordTypeName}"));
                 }
-                
+
                 items = itemsList;
             }
 
@@ -212,18 +199,15 @@ public record SerializableListQueryResult
                 catch (NotSupportedException)
                 {
                     // Fallback to default options
-                    query = JsonSerializer.Deserialize(
-                        decompressedQueryJson,
-                        queryType) as IListQueryCommon;
+                    query = JsonSerializer.Deserialize(decompressedQueryJson, queryType) as IListQueryCommon;
                 }
-                
+
                 if (query == null)
                 {
                     return ResultBox<ListQueryResultGeneral>.FromException(
                         new InvalidOperationException($"Failed to deserialize query: {QueryTypeName}"));
                 }
-            }
-            else
+            } else
             {
                 return ResultBox<ListQueryResultGeneral>.FromException(
                     new InvalidOperationException("No query data to deserialize"));
@@ -237,7 +221,7 @@ public record SerializableListQueryResult
                 items,
                 RecordTypeName,
                 query);
-            
+
             return ResultBox<ListQueryResultGeneral>.FromValue(listQueryResultGeneral);
         }
         catch (Exception ex)
@@ -247,8 +231,7 @@ public record SerializableListQueryResult
         }
     }
 
-    public async Task<ResultBox<IListQueryResult>> ToResultBoxAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<ResultBox<IListQueryResult>> ToResultBoxAsync(SekibanDomainTypes domainTypes)
     {
         var listQueryResultBox = await ToListQueryResultAsync(domainTypes);
         if (!listQueryResultBox.IsSuccess)

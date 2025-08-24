@@ -2,8 +2,9 @@ using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
-using Sekiban.Dcb.Queries;using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Tests;
 
@@ -30,7 +31,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
             tagTypes,
             tagProjectorTypes,
             tagStatePayloadTypes,
-            multiProjectorTypes, new SimpleQueryTypes());
+            multiProjectorTypes,
+            new SimpleQueryTypes());
 
         // Set SafeWindow to 5 seconds for testing
         _options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 5000 };
@@ -84,7 +86,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         // Act - First add with catching up
         await actor.AddEventsAsync(new[] { event1 }, false);
         // Then add with finished catching up
-        await actor.AddEventsAsync(new[] { event2 }, true);
+        await actor.AddEventsAsync(new[] { event2 });
 
         var state = await actor.GetStateAsync();
 
@@ -299,7 +301,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         Assert.True(stateDuringCatchUp.GetValue().IsSafeState, "Should be safe state with old data only");
 
         // Act - Phase 2: After catch up completed with old data only
-        await actor.AddEventsAsync(new[] { oldEvent2 }, true);
+        await actor.AddEventsAsync(new[] { oldEvent2 });
         var stateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
 
         // Assert - Should be both safe and caught up
@@ -347,7 +349,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         // Act - Phase 2: Complete catch up
         var finalEvent = CreateEvent(new TestEventCreated("Final Item"), DateTime.UtcNow.AddSeconds(-7));
-        await actor.AddEventsAsync(new[] { finalEvent }, true);
+        await actor.AddEventsAsync(new[] { finalEvent });
 
         var safeStateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: false);
         var unsafeStateAfterCatchUp = await actor.GetStateAsync(canGetUnsafeState: true);
@@ -394,7 +396,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         {
             CreateEvent(new TestEventCreated("Item 4"), DateTime.UtcNow.AddSeconds(-6))
         };
-        await actor.AddEventsAsync(batch3, true);
+        await actor.AddEventsAsync(batch3);
 
         // Act & Assert
         var finalState = await actor.GetStateAsync();

@@ -17,6 +17,8 @@ public record SortableUniqueIdValue(string Value)
     public const string IdFormatter = "00000000000";
     public static readonly long IdModBase = (long)Math.Pow(10, IdNumberOfLength);
 
+    public static SortableUniqueIdValue MinValue => Generate(DateTime.MinValue, Guid.Empty);
+
     /// <summary>
     ///     Get Datetime from Sortable Unique Id
     /// </summary>
@@ -117,8 +119,6 @@ public record SortableUniqueIdValue(string Value)
     public static SortableUniqueIdValue? NullableValue(string? value) =>
         value != null ? new SortableUniqueIdValue(value) : null;
 
-    public static SortableUniqueIdValue MinValue => Generate(DateTime.MinValue, Guid.Empty);
-    
     public static OptionalValue<SortableUniqueIdValue> OptionalValue(string? value) =>
         !string.IsNullOrWhiteSpace(value)
             ? new SortableUniqueIdValue(value)

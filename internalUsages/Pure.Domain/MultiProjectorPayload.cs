@@ -66,8 +66,9 @@ public record MultiProjectorPayload(
         },
         _ => payload
     };
-    public static MultiProjectorPayload GenerateInitialPayload()
-        => new(ImmutableDictionary<Guid, User>.Empty, ImmutableDictionary<Guid, Cart>.Empty);
+    public static MultiProjectorPayload GenerateInitialPayload() => new(
+        ImmutableDictionary<Guid, User>.Empty,
+        ImmutableDictionary<Guid, Cart>.Empty);
     public static string GetMultiProjectorName() => nameof(MultiProjectorPayload);
     public record User(Guid UserId, string Name, string Email, bool IsConfirmed);
     public record Cart(Guid CartId, Guid UserId, ImmutableList<Item> Items, string PaymentMethod);

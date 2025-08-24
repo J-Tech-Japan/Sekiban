@@ -7,8 +7,8 @@ public interface IAggregatesStream
     public ResultBox<string> GetSingleStreamName() =>
         ResultBox
             .UnitValue
-            .Verify(
-                () => GetStreamNames() is { Count : 1 } streamNames
+            .Verify(() =>
+                GetStreamNames() is { Count : 1 } streamNames
                     ? ExceptionOrNone.None
                     : new ApplicationException("Stream Names is not set"))
             .Conveyor(_ => GetStreamNames()[0].ToResultBox());

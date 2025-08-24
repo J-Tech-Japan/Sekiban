@@ -20,11 +20,13 @@
 
 ## Workflows and Domain Services
 
-Sekiban supports implementing domain workflows and services that encapsulate business logic that spans multiple aggregates or requires specialized processing.
+Sekiban supports implementing domain workflows and services that encapsulate business logic that spans multiple
+aggregates or requires specialized processing.
 
 ## Domain Workflows
 
-Domain workflows are stateless services that implement business processes that may involve multiple aggregates or complex validation logic. They are particularly useful for:
+Domain workflows are stateless services that implement business processes that may involve multiple aggregates or
+complex validation logic. They are particularly useful for:
 
 1. **Cross-Aggregate Operations**: When a business process spans multiple aggregates
 2. **External Data Retrieval**: When business logic requires data from external systems or multiple aggregates
@@ -72,7 +74,9 @@ public class QuestionDisplayWorkflow(ISekibanExecutor executor)
 ```
 
 **Key Points**:
-- Workflows can be implemented as either static classes with static methods or instance-based classes with dependency injection 🏗️
+
+- Workflows can be implemented as either static classes with static methods or instance-based classes with dependency
+  injection 🏗️
 - They should be placed in a `Workflows` folder or namespace 📁
 - They should use `ISekibanExecutor` interface for better testability 🧪
 - They should return domain-specific result types that encapsulate success/failure information 📊
@@ -206,7 +210,8 @@ public class OrderSagaWorkflow(ISekibanExecutor executor)
 
 ## Testing Workflows
 
-Workflows can be tested using the same in-memory testing approach as other Sekiban components. The `SekibanInMemoryTestBase` class provides all the necessary infrastructure for testing in isolation. 🧪
+Workflows can be tested using the same in-memory testing approach as other Sekiban components. The
+`SekibanInMemoryTestBase` class provides all the necessary infrastructure for testing in isolation. 🧪
 
 ### Testing Saga Pattern Workflows
 
@@ -368,9 +373,10 @@ public class QuestionDisplayWorkflowTests : SekibanInMemoryTestBase
 ```
 
 **Key Points**:
+
 - Use `SekibanInMemoryTestBase` for testing workflows. 🧪
 - The base class provides an `Executor` property that implements `ISekibanExecutor`. 🔧
-- Use `GivenCommand` to set up the test state. 🏗️ 
+- Use `GivenCommand` to set up the test state. 🏗️
 - Use `ThenQuery` to verify the outcomes of workflow execution. 🔍
 - Test both success and failure scenarios. ✓✗
 - For Saga Pattern workflows, ensure compensation actions work correctly. ↩️

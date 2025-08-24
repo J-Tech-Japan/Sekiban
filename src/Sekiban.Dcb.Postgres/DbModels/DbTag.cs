@@ -29,7 +29,12 @@ public class DbTag
 
     public DateTime CreatedAt { get; set; }
 
-    public static DbTag FromEventTag(string tag, string tagGroup, string sortableUniqueId, Guid eventId, string eventType) =>
+    public static DbTag FromEventTag(
+        string tag,
+        string tagGroup,
+        string sortableUniqueId,
+        Guid eventId,
+        string eventType) =>
         new()
         {
             Tag = tag,

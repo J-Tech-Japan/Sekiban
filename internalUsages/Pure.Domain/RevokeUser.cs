@@ -17,5 +17,4 @@ public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProj
             //         ? ExceptionOrNone.None
             //         : ExceptionOrNone.FromException(new ApplicationException("user already exists")))
             .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
-
 }

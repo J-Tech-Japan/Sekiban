@@ -1,11 +1,10 @@
+using Sekiban.Pure.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Sekiban.Pure.Documents;
-
 namespace SharedDomain;
 
 /// <summary>
-/// Custom JSON converter for PartitionKeys to allow it to be used as a dictionary key
+///     Custom JSON converter for PartitionKeys to allow it to be used as a dictionary key
 /// </summary>
 public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
 {
@@ -18,7 +17,7 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
 
         string? rootPartitionKey = null;
         string? aggregateGroup = null;
-        Guid aggregateId = Guid.Empty;
+        var aggregateId = Guid.Empty;
 
         while (reader.Read())
         {
@@ -59,7 +58,7 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
     public override void Write(Utf8JsonWriter writer, PartitionKeys value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        
+
         var rootPartitionKey = (string?)typeof(PartitionKeys).GetProperty("RootPartitionKey")?.GetValue(value);
         var aggregateGroup = (string?)typeof(PartitionKeys).GetProperty("AggregateGroup")?.GetValue(value);
         var aggregateId = (Guid)typeof(PartitionKeys).GetProperty("AggregateId")?.GetValue(value)!;
@@ -67,15 +66,14 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
         if (rootPartitionKey != null)
         {
             writer.WriteString("rootPartitionKey", rootPartitionKey);
-        }
-        else
+        } else
         {
             writer.WriteNull("rootPartitionKey");
         }
-        
+
         writer.WriteString("aggregateGroup", aggregateGroup);
         writer.WriteString("aggregateId", aggregateId);
-        
+
         writer.WriteEndObject();
     }
 
@@ -85,16 +83,19 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
         var rootPartitionKey = (string?)typeof(PartitionKeys).GetProperty("RootPartitionKey")?.GetValue(value);
         var aggregateGroup = (string?)typeof(PartitionKeys).GetProperty("AggregateGroup")?.GetValue(value);
         var aggregateId = (Guid)typeof(PartitionKeys).GetProperty("AggregateId")?.GetValue(value)!;
-        
+
         var key = $"{rootPartitionKey ?? "null"}|{aggregateGroup}|{aggregateId}";
         writer.WritePropertyName(key);
     }
 
-    public override PartitionKeys ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override PartitionKeys ReadAsPropertyName(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
     {
         var key = reader.GetString() ?? throw new JsonException("Expected non-null property name");
         var parts = key.Split('|');
-        
+
         if (parts.Length != 3)
         {
             throw new JsonException("Invalid PartitionKeys format in property name");
@@ -103,7 +104,7 @@ public class PartitionKeysJsonConverter : JsonConverter<PartitionKeys>
         var rootPartitionKey = parts[0] == "null" ? null : parts[0];
         var aggregateGroup = parts[1];
         var aggregateId = Guid.Parse(parts[2]);
-        
+
         // Create a new PartitionKeys using the proper constructor
         return new PartitionKeys(aggregateId, aggregateGroup, rootPartitionKey ?? string.Empty);
     }

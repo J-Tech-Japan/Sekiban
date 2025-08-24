@@ -1,26 +1,11 @@
 using Sekiban.Dcb.Actors;
-
 namespace Sekiban.Dcb.Orleans.Streams;
 
 /// <summary>
-/// Implementation of IEventSubscriptionStatus for Orleans subscriptions
+///     Implementation of IEventSubscriptionStatus for Orleans subscriptions
 /// </summary>
 public class OrleansEventSubscriptionStatus : IEventSubscriptionStatus
 {
-    public string SubscriptionId { get; init; }
-    public bool IsActive { get; init; }
-    public bool IsPaused { get; init; }
-    public string? CurrentPosition { get; init; }
-    public DateTime? StartedAt { get; init; }
-    public DateTime? PausedAt { get; init; }
-    public long EventsReceived { get; init; }
-    public long EventsProcessed { get; init; }
-    public long ErrorCount { get; init; }
-    public string? LastError { get; init; }
-    public DateTime? LastErrorAt { get; init; }
-    public DateTime? LastEventReceivedAt { get; init; }
-    public DateTime? LastEventProcessedAt { get; init; }
-    public double? AverageProcessingTimeMs { get; init; }
 
     public OrleansEventSubscriptionStatus(
         string subscriptionId,
@@ -53,4 +38,18 @@ public class OrleansEventSubscriptionStatus : IEventSubscriptionStatus
         LastEventProcessedAt = lastEventProcessedAt;
         AverageProcessingTimeMs = averageProcessingTimeMs;
     }
+    public string SubscriptionId { get; init; }
+    public bool IsActive { get; init; }
+    public bool IsPaused { get; init; }
+    public string? CurrentPosition { get; init; }
+    public DateTime? StartedAt { get; init; }
+    public DateTime? PausedAt { get; init; }
+    public long EventsReceived { get; init; }
+    public long EventsProcessed { get; init; }
+    public long ErrorCount { get; init; }
+    public string? LastError { get; init; }
+    public DateTime? LastErrorAt { get; init; }
+    public DateTime? LastEventReceivedAt { get; init; }
+    public DateTime? LastEventProcessedAt { get; init; }
+    public double? AverageProcessingTimeMs { get; init; }
 }

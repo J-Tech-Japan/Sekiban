@@ -10,5 +10,4 @@ public record EventProviderStatistics(
     long UnsafeEventsProcessed,
     DateTime? LastEventTime,
     SortableUniqueId? LastEventPosition,
-    TimeSpan? CatchUpDuration
-);
+    TimeSpan? CatchUpDuration);

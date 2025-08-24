@@ -51,15 +51,15 @@ public class OptimisticLockingTest
 
         // Act - Update with correct version
         var updateCommand = new UpdateTestCommand(tagId, 2);
-        var updateResult = await _commandExecutor.ExecuteAsync(updateCommand, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                consistencyTag);
-        });
+        var updateResult = await _commandExecutor.ExecuteAsync(
+            updateCommand,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+            });
 
         // Assert
         Assert.True(updateResult.IsSuccess);
@@ -86,27 +86,27 @@ public class OptimisticLockingTest
 
         // Update the entity once (to change its version)
         var firstUpdateCommand = new UpdateTestCommand(tagId, 2);
-        var firstUpdateResult = await _commandExecutor.ExecuteAsync(firstUpdateCommand, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                tag);
-        });
+        var firstUpdateResult = await _commandExecutor.ExecuteAsync(
+            firstUpdateCommand,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
+            });
         Assert.True(firstUpdateResult.IsSuccess);
 
         // Act - Try to update with the OLD (initial) version - should fail
         var secondUpdateCommand = new UpdateTestCommand(tagId, 3);
-        var updateResult = await _commandExecutor.ExecuteAsync(secondUpdateCommand, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, initialVersion);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                consistencyTag);
-        });
+        var updateResult = await _commandExecutor.ExecuteAsync(
+            secondUpdateCommand,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, initialVersion);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+            });
 
         // Assert - Should fail due to version mismatch
         Assert.False(updateResult.IsSuccess);
@@ -127,27 +127,27 @@ public class OptimisticLockingTest
         for (var i = 2; i <= 5; i++)
         {
             var updateCommand = new UpdateTestCommand(tagId, i);
-            var updateResult = await _commandExecutor.ExecuteAsync(updateCommand, async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                return EventOrNone.EventWithTags(
-                    new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                    tag);
-            });
+            var updateResult = await _commandExecutor.ExecuteAsync(
+                updateCommand,
+                async (cmd, context) =>
+                {
+                    var tag = new TestTag(cmd.TagId);
+                    var state = await context.GetStateAsync<TestProjector>(tag);
+                    return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
+                });
             Assert.True(updateResult.IsSuccess);
         }
 
         // Act - Update without specifying version (should use latest)
         var finalUpdateCommand = new UpdateTestCommand(tagId, 6);
-        var finalUpdateResult = await _commandExecutor.ExecuteAsync(finalUpdateCommand, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                tag);
-        });
+        var finalUpdateResult = await _commandExecutor.ExecuteAsync(
+            finalUpdateCommand,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
+            });
 
         // Assert
         Assert.True(finalUpdateResult.IsSuccess);
@@ -181,24 +181,24 @@ public class OptimisticLockingTest
         var update1 = new UpdateTestCommand(tagId, 100);
         var update2 = new UpdateTestCommand(tagId, 200);
 
-        var task1 = _commandExecutor.ExecuteAsync(update1, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                consistencyTag);
-        });
-        var task2 = _commandExecutor.ExecuteAsync(update2, async (cmd, context) =>
-        {
-            var tag = new TestTag(cmd.TagId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
-            var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                consistencyTag);
-        });
+        var task1 = _commandExecutor.ExecuteAsync(
+            update1,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+            });
+        var task2 = _commandExecutor.ExecuteAsync(
+            update2,
+            async (cmd, context) =>
+            {
+                var tag = new TestTag(cmd.TagId);
+                var state = await context.GetStateAsync<TestProjector>(tag);
+                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+            });
 
         var results = await Task.WhenAll(task1, task2);
 
@@ -227,20 +227,22 @@ public class OptimisticLockingTest
         for (var i = 2; i <= 3; i++)
         {
             var updateCommand = new UpdateTestCommand(tagId, i);
-            var updateResult = await _commandExecutor.ExecuteAsync(updateCommand, async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                return EventOrNone.EventWithTags(
-                    new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
-                    tag);
-            });
+            var updateResult = await _commandExecutor.ExecuteAsync(
+                updateCommand,
+                async (cmd, context) =>
+                {
+                    var tag = new TestTag(cmd.TagId);
+                    var state = await context.GetStateAsync<TestProjector>(tag);
+                    return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
+                });
             Assert.True(updateResult.IsSuccess);
         }
 
         // Act - Use ConsistencyTag.From which uses MinValue (should use latest)
         var finalUpdateCommand = new UpdateTestCommand(tagId, 4);
-        var finalUpdateResult = await _commandExecutor.ExecuteAsync(finalUpdateCommand, UpdateTestHandlerWithConsistencyFrom.HandleAsync);
+        var finalUpdateResult = await _commandExecutor.ExecuteAsync(
+            finalUpdateCommand,
+            UpdateTestHandlerWithConsistencyFrom.HandleAsync);
 
         // Assert
         Assert.True(finalUpdateResult.IsSuccess);

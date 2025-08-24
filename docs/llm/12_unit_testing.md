@@ -20,7 +20,8 @@
 
 ## Unit Testing
 
-Sekiban provides several approaches for unit testing your event-sourced applications. You can choose between in-memory testing for simplicity or Orleans-based testing for more complex scenarios.
+Sekiban provides several approaches for unit testing your event-sourced applications. You can choose between in-memory
+testing for simplicity or Orleans-based testing for more complex scenarios.
 
 ## Setup Testing Project
 
@@ -100,13 +101,15 @@ public class YourTests : SekibanInMemoryTestBase
 ```
 
 Key points:
+
 - `Conveyor` is used to chain operations, transforming the result of one operation into the input for the next
 - `Do` is used to perform assertions or side effects without changing the result
 - `UnwrapBox` at the end unwraps the final ResultBox, throwing an exception if any step failed
 
 ## 3. Orleans Testing with SekibanOrleansTestBase
 
-For testing with Orleans integration, use the `SekibanOrleansTestBase` class from the `Sekiban.Pure.Orleans.xUnit` namespace:
+For testing with Orleans integration, use the `SekibanOrleansTestBase` class from the `Sekiban.Pure.Orleans.xUnit`
+namespace:
 
 ```csharp
 public class YourOrleansTests : SekibanOrleansTestBase<YourOrleansTests>
@@ -299,7 +302,8 @@ public void MultiProjectorTest()
 1. **Test Commands**: Verify that commands produce the expected events and state changes
 2. **Test Projectors**: Verify that projectors correctly apply events to build the aggregate state
 3. **Test Queries**: Verify that queries return the expected results based on the current state
-4. **Test State Transitions**: Verify that state transitions work correctly, especially when using different payload types
+4. **Test State Transitions**: Verify that state transitions work correctly, especially when using different payload
+   types
 5. **Test Error Cases**: Verify that commands fail appropriately when validation fails
 6. **Test Serialization**: For Orleans tests, verify that commands and events are serializable
 7. **Use GivenCommand for Setup**: Use `GivenCommand` to set up the test state

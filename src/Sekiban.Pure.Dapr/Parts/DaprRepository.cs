@@ -1,30 +1,24 @@
 using Dapr;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Repositories;
-using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Projectors;
-using Sekiban.Pure.Command;
-using Sekiban.Pure.Command.Handlers;
-using System.Text.Json;
-
 namespace Sekiban.Pure.Dapr.Parts;
 
 /// <summary>
-/// Repository implementation for Dapr actors, bridging between AggregateActor and AggregateEventHandlerActor.
-/// This is the Dapr equivalent of Orleans' OrleansRepository.
+///     Repository implementation for Dapr actors, bridging between AggregateActor and AggregateEventHandlerActor.
+///     This is the Dapr equivalent of Orleans' OrleansRepository.
 /// </summary>
 public class DaprRepository
 {
+    private readonly SekibanDomainTypes _domainTypes;
     private readonly IAggregateEventHandlerActor _eventHandlerActor;
+    private readonly IEventTypes _eventTypes;
     private readonly PartitionKeys _partitionKeys;
     private readonly IAggregateProjector _projector;
-    private readonly IEventTypes _eventTypes;
     private Aggregate _currentAggregate;
-    private readonly SekibanDomainTypes _domainTypes;
     public DaprRepository(
         IAggregateEventHandlerActor eventHandlerActor,
         PartitionKeys partitionKeys,
@@ -41,14 +35,9 @@ public class DaprRepository
         _domainTypes = domainTypes;
     }
 
-    public ResultBox<Aggregate> GetAggregate()
-    {
-        return ResultBox<Aggregate>.FromValue(_currentAggregate);
-    }
+    public ResultBox<Aggregate> GetAggregate() => ResultBox<Aggregate>.FromValue(_currentAggregate);
 
-    public async Task<ResultBox<List<IEvent>>> Save(
-        string lastSortableUniqueId,
-        List<IEvent> newEvents)
+    public async Task<ResultBox<List<IEvent>>> Save(string lastSortableUniqueId, List<IEvent> newEvents)
     {
         if (newEvents == null || newEvents.Count == 0)
         {
@@ -61,15 +50,15 @@ public class DaprRepository
             var eventDocuments = new List<SerializableEventDocument>();
             foreach (var @event in newEvents)
             {
-                var document = await SerializableEventDocument.CreateFromEventAsync(@event, _domainTypes.JsonSerializerOptions);
+                var document = await SerializableEventDocument.CreateFromEventAsync(
+                    @event,
+                    _domainTypes.JsonSerializerOptions);
                 eventDocuments.Add(document);
             }
-            
+
             // Call the event handler actor to append events
-            var response = await _eventHandlerActor.AppendEventsAsync(
-                lastSortableUniqueId,
-                eventDocuments);
-                
+            var response = await _eventHandlerActor.AppendEventsAsync(lastSortableUniqueId, eventDocuments);
+
             if (!response.IsSuccess)
             {
                 return ResultBox<List<IEvent>>.FromException(new InvalidOperationException(response.ErrorMessage));
@@ -77,7 +66,8 @@ public class DaprRepository
 
             // Note: Unlike the previous implementation, we should NOT update _currentAggregate here
             // The caller (AggregateActor) will handle the aggregate update via GetProjectedAggregate
-            Console.WriteLine($"[DaprRepository.Save] Events saved: {newEvents.Count}, current version: {_currentAggregate.Version}");
+            Console.WriteLine(
+                $"[DaprRepository.Save] Events saved: {newEvents.Count}, current version: {_currentAggregate.Version}");
 
             return ResultBox<List<IEvent>>.FromValue(newEvents);
         }
@@ -102,7 +92,7 @@ public class DaprRepository
                 // Actor doesn't exist yet, return empty list
                 eventDocuments = new List<SerializableEventDocument>();
             }
-            
+
             // Convert documents back to events
             var events = new List<IEvent>();
             foreach (var document in eventDocuments)
@@ -113,16 +103,16 @@ public class DaprRepository
                     events.Add(eventResult.Value);
                 }
             }
-            
+
             // Start with empty aggregate
             var aggregate = Aggregate.EmptyFromPartitionKeys(_partitionKeys);
-            
+
             // Project all events
             aggregate = aggregate.Project(events, _projector).UnwrapBox();
-            
+
             // Update current aggregate
             _currentAggregate = aggregate;
-            
+
             return ResultBox<Aggregate>.FromValue(aggregate);
         }
         catch (Exception ex)
@@ -135,11 +125,12 @@ public class DaprRepository
     {
         try
         {
-            Console.WriteLine($"[GetProjectedAggregate] Current version: {_currentAggregate.Version}, projecting {projectedEvents.Count} events");
-            
+            Console.WriteLine(
+                $"[GetProjectedAggregate] Current version: {_currentAggregate.Version}, projecting {projectedEvents.Count} events");
+
             // Project the events onto the current aggregate to get a new aggregate
             var aggregate = _currentAggregate.Project(projectedEvents, _projector).UnwrapBox();
-            
+
             Console.WriteLine($"[GetProjectedAggregate] After projection - version: {aggregate.Version}");
             return ResultBox<Aggregate>.FromValue(aggregate);
         }

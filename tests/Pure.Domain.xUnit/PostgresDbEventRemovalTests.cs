@@ -19,10 +19,10 @@ namespace Pure.Domain.xUnit;
 // }
 public class PostgresDbEventRemovalTests
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IEventWriter _eventWriter;
-    private readonly IEventReader _eventReader;
     private readonly SekibanDomainTypes _domainTypes;
+    private readonly IEventReader _eventReader;
+    private readonly IEventWriter _eventWriter;
+    private readonly IServiceProvider _serviceProvider;
 
     public PostgresDbEventRemovalTests()
     {

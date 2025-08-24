@@ -58,8 +58,9 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default));
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.Equals(
+                    iEventPayloadSymbol,
+                    SymbolEqualityComparer.Default));
                 eventTypes.Add(
                     new AggregateProjectorValues
                     {
@@ -69,12 +70,6 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
             }
         }
         return eventTypes.ToImmutable();
-    }
-    public class AggregateProjectorValues
-    {
-        public string InterfaceName { get; set; } = string.Empty;
-        public string RecordName { get; set; } = string.Empty;
-        public int TypeCount { get; set; }
     }
 
     private string GenerateSourceCode(
@@ -184,116 +179,92 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine("            };");
 
         sb.AppendLine();
-        sb.AppendLine("        public async Task<ResultBox<string>> GetSerialisedMultiProjector(IMultiProjectorCommon multiProjector, SekibanDomainTypes domainTypes)");
+        sb.AppendLine(
+            "        public async Task<ResultBox<string>> GetSerialisedMultiProjector(IMultiProjectorCommon multiProjector, SekibanDomainTypes domainTypes)");
         sb.AppendLine("            => multiProjector switch");
         sb.AppendLine("            {");
-        
+
         foreach (var type in multiProjectorTypes)
         {
             var className = type.TypeName.Split('.').Last();
             sb.AppendLine(
                 $"                {type.TypeName} projector => ResultBox.FromValue(JsonSerializer.Serialize(projector, domainTypes.JsonSerializerOptions)),");
         }
-        
+
         foreach (var type in aggregateProjectorTypes)
         {
             sb.AppendLine(
                 $"                AggregateListProjector<{type.RecordName}> aggregator => await SerializableAggregateListProjector.SerializeAggregateList(aggregator, domainTypes),");
         }
-        
+
         sb.AppendLine(
             "                _ => ResultBox<string>.Error(new ApplicationException(multiProjector.GetType().Name))");
         sb.AppendLine("            };");
-        
+
         sb.AppendLine();
         sb.AppendLine("        public async Task<ResultBox<IMultiProjectorCommon>> GetSerialisedMultiProjector(");
         sb.AppendLine("            string json,");
         sb.AppendLine("            string typeFullName,");
         sb.AppendLine("            SekibanDomainTypes domainTypes) => typeFullName switch");
         sb.AppendLine("        {");
-        
+
         // Handle regular multi-projector types
         foreach (var type in multiProjectorTypes)
         {
             var fullName = type.TypeName;
-            sb.AppendLine(
-                $"            // Regular multi-projector: {fullName}");
-            sb.AppendLine(
-                $"            \"{fullName}\" => ResultBox");
-            sb.AppendLine(
-                $"                .FromValue(");
-            sb.AppendLine(
-                $"                    JsonSerializer.Deserialize<{fullName}>(");
-            sb.AppendLine(
-                $"                        json,");
-            sb.AppendLine(
-                $"                        domainTypes.JsonSerializerOptions))");
-            sb.AppendLine(
-                $"                .Remap(mp => (IMultiProjectorCommon)mp),");
-            
+            sb.AppendLine($"            // Regular multi-projector: {fullName}");
+            sb.AppendLine($"            \"{fullName}\" => ResultBox");
+            sb.AppendLine("                .FromValue(");
+            sb.AppendLine($"                    JsonSerializer.Deserialize<{fullName}>(");
+            sb.AppendLine("                        json,");
+            sb.AppendLine("                        domainTypes.JsonSerializerOptions))");
+            sb.AppendLine("                .Remap(mp => (IMultiProjectorCommon)mp),");
+
             // Add case for the same type with assembly info
-            sb.AppendLine(
-                $"            string s when s.StartsWith(\"{fullName}, \") => ResultBox");
-            sb.AppendLine(
-                $"                .FromValue(");
-            sb.AppendLine(
-                $"                    JsonSerializer.Deserialize<{fullName}>(");
-            sb.AppendLine(
-                $"                        json,");
-            sb.AppendLine(
-                $"                        domainTypes.JsonSerializerOptions))");
-            sb.AppendLine(
-                $"                .Remap(mp => (IMultiProjectorCommon)mp),");
+            sb.AppendLine($"            string s when s.StartsWith(\"{fullName}, \") => ResultBox");
+            sb.AppendLine("                .FromValue(");
+            sb.AppendLine($"                    JsonSerializer.Deserialize<{fullName}>(");
+            sb.AppendLine("                        json,");
+            sb.AppendLine("                        domainTypes.JsonSerializerOptions))");
+            sb.AppendLine("                .Remap(mp => (IMultiProjectorCommon)mp),");
         }
-        
+
         // Handle AggregateListProjector types with full type names
         foreach (var type in aggregateProjectorTypes)
         {
             var projectorClass = type.RecordName.Split('.').Last();
-            
+
             // With full assembly name pattern: AggregateListProjector`1[[TypeName, Assembly, Version, ...]]
-            sb.AppendLine(
-                $"            // AggregateListProjector for {type.RecordName}");
+            sb.AppendLine($"            // AggregateListProjector for {type.RecordName}");
             sb.AppendLine(
                 $"            string s when s.StartsWith(\"Sekiban.Pure.Projectors.AggregateListProjector`1[[{type.RecordName}\") => ");
             sb.AppendLine(
                 $"                await SerializableAggregateListProjector.DeserializeAggregateList<{type.RecordName}>(");
-            sb.AppendLine(
-                $"                    json,");
-            sb.AppendLine(
-                $"                    domainTypes)");
-            sb.AppendLine(
-                $"                .Remap(mp => (IMultiProjectorCommon)mp),");
-            
+            sb.AppendLine("                    json,");
+            sb.AppendLine("                    domainTypes)");
+            sb.AppendLine("                .Remap(mp => (IMultiProjectorCommon)mp),");
+
             // With simple generic syntax: AggregateListProjector<TypeName>
-            sb.AppendLine(
-                $"            \"AggregateListProjector<{type.RecordName}>\" => ");
+            sb.AppendLine($"            \"AggregateListProjector<{type.RecordName}>\" => ");
             sb.AppendLine(
                 $"                await SerializableAggregateListProjector.DeserializeAggregateList<{type.RecordName}>(");
-            sb.AppendLine(
-                $"                    json,");
-            sb.AppendLine(
-                $"                    domainTypes)");
-            sb.AppendLine(
-                $"                .Remap(mp => (IMultiProjectorCommon)mp),");
-            
+            sb.AppendLine("                    json,");
+            sb.AppendLine("                    domainTypes)");
+            sb.AppendLine("                .Remap(mp => (IMultiProjectorCommon)mp),");
+
             // With namespace: Sekiban.Pure.Projectors.AggregateListProjector<TypeName>
-            sb.AppendLine(
-                $"            \"Sekiban.Pure.Projectors.AggregateListProjector<{type.RecordName}>\" => ");
+            sb.AppendLine($"            \"Sekiban.Pure.Projectors.AggregateListProjector<{type.RecordName}>\" => ");
             sb.AppendLine(
                 $"                await SerializableAggregateListProjector.DeserializeAggregateList<{type.RecordName}>(");
-            sb.AppendLine(
-                $"                    json,");
-            sb.AppendLine(
-                $"                    domainTypes)");
-            sb.AppendLine(
-                $"                .Remap(mp => (IMultiProjectorCommon)mp),");
+            sb.AppendLine("                    json,");
+            sb.AppendLine("                    domainTypes)");
+            sb.AppendLine("                .Remap(mp => (IMultiProjectorCommon)mp),");
         }
-        
+
         sb.AppendLine(
             "            _ => ResultBox<IMultiProjectorCommon>.Error(new ApplicationException($\"Unknown type: {typeFullName}\"))");
         sb.AppendLine("        };");
-        
+
         sb.AppendLine();
         sb.AppendLine("        public List<Type> GetMultiProjectorTypes()");
         sb.AppendLine("        {");
@@ -304,16 +275,16 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"            types.Add(typeof({type.TypeName}));");
         }
-        
+
         sb.AppendLine("            // Add aggregate list projector types");
         foreach (var type in aggregateProjectorTypes)
         {
             sb.AppendLine($"            types.Add(typeof(AggregateListProjector<{type.RecordName}>));");
         }
-        
+
         sb.AppendLine("            return types;");
         sb.AppendLine("        }");
-        
+
         sb.AppendLine();
         sb.AppendLine("        public ResultBox<IMultiProjectorCommon> GenerateInitialPayload(Type projectorType)");
         sb.AppendLine("        {");
@@ -323,7 +294,8 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine("            {");
         sb.AppendLine("                // Get the static GenerateInitialPayload method");
         sb.AppendLine("                var generateMethod = projectorType.GetMethod(\"GenerateInitialPayload\", ");
-        sb.AppendLine("                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);");
+        sb.AppendLine(
+            "                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);");
         sb.AppendLine("                ");
         sb.AppendLine("                if (generateMethod != null)");
         sb.AppendLine("                {");
@@ -335,7 +307,8 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine("                }");
         sb.AppendLine("                ");
         sb.AppendLine("                return ResultBox<IMultiProjectorCommon>.Error(");
-        sb.AppendLine("                    new InvalidOperationException($\"Could not generate initial payload for {projectorType.Name}\"));");
+        sb.AppendLine(
+            "                    new InvalidOperationException($\"Could not generate initial payload for {projectorType.Name}\"));");
         sb.AppendLine("            }");
         sb.AppendLine("            ");
         sb.AppendLine("            // Try type-specific generation based on full type name");
@@ -343,30 +316,38 @@ public class MultiProjectorTypesGenerator : IIncrementalGenerator
         sb.AppendLine("            ");
         sb.AppendLine("            return typeName switch");
         sb.AppendLine("            {");
-        
+
         // Generate cases for each multi-projector type
         foreach (var type in multiProjectorTypes)
         {
             sb.AppendLine($"                \"{type.TypeName}\" => ");
-            sb.AppendLine($"                    ResultBox.FromValue((IMultiProjectorCommon){type.TypeName}.GenerateInitialPayload()),");
+            sb.AppendLine(
+                $"                    ResultBox.FromValue((IMultiProjectorCommon){type.TypeName}.GenerateInitialPayload()),");
         }
-        
+
         // Generate cases for each aggregate list projector type
         foreach (var type in aggregateProjectorTypes)
         {
-            sb.AppendLine($"                string s when s == typeof(AggregateListProjector<{type.RecordName}>).FullName => ");
-            sb.AppendLine($"                    ResultBox.FromValue((IMultiProjectorCommon)AggregateListProjector<{type.RecordName}>.GenerateInitialPayload()),");
+            sb.AppendLine(
+                $"                string s when s == typeof(AggregateListProjector<{type.RecordName}>).FullName => ");
+            sb.AppendLine(
+                $"                    ResultBox.FromValue((IMultiProjectorCommon)AggregateListProjector<{type.RecordName}>.GenerateInitialPayload()),");
         }
-        
+
         sb.AppendLine("                _ => ResultBox<IMultiProjectorCommon>.Error(");
         sb.AppendLine("                    new ArgumentException($\"Unknown projector type: {typeName}\"))");
         sb.AppendLine("            };");
         sb.AppendLine("        }");
-        
+
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
         return sb.ToString();
     }
-
+    public class AggregateProjectorValues
+    {
+        public string InterfaceName { get; set; } = string.Empty;
+        public string RecordName { get; set; } = string.Empty;
+        public int TypeCount { get; set; }
+    }
 }

@@ -1,25 +1,24 @@
-using Orleans;
-using SharedDomain.Aggregates.WeatherForecasts.Events;
-using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Command;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-
+using SharedDomain.Aggregates.WeatherForecasts.Events;
+using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 namespace SharedDomain.Aggregates.WeatherForecasts.Commands;
 
 [GenerateSerializer]
 public record DeleteWeatherForecastCommand(
-    [property: Id(0)] Guid WeatherForecastId
-) : ICommandWithHandler<DeleteWeatherForecastCommand, WeatherForecastProjector>
+    [property: Id(0)]
+    Guid WeatherForecastId) : ICommandWithHandler<DeleteWeatherForecastCommand, WeatherForecastProjector>
 {
-    public PartitionKeys SpecifyPartitionKeys(DeleteWeatherForecastCommand command) => 
+    public PartitionKeys SpecifyPartitionKeys(DeleteWeatherForecastCommand command) =>
         PartitionKeys.Existing<WeatherForecastProjector>(command.WeatherForecastId);
 
-    public ResultBox<EventOrNone> Handle(DeleteWeatherForecastCommand command, ICommandContext<IAggregatePayload> context)
+    public ResultBox<EventOrNone> Handle(
+        DeleteWeatherForecastCommand command,
+        ICommandContext<IAggregatePayload> context)
     {
         // Only allow deletion on existing WeatherForecast aggregates
         var aggregate = context.GetAggregate();
@@ -27,7 +26,7 @@ public record DeleteWeatherForecastCommand(
         {
             return EventOrNone.None;
         }
-        
+
         return EventOrNone.Event(WeatherForecastDeleted.Instance);
     }
 }

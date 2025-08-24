@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json;
-using System.Threading.Tasks;
-using SharedDomain.Aggregates.User.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
@@ -13,29 +7,29 @@ using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Executors;
 using Sekiban.Pure.Repositories;
+using SharedDomain;
+using SharedDomain.Aggregates.User.Commands;
+using SharedDomain.Generated;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace DaprSample.Tests;
 
 public class DaprSerializationTests : IAsyncLifetime
 {
     private readonly ITestOutputHelper _output;
-    private ServiceProvider? _serviceProvider;
-    private ISekibanExecutor? _executor;
     private SekibanDomainTypes? _domainTypes;
+    private ISekibanExecutor? _executor;
+    private ServiceProvider? _serviceProvider;
 
-    public DaprSerializationTests(ITestOutputHelper output)
-    {
-        _output = output;
-    }
+    public DaprSerializationTests(ITestOutputHelper output) => _output = output;
 
     public async Task InitializeAsync()
     {
         var services = new ServiceCollection();
-        
+
         // Configure logging to test output
-        services.AddLogging(builder => 
+        services.AddLogging(builder =>
         {
             builder.AddXunit(_output);
             builder.SetMinimumLevel(LogLevel.Debug);
@@ -43,19 +37,18 @@ public class DaprSerializationTests : IAsyncLifetime
 
         // Add required services for testing
         services.AddMemoryCache();
-        
+
         // Generate domain types
-        _domainTypes = SharedDomain.Generated.SharedDomainDomainTypes.Generate(
-            SharedDomain.SharedDomainEventsJsonContext.Default.Options);
+        _domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
         services.AddSingleton(_domainTypes);
 
         _serviceProvider = services.BuildServiceProvider();
-        
+
         // Create in-memory executor for testing
         var repository = new Repository();
         var metadataProvider = new FunctionCommandMetadataProvider(() => "test");
         _executor = new InMemorySekibanExecutor(_domainTypes, metadataProvider, repository, _serviceProvider);
-        
+
         await Task.CompletedTask;
     }
 
@@ -73,36 +66,36 @@ public class DaprSerializationTests : IAsyncLifetime
         var createCommand = new CreateUser(userId, "Test User", "test@example.com");
         var createResult = await _executor!.CommandAsync(createCommand);
         Assert.True(createResult.IsSuccess);
-        
+
         var originalResponse = createResult.GetValue();
-        
+
         // Act - Simulate what happens in Dapr actor communication
         // 1. Convert to SerializableCommandResponse
         var serializableResponse = await SerializableCommandResponse.CreateFromAsync(
-            originalResponse, 
+            originalResponse,
             DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+
         // 2. Serialize to JSON string (what the actor returns)
         var jsonString = JsonSerializer.Serialize(
-            serializableResponse, 
+            serializableResponse,
             DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+
         _output.WriteLine($"Serialized JSON: {jsonString}");
-        
+
         // 3. Deserialize from JSON string (what the executor receives)
         var deserializedResponse = JsonSerializer.Deserialize<SerializableCommandResponse>(
-            jsonString, 
+            jsonString,
             DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+
         Assert.NotNull(deserializedResponse);
-        
+
         // 4. Convert back to CommandResponse
         var finalResult = await deserializedResponse!.ToCommandResponseAsync(_domainTypes!);
-        
+
         // Assert
         if (!finalResult.HasValue)
         {
-            _output.WriteLine($"Failed to convert back to CommandResponse");
+            _output.WriteLine("Failed to convert back to CommandResponse");
             _output.WriteLine($"SerializableResponse has {deserializedResponse.Events.Count} events");
             foreach (var evt in deserializedResponse.Events)
             {
@@ -117,12 +110,13 @@ public class DaprSerializationTests : IAsyncLifetime
             Assert.True(finalResult.HasValue, "Should successfully convert back to CommandResponse");
         }
         var finalResponse = finalResult.Value!;
-        
+
         Assert.Equal(originalResponse.Version, finalResponse.Version);
         Assert.Equal(originalResponse.Events.Count, finalResponse.Events.Count);
         Assert.Equal(originalResponse.PartitionKeys.AggregateId, finalResponse.PartitionKeys.AggregateId);
-        
-        _output.WriteLine($"Success! Original version: {originalResponse.Version}, Final version: {finalResponse.Version}");
+
+        _output.WriteLine(
+            $"Success! Original version: {originalResponse.Version}, Final version: {finalResponse.Version}");
     }
 
     [Fact]
@@ -137,17 +131,18 @@ public class DaprSerializationTests : IAsyncLifetime
             Version = 1,
             Events = new List<SerializableCommandResponse.SerializableEvent>()
         };
-        
+
         // Act - This should not throw
         var json = JsonSerializer.Serialize(response, DaprSerializationOptions.Default.JsonSerializerOptions);
         var deserialized = JsonSerializer.Deserialize<SerializableCommandResponse>(
-            json, DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+            json,
+            DaprSerializationOptions.Default.JsonSerializerOptions);
+
         // Assert
         Assert.NotNull(deserialized);
         Assert.Equal(response.AggregateId, deserialized!.AggregateId);
         Assert.Equal(response.Version, deserialized.Version);
-        
-        _output.WriteLine($"Successfully serialized and deserialized with DaprSerializationOptions");
+
+        _output.WriteLine("Successfully serialized and deserialized with DaprSerializationOptions");
     }
 }

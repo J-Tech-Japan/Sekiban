@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Represents a code sample in a Markdown document
+///     Represents a code sample in a Markdown document
 /// </summary>
 public class CodeSample
 {

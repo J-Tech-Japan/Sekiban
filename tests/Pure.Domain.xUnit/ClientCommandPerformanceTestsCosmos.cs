@@ -83,12 +83,11 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
             var branchName = $"Branch-{i}";
 
             GivenCommandWithResult(new RegisterBranch(branchName))
-                .Do(
-                    response =>
-                    {
-                        Assert.Equal(1, response.Version);
-                        branchIds.Add(response.PartitionKeys.AggregateId);
-                    })
+                .Do(response =>
+                {
+                    Assert.Equal(1, response.Version);
+                    branchIds.Add(response.PartitionKeys.AggregateId);
+                })
                 .UnwrapBox();
         }
 
@@ -101,12 +100,11 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
                 var clientEmail = $"client-{branchId}-{j}@example.com";
 
                 WhenCommandWithResult(new CreateClient(branchId, clientName, clientEmail))
-                    .Do(
-                        response =>
-                        {
-                            Assert.Equal(1, response.Version);
-                            clientIds.Add(response.PartitionKeys.AggregateId);
-                        })
+                    .Do(response =>
+                    {
+                        Assert.Equal(1, response.Version);
+                        clientIds.Add(response.PartitionKeys.AggregateId);
+                    })
                     .UnwrapBox();
             }
         }
@@ -135,34 +133,31 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
 
         // Verify final state
         ThenGetMultiProjectorWithResult<AggregateListProjector<BranchProjector>>()
-            .Do(
-                projector =>
-                {
-                    Assert.Equal(branchCount, projector.Aggregates.Count);
-                })
+            .Do(projector =>
+            {
+                Assert.Equal(branchCount, projector.Aggregates.Count);
+            })
             .UnwrapBox();
 
         ThenGetMultiProjectorWithResult<AggregateListProjector<ClientProjector>>()
-            .Do(
-                projector =>
-                {
-                    Assert.Equal(branchCount * clientsPerBranch, projector.Aggregates.Count);
+            .Do(projector =>
+            {
+                Assert.Equal(branchCount * clientsPerBranch, projector.Aggregates.Count);
 
-                    // Output performance metrics
-                    Console.WriteLine($"Created {branchCount} branches");
-                    Console.WriteLine($"Created {branchCount * clientsPerBranch} clients");
-                    Console.WriteLine(
-                        $"Performed {branchCount * clientsPerBranch * nameChangesPerClient} name changes");
-                    Console.WriteLine(
-                        $"Total operations: {branchCount + branchCount * clientsPerBranch + branchCount * clientsPerBranch * nameChangesPerClient}");
-                    Console.WriteLine($"Total execution time: {stopwatch.ElapsedMilliseconds}ms");
+                // Output performance metrics
+                Console.WriteLine($"Created {branchCount} branches");
+                Console.WriteLine($"Created {branchCount * clientsPerBranch} clients");
+                Console.WriteLine($"Performed {branchCount * clientsPerBranch * nameChangesPerClient} name changes");
+                Console.WriteLine(
+                    $"Total operations: {branchCount + branchCount * clientsPerBranch + branchCount * clientsPerBranch * nameChangesPerClient}");
+                Console.WriteLine($"Total execution time: {stopwatch.ElapsedMilliseconds}ms");
 
-                    var totalOperations = branchCount +
-                        branchCount * clientsPerBranch +
-                        branchCount * clientsPerBranch * nameChangesPerClient;
-                    Console.WriteLine(
-                        $"Average time per operation: {stopwatch.ElapsedMilliseconds / (double)totalOperations}ms");
-                })
+                var totalOperations = branchCount +
+                    branchCount * clientsPerBranch +
+                    branchCount * clientsPerBranch * nameChangesPerClient;
+                Console.WriteLine(
+                    $"Average time per operation: {stopwatch.ElapsedMilliseconds / (double)totalOperations}ms");
+            })
             .UnwrapBox();
     }
 }

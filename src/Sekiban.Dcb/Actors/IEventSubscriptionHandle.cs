@@ -34,7 +34,7 @@ public interface IEventSubscriptionHandle : IDisposable
     ///     Unsubscribe and clean up resources
     /// </summary>
     Task UnsubscribeAsync();
-    
+
     /// <summary>
     ///     Get detailed status information about the subscription
     /// </summary>

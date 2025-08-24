@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Basic information about a document
+///     Basic information about a document
 /// </summary>
 public class DocumentInfo
 {

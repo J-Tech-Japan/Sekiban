@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Navigation item for UI
+///     Navigation item for UI
 /// </summary>
 public class NavigationItem
 {

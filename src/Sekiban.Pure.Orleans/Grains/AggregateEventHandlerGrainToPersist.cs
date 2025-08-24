@@ -12,7 +12,10 @@ public record AggregateEventHandlerGrainToPersist
         var lastEvent = events.LastOrDefault();
         var last = lastEvent?.SortableUniqueId ?? string.Empty;
         var value = new SortableUniqueIdValue(last);
-        if (string.IsNullOrWhiteSpace(last)) return new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty};
-        return new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = last, LastEventDate = value.GetTicks() };
+        if (string.IsNullOrWhiteSpace(last))
+            return new AggregateEventHandlerGrainToPersist
+                { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
+        return new AggregateEventHandlerGrainToPersist
+            { LastSortableUniqueId = last, LastEventDate = value.GetTicks() };
     }
 }

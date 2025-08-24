@@ -28,5 +28,4 @@ public static class SekibanPostgresExtensions
         services.AddMemoryCache();
         return services;
     }
-
 }

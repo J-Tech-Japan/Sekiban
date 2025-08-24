@@ -1,42 +1,37 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using SharedDomain.Aggregates.User;
-using SharedDomain.Aggregates.User.Commands;
-using SharedDomain.Aggregates.User.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
 using Sekiban.Pure.Repositories;
-using Sekiban.Pure.Command.Handlers;
+using SharedDomain;
+using SharedDomain.Aggregates.User.Commands;
+using SharedDomain.Aggregates.User.Events;
+using SharedDomain.Generated;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace DaprSample.Tests;
 
 public class SerializableCommandResponseTests : IAsyncLifetime
 {
     private readonly ITestOutputHelper _output;
-    private ServiceProvider? _serviceProvider;
-    private ISekibanExecutor? _executor;
     private SekibanDomainTypes? _domainTypes;
+    private ISekibanExecutor? _executor;
+    private ServiceProvider? _serviceProvider;
 
-    public SerializableCommandResponseTests(ITestOutputHelper output)
-    {
-        _output = output;
-    }
+    public SerializableCommandResponseTests(ITestOutputHelper output) => _output = output;
 
     public async Task InitializeAsync()
     {
         var services = new ServiceCollection();
-        
+
         // Configure logging to test output
-        services.AddLogging(builder => 
+        services.AddLogging(builder =>
         {
             builder.AddXunit(_output);
             builder.SetMinimumLevel(LogLevel.Debug);
@@ -44,19 +39,18 @@ public class SerializableCommandResponseTests : IAsyncLifetime
 
         // Add required services for testing
         services.AddMemoryCache();
-        
+
         // Generate domain types
-        _domainTypes = SharedDomain.Generated.SharedDomainDomainTypes.Generate(
-            SharedDomain.SharedDomainEventsJsonContext.Default.Options);
+        _domainTypes = SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
         services.AddSingleton(_domainTypes);
 
         _serviceProvider = services.BuildServiceProvider();
-        
+
         // Create in-memory executor for testing
         var repository = new Repository();
         var metadataProvider = new FunctionCommandMetadataProvider(() => "test");
         _executor = new InMemorySekibanExecutor(_domainTypes, metadataProvider, repository, _serviceProvider);
-        
+
         await Task.CompletedTask;
     }
 
@@ -74,36 +68,42 @@ public class SerializableCommandResponseTests : IAsyncLifetime
         var createCommand = new CreateUser(userId, "Test User", "test@example.com");
         var createResult = await _executor!.CommandAsync(createCommand);
         Assert.True(createResult.IsSuccess);
-        
+
         var originalResponse = createResult.GetValue();
-        _output.WriteLine($"Original Response - Version: {originalResponse.Version}, Events: {originalResponse.Events.Count}");
-        
+        _output.WriteLine(
+            $"Original Response - Version: {originalResponse.Version}, Events: {originalResponse.Events.Count}");
+
         // Act - Convert to SerializableCommandResponse and back
         var serializableResponse = await SerializableCommandResponse.CreateFromAsync(
-            originalResponse, 
-            Sekiban.Pure.Dapr.Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
-        
-        _output.WriteLine($"Serializable Response - Version: {serializableResponse.Version}, Events: {serializableResponse.Events.Count}");
-        
+            originalResponse,
+            DaprSerializationOptions.Default.JsonSerializerOptions);
+
+        _output.WriteLine(
+            $"Serializable Response - Version: {serializableResponse.Version}, Events: {serializableResponse.Events.Count}");
+
         // Serialize and log for debugging
-        var json = System.Text.Json.JsonSerializer.Serialize(serializableResponse, Sekiban.Pure.Dapr.Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
+        var json = JsonSerializer.Serialize(
+            serializableResponse,
+            DaprSerializationOptions.Default.JsonSerializerOptions);
         _output.WriteLine($"Serialized JSON: {json}");
-        
+
         // Deserialize back
-        var deserializedSerializable = System.Text.Json.JsonSerializer.Deserialize<SerializableCommandResponse>(
-            json, Sekiban.Pure.Dapr.Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+        var deserializedSerializable = JsonSerializer.Deserialize<SerializableCommandResponse>(
+            json,
+            DaprSerializationOptions.Default.JsonSerializerOptions);
+
         Assert.NotNull(deserializedSerializable);
-        
-        var roundTripResult = await deserializedSerializable!.ToCommandResponseAsync(_domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
-        
+
+        var roundTripResult = await deserializedSerializable!.ToCommandResponseAsync(
+            _domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
+
         // Assert
         if (!roundTripResult.HasValue)
         {
             _output.WriteLine("Failed to convert back to CommandResponse");
         }
         Assert.True(roundTripResult.HasValue, "Should successfully convert back to CommandResponse");
-        
+
         var roundTripResponse = roundTripResult.Value!;
         Assert.Equal(originalResponse.Version, roundTripResponse.Version);
         Assert.Equal(originalResponse.Events.Count, roundTripResponse.Events.Count);
@@ -122,22 +122,24 @@ public class SerializableCommandResponseTests : IAsyncLifetime
             Version = 1,
             Events = new List<SerializableCommandResponse.SerializableEvent>()
         };
-        
+
         // Act - Serialize and deserialize
-        var json = System.Text.Json.JsonSerializer.Serialize(response, Sekiban.Pure.Dapr.Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
+        var json = JsonSerializer.Serialize(response, DaprSerializationOptions.Default.JsonSerializerOptions);
         _output.WriteLine($"Empty events JSON: {json}");
-        
-        var deserialized = System.Text.Json.JsonSerializer.Deserialize<SerializableCommandResponse>(
-            json, Sekiban.Pure.Dapr.Serialization.DaprSerializationOptions.Default.JsonSerializerOptions);
-        
+
+        var deserialized = JsonSerializer.Deserialize<SerializableCommandResponse>(
+            json,
+            DaprSerializationOptions.Default.JsonSerializerOptions);
+
         // Assert
         Assert.NotNull(deserialized);
         Assert.Equal(response.AggregateId, deserialized!.AggregateId);
         Assert.Equal(response.Version, deserialized.Version);
         Assert.Empty(deserialized.Events);
-        
+
         // Try to convert to CommandResponse
-        var commandResponseResult = await deserialized.ToCommandResponseAsync(_domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
+        var commandResponseResult = await deserialized.ToCommandResponseAsync(
+            _domainTypes ?? throw new InvalidOperationException("Domain types not initialized"));
         Assert.True(commandResponseResult.HasValue);
         Assert.Empty(commandResponseResult.Value!.Events);
     }
@@ -147,7 +149,10 @@ public class SerializableCommandResponseTests : IAsyncLifetime
     {
         // Arrange - Create an actual event
         var userId = Guid.NewGuid();
-        var partitionKeys = new PartitionKeys(userId, PartitionKeys.DefaultAggregateGroupName, PartitionKeys.DefaultRootPartitionKey);
+        var partitionKeys = new PartitionKeys(
+            userId,
+            PartitionKeys.DefaultAggregateGroupName,
+            PartitionKeys.DefaultRootPartitionKey);
         var userCreatedPayload = new UserCreated(userId, "Test User", "test@example.com");
         var userCreatedEvent = new Event<UserCreated>(
             Guid.NewGuid(),
@@ -155,30 +160,29 @@ public class SerializableCommandResponseTests : IAsyncLifetime
             partitionKeys,
             SortableUniqueIdValue.Generate(DateTime.UtcNow, Guid.NewGuid()),
             1,
-            new EventMetadata(string.Empty, string.Empty, string.Empty)
-        );
-        
+            new EventMetadata(string.Empty, string.Empty, string.Empty));
+
         // Act - Create SerializableEvent
         var serializableEvent = await SerializableCommandResponse.SerializableEvent.CreateFromAsync(
-            userCreatedEvent, 
+            userCreatedEvent,
             _domainTypes!.JsonSerializerOptions);
-        
+
         _output.WriteLine($"SerializableEvent - Type: {serializableEvent.EventTypeName}");
         _output.WriteLine($"SerializableEvent - Version: {serializableEvent.Version}");
         _output.WriteLine($"SerializableEvent - AggregateId: {serializableEvent.AggregateId}");
-        
+
         // Check if compressed payload is created
         Assert.NotEmpty(serializableEvent.CompressedPayloadJson);
-        
+
         // Try to convert back
         var eventResult = await serializableEvent.ToEventAsync(_domainTypes);
-        
+
         // Assert
         Assert.True(eventResult.HasValue, "Should successfully convert back to IEvent");
         var reconstructedEvent = eventResult.Value!;
         Assert.Equal(userCreatedEvent.Version, reconstructedEvent.Version);
         Assert.Equal(userCreatedEvent.PartitionKeys.AggregateId, reconstructedEvent.PartitionKeys.AggregateId);
-        
+
         var payload = reconstructedEvent.GetPayload() as UserCreated;
         Assert.NotNull(payload);
         Assert.Equal(userCreatedPayload.Name, payload!.Name);

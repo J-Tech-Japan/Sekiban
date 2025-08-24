@@ -2,24 +2,20 @@ using ResultBoxes;
 using Sekiban.Pure.Query;
 using System.IO.Compression;
 using System.Text.Json;
-
 namespace Sekiban.Pure.Dapr.Serialization;
 
 [Serializable]
 public record SerializableListQuery
 {
     public string QueryTypeName { get; init; } = string.Empty;
-    
+
     public byte[] CompressedQueryJson { get; init; } = Array.Empty<byte>();
-    
+
     public string QueryAssemblyVersion { get; init; } = string.Empty;
-    
+
     public SerializableListQuery() { }
 
-    private SerializableListQuery(
-        string queryTypeName,
-        byte[] compressedQueryJson,
-        string queryAssemblyVersion)
+    private SerializableListQuery(string queryTypeName, byte[] compressedQueryJson, string queryAssemblyVersion)
     {
         QueryTypeName = queryTypeName;
         CompressedQueryJson = compressedQueryJson;
@@ -27,40 +23,33 @@ public record SerializableListQuery
     }
 
     public static async Task<SerializableListQuery> CreateFromAsync(
-        IListQueryCommon query, 
+        IListQueryCommon query,
         JsonSerializerOptions options)
     {
         var queryType = query.GetType();
         var queryAssemblyVersion = queryType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
-        
+
         // Use default options if the provided options don't support the type
         byte[] queryJson;
         try
         {
-            queryJson = JsonSerializer.SerializeToUtf8Bytes(
-                query, 
-                queryType, 
-                options);
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(query, queryType, options);
         }
         catch (NotSupportedException)
         {
             // Fallback to default serialization options for types not in source generation
-            queryJson = JsonSerializer.SerializeToUtf8Bytes(
-                query, 
-                queryType);
+            queryJson = JsonSerializer.SerializeToUtf8Bytes(query, queryType);
         }
-        
+
         var compressedQueryJson = await CompressAsync(queryJson);
 
         return new SerializableListQuery(
             queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
             compressedQueryJson,
-            queryAssemblyVersion
-        );
+            queryAssemblyVersion);
     }
 
-    public async Task<ResultBox<IListQueryCommon>> ToListQueryAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<ResultBox<IListQueryCommon>> ToListQueryAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -69,7 +58,7 @@ public record SerializableListQuery
             {
                 // Use GetPayloadTypeByName from QueryTypes for better type resolution
                 queryType = domainTypes.QueryTypes.GetPayloadTypeByName(QueryTypeName);
-                
+
                 if (queryType == null)
                 {
                     return ResultBox<IListQueryCommon>.FromException(
@@ -89,18 +78,16 @@ public record SerializableListQuery
                 try
                 {
                     query = JsonSerializer.Deserialize(
-                        decompressedJson, 
-                        queryType, 
+                        decompressedJson,
+                        queryType,
                         domainTypes.JsonSerializerOptions) as IListQueryCommon;
                 }
                 catch (NotSupportedException)
                 {
                     // Fallback to default options
-                    query = JsonSerializer.Deserialize(
-                        decompressedJson, 
-                        queryType) as IListQueryCommon;
+                    query = JsonSerializer.Deserialize(decompressedJson, queryType) as IListQueryCommon;
                 }
-                
+
                 if (query == null)
                 {
                     return ResultBox<IListQueryCommon>.FromException(
@@ -109,7 +96,7 @@ public record SerializableListQuery
 
                 return ResultBox<IListQueryCommon>.FromValue(query);
             }
-            
+
             return ResultBox<IListQueryCommon>.FromException(
                 new InvalidOperationException("No list query data to deserialize"));
         }

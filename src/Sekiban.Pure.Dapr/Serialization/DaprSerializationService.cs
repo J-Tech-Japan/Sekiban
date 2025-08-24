@@ -1,24 +1,22 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Sekiban.Pure;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
-using Sekiban.Pure.Events;
 using Sekiban.Pure.Documents;
-
+using Sekiban.Pure.Events;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 namespace Sekiban.Pure.Dapr.Serialization;
 
 /// <summary>
-/// Default implementation of Dapr serialization service
+///     Default implementation of Dapr serialization service
 /// </summary>
 public class DaprSerializationService : IDaprSerializationService
 {
-    private readonly IDaprTypeRegistry _typeRegistry;
-    private readonly DaprSerializationOptions _options;
-    private readonly ILogger<DaprSerializationService> _logger;
     private readonly SekibanDomainTypes _domainTypes;
+    private readonly ILogger<DaprSerializationService> _logger;
+    private readonly DaprSerializationOptions _options;
+    private readonly IDaprTypeRegistry _typeRegistry;
 
     public DaprSerializationService(
         IDaprTypeRegistry typeRegistry,
@@ -66,7 +64,7 @@ public class DaprSerializationService : IDaprSerializationService
 
         try
         {
-            byte[] json = data;
+            var json = data;
 
             // Try to decompress if the data appears to be compressed
             if (_options.EnableCompression && IsCompressed(data))
@@ -94,20 +92,19 @@ public class DaprSerializationService : IDaprSerializationService
             var json = JsonSerializer.SerializeToUtf8Bytes(payload, payloadType, _options.JsonSerializerOptions);
 
             byte[] compressedPayload;
-            bool isCompressed = false;
+            var isCompressed = false;
 
             if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
             {
                 compressedPayload = DaprCompressionUtility.Compress(json);
                 isCompressed = true;
-            }
-            else
+            } else
             {
                 compressedPayload = json;
             }
 
-            var typeAlias = _options.EnableTypeAliases 
-                ? _typeRegistry.GetTypeAlias(payloadType) 
+            var typeAlias = _options.EnableTypeAliases
+                ? _typeRegistry.GetTypeAlias(payloadType)
                 : payloadType.AssemblyQualifiedName ?? payloadType.FullName ?? payloadType.Name;
             await Task.CompletedTask;
             return new DaprAggregateSurrogate
@@ -163,13 +160,13 @@ public class DaprSerializationService : IDaprSerializationService
                 // Try to find the type in Sekiban.Pure assembly
                 var sekibanAssembly = typeof(EmptyAggregatePayload).Assembly;
                 payloadType = sekibanAssembly.GetType(surrogate.PayloadTypeName);
-                
+
                 // If not found, try with namespace
                 if (payloadType == null)
                 {
                     payloadType = sekibanAssembly.GetType($"Sekiban.Pure.Aggregates.{surrogate.PayloadTypeName}");
                 }
-                
+
                 // If still not found, try to search all loaded assemblies for the type
                 if (payloadType == null)
                 {
@@ -190,12 +187,12 @@ public class DaprSerializationService : IDaprSerializationService
                 throw new InvalidOperationException($"Cannot resolve type: {surrogate.PayloadTypeName}");
             }
 
-            byte[] json = surrogate.IsCompressed
+            var json = surrogate.IsCompressed
                 ? DaprCompressionUtility.Decompress(surrogate.CompressedPayload)
                 : surrogate.CompressedPayload;
 
             var payload = JsonSerializer.Deserialize(json, payloadType, _options.JsonSerializerOptions);
-            
+
             if (payload == null)
             {
                 return null;
@@ -203,7 +200,8 @@ public class DaprSerializationService : IDaprSerializationService
 
             // Create aggregate instance
             var aggregate = new Aggregate(
-                payload as IAggregatePayload ?? throw new InvalidOperationException("Payload must implement IAggregatePayload"),
+                payload as IAggregatePayload ??
+                throw new InvalidOperationException("Payload must implement IAggregatePayload"),
                 new PartitionKeys(surrogate.AggregateId, string.Empty, surrogate.RootPartitionKey),
                 surrogate.Version,
                 surrogate.LastEventId ?? string.Empty, // LastSortableUniqueId
@@ -230,14 +228,13 @@ public class DaprSerializationService : IDaprSerializationService
             var json = JsonSerializer.SerializeToUtf8Bytes(command, commandType, _options.JsonSerializerOptions);
 
             byte[] commandData;
-            bool isCompressed = false;
+            var isCompressed = false;
 
             if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
             {
                 commandData = DaprCompressionUtility.Compress(json);
                 isCompressed = true;
-            }
-            else
+            } else
             {
                 commandData = json;
             }
@@ -293,11 +290,13 @@ public class DaprSerializationService : IDaprSerializationService
                 throw new InvalidOperationException($"Cannot resolve command type: {envelope.CommandType}");
             }
 
-            byte[] json = envelope.IsCompressed
+            var json = envelope.IsCompressed
                 ? DaprCompressionUtility.Decompress(envelope.CommandData)
                 : envelope.CommandData;
             await Task.CompletedTask;
-            var command = JsonSerializer.Deserialize(json, commandType, _options.JsonSerializerOptions) as ICommandWithHandlerSerializable;
+            var command
+                = JsonSerializer.Deserialize(json, commandType, _options.JsonSerializerOptions) as
+                    ICommandWithHandlerSerializable;
             return command;
         }
         catch (Exception ex)
@@ -307,7 +306,11 @@ public class DaprSerializationService : IDaprSerializationService
         }
     }
 
-    public async ValueTask<DaprEventEnvelope> SerializeEventAsync(IEvent @event, Guid aggregateId, int version, string rootPartitionKey)
+    public async ValueTask<DaprEventEnvelope> SerializeEventAsync(
+        IEvent @event,
+        Guid aggregateId,
+        int version,
+        string rootPartitionKey)
     {
         ArgumentNullException.ThrowIfNull(@event);
 
@@ -317,14 +320,13 @@ public class DaprSerializationService : IDaprSerializationService
             var json = JsonSerializer.SerializeToUtf8Bytes(@event, eventType, _options.JsonSerializerOptions);
 
             byte[] eventData;
-            bool isCompressed = false;
+            var isCompressed = false;
 
             if (_options.EnableCompression && json.Length > _options.CompressionThreshold)
             {
                 eventData = DaprCompressionUtility.Compress(json);
                 isCompressed = true;
-            }
-            else
+            } else
             {
                 eventData = json;
             }
@@ -368,7 +370,7 @@ public class DaprSerializationService : IDaprSerializationService
 
         try
         {
-            byte[] json = envelope.IsCompressed
+            var json = envelope.IsCompressed
                 ? DaprCompressionUtility.Decompress(envelope.EventData)
                 : envelope.EventData;
 
@@ -394,13 +396,13 @@ public class DaprSerializationService : IDaprSerializationService
                 new EventMetadata(
                     envelope.Metadata.GetValueOrDefault("CausationId", string.Empty),
                     envelope.Metadata.GetValueOrDefault("CorrelationId", string.Empty),
-                    envelope.Metadata.GetValueOrDefault("ExecutedUser", string.Empty)
-                )
-            );
+                    envelope.Metadata.GetValueOrDefault("ExecutedUser", string.Empty)));
 
             // Use IEventTypes.DeserializeToTyped to properly reconstruct the event
-            var eventResult = _domainTypes.EventTypes.DeserializeToTyped(eventDocumentCommon, _options.JsonSerializerOptions);
-            
+            var eventResult = _domainTypes.EventTypes.DeserializeToTyped(
+                eventDocumentCommon,
+                _options.JsonSerializerOptions);
+
             if (!eventResult.IsSuccess)
             {
                 _logger.LogError("Failed to deserialize event: {Error}", eventResult.GetException().Message);
@@ -416,9 +418,7 @@ public class DaprSerializationService : IDaprSerializationService
         }
     }
 
-    private static bool IsCompressed(byte[] data)
-    {
+    private static bool IsCompressed(byte[] data) =>
         // Check for GZip magic number
-        return data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b;
-    }
+        data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b;
 }

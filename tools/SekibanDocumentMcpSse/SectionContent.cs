@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Content of a specific section
+///     Content of a specific section
 /// </summary>
 public class SectionContent
 {

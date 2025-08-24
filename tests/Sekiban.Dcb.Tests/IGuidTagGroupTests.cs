@@ -2,8 +2,6 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>

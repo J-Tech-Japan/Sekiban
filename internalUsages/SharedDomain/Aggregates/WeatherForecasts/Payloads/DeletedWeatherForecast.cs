@@ -1,6 +1,4 @@
-using Orleans;
 using Sekiban.Pure.Aggregates;
-
 namespace SharedDomain.Aggregates.WeatherForecasts.Payloads;
 
 [GenerateSerializer]

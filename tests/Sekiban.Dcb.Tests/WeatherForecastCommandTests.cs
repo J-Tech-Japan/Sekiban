@@ -1,23 +1,20 @@
 using Dcb.Domain;
 using Dcb.Domain.Weather;
-using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-/// Tests for Weather domain commands using GeneralSekibanExecutor
-/// Testing create, change location name, and get operations
+///     Tests for Weather domain commands using GeneralSekibanExecutor
+///     Testing create, change location name, and get operations
 /// </summary>
 public class WeatherForecastCommandTests
 {
     private readonly InMemoryObjectAccessor _actorAccessor;
-    private readonly GeneralSekibanExecutor _executor;
     private readonly DcbDomainTypes _domainTypes;
     private readonly InMemoryEventStore _eventStore;
+    private readonly GeneralSekibanExecutor _executor;
 
     public WeatherForecastCommandTests()
     {
@@ -146,7 +143,7 @@ public class WeatherForecastCommandTests
         Assert.True(stateResult.IsSuccess);
         var state = stateResult.GetValue();
         Assert.NotNull(state);
-        
+
         var payload = state.Payload as WeatherForecastState;
         Assert.NotNull(payload);
         Assert.Equal(forecastId, payload.ForecastId);
@@ -280,7 +277,7 @@ public class WeatherForecastCommandTests
         var state = result.GetValue();
         Assert.NotNull(state);
         Assert.Equal(1, state.Version); // Should have version 1 after create
-        
+
         var payload = state.Payload as WeatherForecastState;
         Assert.NotNull(payload);
         Assert.Equal(forecastId, payload.ForecastId);

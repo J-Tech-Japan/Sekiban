@@ -1,28 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
-    <PackageReference Include="Google.Protobuf" Version="3.32.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.72.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1"/>
+        <PackageReference Include="Google.Protobuf" Version="3.32.0"/>
+        <PackageReference Include="Grpc.Tools" Version="2.72.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Sekiban.Pure\Sekiban.Pure.csproj" />
-    <ProjectReference Include="..\..\src\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Sekiban.Pure\Sekiban.Pure.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <Protobuf Include="Protos\**\*.proto" GrpcServices="Client" />
-  </ItemGroup>
+    <ItemGroup>
+        <Protobuf Include="Protos\**\*.proto" GrpcServices="Client"/>
+    </ItemGroup>
 
 </Project>

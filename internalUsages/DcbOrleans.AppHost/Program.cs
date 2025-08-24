@@ -1,8 +1,8 @@
+using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add Azure Storage emulator for Orleans
-var storage = builder.AddAzureStorage("azurestorage")
-    .RunAsEmulator();
+var storage = builder.AddAzureStorage("azurestorage").RunAsEmulator();
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -16,7 +16,8 @@ var postgres = builder
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans
-var orleans = builder.AddOrleans("default")
+var orleans = builder
+    .AddOrleans("default")
     .WithClustering(clusteringTable)
     .WithGrainStorage("Default", grainStorage)
     .WithGrainStorage("OrleansStorage", grainStorage)
@@ -25,13 +26,15 @@ var orleans = builder.AddOrleans("default")
     .WithStreaming(queue);
 
 // Add the API Service
-var apiService = builder.AddProject<Projects.DcbOrleans_ApiService>("apiservice")
+var apiService = builder
+    .AddProject<DcbOrleans_ApiService>("apiservice")
     .WithReference(postgres)
     .WithReference(orleans)
     .WaitFor(postgres);
 
 // Add the Web frontend
-builder.AddProject<Projects.DcbOrleans_Web>("webfrontend")
+builder
+    .AddProject<DcbOrleans_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);

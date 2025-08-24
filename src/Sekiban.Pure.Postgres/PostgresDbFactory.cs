@@ -32,12 +32,11 @@ public class PostgresDbFactory(SekibanPostgresDbOption dbOption, IPostgresMemory
 
     public async Task DeleteAllFromAggregateFromContainerIncludes()
     {
-        await DbActionAsync(
-            async dbContext =>
-            {
-                dbContext.Events.RemoveRange(dbContext.Events);
-                await dbContext.SaveChangesAsync();
-            });
+        await DbActionAsync(async dbContext =>
+        {
+            dbContext.Events.RemoveRange(dbContext.Events);
+            await dbContext.SaveChangesAsync();
+        });
     }
 
     public async Task DeleteAllFromEventContainer()

@@ -1,6 +1,5 @@
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
-
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -9,6 +8,21 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public interface IGeneralEventProvider : IDisposable
 {
+
+    /// <summary>
+    ///     Get current state of the provider
+    /// </summary>
+    EventProviderState State { get; }
+
+    /// <summary>
+    ///     Get current position being processed
+    /// </summary>
+    SortableUniqueId? CurrentPosition { get; }
+
+    /// <summary>
+    ///     Whether the provider has caught up to live events
+    /// </summary>
+    bool IsCaughtUp { get; }
     /// <summary>
     ///     Start providing events to the callback
     /// </summary>
@@ -62,21 +76,6 @@ public interface IGeneralEventProvider : IDisposable
         IEventProviderFilter? filter = null,
         int batchSize = 10000,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Get current state of the provider
-    /// </summary>
-    EventProviderState State { get; }
-
-    /// <summary>
-    ///     Get current position being processed
-    /// </summary>
-    SortableUniqueId? CurrentPosition { get; }
-
-    /// <summary>
-    ///     Whether the provider has caught up to live events
-    /// </summary>
-    bool IsCaughtUp { get; }
 
     /// <summary>
     ///     Get the safe window threshold

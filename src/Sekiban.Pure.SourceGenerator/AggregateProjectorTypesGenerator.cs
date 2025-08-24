@@ -55,8 +55,9 @@ public class AggregateProjectorTypesGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default));
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.Equals(
+                    iEventPayloadSymbol,
+                    SymbolEqualityComparer.Default));
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {

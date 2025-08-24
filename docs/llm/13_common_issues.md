@@ -89,13 +89,15 @@ public record YourCommand(...)
 var currentTime = SekibanDateProducer.GetRegistered().UtcNow;
 ```
 
-This approach allows you to use the same time source for both Sekiban's event sourcing system and external systems. Time can also be mocked during testing.
+This approach allows you to use the same time source for both Sekiban's event sourcing system and external systems. Time
+can also be mocked during testing.
 
 ## 4. Serialization Issues
 
 **Issue**: `System.NotSupportedException: Orleans serialization requires types to be serializable.`
 
-**Solution**: Ensure all types that are used in commands, events, and aggregates have the `[GenerateSerializer]` attribute:
+**Solution**: Ensure all types that are used in commands, events, and aggregates have the `[GenerateSerializer]`
+attribute:
 
 ```csharp
 [GenerateSerializer]
@@ -125,7 +127,7 @@ public class ComplexType
 
 **Issue**: Missing `YourProjectDomainDomainTypes` class.
 
-**Solution**: 
+**Solution**:
 
 1. Ensure your project compiles successfully
 2. Check that your domain types are correctly defined with the required attributes
@@ -233,7 +235,7 @@ public void TestSerializable()
 
 **Issue**: Slow performance with large event streams.
 
-**Solution**: 
+**Solution**:
 
 1. Consider implementing event snapshots
 2. Use appropriate database indexing
@@ -323,7 +325,9 @@ dotnet run --project MyProject.AppHost --launch-profile https
 
 **Issue**: Not sure which executor type to use.
 
-**Solution**: When implementing domain services or workflows, use the `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
+**Solution**: When implementing domain services or workflows, use the `ISekibanExecutor` interface instead of the
+concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the
+`Sekiban.Pure.Executors` namespace.
 
 ```csharp
 // Better for testability

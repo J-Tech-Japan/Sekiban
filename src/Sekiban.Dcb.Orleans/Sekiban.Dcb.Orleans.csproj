@@ -40,10 +40,10 @@
 
     <ItemGroup>
         <!-- Exclude domain-specific surrogates which must not be shipped from this shared library -->
-        <Compile Remove="Surrogates/GetWeatherForecastListQuerySurrogate.cs" />
-        <Compile Remove="Surrogates/GetWeatherForecastListQuerySurrogateConverter.cs" />
-        <Compile Remove="Surrogates/MultiProjectionGrainStatusSurrogate.cs" />
-        <Compile Remove="Surrogates/MultiProjectionGrainStatusSurrogateConverter.cs" />
+        <Compile Remove="Surrogates/GetWeatherForecastListQuerySurrogate.cs"/>
+        <Compile Remove="Surrogates/GetWeatherForecastListQuerySurrogateConverter.cs"/>
+        <Compile Remove="Surrogates/MultiProjectionGrainStatusSurrogate.cs"/>
+        <Compile Remove="Surrogates/MultiProjectionGrainStatusSurrogateConverter.cs"/>
     </ItemGroup>
 
 </Project>

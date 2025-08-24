@@ -40,7 +40,8 @@ dotnet test
 
 The `WeatherForecastTests` class contains tests for the Weather Forecast functionality:
 
-- `WeatherForecastsAreDisplayed`: Verifies that weather forecasts are displayed on the Weather page and checks that the forecasts contain locations, temperatures, and summaries.
+- `WeatherForecastsAreDisplayed`: Verifies that weather forecasts are displayed on the Weather page and checks that the
+  forecasts contain locations, temperatures, and summaries.
 
 ## Screenshots
 

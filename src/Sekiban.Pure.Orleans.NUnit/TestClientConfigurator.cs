@@ -6,10 +6,9 @@ public class TestClientConfigurator : IClientBuilderConfigurator
 {
     public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
     {
-        clientBuilder.ConfigureServices(
-            services =>
-            {
-                // services.AddSekibanOrleansClient();
-            });
+        clientBuilder.ConfigureServices(services =>
+        {
+            // services.AddSekibanOrleansClient();
+        });
     }
 }

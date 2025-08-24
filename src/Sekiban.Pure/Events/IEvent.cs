@@ -7,9 +7,9 @@ public interface IEvent
     public int Version { get; }
     public string SortableUniqueId { get; }
     public PartitionKeys PartitionKeys { get; }
+    public EventMetadata Metadata { get; }
 
     public SortableUniqueIdValue GetSortableUniqueId() => new(SortableUniqueId);
 
     public IEventPayload GetPayload();
-    public EventMetadata Metadata { get; }
 }

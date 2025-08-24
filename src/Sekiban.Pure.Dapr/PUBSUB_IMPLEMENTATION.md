@@ -1,10 +1,12 @@
 # Dapr PubSub Implementation for Sekiban
 
-This document describes the PubSub implementation for Sekiban.Pure.Dapr, which enables real-time event propagation to projectors using Dapr's pub/sub building block.
+This document describes the PubSub implementation for Sekiban.Pure.Dapr, which enables real-time event propagation to
+projectors using Dapr's pub/sub building block.
 
 ## Overview
 
-The implementation follows the Orleans pattern where events are streamed to projectors in real-time, but uses Dapr PubSub instead of Orleans streams. This provides:
+The implementation follows the Orleans pattern where events are streamed to projectors in real-time, but uses Dapr
+PubSub instead of Orleans streams. This provides:
 
 - **Real-time event processing**: Events are immediately published when saved
 - **Scalable projections**: Multiple projector instances can process events concurrently
@@ -134,6 +136,7 @@ public async Task HandlePublishedEvent(DaprEventEnvelope envelope)
 ### Dapr Components
 
 1. **PubSub Component** (`pubsub.yaml`):
+
 ```yaml
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -145,6 +148,7 @@ spec:
 ```
 
 2. **Subscription** (`subscription.yaml`):
+
 ```yaml
 apiVersion: dapr.io/v2alpha1
 kind: Subscription
@@ -162,6 +166,7 @@ scopes:
 ### Application Configuration
 
 In `Program.cs`:
+
 ```csharp
 builder.Services.AddSekibanWithDapr(domainTypes, options =>
 {
@@ -175,16 +180,20 @@ builder.Services.AddSekibanWithDapr(domainTypes, options =>
 ## Key Features
 
 ### 1. Duplicate Event Detection
+
 Events are checked for duplicates using their `SortableUniqueId` to ensure idempotent processing.
 
 ### 2. State Management
+
 - **Safe State**: Events older than 7 seconds, persisted every 5 minutes
 - **Unsafe State**: Recent events, kept in memory for immediate queries
 
 ### 3. Real-time Updates
+
 Events are processed immediately upon receipt, enabling real-time projection updates.
 
 ### 4. Fault Tolerance
+
 - Events continue to be published even if one fails
 - Actors maintain their state across restarts
 - Dapr ensures reliable message delivery
@@ -199,6 +208,7 @@ cd internalUsages/DaprSample
 ```
 
 The test script will:
+
 1. Create test users
 2. Update user information
 3. Verify projections are updated in real-time
@@ -231,6 +241,7 @@ The previous implementation used polling with reminders to check for new events.
 ### Duplicate Events
 
 The system handles duplicates automatically using `SortableUniqueId`. If you see duplicate processing:
+
 1. Check the duplicate detection logic in `HandlePublishedEvent`
 2. Verify `SortableUniqueId` is being generated correctly
 

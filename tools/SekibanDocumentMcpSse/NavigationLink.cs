@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Represents a navigation link in a Markdown document
+///     Represents a navigation link in a Markdown document
 /// </summary>
 public class NavigationLink
 {

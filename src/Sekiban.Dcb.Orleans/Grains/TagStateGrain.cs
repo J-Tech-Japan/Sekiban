@@ -1,5 +1,3 @@
-using Orleans;
-using Orleans.Runtime;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -12,14 +10,14 @@ namespace Sekiban.Dcb.Orleans.Grains;
 public class TagStateGrain : Grain, ITagStateGrain
 {
     private readonly IActorObjectAccessor _actorAccessor;
+    private readonly IPersistentState<TagStateCacheState> _cache;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private GeneralTagStateActor? _actor;
-    private readonly IPersistentState<TagStateCacheState> _cache;
 
     public TagStateGrain(
-        IEventStore eventStore, 
-        DcbDomainTypes domainTypes, 
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
         IActorObjectAccessor actorAccessor,
         [PersistentState("tagStateCache", "OrleansStorage")] IPersistentState<TagStateCacheState> cache)
     {
@@ -106,57 +104,13 @@ public class TagStateGrain : Grain, ITagStateGrain
         // Create the actor instance with Orleans-specific cache persistence
         var tagStatePersistent = new OrleansTagStatePersistent(_cache);
         _actor = new GeneralTagStateActor(
-            tagStateId, 
-            _eventStore, 
-            _domainTypes, 
+            tagStateId,
+            _eventStore,
+            _domainTypes,
             new TagStateOptions(),
             _actorAccessor,
             tagStatePersistent);
 
         return base.OnActivateAsync(cancellationToken);
     }
-}
-
-/// <summary>
-/// Orleans-specific implementation of ITagStatePersistent using grain state
-/// </summary>
-internal class OrleansTagStatePersistent : ITagStatePersistent
-{
-    private readonly IPersistentState<TagStateCacheState> _cache;
-
-    public OrleansTagStatePersistent(IPersistentState<TagStateCacheState> cache)
-    {
-        _cache = cache;
-    }
-
-    public Task<TagState?> LoadStateAsync()
-    {
-        if (_cache.State?.CachedState != null)
-        {
-            return Task.FromResult<TagState?>(_cache.State.CachedState);
-        }
-        return Task.FromResult<TagState?>(null);
-    }
-
-    public async Task SaveStateAsync(TagState state)
-    {
-        _cache.State = new TagStateCacheState { CachedState = state };
-        await _cache.WriteStateAsync();
-    }
-
-    public async Task ClearStateAsync()
-    {
-        _cache.State = new TagStateCacheState();
-        await _cache.WriteStateAsync();
-    }
-}
-
-/// <summary>
-/// State object for caching tag state in Orleans grain storage
-/// </summary>
-[GenerateSerializer]
-public class TagStateCacheState
-{
-    [Id(0)]
-    public TagState? CachedState { get; set; }
 }

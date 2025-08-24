@@ -5,8 +5,8 @@ namespace Sekiban.Pure.Orleans.Surrogates;
 public sealed class OrleansEventConverter<TEventPayload> : IConverter<Event<TEventPayload>, OrleansEvent<TEventPayload>>
     where TEventPayload : IEventPayload
 {
-    private readonly OrleansPartitionKeysConverter _partitionKeysConverter = new();
     private readonly OrleansEventMetadataConverter _metadataConverter = new();
+    private readonly OrleansPartitionKeysConverter _partitionKeysConverter = new();
 
     public Event<TEventPayload> ConvertFromSurrogate(in OrleansEvent<TEventPayload> surrogate) =>
         new(

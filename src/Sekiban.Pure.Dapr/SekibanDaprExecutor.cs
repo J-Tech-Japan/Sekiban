@@ -4,34 +4,30 @@ using Dapr.Actors.Client;
 using Dapr.Client;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
-using Sekiban.Pure.Command;
-using Sekiban.Pure.Dapr.Actors;
-using Sekiban.Pure.Dapr.Configuration;
-using Sekiban.Pure.Dapr.Parts;
-using Sekiban.Pure.Documents;
-using Sekiban.Pure.Events;
-using Sekiban.Pure.Exceptions;
-using Sekiban.Pure.Executors;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Dapr.Actors;
+using Sekiban.Pure.Dapr.Configuration;
+using Sekiban.Pure.Dapr.Parts;
+using Sekiban.Pure.Dapr.Serialization;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Executors;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-using Sekiban.Pure;
-using Sekiban.Pure.Dapr.Serialization;
-using System.Text.Json;
-using System.Linq;
+using System.Diagnostics;
 using SekibanCommandResponse = Sekiban.Pure.Command.Executor.CommandResponse;
 
 namespace Sekiban.Pure.Dapr;
 
 public class SekibanDaprExecutor : ISekibanExecutor
 {
-    private readonly DaprClient _daprClient;
     private readonly IActorProxyFactory _actorProxyFactory;
+    private readonly DaprClient _daprClient;
     private readonly SekibanDomainTypes _domainTypes;
-    private readonly IDaprSerializationService _serialization;
     private readonly DaprSekibanOptions _options;
+    private readonly IDaprSerializationService _serialization;
 
     public SekibanDaprExecutor(
         DaprClient daprClient,
@@ -55,36 +51,36 @@ public class SekibanDaprExecutor : ISekibanExecutor
         {
             // Get partition keys
             var partitionKeys = GetPartitionKeys(command);
-            
+
             // Get projector from command (matching Orleans pattern)
             var projector = command.GetProjector();
             var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, projector);
-            
+
             // Create actor ID using the correct grain key format (matching Orleans pattern)
             var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
-            
+
             // Debug: Print actor ID for troubleshooting
-            Console.WriteLine($"[DEBUG] Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
-            Console.WriteLine($"[DEBUG] ProjectorType: {projector.GetType().Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine(
+                $"[DEBUG] Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine(
+                $"[DEBUG] ProjectorType: {projector.GetType().Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
             Console.WriteLine($"[DEBUG] AggregateId: {partitionKeys.AggregateId}");
-            
-            var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
-                actorId,
-                nameof(AggregateActor));
+
+            var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(actorId, nameof(AggregateActor));
 
             // Create command metadata
             var commandId = Guid.NewGuid();
             var metadata = new CommandMetadata(
-                CommandId: commandId,
-                CausationId: relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
-                CorrelationId: commandId.ToString(),
-                ExecutedUser: "system");
+                commandId,
+                relatedEvent?.GetPayload()?.GetType().Name ?? string.Empty,
+                commandId.ToString(),
+                "system");
             // Create SerializableCommandAndMetadata
             var commandAndMetadata = await SerializableCommandAndMetadata.CreateFromAsync(
                 command,
                 metadata,
                 _domainTypes.JsonSerializerOptions);
-            
+
             // Execute command via SerializableCommandAndMetadata
             // Retry once if we get a 500 error (actor not yet created)
             SerializableCommandResponse envelopeResponse;
@@ -98,16 +94,16 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 await Task.Delay(100);
                 envelopeResponse = await aggregateActor.ExecuteCommandAsync(commandAndMetadata);
             }
-            
+
             // Convert SerializableCommandResponse back to SekibanCommandResponse
             var responseResult = await envelopeResponse.ToCommandResponseAsync(_domainTypes);
-            
-                if (!responseResult.HasValue || responseResult.Value is null)
+
+            if (!responseResult.HasValue || responseResult.Value is null)
             {
                 return ResultBox<SekibanCommandResponse>.FromException(
                     new InvalidOperationException("Failed to convert command response"));
             }
-            
+
             return ResultBox<SekibanCommandResponse>.FromValue(responseResult.Value);
         }
         catch (Exception ex)
@@ -127,29 +123,29 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 // Get the appropriate multi-projector name
                 var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
                     projectorResult.GetValue());
-                
+
                 if (!projectorNameResult.IsSuccess)
                 {
                     return ResultBox<T>.FromException(projectorNameResult.GetException());
                 }
-                
+
                 var projectorName = projectorNameResult.GetValue();
                 var actorId = new ActorId(projectorName);
                 var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
-                    actorId, 
+                    actorId,
                     nameof(MultiProjectorActor));
-                
+
                 // Wait for sortable unique ID if needed
-                if (query is IWaitForSortableUniqueId waitForQuery && 
+                if (query is IWaitForSortableUniqueId waitForQuery &&
                     !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
                     var pollingIntervalMs = 50; // Poll every 50ms for faster response
-                    
-                    var stopwatch = new System.Diagnostics.Stopwatch();
+
+                    var stopwatch = new Stopwatch();
                     stopwatch.Start();
-                    
+
                     while (stopwatch.ElapsedMilliseconds < timeoutMs)
                     {
                         var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
@@ -157,26 +153,28 @@ public class SekibanDaprExecutor : ISekibanExecutor
                         {
                             break;
                         }
-                        
+
                         await Task.Delay(pollingIntervalMs);
                     }
                 }
-                
+
                 // Convert query to serializable format
-                var serializableQuery = await SerializableQuery.CreateFromAsync(query, _domainTypes.JsonSerializerOptions);
+                var serializableQuery = await SerializableQuery.CreateFromAsync(
+                    query,
+                    _domainTypes.JsonSerializerOptions);
                 var serializableResult = await actor.QueryAsync(serializableQuery);
-                
+
                 // Convert back to ResultBox<object>
                 var resultBox = await serializableResult.ToResultBoxAsync(_domainTypes);
-                
+
                 if (!resultBox.IsSuccess)
                 {
                     return ResultBox<T>.FromException(resultBox.GetException());
                 }
-                
+
                 return ResultBox<T>.FromValue((T)resultBox.GetValue());
             }
-            
+
             // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IQueryCommon<T>, ResultBox<T>>(
                 _options.QueryServiceAppId,
@@ -192,7 +190,8 @@ public class SekibanDaprExecutor : ISekibanExecutor
 
     public SekibanDomainTypes GetDomainTypes() => _domainTypes;
 
-    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> query) where TResult : notnull
+    public async Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> query)
+        where TResult : notnull
     {
         try
         {
@@ -203,29 +202,29 @@ public class SekibanDaprExecutor : ISekibanExecutor
                 // Get the appropriate multi-projector name
                 var projectorNameResult = _domainTypes.MultiProjectorsType.GetMultiProjectorNameFromMultiProjector(
                     projectorResult.GetValue());
-                
+
                 if (!projectorNameResult.IsSuccess)
                 {
                     return ResultBox<ListQueryResult<TResult>>.FromException(projectorNameResult.GetException());
                 }
-                
+
                 var projectorName = projectorNameResult.GetValue();
                 var actorId = new ActorId(projectorName);
                 var actor = _actorProxyFactory.CreateActorProxy<IMultiProjectorActor>(
-                    actorId, 
+                    actorId,
                     nameof(MultiProjectorActor));
-                
+
                 // Wait for sortable unique ID if needed
-                if (query is IWaitForSortableUniqueId waitForQuery && 
+                if (query is IWaitForSortableUniqueId waitForQuery &&
                     !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
                 {
                     var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
                     var timeoutMs = 30000; // 30 seconds timeout
                     var pollingIntervalMs = 50; // Poll every 50ms for faster response
-                    
-                    var stopwatch = new System.Diagnostics.Stopwatch();
+
+                    var stopwatch = new Stopwatch();
                     stopwatch.Start();
-                    
+
                     while (stopwatch.ElapsedMilliseconds < timeoutMs)
                     {
                         var isReceived = await actor.IsSortableUniqueIdReceived(sortableUniqueId);
@@ -233,35 +232,37 @@ public class SekibanDaprExecutor : ISekibanExecutor
                         {
                             break;
                         }
-                        
+
                         await Task.Delay(pollingIntervalMs);
                     }
                 }
-                
+
                 // Convert query to serializable format
-                var serializableQuery = await SerializableListQuery.CreateFromAsync(query, _domainTypes.JsonSerializerOptions);
+                var serializableQuery = await SerializableListQuery.CreateFromAsync(
+                    query,
+                    _domainTypes.JsonSerializerOptions);
                 var serializableResult = await actor.QueryListAsync(serializableQuery);
-                
+
                 // Convert back to ResultBox<IListQueryResult>
                 var resultBox = await serializableResult.ToResultBoxAsync(_domainTypes);
-                
+
                 if (!resultBox.IsSuccess)
                 {
                     return ResultBox<ListQueryResult<TResult>>.FromException(resultBox.GetException());
                 }
-                
+
                 // Convert IListQueryResult to ListQueryResult<TResult>
                 var listResult = resultBox.GetValue();
                 if (listResult is ListQueryResult<TResult> typedResult)
                 {
                     return ResultBox<ListQueryResult<TResult>>.FromValue(typedResult);
                 }
-                
+
                 // If it's a generic result, convert it
                 var generalResult = listResult.ToGeneral(query);
                 return ListQueryResult<TResult>.FromGeneral(generalResult);
             }
-            
+
             // For other queries, delegate to a service
             return await _daprClient.InvokeMethodAsync<IListQueryCommon<TResult>, ResultBox<ListQueryResult<TResult>>>(
                 _options.QueryServiceAppId,
@@ -281,31 +282,31 @@ public class SekibanDaprExecutor : ISekibanExecutor
         {
             // Create PartitionKeysAndProjector (matching Orleans pattern)
             var partitionKeyAndProjector = new PartitionKeysAndProjector(partitionKeys, new TAggregateProjector());
-            
+
             // Create actor ID using the correct grain key format (matching Orleans pattern)
             var actorId = new ActorId(partitionKeyAndProjector.ToProjectorGrainKey());
-            
+
             // Debug: Print actor ID for troubleshooting
-            Console.WriteLine($"[DEBUG] LoadAggregate - Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
-            Console.WriteLine($"[DEBUG] LoadAggregate - ProjectorType: {typeof(TAggregateProjector).Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
+            Console.WriteLine(
+                $"[DEBUG] LoadAggregate - Creating ActorProxy with ActorId: {actorId.GetId()}, ActorType: {nameof(AggregateActor)}");
+            Console.WriteLine(
+                $"[DEBUG] LoadAggregate - ProjectorType: {typeof(TAggregateProjector).Name}, PartitionKeys: {partitionKeys.ToPrimaryKeysString()}");
             Console.WriteLine($"[DEBUG] LoadAggregate - AggregateId: {partitionKeys.AggregateId}");
-            
-            var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(
-                actorId,
-                nameof(AggregateActor));
+
+            var aggregateActor = _actorProxyFactory.CreateActorProxy<IAggregateActor>(actorId, nameof(AggregateActor));
 
             // Get the current state from the actor as SerializableAggregate
             var serializableAggregate = await aggregateActor.GetAggregateStateAsync();
-            
+
             // Convert SerializableAggregate back to Aggregate
             var aggregateOptional = await serializableAggregate.ToAggregateAsync(_domainTypes);
-            
+
             if (!aggregateOptional.HasValue)
             {
                 return ResultBox<Aggregate>.FromException(
-                    new InvalidOperationException($"Failed to deserialize aggregate from SerializableAggregate"));
+                    new InvalidOperationException("Failed to deserialize aggregate from SerializableAggregate"));
             }
-            
+
             return ResultBox<Aggregate>.FromValue(aggregateOptional.Value!);
         }
         catch (Exception ex)
@@ -319,12 +320,13 @@ public class SekibanDaprExecutor : ISekibanExecutor
     {
         var partitionKeysSpecifier = command.GetPartitionKeysSpecifier();
         var partitionKeys = partitionKeysSpecifier.DynamicInvoke(command) as PartitionKeys;
-        
+
         if (partitionKeys is null)
         {
-            throw new InvalidOperationException($"Failed to get partition keys for command type {command.GetType().Name}");
+            throw new InvalidOperationException(
+                $"Failed to get partition keys for command type {command.GetType().Name}");
         }
-        
+
         return partitionKeys;
     }
 }

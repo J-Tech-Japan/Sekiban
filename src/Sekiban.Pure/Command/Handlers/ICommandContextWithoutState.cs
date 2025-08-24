@@ -8,12 +8,12 @@ public interface ICommandContextWithoutState
 {
     public string OriginalSortableUniqueId { get; }
     public List<IEvent> Events { get; }
+    public EventMetadata EventMetadata { get; }
+    public CommandMetadata CommandMetadata { get; }
     public PartitionKeys GetPartitionKeys();
     public int GetNextVersion();
     public int GetCurrentVersion();
     internal CommandExecuted GetCommandExecuted(List<IEvent> producedEvents);
     public ResultBox<EventOrNone> AppendEvent(IEventPayload eventPayload);
-    public EventMetadata EventMetadata { get; }
-    public CommandMetadata CommandMetadata { get; }
     public ResultBox<T> GetService<T>() where T : notnull;
 }

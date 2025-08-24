@@ -8,19 +8,23 @@ Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azu
 
 ## (NEW) Sekiban new version - Sekiban.Pure.Orleans
 
-We moved main repository for the new Sekiban.Pure.Orleans and Sekiban.Pure.Dapr project and Sekiban Typescript Dapr. Past project Sekiban.Core and upto 0.23 version to core_main branch of this repository.
+We moved main repository for the new Sekiban.Pure.Orleans and Sekiban.Pure.Dapr project and Sekiban Typescript Dapr.
+Past project Sekiban.Core and upto 0.23 version to core_main branch of this repository.
 
 [Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
 
-mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェクト、Sekiban.Pure.Daprと Sekiban Typescript Dapr のみを残したものとなっています。旧バージョンは、core_mainブランチに残しています。
+mainレポジトリは、新しく開発中の Sekiban.Pure.Orleansプロジェクト、Sekiban.Pure.Daprと Sekiban Typescript Dapr
+のみを残したものとなっています。旧バージョンは、core_mainブランチに残しています。
 [Sekiban core_main branch](https://github.com/J-Tech-Japan/Sekiban/tree/core_main)
-
-
 
 ## What is Sekiban?
 
 **Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C#
-and .NET Core 9+, it allows developers to use a declarative API to create event sourcing applications. Sekiban now supports multiple runtime environments including [Microsoft Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/overview) with actor model for enhanced scalability and performance in multi-threaded environments, and [Dapr](https://dapr.io/) for distributed application development. Sekiban supports
+and .NET Core 9+, it allows developers to use a declarative API to create event sourcing applications. Sekiban now
+supports multiple runtime environments
+including [Microsoft Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/overview) with actor model for enhanced
+scalability and performance in multi-threaded environments, and [Dapr](https://dapr.io/) for distributed application
+development. Sekiban supports
 various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)
 and PostgreSQL, facilitating deployment on Azure, AWS, or any cloud platform.
 
@@ -29,7 +33,9 @@ and PostgreSQL, facilitating deployment on Azure, AWS, or any cloud platform.
 Sekiban is available in multiple implementations, all supporting Azure Cosmos DB or PostgreSQL as event stores:
 
 ### C# with Microsoft Orleans
-The C# implementation with Microsoft Orleans provides high-performance event sourcing using the actor model. This implementation offers exceptional scalability and performance in multi-threaded environments.
+
+The C# implementation with Microsoft Orleans provides high-performance event sourcing using the actor model. This
+implementation offers exceptional scalability and performance in multi-threaded environments.
 
 Create a new C# Orleans Sekiban application with:
 
@@ -39,6 +45,7 @@ dotnet new sekiban-orleans-aspire -n YourProjectName
 ```
 
 ### C# with Dapr
+
 The C# implementation with Dapr integration provides distributed event sourcing using virtual actors.
 
 Create a new C# Dapr Sekiban application with:
@@ -49,28 +56,34 @@ dotnet new sekiban-dapr-aspire -n YourProjectName
 ```
 
 ### TypeScript with Dapr (Alpha)
-The TypeScript implementation with Dapr offers the same event sourcing capabilities for Node.js developers in alpha version. It supports both in-memory storage for development and Azure Cosmos DB or PostgreSQL with Dapr actors for production use. Create a new TypeScript Sekiban application with:
+
+The TypeScript implementation with Dapr offers the same event sourcing capabilities for Node.js developers in alpha
+version. It supports both in-memory storage for development and Azure Cosmos DB or PostgreSQL with Dapr actors for
+production use. Create a new TypeScript Sekiban application with:
 
 ```bash
 npx create-sekiban-app my-app
 ```
 
-This creates a complete TypeScript application with domain models, REST API, event handlers, and projectors. Learn more in the [TypeScript packages directory](./ts).
+This creates a complete TypeScript application with domain models, REST API, event handlers, and projectors. Learn more
+in the [TypeScript packages directory](./ts).
 
 ## Getting started
 
+Do you want to start coding? If so, please
+see [Readme Pure](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure.md)
 
-Do you want to start coding? If so, please see [Readme Pure](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure.md)
-
-日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_JP.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
+日本語の情報をお探しでしょうか？ [Sekiban の紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/README_Sekiban_Pure_JP.md)
+のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
 
 ## AI Programming?
 
 ## Sekiban MCP (Model Context Protocol)
 
-Sekiban provides MCP (Model Context Protocol) support to enhance your development experience with AI coding assistants. The Sekiban MCP server offers direct access to Sekiban documentation and examples through Server-Sent Events (SSE).
+Sekiban provides MCP (Model Context Protocol) support to enhance your development experience with AI coding assistants.
+The Sekiban MCP server offers direct access to Sekiban documentation and examples through Server-Sent Events (SSE).
 
-**MCP Server URL:** 
+**MCP Server URL:**
 https://sekiban-doc-mcp.azurewebsites.net/
 if this does not work in your case, try below.
 https://sekiban-doc-mcp.azurewebsites.net/sse
@@ -83,26 +96,42 @@ To register Sekiban MCP with Claude Desktop, run the following command:
 claude mcp add sekibanDocument --transport sse https://sekiban-doc-mcp.azurewebsites.net/sse
 ```
 
-This integration allows you to access Sekiban documentation, examples, and best practices directly from your AI assistant, making development more efficient and informed.
+This integration allows you to access Sekiban documentation, examples, and best practices directly from your AI
+assistant, making development more efficient and informed.
 
 ## DCB (Dynamic Consistency Boundary)
 
-Sekiban is adopting the DCB (Dynamic Consistency Boundary) approach to offer a simpler and more flexible consistency model for event‑driven systems. DCB, introduced by Sara Pellegrini in the blog post "Killing the Aggregate", replaces rigid per‑aggregate transactional boundaries with a context‑sensitive consistency boundary based on the set of events relevant to a decision. Instead of maintaining multiple streams and coordinating cross‑aggregate invariants via sagas and compensating events, DCB allows a single event stream per bounded context where each event can carry multiple tags representing the entities or concepts it affects. Querying becomes a matter of filtering by event types and/or tags, enabling you to enforce strong consistency only where it truly matters while preserving scalability and simplicity. Learn more at https://dcb.events
+Sekiban is adopting the DCB (Dynamic Consistency Boundary) approach to offer a simpler and more flexible consistency
+model for event‑driven systems. DCB, introduced by Sara Pellegrini in the blog post "Killing the Aggregate", replaces
+rigid per‑aggregate transactional boundaries with a context‑sensitive consistency boundary based on the set of events
+relevant to a decision. Instead of maintaining multiple streams and coordinating cross‑aggregate invariants via sagas
+and compensating events, DCB allows a single event stream per bounded context where each event can carry multiple tags
+representing the entities or concepts it affects. Querying becomes a matter of filtering by event types and/or tags,
+enabling you to enforce strong consistency only where it truly matters while preserving scalability and simplicity.
+Learn more at https://dcb.events
 
 Current status in Sekiban:
 
 - C# implementation: actively under development inside this repository.
 - Data store: PostgreSQL already supported for the new DCB flow (additional providers may follow).
-- Upcoming query features: composite filtering using combinations of event types and multiple tags to express richer consistency and projection conditions.
-- Preview package: released as [Sekiban.Dcb](https://www.nuget.org/packages/Sekiban.Dcb) on NuGet for early experimentation.
-- Actor model integration: being developed to run DCB seamlessly with Microsoft Orleans so dynamic consistency boundaries can leverage actor-based scalability.
-- Release plan: continuing to refine APIs toward a stable 1.x release while iterating on multi-tag composite query capabilities.
+- Upcoming query features: composite filtering using combinations of event types and multiple tags to express richer
+  consistency and projection conditions.
+- Preview package: released as [Sekiban.Dcb](https://www.nuget.org/packages/Sekiban.Dcb) on NuGet for early
+  experimentation.
+- Actor model integration: being developed to run DCB seamlessly with Microsoft Orleans so dynamic consistency
+  boundaries can leverage actor-based scalability.
+- Release plan: continuing to refine APIs toward a stable 1.x release while iterating on multi-tag composite query
+  capabilities.
 
-Our goal is to let you model cross‑entity invariants without saga complexity, keeping a clean decision model and leveraging optimistic concurrency over dynamic query scopes instead of fixed aggregate streams.
+Our goal is to let you model cross‑entity invariants without saga complexity, keeping a clean decision model and
+leveraging optimistic concurrency over dynamic query scopes instead of fixed aggregate streams.
 
 ## Sponsors
 
-Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
+Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship
+information. If you are interested in the special sponsorship,
+please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us
+from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
 
 <p align="center">
   <h3 align="center">Special Sponsor</h3>
@@ -113,7 +142,6 @@ Sekiban is an Apache 2.0 open source project with its ongoing development. We wi
   <img alt="special sponsor jts" src="./docs/images/jtslogo.png" width="500">
   </a>
 </p>
-
 
 ## Understanding Event Sourcing and CQRS
 
@@ -161,7 +189,8 @@ Sekiban Pure is compatible with .NET 9.
 
 For **Azure Cosmos DB**, Sekiban supports
 the [Hierarchical Partition Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep)
-feature. This enables more efficient querying using Azure Cosmos DB by creating a Tenant (or Root Partition Key), Aggregate
+feature. This enables more efficient querying using Azure Cosmos DB by creating a Tenant (or Root Partition Key),
+Aggregate
 Type, and Partition Key.
 
 When using **Dynamo DB** with Sekiban, you need to set up a Partition Key and Sort Key.
@@ -175,7 +204,8 @@ provided the system memory can accommodate the size of the Multiple Projections.
 For more insights on Live Projections, please reference this informative article by Anton
 Stöckl: [Live Projections for Read Models with Event Sourcing and CQRS](https://medium.com/@TonyBologni/live-projections-for-read-models-with-event-sourcing-and-cqrs-42dd18b19fd0).
 
-Developers can implement materialized views using Azure Cosmos DB's and Dynamo DB's change feed feature. Although creation of
+Developers can implement materialized views using Azure Cosmos DB's and Dynamo DB's change feed feature. Although
+creation of
 materialized views with Change Feed is a straightforward process, it does not directly pertain to the Sekiban
 Framework's core functions, hence it hasn't been included within the framework.
 
@@ -190,7 +220,8 @@ project and determines its future direction.
 
 ## Documentation
 
-We are planning to deploy documentation on [Sekiban.dev](https://www.sekiban.dev), we have not done yet. eventually please see
+We are planning to deploy documentation on [Sekiban.dev](https://www.sekiban.dev), we have not done yet. eventually
+please see
 
 https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/intro.md
 
@@ -204,7 +235,9 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
 [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md)
 
 ## About Us
-**J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprise web application since 2008.
+
+**J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan
+and we have been developing enterprise web application since 2008.
 <p align="center">
   <a target="_blank" href="https://www.jtechs.com/japan/">
   <img alt="developer J-Tech Japan." src="./docs/images/jtechjapanlogo.svg" width="500">
