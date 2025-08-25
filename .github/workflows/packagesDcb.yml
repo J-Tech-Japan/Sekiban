@@ -22,11 +22,11 @@ jobs:
       run: |
         pushd ./
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore Sekiban.slnx
     - name: Build with dotnet
       run: |
         pushd ./
-        dotnet build Sekiban.sln -c Release
+        dotnet build Sekiban.slnx -c Release
     - name: Pack Sekiban.Dcb
       run: |
         dotnet nuget push "src/Sekiban.Dcb/bin/Release/Sekiban.Dcb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
@@ -36,3 +36,6 @@ jobs:
     - name: Pack Sekiban.Dcb.Postgres
       run: |
         dotnet nuget push "src/Sekiban.Dcb.Postgres/bin/Release/Sekiban.Dcb.Postgres.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Sekiban.Dcb.CosmosDb
+      run: |
+        dotnet nuget push "src/Sekiban.Dcb.CosmosDb/bin/Release/Sekiban.Dcb.CosmosDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

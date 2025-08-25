@@ -22,11 +22,11 @@ jobs:
       run: |
         pushd ./
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore Sekiban.slnx
     - name: Build with dotnet
       run: |
         pushd ./
-        dotnet build Sekiban.sln -c Release
+        dotnet build Sekiban.slnx -c Release
     - name: Pack Pure
       run: |
         dotnet nuget push "src/Sekiban.Pure/bin/Release/Sekiban.Pure.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

@@ -1,0 +1,62 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/internalUsages/">
+    <Project Path="internalUsages/DaprSample/DaprSample.Api/DaprSample.Api.csproj" />
+    <Project Path="internalUsages/DaprSample/DaprSample.AppHost/DaprSample.AppHost.csproj" />
+    <Project Path="internalUsages/DaprSample/DaprSample.EventRelay/DaprSample.EventRelay.csproj" />
+    <Project Path="internalUsages/DaprSample/DaprSample.ServiceDefaults/DaprSample.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/DaprSample/DaprSample.Tests/DaprSample.Tests.csproj" />
+    <Project Path="internalUsages/DaprSample/DaprSample.Web/DaprSample.Web.csproj" />
+    <Project Path="internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
+    <Project Path="internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
+    <Project Path="internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
+    <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
+    <Project Path="internalUsages/MemStat.Console/MemStat.Console.csproj" />
+    <Project Path="internalUsages/MemStat.Net.Web/MemStat.Net.Web.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.ApiService/OrleansSekiban.ApiService.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.AppHost/OrleansSekiban.AppHost.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.Playwright/OrleansSekiban.Playwright.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.ServiceDefaults/OrleansSekiban.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.Unit/OrleansSekiban.Unit.csproj" />
+    <Project Path="internalUsages/OrleansSekiban.Web/OrleansSekiban.Web.csproj" />
+    <Project Path="internalUsages/Pure.Domain/Pure.Domain.csproj" />
+    <Project Path="internalUsages/SharedDomain/SharedDomain.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/MemStat.Net/MemStat.Net.csproj" />
+    <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans/Sekiban.Dcb.Orleans.csproj" />
+    <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
+    <Project Path="src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />
+    <Project Path="src/Sekiban.Dcb/Sekiban.Dcb.csproj" />
+    <Project Path="src/Sekiban.Pure.AspNetCore/Sekiban.Pure.AspNetCore.csproj" />
+    <Project Path="src/Sekiban.Pure.CosmosDb/Sekiban.Pure.CosmosDb.csproj" />
+    <Project Path="src/Sekiban.Pure.Dapr/Sekiban.Pure.Dapr.csproj" />
+    <Project Path="src/Sekiban.Pure.NUnit/Sekiban.Pure.NUnit.csproj" />
+    <Project Path="src/Sekiban.Pure.Orleans.NUnit/Sekiban.Pure.Orleans.NUnit.csproj" />
+    <Project Path="src/Sekiban.Pure.Orleans.xUnit/Sekiban.Pure.Orleans.xUnit.csproj" />
+    <Project Path="src/Sekiban.Pure.Orleans/Sekiban.Pure.Orleans.csproj" />
+    <Project Path="src/Sekiban.Pure.Postgres.MigrationHost/Sekiban.Pure.Postgres.MigrationHost.csproj" />
+    <Project Path="src/Sekiban.Pure.Postgres/Sekiban.Pure.Postgres.csproj" />
+    <Project Path="src/Sekiban.Pure.ReadModel/Sekiban.Pure.ReadModel.csproj" />
+    <Project Path="src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj" />
+    <Project Path="src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj" />
+    <Project Path="src/Sekiban.Pure/Sekiban.Pure.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/MemStat.Net.Test/MemStat.Net.Test.csproj" />
+    <Project Path="tests/Pure.Domain.Test/Pure.Domain.Test.csproj" />
+    <Project Path="tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj" />
+    <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="tools/SekibanDocumentMcpSse/SekibanDocumentMcpSse.csproj" />
+  </Folder>
+</Solution>
