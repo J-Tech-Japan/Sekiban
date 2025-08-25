@@ -20,7 +20,8 @@
 
 ## Deployment Guide
 
-This guide covers deployment options for Sekiban applications using the provided Bicep templates. Currently, Azure deployment is supported with templates for both Orleans and Dapr implementations.
+This guide covers deployment options for Sekiban applications using the provided Bicep templates. Currently, Azure
+deployment is supported with templates for both Orleans and Dapr implementations.
 
 ## Prerequisites
 
@@ -48,11 +49,14 @@ Sekiban provides pre-configured Bicep templates for different Azure deployment s
 ### Orleans-based Deployments
 
 #### 1. Azure App Service (Full Featured)
+
 **Location**: `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/infrastructure/azure_appservice/`
 
-**Best for**: Production applications requiring full App Service features, SSL certificates, custom domains, and integrated monitoring.
+**Best for**: Production applications requiring full App Service features, SSL certificates, custom domains, and
+integrated monitoring.
 
 **Features**:
+
 - Azure App Service with scaling capabilities
 - Azure SQL Database or Cosmos DB
 - Application Insights integration
@@ -60,22 +64,27 @@ Sekiban provides pre-configured Bicep templates for different Azure deployment s
 - Staging slots for blue-green deployments
 
 #### 2. Azure App Service (Minimal)
+
 **Location**: `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/infrastructure/azure_appservice_minimal/`
 
 **Best for**: Development, testing, or cost-optimized production deployments.
 
 **Features**:
+
 - Basic Azure App Service
 - Minimal resource configuration
 - Essential monitoring
 - Cost-optimized setup
 
 #### 3. Azure Container Apps (Orleans)
+
 **Location**: `templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/infrastructure/azure_container_apps/`
 
-**Best for**: Cloud-native applications requiring containerized deployment with advanced scaling and microservices architecture.
+**Best for**: Cloud-native applications requiring containerized deployment with advanced scaling and microservices
+architecture.
 
 **Features**:
+
 - Container Apps Environment
 - Auto-scaling based on demand
 - KEDA-based scaling triggers
@@ -85,11 +94,13 @@ Sekiban provides pre-configured Bicep templates for different Azure deployment s
 ### Dapr-based Deployments
 
 #### 4. Azure Container Apps (Dapr)
+
 **Location**: `templates/Sekiban.Pure.Templates/content/Sekiban.Dapr.Aspire/infrastructure/azure_container_apps/`
 
 **Best for**: Microservices applications leveraging Dapr's sidecar pattern with cloud-native scaling.
 
 **Features**:
+
 - Dapr integration with sidecar pattern
 - Service Bus for pub/sub messaging
 - Container Apps with Dapr components
@@ -158,12 +169,14 @@ chmod +x ./deploy.sh
 ### Orleans App Service Template
 
 **Resource Providers Required**:
+
 - `Microsoft.Web` (App Service)
 - `Microsoft.Sql` (Azure SQL Database)
 - `Microsoft.DocumentDB` (Cosmos DB)
 - `Microsoft.Insights` (Application Insights)
 
 **Key Components**:
+
 - App Service Plan with auto-scaling
 - Azure SQL Database or Cosmos DB
 - Application Insights for monitoring
@@ -172,12 +185,14 @@ chmod +x ./deploy.sh
 ### Orleans Container Apps Template
 
 **Resource Providers Required**:
+
 - `Microsoft.App` (Container Apps)
 - `Microsoft.ContainerService` (Container Apps Environment)
 - `Microsoft.OperationalInsights` (Log Analytics)
 - `Microsoft.DocumentDB` (Cosmos DB)
 
 **Key Components**:
+
 - Container Apps Environment
 - Container Apps with Orleans configuration
 - Log Analytics workspace
@@ -187,12 +202,14 @@ chmod +x ./deploy.sh
 ### Dapr Container Apps Template
 
 **Resource Providers Required**:
+
 - `Microsoft.App` (Container Apps)
 - `Microsoft.ContainerService` (Container Apps Environment)
 - `Microsoft.OperationalInsights` (Log Analytics)
 - `Microsoft.ServiceBus` (Service Bus for Dapr pub/sub)
 
 **Key Components**:
+
 - Container Apps Environment with Dapr
 - Dapr components (state store, pub/sub)
 - Service Bus for messaging
@@ -232,6 +249,7 @@ Templates support environment-specific configurations:
 Templates support multiple database options:
 
 **Azure SQL Database** (Orleans):
+
 ```json
 {
     "database": {
@@ -243,6 +261,7 @@ Templates support multiple database options:
 ```
 
 **Cosmos DB** (Orleans/Dapr):
+
 ```json
 {
     "database": {
@@ -254,6 +273,7 @@ Templates support multiple database options:
 ```
 
 **PostgreSQL** (Dapr):
+
 ```json
 {
     "database": {
@@ -269,18 +289,21 @@ Templates support multiple database options:
 All templates include monitoring capabilities:
 
 ### Application Insights
+
 - Request tracking
 - Dependency monitoring
 - Exception logging
 - Custom metrics
 
 ### Log Analytics
+
 - Container logs
 - Application logs
 - Performance metrics
 - Query capabilities
 
 ### Health Checks
+
 - Readiness probes
 - Liveness probes
 - Startup probes
@@ -288,6 +311,7 @@ All templates include monitoring capabilities:
 ## Security Considerations
 
 ### Key Vault Integration
+
 Templates include Azure Key Vault for secure secret management:
 
 ```json
@@ -303,6 +327,7 @@ Templates include Azure Key Vault for secure secret management:
 ```
 
 ### Managed Identity
+
 Templates use Managed Identity for secure Azure service authentication:
 
 ```bicep
@@ -313,6 +338,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 ```
 
 ### Network Security
+
 - Private endpoints for databases
 - Virtual network integration
 - Network security groups
@@ -321,6 +347,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 ## Scaling Configuration
 
 ### Orleans Scaling
+
 ```json
 {
     "orleans": {
@@ -337,6 +364,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 ```
 
 ### Dapr Scaling
+
 ```json
 {
     "dapr": {
@@ -356,6 +384,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 Templates are designed to work with Azure DevOps and GitHub Actions:
 
 ### Azure DevOps Pipeline
+
 ```yaml
 - task: AzureCLI@2
   displayName: 'Deploy Infrastructure'
@@ -368,6 +397,7 @@ Templates are designed to work with Azure DevOps and GitHub Actions:
 ```
 
 ### GitHub Actions
+
 ```yaml
 - name: Deploy to Azure
   uses: azure/CLI@v1
@@ -389,8 +419,8 @@ Templates are designed to work with Azure DevOps and GitHub Actions:
    ```
 
 2. **Insufficient Permissions**:
-   - Ensure you have Contributor role on the subscription
-   - Check resource group permissions
+    - Ensure you have Contributor role on the subscription
+    - Check resource group permissions
 
 3. **Template Validation Errors**:
    ```bash
@@ -398,8 +428,8 @@ Templates are designed to work with Azure DevOps and GitHub Actions:
    ```
 
 4. **Container Image Issues**:
-   - Verify container registry access
-   - Check image tags and versions
+    - Verify container registry access
+    - Check image tags and versions
 
 ### Debugging Deployments
 
@@ -419,17 +449,20 @@ az containerapp logs show --name myapp --resource-group myRG
 The following deployment options are planned for future releases:
 
 ### On-Premises Deployment
+
 - Docker Compose templates
 - Kubernetes manifests
 - Helm charts
 
 ### AWS Deployment
+
 - CloudFormation templates
 - ECS/Fargate deployment
 - EKS cluster setup
 - Lambda serverless options
 
 ### Google Cloud Platform
+
 - Cloud Run deployment
 - GKE cluster setup
 - Cloud Functions integration
@@ -447,6 +480,7 @@ The following deployment options are planned for future releases:
 ## Next Steps
 
 After deployment:
+
 1. Configure monitoring dashboards
 2. Set up alerts and notifications
 3. Implement backup and disaster recovery

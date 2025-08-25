@@ -5,6 +5,7 @@ using ResultBoxes;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exceptions;
+using System.Net;
 using System.Text.Json;
 namespace Sekiban.Pure.CosmosDb;
 
@@ -29,7 +30,7 @@ public class CosmosDbFactory(
             await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event);
             await Task.Delay(3000);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             // Container doesn't exist - nothing to delete, which is fine for cleanup
         }
@@ -93,12 +94,11 @@ public class CosmosDbFactory(
     {
         return ResultBox<SekibanAzureCosmosDbOption>
             .FromValue(sekibanAzureCosmosDbOptions)
-            .Conveyor(
-                azureOptions => azureOptions.CosmosConnectionString switch
-                {
-                    { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
-                    _ => new SekibanConfigurationException("CosmosConnectionString is not set.")
-                });
+            .Conveyor(azureOptions => azureOptions.CosmosConnectionString switch
+            {
+                { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
+                _ => new SekibanConfigurationException("CosmosConnectionString is not set.")
+            });
     }
 
     public string GetDatabaseId() => sekibanAzureCosmosDbOptions.CosmosDatabase ?? string.Empty;
@@ -224,7 +224,7 @@ public class CosmosDbFactory(
     }
 
     /// <summary>
-    /// CosmosDBアイテムを安全に削除する
+    ///     CosmosDBアイテムを安全に削除する
     /// </summary>
     private async Task DeleteItemSafely(Container container, Guid id, PartitionKey partitionKey)
     {
@@ -232,7 +232,7 @@ public class CosmosDbFactory(
         {
             await container.DeleteItemAsync<IDocument>(id.ToString(), partitionKey);
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             // アイテムが既に削除されている場合は無視
         }

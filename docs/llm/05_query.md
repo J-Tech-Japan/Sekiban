@@ -66,6 +66,7 @@ public record YourListQuery(string FilterParameter = null)
 ```
 
 **Required for List Queries**:
+
 - Implement `IMultiProjectionListQuery<TProjection, TQuery, TResult>` interface
 - Implement static `HandleFilter` method to filter data based on query parameters
 - Implement static `HandleSort` method to sort the filtered results
@@ -153,6 +154,7 @@ public record YourNonListQuery(string Parameter)
 ```
 
 **Required for Non-List Queries**:
+
 - Implement `IMultiProjectionQuery<TProjection, TQuery, TResult>` interface
 - Implement static `HandleQuery` method that returns a single result
 - The result type can be any serializable type (bool, string, int, custom record, etc.)
@@ -216,7 +218,8 @@ public record GetUserDetailsQuery(Guid UserId)
 
 ### Waiting for Specific Events with IWaitForSortableUniqueId
 
-When building real-time UI applications with event sourcing, there's often a lag between command execution and when the updated state is available for queries. Sekiban solves this with the `IWaitForSortableUniqueId` interface.
+When building real-time UI applications with event sourcing, there's often a lag between command execution and when the
+updated state is available for queries. Sekiban solves this with the `IWaitForSortableUniqueId` interface.
 
 ```csharp
 // Define a query that can wait for specific events
@@ -240,6 +243,7 @@ public record YourQuery(string QueryParam) :
 ```
 
 **Required for Wait-Enabled Queries**:
+
 - Implement the `IWaitForSortableUniqueId` interface
 - Add a public property `WaitForSortableUniqueId` with getter and setter
 - The property should be nullable string type
@@ -278,6 +282,7 @@ var updatedResult = await client.GetResultAsync(commandResult.LastSortableUnique
 ```
 
 **Key Points**:
+
 - The `LastSortableUniqueId` is available in command execution results
 - Pass this ID to subsequent queries to ensure they see the updated state
 - This provides immediate consistency in your application UI

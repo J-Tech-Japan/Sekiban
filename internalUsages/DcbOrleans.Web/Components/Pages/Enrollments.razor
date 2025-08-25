@@ -1,12 +1,7 @@
 @page "/enrollments"
+@using Dcb.Domain.Enrollment
 @attribute [StreamRendering]
 @rendermode InteractiveServer
-
-@using Dcb.Domain.Student
-@using Dcb.Domain.ClassRoom
-@using Dcb.Domain.Enrollment
-@using System.Net.Http
-@using System.Net.Http.Json
 
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JsRuntime
@@ -35,7 +30,7 @@
                         }
                     </select>
                 </div>
-                
+
                 <div class="mb-3">
                     <label for="classroomSelect" class="form-label">Select Classroom</label>
                     <select id="classroomSelect" class="form-select" @bind="selectedClassroomId">
@@ -51,11 +46,12 @@
                         }
                     </select>
                 </div>
-                
-                <button class="btn btn-primary" @onclick="HandleEnrollStudent" disabled="@(string.IsNullOrEmpty(selectedStudentId) || string.IsNullOrEmpty(selectedClassroomId))">
+
+                <button class="btn btn-primary" @onclick="HandleEnrollStudent"
+                        disabled="@(string.IsNullOrEmpty(selectedStudentId) || string.IsNullOrEmpty(selectedClassroomId))">
                     Enroll Student
                 </button>
-                
+
                 @if (!string.IsNullOrEmpty(enrollmentMessage))
                 {
                     <div class="alert @(enrollmentError ? "alert-danger" : "alert-success") mt-3" role="alert">
@@ -65,7 +61,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
@@ -87,11 +83,12 @@
                         }
                     </select>
                 </div>
-                
-                <button class="btn btn-warning" @onclick="HandleDropStudent" disabled="@string.IsNullOrEmpty(selectedEnrollmentForDrop)">
+
+                <button class="btn btn-warning" @onclick="HandleDropStudent"
+                        disabled="@string.IsNullOrEmpty(selectedEnrollmentForDrop)">
                     Drop Student
                 </button>
-                
+
                 @if (!string.IsNullOrEmpty(dropMessage))
                 {
                     <div class="alert @(dropError ? "alert-danger" : "alert-success") mt-3" role="alert">
@@ -105,42 +102,41 @@
 
 <div class="mt-4">
     <h3>Current Enrollments</h3>
-    
+
     @if (enrollments == null)
     {
         <p><em>Loading...</em></p>
-    }
-    else if (enrollments.Count == 0)
+    } else if (enrollments.Count == 0)
     {
         <p>No enrollments found.</p>
-    }
-    else
+    } else
     {
         <table class="table">
             <thead>
-                <tr>
-                    <th>Student Name</th>
-                    <th>Grade</th>
-                    <th>Classroom</th>
-                    <th>Enrollment Date</th>
-                    <th>Actions</th>
-                </tr>
+            <tr>
+                <th>Student Name</th>
+                <th>Grade</th>
+                <th>Classroom</th>
+                <th>Enrollment Date</th>
+                <th>Actions</th>
+            </tr>
             </thead>
             <tbody>
-                @foreach (var enrollment in enrollments)
-                {
-                    <tr>
-                        <td>@enrollment.StudentName</td>
-                        <td>@enrollment.Grade</td>
-                        <td>@enrollment.ClassName</td>
-                        <td>@enrollment.EnrollmentDate.ToString("d")</td>
-                        <td>
-                            <button class="btn btn-sm btn-danger" @onclick="() => HandleQuickDrop(enrollment.StudentId, enrollment.ClassRoomId)">
-                                Drop
-                            </button>
-                        </td>
-                    </tr>
-                }
+            @foreach (var enrollment in enrollments)
+            {
+                <tr>
+                    <td>@enrollment.StudentName</td>
+                    <td>@enrollment.Grade</td>
+                    <td>@enrollment.ClassName</td>
+                    <td>@enrollment.EnrollmentDate.ToString("d")</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger"
+                                @onclick="() => HandleQuickDrop(enrollment.StudentId, enrollment.ClassRoomId)">
+                            Drop
+                        </button>
+                    </td>
+                </tr>
+            }
             </tbody>
         </table>
     }
@@ -150,16 +146,16 @@
     private List<StudentView>? students;
     private List<ClassroomView>? classrooms;
     private List<EnrollmentView>? enrollments;
-    
+
     private string selectedStudentId = string.Empty;
     private string selectedClassroomId = string.Empty;
     private string selectedEnrollmentForDrop = string.Empty;
-    
+
     private string enrollmentMessage = string.Empty;
-    private bool enrollmentError = false;
-    
+    private bool enrollmentError;
+
     private string dropMessage = string.Empty;
-    private bool dropError = false;
+    private bool dropError;
 
     public class StudentView
     {
@@ -199,11 +195,7 @@
 
     private async Task LoadData()
     {
-        await Task.WhenAll(
-            LoadStudents(),
-            LoadClassrooms(),
-            LoadEnrollments()
-        );
+        await Task.WhenAll(LoadStudents(), LoadClassrooms(), LoadEnrollments());
     }
 
     private async Task LoadStudents()
@@ -253,8 +245,7 @@
 
     private async Task HandleEnrollStudent()
     {
-        if (!Guid.TryParse(selectedStudentId, out var studentId) || 
-            !Guid.TryParse(selectedClassroomId, out var classroomId))
+        if (!Guid.TryParse(selectedStudentId, out var studentId) || !Guid.TryParse(selectedClassroomId, out var classroomId))
         {
             enrollmentMessage = "Invalid selection. Please select both a student and a classroom.";
             enrollmentError = true;
@@ -266,7 +257,7 @@
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new EnrollStudentInClassRoom(studentId, classroomId);
             var response = await httpClient.PostAsJsonAsync("api/enrollments/add", command);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 enrollmentMessage = "Student enrolled successfully!";
@@ -274,8 +265,7 @@
                 selectedStudentId = string.Empty;
                 selectedClassroomId = string.Empty;
                 await LoadData();
-            }
-            else
+            } else
             {
                 var error = await response.Content.ReadAsStringAsync();
                 enrollmentMessage = $"Failed to enroll student: {error}";
@@ -299,9 +289,7 @@
         }
 
         var parts = selectedEnrollmentForDrop.Split(':');
-        if (parts.Length != 2 || 
-            !Guid.TryParse(parts[0], out var studentId) || 
-            !Guid.TryParse(parts[1], out var classroomId))
+        if (parts.Length != 2 || !Guid.TryParse(parts[0], out var studentId) || !Guid.TryParse(parts[1], out var classroomId))
         {
             dropMessage = "Invalid selection.";
             dropError = true;
@@ -323,7 +311,7 @@
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new DropStudentFromClassRoom(studentId, classroomId);
             var response = await httpClient.PostAsJsonAsync("api/enrollments/drop", command);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 dropMessage = "Student dropped successfully!";
@@ -332,8 +320,7 @@
                 enrollmentError = dropError;
                 selectedEnrollmentForDrop = string.Empty;
                 await LoadData();
-            }
-            else
+            } else
             {
                 var error = await response.Content.ReadAsStringAsync();
                 dropMessage = $"Failed to drop student: {error}";

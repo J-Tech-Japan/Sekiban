@@ -2,37 +2,34 @@ using Sekiban.Pure.Events;
 namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
-/// Event context
+///     Event context
 /// </summary>
 public class EventContext
 {
     /// <summary>
-    /// Event
+    ///     Event
     /// </summary>
     public IEvent Event { get; }
-    
+
     /// <summary>
-    /// Root partition key
+    ///     Root partition key
     /// </summary>
     public string RootPartitionKey => Event.PartitionKeys.RootPartitionKey;
-    
+
     /// <summary>
-    /// Aggregate group
+    ///     Aggregate group
     /// </summary>
     public string AggregateGroup => Event.PartitionKeys.Group;
-    
+
     /// <summary>
-    /// Target ID
+    ///     Target ID
     /// </summary>
     public Guid TargetId => Event.PartitionKeys.AggregateId;
-    
+
     /// <summary>
-    /// Sortable unique ID
+    ///     Sortable unique ID
     /// </summary>
     public string SortableUniqueId => Event.SortableUniqueId;
-    
-    public EventContext(IEvent @event)
-    {
-        Event = @event;
-    }
+
+    public EventContext(IEvent @event) => Event = @event;
 }

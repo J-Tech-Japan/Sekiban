@@ -2,8 +2,9 @@ using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
-using Sekiban.Dcb.Queries;using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Tests;
 
@@ -30,7 +31,8 @@ public class GeneralMultiProjectionActorSafeWindowTests
             tagTypes,
             tagProjectorTypes,
             tagStatePayloadTypes,
-            multiProjectorTypes, new SimpleQueryTypes());
+            multiProjectorTypes,
+            new SimpleQueryTypes());
 
         // Set SafeWindow to 5 seconds for testing
         _options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 5000 };

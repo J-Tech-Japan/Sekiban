@@ -1,43 +1,33 @@
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
-
 namespace Sekiban.Dcb.Orleans.Streams;
 
 /// <summary>
-/// Common event filters for Orleans event subscriptions
+///     Common event filters for Orleans event subscriptions
 /// </summary>
 public static class EventFilters
 {
     /// <summary>
-    /// Filter events by event type
+    ///     Filter events by event type
     /// </summary>
     public class EventTypeFilter : IEventFilter
     {
         private readonly HashSet<string> _eventTypes;
 
-        public EventTypeFilter(params string[] eventTypes)
-        {
-            _eventTypes = new HashSet<string>(eventTypes);
-        }
+        public EventTypeFilter(params string[] eventTypes) => _eventTypes = new HashSet<string>(eventTypes);
 
-        public EventTypeFilter(IEnumerable<string> eventTypes)
-        {
-            _eventTypes = new HashSet<string>(eventTypes);
-        }
+        public EventTypeFilter(IEnumerable<string> eventTypes) => _eventTypes = new HashSet<string>(eventTypes);
 
-        public bool ShouldInclude(Event evt)
-        {
-            return _eventTypes.Contains(evt.EventType);
-        }
+        public bool ShouldInclude(Event evt) => _eventTypes.Contains(evt.EventType);
     }
 
     /// <summary>
-    /// Filter events by tag
+    ///     Filter events by tag
     /// </summary>
     public class TagFilter : IEventFilter
     {
-        private readonly HashSet<string> _tags;
         private readonly bool _requireAll;
+        private readonly HashSet<string> _tags;
 
         public TagFilter(bool requireAll = false, params string[] tags)
         {
@@ -64,30 +54,21 @@ public static class EventFilters
                 // Event must have all specified tags
                 return _tags.All(tag => evt.Tags.Contains(tag));
             }
-            else
-            {
-                // Event must have at least one of the specified tags
-                return _tags.Any(tag => evt.Tags.Contains(tag));
-            }
+            // Event must have at least one of the specified tags
+            return _tags.Any(tag => evt.Tags.Contains(tag));
         }
     }
 
     /// <summary>
-    /// Filter events by tag group
+    ///     Filter events by tag group
     /// </summary>
     public class TagGroupFilter : IEventFilter
     {
         private readonly HashSet<string> _tagGroups;
 
-        public TagGroupFilter(params string[] tagGroups)
-        {
-            _tagGroups = new HashSet<string>(tagGroups);
-        }
+        public TagGroupFilter(params string[] tagGroups) => _tagGroups = new HashSet<string>(tagGroups);
 
-        public TagGroupFilter(IEnumerable<string> tagGroups)
-        {
-            _tagGroups = new HashSet<string>(tagGroups);
-        }
+        public TagGroupFilter(IEnumerable<string> tagGroups) => _tagGroups = new HashSet<string>(tagGroups);
 
         public bool ShouldInclude(Event evt)
         {
@@ -111,16 +92,14 @@ public static class EventFilters
     }
 
     /// <summary>
-    /// Composite filter that combines multiple filters with AND logic
+    ///     Composite filter that combines multiple filters with AND logic
     /// </summary>
     public class CompositeAndFilter : IEventFilter
     {
         private readonly IEventFilter[] _filters;
 
-        public CompositeAndFilter(params IEventFilter[] filters)
-        {
+        public CompositeAndFilter(params IEventFilter[] filters) =>
             _filters = filters ?? throw new ArgumentNullException(nameof(filters));
-        }
 
         public bool ShouldInclude(Event evt)
         {
@@ -129,16 +108,14 @@ public static class EventFilters
     }
 
     /// <summary>
-    /// Composite filter that combines multiple filters with OR logic
+    ///     Composite filter that combines multiple filters with OR logic
     /// </summary>
     public class CompositeOrFilter : IEventFilter
     {
         private readonly IEventFilter[] _filters;
 
-        public CompositeOrFilter(params IEventFilter[] filters)
-        {
+        public CompositeOrFilter(params IEventFilter[] filters) =>
             _filters = filters ?? throw new ArgumentNullException(nameof(filters));
-        }
 
         public bool ShouldInclude(Event evt)
         {
@@ -147,43 +124,33 @@ public static class EventFilters
     }
 
     /// <summary>
-    /// Filter that negates another filter
+    ///     Filter that negates another filter
     /// </summary>
     public class NotFilter : IEventFilter
     {
         private readonly IEventFilter _innerFilter;
 
-        public NotFilter(IEventFilter innerFilter)
-        {
+        public NotFilter(IEventFilter innerFilter) =>
             _innerFilter = innerFilter ?? throw new ArgumentNullException(nameof(innerFilter));
-        }
 
-        public bool ShouldInclude(Event evt)
-        {
-            return !_innerFilter.ShouldInclude(evt);
-        }
+        public bool ShouldInclude(Event evt) => !_innerFilter.ShouldInclude(evt);
     }
 
     /// <summary>
-    /// Filter events by a custom predicate
+    ///     Filter events by a custom predicate
     /// </summary>
     public class PredicateFilter : IEventFilter
     {
         private readonly Func<Event, bool> _predicate;
 
-        public PredicateFilter(Func<Event, bool> predicate)
-        {
+        public PredicateFilter(Func<Event, bool> predicate) =>
             _predicate = predicate ?? throw new ArgumentNullException(nameof(predicate));
-        }
 
-        public bool ShouldInclude(Event evt)
-        {
-            return _predicate(evt);
-        }
+        public bool ShouldInclude(Event evt) => _predicate(evt);
     }
 
     /// <summary>
-    /// Filter that includes all events (no filtering)
+    ///     Filter that includes all events (no filtering)
     /// </summary>
     public class AllEventsFilter : IEventFilter
     {
@@ -191,7 +158,7 @@ public static class EventFilters
     }
 
     /// <summary>
-    /// Filter that excludes all events
+    ///     Filter that excludes all events
     /// </summary>
     public class NoEventsFilter : IEventFilter
     {

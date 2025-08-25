@@ -1,27 +1,22 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Orleans;
-using Orleans.Hosting;
 using Orleans.TestingHost;
 using ResultBoxes;
-using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.InMemory;
-using Sekiban.Dcb.Tests;
-using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Tests;
+using System.Text.Json;
 using Xunit;
-
-
-
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
-/// Minimal Orleans tests to verify Orleans integration works
+///     Minimal Orleans tests to verify Orleans integration works
 /// </summary>
 public class MinimalOrleansTests : IAsyncLifetime
 {
@@ -30,14 +25,14 @@ public class MinimalOrleansTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-    var builder = new TestClusterBuilder();
-    builder.Options.InitialSilosCount = 1;
-    var uniqueId = Guid.NewGuid().ToString("N")[..8];
-    builder.Options.ClusterId = $"TestCluster-{uniqueId}";
-    builder.Options.ServiceId = $"TestService-{uniqueId}";
-    // Use real networking with explicit fixed ports to avoid client assuming 30000 while silo chooses dynamic port.
-    builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
-        
+        var builder = new TestClusterBuilder();
+        builder.Options.InitialSilosCount = 1;
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        builder.Options.ClusterId = $"TestCluster-{uniqueId}";
+        builder.Options.ServiceId = $"TestService-{uniqueId}";
+        // Use real networking with explicit fixed ports to avoid client assuming 30000 while silo chooses dynamic port.
+        builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
+
         _cluster = builder.Build();
         await _cluster.DeployAsync();
     }
@@ -77,7 +72,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         // Arrange & Act
         var grain1 = _client.GetGrain<IMultiProjectionGrain>("projector-1");
         var grain2 = _client.GetGrain<IMultiProjectionGrain>("projector-2");
-        
+
         var status1 = await grain1.GetStatusAsync();
         var status2 = await grain2.GetStatusAsync();
 
@@ -94,11 +89,11 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         // Act - Get initial status
         var initialStatus = await grain.GetStatusAsync();
-        
+
         // Start subscription
         await grain.StartSubscriptionAsync();
         var activeStatus = await grain.GetStatusAsync();
-        
+
         // Stop subscription
         await grain.StopSubscriptionAsync();
         var stoppedStatus = await grain.GetStatusAsync();
@@ -116,13 +111,13 @@ public class MinimalOrleansTests : IAsyncLifetime
         var grain = _client.GetGrain<IMultiProjectionGrain>("serialization-test");
 
         // Act
-    var stateResult = await grain.GetSerializableStateAsync(true);
+        var stateResult = await grain.GetSerializableStateAsync();
 
         // Assert
         Assert.NotNull(stateResult);
         Assert.True(stateResult.IsSuccess);
-    var state = stateResult.GetValue();
-    Assert.Equal("serialization-test", state.ProjectorName);
+        var state = stateResult.GetValue();
+        Assert.Equal("serialization-test", state.ProjectorName);
     }
 
     [Fact]
@@ -137,7 +132,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         // Assert
         Assert.NotNull(persistResult);
         Assert.True(persistResult.IsSuccess);
-        
+
         // Get status to verify persistence details
         var status = await grain.GetStatusAsync();
         Assert.NotNull(status.LastPersistTime);
@@ -166,7 +161,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                         multiProjectorTypes.RegisterProjector<SubscriptionTestMulti>();
                         multiProjectorTypes.RegisterProjector<SerializationTestMulti>();
                         multiProjectorTypes.RegisterProjector<PersistenceTestMulti>();
-                        
+
                         return new DcbDomainTypes(
                             eventTypes,
                             tagTypes,
@@ -174,79 +169,87 @@ public class MinimalOrleansTests : IAsyncLifetime
                             tagStatePayloadTypes,
                             multiProjectorTypes,
                             queryTypes,
-                            new System.Text.Json.JsonSerializerOptions());
+                            new JsonSerializerOptions());
                     });
-                    
+
                     // Add storage
-                    services.AddSingleton<IEventStore, Sekiban.Dcb.Tests.InMemoryEventStore>();
+                    services.AddSingleton<IEventStore, InMemoryEventStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
-                        new Sekiban.Dcb.Orleans.Streams.DefaultOrleansEventSubscriptionResolver(
-                            "EventStreamProvider",
-                            "AllEvents",
-                            Guid.Empty));
+                        new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("OrleansStorage")
                 .AddMemoryGrainStorage("PubSubStore")
-                .AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+                .AddMemoryStreams("EventStreamProvider")
+                .AddMemoryGrainStorage("EventStreamProvider");
         }
     }
 
 
-    private record EmptyTestMultiProjector() : IMultiProjector<EmptyTestMultiProjector>
+    private record EmptyTestMultiProjector : IMultiProjector<EmptyTestMultiProjector>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "empty-test";
         public static EmptyTestMultiProjector GenerateInitialPayload() => new();
-        public static ResultBox<EmptyTestMultiProjector> Project(EmptyTestMultiProjector payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<EmptyTestMultiProjector> Project(
+            EmptyTestMultiProjector payload,
+            Event ev,
+            List<ITag> tags) => ResultBox.FromValue(payload);
     }
 
-    private record TestProjectorMulti() : IMultiProjector<TestProjectorMulti>
+    private record TestProjectorMulti : IMultiProjector<TestProjectorMulti>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "test-projector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags) =>
+            ResultBox.FromValue(payload);
     }
 
-    private record Projector1Multi() : IMultiProjector<Projector1Multi>
+    private record Projector1Multi : IMultiProjector<Projector1Multi>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-1";
         public static Projector1Multi GenerateInitialPayload() => new();
-        public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags) =>
+            ResultBox.FromValue(payload);
     }
 
-    private record Projector2Multi() : IMultiProjector<Projector2Multi>
+    private record Projector2Multi : IMultiProjector<Projector2Multi>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-2";
         public static Projector2Multi GenerateInitialPayload() => new();
-        public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags) =>
+            ResultBox.FromValue(payload);
     }
 
-    private record SubscriptionTestMulti() : IMultiProjector<SubscriptionTestMulti>
+    private record SubscriptionTestMulti : IMultiProjector<SubscriptionTestMulti>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "subscription-test";
         public static SubscriptionTestMulti GenerateInitialPayload() => new();
-        public static ResultBox<SubscriptionTestMulti> Project(SubscriptionTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<SubscriptionTestMulti>
+            Project(SubscriptionTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
     }
 
-    private record SerializationTestMulti() : IMultiProjector<SerializationTestMulti>
+    private record SerializationTestMulti : IMultiProjector<SerializationTestMulti>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "serialization-test";
         public static SerializationTestMulti GenerateInitialPayload() => new();
-        public static ResultBox<SerializationTestMulti> Project(SerializationTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<SerializationTestMulti> Project(
+            SerializationTestMulti payload,
+            Event ev,
+            List<ITag> tags) => ResultBox.FromValue(payload);
     }
 
-    private record PersistenceTestMulti() : IMultiProjector<PersistenceTestMulti>
+    private record PersistenceTestMulti : IMultiProjector<PersistenceTestMulti>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "persistence-test";
         public static PersistenceTestMulti GenerateInitialPayload() => new();
-        public static ResultBox<PersistenceTestMulti> Project(PersistenceTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+        public static ResultBox<PersistenceTestMulti>
+            Project(PersistenceTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
     }
-
 }

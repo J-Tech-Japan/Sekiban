@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Section in navigation
+///     Section in navigation
 /// </summary>
 public class NavigationSection
 {

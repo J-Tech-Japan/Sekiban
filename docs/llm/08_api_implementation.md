@@ -83,7 +83,8 @@ apiRoute.MapGet("/query",
 
 ### Using ToSimpleCommandResponse() for Efficient API Endpoints
 
-When creating API endpoints that execute commands, using the `ToSimpleCommandResponse()` extension method offers several benefits:
+When creating API endpoints that execute commands, using the `ToSimpleCommandResponse()` extension method offers several
+benefits:
 
 1. **Reduced Payload Size**: Converts the full CommandResponse (with all events) to a compact CommandResponseSimple
 2. **Easy Access to LastSortableUniqueId**: Extracts the most important information for client-side consistency
@@ -105,7 +106,8 @@ apiRoute
 
 #### Client-Side Usage
 
-After executing a command, use the returned `LastSortableUniqueId` to ensure your subsequent queries see the updated state:
+After executing a command, use the returned `LastSortableUniqueId` to ensure your subsequent queries see the updated
+state:
 
 ```csharp
 // Execute a command

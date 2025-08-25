@@ -35,5 +35,4 @@ public static class SekibanCosmosExtensions
         services.AddSingleton(clientOption);
         return services;
     }
-
 }

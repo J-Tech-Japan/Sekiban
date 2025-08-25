@@ -181,7 +181,8 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("            if (string.IsNullOrEmpty(payloadTypeName))");
         sb.AppendLine("                return null;");
         sb.AppendLine();
-        sb.AppendLine("            // First try to get type directly using Type.GetType (works with AssemblyQualifiedName)");
+        sb.AppendLine(
+            "            // First try to get type directly using Type.GetType (works with AssemblyQualifiedName)");
         sb.AppendLine("            var type = Type.GetType(payloadTypeName);");
         sb.AppendLine("            if (type != null)");
         sb.AppendLine("                return type;");
@@ -243,17 +244,14 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            var matchingInterface = typeSymbol.AllInterfaces.FirstOrDefault(
-                m => m.OriginalDefinition is not null &&
-                    (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
-                        m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
+            var matchingInterface = typeSymbol.AllInterfaces.FirstOrDefault(m =>
+                m.OriginalDefinition is not null &&
+                (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name ||
+                    m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
             var formatWithoutNullable = new SymbolDisplayFormat(
                 typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
                 genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-                miscellaneousOptions:
-                SymbolDisplayMiscellaneousOptions
-                    .EscapeKeywordIdentifiers
-            );
+                miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
             if (matchingInterface != null)
                 eventTypes.Add(
                     new QueryWithHandlerValues

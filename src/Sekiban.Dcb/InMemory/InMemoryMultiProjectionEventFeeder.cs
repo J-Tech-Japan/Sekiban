@@ -1,9 +1,8 @@
-using System.Runtime.CompilerServices;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
-
+using System.Runtime.CompilerServices;
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
@@ -12,9 +11,9 @@ namespace Sekiban.Dcb.InMemory;
 public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
 {
     private readonly IEventStore _eventStore;
-    private readonly InMemoryEventSubscription _subscription;
     private readonly Dictionary<string, InMemoryEventFeederHandle> _feeders = new();
     private readonly object _feedersLock = new();
+    private readonly InMemoryEventSubscription _subscription;
 
     public InMemoryMultiProjectionEventFeeder(IEventStore eventStore, InMemoryEventSubscription subscription)
     {
@@ -26,15 +25,8 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         string? fromPosition,
         Func<IReadOnlyList<Event>, Task> onEventBatch,
         int batchSize = 100,
-        CancellationToken cancellationToken = default)
-    {
-        return await StartFeedingWithFilterAsync(
-            null,
-            fromPosition,
-            onEventBatch,
-            batchSize,
-            cancellationToken);
-    }
+        CancellationToken cancellationToken = default) =>
+        await StartFeedingWithFilterAsync(null, fromPosition, onEventBatch, batchSize, cancellationToken);
 
     public async Task<IEventFeederHandle> StartFeedingWithFilterAsync(
         IEventFilter? filter,
@@ -44,10 +36,7 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         CancellationToken cancellationToken = default)
     {
         var feederId = Guid.NewGuid().ToString();
-        var feederHandle = new InMemoryEventFeederHandle(
-            feederId,
-            fromPosition,
-            () => RemoveFeeder(feederId));
+        var feederHandle = new InMemoryEventFeederHandle(feederId, fromPosition, () => RemoveFeeder(feederId));
 
         lock (_feedersLock)
         {
@@ -55,23 +44,25 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         }
 
         // Start the feeding process in background
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await FeedEventsAsync(
-                    feederHandle,
-                    filter,
-                    fromPosition,
-                    onEventBatch,
-                    batchSize,
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                feederHandle.SetError(ex);
-            }
-        }, cancellationToken);
+                try
+                {
+                    await FeedEventsAsync(
+                        feederHandle,
+                        filter,
+                        fromPosition,
+                        onEventBatch,
+                        batchSize,
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    feederHandle.SetError(ex);
+                }
+            },
+            cancellationToken);
 
         return feederHandle;
     }
@@ -86,16 +77,14 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            SortableUniqueId? since = string.IsNullOrEmpty(currentPosition) 
-                ? null 
-                : new SortableUniqueId(currentPosition);
-            
+            var since = string.IsNullOrEmpty(currentPosition) ? null : new SortableUniqueId(currentPosition);
+
             var result = await _eventStore.ReadAllEventsAsync(since);
             if (!result.IsSuccess)
             {
                 yield break;
             }
-            
+
             var events = result.GetValue().Take(batchSize).ToList();
 
             if (!events.Any())
@@ -133,7 +122,7 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
     {
         // Phase 1: Catch up on historical events
         handle.SetState(EventFeederState.CatchingUp);
-        
+
         var currentPosition = fromPosition;
         var caughtUp = false;
 
@@ -146,17 +135,15 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
             }
 
             // Get batch of historical events
-            SortableUniqueId? since = string.IsNullOrEmpty(currentPosition) 
-                ? null 
-                : new SortableUniqueId(currentPosition);
-            
+            var since = string.IsNullOrEmpty(currentPosition) ? null : new SortableUniqueId(currentPosition);
+
             var result = await _eventStore.ReadAllEventsAsync(since);
             if (!result.IsSuccess)
             {
                 handle.SetError(new Exception($"Failed to read events: {result.GetException()}"));
                 return;
             }
-            
+
             var events = result.GetValue().Take(batchSize).ToList();
 
             if (!events.Any())
@@ -219,7 +206,7 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
                 lock (eventBuffer)
                 {
                     shouldFlush = eventBuffer.Count >= batchSize ||
-                                  (DateTime.UtcNow - lastFlush) > TimeSpan.FromSeconds(1);
+                        DateTime.UtcNow - lastFlush > TimeSpan.FromSeconds(1);
                 }
 
                 if (shouldFlush)
@@ -240,7 +227,7 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
                     }
                 }
             },
-            subscriptionId: $"feeder-{handle.FeederId}",
+            $"feeder-{handle.FeederId}",
             cancellationToken);
 
         handle.SetSubscriptionHandle(subscriptionHandle);
@@ -261,8 +248,7 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
                         toProcess = new List<Event>(eventBuffer);
                         eventBuffer.Clear();
                         lastFlush = DateTime.UtcNow;
-                    }
-                    else
+                    } else
                     {
                         continue;
                     }
@@ -288,17 +274,19 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
 
     private class InMemoryEventFeederHandle : IEventFeederHandle
     {
-        private readonly Action _onDispose;
         private readonly TaskCompletionSource<bool> _catchUpTcs = new();
-        private volatile EventFeederState _state = EventFeederState.NotStarted;
+        private readonly Action _onDispose;
         private volatile string? _currentPosition;
+        private bool _disposed;
+        private Exception? _error;
         private long _eventsProcessed;
         private volatile bool _isCatchingUp = true;
         private volatile bool _isPaused;
         private volatile bool _isStopped;
+        private volatile EventFeederState _state = EventFeederState.NotStarted;
         private IEventSubscriptionHandle? _subscriptionHandle;
-        private Exception? _error;
-        private bool _disposed;
+        public bool IsPaused => _isPaused;
+        public bool IsStopped => _isStopped;
 
         public InMemoryEventFeederHandle(string feederId, string? initialPosition, Action onDispose)
         {
@@ -312,24 +300,6 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         public string? CurrentPosition => _currentPosition;
         public long EventsProcessed => Interlocked.Read(ref _eventsProcessed);
         public bool IsCatchingUp => _isCatchingUp;
-        public bool IsPaused => _isPaused;
-        public bool IsStopped => _isStopped;
-
-        public void SetState(EventFeederState state) => _state = state;
-        public void UpdatePosition(string position) => _currentPosition = position;
-        public void IncrementEventsProcessed(int count) => Interlocked.Add(ref _eventsProcessed, count);
-        public void SetCaughtUp()
-        {
-            _isCatchingUp = false;
-            _catchUpTcs.TrySetResult(true);
-        }
-        public void SetError(Exception ex)
-        {
-            _error = ex;
-            _state = EventFeederState.Error;
-            _catchUpTcs.TrySetException(ex);
-        }
-        public void SetSubscriptionHandle(IEventSubscriptionHandle handle) => _subscriptionHandle = handle;
 
         public Task PauseAsync()
         {
@@ -349,12 +319,12 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         {
             _isStopped = true;
             _state = EventFeederState.Stopped;
-            
+
             if (_subscriptionHandle != null)
             {
                 await _subscriptionHandle.UnsubscribeAsync();
             }
-            
+
             Dispose();
         }
 
@@ -375,12 +345,28 @@ public class InMemoryMultiProjectionEventFeeder : IMultiProjectionEventFeeder
         public void Dispose()
         {
             if (_disposed) return;
-            
+
             _isStopped = true;
             _disposed = true;
             _subscriptionHandle?.Dispose();
             _onDispose?.Invoke();
             _catchUpTcs.TrySetCanceled();
         }
+
+        public void SetState(EventFeederState state) => _state = state;
+        public void UpdatePosition(string position) => _currentPosition = position;
+        public void IncrementEventsProcessed(int count) => Interlocked.Add(ref _eventsProcessed, count);
+        public void SetCaughtUp()
+        {
+            _isCatchingUp = false;
+            _catchUpTcs.TrySetResult(true);
+        }
+        public void SetError(Exception ex)
+        {
+            _error = ex;
+            _state = EventFeederState.Error;
+            _catchUpTcs.TrySetException(ex);
+        }
+        public void SetSubscriptionHandle(IEventSubscriptionHandle handle) => _subscriptionHandle = handle;
     }
 }

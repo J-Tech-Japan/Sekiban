@@ -2,22 +2,22 @@ using Sekiban.Pure.Events;
 namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
-/// Interface for event context provider
+///     Interface for event context provider
 /// </summary>
 public interface IEventContextProvider
 {
     /// <summary>
-    /// Get current event context
+    ///     Get current event context
     /// </summary>
     EventContext GetCurrentEventContext();
-    
+
     /// <summary>
-    /// Set current event context
+    ///     Set current event context
     /// </summary>
     void SetCurrentEventContext(IEvent @event);
-    
+
     /// <summary>
-    /// Clear current event context
+    ///     Clear current event context
     /// </summary>
     void ClearCurrentEventContext();
 }

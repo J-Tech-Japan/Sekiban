@@ -1,5 +1,4 @@
 using Sekiban.Dcb.Events;
-
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>

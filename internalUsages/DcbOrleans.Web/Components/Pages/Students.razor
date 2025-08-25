@@ -1,10 +1,7 @@
 @page "/students"
+@using Dcb.Domain.Student
 @attribute [StreamRendering]
 @rendermode InteractiveServer
-
-@using Dcb.Domain.Student
-@using System.Net.Http
-@using System.Net.Http.Json
 
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JsRuntime
@@ -21,12 +18,10 @@
 @if (students == null)
 {
     <p><em>Loading...</em></p>
-}
-else if (students.Count == 0)
+} else if (students.Count == 0)
 {
     <p>No students registered. Click "Add New Student" to create one.</p>
-}
-else
+} else
 {
     <table class="table">
         <thead>
@@ -38,21 +33,23 @@ else
         </tr>
         </thead>
         <tbody>
-            @foreach (var student in students)
-            {
-                <tr>
-                    <td>@student.StudentName</td>
-                    <td>@student.Grade</td>
-                    <td>@student.StudentId</td>
-                    <td>
-                        <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteStudent(student.StudentId)">Delete</button>
-                    </td>
-                </tr>
-            }
+        @foreach (var student in students)
+        {
+            <tr>
+                <td>@student.StudentName</td>
+                <td>@student.Grade</td>
+                <td>@student.StudentId</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteStudent(student.StudentId)">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        }
         </tbody>
     </table>
 }
-    
+
 <!-- Add Student Modal -->
 <div class="modal fade" id="addStudentModal" data-bs-backdrop="static" tabindex="-1">
     <div class="modal-dialog">
@@ -64,11 +61,11 @@ else
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="studentName" class="form-label">Student Name</label>
-                    <input id="studentName" class="form-control" @bind="studentModel.StudentName" />
+                    <input id="studentName" class="form-control" @bind="studentModel.StudentName"/>
                 </div>
                 <div class="mb-3">
                     <label for="grade" class="form-label">Grade</label>
-                    <input type="number" id="grade" class="form-control" @bind="studentModel.Grade" min="1" max="12" />
+                    <input type="number" id="grade" class="form-control" @bind="studentModel.Grade" min="1" max="12"/>
                 </div>
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
@@ -130,7 +127,7 @@ else
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var response = await httpClient.DeleteAsync($"api/students/{studentId}");
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await LoadStudents();
@@ -144,18 +141,16 @@ else
 
     private async Task CloseModal()
     {
-        studentModel = new();
+        studentModel = new StudentModel();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "bootstrap.Modal.getInstance(document.getElementById('addStudentModal'))?.hide()");
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addStudentModal'))?.hide()");
     }
 
     private async Task OpenAddStudentModal()
     {
-        studentModel = new();
+        studentModel = new StudentModel();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", 
-            "new bootstrap.Modal(document.getElementById('addStudentModal')).show()");
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addStudentModal')).show()");
     }
 
     private async Task HandleAddStudentSubmit()
@@ -163,19 +158,15 @@ else
         try
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var command = new CreateStudent(
-                Guid.NewGuid(),
-                studentModel.StudentName,
-                studentModel.Grade);
-                
+            var command = new CreateStudent(Guid.NewGuid(), studentModel.StudentName, studentModel.Grade);
+
             var response = await httpClient.PostAsJsonAsync("api/students", command);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await LoadStudents();
                 await CloseModal();
-            }
-            else
+            } else
             {
                 errorMessage = "Failed to add student. Please try again.";
             }

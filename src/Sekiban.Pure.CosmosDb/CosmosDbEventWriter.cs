@@ -8,6 +8,12 @@ public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes s
     : IEventWriter, IEventRemover
 {
 
+    /// <summary>
+    ///     Removes all events from the Cosmos DB event container
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public Task RemoveAllEvents() => dbFactory.DeleteAllFromEventContainer();
+
     public Task SaveEvents<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent => dbFactory.CosmosActionAsync(
         DocumentType.Event,
         async container =>
@@ -24,8 +30,8 @@ public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes s
     {
         var documentType = eventDocument.GetType();
         var methods = container.GetType().GetMethods().Where(m => m.Name == nameof(Container.UpsertItemAsync));
-        var method = methods.FirstOrDefault(
-            m => m.Name == nameof(Container.UpsertItemAsync) && m.GetParameters().Length == 4);
+        var method = methods.FirstOrDefault(m =>
+            m.Name == nameof(Container.UpsertItemAsync) && m.GetParameters().Length == 4);
         var genericMethod = method?.MakeGenericMethod(documentType);
         return (Task?)genericMethod?.Invoke(
                 container,
@@ -35,10 +41,4 @@ public class CosmosDbEventWriter(CosmosDbFactory dbFactory, SekibanDomainTypes s
                 }) ??
             Task.CompletedTask;
     }
-
-    /// <summary>
-    ///     Removes all events from the Cosmos DB event container
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation</returns>
-    public Task RemoveAllEvents() => dbFactory.DeleteAllFromEventContainer();
 }

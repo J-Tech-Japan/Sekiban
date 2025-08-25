@@ -1,29 +1,22 @@
-using Orleans;
 using Sekiban.Dcb.MultiProjections;
-
 namespace Sekiban.Dcb.Orleans.Surrogates;
 
 [RegisterConverter]
-public sealed class SafeUnsafeProjectionStateSurrogateConverter<TKey, TState> : 
+public sealed class SafeUnsafeProjectionStateSurrogateConverter<TKey, TState> :
     IConverter<SafeUnsafeProjectionState<TKey, TState>, SafeUnsafeProjectionStateSurrogate<TKey, TState>>
-    where TKey : notnull 
-    where TState : class
+    where TKey : notnull where TState : class
 {
     public SafeUnsafeProjectionState<TKey, TState> ConvertFromSurrogate(
-        in SafeUnsafeProjectionStateSurrogate<TKey, TState> surrogate)
-    {
+        in SafeUnsafeProjectionStateSurrogate<TKey, TState> surrogate) =>
         // Create a new instance with the SafeWindowThreshold
-        return new SafeUnsafeProjectionState<TKey, TState> 
-        { 
-            SafeWindowThreshold = surrogate.SafeWindowThreshold 
+        new()
+        {
+            SafeWindowThreshold = surrogate.SafeWindowThreshold
         };
-    }
 
     public SafeUnsafeProjectionStateSurrogate<TKey, TState> ConvertToSurrogate(
-        in SafeUnsafeProjectionState<TKey, TState> value)
-    {
+        in SafeUnsafeProjectionState<TKey, TState> value) =>
         // Only serialize the SafeWindowThreshold
         // The internal dictionaries are private and will be reconstructed on demand
-        return new SafeUnsafeProjectionStateSurrogate<TKey, TState>(value.SafeWindowThreshold);
-    }
+        new(value.SafeWindowThreshold);
 }

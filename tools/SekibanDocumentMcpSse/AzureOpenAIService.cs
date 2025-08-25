@@ -1,24 +1,22 @@
-using Azure;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.Options;
+using OpenAI.Chat;
 using System.ClientModel;
 using System.Text;
-using OpenAI.Chat;
-
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Service for interacting with Azure OpenAI
+///     Service for interacting with Azure OpenAI
 /// </summary>
 public class AzureOpenAIService
 {
+    private readonly AzureOpenAIClient? _client;
+    private readonly SekibanDocumentService _documentService;
     private readonly ILogger<AzureOpenAIService> _logger;
     private readonly AzureOpenAIOptions _options;
-    private readonly SekibanDocumentService _documentService;
-    private AzureOpenAIClient? _client;
 
     /// <summary>
-    /// Constructor
+    ///     Constructor
     /// </summary>
     public AzureOpenAIService(
         ILogger<AzureOpenAIService> logger,
@@ -28,42 +26,43 @@ public class AzureOpenAIService
         _logger = logger;
         _options = options.Value;
         _documentService = documentService;
-        
+
         if (!string.IsNullOrEmpty(_options.Endpoint) && !string.IsNullOrEmpty(_options.ApiKey))
         {
             try
             {
                 _client = new AzureOpenAIClient(
                     new Uri(_options.Endpoint),
-                    new ApiKeyCredential(_options.ApiKey), new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2024_12_01_Preview));
+                    new ApiKeyCredential(_options.ApiKey),
+                    new AzureOpenAIClientOptions(AzureOpenAIClientOptions.ServiceVersion.V2024_12_01_Preview));
                 _logger.LogInformation("Azure OpenAI client initialized");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to initialize Azure OpenAI client");
             }
-        }
-        else
+        } else
         {
             _logger.LogWarning("Azure OpenAI settings are missing. Question answering will not be available.");
         }
     }
 
     /// <summary>
-    /// Answer a question about Sekiban using Azure OpenAI
+    ///     Answer a question about Sekiban using Azure OpenAI
     /// </summary>
     public async Task<string> AnswerQuestionAsync(string question)
     {
         if (_client == null || string.IsNullOrEmpty(_options.DeploymentName))
         {
-            return "I'm sorry, but Azure OpenAI is not configured properly. Please add valid Azure OpenAI settings to appsettings.json.";
+            return
+                "I'm sorry, but Azure OpenAI is not configured properly. Please add valid Azure OpenAI settings to appsettings.json.";
         }
-        
+
         try
         {
             // Search for relevant documents
             var searchResults = await _documentService.SearchAsync(question);
-            
+
             // Prepare context from search results
             var context = new StringBuilder();
             foreach (var result in searchResults.Take(3))
@@ -80,7 +79,7 @@ public class AzureOpenAIService
                     }
                 }
             }
-            
+
             // If no search results, include basic information
             if (searchResults.Count == 0)
             {
@@ -93,17 +92,18 @@ public class AzureOpenAIService
 
             // Get the chat client
             var chatClient = _client.GetChatClient(_options.DeploymentName);
-            
+
             // Create chat messages
             var systemMessage = new SystemChatMessage(_options.SystemMessage);
-            var userMessage = new UserChatMessage($"Here is documentation about Sekiban:\n\n{context}\n\nBased on this information, please answer the following question: {question}");
-            
+            var userMessage = new UserChatMessage(
+                $"Here is documentation about Sekiban:\n\n{context}\n\nBased on this information, please answer the following question: {question}");
+
             var messages = new ChatMessage[] { systemMessage, userMessage };
-            
+
             // Complete chat
             var response = await chatClient.CompleteChatAsync(messages);
-            
-            try 
+
+            try
             {
                 var contentProperty = response.Value.GetType().GetProperty("Content");
                 if (contentProperty != null)

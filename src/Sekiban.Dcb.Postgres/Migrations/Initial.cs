@@ -39,6 +39,7 @@ public partial class Initial : Migration
                         "Npgsql:ValueGenerationStrategy",
                         NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                 Tag = table.Column<string>("text", nullable: false),
+                TagGroup = table.Column<string>("text", nullable: false),
                 EventType = table.Column<string>("text", nullable: false),
                 SortableUniqueId = table.Column<string>("character varying(100)", maxLength: 100, nullable: false),
                 EventId = table.Column<Guid>("uuid", nullable: false),

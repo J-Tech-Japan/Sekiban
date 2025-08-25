@@ -76,8 +76,8 @@ public class Repository
         }
         return ResultBox
             .FromValue(events)
-            .Conveyor(
-                evts => evts
+            .Conveyor(evts =>
+                evts
                     .ToResultBox()
                     .ReduceEach(new MultiProjectionState<TMultiProjection>(), (ev, state) => state.ApplyEvent(ev)))
             .ToTask();

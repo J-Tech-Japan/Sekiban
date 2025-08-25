@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
-
 namespace Sekiban.Dcb.Orleans.Streams;
 
 /// <summary>
-/// In-memory implementation of checkpoint manager for development and testing
+///     In-memory implementation of checkpoint manager for development and testing
 /// </summary>
 public class InMemoryCheckpointManager : ICheckpointManager
 {
@@ -13,15 +12,11 @@ public class InMemoryCheckpointManager : ICheckpointManager
     {
         if (string.IsNullOrEmpty(subscriptionId))
             throw new ArgumentException("Subscription ID cannot be null or empty", nameof(subscriptionId));
-        
+
         if (string.IsNullOrEmpty(position))
             throw new ArgumentException("Position cannot be null or empty", nameof(position));
 
-        var checkpoint = new CheckpointData(
-            subscriptionId,
-            position,
-            DateTime.UtcNow,
-            metadata);
+        var checkpoint = new CheckpointData(subscriptionId, position, DateTime.UtcNow, metadata);
 
         _checkpoints[subscriptionId] = checkpoint;
         return Task.CompletedTask;
@@ -45,8 +40,6 @@ public class InMemoryCheckpointManager : ICheckpointManager
         return Task.CompletedTask;
     }
 
-    public Task<IEnumerable<CheckpointData>> ListCheckpointsAsync()
-    {
-        return Task.FromResult<IEnumerable<CheckpointData>>(_checkpoints.Values.ToList());
-    }
+    public Task<IEnumerable<CheckpointData>> ListCheckpointsAsync() =>
+        Task.FromResult<IEnumerable<CheckpointData>>(_checkpoints.Values.ToList());
 }

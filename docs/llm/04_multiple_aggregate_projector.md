@@ -20,12 +20,14 @@
 
 ## Multiple Aggregate Projectors
 
-While single aggregate projectors are focused on building the state of a single entity, multiple aggregate projectors allow you to create views that combine data from multiple aggregates or create specialized projections.
+While single aggregate projectors are focused on building the state of a single entity, multiple aggregate projectors
+allow you to create views that combine data from multiple aggregates or create specialized projections.
 
 ## When to Use Multiple Aggregate Projectors
 
 1. **Cross-Aggregate Views**: When you need to create a view that combines data from multiple aggregates
-2. **Specialized Projections**: When you need a specialized view of aggregate data (e.g., statistics, denormalized views)
+2. **Specialized Projections**: When you need a specialized view of aggregate data (e.g., statistics, denormalized
+   views)
 3. **Filtered Collections**: When you need a filtered subset of aggregates based on certain criteria
 4. **Real-time Dashboard Data**: When you need to maintain counters or summaries across aggregates
 
@@ -47,6 +49,7 @@ public class AggregateListProjector<TProjector> : IMultiProjector
 ```
 
 **Usage in queries**:
+
 ```csharp
 [GenerateSerializer]
 public record ListYourEntitiesQuery() 
@@ -84,6 +87,7 @@ public class EventHistoryProjector<TProjector> : IMultiProjector
 ```
 
 **Usage example**:
+
 ```csharp
 [GenerateSerializer]
 public record GetEventHistoryQuery(Guid AggregateId)
@@ -199,7 +203,8 @@ public class OrderStatisticsProjectorSubscriber : IMultiProjectorEventSubscriber
 
 **Registering the multi-projector**:
 
-The multi-projector will be automatically registered by the source generator if it implements `IMultiProjector`. You can then use it in queries:
+The multi-projector will be automatically registered by the source generator if it implements `IMultiProjector`. You can
+then use it in queries:
 
 ```csharp
 [GenerateSerializer]
@@ -231,7 +236,8 @@ public record OrderStatistics(
 
 ## Performance Considerations
 
-Multi-projectors can be resource-intensive, especially if they need to process many events or maintain large collections. Consider the following best practices:
+Multi-projectors can be resource-intensive, especially if they need to process many events or maintain large
+collections. Consider the following best practices:
 
 1. **Be Selective with Events**: Only subscribe to the events you need for your projection
 2. **Use Efficient Data Structures**: Choose appropriate data structures for your projection data

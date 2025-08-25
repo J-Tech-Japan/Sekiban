@@ -1,23 +1,23 @@
 using Dcb.Domain.Projections;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
-[global::Orleans.GenerateSerializer]
-public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>, IWaitForSortableUniqueId, IQueryPagingParameter
+[GenerateSerializer]
+public record GetWeatherForecastListQuery :
+    IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>,
+    IWaitForSortableUniqueId,
+    IQueryPagingParameter
 {
-    [global::Orleans.Id(0)]
+    [Id(0)]
     public bool IncludeDeleted { get; init; } = false;
-    
+
     // Paging parameters (from IQueryPagingParameter)
-    [global::Orleans.Id(1)]
+    [Id(1)]
     public int? PageNumber { get; init; }
-    [global::Orleans.Id(2)]
+    [Id(2)]
     public int? PageSize { get; init; }
-    
-    // Wait for sortable unique ID (from IWaitForSortableUniqueId)
-    [global::Orleans.Id(3)]
-    public string? WaitForSortableUniqueId { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
     public static ResultBox<IEnumerable<WeatherForecastItem>> HandleFilter(
@@ -28,7 +28,7 @@ public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherFor
         // Always use GetCurrentForecasts() for queries (includes unsafe state)
         // GetSafeForecasts() should only be used for special cases requiring guaranteed consistency
         var forecasts = projector.GetCurrentForecasts();
-            
+
         return ResultBox.FromValue(forecasts.Values.AsEnumerable());
     }
 
@@ -39,4 +39,8 @@ public record GetWeatherForecastListQuery : IMultiProjectionListQuery<WeatherFor
     {
         return ResultBox.FromValue(filteredList.OrderByDescending(f => f.Date).AsEnumerable());
     }
+
+    // Wait for sortable unique ID (from IWaitForSortableUniqueId)
+    [Id(3)]
+    public string? WaitForSortableUniqueId { get; init; }
 }

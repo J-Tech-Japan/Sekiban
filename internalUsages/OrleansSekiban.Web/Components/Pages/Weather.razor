@@ -1,14 +1,10 @@
 @page "/weather"
-@attribute [StreamRendering(true)]
-@attribute [OutputCache(Duration = 5)]
-
-@using SharedDomain
-@using System.ComponentModel.DataAnnotations
 @using SharedDomain.Aggregates.WeatherForecasts.Commands
 @using SharedDomain.Aggregates.WeatherForecasts.Queries
 @using SharedDomain.ValueObjects
-@using Sekiban.Pure.Aggregates
-@using Sekiban.Pure.Command.Executor
+@using System.ComponentModel.DataAnnotations
+@attribute [StreamRendering()]
+@attribute [OutputCache(Duration = 5)]
 
 @inject WeatherApiClient WeatherApi
 @inject IJSRuntime JsRuntime
@@ -26,8 +22,7 @@
 @if (forecasts == null)
 {
     <p><em>Loading...</em></p>
-}
-else
+} else
 {
     <table class="table">
         <thead>
@@ -41,25 +36,30 @@ else
         </tr>
         </thead>
         <tbody>
-            @foreach (var forecast in forecasts)
-            {
-                <tr>
-                    <td>@forecast.Location</td>
-                    <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
-                    <td>@forecast.Summary</td>
-                    <td>
-                        <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit Location</button>
-                        <button class="btn btn-danger btn-sm" @onclick="() => HandleRemoveForecast(forecast.WeatherForecastId)">Remove</button>
-                    </td>
-                </tr>
-            }
+        @foreach (var forecast in forecasts)
+        {
+            <tr>
+                <td>@forecast.Location</td>
+                <td>@forecast.Date.ToShortDateString()</td>
+                <td>@forecast.TemperatureC</td>
+                <td>@forecast.TemperatureF</td>
+                <td>@forecast.Summary</td>
+                <td>
+                    <button class="btn btn-primary btn-sm me-2" @onclick="() => OpenEditLocationModal(forecast)">Edit
+                        Location
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => HandleRemoveForecast(forecast.WeatherForecastId)">Remove
+                    </button>
+                </td>
+            </tr>
+        }
         </tbody>
     </table>
 }
 
-<div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="addForecastModalLabel" aria-hidden="true">
+<div class="modal fade" id="addForecastModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="addForecastModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="weather-forecast" Model="@forecastModel" OnValidSubmit="HandleAddForecastSubmit">
@@ -68,20 +68,20 @@ else
                     <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <DataAnnotationsValidator />
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="location" class="form-label">Location</label>
-                        <InputText id="location" class="form-control" @bind-Value="forecastModel.Location" />
-                        <ValidationMessage For="@(() => forecastModel.Location)" class="text-danger" />
+                        <InputText id="location" class="form-control" @bind-Value="forecastModel.Location"/>
+                        <ValidationMessage For="@(() => forecastModel.Location)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="date" class="form-label">Date</label>
-                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date" />
-                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger" />
+                        <InputDate id="date" class="form-control" @bind-Value="forecastModel.Date"/>
+                        <ValidationMessage For="@(() => forecastModel.Date)" class="text-danger"/>
                     </div>
                     <div class="mb-3">
                         <label for="temperatureC" class="form-label">Temperature (°C)</label>
-                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC" />
+                        <InputNumber id="temperatureC" class="form-control" @bind-Value="forecastModel.TemperatureC"/>
                     </div>
                     <div class="mb-3">
                         <label for="summary" class="form-label">Summary</label>
@@ -92,7 +92,7 @@ else
                                 <option value="@summary">@summary</option>
                             }
                         </InputSelect>
-                        <ValidationMessage For="@(() => forecastModel.Summary)" class="text-danger" />
+                        <ValidationMessage For="@(() => forecastModel.Summary)" class="text-danger"/>
                     </div>
                     @if (!string.IsNullOrEmpty(forecastModel.Error))
                     {
@@ -110,20 +110,22 @@ else
     </div>
 </div>
 
-<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="editLocationModalLabel" aria-hidden="true">
+<div class="modal fade" id="editLocationModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="editLocationModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <EditForm FormName="edit-location" Model="@editLocationModel" OnValidSubmit="HandleEditLocationSubmit">
                 <div class="modal-header">
                     <h5 class="modal-title" id="editLocationModalLabel">Edit Location</h5>
-                    <button type="button" class="btn-close" @onclick="CloseEditLocationModal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" @onclick="CloseEditLocationModal"
+                            aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <DataAnnotationsValidator />
+                    <DataAnnotationsValidator/>
                     <div class="mb-3">
                         <label for="newLocation" class="form-label">New Location</label>
-                        <InputText id="newLocation" class="form-control" @bind-Value="editLocationModel.NewLocation" />
-                        <ValidationMessage For="@(() => editLocationModel.NewLocation)" class="text-danger" />
+                        <InputText id="newLocation" class="form-control" @bind-Value="editLocationModel.NewLocation"/>
+                        <ValidationMessage For="@(() => editLocationModel.NewLocation)" class="text-danger"/>
                     </div>
                     @if (!string.IsNullOrEmpty(editLocationModel.Error))
                     {
@@ -145,6 +147,7 @@ else
     function DisplayAddModal(param) {
         $('#addForecastModal').modal(param);
     }
+
     function DisplayEditLocationModal(param) {
         $('#editLocationModal').modal(param);
     }
@@ -154,7 +157,7 @@ else
     private WeatherForecastResponse[]? forecasts;
     private WeatherForecastModel forecastModel = new();
     private EditLocationModel editLocationModel = new();
-    private string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
+    private readonly string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
     public class WeatherForecastModel
     {
@@ -200,13 +203,13 @@ else
 
     private async Task CloseModal()
     {
-        forecastModel = new();
+        forecastModel = new WeatherForecastModel();
         await JsRuntime.InvokeVoidAsync("DisplayAddModal", "hide");
     }
 
     private async Task OpenAddForecastModal()
     {
-        forecastModel = new();
+        forecastModel = new WeatherForecastModel();
         await JsRuntime.InvokeVoidAsync("DisplayAddModal", "show");
     }
 
@@ -222,7 +225,7 @@ else
 
     private async Task CloseEditLocationModal()
     {
-        editLocationModel = new();
+        editLocationModel = new EditLocationModel();
         await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
     }
 
@@ -230,11 +233,9 @@ else
     {
         try
         {
-            var response = await WeatherApi.UpdateLocationAsync(
-                editLocationModel.WeatherForecastId,
-                editLocationModel.NewLocation!);
+            var response = await WeatherApi.UpdateLocationAsync(editLocationModel.WeatherForecastId, editLocationModel.NewLocation!);
             forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
-            
+
             await JsRuntime.InvokeVoidAsync("DisplayEditLocationModal", "hide");
         }
         catch (Exception ex)
@@ -247,15 +248,11 @@ else
     {
         try
         {
-            var command = new InputWeatherForecastCommand(
-                forecastModel.Location!,
-                DateOnly.FromDateTime(forecastModel.Date!.Value),
-                new TemperatureCelsius(forecastModel.TemperatureC),
-                forecastModel.Summary!);
-                
+            var command = new InputWeatherForecastCommand(forecastModel.Location!, DateOnly.FromDateTime(forecastModel.Date!.Value), new TemperatureCelsius(forecastModel.TemperatureC), forecastModel.Summary!);
+
             var response = await WeatherApi.InputWeatherAsync(command);
             forecasts = await WeatherApi.GetWeatherAsync(waitForSortableUniqueId: response.LastSortableUniqueId);
-            
+
             // Reset form and close modal
             forecastModel = new WeatherForecastModel();
             await JsRuntime.InvokeVoidAsync("DisplayAddModal", "hide");

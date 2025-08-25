@@ -10,14 +10,14 @@ namespace Sekiban.Pure.Command;
 public interface ICommandTypes
 {
     public List<Type> GetCommandTypes();
-    
+
     /// <summary>
-    /// Gets the type from the command type name.
+    ///     Gets the type from the command type name.
     /// </summary>
     /// <param name="commandTypeName">Name of the command type</param>
     /// <returns>The found type, or null if not found</returns>
     public Type? GetCommandTypeByName(string commandTypeName);
-    
+
     public Task<ResultBox<CommandResponse>> ExecuteGeneral(
         CommandExecutor executor,
         ICommandWithHandlerSerializable command,

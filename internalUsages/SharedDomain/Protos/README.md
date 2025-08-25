@@ -10,7 +10,8 @@ This directory contains Protocol Buffer definitions for the DaprSample domain.
 
 ## Usage
 
-The proto files are automatically compiled when you build the project. The generated C# classes will be in the namespace specified by `option csharp_namespace`.
+The proto files are automatically compiled when you build the project. The generated C# classes will be in the namespace
+specified by `option csharp_namespace`.
 
 ### Example Command Usage
 

@@ -20,7 +20,8 @@
 
 ## 1. Aggregate Payload (Domain Entity)
 
-An aggregate is a domain entity that encapsulates state and business rules. In Sekiban, aggregates are implemented as immutable records:
+An aggregate is a domain entity that encapsulates state and business rules. In Sekiban, aggregates are implemented as
+immutable records:
 
 ```csharp
 using Orleans.Serialization.Attributes;
@@ -34,6 +35,7 @@ public record YourAggregate(...properties...) : IAggregatePayload
 ```
 
 **Required**:
+
 - Implement `IAggregatePayload` interface
 - Use C# record for immutability
 - Add `[GenerateSerializer]` attribute for Orleans
@@ -94,6 +96,7 @@ public record YourCommand(...parameters...)
     }
 }
 ```
+
 ```
 
 **Required**:
@@ -154,15 +157,20 @@ public record RevokeUser(Guid UserId)
 ```
 
 **Benefits**:
-- The third generic parameter (`ConfirmedUser` in the example) specifies that this command can only be executed when the current aggregate payload is of that specific type
-- The command context becomes strongly typed to `ICommandContext<ConfirmedUser>` instead of `ICommandContext<IAggregatePayload>`
+
+- The third generic parameter (`ConfirmedUser` in the example) specifies that this command can only be executed when the
+  current aggregate payload is of that specific type
+- The command context becomes strongly typed to `ICommandContext<ConfirmedUser>` instead of
+  `ICommandContext<IAggregatePayload>`
 - Provides compile-time safety for state-dependent operations
 - The executor automatically checks if the current payload type matches the specified type before executing the command
-- Particularly useful when using aggregate payload types to express different states of an entity (state machine pattern)
+- Particularly useful when using aggregate payload types to express different states of an entity (state machine
+  pattern)
 
 ### Accessing Aggregate Payload in Commands
 
-There are two ways to access the aggregate payload in command handlers, depending on whether you use the two or three generic parameter version:
+There are two ways to access the aggregate payload in command handlers, depending on whether you use the two or three
+generic parameter version:
 
 1. **With Type Constraint (Three Generic Parameters)**:
    ```csharp
@@ -209,7 +217,8 @@ There are two ways to access the aggregate payload in command handlers, dependin
    }
    ```
 
-The three-parameter version is preferred when you know the exact state the aggregate should be in, as it provides compile-time safety and cleaner code.
+The three-parameter version is preferred when you know the exact state the aggregate should be in, as it provides
+compile-time safety and cleaner code.
 
 ### Generating Multiple Events from a Command
 
@@ -236,6 +245,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 ```
 
 **Key points**:
+
 - Use `context.AppendEvent(eventPayload)` to add events to the event stream
 - You can append multiple events in sequence
 - Return `EventOrNone.None` if all events have been appended using `AppendEvent`
@@ -266,6 +276,7 @@ Events contain two parts:
    ```
 
 **Required**:
+
 - Implement `IEventPayload` interface for domain-specific data only
 - Use past tense naming (Created, Updated, Deleted)
 - Add `[GenerateSerializer]` attribute
@@ -304,6 +315,7 @@ public class PartitionKeys
 ```
 
 **Usage in Commands**:
+
 ```csharp
 using Sekiban.Pure.Documents;
 
@@ -345,6 +357,7 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 ```
 
 **Required**:
+
 - Implement `IAggregateProjector` interface
 - Use pattern matching to manage state transitions
 - Return different payload types to enforce business rules
@@ -379,11 +392,13 @@ public class TodoItemProjector : IAggregateProjector
 
 ## Multiple Projectors for Single Aggregate
 
-One powerful feature of Sekiban is the ability to use multiple projectors on the same event stream. As long as the PartitionKeys align, you can create different views of the same events using different projectors.
+One powerful feature of Sekiban is the ability to use multiple projectors on the same event stream. As long as the
+PartitionKeys align, you can create different views of the same events using different projectors.
 
 ### Using LoadAggregateAsync for Multiple Projections
 
-The `LoadAggregateAsync` method on `SekibanOrleansExecutor` allows you to load an aggregate using any projector that shares the same stream structure:
+The `LoadAggregateAsync` method on `SekibanOrleansExecutor` allows you to load an aggregate using any projector that
+shares the same stream structure:
 
 ```csharp
 using Sekiban.Pure.Executors;
@@ -468,4 +483,5 @@ public record UserActivityEntry(DateTime Timestamp, string Activity);
 2. **Specialized projections**: Create task-specific views of the same data
 3. **Separation of concerns**: Keep your primary aggregate model clean while adding specialized views
 4. **Evolving models**: Add new projectors without changing existing ones
+
 ```

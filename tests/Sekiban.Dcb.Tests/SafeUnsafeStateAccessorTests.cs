@@ -2,11 +2,10 @@ using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
-using Sekiban.Dcb.Queries;using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 public class SafeUnsafeStateAccessorTests
@@ -32,7 +31,8 @@ public class SafeUnsafeStateAccessorTests
             tagTypes,
             tagProjectorTypes,
             tagStatePayloadTypes,
-            multiProjectorTypes, new SimpleQueryTypes());
+            multiProjectorTypes,
+            new SimpleQueryTypes());
 
         // Set SafeWindow to 5 seconds for testing
         _options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 5000 };
@@ -167,7 +167,7 @@ public class SafeUnsafeStateAccessorTests
 
         // Create the same event
         var event1 = CreateEvent(new TestItemAdded("Item1", 100), DateTime.UtcNow.AddSeconds(-10));
-        
+
         // Process the same event twice
         await actor.AddEventsAsync(new[] { event1 });
         await actor.AddEventsAsync(new[] { event1 }); // Duplicate
@@ -179,7 +179,7 @@ public class SafeUnsafeStateAccessorTests
         // Should only have one item (duplicate prevented)
         Assert.Single(payload!.Items);
         Assert.Equal(100, payload.Items["Item1"]);
-        
+
         // Version should only increment once
         var state = stateResult.GetValue();
         Assert.Equal(1, state.Version);
@@ -209,10 +209,13 @@ public class SafeUnsafeStateAccessorTests
         public static string MultiProjectorName => "EfficientTestProjector";
         public static string MultiProjectorVersion => "1.0.0";
 
-        public static EfficientTestProjector GenerateInitialPayload() => 
+        public static EfficientTestProjector GenerateInitialPayload() =>
             new() { Items = new Dictionary<string, int>() };
 
-        public static ResultBox<EfficientTestProjector> Project(EfficientTestProjector payload, Event ev, List<ITag> tags)
+        public static ResultBox<EfficientTestProjector> Project(
+            EfficientTestProjector payload,
+            Event ev,
+            List<ITag> tags)
         {
             var result = ev.Payload switch
             {

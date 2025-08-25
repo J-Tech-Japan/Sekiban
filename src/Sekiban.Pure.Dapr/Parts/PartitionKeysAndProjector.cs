@@ -1,13 +1,11 @@
 using ResultBoxes;
-using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Projectors;
-
 namespace Sekiban.Pure.Dapr.Parts;
 
 /// <summary>
-/// Holds partition keys and projector information for aggregate actors.
-/// This is the Dapr equivalent of Orleans' PartitionKeysAndProjector.
+///     Holds partition keys and projector information for aggregate actors.
+///     This is the Dapr equivalent of Orleans' PartitionKeysAndProjector.
 /// </summary>
 public class PartitionKeysAndProjector
 {
@@ -21,7 +19,7 @@ public class PartitionKeysAndProjector
     }
 
     /// <summary>
-    /// Creates PartitionKeysAndProjector from a grain key string
+    ///     Creates PartitionKeysAndProjector from a grain key string
     /// </summary>
     public static ResultBox<PartitionKeysAndProjector> FromGrainKey(
         string grainKey,
@@ -45,8 +43,7 @@ public class PartitionKeysAndProjector
             var projectorResult = projectorSpecifier.GetProjector(projectorTypeName);
             if (!projectorResult.IsSuccess)
             {
-                return ResultBox<PartitionKeysAndProjector>.FromException(
-                    projectorResult.GetException());
+                return ResultBox<PartitionKeysAndProjector>.FromException(projectorResult.GetException());
             }
 
             var projector = projectorResult.UnwrapBox();
@@ -55,8 +52,7 @@ public class PartitionKeysAndProjector
             var partitionKeysResult = PartitionKeys.FromPrimaryKeysString(partitionKeysString);
             if (!partitionKeysResult.IsSuccess)
             {
-                return ResultBox<PartitionKeysAndProjector>.FromException(
-                    partitionKeysResult.GetException());
+                return ResultBox<PartitionKeysAndProjector>.FromException(partitionKeysResult.GetException());
             }
 
             return ResultBox<PartitionKeysAndProjector>.FromValue(
@@ -69,18 +65,12 @@ public class PartitionKeysAndProjector
     }
 
     /// <summary>
-    /// Converts to a grain key string for the projector
+    ///     Converts to a grain key string for the projector
     /// </summary>
-    public string ToProjectorGrainKey()
-    {
-        return $"{PartitionKeys.ToPrimaryKeysString()}={Projector.GetType().Name}";
-    }
+    public string ToProjectorGrainKey() => $"{PartitionKeys.ToPrimaryKeysString()}={Projector.GetType().Name}";
 
     /// <summary>
-    /// Converts to a grain key string for the event handler
+    ///     Converts to a grain key string for the event handler
     /// </summary>
-    public string ToEventHandlerGrainKey()
-    {
-        return PartitionKeys.ToPrimaryKeysString();
-    }
+    public string ToEventHandlerGrainKey() => PartitionKeys.ToPrimaryKeysString();
 }

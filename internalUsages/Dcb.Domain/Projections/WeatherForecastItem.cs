@@ -1,13 +1,20 @@
+using Orleans;
 namespace Dcb.Domain.Projections;
 
 /// <summary>
 ///     Weather forecast item in projection
 /// </summary>
-[global::Orleans.GenerateSerializer]
+[GenerateSerializer]
 public record WeatherForecastItem(
-    [property: global::Orleans.Id(0)] Guid ForecastId,
-    [property: global::Orleans.Id(1)] string Location,
-    [property: global::Orleans.Id(2)] DateTime Date,
-    [property: global::Orleans.Id(3)] int TemperatureC,
-    [property: global::Orleans.Id(4)] string? Summary,
-    [property: global::Orleans.Id(5)] DateTime LastUpdated);
+    [property: Id(0)]
+    Guid ForecastId,
+    [property: Id(1)]
+    string Location,
+    [property: Id(2)]
+    DateTime Date,
+    [property: Id(3)]
+    int TemperatureC,
+    [property: Id(4)]
+    string? Summary,
+    [property: Id(5)]
+    DateTime LastUpdated);

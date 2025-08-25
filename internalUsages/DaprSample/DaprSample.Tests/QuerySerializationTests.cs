@@ -1,12 +1,11 @@
-using SharedDomain;
-using SharedDomain.Generated;
-using SharedDomain.Aggregates.User.Queries;
-using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Dapr.Serialization;
+using Sekiban.Pure.Query;
+using SharedDomain;
+using SharedDomain.Aggregates.User.Queries;
+using SharedDomain.Generated;
 using System.Text.Json;
 using Xunit;
-
 namespace DaprSample.Tests;
 
 public class QuerySerializationTests
@@ -17,7 +16,7 @@ public class QuerySerializationTests
     public QuerySerializationTests()
     {
         _jsonOptions = SharedDomainEventsJsonContext.Default.Options;
-        _domainTypes = SharedDomain.Generated.SharedDomainDomainTypes.Generate(_jsonOptions);
+        _domainTypes = SharedDomainDomainTypes.Generate(_jsonOptions);
         // Use the domain types' JsonSerializerOptions which includes all types
         _jsonOptions = _domainTypes.JsonSerializerOptions;
     }
@@ -33,7 +32,7 @@ public class QuerySerializationTests
 
         // Act - Serialize
         var serialized = await SerializableQuery.CreateFromAsync(originalQuery, _jsonOptions);
-        
+
         // Assert serialization worked
         Assert.NotNull(serialized);
         Assert.NotEmpty(serialized.QueryTypeName);
@@ -42,7 +41,7 @@ public class QuerySerializationTests
 
         // Act - Deserialize
         var deserializedResult = await serialized.ToQueryAsync(_domainTypes);
-        
+
         // Assert deserialization worked
         Assert.True(deserializedResult.IsSuccess);
         var deserializedQuery = deserializedResult.GetValue() as UserQuery;
@@ -62,7 +61,7 @@ public class QuerySerializationTests
 
         // Act - Serialize
         var serialized = await SerializableListQuery.CreateFromAsync(originalQuery, _jsonOptions);
-        
+
         // Assert serialization worked
         Assert.NotNull(serialized);
         Assert.NotEmpty(serialized.QueryTypeName);
@@ -71,7 +70,7 @@ public class QuerySerializationTests
 
         // Act - Deserialize
         var deserializedResult = await serialized.ToListQueryAsync(_domainTypes);
-        
+
         // Assert deserialization worked
         Assert.True(deserializedResult.IsSuccess);
         var deserializedQuery = deserializedResult.GetValue() as UserListQuery;
@@ -92,7 +91,7 @@ public class QuerySerializationTests
 
         // Act - Serialize
         var serialized = await SerializableQuery.CreateFromAsync(originalQuery, _jsonOptions);
-        
+
         // Assert serialization worked
         Assert.NotNull(serialized);
         Assert.NotEmpty(serialized.QueryTypeName);
@@ -101,7 +100,7 @@ public class QuerySerializationTests
 
         // Act - Deserialize
         var deserializedResult = await serialized.ToQueryAsync(_domainTypes);
-        
+
         // Assert deserialization worked
         Assert.True(deserializedResult.IsSuccess);
         var deserializedQuery = deserializedResult.GetValue() as UserStatisticsQuery;
@@ -113,23 +112,16 @@ public class QuerySerializationTests
     public async Task QueryResult_CanBeSerializedAndDeserialized()
     {
         // Arrange
-        var userDetail = new UserQuery.UserDetail(
-            Guid.NewGuid(),
-            "John Doe",
-            "john@example.com",
-            1,
-            "last-event-id"
-        );
+        var userDetail = new UserQuery.UserDetail(Guid.NewGuid(), "John Doe", "john@example.com", 1, "last-event-id");
         var originalQuery = new UserQuery(userDetail.UserId);
-        var queryResultGeneral = new Sekiban.Pure.Query.QueryResultGeneral(
+        var queryResultGeneral = new QueryResultGeneral(
             userDetail,
             typeof(UserQuery.UserDetail).FullName!,
-            originalQuery
-        );
+            originalQuery);
 
         // Act - Serialize
         var serialized = await SerializableQueryResult.CreateFromAsync(queryResultGeneral, _jsonOptions);
-        
+
         // Assert serialization worked
         Assert.NotNull(serialized);
         Assert.NotEmpty(serialized.ResultTypeName);
@@ -139,7 +131,7 @@ public class QuerySerializationTests
 
         // Act - Deserialize
         var deserializedResult = await serialized.ToQueryResultAsync(_domainTypes);
-        
+
         // Assert deserialization worked
         if (!deserializedResult.IsSuccess)
         {
@@ -148,7 +140,7 @@ public class QuerySerializationTests
         }
         var queryResult = deserializedResult.GetValue();
         Assert.NotNull(queryResult);
-        
+
         var resultValue = queryResult.Value as UserQuery.UserDetail;
         Assert.NotNull(resultValue);
         Assert.Equal(userDetail.UserId, resultValue.UserId);

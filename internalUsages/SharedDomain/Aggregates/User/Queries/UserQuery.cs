@@ -1,23 +1,22 @@
-using Orleans;
 using ResultBoxes;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-
 namespace SharedDomain.Aggregates.User.Queries;
 
 [GenerateSerializer(GenerateFieldIds = GenerateFieldIds.PublicProperties)]
 public record UserQuery(Guid UserId)
     : IMultiProjectionQuery<AggregateListProjector<UserProjector>, UserQuery, UserQuery.UserDetail>,
-      IWaitForSortableUniqueId
+        IWaitForSortableUniqueId
 {
-    public string? WaitForSortableUniqueId { get; set; }
-    
+
     public static ResultBox<UserDetail> HandleQuery(
-        MultiProjectionState<AggregateListProjector<UserProjector>> projection, 
-        UserQuery query, 
+        MultiProjectionState<AggregateListProjector<UserProjector>> projection,
+        UserQuery query,
         IQueryContext context)
     {
-        var userAggregate = projection.Payload.Aggregates
+        var userAggregate = projection
+            .Payload
+            .Aggregates
             .Where(m => m.Key.AggregateId == query.UserId)
             .Select(m => m.Value)
             .FirstOrDefault();
@@ -30,24 +29,20 @@ public record UserQuery(Guid UserId)
         var payload = userAggregate.GetPayload();
         if (payload is not User user)
         {
-            return ResultBox<UserDetail>.FromException(new InvalidOperationException($"User {query.UserId} payload is not of type User"));
+            return ResultBox<UserDetail>.FromException(
+                new InvalidOperationException($"User {query.UserId} payload is not of type User"));
         }
 
-        return ResultBox<UserDetail>.FromValue(new UserDetail(
-            userAggregate.PartitionKeys.AggregateId,
-            user.Name,
-            user.Email,
-            userAggregate.Version,
-            userAggregate.LastSortableUniqueId
-        ));
+        return ResultBox<UserDetail>.FromValue(
+            new UserDetail(
+                userAggregate.PartitionKeys.AggregateId,
+                user.Name,
+                user.Email,
+                userAggregate.Version,
+                userAggregate.LastSortableUniqueId));
     }
+    public string? WaitForSortableUniqueId { get; set; }
 
     [GenerateSerializer]
-    public record UserDetail(
-        Guid UserId,
-        string Name,
-        string Email,
-        int Version,
-        string LastEventId
-    );
+    public record UserDetail(Guid UserId, string Name, string Email, int Version, string LastEventId);
 }

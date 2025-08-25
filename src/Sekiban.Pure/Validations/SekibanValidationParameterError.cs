@@ -18,12 +18,11 @@ public record SekibanValidationParameterError(string PropertyName, IEnumerable<s
     {
         var list = validationResults.ToList();
         var errors = list.Select(m => m.MemberNames.FirstOrDefault() ?? string.Empty).Distinct().ToList();
-        return errors.Select(
-            param => new SekibanValidationParameterError(
-                param,
-                list
-                    .Where(m => (m.MemberNames.FirstOrDefault() ?? string.Empty) == param)
-                    .Select(m => m.ErrorMessage ?? string.Empty)
-                    .ToList()));
+        return errors.Select(param => new SekibanValidationParameterError(
+            param,
+            list
+                .Where(m => (m.MemberNames.FirstOrDefault() ?? string.Empty) == param)
+                .Select(m => m.ErrorMessage ?? string.Empty)
+                .ToList()));
     }
 }

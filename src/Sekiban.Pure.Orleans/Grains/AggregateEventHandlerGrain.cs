@@ -19,18 +19,15 @@ public class AggregateEventHandlerGrain(
         var streamProvider = this.GetStreamProvider("EventStreamProvider");
         var toStoreEvents = newEvents.ToList().ToEventsAndReplaceTime(sekibanDomainTypes.EventTypes);
         var currentLast = state.State?.LastSortableUniqueId ?? string.Empty;
-        
+
         // 楽観的並行性制御: 期待される最後のIDと現在の最後のIDが一致するかチェック
         if (!string.IsNullOrWhiteSpace(expectedLastSortableUniqueId) && currentLast != expectedLastSortableUniqueId)
             throw new InvalidCastException("Expected last event ID does not match");
-        
+
         // 順序チェック: 現在の最後のイベントより前のタイムスタンプのイベントは受け入れない
         if (!string.IsNullOrWhiteSpace(currentLast) &&
             toStoreEvents.Any() &&
-            string.Compare(
-                currentLast,
-                toStoreEvents.First().SortableUniqueId,
-                StringComparison.Ordinal) > 0)
+            string.Compare(currentLast, toStoreEvents.First().SortableUniqueId, StringComparison.Ordinal) > 0)
             throw new InvalidCastException("Expected last event ID is later than new events");
 
         if (toStoreEvents.Any())
@@ -42,7 +39,7 @@ public class AggregateEventHandlerGrain(
             state.State = persist;
             await state.WriteStateAsync();
         }
-        
+
         var orleansEvents = toStoreEvents;
         if (toStoreEvents.Count != 0) await eventWriter.SaveEvents(toStoreEvents);
         var stream = streamProvider.GetStream<IEvent>(StreamId.Create("AllEvents", Guid.Empty));
@@ -72,7 +69,8 @@ public class AggregateEventHandlerGrain(
         return events.ToList();
     }
 
-    public Task<string> GetLastSortableUniqueIdAsync() => Task.FromResult(state.State?.LastSortableUniqueId ?? string.Empty);
+    public Task<string> GetLastSortableUniqueIdAsync() =>
+        Task.FromResult(state.State?.LastSortableUniqueId ?? string.Empty);
 
     public Task RegisterProjectorAsync(string projectorKey) =>
         // No-op for in-memory implementation
@@ -87,15 +85,17 @@ public class AggregateEventHandlerGrain(
         }
         catch
         {
-            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
+            state.State = new AggregateEventHandlerGrainToPersist
+                { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
         }
         if (state.State == null)
         {
-            state.State = new AggregateEventHandlerGrainToPersist() { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
+            state.State = new AggregateEventHandlerGrainToPersist
+                { LastSortableUniqueId = string.Empty, LastEventDate = OptionalValue<DateTime>.Empty };
         }
         // 永続化された state から最後のイベントID情報を取得
         var persistedLastId = state.State.LastSortableUniqueId;
-        
+
         // 実際のイベントストアから全イベントを取得
         var retrievalInfo = PartitionKeys
             .FromPrimaryKeysString(this.GetPrimaryKeyString())
@@ -104,7 +104,7 @@ public class AggregateEventHandlerGrain(
         var events = await eventReader.GetEvents(retrievalInfo).UnwrapBox();
         _events.Clear();
         _events.AddRange(events);
-        
+
         // 実際のイベントの最後のIDと永続化されたIDが異なる場合は state を更新
         var actualLastId = events.LastOrDefault()?.SortableUniqueId ?? string.Empty;
         if (actualLastId != persistedLastId)
@@ -114,5 +114,4 @@ public class AggregateEventHandlerGrain(
             await state.WriteStateAsync();
         }
     }
-
 }

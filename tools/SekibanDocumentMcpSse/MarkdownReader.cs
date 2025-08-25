@@ -1,24 +1,22 @@
-using Markdig;
 using System.Text.RegularExpressions;
-
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Utility class for reading and parsing Markdown documents
+///     Utility class for reading and parsing Markdown documents
 /// </summary>
 public class MarkdownReader
 {
-    private readonly ILogger<MarkdownReader> _logger;
     public readonly string _docsBasePath;
-    
+    private readonly ILogger<MarkdownReader> _logger;
+
     public MarkdownReader(ILogger<MarkdownReader> logger, string docsBasePath)
     {
         _logger = logger;
         _docsBasePath = docsBasePath;
     }
-    
+
     /// <summary>
-    /// Read all markdown files from the docs directory
+    ///     Read all markdown files from the docs directory
     /// </summary>
     public async Task<List<MarkdownDocument>> ReadAllDocumentsAsync()
     {
@@ -30,7 +28,7 @@ public class MarkdownReader
                 _logger.LogWarning("Docs directory not found: {DocsBasePath}", _docsBasePath);
                 return documents;
             }
-            
+
             var files = Directory.GetFiles(_docsBasePath, "*.md", SearchOption.TopDirectoryOnly);
             foreach (var file in files)
             {
@@ -39,7 +37,7 @@ public class MarkdownReader
                 var doc = ParseDocument(fileName, content);
                 documents.Add(doc);
             }
-            
+
             // Sort documents by filename (assuming they are numbered)
             documents = documents.OrderBy(d => d.FileName).ToList();
         }
@@ -47,12 +45,12 @@ public class MarkdownReader
         {
             _logger.LogError(ex, "Error reading markdown documents from {DocsBasePath}", _docsBasePath);
         }
-        
+
         return documents;
     }
-    
+
     /// <summary>
-    /// Parse a single markdown document
+    ///     Parse a single markdown document
     /// </summary>
     private MarkdownDocument ParseDocument(string fileName, string content)
     {
@@ -61,33 +59,33 @@ public class MarkdownReader
             FileName = fileName,
             Content = content
         };
-        
+
         // Extract title (first H1)
         var titleMatch = Regex.Match(content, @"^#\s+(.+)$", RegexOptions.Multiline);
         if (titleMatch.Success)
         {
             document.Title = titleMatch.Groups[1].Value.Trim();
-        }
-        else
+        } else
         {
             document.Title = Path.GetFileNameWithoutExtension(fileName);
         }
-        
+
         // Extract code samples
         var codeBlockMatches = Regex.Matches(content, @"```(\w+)\s*\n(.*?)```", RegexOptions.Singleline);
         foreach (Match match in codeBlockMatches)
         {
             var language = match.Groups[1].Value.Trim();
             var code = match.Groups[2].Value;
-            
-            document.CodeSamples.Add(new CodeSample
-            {
-                Language = language,
-                Code = code,
-                Context = ExtractContextBeforeCodeBlock(content, match.Index)
-            });
+
+            document.CodeSamples.Add(
+                new CodeSample
+                {
+                    Language = language,
+                    Code = code,
+                    Context = ExtractContextBeforeCodeBlock(content, match.Index)
+                });
         }
-        
+
         // Extract navigation links
         var navMatches = Regex.Matches(content, @"\>\s*-\s*\[(.*?)\]\((.*?)\)(\s*\((.*?)\))?", RegexOptions.Multiline);
         foreach (Match match in navMatches)
@@ -95,15 +93,16 @@ public class MarkdownReader
             var title = match.Groups[1].Value.Trim();
             var link = match.Groups[2].Value.Trim();
             var isCurrent = match.Groups[4].Value.Contains("You are here");
-            
-            document.NavigationLinks.Add(new NavigationLink
-            {
-                Title = title,
-                Link = link,
-                IsCurrent = isCurrent
-            });
+
+            document.NavigationLinks.Add(
+                new NavigationLink
+                {
+                    Title = title,
+                    Link = link,
+                    IsCurrent = isCurrent
+                });
         }
-        
+
         // Extract sections (H2)
         var sectionMatches = Regex.Matches(content, @"^##\s+(.+)$", RegexOptions.Multiline);
         foreach (Match match in sectionMatches)
@@ -114,26 +113,26 @@ public class MarkdownReader
 
         return document;
     }
-    
+
     /// <summary>
-    /// Extract context (usually section heading) before a code block
+    ///     Extract context (usually section heading) before a code block
     /// </summary>
     private string ExtractContextBeforeCodeBlock(string content, int codeBlockPosition)
     {
         var contentBeforeBlock = content.Substring(0, codeBlockPosition);
         var headingMatches = Regex.Matches(contentBeforeBlock, @"^(#{1,6})\s+(.+)$", RegexOptions.Multiline);
-        
+
         if (headingMatches.Count > 0)
         {
             var lastHeading = headingMatches[headingMatches.Count - 1];
             return lastHeading.Groups[2].Value.Trim();
         }
-        
+
         return string.Empty;
     }
-    
+
     /// <summary>
-    /// Read a specific document by filename
+    ///     Read a specific document by filename
     /// </summary>
     public async Task<MarkdownDocument?> ReadDocumentAsync(string fileName)
     {
@@ -145,7 +144,7 @@ public class MarkdownReader
                 _logger.LogWarning("Document not found: {FilePath}", filePath);
                 return null;
             }
-            
+
             var content = await File.ReadAllTextAsync(filePath);
             return ParseDocument(fileName, content);
         }

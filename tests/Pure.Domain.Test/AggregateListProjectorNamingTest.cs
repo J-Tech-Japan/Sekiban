@@ -1,7 +1,4 @@
-using Pure.Domain;
 using Sekiban.Pure.Projectors;
-using Xunit;
-
 namespace Pure.Domain.Test;
 
 public class AggregateListProjectorNamingTest
@@ -15,13 +12,13 @@ public class AggregateListProjectorNamingTest
         Assert.Equal(userProjectorName.ToLowerInvariant(), userProjectorName);
         Assert.DoesNotContain("`", userProjectorName);
         Assert.DoesNotContain("_", userProjectorName);
-        
+
         // Test with ShoppingCartProjector
         var cartProjectorName = AggregateListProjector<ShoppingCartProjector>.GetMultiProjectorName();
         Assert.Equal("aggregatelistprojector-shoppingcartprojector", cartProjectorName);
         Assert.Equal(cartProjectorName.ToLowerInvariant(), cartProjectorName);
     }
-    
+
     [Fact]
     public void AggregateListProjector_Names_AreKubernetesCompliant()
     {
@@ -30,7 +27,7 @@ public class AggregateListProjectorNamingTest
             AggregateListProjector<UserProjector>.GetMultiProjectorName(),
             AggregateListProjector<ShoppingCartProjector>.GetMultiProjectorName()
         };
-        
+
         foreach (var name in names)
         {
             // Check Kubernetes naming requirements

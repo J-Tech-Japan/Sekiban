@@ -1,10 +1,9 @@
-using System.Collections.Concurrent;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-
+using System.Collections.Concurrent;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -14,17 +13,13 @@ public class GeneralEventProvider : IGeneralEventProvider
 {
     private readonly IEventStore _eventStore;
     private readonly IEventSubscription _eventSubscription;
+    private readonly ConcurrentDictionary<string, EventProviderHandle> _handles = new();
     private readonly TimeSpan _safeWindowDuration;
     private readonly object _stateLock = new();
-    
-    private EventProviderState _state = EventProviderState.NotStarted;
-    private SortableUniqueId? _currentPosition;
-    private bool _isCaughtUp;
-    private readonly ConcurrentDictionary<string, EventProviderHandle> _handles = new();
     private bool _disposed;
 
     public GeneralEventProvider(
-        IEventStore eventStore, 
+        IEventStore eventStore,
         IEventSubscription eventSubscription,
         TimeSpan? safeWindowDuration = null)
     {
@@ -33,9 +28,21 @@ public class GeneralEventProvider : IGeneralEventProvider
         _safeWindowDuration = safeWindowDuration ?? TimeSpan.FromSeconds(20);
     }
 
-    public EventProviderState State => _state;
-    public SortableUniqueId? CurrentPosition => _currentPosition;
-    public bool IsCaughtUp => _isCaughtUp;
+    public EventProviderState State
+    {
+        get;
+        private set;
+    } = EventProviderState.NotStarted;
+    public SortableUniqueId? CurrentPosition
+    {
+        get;
+        private set;
+    }
+    public bool IsCaughtUp
+    {
+        get;
+        private set;
+    }
 
     public SortableUniqueId GetSafeWindowThreshold()
     {
@@ -50,12 +57,58 @@ public class GeneralEventProvider : IGeneralEventProvider
         string eventTopic = "event.all",
         IEventProviderFilter? filter = null,
         int batchSize = 10000,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await StartAsyncWithRetry(onEvent, fromPosition, eventTopic, filter, batchSize, false, null, cancellationToken);
+
+    // Interface implementation (backward compatible)
+    public async Task<IEventProviderHandle> StartWithActorAsync(
+        IMultiProjectionActorCommon actor,
+        SortableUniqueId? fromPosition = null,
+        string eventTopic = "event.all",
+        IEventProviderFilter? filter = null,
+        int batchSize = 10000,
+        CancellationToken cancellationToken = default) =>
+        await StartWithActorAsyncWithRetry(
+            actor,
+            fromPosition,
+            eventTopic,
+            filter,
+            batchSize,
+            false,
+            null,
+            cancellationToken);
+
+    // Interface implementation (backward compatible)
+    public async Task<IEventProviderHandle> StartWithBatchCallbackAsync(
+        Func<IReadOnlyList<(Event evt, bool isSafe)>, Task> onEventBatch,
+        SortableUniqueId? fromPosition = null,
+        string eventTopic = "event.all",
+        IEventProviderFilter? filter = null,
+        int batchSize = 10000,
+        CancellationToken cancellationToken = default) =>
+        await StartWithBatchCallbackAsyncWithRetry(
+            onEventBatch,
+            fromPosition,
+            eventTopic,
+            filter,
+            batchSize,
+            false,
+            null,
+            cancellationToken);
+
+    public void Dispose()
     {
-        return await StartAsyncWithRetry(onEvent, fromPosition, eventTopic, filter, batchSize, 
-            false, null, cancellationToken);
+        if (_disposed) return;
+
+        foreach (var handle in _handles.Values)
+        {
+            handle.Dispose();
+        }
+
+        _handles.Clear();
+        _disposed = true;
     }
-    
+
     // Overload with retry options
     public async Task<IEventProviderHandle> StartAsyncWithRetry(
         Func<Event, bool, Task> onEvent,
@@ -69,51 +122,38 @@ public class GeneralEventProvider : IGeneralEventProvider
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GeneralEventProvider));
 
-        var handle = new EventProviderHandle(
-            Guid.NewGuid().ToString(),
-            () => RemoveHandle(Guid.NewGuid().ToString()));
+        var handle = new EventProviderHandle(Guid.NewGuid().ToString(), () => RemoveHandle(Guid.NewGuid().ToString()));
 
         _handles[handle.ProviderId] = handle;
 
         // Start the event streaming process
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await StreamEventsAsync(
-                    handle,
-                    onEvent,
-                    fromPosition,
-                    eventTopic,
-                    filter,
-                    batchSize,
-                    autoRetryOnIncompleteWindow,
-                    retryDelay ?? TimeSpan.FromSeconds(5),
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                handle.SetError(ex);
-                UpdateState(EventProviderState.Error);
-            }
-        }, cancellationToken);
+                try
+                {
+                    await StreamEventsAsync(
+                        handle,
+                        onEvent,
+                        fromPosition,
+                        eventTopic,
+                        filter,
+                        batchSize,
+                        autoRetryOnIncompleteWindow,
+                        retryDelay ?? TimeSpan.FromSeconds(5),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    handle.SetError(ex);
+                    UpdateState(EventProviderState.Error);
+                }
+            },
+            cancellationToken);
 
         return handle;
     }
 
-    // Interface implementation (backward compatible)
-    public async Task<IEventProviderHandle> StartWithActorAsync(
-        IMultiProjectionActorCommon actor,
-        SortableUniqueId? fromPosition = null,
-        string eventTopic = "event.all",
-        IEventProviderFilter? filter = null,
-        int batchSize = 10000,
-        CancellationToken cancellationToken = default)
-    {
-        return await StartWithActorAsyncWithRetry(actor, fromPosition, eventTopic, filter,
-            batchSize, false, null, cancellationToken);
-    }
-    
     // Overload with retry options
     public async Task<IEventProviderHandle> StartWithActorAsyncWithRetry(
         IMultiProjectionActorCommon actor,
@@ -131,7 +171,7 @@ public class GeneralEventProvider : IGeneralEventProvider
             {
                 var events = batch.Select(b => b.evt).ToList();
                 var allSafe = batch.All(b => b.isSafe);
-                
+
                 // Send to actor's AddEventsAsync
                 // finishedCatchUp is true when all events are safe
                 await actor.AddEventsAsync(events, allSafe);
@@ -145,19 +185,6 @@ public class GeneralEventProvider : IGeneralEventProvider
             cancellationToken);
     }
 
-    // Interface implementation (backward compatible)
-    public async Task<IEventProviderHandle> StartWithBatchCallbackAsync(
-        Func<IReadOnlyList<(Event evt, bool isSafe)>, Task> onEventBatch,
-        SortableUniqueId? fromPosition = null,
-        string eventTopic = "event.all",
-        IEventProviderFilter? filter = null,
-        int batchSize = 10000,
-        CancellationToken cancellationToken = default)
-    {
-        return await StartWithBatchCallbackAsyncWithRetry(onEventBatch, fromPosition, eventTopic,
-            filter, batchSize, false, null, cancellationToken);
-    }
-    
     // Overload with retry options
     public async Task<IEventProviderHandle> StartWithBatchCallbackAsyncWithRetry(
         Func<IReadOnlyList<(Event evt, bool isSafe)>, Task> onEventBatch,
@@ -171,34 +198,34 @@ public class GeneralEventProvider : IGeneralEventProvider
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GeneralEventProvider));
 
-        var handle = new EventProviderHandle(
-            Guid.NewGuid().ToString(),
-            () => RemoveHandle(Guid.NewGuid().ToString()));
+        var handle = new EventProviderHandle(Guid.NewGuid().ToString(), () => RemoveHandle(Guid.NewGuid().ToString()));
 
         _handles[handle.ProviderId] = handle;
 
         // Start the event streaming process with batch callback
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await StreamEventsBatchAsync(
-                    handle,
-                    onEventBatch,
-                    fromPosition,
-                    eventTopic,
-                    filter,
-                    batchSize,
-                    autoRetryOnIncompleteWindow,
-                    retryDelay ?? TimeSpan.FromSeconds(5),
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                handle.SetError(ex);
-                UpdateState(EventProviderState.Error);
-            }
-        }, cancellationToken);
+                try
+                {
+                    await StreamEventsBatchAsync(
+                        handle,
+                        onEventBatch,
+                        fromPosition,
+                        eventTopic,
+                        filter,
+                        batchSize,
+                        autoRetryOnIncompleteWindow,
+                        retryDelay ?? TimeSpan.FromSeconds(5),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    handle.SetError(ex);
+                    UpdateState(EventProviderState.Error);
+                }
+            },
+            cancellationToken);
 
         return handle;
     }
@@ -222,7 +249,7 @@ public class GeneralEventProvider : IGeneralEventProvider
         var historicalPosition = fromPosition;
         var processedEventIds = new HashSet<Guid>();
         var safeThreshold = GetSafeWindowThreshold();
-        
+
         // Buffer for events from subscription that arrive during catch-up
         var subscriptionBuffer = new ConcurrentBag<Event>();
         IEventSubscriptionHandle? subscriptionHandle = null;
@@ -233,19 +260,18 @@ public class GeneralEventProvider : IGeneralEventProvider
             subscriptionHandle = await _eventSubscription.SubscribeAsync(
                 async evt =>
                 {
-                    if (!_isCaughtUp)
+                    if (!IsCaughtUp)
                     {
                         // Buffer events during catch-up
                         subscriptionBuffer.Add(evt);
-                    }
-                    else if (!handle.IsPaused && !handle.IsStopped)
+                    } else if (!handle.IsPaused && !handle.IsStopped)
                     {
                         // Process live events directly after catch-up
                         await ProcessLiveEvent(evt, onEvent, filter, handle, processedEventIds);
                     }
                 },
-                subscriptionId: $"provider-{handle.ProviderId}",
-                cancellationToken: cancellationToken);
+                $"provider-{handle.ProviderId}",
+                cancellationToken);
 
             // Process historical events in batches
             var processedInCurrentBatch = 0;
@@ -257,7 +283,7 @@ public class GeneralEventProvider : IGeneralEventProvider
                     continue;
                 }
 
-                ((EventProviderHandle)handle).SetProcessingBatch(true);
+                handle.SetProcessingBatch(true);
 
                 // Get batch of events from EventStore
                 var result = await GetFilteredEvents(historicalPosition, filter);
@@ -270,7 +296,7 @@ public class GeneralEventProvider : IGeneralEventProvider
                 if (!events.Any())
                 {
                     // No more historical events
-                    ((EventProviderHandle)handle).SetProcessingBatch(false);
+                    handle.SetProcessingBatch(false);
                     break;
                 }
 
@@ -285,7 +311,11 @@ public class GeneralEventProvider : IGeneralEventProvider
                         continue;
 
                     // Determine if event is safe
-                    bool isSafe = string.Compare(evt.SortableUniqueIdValue, safeThreshold.Value, StringComparison.Ordinal) <= 0;
+                    var isSafe = string.Compare(
+                            evt.SortableUniqueIdValue,
+                            safeThreshold.Value,
+                            StringComparison.Ordinal) <=
+                        0;
 
                     // Check filter
                     if (filter != null)
@@ -297,16 +327,16 @@ public class GeneralEventProvider : IGeneralEventProvider
 
                     // Send event to projection
                     await onEvent(evt, isSafe);
-                    
+
                     handle.IncrementStatistics(isSafe);
                     UpdatePosition(evt.SortableUniqueIdValue);
                     handle.UpdatePosition(evt.SortableUniqueIdValue);
-                    
+
                     historicalPosition = new SortableUniqueId(evt.SortableUniqueIdValue);
                     processedInCurrentBatch++;
                 }
 
-                ((EventProviderHandle)handle).SetProcessingBatch(false);
+                handle.SetProcessingBatch(false);
 
                 // Check if we've reached batch size limit
                 if (processedInCurrentBatch >= batchSize)
@@ -323,31 +353,32 @@ public class GeneralEventProvider : IGeneralEventProvider
                     // We're in the unsafe zone, time to transition
                     break;
                 }
-                
+
                 // If we processed a full batch but didn't reach SafeWindow, handle retry logic
                 if (events.Count == batchSize && processedInCurrentBatch >= batchSize)
                 {
                     processedInCurrentBatch = 0;
-                    
+
                     if (autoRetryOnIncompleteWindow)
                     {
                         // Wait before retrying
                         await Task.Delay(retryDelay, cancellationToken);
-                        
+
                         // Update safe threshold for next iteration
                         safeThreshold = GetSafeWindowThreshold();
-                    }
-                    else
+                    } else
                     {
                         // Signal that manual retry is needed
-                        ((EventProviderHandle)handle).SetWaitingForManualRetry(true);
-                        
+                        handle.SetWaitingForManualRetry(true);
+
                         // Wait for manual retry signal
-                        while (((EventProviderHandle)handle).IsWaitingForManualRetry && !cancellationToken.IsCancellationRequested && !handle.IsStopped)
+                        while (((EventProviderHandle)handle).IsWaitingForManualRetry &&
+                            !cancellationToken.IsCancellationRequested &&
+                            !handle.IsStopped)
                         {
                             await Task.Delay(100, cancellationToken);
                         }
-                        
+
                         // Update safe threshold after manual retry
                         safeThreshold = GetSafeWindowThreshold();
                     }
@@ -370,7 +401,7 @@ public class GeneralEventProvider : IGeneralEventProvider
             }
 
             // Phase 3: Mark as caught up and switch to live mode
-            _isCaughtUp = true;
+            IsCaughtUp = true;
             handle.SetCaughtUp(DateTime.UtcNow - catchUpStartTime);
             UpdateState(EventProviderState.Live);
             handle.SetState(EventProviderState.Live);
@@ -406,7 +437,7 @@ public class GeneralEventProvider : IGeneralEventProvider
         var historicalPosition = fromPosition;
         var processedEventIds = new HashSet<Guid>();
         var safeThreshold = GetSafeWindowThreshold();
-        
+
         // Buffer for events from subscription
         var subscriptionBuffer = new ConcurrentBag<Event>();
         IEventSubscriptionHandle? subscriptionHandle = null;
@@ -417,18 +448,17 @@ public class GeneralEventProvider : IGeneralEventProvider
             subscriptionHandle = await _eventSubscription.SubscribeAsync(
                 async evt =>
                 {
-                    if (!_isCaughtUp)
+                    if (!IsCaughtUp)
                     {
                         subscriptionBuffer.Add(evt);
-                    }
-                    else if (!handle.IsPaused && !handle.IsStopped && !((EventProviderHandle)handle).IsSubscriptionStopped)
+                    } else if (!handle.IsPaused && !handle.IsStopped && !handle.IsSubscriptionStopped)
                     {
                         // Process live events in batches
                         subscriptionBuffer.Add(evt);
                     }
                 },
-                subscriptionId: $"provider-{handle.ProviderId}",
-                cancellationToken: cancellationToken);
+                $"provider-{handle.ProviderId}",
+                cancellationToken);
 
             // Process historical events in batches
             while (!cancellationToken.IsCancellationRequested && !handle.IsStopped)
@@ -453,7 +483,7 @@ public class GeneralEventProvider : IGeneralEventProvider
                 if (!events.Any())
                 {
                     // No more historical events
-                    ((EventProviderHandle)handle).SetProcessingBatch(false);
+                    handle.SetProcessingBatch(false);
                     break;
                 }
 
@@ -463,7 +493,11 @@ public class GeneralEventProvider : IGeneralEventProvider
                     if (!processedEventIds.Add(evt.Id))
                         continue;
 
-                    bool isSafe = string.Compare(evt.SortableUniqueIdValue, safeThreshold.Value, StringComparison.Ordinal) <= 0;
+                    var isSafe = string.Compare(
+                            evt.SortableUniqueIdValue,
+                            safeThreshold.Value,
+                            StringComparison.Ordinal) <=
+                        0;
 
                     if (filter != null)
                     {
@@ -480,7 +514,7 @@ public class GeneralEventProvider : IGeneralEventProvider
                 if (batch.Any())
                 {
                     await onEventBatch(batch);
-                    
+
                     foreach (var item in batch)
                     {
                         handle.IncrementStatistics(item.isSafe);
@@ -489,7 +523,7 @@ public class GeneralEventProvider : IGeneralEventProvider
                     }
                 }
 
-                ((EventProviderHandle)handle).SetProcessingBatch(false);
+                handle.SetProcessingBatch(false);
 
                 // Check if we've caught up
                 var lastEvent = events.Last();
@@ -503,22 +537,24 @@ public class GeneralEventProvider : IGeneralEventProvider
                 {
                     // Wait before retrying
                     await Task.Delay(retryDelay, cancellationToken);
-                    
+
                     // Update safe threshold for next iteration
                     safeThreshold = GetSafeWindowThreshold();
                     continue;
                 }
-                else if (events.Count == batchSize && !autoRetryOnIncompleteWindow)
+                if (events.Count == batchSize && !autoRetryOnIncompleteWindow)
                 {
                     // Signal that manual retry is needed
-                    ((EventProviderHandle)handle).SetWaitingForManualRetry(true);
-                    
+                    handle.SetWaitingForManualRetry(true);
+
                     // Wait for manual retry signal
-                    while (((EventProviderHandle)handle).IsWaitingForManualRetry && !cancellationToken.IsCancellationRequested && !handle.IsStopped)
+                    while (((EventProviderHandle)handle).IsWaitingForManualRetry &&
+                        !cancellationToken.IsCancellationRequested &&
+                        !handle.IsStopped)
                     {
                         await Task.Delay(100, cancellationToken);
                     }
-                    
+
                     // Update safe threshold after manual retry
                     safeThreshold = GetSafeWindowThreshold();
                     continue;
@@ -529,7 +565,7 @@ public class GeneralEventProvider : IGeneralEventProvider
             }
 
             // Mark as caught up
-            _isCaughtUp = true;
+            IsCaughtUp = true;
             handle.SetCaughtUp(DateTime.UtcNow - catchUpStartTime);
             UpdateState(EventProviderState.Live);
             handle.SetState(EventProviderState.Live);
@@ -540,13 +576,13 @@ public class GeneralEventProvider : IGeneralEventProvider
                 if (handle.IsPaused || ((EventProviderHandle)handle).IsSubscriptionStopped)
                 {
                     await Task.Delay(100, cancellationToken);
-                    
+
                     // If subscription is stopped but there are buffered events, process them
                     if (((EventProviderHandle)handle).IsSubscriptionStopped && subscriptionBuffer.Any())
                     {
                         var buffered = subscriptionBuffer.ToList();
                         subscriptionBuffer.Clear();
-                        
+
                         var batch = new List<(Event evt, bool isSafe)>();
                         foreach (var evt in buffered.OrderBy(e => e.SortableUniqueIdValue))
                         {
@@ -574,19 +610,20 @@ public class GeneralEventProvider : IGeneralEventProvider
                             }
                         }
                     }
-                    
+
                     continue;
                 }
 
                 // Collect batch from subscription buffer
-                if (subscriptionBuffer.Count >= batchSize || 
-                    (subscriptionBuffer.Any() && DateTime.UtcNow.Subtract(((EventProviderHandle)handle).LastBatchTime) > TimeSpan.FromSeconds(1)))
+                if (subscriptionBuffer.Count >= batchSize ||
+                    subscriptionBuffer.Any() &&
+                    DateTime.UtcNow.Subtract(handle.LastBatchTime) > TimeSpan.FromSeconds(1))
                 {
                     ((EventProviderHandle)handle).SetProcessingBatch(true);
-                    
+
                     var buffered = subscriptionBuffer.ToList();
                     subscriptionBuffer.Clear();
-                    
+
                     var batch = new List<(Event evt, bool isSafe)>();
                     foreach (var evt in buffered.OrderBy(e => e.SortableUniqueIdValue).Take(batchSize))
                     {
@@ -613,8 +650,8 @@ public class GeneralEventProvider : IGeneralEventProvider
                             handle.UpdatePosition(item.evt.SortableUniqueIdValue);
                         }
                     }
-                    
-                    ((EventProviderHandle)handle).SetProcessingBatch(false);
+
+                    handle.SetProcessingBatch(false);
                     ((EventProviderHandle)handle).UpdateLastBatchTime();
                 }
 
@@ -648,14 +685,14 @@ public class GeneralEventProvider : IGeneralEventProvider
 
         // Live events are always unsafe
         await onEvent(evt, false);
-        
+
         handle.IncrementStatistics(false);
         UpdatePosition(evt.SortableUniqueIdValue);
         handle.UpdatePosition(evt.SortableUniqueIdValue);
     }
 
     private async Task<ResultBox<IEnumerable<Event>>> GetFilteredEvents(
-        SortableUniqueId? fromPosition, 
+        SortableUniqueId? fromPosition,
         IEventProviderFilter? filter)
     {
         // If we have tag filters, use ReadEventsByTagAsync
@@ -670,24 +707,22 @@ public class GeneralEventProvider : IGeneralEventProvider
         return await _eventStore.ReadAllEventsAsync(fromPosition);
     }
 
-    private async Task<List<ITag>> GetEventTags(Event evt)
-    {
+    private async Task<List<ITag>> GetEventTags(Event evt) =>
         // In a real implementation, this would retrieve tags associated with the event
         // For now, return empty list (tags would typically be stored with events)
-        return await Task.FromResult(new List<ITag>());
-    }
+        await Task.FromResult(new List<ITag>());
 
     private void UpdateState(EventProviderState newState)
     {
         lock (_stateLock)
         {
-            _state = newState;
+            State = newState;
         }
     }
 
     private void UpdatePosition(string position)
     {
-        _currentPosition = new SortableUniqueId(position);
+        CurrentPosition = new SortableUniqueId(position);
     }
 
     private void RemoveHandle(string providerId)
@@ -695,39 +730,33 @@ public class GeneralEventProvider : IGeneralEventProvider
         _handles.TryRemove(providerId, out _);
     }
 
-    public void Dispose()
-    {
-        if (_disposed) return;
-        
-        foreach (var handle in _handles.Values)
-        {
-            handle.Dispose();
-        }
-        
-        _handles.Clear();
-        _disposed = true;
-    }
-
     private class EventProviderHandle : IEventProviderHandle
     {
-        private readonly Action _onDispose;
+        private readonly TaskCompletionSource<bool> _batchCompletionTcs = new();
         private readonly TaskCompletionSource<bool> _catchUpTcs = new();
-        private volatile EventProviderState _state = EventProviderState.NotStarted;
+        private readonly Action _onDispose;
+        private TimeSpan? _catchUpDuration;
+        private bool _disposed;
+        private Exception? _error;
         private volatile bool _isPaused;
+        private volatile bool _isProcessingBatch;
         private volatile bool _isStopped;
         private volatile bool _isSubscriptionStopped;
-        private volatile bool _isProcessingBatch;
-        private long _totalEvents;
-        private long _safeEvents;
-        private long _unsafeEvents;
-        private DateTime? _lastEventTime;
-        private SortableUniqueId? _lastEventPosition;
-        private TimeSpan? _catchUpDuration;
-        private Exception? _error;
-        private bool _disposed;
-        private readonly TaskCompletionSource<bool> _batchCompletionTcs = new();
-        private DateTime _lastBatchTime = DateTime.UtcNow;
         private volatile bool _isWaitingForManualRetry;
+        private SortableUniqueId? _lastEventPosition;
+        private DateTime? _lastEventTime;
+        private long _safeEvents;
+        private volatile EventProviderState _state = EventProviderState.NotStarted;
+        private long _totalEvents;
+        private long _unsafeEvents;
+        public bool IsPaused => _isPaused;
+        public bool IsStopped => _isStopped;
+        public bool IsSubscriptionStopped => _isSubscriptionStopped;
+        public DateTime LastBatchTime
+        {
+            get;
+            private set;
+        } = DateTime.UtcNow;
 
         public EventProviderHandle(string providerId, Action onDispose)
         {
@@ -737,42 +766,8 @@ public class GeneralEventProvider : IGeneralEventProvider
 
         public string ProviderId { get; }
         public EventProviderState State => _state;
-        public bool IsPaused => _isPaused;
-        public bool IsStopped => _isStopped;
-        public bool IsSubscriptionStopped => _isSubscriptionStopped;
         public bool IsProcessingBatch => _isProcessingBatch;
-        public DateTime LastBatchTime => _lastBatchTime;
         public bool IsWaitingForManualRetry => _isWaitingForManualRetry;
-
-        public void SetState(EventProviderState state) => _state = state;
-        
-        public void SetError(Exception ex)
-        {
-            _error = ex;
-            _state = EventProviderState.Error;
-            _catchUpTcs.TrySetException(ex);
-        }
-
-        public void SetCaughtUp(TimeSpan duration)
-        {
-            _catchUpDuration = duration;
-            _catchUpTcs.TrySetResult(true);
-        }
-
-        public void UpdatePosition(string position)
-        {
-            _lastEventPosition = new SortableUniqueId(position);
-            _lastEventTime = DateTime.UtcNow;
-        }
-
-        public void IncrementStatistics(bool isSafe)
-        {
-            Interlocked.Increment(ref _totalEvents);
-            if (isSafe)
-                Interlocked.Increment(ref _safeEvents);
-            else
-                Interlocked.Increment(ref _unsafeEvents);
-        }
 
         public async Task PauseAsync()
         {
@@ -801,12 +796,7 @@ public class GeneralEventProvider : IGeneralEventProvider
             _isSubscriptionStopped = true;
             await Task.CompletedTask;
         }
-        
-        public void SetWaitingForManualRetry(bool waiting)
-        {
-            _isWaitingForManualRetry = waiting;
-        }
-        
+
         public void RetryManually()
         {
             _isWaitingForManualRetry = false;
@@ -834,15 +824,59 @@ public class GeneralEventProvider : IGeneralEventProvider
             }
         }
 
-        public EventProviderStatistics GetStatistics()
-        {
-            return new EventProviderStatistics(
+        public EventProviderStatistics GetStatistics() =>
+            new(
                 Interlocked.Read(ref _totalEvents),
                 Interlocked.Read(ref _safeEvents),
                 Interlocked.Read(ref _unsafeEvents),
                 _lastEventTime,
                 _lastEventPosition,
                 _catchUpDuration);
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _isStopped = true;
+            _disposed = true;
+            _catchUpTcs.TrySetCanceled();
+            _batchCompletionTcs.TrySetCanceled();
+            _onDispose?.Invoke();
+        }
+
+        public void SetState(EventProviderState state) => _state = state;
+
+        public void SetError(Exception ex)
+        {
+            _error = ex;
+            _state = EventProviderState.Error;
+            _catchUpTcs.TrySetException(ex);
+        }
+
+        public void SetCaughtUp(TimeSpan duration)
+        {
+            _catchUpDuration = duration;
+            _catchUpTcs.TrySetResult(true);
+        }
+
+        public void UpdatePosition(string position)
+        {
+            _lastEventPosition = new SortableUniqueId(position);
+            _lastEventTime = DateTime.UtcNow;
+        }
+
+        public void IncrementStatistics(bool isSafe)
+        {
+            Interlocked.Increment(ref _totalEvents);
+            if (isSafe)
+                Interlocked.Increment(ref _safeEvents);
+            else
+                Interlocked.Increment(ref _unsafeEvents);
+        }
+
+        public void SetWaitingForManualRetry(bool waiting)
+        {
+            _isWaitingForManualRetry = waiting;
         }
 
         public void SetProcessingBatch(bool isProcessing)
@@ -856,18 +890,7 @@ public class GeneralEventProvider : IGeneralEventProvider
 
         public void UpdateLastBatchTime()
         {
-            _lastBatchTime = DateTime.UtcNow;
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            
-            _isStopped = true;
-            _disposed = true;
-            _catchUpTcs.TrySetCanceled();
-            _batchCompletionTcs.TrySetCanceled();
-            _onDispose?.Invoke();
+            LastBatchTime = DateTime.UtcNow;
         }
     }
 }

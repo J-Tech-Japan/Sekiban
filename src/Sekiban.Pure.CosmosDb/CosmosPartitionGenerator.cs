@@ -17,5 +17,4 @@ public class CosmosPartitionGenerator
             .Add(partitionKeys.Group)
             .Add(partitionKeys.ToPrimaryKeysString())
             .Build();
-
 }

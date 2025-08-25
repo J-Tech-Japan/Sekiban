@@ -10,6 +10,12 @@ public class SekibanSourceGenSerializer : ISekibanSerializer
             new JsonSerializerOptions
                 { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
+    public JsonSerializerOptions GetJsonSerializerOptions() => _serializerOptions;
+    public string Serialize<T>(T json) => JsonSerializer.Serialize(json, _serializerOptions);
+
+    public T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, _serializerOptions) ??
+        throw new JsonException("Deserialization failed.");
+
     public static SekibanSourceGenSerializer FromOptions<TEventTypes>(JsonSerializerOptions serializerOptions)
         where TEventTypes : IEventTypes, new()
     {
@@ -18,10 +24,4 @@ public class SekibanSourceGenSerializer : ISekibanSerializer
         eventTypes.CheckEventJsonContextOption(serializerOptions);
         return new SekibanSourceGenSerializer(serializerOptions);
     }
-
-    public JsonSerializerOptions GetJsonSerializerOptions() => _serializerOptions;
-    public string Serialize<T>(T json) => JsonSerializer.Serialize(json, _serializerOptions);
-
-    public T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, _serializerOptions) 
-        ?? throw new JsonException("Deserialization failed.");
 }

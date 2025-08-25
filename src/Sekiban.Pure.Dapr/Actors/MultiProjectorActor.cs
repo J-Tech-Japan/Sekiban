@@ -1,6 +1,6 @@
-using Dapr.Actors;
 using Dapr.Actors.Runtime;
 using Dapr.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
@@ -9,45 +9,39 @@ using Sekiban.Pure.Dapr.Parts;
 using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
-using Sekiban.Pure.Exceptions;
-using Sekiban.Pure.Executors;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
-using Sekiban.Pure.Repositories;
-using Sekiban.Pure;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Sekiban.Pure.Dapr.Actors;
 
 [Actor(TypeName = nameof(MultiProjectorActor))]
 public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
 {
-    // ---------- Tunables ----------
-    private static readonly TimeSpan SafeStateWindow = TimeSpan.FromSeconds(7);
-    private static readonly TimeSpan PersistInterval = TimeSpan.FromMinutes(5);
-    
-    // ---------- State ----------
-    private MultiProjectionState? _safeState;
-    private MultiProjectionState? _unsafeState;
-    
-    // ---------- Infra ----------
-    private readonly IEventReader _eventReader;
-    private readonly SekibanDomainTypes _domainTypes;
-    private readonly IDaprSerializationService _serialization;
-    private readonly DaprClient _daprClient;
-    private readonly DaprSekibanOptions _options;
-    private readonly ILogger<MultiProjectorActor> _logger;
-    
-    // ---------- Event Buffer ----------
-    private readonly List<IEvent> _buffer = new();
-    private bool _bootstrapping = true;
-    private bool _pendingSave = false;
-    private bool _eventDeliveryActive = false;
-    private DateTime _lastEventReceivedTime = DateTime.MinValue;
-    
+
     // ---------- State Keys ----------
     private const string StateKey = "multiprojector_state";
     private const string SnapshotReminderName = "snapshot_reminder";
+    // ---------- Tunables ----------
+    private static readonly TimeSpan SafeStateWindow = TimeSpan.FromSeconds(7);
+    private static readonly TimeSpan PersistInterval = TimeSpan.FromMinutes(5);
+
+    // ---------- Event Buffer ----------
+    private readonly List<IEvent> _buffer = new();
+    private readonly DaprClient _daprClient;
+    private readonly SekibanDomainTypes _domainTypes;
+
+    // ---------- Infra ----------
+    private readonly IEventReader _eventReader;
+    private readonly ILogger<MultiProjectorActor> _logger;
+    private readonly DaprSekibanOptions _options;
+    private readonly IDaprSerializationService _serialization;
+    private bool _bootstrapping = true;
+    private bool _eventDeliveryActive;
+    private DateTime _lastEventReceivedTime = DateTime.MinValue;
+    private bool _pendingSave;
+
+    // ---------- State ----------
+    private MultiProjectionState? _safeState;
+    private MultiProjectionState? _unsafeState;
 
     public MultiProjectorActor(
         ActorHost host,
@@ -66,12 +60,83 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    #region Activation / Deactivation
+    #region Event Handling via PubSub
+    /// <summary>
+    ///     Handles events published through Dapr PubSub.
+    ///     This is called by the EventPubSubController when events are received.
+    /// </summary>
+    public async Task HandlePublishedEvent(DaprEventEnvelope envelope)
+    {
+        try
+        {
 
+            // Mark event delivery as active
+            _eventDeliveryActive = true;
+            _lastEventReceivedTime = DateTime.UtcNow;
+
+            // Ensure state is loaded before processing
+            await EnsureStateLoadedAsync();
+
+            // Deserialize the event
+            var @event = await _serialization.DeserializeEventAsync(envelope);
+            if (@event == null)
+            {
+                _logger.LogWarning("Failed to deserialize event from envelope");
+                return;
+            }
+
+            // First check if this exact event is already in the buffer
+            if (_buffer.Any(e => e.SortableUniqueId == @event.SortableUniqueId))
+            {
+                return;
+            }
+
+            // Then check if we've already processed this event in state
+            if (!string.IsNullOrEmpty(_safeState?.LastSortableUniqueId))
+            {
+                var lastSafeId = new SortableUniqueIdValue(_safeState.LastSortableUniqueId);
+                var eventId = new SortableUniqueIdValue(@event.SortableUniqueId);
+
+                if (lastSafeId.IsLaterThanOrEqual(eventId))
+                {
+                    return;
+                }
+            }
+
+            // Add to buffer
+            _buffer.Add(@event);
+
+            // Similar to Orleans, we don't flush immediately during bootstrapping
+            // This allows for batch processing of initial events
+            if (_bootstrapping)
+            {
+                // Bootstrapping mode - deferring flush
+            }
+            // Unlike before, we don't flush immediately
+            // Buffer will be flushed when queries are made or during periodic snapshots
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling published event");
+        }
+    }
+    #endregion
+
+    #region Timer Fallback Methods
+    /// <summary>
+    ///     Timer fallback for snapshot handling when reminders are not available
+    /// </summary>
+    public async Task HandleSnapshotTimerAsync(byte[] state)
+    {
+        await HandleSnapshotReminder();
+    }
+    #endregion
+
+    #region Activation / Deactivation
     protected override async Task OnActivateAsync()
     {
         await base.OnActivateAsync();
-        
+
         try
         {
             // Register reminder for periodic snapshot saving
@@ -83,8 +148,11 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to register reminder for {ActorId}. Falling back to timer-based approach.", Id.GetId());
-            
+            _logger.LogWarning(
+                ex,
+                "Failed to register reminder for {ActorId}. Falling back to timer-based approach.",
+                Id.GetId());
+
             // Fallback to timer if reminder fails
             await RegisterTimerAsync(
                 "SnapshotTimer",
@@ -93,11 +161,11 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 TimeSpan.FromMinutes(1),
                 PersistInterval);
         }
-        
+
         // Initial state loading and catch-up will be done via EnsureStateLoadedAsync
         // when the first event arrives via PubSub
         _bootstrapping = false;
-        
+
         // Mark event delivery as active initially to allow batch processing during startup
         _eventDeliveryActive = true;
         _lastEventReceivedTime = DateTime.UtcNow;
@@ -110,17 +178,15 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         {
             await PersistStateAsync(_safeState);
         }
-        
+
         // Unregister snapshot reminder
         await UnregisterReminderAsync(SnapshotReminderName);
-        
+
         await base.OnDeactivateAsync();
     }
-
     #endregion
 
     #region IRemindable Implementation
-
     public async Task ReceiveReminderAsync(string reminderName, byte[] state, TimeSpan dueTime, TimeSpan period)
     {
         switch (reminderName)
@@ -141,34 +207,20 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         {
             FlushBuffer();
         }
-        
+
         // Then persist if needed
         if (!_pendingSave || _safeState == null) return;
-        
+
         _pendingSave = false;
         await PersistStateAsync(_safeState);
     }
-
-    #endregion
-
-    #region Timer Fallback Methods
-
-    /// <summary>
-    /// Timer fallback for snapshot handling when reminders are not available
-    /// </summary>
-    public async Task HandleSnapshotTimerAsync(byte[] state)
-    {
-        await HandleSnapshotReminder();
-    }
-
     #endregion
 
     #region State Management
-
     private async Task EnsureStateLoadedAsync()
     {
         if (_safeState != null) return;
-        
+
         var savedState = await StateManager.TryGetStateAsync<SerializableMultiProjectionState>(StateKey);
         if (savedState.HasValue && savedState.Value != null)
         {
@@ -178,13 +230,13 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                 _safeState = restored.Value;
             }
         }
-        
+
         // Initialize state if not loaded
         if (_safeState == null)
         {
             InitializeState();
         }
-        
+
         // Catch up from store
         await CatchUpFromStoreAsync();
     }
@@ -202,15 +254,16 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             SortableIdCondition = string.IsNullOrEmpty(lastId)
                 ? ISortableIdCondition.None
                 : ISortableIdCondition.Between(
-                    new SortableUniqueIdValue(lastId), 
-                    new SortableUniqueIdValue(SortableUniqueIdValue.Generate(DateTime.UtcNow.AddSeconds(10), Guid.Empty)))
+                    new SortableUniqueIdValue(lastId),
+                    new SortableUniqueIdValue(
+                        SortableUniqueIdValue.Generate(DateTime.UtcNow.AddSeconds(10), Guid.Empty)))
         };
-        
+
         var eventsResult = await _eventReader.GetEvents(retrieval);
         if (!eventsResult.IsSuccess) return;
-        
+
         var events = eventsResult.GetValue().ToList();
-        
+
         if (events.Count > 0)
         {
             // Add events to buffer with duplicate check
@@ -223,7 +276,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
             }
             FlushBuffer();
         }
-        
+
         LogState();
     }
 
@@ -235,47 +288,51 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         {
             InitializeState();
         }
-        
+
         if (!_buffer.Any())
         {
             // Even with no events, ensure state consistency
             _unsafeState = null; // No unsafe state when buffer is empty
             return;
         }
-        
+
         var projector = GetProjectorFromName();
-        
+
         // Sort buffer by sortable unique ID
-        _buffer.Sort((a, b) => {
+        _buffer.Sort((a, b) =>
+        {
             var aValue = new SortableUniqueIdValue(a.SortableUniqueId);
             var bValue = new SortableUniqueIdValue(b.SortableUniqueId);
-            return aValue.IsEarlierThan(bValue) ? -1 : (aValue.IsLaterThan(bValue) ? 1 : 0);
+            return aValue.IsEarlierThan(bValue) ? -1 :
+                aValue.IsLaterThan(bValue) ? 1 : 0;
         });
-        
+
         // Calculate safe border
-        var safeBorderId = SortableUniqueIdValue.Generate((DateTime.UtcNow - SafeStateWindow), Guid.Empty);
+        var safeBorderId = SortableUniqueIdValue.Generate(DateTime.UtcNow - SafeStateWindow, Guid.Empty);
         var safeBorder = new SortableUniqueIdValue(safeBorderId);
-        
+
         // Find split index
-        int splitIndex = _buffer.FindLastIndex(e => 
+        var splitIndex = _buffer.FindLastIndex(e =>
             new SortableUniqueIdValue(e.SortableUniqueId).IsEarlierThan(safeBorder));
-        
+
         // Process old events
         if (splitIndex >= 0)
         {
             var sortableUniqueIdFrom = _safeState?.GetLastSortableUniqueId() ?? SortableUniqueIdValue.MinValue;
-            
+
             // Get old events
-            var oldEvents = _buffer.Take(splitIndex + 1)
+            var oldEvents = _buffer
+                .Take(splitIndex + 1)
                 .Where(e => new SortableUniqueIdValue(e.SortableUniqueId).IsLaterThan(sortableUniqueIdFrom))
                 .ToList();
-            
+
             if (oldEvents.Any())
             {
                 // Apply to safe state
                 var newSafeState = _domainTypes.MultiProjectorsType.Project(
-                    _safeState?.ProjectorCommon ?? projector, oldEvents);
-                
+                    _safeState?.ProjectorCommon ?? projector,
+                    oldEvents);
+
                 if (newSafeState.IsSuccess)
                 {
                     var lastOldEvt = oldEvents.Last();
@@ -286,22 +343,22 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                         (_safeState?.Version ?? 0) + 1,
                         0,
                         _safeState?.RootPartitionKey ?? "default");
-                    
+
                     // Mark for saving
                     _pendingSave = true;
                 }
             }
-            
+
             // Remove processed events from buffer
             _buffer.RemoveRange(0, splitIndex + 1);
         }
-        
-        
+
+
         // Process remaining (newer) events for unsafe state
         if (_buffer.Any() && _safeState != null)
         {
             var newUnsafeState = _domainTypes.MultiProjectorsType.Project(_safeState.ProjectorCommon, _buffer);
-            
+
             if (newUnsafeState.IsSuccess)
             {
                 var lastNewEvt = _buffer.Last();
@@ -313,45 +370,36 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                     0,
                     _safeState.RootPartitionKey);
             }
-        }
-        else
+        } else
         {
             _unsafeState = null;
         }
-        
+
         LogState();
     }
 
     private void InitializeState()
     {
         var projector = GetProjectorFromName();
-        _safeState = new MultiProjectionState(
-            projector, 
-            Guid.Empty, 
-            string.Empty,
-            0, 
-            0, 
-            "default");
+        _safeState = new MultiProjectionState(projector, Guid.Empty, string.Empty, 0, 0, "default");
     }
 
     private async Task PersistStateAsync(MultiProjectionState state)
     {
         if (state.Version == 0) return;
-        
+
         var serializableState = await SerializableMultiProjectionState.CreateFromAsync(state, _domainTypes);
         await StateManager.SetStateAsync(StateKey, serializableState);
     }
-
     #endregion
 
     #region Public API (IMultiProjectorActor)
-
     public async Task<SerializableQueryResult> QueryAsync(SerializableQuery query)
     {
         try
         {
             await EnsureStateLoadedAsync();
-            
+
             // Deserialize the query
             var queryResult = await query.ToQueryAsync(_domainTypes);
             if (!queryResult.IsSuccess)
@@ -362,14 +410,14 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.IsSuccess ? errorResult.GetValue() : errorResult.UnwrapBox();
             }
-            
+
             var queryCommon = queryResult.GetValue();
-            
+
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                queryCommon, 
-                GetProjectorForQuery, 
+                queryCommon,
+                GetProjectorForQuery,
                 new ServiceCollection().BuildServiceProvider());
-            
+
             if (res == null)
             {
                 var errorResult = await SerializableQueryResult.CreateFromResultBoxAsync(
@@ -378,7 +426,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.IsSuccess ? errorResult.GetValue() : errorResult.UnwrapBox();
             }
-            
+
             var resultBox = res.Remap(v => v.ToGeneral(queryCommon));
             var serializableResult = await SerializableQueryResult.CreateFromResultBoxAsync(
                 resultBox,
@@ -402,7 +450,7 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         try
         {
             await EnsureStateLoadedAsync();
-            
+
             // Deserialize the query
             var queryResult = await query.ToListQueryAsync(_domainTypes);
             if (!queryResult.IsSuccess)
@@ -413,14 +461,14 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.IsSuccess ? errorResult.GetValue() : errorResult.UnwrapBox();
             }
-            
+
             var queryCommon = queryResult.GetValue();
-            
+
             var res = await _domainTypes.QueryTypes.ExecuteAsQueryResult(
-                queryCommon, 
-                GetProjectorForQuery, 
+                queryCommon,
+                GetProjectorForQuery,
                 new ServiceCollection().BuildServiceProvider());
-            
+
             if (res == null)
             {
                 var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
@@ -429,22 +477,24 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.IsSuccess ? errorResult.GetValue() : errorResult.UnwrapBox();
             }
-            
+
             var serializableResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
                 res,
                 queryCommon,
                 _domainTypes.JsonSerializerOptions);
-            
+
             if (!serializableResult.IsSuccess)
             {
-                _logger.LogError("Failed to create serializable result: {Error}", serializableResult.GetException().Message);
+                _logger.LogError(
+                    "Failed to create serializable result: {Error}",
+                    serializableResult.GetException().Message);
                 var errorResult = await SerializableListQueryResult.CreateFromResultBoxAsync(
                     ResultBox<IListQueryResult>.FromException(serializableResult.GetException()),
                     queryCommon,
                     _domainTypes.JsonSerializerOptions);
                 return errorResult.UnwrapBox();
             }
-            
+
             return serializableResult.GetValue();
         }
         catch (Exception ex)
@@ -461,54 +511,53 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
     {
         await EnsureStateLoadedAsync();
-        
+
         // Check if exactly this event is in buffer (not just later events)
         if (_buffer.Any(e => e.SortableUniqueId == sortableUniqueId))
         {
             return true;
         }
-        
+
         // Check if already processed in safe state
         if (!string.IsNullOrEmpty(_safeState?.LastSortableUniqueId))
         {
             var lastId = new SortableUniqueIdValue(_safeState.LastSortableUniqueId);
             var targetId = new SortableUniqueIdValue(sortableUniqueId);
-            
+
             if (lastId.IsLaterThanOrEqual(targetId))
             {
                 return true;
             }
         }
-        
+
         // Check if already processed in unsafe state
         if (!string.IsNullOrEmpty(_unsafeState?.LastSortableUniqueId))
         {
             var lastId = new SortableUniqueIdValue(_unsafeState.LastSortableUniqueId);
             var targetId = new SortableUniqueIdValue(sortableUniqueId);
-            
+
             if (lastId.IsLaterThanOrEqual(targetId))
             {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     public async Task BuildStateAsync()
     {
         await EnsureStateLoadedAsync();
-        
+
         // Check if we're actively receiving events
         var eventDeliveryTimeout = TimeSpan.FromSeconds(30);
-        var isActivelyReceivingEvents = _eventDeliveryActive && 
-            (DateTime.UtcNow - _lastEventReceivedTime) < eventDeliveryTimeout;
-        
+        var isActivelyReceivingEvents = _eventDeliveryActive &&
+            DateTime.UtcNow - _lastEventReceivedTime < eventDeliveryTimeout;
+
         if (isActivelyReceivingEvents)
         {
             FlushBuffer();
-        }
-        else
+        } else
         {
             await CatchUpFromStoreAsync();
         }
@@ -522,78 +571,9 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
         await CatchUpFromStoreAsync();
         _pendingSave = true;
     }
-
-    #endregion
-
-    #region Event Handling via PubSub
-
-    /// <summary>
-    /// Handles events published through Dapr PubSub.
-    /// This is called by the EventPubSubController when events are received.
-    /// </summary>
-    public async Task HandlePublishedEvent(DaprEventEnvelope envelope)
-    {
-        try
-        {
-
-            // Mark event delivery as active
-            _eventDeliveryActive = true;
-            _lastEventReceivedTime = DateTime.UtcNow;
-
-            // Ensure state is loaded before processing
-            await EnsureStateLoadedAsync();
-
-            // Deserialize the event
-            var @event = await _serialization.DeserializeEventAsync(envelope);
-            if (@event == null)
-            {
-                _logger.LogWarning("Failed to deserialize event from envelope");
-                return;
-            }
-            
-            // First check if this exact event is already in the buffer
-            if (_buffer.Any(e => e.SortableUniqueId == @event.SortableUniqueId))
-            {
-                return;
-            }
-            
-            // Then check if we've already processed this event in state
-            if (!string.IsNullOrEmpty(_safeState?.LastSortableUniqueId))
-            {
-                var lastSafeId = new SortableUniqueIdValue(_safeState.LastSortableUniqueId);
-                var eventId = new SortableUniqueIdValue(@event.SortableUniqueId);
-                
-                if (lastSafeId.IsLaterThanOrEqual(eventId))
-                {
-                    return;
-                }
-            }
-            
-            // Add to buffer
-            _buffer.Add(@event);
-            
-            // Similar to Orleans, we don't flush immediately during bootstrapping
-            // This allows for batch processing of initial events
-            if (_bootstrapping)
-            {
-                // Bootstrapping mode - deferring flush
-            }
-            else
-            {
-                // Unlike before, we don't flush immediately
-                // Buffer will be flushed when queries are made or during periodic snapshots
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error handling published event");
-        }
-    }
-
     #endregion
 
     #region Helpers
-
     private IMultiProjectorCommon GetProjectorFromName()
     {
         var projectorName = Id.GetId();
@@ -603,39 +583,37 @@ public class MultiProjectorActor : Actor, IMultiProjectorActor, IRemindable
     private async Task<ResultBox<IMultiProjectorStateCommon>> GetProjectorForQuery(IMultiProjectionEventSelector _)
     {
         await EnsureStateLoadedAsync();
-        
+
         // Check if we're actively receiving events (similar to Orleans' _streamActive)
         var eventDeliveryTimeout = TimeSpan.FromSeconds(30); // Consider events active for 30 seconds after last receipt
-        var isActivelyReceivingEvents = _eventDeliveryActive && 
-            (DateTime.UtcNow - _lastEventReceivedTime) < eventDeliveryTimeout;
-        
+        var isActivelyReceivingEvents = _eventDeliveryActive &&
+            DateTime.UtcNow - _lastEventReceivedTime < eventDeliveryTimeout;
+
         if (isActivelyReceivingEvents)
         {
             // If actively receiving events, flush buffer to ensure consistency
             FlushBuffer();
-        }
-        else
+        } else
         {
             // If not actively receiving events, catch up from store
             await CatchUpFromStoreAsync();
         }
-        
+
         var state = _unsafeState ?? _safeState;
         if (state == null)
         {
             // Initialize state if not available
             InitializeState();
             state = _safeState;
-            
+
             if (state == null)
             {
                 return ResultBox<IMultiProjectorStateCommon>.FromException(
                     new InvalidOperationException("Failed to initialize state"));
             }
         }
-        
+
         return ResultBox<IMultiProjectorStateCommon>.FromValue(state);
     }
-
     #endregion
 }

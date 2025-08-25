@@ -33,15 +33,15 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
     // Safe state - events older than SafeWindow
     private IMultiProjectionPayload? _safeProjector;
     private int _safeVersion;
+
+    // Single state accessor when projection implements ISafeAndUnsafeStateAccessor
+    private object? _singleStateAccessor;
     private Guid _unsafeLastEventId;
     private string _unsafeLastSortableUniqueId = string.Empty;
 
     // Unsafe state - includes all events
     private IMultiProjectionPayload? _unsafeProjector;
     private int _unsafeVersion;
-
-    // Single state accessor when projection implements ISafeAndUnsafeStateAccessor
-    private object? _singleStateAccessor;
     private bool _useSingleState;
 
     public GeneralMultiProjectionActor(
@@ -70,78 +70,11 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         {
             // Use single state accessor pattern
             await AddEventsWithSingleStateAsync(events, safeWindowThreshold);
-        }
-        else
+        } else
         {
             // Use traditional dual state pattern
             await AddEventsWithDualStateAsync(events, safeWindowThreshold);
         }
-    }
-
-    private async Task AddEventsWithSingleStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
-    {
-        // Process events through the single state accessor
-        foreach (var ev in events)
-        {
-            // Use reflection to call ProcessEvent method
-            var accessorType = _singleStateAccessor!.GetType();
-            var method = accessorType.GetMethod("ProcessEvent");
-            if (method != null)
-            {
-                _singleStateAccessor = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold });
-            }
-
-            // Update tracking
-            _unsafeLastEventId = ev.Id;
-            _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
-            _unsafeVersion++;
-        }
-
-        await Task.CompletedTask;
-    }
-
-    private async Task AddEventsWithDualStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
-    {
-        // Separate events into those that need buffering and those that don't
-        var eventsToBuffer = new List<Event>();
-        var safeEvents = new List<Event>();
-
-        foreach (var ev in events)
-        {
-            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-
-            // Always update unsafe state
-            var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags);
-            if (!unsafeProjected.IsSuccess)
-            {
-                throw unsafeProjected.GetException();
-            }
-            _unsafeProjector = unsafeProjected.GetValue();
-            _unsafeLastEventId = ev.Id;
-            _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
-            _unsafeVersion++;
-
-            // Check if event is outside safe window
-            if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
-            {
-                // Add to safe events list for batch processing
-                safeEvents.Add(ev);
-            } else
-            {
-                // Buffer event for later processing (overwrites if duplicate)
-                _bufferedEvents[ev.Id] = ev;
-            }
-        }
-
-        // Process safe events if any
-        if (safeEvents.Count > 0)
-        {
-            await ProcessSafeEventsAsync(safeEvents);
-        }
-
-        // Process buffered events that are now outside safe window
-        await ProcessBufferedEventsAsync();
     }
 
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
@@ -174,99 +107,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         {
             return GetStateFromSingleAccessorAsync(canGetUnsafeState);
         }
-        else
-        {
-            return GetStateFromDualStateAsync(canGetUnsafeState);
-        }
-    }
-
-    private Task<ResultBox<MultiProjectionState>> GetStateFromSingleAccessorAsync(bool canGetUnsafeState)
-    {
-        // Get version from the type
-        var versionResult = _types.GetProjectorVersion(_projectorName);
-        if (!versionResult.IsSuccess)
-        {
-            return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
-        }
-        var version = versionResult.GetValue();
-
-        // Use reflection to get the appropriate state
-        var accessorType = _singleStateAccessor!.GetType();
-        IMultiProjectionPayload statePayload;
-        
-        if (canGetUnsafeState)
-        {
-            var getUnsafeMethod = accessorType.GetMethod("GetUnsafeState");
-            statePayload = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, null) ?? _singleStateAccessor);
-        }
-        else
-        {
-            var getSafeMethod = accessorType.GetMethod("GetSafeState");
-            statePayload = (IMultiProjectionPayload)(getSafeMethod?.Invoke(_singleStateAccessor, null) ?? _singleStateAccessor);
-        }
-
-        // Get version info
-        var getVersionMethod = accessorType.GetMethod("GetVersion");
-        var getLastEventIdMethod = accessorType.GetMethod("GetLastEventId");
-        var getLastSortableIdMethod = accessorType.GetMethod("GetLastSortableUniqueId");
-        
-        var stateVersion = (int)(getVersionMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeVersion);
-        var lastEventId = (Guid)(getLastEventIdMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeLastEventId);
-        var lastSortableId = (string)(getLastSortableIdMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeLastSortableUniqueId);
-
-        var state = new MultiProjectionState(
-            statePayload,
-            _projectorName,
-            version,
-            lastSortableId,
-            lastEventId,
-            stateVersion,
-            _isCatchedUp,
-            !canGetUnsafeState // isSafeState
-        );
-        
-        return Task.FromResult(ResultBox.FromValue(state));
-    }
-
-    private Task<ResultBox<MultiProjectionState>> GetStateFromDualStateAsync(bool canGetUnsafeState)
-    {
-        // Determine which state to return
-        var useUnsafeState = canGetUnsafeState && _bufferedEvents.Count > 0;
-
-        // Get version from the type
-        var versionResult = _types.GetProjectorVersion(_projectorName);
-        if (!versionResult.IsSuccess)
-        {
-            return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
-        }
-        var version = versionResult.GetValue();
-
-        if (useUnsafeState)
-        {
-            // Return unsafe state
-            var unsafeState = new MultiProjectionState(
-                _unsafeProjector!,
-                _projectorName,
-                version,
-                _unsafeLastSortableUniqueId,
-                _unsafeLastEventId,
-                _unsafeVersion,
-                _isCatchedUp,
-                false // This is unsafe state
-            );
-            return Task.FromResult(ResultBox.FromValue(unsafeState));
-        }
-        // Return safe state
-        var safeState = new MultiProjectionState(
-            _safeProjector!,
-            _projectorName,
-            version,
-            _safeLastSortableUniqueId,
-            _safeLastEventId,
-            _safeVersion,
-            _isCatchedUp // This is safe state
-        );
-        return Task.FromResult(ResultBox.FromValue(safeState));
+        return GetStateFromDualStateAsync(canGetUnsafeState);
     }
 
     public Task SetCurrentState(SerializableMultiProjectionState state)
@@ -360,6 +201,184 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         return Task.FromResult(ResultBox.FromValue(state));
     }
 
+    public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
+    {
+        if (string.IsNullOrEmpty(sortableUniqueId))
+        {
+            return Task.FromResult(false);
+        }
+
+        // Check if the sortable unique ID has been processed in the unsafe state
+        // The unsafe state contains all events including the most recent ones
+        if (!string.IsNullOrEmpty(_unsafeLastSortableUniqueId))
+        {
+            // Compare sortable unique IDs - if the requested ID is less than or equal to 
+            // the last processed ID, then it has been received
+            var comparison = string.Compare(sortableUniqueId, _unsafeLastSortableUniqueId, StringComparison.Ordinal);
+            return Task.FromResult(comparison <= 0);
+        }
+
+        return Task.FromResult(false);
+    }
+
+    private async Task AddEventsWithSingleStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
+    {
+        // Process events through the single state accessor
+        foreach (var ev in events)
+        {
+            // Use reflection to call ProcessEvent method
+            var accessorType = _singleStateAccessor!.GetType();
+            var method = accessorType.GetMethod("ProcessEvent");
+            if (method != null)
+            {
+                _singleStateAccessor = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold });
+            }
+
+            // Update tracking
+            _unsafeLastEventId = ev.Id;
+            _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+            _unsafeVersion++;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task AddEventsWithDualStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
+    {
+        // Separate events into those that need buffering and those that don't
+        var eventsToBuffer = new List<Event>();
+        var safeEvents = new List<Event>();
+
+        foreach (var ev in events)
+        {
+            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+
+            // Always update unsafe state
+            var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
+            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags);
+            if (!unsafeProjected.IsSuccess)
+            {
+                throw unsafeProjected.GetException();
+            }
+            _unsafeProjector = unsafeProjected.GetValue();
+            _unsafeLastEventId = ev.Id;
+            _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+            _unsafeVersion++;
+
+            // Check if event is outside safe window
+            if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
+            {
+                // Add to safe events list for batch processing
+                safeEvents.Add(ev);
+            } else
+            {
+                // Buffer event for later processing (overwrites if duplicate)
+                _bufferedEvents[ev.Id] = ev;
+            }
+        }
+
+        // Process safe events if any
+        if (safeEvents.Count > 0)
+        {
+            await ProcessSafeEventsAsync(safeEvents);
+        }
+
+        // Process buffered events that are now outside safe window
+        await ProcessBufferedEventsAsync();
+    }
+
+    private Task<ResultBox<MultiProjectionState>> GetStateFromSingleAccessorAsync(bool canGetUnsafeState)
+    {
+        // Get version from the type
+        var versionResult = _types.GetProjectorVersion(_projectorName);
+        if (!versionResult.IsSuccess)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
+        }
+        var version = versionResult.GetValue();
+
+        // Use reflection to get the appropriate state
+        var accessorType = _singleStateAccessor!.GetType();
+        IMultiProjectionPayload statePayload;
+
+        if (canGetUnsafeState)
+        {
+            var getUnsafeMethod = accessorType.GetMethod("GetUnsafeState");
+            statePayload
+                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, null) ??
+                    _singleStateAccessor);
+        } else
+        {
+            var getSafeMethod = accessorType.GetMethod("GetSafeState");
+            statePayload
+                = (IMultiProjectionPayload)(getSafeMethod?.Invoke(_singleStateAccessor, null) ?? _singleStateAccessor);
+        }
+
+        // Get version info
+        var getVersionMethod = accessorType.GetMethod("GetVersion");
+        var getLastEventIdMethod = accessorType.GetMethod("GetLastEventId");
+        var getLastSortableIdMethod = accessorType.GetMethod("GetLastSortableUniqueId");
+
+        var stateVersion = (int)(getVersionMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeVersion);
+        var lastEventId = (Guid)(getLastEventIdMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeLastEventId);
+        var lastSortableId = (string)(getLastSortableIdMethod?.Invoke(_singleStateAccessor, null) ??
+            _unsafeLastSortableUniqueId);
+
+        var state = new MultiProjectionState(
+            statePayload,
+            _projectorName,
+            version,
+            lastSortableId,
+            lastEventId,
+            stateVersion,
+            _isCatchedUp,
+            !canGetUnsafeState // isSafeState
+        );
+
+        return Task.FromResult(ResultBox.FromValue(state));
+    }
+
+    private Task<ResultBox<MultiProjectionState>> GetStateFromDualStateAsync(bool canGetUnsafeState)
+    {
+        // Determine which state to return
+        var useUnsafeState = canGetUnsafeState && _bufferedEvents.Count > 0;
+
+        // Get version from the type
+        var versionResult = _types.GetProjectorVersion(_projectorName);
+        if (!versionResult.IsSuccess)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(versionResult.GetException()));
+        }
+        var version = versionResult.GetValue();
+
+        if (useUnsafeState)
+        {
+            // Return unsafe state
+            var unsafeState = new MultiProjectionState(
+                _unsafeProjector!,
+                _projectorName,
+                version,
+                _unsafeLastSortableUniqueId,
+                _unsafeLastEventId,
+                _unsafeVersion,
+                _isCatchedUp,
+                false // This is unsafe state
+            );
+            return Task.FromResult(ResultBox.FromValue(unsafeState));
+        }
+        // Return safe state
+        var safeState = new MultiProjectionState(
+            _safeProjector!,
+            _projectorName,
+            version,
+            _safeLastSortableUniqueId,
+            _safeLastEventId,
+            _safeVersion,
+            _isCatchedUp // This is safe state
+        );
+        return Task.FromResult(ResultBox.FromValue(safeState));
+    }
+
     /// <summary>
     ///     Get the unsafe state which includes all events including those within SafeWindow
     /// </summary>
@@ -380,27 +399,27 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             {
                 throw init.GetException();
             }
-            
+
             var initialPayload = init.GetValue();
-            
+
             // Check if the payload type implements ISafeAndUnsafeStateAccessor
             var payloadType = initialPayload.GetType();
-            var accessorInterfaces = payloadType.GetInterfaces()
-                .Where(i => i.IsGenericType && 
-                            i.GetGenericTypeDefinition() == typeof(ISafeAndUnsafeStateAccessor<>))
+            var accessorInterfaces = payloadType
+                .GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISafeAndUnsafeStateAccessor<>))
                 .ToList();
-            
+
             if (accessorInterfaces.Any())
             {
                 // Use single state pattern
                 _useSingleState = true;
-                
+
                 // Check if we can create a SafeUnsafeMultiProjectionState wrapper
-                var projectorInterfaces = payloadType.GetInterfaces()
-                    .Where(i => i.IsGenericType && 
-                                i.GetGenericTypeDefinition() == typeof(IMultiProjector<>))
+                var projectorInterfaces = payloadType
+                    .GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IMultiProjector<>))
                     .ToList();
-                
+
                 if (projectorInterfaces.Any())
                 {
                     // Create SafeUnsafeMultiProjectionState wrapper
@@ -408,13 +427,11 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
                     var projectorType = projectorInterface.GetGenericArguments()[0];
                     var wrapperType = typeof(SafeUnsafeMultiProjectionState<>).MakeGenericType(projectorType);
                     _singleStateAccessor = Activator.CreateInstance(wrapperType, initialPayload);
-                }
-                else
+                } else
                 {
                     _singleStateAccessor = initialPayload;
                 }
-            }
-            else
+            } else
             {
                 // Use traditional dual state pattern
                 _useSingleState = false;
@@ -529,25 +546,5 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         var json = JsonSerializer.Serialize(source, source.GetType(), _jsonOptions);
         var cloned = JsonSerializer.Deserialize(json, source.GetType(), _jsonOptions);
         return (IMultiProjectionPayload)cloned!;
-    }
-
-    public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
-    {
-        if (string.IsNullOrEmpty(sortableUniqueId))
-        {
-            return Task.FromResult(false);
-        }
-
-        // Check if the sortable unique ID has been processed in the unsafe state
-        // The unsafe state contains all events including the most recent ones
-        if (!string.IsNullOrEmpty(_unsafeLastSortableUniqueId))
-        {
-            // Compare sortable unique IDs - if the requested ID is less than or equal to 
-            // the last processed ID, then it has been received
-            var comparison = string.Compare(sortableUniqueId, _unsafeLastSortableUniqueId, StringComparison.Ordinal);
-            return Task.FromResult(comparison <= 0);
-        }
-
-        return Task.FromResult(false);
     }
 }

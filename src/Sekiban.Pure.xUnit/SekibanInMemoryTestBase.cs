@@ -17,7 +17,6 @@ public abstract class SekibanInMemoryTestBase
     ///     Abstract property for implementing domain types for each test case
     /// </summary>
     private SekibanDomainTypes DomainTypes => GetDomainTypes();
-    protected abstract SekibanDomainTypes GetDomainTypes();
 
     protected ICommandMetadataProvider CommandMetadataProvider { get; }
         = new FunctionCommandMetadataProvider(() => "test");
@@ -30,6 +29,7 @@ public abstract class SekibanInMemoryTestBase
 
     public SekibanInMemoryTestBase() =>
         Executor = new InMemorySekibanExecutor(DomainTypes, CommandMetadataProvider, Repository, ServiceProvider);
+    protected abstract SekibanDomainTypes GetDomainTypes();
 
     /// <summary>
     ///     Command execution in Given phase
@@ -100,5 +100,4 @@ public abstract class SekibanInMemoryTestBase
         .Remap(x => x.Payload)
         .UnwrapBox()
         .Result;
-
 }

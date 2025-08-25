@@ -20,7 +20,9 @@
 
 ## Value Object
 
-Value Objects are an important concept in Domain-Driven Design (DDD), representing objects whose equality is based on their values rather than identity. In Sekiban, Value Objects can be leveraged to provide strong typing and automatic validation.
+Value Objects are an important concept in Domain-Driven Design (DDD), representing objects whose equality is based on
+their values rather than identity. In Sekiban, Value Objects can be leveraged to provide strong typing and automatic
+validation.
 
 ## Basic Implementation Approach
 
@@ -102,7 +104,8 @@ public record UserId(string Value)
 
 #### Event Replay Issues
 
-In Sekiban's event sourcing, event replay occurs when reconstructing aggregates from past events. If validation is performed in constructors or static methods, previously valid data might fail current validation rules.
+In Sekiban's event sourcing, event replay occurs when reconstructing aggregates from past events. If validation is
+performed in constructors or static methods, previously valid data might fail current validation rules.
 
 #### Correct Flow
 
@@ -182,7 +185,8 @@ Following these principles will create safe Value Objects that are fully compati
 
 ## Using Value Objects in Events and Commands
 
-Value Objects can also be used as persistent data in events and commands. This allows for clearer expression of domain concepts and improved type safety.
+Value Objects can also be used as persistent data in events and commands. This allows for clearer expression of domain
+concepts and improved type safety.
 
 ### Value Object Usage in Events
 

@@ -1,9 +1,7 @@
-using System;
-
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-/// マルチプロジェクション状態をシリアライズ可能な形で保持するコア領域専用のレコードです。
+///     マルチプロジェクション状態をシリアライズ可能な形で保持するコア領域専用のレコードです。
 /// </summary>
 public record SerializableMultiProjectionState
 {

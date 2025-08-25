@@ -22,6 +22,19 @@ public record Aggregate(
         string.Empty,
         string.Empty,
         nameof(EmptyAggregatePayload));
+    public IAggregatePayload GetPayload() => Payload;
+    public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayload => Payload is TAggregatePayload typedPayload
+        ? ResultBox.FromValue(
+            new Aggregate<TAggregatePayload>(
+                typedPayload,
+                PartitionKeys,
+                Version,
+                LastSortableUniqueId,
+                ProjectorVersion,
+                ProjectorTypeName,
+                PayloadTypeName))
+        : new SekibanAggregateTypeException("Payload is not typed to " + typeof(TAggregatePayload).Name);
     public static Aggregate FromPayload(
         IAggregatePayload payload,
         PartitionKeys partitionKeys,
@@ -36,7 +49,6 @@ public record Aggregate(
             projector.GetVersion(),
             projector.GetType().Name,
             payload.GetType().Name);
-    public IAggregatePayload GetPayload() => Payload;
     public static Aggregate EmptyFromPartitionKeys(PartitionKeys keys) =>
         new(
             new EmptyAggregatePayload(),
@@ -46,31 +58,18 @@ public record Aggregate(
             string.Empty,
             string.Empty,
             nameof(EmptyAggregatePayload));
-    public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayload => Payload is TAggregatePayload typedPayload
-        ? ResultBox.FromValue(
-            new Aggregate<TAggregatePayload>(
-                typedPayload,
-                PartitionKeys,
-                Version,
-                LastSortableUniqueId,
-                ProjectorVersion,
-                ProjectorTypeName,
-                PayloadTypeName))
-        : new SekibanAggregateTypeException("Payload is not typed to " + typeof(TAggregatePayload).Name);
     public ResultBox<Aggregate> Project(IEvent ev, IAggregateProjector projector) =>
         ResultBox
             .FromValue(projector.Project(Payload, ev))
-            .Remap(
-                projected => this with
-                {
-                    Payload = projected,
-                    LastSortableUniqueId = ev.SortableUniqueId,
-                    Version = Version + 1,
-                    ProjectorVersion = projector.GetVersion(),
-                    ProjectorTypeName = projector.GetType().Name,
-                    PayloadTypeName = projected.GetType().Name
-                });
+            .Remap(projected => this with
+            {
+                Payload = projected,
+                LastSortableUniqueId = ev.SortableUniqueId,
+                Version = Version + 1,
+                ProjectorVersion = projector.GetVersion(),
+                ProjectorTypeName = projector.GetType().Name,
+                PayloadTypeName = projected.GetType().Name
+            });
     public ResultBox<Aggregate> Project(List<IEvent> events, IAggregateProjector projector) => ResultBox
         .FromValue(events)
         .ReduceEach(this, (ev, aggregate) => aggregate.Project(ev, projector));

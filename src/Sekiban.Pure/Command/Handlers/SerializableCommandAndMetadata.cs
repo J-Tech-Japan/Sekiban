@@ -10,19 +10,16 @@ public record SerializableCommandAndMetadata
     public string CausationId { get; init; } = string.Empty;
     public string CorrelationId { get; init; } = string.Empty;
     public string ExecutedUser { get; init; } = string.Empty;
-    
+
     public string CommandTypeName { get; init; } = string.Empty;
     public string ProjectorTypeName { get; init; } = string.Empty;
     public string AggregatePayloadTypeName { get; init; } = string.Empty;
-    
-    public byte[] CompressedCommandJson { get; init; } = Array.Empty<byte>();
-    
-    public string CommandAssemblyVersion { get; init; } = string.Empty;
-    
-    public SerializableCommandAndMetadata() { }
 
-    public CommandMetadata GetCommandMetadata() => 
-        new(CommandId, CausationId, CorrelationId, ExecutedUser);
+    public byte[] CompressedCommandJson { get; init; } = Array.Empty<byte>();
+
+    public string CommandAssemblyVersion { get; init; } = string.Empty;
+
+    public SerializableCommandAndMetadata() { }
 
     private SerializableCommandAndMetadata(
         Guid commandId,
@@ -46,28 +43,28 @@ public record SerializableCommandAndMetadata
         CommandAssemblyVersion = commandAssemblyVersion;
     }
 
+    public CommandMetadata GetCommandMetadata() =>
+        new(CommandId, CausationId, CorrelationId, ExecutedUser);
+
     public static async Task<SerializableCommandAndMetadata> CreateFromAsync(
         ICommandWithHandlerSerializable command,
         CommandMetadata metadata,
         JsonSerializerOptions options)
     {
-        byte[] compressedCommandJson = Array.Empty<byte>();
-        string commandAssemblyVersion = "0.0.0.0";
+        var compressedCommandJson = Array.Empty<byte>();
+        var commandAssemblyVersion = "0.0.0.0";
 
         if (command != null)
         {
             var commandType = command.GetType();
             commandAssemblyVersion = commandType.Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
-            
-            var commandJson = JsonSerializer.SerializeToUtf8Bytes(
-                command, 
-                commandType, 
-                options);
-            
+
+            var commandJson = JsonSerializer.SerializeToUtf8Bytes(command, commandType, options);
+
             compressedCommandJson = await CompressAsync(commandJson);
         }
 
-        string projectorTypeName = string.Empty;
+        var projectorTypeName = string.Empty;
         try
         {
             var projector = command?.GetProjector();
@@ -77,7 +74,7 @@ public record SerializableCommandAndMetadata
         {
         }
 
-        string aggregatePayloadTypeName = string.Empty;
+        var aggregatePayloadTypeName = string.Empty;
         try
         {
             var payloadTypeOpt = command?.GetAggregatePayloadType();
@@ -99,12 +96,11 @@ public record SerializableCommandAndMetadata
             projectorTypeName,
             aggregatePayloadTypeName,
             compressedCommandJson,
-            commandAssemblyVersion
-        );
+            commandAssemblyVersion);
     }
 
-    public async Task<OptionalValue<(ICommandWithHandlerSerializable Command, CommandMetadata Metadata)>> ToCommandAndMetadataAsync(
-        SekibanDomainTypes domainTypes)
+    public async Task<OptionalValue<(ICommandWithHandlerSerializable Command, CommandMetadata Metadata)>>
+        ToCommandAndMetadataAsync(SekibanDomainTypes domainTypes)
     {
         try
         {
@@ -123,21 +119,20 @@ public record SerializableCommandAndMetadata
             }
 
             ICommandWithHandlerSerializable? command = null;
-            
+
             if (CompressedCommandJson.Length > 0)
             {
                 var decompressedJson = await DecompressAsync(CompressedCommandJson);
                 command = (ICommandWithHandlerSerializable?)JsonSerializer.Deserialize(
-                    decompressedJson, 
-                    commandType, 
+                    decompressedJson,
+                    commandType,
                     domainTypes.JsonSerializerOptions);
-                
+
                 if (command == null)
                 {
                     return OptionalValue<(ICommandWithHandlerSerializable, CommandMetadata)>.Empty;
                 }
-            }
-            else
+            } else
             {
                 return OptionalValue<(ICommandWithHandlerSerializable, CommandMetadata)>.Empty;
             }

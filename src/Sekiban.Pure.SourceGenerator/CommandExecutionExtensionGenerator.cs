@@ -60,9 +60,8 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m =>
+                    m.OriginalDefinition is not null && m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -96,9 +95,8 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(m =>
+                    m.OriginalDefinition is not null && m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -143,11 +141,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
             if (typeSymbol != null &&
                 typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandSymbol.Name))
             {
-                var interfaceImplementationAggregate = typeSymbol.AllInterfaces.FirstOrDefault(
-                    m => m.OriginalDefinition.Name == iCommandWithAggregateRestrictionSymbol.Name);
+                var interfaceImplementationAggregate = typeSymbol.AllInterfaces.FirstOrDefault(m =>
+                    m.OriginalDefinition.Name == iCommandWithAggregateRestrictionSymbol.Name);
 
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition.Name == iCommandSymbol.Name);
+                var interfaceImplementation
+                    = typeSymbol.AllInterfaces.First(m => m.OriginalDefinition.Name == iCommandSymbol.Name);
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {

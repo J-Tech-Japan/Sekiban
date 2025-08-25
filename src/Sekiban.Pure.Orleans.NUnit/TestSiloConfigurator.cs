@@ -14,14 +14,13 @@ public class TestSiloConfigurator<TDomainTypesGetter> : ISiloConfigurator
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
-        siloBuilder.ConfigureServices(
-            services =>
-            {
-                services.AddSingleton(domainTypes);
-                services.AddSingleton(repository);
-                services.AddTransient<IEventWriter, InMemoryEventWriter>();
-                services.AddTransient<IEventReader, InMemoryEventReader>();
-                // services.AddTransient()
-            });
+        siloBuilder.ConfigureServices(services =>
+        {
+            services.AddSingleton(domainTypes);
+            services.AddSingleton(repository);
+            services.AddTransient<IEventWriter, InMemoryEventWriter>();
+            services.AddTransient<IEventReader, InMemoryEventReader>();
+            // services.AddTransient()
+        });
     }
 }

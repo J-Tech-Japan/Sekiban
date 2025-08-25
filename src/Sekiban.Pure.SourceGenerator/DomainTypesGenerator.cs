@@ -68,5 +68,4 @@ public class DomainTypesGenerator : IIncrementalGenerator
 
         return sb.ToString();
     }
-
 }

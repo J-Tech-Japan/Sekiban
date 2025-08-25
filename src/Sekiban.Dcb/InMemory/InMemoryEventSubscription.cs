@@ -1,7 +1,6 @@
-using System.Collections.Concurrent;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
-
+using System.Collections.Concurrent;
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
@@ -9,51 +8,16 @@ namespace Sekiban.Dcb.InMemory;
 /// </summary>
 public class InMemoryEventSubscription : IEventSubscription
 {
-    private readonly ConcurrentDictionary<string, InMemorySubscriptionHandle> _subscriptions = new();
     private readonly List<Event> _eventStore = new();
     private readonly object _eventStoreLock = new();
+    private readonly ConcurrentDictionary<string, InMemorySubscriptionHandle> _subscriptions = new();
     private bool _disposed;
-
-    /// <summary>
-    ///     Publish an event to all active subscriptions
-    /// </summary>
-    public async Task PublishEventAsync(Event evt)
-    {
-        if (_disposed) throw new ObjectDisposedException(nameof(InMemoryEventSubscription));
-
-        // Add to event store
-        lock (_eventStoreLock)
-        {
-            _eventStore.Add(evt);
-        }
-
-        // Notify all active subscriptions
-        var tasks = _subscriptions.Values
-            .Where(s => s.IsActive && !s.IsPaused)
-            .Select(s => s.NotifyEventAsync(evt))
-            .ToList();
-
-        await Task.WhenAll(tasks);
-    }
-
-    /// <summary>
-    ///     Get all stored events (for testing)
-    /// </summary>
-    public IReadOnlyList<Event> GetAllEvents()
-    {
-        lock (_eventStoreLock)
-        {
-            return _eventStore.ToList();
-        }
-    }
 
     public async Task<IEventSubscriptionHandle> SubscribeAsync(
         Func<Event, Task> onEventReceived,
         string? subscriptionId = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await SubscribeFromAsync(null, onEventReceived, subscriptionId, cancellationToken);
-    }
+        CancellationToken cancellationToken = default) =>
+        await SubscribeFromAsync(null, onEventReceived, subscriptionId, cancellationToken);
 
     public async Task<IEventSubscriptionHandle> SubscribeFromAsync(
         string? fromPosition,
@@ -64,7 +28,7 @@ public class InMemoryEventSubscription : IEventSubscription
         if (_disposed) throw new ObjectDisposedException(nameof(InMemoryEventSubscription));
 
         subscriptionId ??= Guid.NewGuid().ToString();
-        
+
         var handle = new InMemorySubscriptionHandle(
             subscriptionId,
             onEventReceived,
@@ -92,7 +56,7 @@ public class InMemoryEventSubscription : IEventSubscription
         if (_disposed) throw new ObjectDisposedException(nameof(InMemoryEventSubscription));
 
         subscriptionId ??= Guid.NewGuid().ToString();
-        
+
         var handle = new InMemorySubscriptionHandle(
             subscriptionId,
             onEventReceived,
@@ -109,6 +73,69 @@ public class InMemoryEventSubscription : IEventSubscription
         await ProcessHistoricalEventsAsync(handle, null, cancellationToken);
 
         return handle;
+    }
+
+    public IEnumerable<IEventSubscriptionStatus> GetAllSubscriptionStatuses()
+    {
+        return _subscriptions.Values.Where(s => s != null).Select(s => s.GetStatus()).ToList();
+    }
+
+    public IEventSubscriptionStatus? GetSubscriptionStatus(string subscriptionId)
+    {
+        if (_subscriptions.TryGetValue(subscriptionId, out var handle))
+        {
+            return handle?.GetStatus();
+        }
+        return null;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        // Dispose all subscriptions
+        var handles = _subscriptions.Values.ToList();
+        foreach (var handle in handles)
+        {
+            handle.Dispose();
+        }
+
+        _subscriptions.Clear();
+        _disposed = true;
+    }
+
+    /// <summary>
+    ///     Publish an event to all active subscriptions
+    /// </summary>
+    public async Task PublishEventAsync(Event evt)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(InMemoryEventSubscription));
+
+        // Add to event store
+        lock (_eventStoreLock)
+        {
+            _eventStore.Add(evt);
+        }
+
+        // Notify all active subscriptions
+        var tasks = _subscriptions
+            .Values
+            .Where(s => s.IsActive && !s.IsPaused)
+            .Select(s => s.NotifyEventAsync(evt))
+            .ToList();
+
+        await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    ///     Get all stored events (for testing)
+    /// </summary>
+    public IReadOnlyList<Event> GetAllEvents()
+    {
+        lock (_eventStoreLock)
+        {
+            return _eventStore.ToList();
+        }
     }
 
     private async Task ProcessHistoricalEventsAsync(
@@ -138,47 +165,15 @@ public class InMemoryEventSubscription : IEventSubscription
         }
     }
 
-    public IEnumerable<IEventSubscriptionStatus> GetAllSubscriptionStatuses()
-    {
-        return _subscriptions.Values
-            .Where(s => s != null)
-            .Select(s => s.GetStatus())
-            .ToList();
-    }
-    
-    public IEventSubscriptionStatus? GetSubscriptionStatus(string subscriptionId)
-    {
-        if (_subscriptions.TryGetValue(subscriptionId, out var handle))
-        {
-            return handle?.GetStatus();
-        }
-        return null;
-    }
-    
-    public void Dispose()
-    {
-        if (_disposed) return;
-
-        // Dispose all subscriptions
-        var handles = _subscriptions.Values.ToList();
-        foreach (var handle in handles)
-        {
-            handle.Dispose();
-        }
-
-        _subscriptions.Clear();
-        _disposed = true;
-    }
-
     private class InMemorySubscriptionHandle : IEventSubscriptionHandle
     {
-        private readonly Func<Event, Task> _onEventReceived;
         private readonly IEventFilter? _filter;
         private readonly Action _onDispose;
+        private readonly Func<Event, Task> _onEventReceived;
+        private bool _disposed;
         private volatile bool _isActive = true;
         private volatile bool _isPaused;
-        private string? _currentPosition;
-        private bool _disposed;
+        public bool IsPaused => _isPaused;
 
         public InMemorySubscriptionHandle(
             string subscriptionId,
@@ -190,35 +185,16 @@ public class InMemoryEventSubscription : IEventSubscription
             SubscriptionId = subscriptionId;
             _onEventReceived = onEventReceived;
             _filter = filter;
-            _currentPosition = initialPosition;
+            CurrentPosition = initialPosition;
             _onDispose = onDispose;
         }
 
         public string SubscriptionId { get; }
         public bool IsActive => _isActive && !_disposed;
-        public bool IsPaused => _isPaused;
-        public string? CurrentPosition => _currentPosition;
-
-        public async Task NotifyEventAsync(Event evt)
+        public string? CurrentPosition
         {
-            if (!IsActive || IsPaused) return;
-
-            // Apply filter if present
-            if (_filter != null && !_filter.ShouldInclude(evt))
-            {
-                return;
-            }
-
-            try
-            {
-                await _onEventReceived(evt);
-                _currentPosition = evt.SortableUniqueIdValue;
-            }
-            catch
-            {
-                // Log error in production
-                // For now, swallow to prevent breaking other subscriptions
-            }
+            get;
+            private set;
         }
 
         public Task PauseAsync()
@@ -240,33 +216,53 @@ public class InMemoryEventSubscription : IEventSubscription
             return Task.CompletedTask;
         }
 
-        public IEventSubscriptionStatus GetStatus()
-        {
+        public IEventSubscriptionStatus GetStatus() =>
             // Simple status for in-memory implementation
-            return new EventSubscriptionStatus(
+            new EventSubscriptionStatus(
                 SubscriptionId,
                 IsActive,
                 IsPaused,
                 CurrentPosition,
-                startedAt: null,
-                pausedAt: null,
-                eventsReceived: 0,
-                eventsProcessed: 0,
-                errorCount: 0,
-                lastError: null,
-                lastErrorAt: null,
-                lastEventReceivedAt: null,
-                lastEventProcessedAt: null,
-                averageProcessingTimeMs: null);
-        }
+                null,
+                null,
+                0,
+                0,
+                0,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         public void Dispose()
         {
             if (_disposed) return;
-            
+
             _isActive = false;
             _disposed = true;
             _onDispose?.Invoke();
+        }
+
+        public async Task NotifyEventAsync(Event evt)
+        {
+            if (!IsActive || IsPaused) return;
+
+            // Apply filter if present
+            if (_filter != null && !_filter.ShouldInclude(evt))
+            {
+                return;
+            }
+
+            try
+            {
+                await _onEventReceived(evt);
+                CurrentPosition = evt.SortableUniqueIdValue;
+            }
+            catch
+            {
+                // Log error in production
+                // For now, swallow to prevent breaking other subscriptions
+            }
         }
     }
 }

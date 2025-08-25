@@ -1,26 +1,18 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Orleans;
-using Orleans.Hosting;
 using Orleans.TestingHost;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
-/// Minimal test to verify Orleans silo can start
+///     Minimal test to verify Orleans silo can start
 /// </summary>
 public class SimpleSiloStartupTest : IAsyncLifetime
 {
-    private TestCluster _cluster = null!;
     private readonly ITestOutputHelper _output;
+    private TestCluster _cluster = null!;
 
-    public SimpleSiloStartupTest(ITestOutputHelper output)
-    {
-        _output = output;
-    }
+    public SimpleSiloStartupTest(ITestOutputHelper output) => _output = output;
 
     public async Task InitializeAsync()
     {
@@ -32,7 +24,7 @@ public class SimpleSiloStartupTest : IAsyncLifetime
             builder.Options.ClusterId = $"TestCluster-{uniqueId}";
             builder.Options.ServiceId = $"TestService-{uniqueId}";
             builder.AddSiloBuilderConfigurator<MinimalSiloConfigurator>();
-            
+
             _cluster = builder.Build();
             await _cluster.DeployAsync();
             _output.WriteLine("Cluster deployed successfully");
@@ -68,7 +60,8 @@ public class SimpleSiloStartupTest : IAsyncLifetime
                 .ConfigureLogging(logging => logging.AddConsole())
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("PubSubStore")
-                .AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
+                .AddMemoryStreams("EventStreamProvider")
+                .AddMemoryGrainStorage("EventStreamProvider");
         }
     }
 }

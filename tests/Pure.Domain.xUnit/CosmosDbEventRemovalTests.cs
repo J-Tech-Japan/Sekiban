@@ -6,8 +6,8 @@ namespace Pure.Domain.xUnit;
 // Extension method for IEventReader to get all events
 public class CosmosDbEventRemovalTests : CosmosDbTestBase
 {
-    private readonly IEventWriter _eventWriter;
     private readonly IEventReader _eventReader;
+    private readonly IEventWriter _eventWriter;
 
     public CosmosDbEventRemovalTests()
     {

@@ -34,11 +34,11 @@ public class SourceGenCosmosSerializer<TEventTypes> : CosmosSerializer where TEv
             var typeInfo = _serializerOptions.GetTypeInfo(typeof(T)) as JsonTypeInfo<T>;
             if (typeInfo != null)
             {
-                return JsonSerializer.Deserialize(stream, typeInfo) 
-                    ?? throw new JsonException("Failed to deserialize the stream.");
+                return JsonSerializer.Deserialize(stream, typeInfo) ??
+                    throw new JsonException("Failed to deserialize the stream.");
             }
-            return JsonSerializer.Deserialize<T>(stream, _serializerOptions) 
-                ?? throw new JsonException("Failed to deserialize the stream.");
+            return JsonSerializer.Deserialize<T>(stream, _serializerOptions) ??
+                throw new JsonException("Failed to deserialize the stream.");
         }
     }
 

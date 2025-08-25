@@ -38,22 +38,24 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Event ev,
         List<ITag> tags)
     {
-        Console.WriteLine($"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
-        
+        Console.WriteLine(
+            $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
+
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
 
         if (weatherForecastTags.Count == 0)
         {
-            Console.WriteLine($"[WeatherForecastProjection.Project] No WeatherForecastTag found, skipping event");
+            Console.WriteLine("[WeatherForecastProjection.Project] No WeatherForecastTag found, skipping event");
             // No WeatherForecastTag, skip this event
             return ResultBox.FromValue(payload);
         }
-        
-        Console.WriteLine($"[WeatherForecastProjection.Project] Found {weatherForecastTags.Count} WeatherForecastTag(s)");
+
+        Console.WriteLine(
+            $"[WeatherForecastProjection.Project] Found {weatherForecastTags.Count} WeatherForecastTag(s)");
 
         // Function to get affected item IDs
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
         {
             // Return the forecast IDs from the tags
             return weatherForecastTags.Select(tag => tag.ForecastId);
@@ -81,7 +83,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                         created.TemperatureC,
                         created.Summary,
                         GetEventTimestamp(evt)),
-                        
+
                 WeatherForecastUpdated updated => current != null
                     ? current with // Update existing
                     {
@@ -91,7 +93,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                         LastUpdated = GetEventTimestamp(evt)
                     }
                     : null, // Can't update non-existent item
-                    
+
                 LocationNameChanged locationChanged => current != null
                     ? current with // Update location name only
                     {
@@ -99,21 +101,22 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                         LastUpdated = GetEventTimestamp(evt)
                     }
                     : null, // Can't update non-existent item
-                    
+
                 WeatherForecastDeleted _ => null, // Delete the item
-                
+
                 _ => current // Unknown event type, keep current state
             };
         };
-        
+
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
-        
+
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
         var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
-        
-        Console.WriteLine($"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}, Safe forecasts: {updatedState.GetSafeState().Count}");
+
+        Console.WriteLine(
+            $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}, Safe forecasts: {updatedState.GetSafeState().Count}");
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }

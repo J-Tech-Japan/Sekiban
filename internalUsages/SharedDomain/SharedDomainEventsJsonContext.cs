@@ -1,19 +1,19 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Query;
+using SharedDomain.Aggregates.User;
 using SharedDomain.Aggregates.User.Commands;
 using SharedDomain.Aggregates.User.Events;
 using SharedDomain.Aggregates.User.Queries;
+using SharedDomain.Aggregates.WeatherForecasts;
 using SharedDomain.Aggregates.WeatherForecasts.Commands;
 using SharedDomain.Aggregates.WeatherForecasts.Events;
 using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 using SharedDomain.Aggregates.WeatherForecasts.Queries;
 using SharedDomain.ValueObjects;
-using Sekiban.Pure.Events;
-using Sekiban.Pure.Aggregates;
-using Sekiban.Pure.Documents;
-using Sekiban.Pure.Projectors;
-using Sekiban.Pure.Query;
-
+using System.Text.Json.Serialization;
 namespace SharedDomain;
 
 [JsonSourceGenerationOptions(
@@ -32,10 +32,10 @@ namespace SharedDomain;
 [JsonSerializable(typeof(IEvent))]
 [JsonSerializable(typeof(TemperatureCelsius))]
 // Projector types
-[JsonSerializable(typeof(AggregateListProjector<Aggregates.User.UserProjector>))]
-[JsonSerializable(typeof(AggregateListProjector<Aggregates.WeatherForecasts.WeatherForecastProjector>))]
+[JsonSerializable(typeof(AggregateListProjector<UserProjector>))]
+[JsonSerializable(typeof(AggregateListProjector<WeatherForecastProjector>))]
 // User domain
-[JsonSerializable(typeof(Aggregates.User.User))]
+[JsonSerializable(typeof(User))]
 [JsonSerializable(typeof(CreateUser))]
 [JsonSerializable(typeof(UpdateUserName))]
 [JsonSerializable(typeof(UpdateUserEmail))]

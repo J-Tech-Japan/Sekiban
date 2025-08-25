@@ -45,6 +45,7 @@
 mainブランチへのプッシュ時に自動的にデプロイされるように設定されています。また、手動でデプロイすることもできます。
 
 GitHub Secretsの設定:
+
 - `AZURE_CREDENTIALS`: Azure Service Principalの認証情報
 
 ## 構成ファイル
@@ -57,6 +58,7 @@ GitHub Secretsの設定:
 このテンプレートは、Azure OpenAIリソースを自動的に作成し、以下のモデルをデプロイします：
 
 ### 自動デプロイされるモデル
+
 - **GPT-4.1**: `gpt-4` (turbo-2024-04-09版) - 最新のGPT-4.1機能を提供
 - **Text Embedding**: `text-embedding-ada-002`
 

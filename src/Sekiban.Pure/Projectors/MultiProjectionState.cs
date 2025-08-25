@@ -62,6 +62,7 @@ public record MultiProjectionState(
     int AppliedSnapshotVersion,
     string RootPartitionKey) : IMultiProjectorStateCommon
 {
-    public SortableUniqueIdValue GetLastSortableUniqueId() => string.IsNullOrEmpty(LastSortableUniqueId) ? SortableUniqueIdValue.MinValue : 
-        new(LastSortableUniqueId);
+    public SortableUniqueIdValue GetLastSortableUniqueId() => string.IsNullOrEmpty(LastSortableUniqueId)
+        ? SortableUniqueIdValue.MinValue
+        : new SortableUniqueIdValue(LastSortableUniqueId);
 }

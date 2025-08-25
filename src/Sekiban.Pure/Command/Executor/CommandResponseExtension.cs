@@ -6,8 +6,8 @@ public static class CommandResponseExtension
     public static Task<ResultBox<CommandResponseSimple>> ToSimpleCommandResponse(
         this Task<ResultBox<CommandResponse>> taskResponse) => taskResponse.Remap(ToSimpleCommandResponse);
 
-    public static ResultBox<CommandResponseSimple>
-        ToSimpleCommandResponse(this ResultBox<CommandResponse> taskResponse) =>
+    public static ResultBox<CommandResponseSimple> ToSimpleCommandResponse(
+        this ResultBox<CommandResponse> taskResponse) =>
         taskResponse.Remap(ToSimpleCommandResponse);
 
     public static CommandResponseSimple ToSimpleCommandResponse(this CommandResponse response) => new(

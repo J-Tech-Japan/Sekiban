@@ -38,13 +38,13 @@ public class ExceptionEndpointFilter : IEndpointFilter
             return Results.Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: ex.GetType().FullName,
-                detail: ex.Message
-            );
+                detail: ex.Message);
         }
     }
 
     public static IResult CreateValidationProblemResult(SekibanValidationErrorsException exception) =>
-        Results.ValidationProblem(new Dictionary<string, string[]>(
-            exception.Errors.Select(s => new KeyValuePair<string, string[]>(s.PropertyName, s.ErrorMessages.ToArray()))
-        ));
+        Results.ValidationProblem(
+            new Dictionary<string, string[]>(
+                exception.Errors.Select(s =>
+                    new KeyValuePair<string, string[]>(s.PropertyName, s.ErrorMessages.ToArray()))));
 }

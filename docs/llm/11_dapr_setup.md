@@ -20,7 +20,8 @@
 
 ## Dapr Setup
 
-Dapr (Distributed Application Runtime) provides a distributed computing approach for Sekiban as an alternative to Orleans. Unlike Orleans, Dapr uses the sidecar pattern to provide distributed capabilities to your applications.
+Dapr (Distributed Application Runtime) provides a distributed computing approach for Sekiban as an alternative to
+Orleans. Unlike Orleans, Dapr uses the sidecar pattern to provide distributed capabilities to your applications.
 
 ## Basic Dapr Configuration
 
@@ -229,6 +230,7 @@ app.Run();
 For production, replace the in-memory state store with a persistent option:
 
 **Redis State Store:**
+
 ```yaml
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -249,6 +251,7 @@ spec:
 ```
 
 **PostgreSQL State Store:**
+
 ```yaml
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -348,19 +351,20 @@ spec:
 
 ## Orleans vs Dapr Comparison
 
-| Feature | Orleans | Dapr |
-|---------|---------|------|
-| **Architecture** | Integrated framework | Sidecar pattern |
-| **Language Support** | Primarily .NET | Language agnostic |
-| **State Management** | Built-in grain storage | External state stores |
-| **Messaging** | Built-in streaming | External pub/sub |
-| **Actor Model** | Virtual actors (grains) | Dapr actors |
-| **Deployment** | Single process | App + sidecar |
-| **Learning Curve** | Orleans-specific concepts | Dapr + distributed systems |
-| **Performance** | Lower latency (direct calls) | Higher latency (HTTP/gRPC) |
-| **Ecosystem** | .NET focused | Cloud-native ecosystem |
+| Feature              | Orleans                      | Dapr                       |
+|----------------------|------------------------------|----------------------------|
+| **Architecture**     | Integrated framework         | Sidecar pattern            |
+| **Language Support** | Primarily .NET               | Language agnostic          |
+| **State Management** | Built-in grain storage       | External state stores      |
+| **Messaging**        | Built-in streaming           | External pub/sub           |
+| **Actor Model**      | Virtual actors (grains)      | Dapr actors                |
+| **Deployment**       | Single process               | App + sidecar              |
+| **Learning Curve**   | Orleans-specific concepts    | Dapr + distributed systems |
+| **Performance**      | Lower latency (direct calls) | Higher latency (HTTP/gRPC) |
+| **Ecosystem**        | .NET focused                 | Cloud-native ecosystem     |
 
-Choose Orleans for .NET-centric applications requiring maximum performance, or Dapr for multi-language environments and cloud-native deployments.
+Choose Orleans for .NET-centric applications requiring maximum performance, or Dapr for multi-language environments and
+cloud-native deployments.
 
 ## Next Steps
 

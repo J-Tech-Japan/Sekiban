@@ -13,13 +13,13 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.8" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.8"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
+        <ProjectReference Include="..\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

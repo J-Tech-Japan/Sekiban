@@ -10,6 +10,16 @@ public class InMemoryEventWriter(Repository repository) : IEventWriter, IEventRe
     private readonly Repository _repository = repository;
 
     /// <summary>
+    ///     Removes all events from the repository
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public Task RemoveAllEvents()
+    {
+        var result = _repository.ClearAllEvents();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     Saves events to the repository
     /// </summary>
     /// <typeparam name="TEvent">The type of events to save</typeparam>
@@ -19,16 +29,6 @@ public class InMemoryEventWriter(Repository repository) : IEventWriter, IEventRe
     {
         var eventsList = events.ToList();
         var result = _repository.Save(eventsList.Cast<IEvent>().ToList());
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    ///     Removes all events from the repository
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation</returns>
-    public Task RemoveAllEvents()
-    {
-        var result = _repository.ClearAllEvents();
         return Task.CompletedTask;
     }
 }

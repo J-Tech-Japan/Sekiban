@@ -1,9 +1,8 @@
 using ResultBoxes;
-
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
-/// General list query result wrapper for Orleans serialization
+///     General list query result wrapper for Orleans serialization
 /// </summary>
 public record ListQueryResultGeneral(
     int? TotalCount,
@@ -37,18 +36,13 @@ public record ListQueryResultGeneral(
             return hashCode;
         }
     }
-    
+
     public ResultBox<ListQueryResult<T>> ToTypedResult<T>() where T : notnull
     {
         try
         {
             var typedItems = Items.Cast<T>().ToList();
-            var result = new ListQueryResult<T>(
-                TotalCount,
-                TotalPages,
-                CurrentPage,
-                PageSize,
-                typedItems);
+            var result = new ListQueryResult<T>(TotalCount, TotalPages, CurrentPage, PageSize, typedItems);
             return ResultBox.FromValue(result);
         }
         catch (InvalidCastException ex)
@@ -56,11 +50,4 @@ public record ListQueryResultGeneral(
             return ResultBox.Error<ListQueryResult<T>>(ex);
         }
     }
-}
-
-/// <summary>
-/// Empty list query for default values
-/// </summary>
-public class EmptyListQueryCommon : IListQueryCommon
-{
 }

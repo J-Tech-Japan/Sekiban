@@ -1,6 +1,5 @@
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
-
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>

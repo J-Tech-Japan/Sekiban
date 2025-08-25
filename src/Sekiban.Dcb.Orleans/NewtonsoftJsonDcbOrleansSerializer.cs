@@ -1,18 +1,16 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Orleans.Storage;
-
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
-/// Custom JSON serializer for Orleans grain storage that handles DCB types properly
+///     Custom JSON serializer for Orleans grain storage that handles DCB types properly
 /// </summary>
 public class NewtonsoftJsonDcbOrleansSerializer : IGrainStorageSerializer
 {
     private readonly JsonSerializerSettings _settings;
 
-    public NewtonsoftJsonDcbOrleansSerializer()
-    {
+    public NewtonsoftJsonDcbOrleansSerializer() =>
         _settings = new JsonSerializerSettings
         {
             // Use default contract resolver that includes fields
@@ -22,7 +20,6 @@ public class NewtonsoftJsonDcbOrleansSerializer : IGrainStorageSerializer
             // Include null values
             NullValueHandling = NullValueHandling.Include
         };
-    }
 
     public BinaryData Serialize<T>(T input)
     {
@@ -34,12 +31,12 @@ public class NewtonsoftJsonDcbOrleansSerializer : IGrainStorageSerializer
     {
         var json = input.ToString();
         var result = JsonConvert.DeserializeObject<T>(json, _settings);
-        
+
         if (result is null)
         {
             throw new InvalidOperationException($"Failed to deserialize {typeof(T).Name} from JSON: {json}");
         }
-        
+
         return result;
     }
 }

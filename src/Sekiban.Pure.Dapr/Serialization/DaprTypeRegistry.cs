@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
-
 namespace Sekiban.Pure.Dapr.Serialization;
 
 /// <summary>
-/// Default implementation of type registry for Dapr serialization
+///     Default implementation of type registry for Dapr serialization
 /// </summary>
 public class DaprTypeRegistry : IDaprTypeRegistry
 {

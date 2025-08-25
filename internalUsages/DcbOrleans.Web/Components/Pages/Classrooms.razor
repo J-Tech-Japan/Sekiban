@@ -1,11 +1,8 @@
 @page "/classrooms"
-@attribute [StreamRendering]
-@rendermode InteractiveServer
-
 @using Dcb.Domain.ClassRoom
 @using Dcb.Domain.Enrollment
-@using System.Net.Http
-@using System.Net.Http.Json
+@attribute [StreamRendering]
+@rendermode InteractiveServer
 
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JsRuntime
@@ -21,12 +18,10 @@
 @if (classrooms == null)
 {
     <p><em>Loading...</em></p>
-}
-else if (classrooms.Count == 0)
+} else if (classrooms.Count == 0)
 {
     <p>No classrooms available. Click "Add New Classroom" to create one.</p>
-}
-else
+} else
 {
     <table class="table">
         <thead>
@@ -39,32 +34,33 @@ else
         </tr>
         </thead>
         <tbody>
-            @foreach (var classroom in classrooms)
-            {
-                <tr>
-                    <td>@classroom.ClassName</td>
-                    <td>@classroom.MaxCapacity</td>
-                    <td>@classroom.EnrolledStudents.Count</td>
-                    <td>
-                        @if (classroom.EnrolledStudents.Count >= classroom.MaxCapacity)
-                        {
-                            <span class="badge bg-danger">Full</span>
-                        }
-                        else if (classroom.EnrolledStudents.Count > classroom.MaxCapacity * 0.8)
-                        {
-                            <span class="badge bg-warning">Almost Full</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-success">Available</span>
-                        }
-                    </td>
-                    <td>
-                        <button class="btn btn-info btn-sm me-2" @onclick="() => ViewClassroomDetails(classroom)">Details</button>
-                        <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteClassroom(classroom.ClassRoomId)">Delete</button>
-                    </td>
-                </tr>
-            }
+        @foreach (var classroom in classrooms)
+        {
+            <tr>
+                <td>@classroom.ClassName</td>
+                <td>@classroom.MaxCapacity</td>
+                <td>@classroom.EnrolledStudents.Count</td>
+                <td>
+                    @if (classroom.EnrolledStudents.Count >= classroom.MaxCapacity)
+                    {
+                        <span class="badge bg-danger">Full</span>
+                    } else if (classroom.EnrolledStudents.Count > classroom.MaxCapacity * 0.8)
+                    {
+                        <span class="badge bg-warning">Almost Full</span>
+                    } else
+                    {
+                        <span class="badge bg-success">Available</span>
+                    }
+                </td>
+                <td>
+                    <button class="btn btn-info btn-sm me-2" @onclick="() => ViewClassroomDetails(classroom)">Details
+                    </button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteClassroom(classroom.ClassRoomId)">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        }
         </tbody>
     </table>
 }
@@ -80,11 +76,12 @@ else
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="className" class="form-label">Classroom Name</label>
-                    <input id="className" class="form-control" @bind="classroomModel.ClassName" />
+                    <input id="className" class="form-control" @bind="classroomModel.ClassName"/>
                 </div>
                 <div class="mb-3">
                     <label for="maxCapacity" class="form-label">Maximum Capacity</label>
-                    <input type="number" id="maxCapacity" class="form-control" @bind="classroomModel.MaxCapacity" min="1" max="100" />
+                    <input type="number" id="maxCapacity" class="form-control" @bind="classroomModel.MaxCapacity"
+                           min="1" max="100"/>
                 </div>
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
@@ -116,13 +113,13 @@ else
                     <dl class="row">
                         <dt class="col-sm-3">Name:</dt>
                         <dd class="col-sm-9">@selectedClassroom.ClassName</dd>
-                        
+
                         <dt class="col-sm-3">Classroom ID:</dt>
                         <dd class="col-sm-9">@selectedClassroom.ClassRoomId</dd>
-                        
+
                         <dt class="col-sm-3">Max Capacity:</dt>
                         <dd class="col-sm-9">@selectedClassroom.MaxCapacity</dd>
-                        
+
                         <dt class="col-sm-3">Enrolled Students:</dt>
                         <dd class="col-sm-9">@selectedClassroom.EnrolledStudents.Count / @selectedClassroom.MaxCapacity</dd>
                     </dl>
@@ -132,30 +129,29 @@ else
                     {
                         <table class="table table-sm">
                             <thead>
-                                <tr>
-                                    <th>Student Name</th>
-                                    <th>Student ID</th>
-                                    <th>Action</th>
-                                </tr>
+                            <tr>
+                                <th>Student Name</th>
+                                <th>Student ID</th>
+                                <th>Action</th>
+                            </tr>
                             </thead>
                             <tbody>
-                                @foreach (var student in selectedClassroom.EnrolledStudents)
-                                {
-                                    <tr>
-                                        <td>@student.StudentName</td>
-                                        <td>@student.StudentId</td>
-                                        <td>
-                                            <button class="btn btn-warning btn-sm" 
-                                                    @onclick="() => HandleRemoveStudent(student.StudentId, selectedClassroom.ClassRoomId)">
-                                                Remove
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
+                            @foreach (var student in selectedClassroom.EnrolledStudents)
+                            {
+                                <tr>
+                                    <td>@student.StudentName</td>
+                                    <td>@student.StudentId</td>
+                                    <td>
+                                        <button class="btn btn-warning btn-sm"
+                                                @onclick="() => HandleRemoveStudent(student.StudentId, selectedClassroom.ClassRoomId)">
+                                            Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
                             </tbody>
                         </table>
-                    }
-                    else
+                    } else
                     {
                         <p>No students enrolled in this classroom.</p>
                     }
@@ -220,7 +216,7 @@ else
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var response = await httpClient.DeleteAsync($"api/classrooms/{classRoomId}");
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await LoadClassrooms();
@@ -239,7 +235,7 @@ else
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new DropStudentFromClassRoom(studentId, classRoomId);
             var response = await httpClient.PostAsJsonAsync("api/enrollments/drop", command);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await LoadClassrooms();
@@ -257,7 +253,7 @@ else
 
     private async Task CloseModal()
     {
-        classroomModel = new();
+        classroomModel = new ClassroomModel();
         errorMessage = string.Empty;
         await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('hide')");
     }
@@ -270,7 +266,7 @@ else
 
     private async Task OpenAddClassroomModal()
     {
-        classroomModel = new();
+        classroomModel = new ClassroomModel();
         errorMessage = string.Empty;
         await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('show')");
     }
@@ -286,19 +282,15 @@ else
         try
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var command = new CreateClassRoom(
-                Guid.NewGuid(),
-                classroomModel.ClassName,
-                classroomModel.MaxCapacity);
-                
+            var command = new CreateClassRoom(Guid.NewGuid(), classroomModel.ClassName, classroomModel.MaxCapacity);
+
             var response = await httpClient.PostAsJsonAsync("api/classrooms", command);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 await LoadClassrooms();
                 await CloseModal();
-            }
-            else
+            } else
             {
                 errorMessage = "Failed to add classroom. Please try again.";
             }

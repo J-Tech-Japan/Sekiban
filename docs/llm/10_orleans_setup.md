@@ -20,7 +20,8 @@
 
 ## Orleans Setup
 
-Microsoft Orleans is a framework that provides a straightforward approach to building distributed high-scale computing applications. Sekiban integrates with Orleans to provide a robust, scalable event sourcing infrastructure.
+Microsoft Orleans is a framework that provides a straightforward approach to building distributed high-scale computing
+applications. Sekiban integrates with Orleans to provide a robust, scalable event sourcing infrastructure.
 
 ## Basic Orleans Configuration
 
@@ -345,4 +346,5 @@ Orleans is designed for horizontal scaling, but you should consider:
 
 ## Alternative: Dapr Setup
 
-For distributed applications requiring language-agnostic support or cloud-native deployment patterns, consider using [Dapr Setup](11_dapr_setup.md) as an alternative to Orleans.
+For distributed applications requiring language-agnostic support or cloud-native deployment patterns, consider
+using [Dapr Setup](11_dapr_setup.md) as an alternative to Orleans.

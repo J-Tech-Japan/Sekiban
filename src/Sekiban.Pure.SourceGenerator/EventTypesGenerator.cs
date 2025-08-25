@@ -31,12 +31,13 @@ public class EventTypesGenerator : IIncrementalGenerator
                 var aggregateTypes = SekibanTypesExtractors.GetAggregateTypeValues(compilation, types);
                 var multiProjectorTypes = SekibanTypesExtractors.GetMultiProjectorValues(compilation, types);
                 var rootNamespace = compilation.AssemblyName ?? throw new ApplicationException("AssemblyName is null");
-                var sourceCode = GenerateSourceCode(eventTypes, aggregateTypes,multiProjectorTypes, rootNamespace);
+                var sourceCode = GenerateSourceCode(eventTypes, aggregateTypes, multiProjectorTypes, rootNamespace);
                 ctx.AddSource("EventTypes.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
             });
     }
-    
-    private string GenerateSourceCode(ImmutableArray<SekibanTypesExtractors.EventTypeValues> eventTypes, 
+
+    private string GenerateSourceCode(
+        ImmutableArray<SekibanTypesExtractors.EventTypeValues> eventTypes,
         ImmutableArray<SekibanTypesExtractors.AggregateTypesValues> aggregateTypes,
         ImmutableArray<SekibanTypesExtractors.MultiProjectorValue> multiProjectorValues,
         string rootNamespace)
@@ -241,14 +242,14 @@ public class EventTypesGenerator : IIncrementalGenerator
         }
         sb.AppendLine("            };");
         sb.AppendLine("        }");
-        
+
         // Add GetEventTypeByName implementation
         sb.AppendLine();
         sb.AppendLine("        public Type? GetEventTypeByName(string eventTypeName)");
         sb.AppendLine("        {");
         sb.AppendLine("            return eventTypeName switch");
         sb.AppendLine("            {");
-        
+
         // Generate case statements for each event type
         foreach (var type in eventTypes)
         {
@@ -259,7 +260,7 @@ public class EventTypesGenerator : IIncrementalGenerator
                 sb.AppendLine($"                \"{shortName}\" => typeof({type.RecordName}),");
             }
         }
-        
+
         sb.AppendLine("                _ => null");
         sb.AppendLine("            };");
         sb.AppendLine("        }");
@@ -296,6 +297,4 @@ public class EventTypesGenerator : IIncrementalGenerator
 
         return sb.ToString();
     }
-
-
 }

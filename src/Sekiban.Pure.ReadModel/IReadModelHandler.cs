@@ -2,12 +2,12 @@ using Sekiban.Pure.Events;
 namespace Sekiban.Pure.ReadModel;
 
 /// <summary>
-/// Interface for read model handlers
+///     Interface for read model handlers
 /// </summary>
 public interface IReadModelHandler
 {
     /// <summary>
-    /// Handle event
+    ///     Handle event
     /// </summary>
     Task HandleEventAsync(IEvent @event);
 }

@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-
 namespace Microsoft.Extensions.Hosting;
 
 public static class Extensions
@@ -33,17 +32,16 @@ public static class Extensions
             logging.IncludeScopes = true;
         });
 
-        builder.Services.AddOpenTelemetry()
+        builder
+            .Services
+            .AddOpenTelemetry()
             .WithMetrics(metrics =>
             {
-                metrics.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                metrics.AddAspNetCoreInstrumentation().AddHttpClientInstrumentation().AddRuntimeInstrumentation();
             })
             .WithTracing(tracing =>
             {
-                tracing.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation();
+                tracing.AddAspNetCoreInstrumentation().AddHttpClientInstrumentation();
             });
 
         builder.AddOpenTelemetryExporters();
@@ -65,8 +63,7 @@ public static class Extensions
 
     public static IHostApplicationBuilder AddDefaultHealthChecks(this IHostApplicationBuilder builder)
     {
-        builder.Services.AddHealthChecks()
-            .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
+        builder.Services.AddHealthChecks().AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
 
         return builder;
     }
@@ -74,10 +71,12 @@ public static class Extensions
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
         app.MapHealthChecks("/health");
-        app.MapHealthChecks("/alive", new HealthCheckOptions
-        {
-            Predicate = r => r.Tags.Contains("live")
-        });
+        app.MapHealthChecks(
+            "/alive",
+            new HealthCheckOptions
+            {
+                Predicate = r => r.Tags.Contains("live")
+            });
 
         return app;
     }

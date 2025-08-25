@@ -49,7 +49,8 @@ public static class DomainType
             // Register multi-projectors
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjector>();
-            types.MultiProjectorTypes.RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
+            types.MultiProjectorTypes
+                .RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
 
             // Register list queries
             types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();

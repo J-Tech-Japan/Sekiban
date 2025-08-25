@@ -20,9 +20,9 @@ public interface IQueryTypes
     public ResultBox<IListQueryResult> ToTypedListQueryResult(ListQueryResultGeneral general);
     public ResultBox<IMultiProjectorCommon> GetMultiProjector(IQueryCommon query);
     public ResultBox<IMultiProjectorCommon> GetMultiProjector(IListQueryCommon query);
-    
+
     /// <summary>
-    /// Gets the type from the payload type name。
+    ///     Gets the type from the payload type name。
     /// </summary>
     /// <param name="payloadTypeName">Name of the payload type</param>
     /// <returns>The found type, or null if not found</returns>

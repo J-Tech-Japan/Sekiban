@@ -23,7 +23,7 @@ public class PostgresEventStore : IEventStore
         try
         {
             Console.WriteLine($"[PostgresEventStore] ReadAllEventsAsync called, since: {since?.Value ?? "null"}");
-            
+
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             var query = context.Events.AsQueryable();
@@ -34,7 +34,7 @@ public class PostgresEventStore : IEventStore
             }
 
             var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
-            
+
             Console.WriteLine($"[PostgresEventStore] Found {dbEvents.Count} events in database");
 
             var events = new List<Event>();
@@ -154,8 +154,16 @@ public class PostgresEventStore : IEventStore
                     // Process tags associated with this event
                     foreach (var tagString in ev.Tags)
                     {
+                        // Extract tag group from tag string (format: "group:content")
+                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+
                         // Create a tag entry for this event
-                        var dbTag = DbTag.FromEventTag(tagString, ev.SortableUniqueIdValue, ev.Id, ev.EventType);
+                        var dbTag = DbTag.FromEventTag(
+                            tagString,
+                            tagGroup,
+                            ev.SortableUniqueIdValue,
+                            ev.Id,
+                            ev.EventType);
                         context.Tags.Add(dbTag);
 
                         tagWriteResults.Add(

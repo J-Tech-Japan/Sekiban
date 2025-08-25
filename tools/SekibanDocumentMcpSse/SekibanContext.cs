@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// JSON serialization context
+///     JSON serialization context
 /// </summary>
 [JsonSerializable(typeof(List<DocumentInfo>))]
 [JsonSerializable(typeof(DocumentInfo))]
@@ -13,4 +13,6 @@ namespace SekibanDocumentMcpSse;
 [JsonSerializable(typeof(SearchResult))]
 [JsonSerializable(typeof(List<SekibanCodeSample>))]
 [JsonSerializable(typeof(SekibanCodeSample))]
-internal sealed partial class SekibanContext : JsonSerializerContext { }
+internal sealed partial class SekibanContext : JsonSerializerContext
+{
+}

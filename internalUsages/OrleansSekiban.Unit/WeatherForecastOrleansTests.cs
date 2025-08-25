@@ -1,35 +1,35 @@
+using ResultBoxes;
+using Sekiban.Pure;
+using Sekiban.Pure.Orleans.xUnit;
+using Sekiban.Pure.Projectors;
 using SharedDomain;
 using SharedDomain.Aggregates.WeatherForecasts;
 using SharedDomain.Aggregates.WeatherForecasts.Commands;
 using SharedDomain.Aggregates.WeatherForecasts.Payloads;
 using SharedDomain.Generated;
 using SharedDomain.ValueObjects;
-using ResultBoxes;
-using Sekiban.Pure;
-using Sekiban.Pure.Orleans.xUnit;
-using Sekiban.Pure.Projectors;
-
 namespace OrleansSekiban.Unit;
 
 public class WeatherForecastOrleansTests : SekibanOrleansTestBase<WeatherForecastOrleansTests>
 {
-    public override SekibanDomainTypes GetDomainTypes() => 
-        SharedDomain.Generated.SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
+    public override SekibanDomainTypes GetDomainTypes() =>
+        SharedDomainDomainTypes.Generate(SharedDomainEventsJsonContext.Default.Options);
 
     [Fact]
     public void OrleansTest_CreateAndQueryWeatherForecast() =>
-        GivenCommandWithResult(new InputWeatherForecastCommand(
-                "Chicago", 
-                new DateOnly(2025, 3, 7), 
-                new TemperatureCelsius(10), 
-                "Windy"))
+        GivenCommandWithResult(
+                new InputWeatherForecastCommand(
+                    "Chicago",
+                    new DateOnly(2025, 3, 7),
+                    new TemperatureCelsius(10),
+                    "Windy"))
             .Do(response => Assert.Equal(1, response.Version))
             .Conveyor(response => WhenCommandWithResult(
                 new UpdateWeatherForecastLocationCommand(response.PartitionKeys.AggregateId, "New Chicago")))
             .Do(response => Assert.Equal(2, response.Version))
             .Conveyor(response => ThenGetAggregateWithResult<WeatherForecastProjector>(response.PartitionKeys))
             .Conveyor(aggregate => aggregate.Payload.ToResultBox().Cast<WeatherForecast>())
-            .Do(forecast => 
+            .Do(forecast =>
             {
                 Assert.Equal("New Chicago", forecast.Location);
                 Assert.Equal(new DateOnly(2025, 3, 7), forecast.Date);
@@ -37,7 +37,7 @@ public class WeatherForecastOrleansTests : SekibanOrleansTestBase<WeatherForecas
                 Assert.Equal("Windy", forecast.Summary);
             })
             .Conveyor(_ => ThenGetMultiProjectorWithResult<AggregateListProjector<WeatherForecastProjector>>())
-            .Do(projector => 
+            .Do(projector =>
             {
                 var aggregates = projector.Aggregates.Values;
                 Assert.Single(aggregates);
@@ -45,22 +45,16 @@ public class WeatherForecastOrleansTests : SekibanOrleansTestBase<WeatherForecas
                 Assert.Equal("New Chicago", forecast.Location);
             })
             .UnwrapBox();
-            
+
     [Fact]
     public void TestSerializable()
     {
         // Test that commands are serializable (important for Orleans)
-        CheckSerializability(new InputWeatherForecastCommand(
-            "Seattle", 
-            new DateOnly(2025, 3, 4), 
-            new TemperatureCelsius(15), 
-            "Rainy"));
-            
-        CheckSerializability(new UpdateWeatherForecastLocationCommand(
-            Guid.NewGuid(), 
-            "Portland"));
-            
-        CheckSerializability(new DeleteWeatherForecastCommand(
-            Guid.NewGuid()));
+        CheckSerializability(
+            new InputWeatherForecastCommand("Seattle", new DateOnly(2025, 3, 4), new TemperatureCelsius(15), "Rainy"));
+
+        CheckSerializability(new UpdateWeatherForecastLocationCommand(Guid.NewGuid(), "Portland"));
+
+        CheckSerializability(new DeleteWeatherForecastCommand(Guid.NewGuid()));
     }
 }

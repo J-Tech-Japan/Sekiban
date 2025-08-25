@@ -1,13 +1,12 @@
-using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Documents;
-
+using System.Text.Json;
 namespace Sekiban.Pure.Dapr.Parts;
 
 /// <summary>
-/// Serializable representation of an aggregate for state storage in Dapr actors.
-/// This is the Dapr equivalent of Orleans' SerializableAggregate.
+///     Serializable representation of an aggregate for state storage in Dapr actors.
+///     This is the Dapr equivalent of Orleans' SerializableAggregate.
 /// </summary>
 public record DaprSerializableAggregate
 {
@@ -20,7 +19,7 @@ public record DaprSerializableAggregate
     public string PayloadTypeName { get; init; } = string.Empty;
 
     /// <summary>
-    /// Creates a DaprSerializableAggregate from an Aggregate
+    ///     Creates a DaprSerializableAggregate from an Aggregate
     /// </summary>
     public static Task<DaprSerializableAggregate> CreateFromAsync(
         Aggregate aggregate,
@@ -31,8 +30,8 @@ public record DaprSerializableAggregate
             throw new ArgumentNullException(nameof(aggregate));
         }
 
-        string payloadJson = string.Empty;
-        string payloadTypeName = string.Empty;
+        var payloadJson = string.Empty;
+        var payloadTypeName = string.Empty;
 
         if (aggregate.Payload != null)
         {
@@ -50,12 +49,12 @@ public record DaprSerializableAggregate
             PayloadJson = payloadJson,
             PayloadTypeName = payloadTypeName
         };
-        
+
         return Task.FromResult(result);
     }
 
     /// <summary>
-    /// Converts back to an Aggregate
+    ///     Converts back to an Aggregate
     /// </summary>
     public Task<OptionalValue<Aggregate>> ToAggregateAsync(SekibanDomainTypes domainTypes)
     {
@@ -71,25 +70,27 @@ public record DaprSerializableAggregate
                     return Task.FromResult(OptionalValue<Aggregate>.Empty);
                 }
 
-                var deserialized = JsonSerializer.Deserialize(PayloadJson, payloadType, domainTypes.JsonSerializerOptions);
+                var deserialized = JsonSerializer.Deserialize(
+                    PayloadJson,
+                    payloadType,
+                    domainTypes.JsonSerializerOptions);
                 if (deserialized is IAggregatePayload aggregatePayload)
                 {
                     payload = aggregatePayload;
-                }
-                else
+                } else
                 {
                     return Task.FromResult(OptionalValue<Aggregate>.Empty);
                 }
             }
 
             var aggregate = new Aggregate(
-                Payload: payload ?? new EmptyAggregatePayload(),
-                PartitionKeys: PartitionKeys,
-                Version: Version,
-                LastSortableUniqueId: LastSortableUniqueId,
-                ProjectorVersion: ProjectorVersion,
-                ProjectorTypeName: ProjectorTypeName,
-                PayloadTypeName: PayloadTypeName);
+                payload ?? new EmptyAggregatePayload(),
+                PartitionKeys,
+                Version,
+                LastSortableUniqueId,
+                ProjectorVersion,
+                ProjectorTypeName,
+                PayloadTypeName);
 
             var result = new OptionalValue<Aggregate>(aggregate);
             return Task.FromResult(result);

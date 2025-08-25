@@ -9,9 +9,9 @@ namespace Dcb.Domain.Projections;
 /// <summary>
 ///     Weather forecast projection using TagState with SafeUnsafeProjectionState
 /// </summary>
-public record
-    WeatherForecastProjectorWithTagStateProjector : IMultiProjector<WeatherForecastProjectorWithTagStateProjector>,
-        ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
+public record WeatherForecastProjectorWithTagStateProjector :
+    IMultiProjector<WeatherForecastProjectorWithTagStateProjector>,
+    ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 
     // We no longer need an instance since we'll use static methods
@@ -49,16 +49,15 @@ public record
         }
 
         // Function to get affected item IDs
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = (evt) =>
-            weatherForecastTags.Select(tag => tag.ForecastId);
-        
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => weatherForecastTags.Select(tag => tag.ForecastId);
+
         // Function to project a single item
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) =>
             ProjectTagState(forecastId, current, evt, weatherForecastTags);
-        
+
         // Calculate SafeWindow threshold
         var threshold = GetSafeWindowThreshold();
-        
+
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
         var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
@@ -155,7 +154,6 @@ public record
     }
 
     #region ISafeAndUnsafeStateAccessor Implementation
-
     private Guid _lastEventId = Guid.Empty;
     private string _lastSortableUniqueId = string.Empty;
     private int _version;
@@ -163,51 +161,48 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetSafeState()
-    {
+    public WeatherForecastProjectorWithTagStateProjector GetSafeState() =>
         // The State already manages safe/unsafe internally
         // We return the same instance since SafeUnsafeProjectionState handles it
-        return this;
-    }
+        this;
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState()
-    {
+    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState() =>
         // Return current state (includes unsafe)
-        return this;
-    }
+        this;
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
     /// </summary>
     public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
-        Event evt, 
+        Event evt,
         SortableUniqueId safeWindowThreshold)
     {
         // Extract tags from event - specifically looking for WeatherForecastTag
-        var tags = evt.Tags
-            .Select(t => 
+        var tags = evt
+            .Tags
+            .Select(t =>
             {
                 // Try to parse as WeatherForecastTag
                 if (Guid.TryParse(t, out var id))
                 {
-                    return new WeatherForecastTag(id) as ITag;
+                    return new WeatherForecastTag(id);
                 }
                 return new SimpleTag(t) as ITag;
             })
             .ToList();
-        
+
         // Use the static Project method
         var result = Project(this, evt, tags);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
         }
-        
+
         var projected = result.GetValue();
-        
+
         // Update tracking information
         return projected with
         {
@@ -230,6 +225,5 @@ public record
         public string GetTagGroup() => "";
         public string GetTagContent() => Value;
     }
-
     #endregion
 }

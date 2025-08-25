@@ -2,15 +2,12 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
-using Xunit;
-
 namespace Sekiban.Dcb.Tests;
 
 public class GenericTagMultiProjectorWithTagGroupTests
@@ -51,7 +48,8 @@ public class GenericTagMultiProjectorWithTagGroupTests
             tagTypes,
             tagProjectorTypes,
             tagStatePayloadTypes,
-            multiProjectorTypes, new SimpleQueryTypes());
+            multiProjectorTypes,
+            new SimpleQueryTypes());
     }
 
     [Fact]
@@ -59,37 +57,35 @@ public class GenericTagMultiProjectorWithTagGroupTests
     {
         // Arrange
         var projector = GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>.GenerateInitialPayload();
-        
+
         var classRoomId = Guid.NewGuid();
-        
+
         // Create event with ClassRoomTag
-        var classRoomEvent = CreateEvent(
-            new ClassRoomCreated(classRoomId, "Room 101", 30),
-            null);
+        var classRoomEvent = CreateEvent(new ClassRoomCreated(classRoomId, "Room 101", 30), null);
 
         // Act - Process event with ClassRoomTag
         var result = GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>.Project(
-            projector, 
-            classRoomEvent, 
+            projector,
+            classRoomEvent,
             new List<ITag> { new ClassRoomTag(classRoomId) });
-        
+
         Assert.True(result.IsSuccess);
         var updatedProjector = result.GetValue();
 
         // Assert
         var tagStates = updatedProjector.GetCurrentTagStates();
-        
+
         // Debug: Check state
         Assert.NotNull(tagStates);
         Assert.NotEmpty(tagStates);
         Assert.Contains(classRoomId, tagStates.Keys);
-        
+
         var tagState = tagStates[classRoomId];
         Assert.NotNull(tagState);
-        
+
         // Check that it's no longer EmptyTagStatePayload
         Assert.NotEqual(typeof(EmptyTagStatePayload), tagState.Payload.GetType());
-        
+
         var classRoomState = tagState.Payload as AvailableClassRoomState;
         Assert.NotNull(classRoomState);
         Assert.Equal("Room 101", classRoomState.Name);
@@ -101,46 +97,42 @@ public class GenericTagMultiProjectorWithTagGroupTests
     {
         // Arrange
         var projector = GenericTagMultiProjector<StudentProjector, StudentTag>.GenerateInitialPayload();
-        
+
         var classRoomId = Guid.NewGuid();
         var studentId1 = Guid.NewGuid();
         var studentId2 = Guid.NewGuid();
-        
+
         // Create events with mixed tags
-        var mixedEvent = CreateEvent(
-            new StudentCreated(studentId1, "Alice"),
-            null);
-        
-        var studentOnlyEvent = CreateEvent(
-            new StudentCreated(studentId2, "Bob"),
-            null);
+        var mixedEvent = CreateEvent(new StudentCreated(studentId1, "Alice"), null);
+
+        var studentOnlyEvent = CreateEvent(new StudentCreated(studentId2, "Bob"), null);
 
         // Act
         var result1 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
-            projector, 
-            mixedEvent, 
+            projector,
+            mixedEvent,
             new List<ITag> { new StudentTag(studentId1), new ClassRoomTag(classRoomId) });
         var projector1 = result1.GetValue();
-        
+
         var result2 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
-            projector1, 
-            studentOnlyEvent, 
+            projector1,
+            studentOnlyEvent,
             new List<ITag> { new StudentTag(studentId2) });
         var projector2 = result2.GetValue();
 
         // Assert
         var tagStates = projector2.GetCurrentTagStates();
-        
+
         // Should have both student states, but no classroom state
         Assert.Equal(2, tagStates.Count);
         Assert.Contains(studentId1, tagStates.Keys);
         Assert.Contains(studentId2, tagStates.Keys);
         Assert.DoesNotContain(classRoomId, tagStates.Keys);
-        
+
         var aliceState = tagStates[studentId1].Payload as StudentState;
         Assert.NotNull(aliceState);
         Assert.Equal("Alice", aliceState.Name);
-        
+
         var bobState = tagStates[studentId2].Payload as StudentState;
         Assert.NotNull(bobState);
         Assert.Equal("Bob", bobState.Name);
@@ -152,26 +144,24 @@ public class GenericTagMultiProjectorWithTagGroupTests
         // Arrange
         var projector = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload();
         var forecastId = Guid.NewGuid();
-        
+
         // Create event with WeatherForecastTag
-        var weatherEvent = CreateEvent(
-            new WeatherForecastCreated(forecastId, DateTime.Now, 20, "Cloudy"),
-            null);
+        var weatherEvent = CreateEvent(new WeatherForecastCreated(forecastId, DateTime.Now, 20, "Cloudy"), null);
 
         // Act
         var result = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
-            projector, 
-            weatherEvent, 
+            projector,
+            weatherEvent,
             new List<ITag> { new WeatherForecastTag(forecastId) });
         var updatedProjector = result.GetValue();
 
         // Assert
         var tagStates = updatedProjector.GetCurrentTagStates();
-        
+
         // The key should be the exact GUID from GetId(), not a hash
         Assert.Single(tagStates);
         Assert.Contains(forecastId, tagStates.Keys);
-        
+
         var weatherState = tagStates[forecastId].Payload as WeatherForecastState;
         Assert.NotNull(weatherState);
         Assert.Equal(20, weatherState.Temperature);
@@ -192,7 +182,8 @@ public class GenericTagMultiProjectorWithTagGroupTests
 
     // Test event payloads - using test-specific events to avoid conflicts
     public record StudentCreated(Guid StudentId, string Name) : IEventPayload;
-    public record WeatherForecastCreated(Guid ForecastId, DateTime Date, int Temperature, string Summary) : IEventPayload;
+    public record WeatherForecastCreated(Guid ForecastId, DateTime Date, int Temperature, string Summary)
+        : IEventPayload;
 
     // Mock StudentProjector (since it wasn't defined in the original code)
     public class StudentProjector : ITagProjector<StudentProjector>
@@ -221,11 +212,16 @@ public class GenericTagMultiProjectorWithTagGroupTests
             (current, ev.Payload) switch
             {
                 (EmptyTagStatePayload, WeatherForecastCreated created) => new WeatherForecastState(
-                    created.ForecastId, created.Date, created.Temperature, created.Summary, false),
+                    created.ForecastId,
+                    created.Date,
+                    created.Temperature,
+                    created.Summary,
+                    false),
                 _ => current
             };
     }
 
     // Mock WeatherForecastState
-    public record WeatherForecastState(Guid Id, DateTime Date, int Temperature, string Summary, bool IsDeleted) : ITagStatePayload;
+    public record WeatherForecastState(Guid Id, DateTime Date, int Temperature, string Summary, bool IsDeleted)
+        : ITagStatePayload;
 }

@@ -3,7 +3,6 @@ using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
-using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Tests;

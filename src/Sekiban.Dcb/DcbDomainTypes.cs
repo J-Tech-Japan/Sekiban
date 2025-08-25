@@ -80,6 +80,13 @@ public record DcbDomainTypes
         }
 
         internal DcbDomainTypes Build() =>
-            new(EventTypes, TagTypes, TagProjectorTypes, TagStatePayloadTypes, MultiProjectorTypes, QueryTypes, JsonOptions);
+            new(
+                EventTypes,
+                TagTypes,
+                TagProjectorTypes,
+                TagStatePayloadTypes,
+                MultiProjectorTypes,
+                QueryTypes,
+                JsonOptions);
     }
 }

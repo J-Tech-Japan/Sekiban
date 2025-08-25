@@ -13,9 +13,9 @@ namespace Pure.Domain.xUnit;
 [Collection("CosmosDbTests")]
 public abstract class CosmosDbTestBase : IAsyncLifetime
 {
+    protected readonly SekibanDomainTypes DomainTypes;
     protected readonly IServiceProvider ServiceProvider;
     protected readonly string TestRunId;
-    protected readonly SekibanDomainTypes DomainTypes;
 
     protected CosmosDbTestBase()
     {
@@ -41,24 +41,16 @@ public abstract class CosmosDbTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    ///     Override this method to add additional services
-    /// </summary>
-    protected virtual void ConfigureServices(IServiceCollection services)
-    {
-        // No additional services by default
-    }
-
-    /// <summary>
     ///     Initialize the test environment
     /// </summary>
     public virtual async Task InitializeAsync()
     {
         // Ensure clean state at start - wait for any previous cleanup to complete
         await Task.Delay(1000); // Small delay to allow previous test cleanup to complete
-        
+
         var eventRemover = ServiceProvider.GetRequiredService<IEventRemover>();
         await eventRemover.RemoveAllEvents();
-        
+
         // Additional delay to ensure cleanup is complete
         await Task.Delay(2000);
     }
@@ -72,9 +64,9 @@ public abstract class CosmosDbTestBase : IAsyncLifetime
         {
             // Clean up after test with retry logic
             var eventRemover = ServiceProvider.GetRequiredService<IEventRemover>();
-            
+
             // Retry cleanup up to 3 times
-            for (int retry = 0; retry < 3; retry++)
+            for (var retry = 0; retry < 3; retry++)
             {
                 try
                 {
@@ -87,7 +79,7 @@ public abstract class CosmosDbTestBase : IAsyncLifetime
                     await Task.Delay(1000 * (retry + 1)); // Exponential backoff
                 }
             }
-            
+
             // Additional delay to ensure cleanup is complete before next test
             await Task.Delay(1000);
         }
@@ -96,5 +88,13 @@ public abstract class CosmosDbTestBase : IAsyncLifetime
             Console.WriteLine($"Warning: Cleanup failed: {ex.Message}");
             // Don't throw here to avoid masking the actual test failure
         }
+    }
+
+    /// <summary>
+    ///     Override this method to add additional services
+    /// </summary>
+    protected virtual void ConfigureServices(IServiceCollection services)
+    {
+        // No additional services by default
     }
 }

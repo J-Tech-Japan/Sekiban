@@ -1,21 +1,14 @@
-using System.Net.Http.Json;
-using System.Text.Json;
-using SharedDomain.Aggregates.WeatherForecasts.Commands;
-using SharedDomain.Aggregates.WeatherForecasts.Queries;
-using SharedDomain.ValueObjects;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Query;
-
+using SharedDomain.Aggregates.WeatherForecasts.Commands;
+using SharedDomain.Aggregates.WeatherForecasts.Queries;
 namespace DaprSample.Web.Services;
 
 public class WeatherApiClient
 {
     private readonly HttpClient _httpClient;
 
-    public WeatherApiClient(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
+    public WeatherApiClient(HttpClient httpClient) => _httpClient = httpClient;
 
     public async Task<List<WeatherForecastResponse>?> GetWeatherForecastsAsync(string? waitForSortableUniqueId = null)
     {
@@ -41,7 +34,9 @@ public class WeatherApiClient
     public async Task<CommandResponseSimple?> UpdateLocationAsync(Guid weatherForecastId, string location)
     {
         var request = new { Location = location };
-        var response = await _httpClient.PostAsJsonAsync($"api/weatherforecast/{weatherForecastId}/update-location", request);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"api/weatherforecast/{weatherForecastId}/update-location",
+            request);
         if (response.IsSuccessStatusCode)
         {
             return await response.Content.ReadFromJsonAsync<CommandResponseSimple>();

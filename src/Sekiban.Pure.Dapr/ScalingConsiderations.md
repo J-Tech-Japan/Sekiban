@@ -7,6 +7,7 @@ EventPubSubControllerをライブラリで提供すると、クライアント�
 ## Dapr PubSubの制約（ChatGPT調査結果） 🔍
 
 **重要な発見**：
+
 - **現行Dapr（v1.15-1.16）では、PubSub → Actor への直接配信はサポートされていない** ❌
 - Dapr SidecarはトピックをSubscribeすると、必ず**HTTPまたはgRPCのアプリケーションエンドポイント**にメッセージをPOST
 - "Act## 推奨アプローチ
@@ -14,26 +15,26 @@ EventPubSubControllerをライブラリで提供すると、クライアント�
 ChatGPTからの調査結果に基づく最新の優先順位：
 
 1. **"リレー"エンドポイント + 最小API パターン** を最優先で実装 🎯
-   - HTTP経由は避けられないが、最小限のリレーで実現
-   - ライブラリは拡張メソッドのみ提供（opt-in）
-   - Controllerクラス不要
+    - HTTP経由は避けられないが、最小限のリレーで実現
+    - ライブラリは拡張メソッドのみ提供（opt-in）
+    - Controllerクラス不要
 
 2. **Consumer Group** による重複処理防止 🛡️
-   - 同一`app-id`での自動重複回避
-   - 明示的なConsumer Group設定
+    - 同一`app-id`での自動重複回避
+    - 明示的なConsumer Group設定
 
 3. **Streaming Subscription（α機能）** の将来対応準備 🔮
-   - Dapr 1.17以降でActor直接購読が可能になる予定
-   - `IEventDispatcher`抽象化で実装差し替えに備える
+    - Dapr 1.17以降でActor直接購読が可能になる予定
+    - `IEventDispatcher`抽象化で実装差し替えに備える
 
 4. **Assembly分離パターン** は次善策 📦
-   - リレーパターンで解決できない場合の代替案は2019年に提案（Issue #501）されたが、まだ実装されていない（Milestone v1.17）
+    - リレーパターンで解決できない場合の代替案は2019年に提案（Issue #501）されたが、まだ実装されていない（Milestone v1.17）
 
-| やりたいこと | 可否 | 補足 |
-|--------------|------|------|
-| PubSubメッセージをActorに**直接**ルーティング | **✗ 不可** | SidecarはActorランタイムの内部キューを認識しない |
-| Actor自身が`subscribe`宣言 | **✗ 不可** | 現状、`dapr/actors` APIはPubSubを扱わない |
-| HTTPコントローラーを置かずに受信 | **△** | 最小APIでprivateルート、またはgRPCストリーミング（α）を使用 |
+| やりたいこと                         | 可否       | 補足                                    |
+|--------------------------------|----------|---------------------------------------|
+| PubSubメッセージをActorに**直接**ルーティング | **✗ 不可** | SidecarはActorランタイムの内部キューを認識しない        |
+| Actor自身が`subscribe`宣言          | **✗ 不可** | 現状、`dapr/actors` APIはPubSubを扱わない      |
+| HTTPコントローラーを置かずに受信             | **△**    | 最小APIでprivateルート、またはgRPCストリーミング（α）を使用 |
 
 ## 解決策
 
@@ -75,6 +76,7 @@ public static class SekibanEventRelayExtensions
 ```
 
 クライアント側：
+
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +97,7 @@ app.Run();
 ```
 
 **メリット**：
+
 - ルートは1本のみ `/internal/pubsub/events` 🎯
 - Controllerクラス不要 ✅
 - ライブラリ側は拡張メソッドのみ提供 ✅
@@ -148,6 +151,7 @@ scopes:
 ```
 
 **ChatGPTからの重要な指摘：**
+
 - 同じ`app-id`を共有する全レプリカは、Daprが自動的に1つのインスタンスのみにメッセージを配信
 - しかし、ブローカーがConsumer Groupをサポートしていない場合は重複配信が発生する可能性がある
 - プロダクション環境では必ずConsumer Group対応のプロバイダー（Kafka、Azure Service Bus、RabbitMQ、Redis Streams）を使用
@@ -168,6 +172,7 @@ builder.Services.AddDaprStreamSubscriber(options =>
 ```
 
 **注意**：
+
 - .NETではまだプレビュー機能
 - HTTPを使わないがホスト側での登録が必要
 
@@ -198,6 +203,7 @@ public static class SekibanPubSubEndpoints
 ```
 
 クライアント側：
+
 ```csharp
 var app = builder.Build();
 
@@ -338,20 +344,20 @@ spec:
 ChatGPTからの提案に基づく優先順位：
 
 1. **Assembly分離パターン** を最優先で実装 🎯
-   - `Sekiban.Pure.Dapr.AspNetCore`として分離
-   - クライアント側での明示的な有効化
-   
+    - `Sekiban.Pure.Dapr.AspNetCore`として分離
+    - クライアント側での明示的な有効化
+
 2. **Consumer Group** による重複処理防止 🛡️
-   - 同一`app-id`での自動重複回避
-   - 明示的なConsumer Group設定
+    - 同一`app-id`での自動重複回避
+    - 明示的なConsumer Group設定
 
 3. **Minimal API + Internal Controller** のハイブリッド �
-   - 既存Controllerを`internal`に変更
-   - `MapSekibanPubSubEndpoints()`での明示的公開
+    - 既存Controllerを`internal`に変更
+    - `MapSekibanPubSubEndpoints()`での明示的公開
 
 4. **Application Parts制御** による細かい制御 ⚙️
-   - `ConfigureApplicationPartManager`での動的制御
-   - 設定ベースの有効/無効切り替え
+    - `ConfigureApplicationPartManager`での動的制御
+    - 設定ベースの有効/無効切り替え
 
 ## 将来への対応準備
 
@@ -425,23 +431,26 @@ app.Run();
 ## 実装状況（更新）
 
 **✅ 完了**：
+
 - **MinimalAPI リレーエンドポイント** の実装 🎯
-  - `SekibanEventRelayExtensions.MapSekibanEventRelay()`
-  - `MapSekibanEventRelayIfEnabled()` (設定ベース制御)
-  - `MapSekibanEventRelayForDevelopment()` (開発環境限定)
-  - `MapSekibanEventRelayMultiTopic()` (複数トピック対応)
+    - `SekibanEventRelayExtensions.MapSekibanEventRelay()`
+    - `MapSekibanEventRelayIfEnabled()` (設定ベース制御)
+    - `MapSekibanEventRelayForDevelopment()` (開発環境限定)
+    - `MapSekibanEventRelayMultiTopic()` (複数トピック対応)
 - **拡張メソッド**でのopt-in方式採用
 - **Consumer Group**対応
 - **従来Controller**のDeprecated化とWarning追加
 - **詳細な使用ガイド**の作成
 
 **📝 ドキュメント作成済み**：
+
 - `README_MinimalAPI_PubSub.md` - 詳細な使用ガイド
 - `PubSubMinimalApiUsage.md` - 基本的な使用方法 (更新)
 - `Examples/Program.MinimalAPI.cs` - サンプルコード
 - `appsettings.example.json` - 設定例
 
 **🎯 推奨使用方法**：
+
 ```csharp
 // 基本的な使用
 app.MapSekibanEventRelay();
@@ -465,6 +474,7 @@ app.MapSekibanEventRelayIfEnabled(options =>
 ```
 
 **重要な変更点**：
+
 - Assembly分離は次善策に変更
 - HTTPエンドポイントは現状必須（Dapr制約）
 - 将来のActor直接購読に備えた抽象化が重要

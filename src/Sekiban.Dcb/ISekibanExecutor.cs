@@ -16,16 +16,15 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <param name="tagStateId">The tag state identifier</param>
     /// <returns>ResultBox containing the tag state or error</returns>
     Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId);
-    
+
     /// <summary>
     ///     Execute a single-result query
     /// </summary>
     /// <typeparam name="TResult">The result type</typeparam>
     /// <param name="queryCommon">The query to execute</param>
     /// <returns>The query result</returns>
-    Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) 
-        where TResult : notnull;
-    
+    Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull;
+
     /// <summary>
     ///     Execute a list query with pagination support
     /// </summary>

@@ -1,7 +1,7 @@
 namespace SekibanDocumentMcpSse;
 
 /// <summary>
-/// Code sample with context
+///     Code sample with context
 /// </summary>
 public class SekibanCodeSample
 {

@@ -1,6 +1,7 @@
 # Sekiban.Pure.Dapr with Protobuf Support
 
-This package provides Dapr integration for Sekiban.Pure with enhanced Protobuf serialization support for improved performance and cross-language compatibility.
+This package provides Dapr integration for Sekiban.Pure with enhanced Protobuf serialization support for improved
+performance and cross-language compatibility.
 
 ## Features
 
@@ -186,16 +187,16 @@ The Protobuf definitions are in `Protos/sekiban.proto`:
 The system supports gradual migration:
 
 1. **Phase 1**: Deploy with `useJsonFallback: true` (default)
-   - New data saved as Protobuf
-   - Can still read existing JSON data
+    - New data saved as Protobuf
+    - Can still read existing JSON data
 
 2. **Phase 2**: Run migration tool (coming soon)
-   - Converts existing JSON data to Protobuf
-   - Validates data integrity
+    - Converts existing JSON data to Protobuf
+    - Validates data integrity
 
 3. **Phase 3**: Disable JSON fallback
-   - Set `useJsonFallback: false`
-   - Pure Protobuf operation
+    - Set `useJsonFallback: false`
+    - Pure Protobuf operation
 
 ## Performance Considerations
 
