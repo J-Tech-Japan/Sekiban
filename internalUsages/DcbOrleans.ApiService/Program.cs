@@ -15,6 +15,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -22,7 +23,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
-
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
@@ -181,8 +181,20 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
-builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
-builder.Services.AddSekibanDcbPostgresWithAspire();
+
+// Configure database storage based on configuration
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
+if (databaseType == "cosmos")
+{
+    // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
+    builder.Services.AddSekibanDcbCosmosDbWithAspire();
+}
+else
+{
+    // Postgres settings (default)
+    builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
+    builder.Services.AddSekibanDcbPostgresWithAspire();
+}
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>

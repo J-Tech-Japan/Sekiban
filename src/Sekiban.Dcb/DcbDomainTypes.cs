@@ -35,7 +35,7 @@ public record DcbDomainTypes
             new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
+                WriteIndented = false
             };
     }
 
@@ -68,7 +68,7 @@ public record DcbDomainTypes
                 new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true
+                    WriteIndented = false
                 };
 
             EventTypes = new SimpleEventTypes(JsonOptions);
