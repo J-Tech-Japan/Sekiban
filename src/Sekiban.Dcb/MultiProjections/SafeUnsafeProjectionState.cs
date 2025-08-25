@@ -154,10 +154,19 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
 
                 if (stillUnsafeEvents.Count > 0)
                 {
-                    // Update backup with new safe state
-                    newSafeBackup[itemKey] = new SafeStateBackup<TState>(currentItemState!, stillUnsafeEvents);
+                    // If item was deleted in safe state, we still need to track the unsafe events
+                    if (currentItemState != null)
+                    {
+                        // Update backup with new safe state
+                        newSafeBackup[itemKey] = new SafeStateBackup<TState>(currentItemState, stillUnsafeEvents);
+                    } else
+                    {
+                        // Item was deleted in safe state but has unsafe events
+                        // Don't keep the backup if safe state is deleted
+                        // The unsafe events might re-create the item
+                    }
 
-                    // Reprocess unsafe events on top of new safe state
+                    // Reprocess unsafe events on top of new safe state (which might be null)
                     var unsafeState = currentItemState;
                     foreach (var unsafeEvent in stillUnsafeEvents)
                     {
@@ -171,9 +180,16 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
                     if (unsafeState != null)
                     {
                         newCurrentData[itemKey] = unsafeState;
+                        // If safe state was null (deleted) but unsafe events created it, track it
+                        if (currentItemState == null)
+                        {
+                            newSafeBackup[itemKey] = new SafeStateBackup<TState>(null!, stillUnsafeEvents);
+                        }
                     } else
                     {
                         newCurrentData.Remove(itemKey);
+                        // Item is deleted in both safe and unsafe states, remove backup
+                        newSafeBackup.Remove(itemKey);
                     }
                 } else
                 {
@@ -315,8 +331,11 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
                     newCurrentData[itemKey] = newValue;
                 } else
                 {
+                    // Item deleted by unsafe event - remove from current data but keep the backup
                     newCurrentData.Remove(itemKey);
-                    newSafeBackup.Remove(itemKey);
+                    // Keep the backup with the unsafe delete event added
+                    var updatedUnsafeEvents = new List<Event>(existingBackup.UnsafeEvents) { evt };
+                    newSafeBackup[itemKey] = existingBackup with { UnsafeEvents = updatedUnsafeEvents };
                 }
             } else
             {

@@ -5,16 +5,20 @@
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PackageId>Sekiban.Dcb</PackageId>
-        <Version>1.0.2-preview01</Version>
-        <Authors>J-Tech Group</Authors>
-        <Company>J-Tech-Japan</Company>
-        <PackageDescription>Sekiban - Dynamic Consistency Boundary Event Sourcing Framework</PackageDescription>
-        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.2-preview01</PackageVersion>
-        <Description>Dynamic Consistency Boundary implementation for Event Sourcing with Multi-Projection support</Description>
         <AssemblyName>Sekiban.Dcb</AssemblyName>
         <RootNamespace>Sekiban.Dcb</RootNamespace>
+        <PackageId>Sekiban.Dcb</PackageId>
+        <Version>1.0.2-preview02</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
+        <PackageDescription>Sekiban - Dynamic Consistency Boundary Event Sourcing Framework</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+        <PackageVersion>1.0.2-preview02</PackageVersion>
+        <Description>Dynamic Consistency Boundary implementation for Event Sourcing with Multi-Projection support</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>

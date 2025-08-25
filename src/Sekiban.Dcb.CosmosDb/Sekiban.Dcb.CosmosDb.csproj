@@ -5,20 +5,21 @@
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyName>Sekiban.Dcb.Postgres</AssemblyName>
-        <RootNamespace>Sekiban.Dcb.Postgres</RootNamespace>
-        <PackageId>Sekiban.Dcb.Postgres</PackageId>
+        <AssemblyName>Sekiban.Dcb.CosmosDb</AssemblyName>
+        <RootNamespace>Sekiban.Dcb.CosmosDb</RootNamespace>
+        <PackageId>Sekiban.Dcb.CosmosDb</PackageId>
         <Version>1.0.2-preview02</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
-        <PackageDescription>Sekiban - Dynamic Consistency Boundary PostgreSQL Integration</PackageDescription>
+        <PackageDescription>Sekiban - Dynamic Consistency Boundary CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
         <PackageVersion>1.0.2-preview02</PackageVersion>
-        <Description>PostgreSQL event store and persistence layer for Sekiban DCB</Description>
-        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;postgresql;postgres</PackageTags>
-        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <Description>CosmosDB event store and persistence layer for Sekiban DCB</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;cosmosdb;azure</PackageTags>
+        <AnalysisLevel>latest-All</AnalysisLevel>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
@@ -28,16 +29,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.46.0"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.8"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.8"/>
-        <PackageReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
