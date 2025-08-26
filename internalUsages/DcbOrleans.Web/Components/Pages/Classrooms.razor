@@ -1,11 +1,12 @@
 @page "/classrooms"
 @using Dcb.Domain.ClassRoom
-@using Dcb.Domain.Enrollment
+@using System.ComponentModel.DataAnnotations
 @attribute [StreamRendering]
 @rendermode InteractiveServer
 
-@inject IHttpClientFactory HttpClientFactory
+@inject ClassRoomApiClient ClassRoomApiClient
 @inject IJSRuntime JsRuntime
+@inject ILogger<Classrooms> Logger
 
 <PageTitle>Classrooms</PageTitle>
 
@@ -13,6 +14,30 @@
 
 <div>
     <button class="btn btn-primary mb-3" @onclick="OpenAddClassroomModal">Add New Classroom</button>
+</div>
+
+<h3>Classroom List</h3>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="col-form-label">Page Size:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnPageSizeChanged">
+            <option value="5" selected="@(pageSize == 5)">5</option>
+            <option value="10" selected="@(pageSize == 10)">10</option>
+            <option value="20" selected="@(pageSize == 20)">20</option>
+            <option value="50" selected="@(pageSize == 50)">50</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <span class="col-form-label text-muted">
+            @if (classrooms != null)
+            {
+                @:Showing @classrooms.Count items
+            }
+        </span>
+    </div>
 </div>
 
 @if (classrooms == null)
@@ -26,43 +51,68 @@
     <table class="table">
         <thead>
         <tr>
-            <th>Classroom Name</th>
-            <th>Max Capacity</th>
-            <th>Enrolled Students</th>
+            <th>Name</th>
+            <th>Max Students</th>
+            <th>Enrolled</th>
+            <th>Available</th>
             <th>Status</th>
-            <th>Actions</th>
         </tr>
         </thead>
         <tbody>
         @foreach (var classroom in classrooms)
         {
             <tr>
-                <td>@classroom.ClassName</td>
-                <td>@classroom.MaxCapacity</td>
-                <td>@classroom.EnrolledStudents.Count</td>
+                <td>@classroom.Name</td>
+                <td>@classroom.MaxStudents</td>
+                <td>@classroom.EnrolledCount</td>
+                <td>@classroom.RemainingCapacity</td>
                 <td>
-                    @if (classroom.EnrolledStudents.Count >= classroom.MaxCapacity)
+                    @if (classroom.IsFull)
                     {
                         <span class="badge bg-danger">Full</span>
-                    } else if (classroom.EnrolledStudents.Count > classroom.MaxCapacity * 0.8)
-                    {
-                        <span class="badge bg-warning">Almost Full</span>
-                    } else
+                    }
+                    else
                     {
                         <span class="badge bg-success">Available</span>
                     }
-                </td>
-                <td>
-                    <button class="btn btn-info btn-sm me-2" @onclick="() => ViewClassroomDetails(classroom)">Details
-                    </button>
-                    <button class="btn btn-danger btn-sm" @onclick="() => HandleDeleteClassroom(classroom.ClassRoomId)">
-                        Delete
-                    </button>
                 </td>
             </tr>
         }
         </tbody>
     </table>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+            <nav aria-label="Classroom list pagination">
+                <ul class="pagination">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)"
+                                disabled="@(currentPage == 1)">
+                            Previous
+                        </button>
+                    </li>
+                    @for (var i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    {
+                        var pageNumber = i;
+                        <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(pageNumber)">
+                                @pageNumber
+                            </button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages || totalPages == 0 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)"
+                                disabled="@(currentPage == totalPages || totalPages == 0)">
+                            Next
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div class="text-muted">
+            Page @currentPage of @(totalPages > 0 ? totalPages : 1)
+        </div>
+    </div>
 }
 
 <!-- Add Classroom Modal -->
@@ -71,7 +121,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Add New Classroom</h5>
-                <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
@@ -91,98 +141,26 @@
                 }
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
                 <button type="button" class="btn btn-primary" @onclick="HandleAddClassroomSubmit">Add Classroom</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Classroom Details Modal -->
-<div class="modal fade" id="classroomDetailsModal" data-bs-backdrop="static" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Classroom Details</h5>
-                <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
-            </div>
-            <div class="modal-body">
-                @if (selectedClassroom != null)
-                {
-                    <h6>Classroom Information</h6>
-                    <dl class="row">
-                        <dt class="col-sm-3">Name:</dt>
-                        <dd class="col-sm-9">@selectedClassroom.ClassName</dd>
-
-                        <dt class="col-sm-3">Classroom ID:</dt>
-                        <dd class="col-sm-9">@selectedClassroom.ClassRoomId</dd>
-
-                        <dt class="col-sm-3">Max Capacity:</dt>
-                        <dd class="col-sm-9">@selectedClassroom.MaxCapacity</dd>
-
-                        <dt class="col-sm-3">Enrolled Students:</dt>
-                        <dd class="col-sm-9">@selectedClassroom.EnrolledStudents.Count / @selectedClassroom.MaxCapacity</dd>
-                    </dl>
-
-                    <h6 class="mt-4">Enrolled Students</h6>
-                    @if (selectedClassroom.EnrolledStudents.Any())
-                    {
-                        <table class="table table-sm">
-                            <thead>
-                            <tr>
-                                <th>Student Name</th>
-                                <th>Student ID</th>
-                                <th>Action</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var student in selectedClassroom.EnrolledStudents)
-                            {
-                                <tr>
-                                    <td>@student.StudentName</td>
-                                    <td>@student.StudentId</td>
-                                    <td>
-                                        <button class="btn btn-warning btn-sm"
-                                                @onclick="() => HandleRemoveStudent(student.StudentId, selectedClassroom.ClassRoomId)">
-                                            Remove
-                                        </button>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    } else
-                    {
-                        <p>No students enrolled in this classroom.</p>
-                    }
-                }
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="CloseDetailsModal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 @code {
-    private List<ClassroomView>? classrooms;
-    private ClassroomView? selectedClassroom;
+    private List<ClassRoomItem>? classrooms;
     private ClassroomModel classroomModel = new();
     private string errorMessage = string.Empty;
+    private string? lastSortableUniqueId;
 
-    public class ClassroomView
-    {
-        public Guid ClassRoomId { get; set; }
-        public string ClassName { get; set; } = string.Empty;
-        public int MaxCapacity { get; set; }
-        public List<EnrolledStudentView> EnrolledStudents { get; set; } = new();
-    }
+    // Pagination fields
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages = 1;
+    private int totalItems;
 
-    public class EnrolledStudentView
-    {
-        public Guid StudentId { get; set; }
-        public string StudentName { get; set; } = string.Empty;
-    }
 
     public class ClassroomModel
     {
@@ -195,104 +173,95 @@
         await LoadClassrooms();
     }
 
-    private async Task LoadClassrooms()
+    private async Task LoadClassrooms(string? waitForSortableUniqueId = null)
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<ClassroomView>>("api/classrooms");
-            classrooms = response ?? new List<ClassroomView>();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error loading classrooms: {ex.Message}");
-            classrooms = new List<ClassroomView>();
-        }
-    }
+            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            classrooms = result?.ToList() ?? new List<ClassRoomItem>();
 
-    private async Task HandleDeleteClassroom(Guid classRoomId)
-    {
-        try
-        {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.DeleteAsync($"api/classrooms/{classRoomId}");
-
-            if (response.IsSuccessStatusCode)
+            // For now, estimate total pages based on if we got a full page
+            if (classrooms.Count < pageSize && currentPage == 1)
             {
-                await LoadClassrooms();
+                totalPages = 1;
+                totalItems = classrooms.Count;
+            } else if (classrooms.Count == pageSize)
+            {
+                // Assume there might be more pages
+                totalPages = Math.Max(totalPages, currentPage + 1);
+                totalItems = classrooms.Count * currentPage;
+            } else
+            {
+                totalPages = currentPage;
+                totalItems = (currentPage - 1) * pageSize + classrooms.Count;
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error deleting classroom: {ex.Message}");
+            Logger.LogError(ex, "Error loading classrooms");
+            classrooms = new List<ClassRoomItem>();
+            totalPages = 1;
+            totalItems = 0;
         }
     }
 
-    private async Task HandleRemoveStudent(Guid studentId, Guid classRoomId)
+    private async Task ChangePage(int newPage)
     {
-        try
-        {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var command = new DropStudentFromClassRoom(studentId, classRoomId);
-            var response = await httpClient.PostAsJsonAsync("api/enrollments/drop", command);
+        if (newPage < 1 || newPage > totalPages && totalPages > 0)
+            return;
 
-            if (response.IsSuccessStatusCode)
-            {
-                await LoadClassrooms();
-                if (selectedClassroom?.ClassRoomId == classRoomId)
-                {
-                    selectedClassroom = classrooms?.FirstOrDefault(c => c.ClassRoomId == classRoomId);
-                }
-            }
-        }
-        catch (Exception ex)
+        currentPage = newPage;
+        await LoadClassrooms(lastSortableUniqueId);
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize))
         {
-            Console.Error.WriteLine($"Error removing student from classroom: {ex.Message}");
+            pageSize = newSize;
+            currentPage = 1; // Reset to first page when changing page size
+            await LoadClassrooms(lastSortableUniqueId);
         }
     }
 
-    private async Task CloseModal()
+    // Note: Delete and enrollment management would be implemented separately
+
+    private async Task CloseAddModal()
     {
         classroomModel = new ClassroomModel();
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('hide')");
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addClassroomModal'))?.hide()");
     }
 
-    private async Task CloseDetailsModal()
-    {
-        selectedClassroom = null;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#classroomDetailsModal').modal('hide')");
-    }
 
     private async Task OpenAddClassroomModal()
     {
-        classroomModel = new ClassroomModel();
+        classroomModel = new ClassroomModel { MaxCapacity = 20 };
         errorMessage = string.Empty;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#addClassroomModal').modal('show')");
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addClassroomModal')).show()");
     }
 
-    private async Task ViewClassroomDetails(ClassroomView classroom)
-    {
-        selectedClassroom = classroom;
-        await JsRuntime.InvokeVoidAsync("eval", "$('#classroomDetailsModal').modal('show')");
-    }
 
     private async Task HandleAddClassroomSubmit()
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var command = new CreateClassRoom(Guid.NewGuid(), classroomModel.ClassName, classroomModel.MaxCapacity);
+            var command = new CreateClassRoom(
+                Guid.NewGuid(),
+                classroomModel.ClassName,
+                classroomModel.MaxCapacity);
 
-            var response = await httpClient.PostAsJsonAsync("api/classrooms", command);
+            var response = await ClassRoomApiClient.CreateClassRoomAsync(command);
 
-            if (response.IsSuccessStatusCode)
+            if (response?.Success == true)
             {
-                await LoadClassrooms();
-                await CloseModal();
+                lastSortableUniqueId = response.SortableUniqueId;
+                currentPage = 1; // Go to first page to see the new item
+                await LoadClassrooms(lastSortableUniqueId);
+                await CloseAddModal();
             } else
             {
-                errorMessage = "Failed to add classroom. Please try again.";
+                errorMessage = response?.Error ?? "Failed to add classroom. Please try again.";
             }
         }
         catch (Exception ex)

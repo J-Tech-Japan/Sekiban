@@ -55,7 +55,8 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         }
 
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
-        var tags = evt.Tags.Select(t => new SimpleTag(t)).Cast<ITag>().ToList();
+        // Tags need to be provided as proper ITag instances - parsing should happen at actor level
+        var tags = new List<ITag>();
 
         // Mark processed
         _processedEventIds.Add(evt.Id);
@@ -141,7 +142,8 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         // Apply all unsafe events in order
         foreach (var item in _unsafeEvents.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
-            var tags = item.evt.Tags.Select(t => new SimpleTag(t)).Cast<ITag>().ToList();
+            // Tags need to be provided as proper ITag instances - parsing should happen at actor level
+            var tags = new List<ITag>();
             var result = T.Project(state, item.evt, tags);
             if (result.IsSuccess)
             {
@@ -150,15 +152,5 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         }
 
         return state;
-    }
-
-    /// <summary>
-    ///     Simple tag implementation for processing
-    /// </summary>
-    private record SimpleTag(string Value) : ITag
-    {
-        public bool IsConsistencyTag() => false;
-        public string GetTagGroup() => "";
-        public string GetTagContent() => Value;
     }
 }

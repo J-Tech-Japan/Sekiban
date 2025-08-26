@@ -204,8 +204,26 @@ public record
         Event evt,
         SortableUniqueId safeWindowThreshold)
     {
-        // Extract tags from event
-        var tags = evt.Tags.Select(t => new SimpleTag(t)).Cast<ITag>().ToList();
+        // Parse tag strings into ITag instances - only parse tags belonging to our tag group
+        var tags = new List<ITag>();
+        foreach (var tagString in evt.Tags)
+        {
+            // Parse the tag string format "group:content"
+            var parts = tagString.Split(':', 2);
+            if (parts.Length == 2 && parts[0] == TTagGroup.TagGroupName)
+            {
+                // This tag belongs to our tag group, create proper instance
+                try
+                {
+                    var tag = TTagGroup.FromContent(parts[1]);
+                    tags.Add(tag);
+                }
+                catch
+                {
+                    // If parsing fails, skip this tag
+                }
+            }
+        }
 
         // Use the static Project method
         var result = Project(this, evt, tags);
@@ -229,14 +247,5 @@ public record
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
 
-    /// <summary>
-    ///     Simple tag implementation for processing
-    /// </summary>
-    private record SimpleTag(string Value) : ITag
-    {
-        public bool IsConsistencyTag() => false;
-        public string GetTagGroup() => "";
-        public string GetTagContent() => Value;
-    }
     #endregion
 }
