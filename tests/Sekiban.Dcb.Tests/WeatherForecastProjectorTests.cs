@@ -53,14 +53,15 @@ public class WeatherForecastProjectorTests
         );
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag }, _domainTypes);
+        var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag }, _domainTypes, TimeProvider.System);
         var projectorAfterTag = result1.GetValue();
 
         var result2 = WeatherForecastProjection.Project(
             projectorAfterTag,
             eventWithoutWeatherTag,
             new List<ITag> { otherTag },
-            _domainTypes);
+            _domainTypes,
+            TimeProvider.System);
         var projectorAfterNoTag = result2.GetValue();
 
         // Assert
@@ -105,10 +106,10 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-5));
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag }, _domainTypes);
+        var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag }, _domainTypes, TimeProvider.System);
         var afterSafe = result1.GetValue();
 
-        var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag }, _domainTypes);
+        var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag }, _domainTypes, TimeProvider.System);
         var afterUnsafe = result2.GetValue();
 
         // Assert
@@ -152,7 +153,7 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-30));
 
         // Act - Process event with multiple tags
-        var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 }, _domainTypes);
+        var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 }, _domainTypes, TimeProvider.System);
         var afterMultipleTags = result.GetValue();
 
         // Assert
@@ -189,10 +190,10 @@ public class WeatherForecastProjectorTests
         var deleteEvent = CreateEvent(new WeatherForecastDeleted(forecastId), DateTime.UtcNow.AddSeconds(-25));
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag }, _domainTypes);
+        var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag }, _domainTypes, TimeProvider.System);
         var afterCreate = result1.GetValue();
 
-        var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag }, _domainTypes);
+        var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag }, _domainTypes, TimeProvider.System);
         var afterDelete = result2.GetValue();
 
         // Assert

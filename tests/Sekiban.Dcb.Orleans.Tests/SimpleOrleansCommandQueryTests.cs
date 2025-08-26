@@ -534,7 +534,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             TestPlaceholderMultiProjector payload,
             Event ev,
             List<ITag> tags,
-            DcbDomainTypes domainTypes) => ResultBox.FromValue(payload);
+            DcbDomainTypes domainTypes,
+            TimeProvider timeProvider) => ResultBox.FromValue(payload);
     }
 
     private record TestProjectorMulti : IMultiProjector<TestProjectorMulti>
@@ -542,7 +543,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "TestProjector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes) =>
+        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
             ResultBox.FromValue(payload);
     }
 
@@ -555,6 +556,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             SerializationTestMulti payload,
             Event ev,
             List<ITag> tags,
-            DcbDomainTypes domainTypes) => ResultBox.FromValue(payload);
+            DcbDomainTypes domainTypes,
+            TimeProvider timeProvider) => ResultBox.FromValue(payload);
     }
 }

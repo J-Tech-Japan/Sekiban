@@ -33,11 +33,11 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     /// <summary>
     ///     Gets the unsafe state (includes all events)
     /// </summary>
-    public T GetUnsafeState(DcbDomainTypes domainTypes)
+    public T GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         if (!_unsafeStateCacheValid)
         {
-            _unsafeStateCache = ComputeUnsafeState(domainTypes);
+            _unsafeStateCache = ComputeUnsafeState(domainTypes, timeProvider);
             _unsafeStateCacheValid = true;
         }
         return _unsafeStateCache!;
@@ -46,7 +46,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     /// <summary>
     ///     Process an event and update the state
     /// </summary>
-    public ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    public ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         // Check for duplicate event
         if (_processedEventIds.Contains(evt.Id))
@@ -72,7 +72,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
         {
             // Safe event - apply directly to safe state
-            var result = T.Project(_safeState, evt, tags, domainTypes);
+            var result = T.Project(_safeState, evt, tags, domainTypes, timeProvider);
             if (!result.IsSuccess)
             {
                 throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
@@ -84,11 +84,11 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
             _processedEventIds.Remove(evt.Id);
 
             // Process any unsafe events that are now safe
-            ProcessUnsafeEventsToSafe(safeWindowThreshold, domainTypes);
+            ProcessUnsafeEventsToSafe(safeWindowThreshold, domainTypes, timeProvider);
         } else
         {
             // Unsafe event - add to buffer
-            var currentState = GetUnsafeState(domainTypes);
+            var currentState = GetUnsafeState(domainTypes, timeProvider);
             _unsafeEvents.Add((evt, currentState));
         }
 
@@ -99,7 +99,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     public string GetLastSortableUniqueId() => _lastSortableUniqueId;
     public int GetVersion() => _version;
 
-    private void ProcessUnsafeEventsToSafe(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    private void ProcessUnsafeEventsToSafe(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         var eventsToPromote = new List<(Event evt, T stateBefore)>();
         var eventsToKeep = new List<(Event evt, T stateBefore)>();
@@ -120,7 +120,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         foreach (var item in eventsToPromote.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
             var promotedTags = item.evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
-            var result = T.Project(_safeState, item.evt, promotedTags, domainTypes);
+            var result = T.Project(_safeState, item.evt, promotedTags, domainTypes, timeProvider);
             if (result.IsSuccess)
             {
                 _safeState = result.GetValue();
@@ -137,7 +137,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         _unsafeStateCacheValid = false;
     }
 
-    private T ComputeUnsafeState(DcbDomainTypes domainTypes)
+    private T ComputeUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         var state = _safeState;
 
@@ -145,7 +145,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         foreach (var item in _unsafeEvents.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
             var tags = item.evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
-            var result = T.Project(state, item.evt, tags, domainTypes);
+            var result = T.Project(state, item.evt, tags, domainTypes, timeProvider);
             if (result.IsSuccess)
             {
                 state = result.GetValue();

@@ -40,7 +40,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
         WeatherForecastProjectorWithTagStateProjector payload,
         Event ev,
         List<ITag> tags,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
@@ -59,7 +60,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
             ProjectTagState(forecastId, current, evt, weatherForecastTags);
 
         // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold();
+        var threshold = GetSafeWindowThreshold(timeProvider);
 
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
@@ -111,9 +112,9 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     Get current SafeWindow threshold
     /// </summary>
-    private static string GetSafeWindowThreshold()
+    private static string GetSafeWindowThreshold(TimeProvider timeProvider)
     {
-        var threshold = DateTime.UtcNow.Subtract(SafeWindow);
+        var threshold = timeProvider.GetUtcNow().UtcDateTime.Subtract(SafeWindow);
         return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 
@@ -172,7 +173,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState(DcbDomainTypes domainTypes) =>
+    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
         // Return current state (includes unsafe)
         this;
 
@@ -182,7 +183,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
         // Extract tags from event - specifically looking for WeatherForecastTag
         var tags = new List<ITag>();
@@ -202,7 +204,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
         }
 
         // Use the static Project method with provided domainTypes
-        var result = Project(this, evt, tags, domainTypes);
+        var result = Project(this, evt, tags, domainTypes, timeProvider);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");

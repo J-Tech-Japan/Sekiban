@@ -39,7 +39,8 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         WeatherForecastProjection payload,
         Event ev,
         List<ITag> tags,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
@@ -61,14 +62,17 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
         {
             // Return the forecast IDs from the tags
-            return weatherForecastTags.Select(tag => tag.ForecastId);
+            var ids = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
+            Console.WriteLine($"[WeatherForecastProjection.Project] getAffectedItemIds returning {ids.Count} IDs");
+            return ids;
         };
 
         // Function to project a single item
         Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem = (forecastId, current, evt) =>
         {
+            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem called for forecastId: {forecastId}, current is null: {current == null}, event type: {evt.Payload?.GetType().Name}");
             // Process based on event type
-            return evt.Payload switch
+            var result = evt.Payload switch
             {
                 WeatherForecastCreated created => current != null
                     ? current with // Update existing
@@ -109,10 +113,12 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
                 _ => current // Unknown event type, keep current state
             };
+            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem returning: {(result != null ? "non-null item" : "null")}");
+            return result;
         };
 
         // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold();
+        var threshold = GetSafeWindowThreshold(timeProvider);
 
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
@@ -128,9 +134,9 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     ///     Get current SafeWindow threshold
     /// </summary>
-    private static string GetSafeWindowThreshold()
+    private static string GetSafeWindowThreshold(TimeProvider timeProvider)
     {
-        var threshold = DateTime.UtcNow.Subtract(SafeWindow);
+        var threshold = timeProvider.GetUtcNow().UtcDateTime.Subtract(SafeWindow);
         return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 

@@ -46,7 +46,7 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             createEvent,
             new List<ITag> { weatherTag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterCreate = result.GetValue();
 
         // Assert
@@ -89,14 +89,14 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             updateEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterUpdate = result2.GetValue();
 
         // Assert
@@ -142,14 +142,14 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             deleteEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterDelete = result2.GetValue();
 
         // Assert
@@ -187,14 +187,14 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             createEvent1,
             new List<ITag> { tag1 },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var after1 = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             after1,
             createEvent2,
             new List<ITag> { tag2 },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var after2 = result2.GetValue();
 
         // Assert
@@ -232,14 +232,14 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             safeEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterSafe = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterSafe,
             unsafeEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterUnsafe = result2.GetValue();
 
         // Assert
@@ -284,14 +284,14 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             unknownEvent,
             new List<ITag> { tag },
-            _domainTypes);
+            _domainTypes, TimeProvider.System);
         var afterUnknown = result2.GetValue();
 
         // Assert

@@ -38,10 +38,12 @@ public record
         GenericTagMultiProjector<TTagProjector, TTagGroup> payload,
         Event ev,
         List<ITag> tags,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
         // Filter tags to only process tags of the specified tag group type
         var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
+        Console.WriteLine($"[GenericTagMultiProjector.Project] Event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}, Relevant {typeof(TTagGroup).Name} tags: {relevantTags.Count}");
 
         if (relevantTags.Count == 0)
         {
@@ -50,7 +52,7 @@ public record
         }
 
         // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold();
+        var threshold = GetSafeWindowThreshold(timeProvider);
 
         // Function to get affected item IDs (filter out nulls)
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
@@ -64,7 +66,12 @@ public record
         var newState = payload.State with { SafeWindowThreshold = threshold };
         var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
 
-        return ResultBox.FromValue(payload with { State = updatedState });
+        var newPayload = payload with { State = updatedState };
+        var currentCount = newPayload.GetCurrentTagStates().Count;
+        var safeCount = newPayload.GetSafeTagStates().Count;
+        Console.WriteLine($"[GenericTagMultiProjector.Project] After processing {ev.EventType} - Current tag states: {currentCount}, Safe tag states: {safeCount}");
+        
+        return ResultBox.FromValue(newPayload);
     }
 
     /// <summary>
@@ -142,9 +149,9 @@ public record
     /// <summary>
     ///     Get current SafeWindow threshold
     /// </summary>
-    private static string GetSafeWindowThreshold()
+    private static string GetSafeWindowThreshold(TimeProvider timeProvider)
     {
-        var threshold = DateTime.UtcNow.Subtract(SafeWindow);
+        var threshold = timeProvider.GetUtcNow().UtcDateTime.Subtract(SafeWindow);
         return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 
@@ -168,7 +175,10 @@ public record
     /// </summary>
     public IEnumerable<ITagStatePayload> GetStatePayloads()
     {
-        return GetCurrentTagStates().Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
+        var currentStates = GetCurrentTagStates();
+        var payloads = currentStates.Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p)).ToList();
+        Console.WriteLine($"[GenericTagMultiProjector.GetStatePayloads] Returning {payloads.Count} items from {currentStates.Count} tag states");
+        return payloads;
     }
 
     /// <summary>
@@ -187,16 +197,18 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState() =>
-        // The State already manages safe/unsafe internally
-        // We return the same instance since SafeUnsafeProjectionState handles it
-        this;
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState()
+    {
+        // Return this instance - the State already manages safe/unsafe separation internally
+        // GetSafeStatePayloads() will return only safe items when needed for persistence
+        return this;
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState(DcbDomainTypes domainTypes) =>
-        // Return current state (includes unsafe)
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
+        // Return current state (includes both safe and unsafe)
         this;
 
     /// <summary>
@@ -205,29 +217,40 @@ public record
     public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
+        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] START - Event: {evt.EventType}, Event Tags: [{string.Join(", ", evt.Tags)}]");
+        
         // Parse tag strings into ITag instances using DomainTypes - only keep tags belonging to our tag group
         var tags = evt.Tags
             .Select(domainTypes.TagTypes.GetTag)
             .ToList();
+        
+        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Parsed tags: {tags.Count} tags - Types: [{string.Join(", ", tags.Select(t => t?.GetType().Name ?? "null"))}]");
 
-        // Use the static Project method with the provided domainTypes
-        var result = Project(this, evt, tags, domainTypes);
+        // Use the static Project method with the provided domainTypes and timeProvider
+        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Calling Project method...");
+        var result = Project(this, evt, tags, domainTypes, timeProvider);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
         }
 
         var projected = result.GetValue();
+        
+        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Project returned - Current states: {projected.GetCurrentTagStates().Count}, Safe states: {projected.GetSafeTagStates().Count}");
 
         // Update tracking information
-        return projected with
+        var finalResult = projected with
         {
             LastEventId = evt.Id,
             LastSortableUniqueId = evt.SortableUniqueIdValue,
             Version = Version + 1
         };
+        
+        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] END - Returning with Version: {finalResult.Version}");
+        return finalResult;
     }
 
     public Guid GetLastEventId() => LastEventId;

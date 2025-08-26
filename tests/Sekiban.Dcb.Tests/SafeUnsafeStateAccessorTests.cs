@@ -216,7 +216,8 @@ public class SafeUnsafeStateAccessorTests
             EfficientTestProjector payload,
             Event ev,
             List<ITag> tags,
-            DcbDomainTypes domainTypes)
+            DcbDomainTypes domainTypes,
+            TimeProvider timeProvider)
         {
             var result = ev.Payload switch
             {

@@ -15,7 +15,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
     private readonly
         ConcurrentDictionary<string,
-            Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, ResultBox<IMultiProjectionPayload>>> _projectorFunctions
+            Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, TimeProvider, ResultBox<IMultiProjectionPayload>>> _projectorFunctions
             = new();
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
@@ -26,11 +26,13 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         IMultiProjectionPayload payload,
         Event ev,
         List<ITag> tags,
-        DcbDomainTypes domainTypes)
+        DcbDomainTypes domainTypes,
+        TimeProvider? timeProvider = null)
     {
+        var provider = timeProvider ?? TimeProvider.System;
         if (_projectorFunctions.TryGetValue(multiProjectorName, out var projectorFunc))
         {
-            return projectorFunc(payload, ev, tags, domainTypes);
+            return projectorFunc(payload, ev, tags, domainTypes, provider);
         }
 
         return ResultBox.Error<IMultiProjectionPayload>(
@@ -120,12 +122,12 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         var projectorName = TProjector.MultiProjectorName;
 
         // Register the projector function
-        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, ResultBox<IMultiProjectionPayload>> projectFunc
-            = (payload, ev, tags, domainTypes) =>
+        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, TimeProvider, ResultBox<IMultiProjectionPayload>> projectFunc
+            = (payload, ev, tags, domainTypes, timeProvider) =>
             {
                 if (payload is TProjector typedPayload)
                 {
-                    var result = TProjector.Project(typedPayload, ev, tags, domainTypes);
+                    var result = TProjector.Project(typedPayload, ev, tags, domainTypes, timeProvider);
                     if (result.IsSuccess)
                     {
                         return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());

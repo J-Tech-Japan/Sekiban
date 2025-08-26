@@ -55,6 +55,7 @@
     <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj" />
+    <Project Path="tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="tools/SekibanDocumentMcpSse/SekibanDocumentMcpSse.csproj" />

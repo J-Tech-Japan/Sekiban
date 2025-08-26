@@ -23,7 +23,7 @@ public static class KubernetesNameHelper
     {
         if (string.IsNullOrWhiteSpace(input))
         {
-            throw new ArgumentException("Input cannot be null or whitespace", nameof(input));
+            return "default";
         }
 
         // Convert to lowercase

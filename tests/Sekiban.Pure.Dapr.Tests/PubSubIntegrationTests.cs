@@ -8,12 +8,17 @@ using Sekiban.Pure.Dapr.Actors;
 using Sekiban.Pure.Dapr.Serialization;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Command;
+using Sekiban.Pure.Query;
+using Sekiban.Pure.Projectors;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Moq;
 using ResultBoxes;
 using Sekiban.Pure;
+using Microsoft.Extensions.Options;
 
 namespace Sekiban.Pure.Dapr.Tests;
 
@@ -35,15 +40,38 @@ public class PubSubIntegrationTests
         _mockLogger = new Mock<ILogger<AggregateEventHandlerActor>>();
         
         // Create a simple domain types instance for testing
+        // Using mock implementations since this is just for serialization testing
+        var mockEventTypes = new Mock<IEventTypes>();
+        var mockAggregateTypes = new Mock<IAggregateTypes>();
+        var mockCommandTypes = new Mock<ICommandTypes>();
+        var mockAggregateProjectorSpecifier = new Mock<IAggregateProjectorSpecifier>();
+        var mockQueryTypes = new Mock<IQueryTypes>();
+        var mockMultiProjectorTypes = new Mock<IMultiProjectorTypes>();
+        
         _domainTypes = new SekibanDomainTypes(
-            new SekibanAggregateTypes(),
-            new SekibanCommandTypes(), 
-            new SekibanEventTypes(),
-            new SekibanQueryTypes(),
-            new SekibanMultiProjectorsType(),
+            mockEventTypes.Object,
+            mockAggregateTypes.Object,
+            mockCommandTypes.Object, 
+            mockAggregateProjectorSpecifier.Object,
+            mockQueryTypes.Object,
+            mockMultiProjectorTypes.Object,
             System.Text.Json.JsonSerializerOptions.Default);
-            
-        _serialization = new DaprSerializationService(_domainTypes);
+        
+        // Create mocks for DaprSerializationService dependencies
+        var mockTypeRegistry = new Mock<IDaprTypeRegistry>();
+        var mockSerializationOptions = Options.Create(new DaprSerializationOptions
+        {
+            JsonSerializerOptions = System.Text.Json.JsonSerializerOptions.Default,
+            EnableCompression = false,
+            CompressionThreshold = 1024
+        });
+        var mockSerializationLogger = new Mock<ILogger<DaprSerializationService>>();
+        
+        _serialization = new DaprSerializationService(
+            mockTypeRegistry.Object,
+            mockSerializationOptions,
+            mockSerializationLogger.Object,
+            _domainTypes);
     }
 
     [Fact]

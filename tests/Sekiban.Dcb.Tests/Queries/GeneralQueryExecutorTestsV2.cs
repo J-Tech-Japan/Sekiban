@@ -52,7 +52,7 @@ public class GeneralQueryExecutorTestsV2
 
         foreach (var (evt, tags) in events)
         {
-            var result = TestMultiProjector.Project(projector, evt, tags, _domainTypes);
+            var result = TestMultiProjector.Project(projector, evt, tags, _domainTypes, TimeProvider.System);
             if (result.IsSuccess)
             {
                 projector = result.GetValue();

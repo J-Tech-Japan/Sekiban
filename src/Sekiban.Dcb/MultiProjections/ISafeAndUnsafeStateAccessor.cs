@@ -20,8 +20,9 @@ public interface ISafeAndUnsafeStateAccessor<T> where T : IMultiProjectionPayloa
     ///     Gets the unsafe state (includes all events including those within the safe window)
     /// </summary>
     /// <param name="domainTypes">The domain types for tag parsing</param>
+    /// <param name="timeProvider">The time provider for safe window calculations</param>
     /// <returns>The unsafe projection state</returns>
-    T GetUnsafeState(DcbDomainTypes domainTypes);
+    T GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider);
 
     /// <summary>
     ///     Processes an event and returns the updated state
@@ -29,8 +30,9 @@ public interface ISafeAndUnsafeStateAccessor<T> where T : IMultiProjectionPayloa
     /// <param name="evt">The event to process</param>
     /// <param name="safeWindowThreshold">The threshold for determining if an event is safe</param>
     /// <param name="domainTypes">The domain types for tag parsing</param>
+    /// <param name="timeProvider">The time provider for safe window calculations</param>
     /// <returns>The updated state</returns>
-    ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes);
+    ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider);
 
     /// <summary>
     ///     Gets the last processed event ID

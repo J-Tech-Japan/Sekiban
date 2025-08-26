@@ -14,7 +14,7 @@ public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiPr
     /// <summary>
     ///     Project with tags support for tag-based filtering
     /// </summary>
-    static abstract ResultBox<T> Project(T payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes);
+    static abstract ResultBox<T> Project(T payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider);
 
     static abstract T GenerateInitialPayload();
 }

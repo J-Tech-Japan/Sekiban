@@ -16,7 +16,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes)
+    public static ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         var next = new Dictionary<Guid, Item>(payload.Students);
         switch (ev.Payload)

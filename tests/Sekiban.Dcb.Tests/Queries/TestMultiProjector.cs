@@ -17,7 +17,7 @@ public record TestMultiProjector : IMultiProjector<TestMultiProjector>
     public static string MultiProjectorName => "TestMultiProjector";
     public static string MultiProjectorVersion => "1.0";
 
-    public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes)
+    public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider)
     {
         return ev.Payload switch
         {

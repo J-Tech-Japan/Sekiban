@@ -236,7 +236,7 @@ public class GeneralMultiProjectionActorSafeWindowTests
 
         public static string MultiProjectorVersion => "1.0.0";
 
-        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes)
+        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider)
         {
             var result = ev.Payload switch
             {

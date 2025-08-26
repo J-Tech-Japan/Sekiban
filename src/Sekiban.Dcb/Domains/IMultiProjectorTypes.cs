@@ -15,7 +15,8 @@ public interface IMultiProjectorTypes
         IMultiProjectionPayload payload,
         Event ev,
         List<ITag> tags,
-        DcbDomainTypes domainTypes);
+        DcbDomainTypes domainTypes,
+        TimeProvider? timeProvider = null);
 
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
 
