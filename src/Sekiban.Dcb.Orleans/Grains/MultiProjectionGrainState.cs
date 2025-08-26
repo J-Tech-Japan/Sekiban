@@ -18,4 +18,6 @@ public class MultiProjectionGrainState
     public long EventsProcessed { get; set; }
     [Id(5)]
     public long StateSize { get; set; }
+    [Id(6)]
+    public string? SafeLastPosition { get; set; }
 }

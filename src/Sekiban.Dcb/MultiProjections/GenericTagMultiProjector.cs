@@ -61,9 +61,8 @@ public record
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
             ProjectTagState(tagId, current, evt, relevantTags);
 
-        // Update threshold and process the event
-        var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
+        // Process the event with threshold
+        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, threshold);
 
         var newPayload = payload with { State = updatedState };
         
@@ -159,7 +158,11 @@ public record
     /// <summary>
     ///     Get only safe tag states
     /// </summary>
-    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates() => State.GetSafeState();
+    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates(
+        string safeWindowThreshold,
+        Func<Event, IEnumerable<Guid>> getAffectedItemKeys,
+        Func<Guid, TagState?, Event, TagState?> projectItem) => 
+        State.GetSafeState(safeWindowThreshold, getAffectedItemKeys, projectItem);
 
     /// <summary>
     ///     Check if a specific tag state has unsafe modifications
@@ -179,9 +182,13 @@ public record
     /// <summary>
     ///     Get only safe state payloads
     /// </summary>
-    public IEnumerable<ITagStatePayload> GetSafeStatePayloads()
+    public IEnumerable<ITagStatePayload> GetSafeStatePayloads(
+        string safeWindowThreshold,
+        Func<Event, IEnumerable<Guid>> getAffectedItemKeys,
+        Func<Guid, TagState?, Event, TagState?> projectItem)
     {
-        return GetSafeTagStates().Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
+        return GetSafeTagStates(safeWindowThreshold, getAffectedItemKeys, projectItem)
+            .Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
     }
 
     #region ISafeAndUnsafeStateAccessor Implementation
@@ -192,7 +199,10 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState()
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState(
+        SortableUniqueId safeWindowThreshold, 
+        DcbDomainTypes domainTypes, 
+        TimeProvider timeProvider)
     {
         // Return this instance - the State already manages safe/unsafe separation internally
         // GetSafeStatePayloads() will return only safe items when needed for persistence

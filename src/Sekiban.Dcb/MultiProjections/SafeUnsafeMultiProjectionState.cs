@@ -28,7 +28,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     /// <summary>
     ///     Gets the safe state (events outside the safe window)
     /// </summary>
-    public T GetSafeState() => _safeState;
+    public T GetSafeState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider) => _safeState;
 
     /// <summary>
     ///     Gets the unsafe state (includes all events)

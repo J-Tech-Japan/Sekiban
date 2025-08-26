@@ -222,6 +222,11 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         return Task.FromResult(false);
     }
 
+    /// <summary>
+    ///     Gets the last safe (persisted) sortable unique id. Used by hosts to persist SafeLastPosition.
+    /// </summary>
+    public string GetSafeLastSortableUniqueId() => _safeLastSortableUniqueId;
+
     private async Task AddEventsWithSingleStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
         // Process events through the single state accessor

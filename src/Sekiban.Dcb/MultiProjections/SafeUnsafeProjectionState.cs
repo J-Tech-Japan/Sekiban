@@ -26,22 +26,16 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     /// </summary>
     private readonly Dictionary<TKey, SafeStateBackup<TState>> _safeBackup = new();
 
-    /// <summary>
-    ///     SafeWindow threshold
-    /// </summary>
-    public string SafeWindowThreshold { get; init; } = string.Empty;
 
     public SafeUnsafeProjectionState() { }
 
     private SafeUnsafeProjectionState(
         Dictionary<TKey, TState> currentData,
         Dictionary<TKey, SafeStateBackup<TState>> safeBackup,
-        string safeWindowThreshold,
         HashSet<Guid>? processedEventIds = null)
     {
         _currentData = new Dictionary<TKey, TState>(currentData);
         _safeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(safeBackup);
-        SafeWindowThreshold = safeWindowThreshold;
         _processedEventIds = processedEventIds ?? new HashSet<Guid>();
     }
 
@@ -56,7 +50,7 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         Event evt,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem,
-        DcbDomainTypes domainTypes)
+        string? safeWindowThreshold = null)
     {
         // Get affected item keys
         var affectedItemKeys = getAffectedItemKeys(evt).ToList();
@@ -65,17 +59,16 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
             return this; // No items affected
         }
 
-        var isEventSafe = string.Compare(evt.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0;
-
-        // First, process any events that have become safe
-        var currentState = ProcessNewlySafeEvents(getAffectedItemKeys, projectItem);
+        // If no threshold provided, treat all events as safe
+        var isEventSafe = string.IsNullOrEmpty(safeWindowThreshold) || 
+                          string.Compare(evt.SortableUniqueIdValue, safeWindowThreshold, StringComparison.Ordinal) <= 0;
 
         // Now process the current event
         if (isEventSafe)
         {
-            return currentState.ProcessSafeEvent(evt, affectedItemKeys, projectItem);
+            return ProcessSafeEvent(evt, affectedItemKeys, projectItem);
         }
-        return currentState.ProcessUnsafeEvent(evt, affectedItemKeys, projectItem);
+        return ProcessUnsafeEvent(evt, affectedItemKeys, projectItem);
     }
 
     /// <summary>
@@ -85,12 +78,12 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         IEnumerable<Event> events,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem,
-        DcbDomainTypes domainTypes)
+        string? safeWindowThreshold = null)
     {
         var state = this;
         foreach (var evt in events)
         {
-            state = state.ProcessEvent(evt, getAffectedItemKeys, projectItem, domainTypes);
+            state = state.ProcessEvent(evt, getAffectedItemKeys, projectItem, safeWindowThreshold);
         }
         return state;
     }
@@ -99,6 +92,7 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     ///     Process events that have transitioned from unsafe to safe
     /// </summary>
     private SafeUnsafeProjectionState<TKey, TState> ProcessNewlySafeEvents(
+        string safeWindowThreshold,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
         Func<TKey, TState?, Event, TState?> projectItem)
     {
@@ -115,13 +109,13 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
             // Separate events into safe and still-unsafe
             var nowSafeEvents = backup
                 .UnsafeEvents
-                .Where(e => string.Compare(e.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) <= 0)
+                .Where(e => string.Compare(e.SortableUniqueIdValue, safeWindowThreshold, StringComparison.Ordinal) <= 0)
                 .OrderBy(e => e.SortableUniqueIdValue)
                 .ToList();
 
             var stillUnsafeEvents = backup
                 .UnsafeEvents
-                .Where(e => string.Compare(e.SortableUniqueIdValue, SafeWindowThreshold, StringComparison.Ordinal) > 0)
+                .Where(e => string.Compare(e.SortableUniqueIdValue, safeWindowThreshold, StringComparison.Ordinal) > 0)
                 .ToList();
 
             if (nowSafeEvents.Count > 0)
@@ -220,7 +214,6 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         return new SafeUnsafeProjectionState<TKey, TState>(
             newCurrentData,
             newSafeBackup,
-            SafeWindowThreshold,
             newProcessedEventIds);
     }
 
@@ -287,7 +280,6 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         return new SafeUnsafeProjectionState<TKey, TState>(
             newCurrentData,
             newSafeBackup,
-            SafeWindowThreshold,
             newProcessedEventIds);
     }
 
@@ -372,21 +364,9 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         return new SafeUnsafeProjectionState<TKey, TState>(
             newCurrentData,
             newSafeBackup,
-            SafeWindowThreshold,
             newProcessedEventIds);
     }
 
-    /// <summary>
-    ///     Update SafeWindow threshold and reprocess events if needed
-    /// </summary>
-    public SafeUnsafeProjectionState<TKey, TState> UpdateSafeWindowThreshold(
-        string newThreshold,
-        Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
-        Func<TKey, TState?, Event, TState?> projectItem)
-    {
-        var newState = this with { SafeWindowThreshold = newThreshold };
-        return newState.ProcessNewlySafeEvents(getAffectedItemKeys, projectItem);
-    }
 
     /// <summary>
     ///     Get current state for queries (fast)
@@ -394,23 +374,60 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     public IReadOnlyDictionary<TKey, TState> GetCurrentState() => _currentData;
 
     /// <summary>
-    ///     Get safe state only
+    ///     Get safe state only - dynamically calculated based on threshold
     /// </summary>
-    public IReadOnlyDictionary<TKey, TState> GetSafeState()
+    public IReadOnlyDictionary<TKey, TState> GetSafeState(
+        string safeWindowThreshold,
+        Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
+        Func<TKey, TState?, Event, TState?> projectItem)
     {
         var result = new Dictionary<TKey, TState>();
 
-        foreach (var kvp in _currentData)
+        // First, check each backed up item to see if any events have become safe
+        foreach (var kvp in _safeBackup)
         {
-            if (_safeBackup.TryGetValue(kvp.Key, out var backup))
+            var itemKey = kvp.Key;
+            var backup = kvp.Value;
+            
+            // Separate events into safe and still-unsafe
+            var nowSafeEvents = backup.UnsafeEvents
+                .Where(e => string.Compare(e.SortableUniqueIdValue, safeWindowThreshold, StringComparison.Ordinal) <= 0)
+                .OrderBy(e => e.SortableUniqueIdValue)
+                .ToList();
+                
+            if (nowSafeEvents.Any())
             {
-                // Has unsafe modifications, use backed up safe state
+                // Some events have become safe, recompute the safe state
+                var safeState = backup.SafeState;
+                
+                foreach (var safeEvent in nowSafeEvents)
+                {
+                    var affectedKeys = getAffectedItemKeys(safeEvent);
+                    if (affectedKeys.Contains(itemKey))
+                    {
+                        safeState = projectItem(itemKey, safeState, safeEvent);
+                    }
+                }
+                
+                if (safeState != null)
+                {
+                    result[itemKey] = safeState;
+                }
+            }
+            else
+            {
+                // No events have become safe, use the original safe state
                 if (backup.SafeState != null)
                 {
-                    result[kvp.Key] = backup.SafeState;
+                    result[itemKey] = backup.SafeState;
                 }
-                // If SafeState is null, item was created by unsafe event, skip it
-            } else
+            }
+        }
+        
+        // Add items that have no unsafe modifications
+        foreach (var kvp in _currentData)
+        {
+            if (!_safeBackup.ContainsKey(kvp.Key))
             {
                 // No unsafe modifications, current is safe
                 result[kvp.Key] = kvp.Value;

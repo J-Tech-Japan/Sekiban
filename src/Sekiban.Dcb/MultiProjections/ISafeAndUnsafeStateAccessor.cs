@@ -13,8 +13,11 @@ public interface ISafeAndUnsafeStateAccessor<T> where T : IMultiProjectionPayloa
     /// <summary>
     ///     Gets the safe state (events outside the safe window, fully processed and ordered)
     /// </summary>
+    /// <param name="safeWindowThreshold">The threshold for determining if an event is safe</param>
+    /// <param name="domainTypes">The domain types for processing</param>
+    /// <param name="timeProvider">The time provider for safe window calculations</param>
     /// <returns>The safe projection state</returns>
-    T GetSafeState();
+    T GetSafeState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider);
 
     /// <summary>
     ///     Gets the unsafe state (includes all events including those within the safe window)

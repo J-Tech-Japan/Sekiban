@@ -74,7 +74,26 @@ public class StudentProjectionDebugTest
         // Create initial projector state
         var projector = GenericTagMultiProjector<StudentProjector, StudentTag>.GenerateInitialPayload();
         
-        _output.WriteLine($"Initial projector - Current states: {projector.GetCurrentTagStates().Count}, Safe states: {projector.GetSafeTagStates().Count}");
+        // Prepare projection functions for safe state queries
+        var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        Func<Event, IEnumerable<Guid>> getIds = evt => new[] { studentId };
+        Func<Guid, TagState?, Event, TagState?> projectTagState = (id, current, evt) =>
+        {
+            if (current == null)
+            {
+                var tagStateId = new TagStateId(new StudentTag(id), "StudentProjector");
+                current = TagState.GetEmpty(tagStateId);
+            }
+            var newPayload = StudentProjector.Project(current.Payload, evt);
+            return current with
+            {
+                Payload = newPayload,
+                Version = current.Version + 1,
+                LastSortedUniqueId = evt.SortableUniqueIdValue
+            };
+        };
+        
+        _output.WriteLine($"Initial projector - Current states: {projector.GetCurrentTagStates().Count}, Safe states: {projector.GetSafeTagStates(threshold, getIds, projectTagState).Count}");
 
         // Act - Call the static Project method directly
         var tags = new List<ITag> { studentTag };
@@ -89,7 +108,7 @@ public class StudentProjectionDebugTest
         Assert.True(result.IsSuccess);
         var projected = result.GetValue();
         
-        _output.WriteLine($"After projection - Current states: {projected.GetCurrentTagStates().Count}, Safe states: {projected.GetSafeTagStates().Count}");
+        _output.WriteLine($"After projection - Current states: {projected.GetCurrentTagStates().Count}, Safe states: {projected.GetSafeTagStates(threshold, getIds, projectTagState).Count}");
         
         var currentStates = projected.GetCurrentTagStates();
         Assert.Single(currentStates);
