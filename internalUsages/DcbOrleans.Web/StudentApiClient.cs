@@ -9,6 +9,7 @@ public class StudentApiClient(HttpClient httpClient)
     {
         public Guid studentId { get; set; }
         public Guid eventId { get; set; }
+        public string? sortableUniqueId { get; set; }
         public string? message { get; set; }
     }
     
@@ -74,7 +75,7 @@ public class StudentApiClient(HttpClient httpClient)
                         result.eventId, 
                         result.studentId, 
                         null, 
-                        null);
+                        result.sortableUniqueId);
                 }
             }
             else

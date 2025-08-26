@@ -257,6 +257,7 @@ apiRoute
                     {
                         studentId = command.StudentId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student created successfully"
                     });
             }
@@ -329,6 +330,7 @@ apiRoute
                     {
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "ClassRoom created successfully"
                     });
             }
@@ -402,6 +404,7 @@ apiRoute
                         studentId = command.StudentId,
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student enrolled successfully"
                     });
             }
@@ -424,6 +427,7 @@ apiRoute
                         studentId = command.StudentId,
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student dropped successfully"
                     });
             }
