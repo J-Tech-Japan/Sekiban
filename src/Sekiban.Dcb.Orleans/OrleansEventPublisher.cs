@@ -29,7 +29,6 @@ public class OrleansEventPublisher : IEventPublisher
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Publishing {EventCount} events to Orleans streams", events.Count);
-        Console.WriteLine($"[OrleansEventPublisher] Publishing {events.Count} events");
 
         var failedEvents = new List<(Event Event, Exception Exception)>();
 
@@ -50,10 +49,6 @@ public class OrleansEventPublisher : IEventPublisher
                             os.ProviderName,
                             os.StreamNamespace,
                             os.StreamId);
-                        Console.WriteLine(
-                            $"[OrleansEventPublisher] Publishing event {evt.EventType} to stream {os.ProviderName}/{os.StreamNamespace}/{os.StreamId}");
-                        Console.WriteLine(
-                            $"[OrleansEventPublisher] Event ID: {evt.Id}, SortableUniqueId: {evt.SortableUniqueIdValue}");
 
                         try
                         {
@@ -64,8 +59,6 @@ public class OrleansEventPublisher : IEventPublisher
                             await stream.OnNextAsync(evt);
 
                             _logger.LogDebug("Event {EventId} published successfully to Orleans stream", evt.Id);
-                            Console.WriteLine(
-                                $"[OrleansEventPublisher] Event {evt.Id} published successfully to Orleans stream");
                         }
                         catch (Exception streamEx)
                         {
@@ -77,8 +70,6 @@ public class OrleansEventPublisher : IEventPublisher
                                 os.ProviderName,
                                 os.StreamNamespace,
                                 os.StreamId);
-                            Console.WriteLine(
-                                $"[OrleansEventPublisher] ERROR: Failed to publish event {evt.Id}: {streamEx.Message}");
                             failedEvents.Add((evt, streamEx));
                         }
                     }
@@ -91,8 +82,6 @@ public class OrleansEventPublisher : IEventPublisher
                     "Failed to resolve streams for event {EventType} (ID: {EventId})",
                     evt.EventType,
                     evt.Id);
-                Console.WriteLine(
-                    $"[OrleansEventPublisher] ERROR: Failed to resolve streams for event {evt.Id}: {ex.Message}");
                 failedEvents.Add((evt, ex));
             }
         }
@@ -103,8 +92,6 @@ public class OrleansEventPublisher : IEventPublisher
                 "Failed to publish {FailedCount} out of {TotalCount} events to Orleans streams. These events are persisted in the event store and will be available through catch-up reads.",
                 failedEvents.Count,
                 events.Count);
-            Console.WriteLine(
-                $"[OrleansEventPublisher] WARNING: {failedEvents.Count} events failed to publish to streams but are saved in event store");
 
             // Log details of failed events for debugging
             foreach (var (evt, ex) in failedEvents)

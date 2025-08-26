@@ -43,7 +43,6 @@ public record
     {
         // Filter tags to only process tags of the specified tag group type
         var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
-        Console.WriteLine($"[GenericTagMultiProjector.Project] Event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}, Relevant {typeof(TTagGroup).Name} tags: {relevantTags.Count}");
 
         if (relevantTags.Count == 0)
         {
@@ -67,9 +66,6 @@ public record
         var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
 
         var newPayload = payload with { State = updatedState };
-        var currentCount = newPayload.GetCurrentTagStates().Count;
-        var safeCount = newPayload.GetSafeTagStates().Count;
-        Console.WriteLine($"[GenericTagMultiProjector.Project] After processing {ev.EventType} - Current tag states: {currentCount}, Safe tag states: {safeCount}");
         
         return ResultBox.FromValue(newPayload);
     }
@@ -177,7 +173,6 @@ public record
     {
         var currentStates = GetCurrentTagStates();
         var payloads = currentStates.Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p)).ToList();
-        Console.WriteLine($"[GenericTagMultiProjector.GetStatePayloads] Returning {payloads.Count} items from {currentStates.Count} tag states");
         return payloads;
     }
 
@@ -220,17 +215,12 @@ public record
         DcbDomainTypes domainTypes,
         TimeProvider timeProvider)
     {
-        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] START - Event: {evt.EventType}, Event Tags: [{string.Join(", ", evt.Tags)}]");
-        
         // Parse tag strings into ITag instances using DomainTypes - only keep tags belonging to our tag group
         var tags = evt.Tags
             .Select(domainTypes.TagTypes.GetTag)
             .ToList();
-        
-        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Parsed tags: {tags.Count} tags - Types: [{string.Join(", ", tags.Select(t => t?.GetType().Name ?? "null"))}]");
 
         // Use the static Project method with the provided domainTypes and timeProvider
-        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Calling Project method...");
         var result = Project(this, evt, tags, domainTypes, timeProvider);
         if (!result.IsSuccess)
         {
@@ -238,8 +228,6 @@ public record
         }
 
         var projected = result.GetValue();
-        
-        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] Project returned - Current states: {projected.GetCurrentTagStates().Count}, Safe states: {projected.GetSafeTagStates().Count}");
 
         // Update tracking information
         var finalResult = projected with
@@ -249,7 +237,6 @@ public record
             Version = Version + 1
         };
         
-        Console.WriteLine($"[GenericTagMultiProjector.ProcessEvent] END - Returning with Version: {finalResult.Version}");
         return finalResult;
     }
 

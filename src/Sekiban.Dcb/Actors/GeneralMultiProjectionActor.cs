@@ -227,17 +227,12 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         // Process events through the single state accessor
         foreach (var ev in events)
         {
-            Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] Processing event {ev.EventType} for {_projectorName}");
-            
             // Use reflection to call ProcessEvent method with domainTypes
             var accessorType = _singleStateAccessor!.GetType();
             var method = accessorType.GetMethod("ProcessEvent");
             if (method != null)
             {
-                Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] Invoking ProcessEvent on type {accessorType.Name}");
                 var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain, TimeProvider.System });
-                
-                Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] ProcessEvent returned type: {result?.GetType().Name ?? "null"}");
                 
                 // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
                 // The actual object is still the same type that implements both interfaces
@@ -250,7 +245,6 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
                     // In that case, the actual object should still implement IMultiProjectionPayload
                     if (_singleStateAccessor == null)
                     {
-                        Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] Direct cast failed, result type: {result.GetType().FullName}");
                         throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
                     }
                 }
@@ -258,22 +252,10 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
                 {
                     throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
                 }
-                
-                Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] Event processed successfully, new state type: {_singleStateAccessor.GetType().Name}");
-                
-                // Debug: Check if the state has the data
-                // Use reflection to call GetStatePayloads if available
-                var getPayloadsMethod = _singleStateAccessor.GetType().GetMethod("GetStatePayloads");
-                if (getPayloadsMethod != null)
-                {
-                    var payloads = getPayloadsMethod.Invoke(_singleStateAccessor, null) as System.Collections.IEnumerable;
-                    var count = payloads?.Cast<object>().Count() ?? 0;
-                    Console.WriteLine($"[DEBUG] After ProcessEvent - Projector {_projectorName} has {count} payloads");
-                }
             }
             else
             {
-                Console.WriteLine($"[GeneralMultiProjectionActor.AddEventsWithSingleStateAsync] ProcessEvent method not found!");
+                throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
             }
 
             // Update tracking
