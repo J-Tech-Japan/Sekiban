@@ -1,6 +1,8 @@
 using Dcb.Domain.Weather;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
@@ -37,7 +39,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public static ResultBox<WeatherForecastProjectorWithTagStateProjector> Project(
         WeatherForecastProjectorWithTagStateProjector payload,
         Event ev,
-        List<ITag> tags)
+        List<ITag> tags,
+        DcbDomainTypes domainTypes)
     {
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
@@ -60,7 +63,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -169,7 +172,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState() =>
+    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState(DcbDomainTypes domainTypes) =>
         // Return current state (includes unsafe)
         this;
 
@@ -178,24 +181,28 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
         Event evt,
-        SortableUniqueId safeWindowThreshold)
+        SortableUniqueId safeWindowThreshold,
+        DcbDomainTypes domainTypes)
     {
         // Extract tags from event - specifically looking for WeatherForecastTag
-        var tags = evt
-            .Tags
-            .Select(t =>
+        var tags = new List<ITag>();
+        foreach (var tagString in evt.Tags)
+        {
+            // Parse the tag string format "group:content"
+            var parts = tagString.Split(':', 2);
+            if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
             {
-                // Try to parse as WeatherForecastTag
-                if (Guid.TryParse(t, out var id))
+                // This is a WeatherForecastTag - parse the GUID content
+                if (Guid.TryParse(parts[1], out var forecastId))
                 {
-                    return new WeatherForecastTag(id);
+                    tags.Add(new WeatherForecastTag(forecastId));
                 }
-                return new SimpleTag(t) as ITag;
-            })
-            .ToList();
+            }
+            // Ignore other tags since this projector only processes WeatherForecastTag
+        }
 
-        // Use the static Project method
-        var result = Project(this, evt, tags);
+        // Use the static Project method with provided domainTypes
+        var result = Project(this, evt, tags, domainTypes);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
@@ -216,14 +223,5 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public string GetLastSortableUniqueId() => _lastSortableUniqueId;
     public int GetVersion() => _version;
 
-    /// <summary>
-    ///     Simple tag implementation for processing
-    /// </summary>
-    private record SimpleTag(string Value) : ITag
-    {
-        public bool IsConsistencyTag() => false;
-        public string GetTagGroup() => "";
-        public string GetTagContent() => Value;
-    }
     #endregion
 }

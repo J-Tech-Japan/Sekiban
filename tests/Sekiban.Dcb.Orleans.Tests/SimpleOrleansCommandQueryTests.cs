@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Orleans.Streams;
 using Orleans.TestingHost;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Domains;
@@ -186,13 +187,13 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var streamNamespace = "TestEvents";
         var streamId = Guid.NewGuid();
 
-        // Subscribe directly to the stream for payloads (matching what publisher sends)
-        var stream = streamProvider.GetStream<object>(StreamId.Create(streamNamespace, streamId));
+        // Subscribe directly to the stream for Event objects (matching what publisher sends)
+        var stream = streamProvider.GetStream<Event>(StreamId.Create(streamNamespace, streamId));
         var receivedPayloads = new List<IEventPayload>();
 
-        var subscriptionHandle = await stream.SubscribeAsync(async (payload, token) =>
+        var subscriptionHandle = await stream.SubscribeAsync(async (evt, token) =>
         {
-            if (payload is IEventPayload eventPayload)
+            if (evt?.Payload is IEventPayload eventPayload)
             {
                 receivedPayloads.Add(eventPayload);
             }
@@ -252,23 +253,23 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var streamId = Guid.NewGuid();
 
         // Create multiple direct stream subscriptions
-        var stream = streamProvider.GetStream<object>(StreamId.Create(streamNamespace, streamId));
+        var stream = streamProvider.GetStream<Event>(StreamId.Create(streamNamespace, streamId));
 
         var receivedPayloads1 = new List<IEventPayload>();
         var receivedPayloads2 = new List<IEventPayload>();
 
-        var handle1 = await stream.SubscribeAsync(async (payload, token) =>
+        var handle1 = await stream.SubscribeAsync(async (evt, token) =>
         {
-            if (payload is IEventPayload eventPayload)
+            if (evt?.Payload is IEventPayload eventPayload)
             {
                 receivedPayloads1.Add(eventPayload);
             }
             await Task.CompletedTask;
         });
 
-        var handle2 = await stream.SubscribeAsync(async (payload, token) =>
+        var handle2 = await stream.SubscribeAsync(async (evt, token) =>
         {
-            if (payload is IEventPayload eventPayload)
+            if (evt?.Payload is IEventPayload eventPayload)
             {
                 receivedPayloads2.Add(eventPayload);
             }
@@ -532,7 +533,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static ResultBox<TestPlaceholderMultiProjector> Project(
             TestPlaceholderMultiProjector payload,
             Event ev,
-            List<ITag> tags) => ResultBox.FromValue(payload);
+            List<ITag> tags,
+            DcbDomainTypes domainTypes) => ResultBox.FromValue(payload);
     }
 
     private record TestProjectorMulti : IMultiProjector<TestProjectorMulti>
@@ -540,7 +542,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "TestProjector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags) =>
+        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes) =>
             ResultBox.FromValue(payload);
     }
 
@@ -552,6 +554,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static ResultBox<SerializationTestMulti> Project(
             SerializationTestMulti payload,
             Event ev,
-            List<ITag> tags) => ResultBox.FromValue(payload);
+            List<ITag> tags,
+            DcbDomainTypes domainTypes) => ResultBox.FromValue(payload);
     }
 }

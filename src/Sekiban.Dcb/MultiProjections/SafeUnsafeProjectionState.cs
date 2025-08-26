@@ -1,3 +1,4 @@
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -54,7 +55,8 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     public SafeUnsafeProjectionState<TKey, TState> ProcessEvent(
         Event evt,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
-        Func<TKey, TState?, Event, TState?> projectItem)
+        Func<TKey, TState?, Event, TState?> projectItem,
+        DcbDomainTypes domainTypes)
     {
         // Get affected item keys
         var affectedItemKeys = getAffectedItemKeys(evt).ToList();
@@ -82,12 +84,13 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     public SafeUnsafeProjectionState<TKey, TState> ProcessEvents(
         IEnumerable<Event> events,
         Func<Event, IEnumerable<TKey>> getAffectedItemKeys,
-        Func<TKey, TState?, Event, TState?> projectItem)
+        Func<TKey, TState?, Event, TState?> projectItem,
+        DcbDomainTypes domainTypes)
     {
         var state = this;
         foreach (var evt in events)
         {
-            state = state.ProcessEvent(evt, getAffectedItemKeys, projectItem);
+            state = state.ProcessEvent(evt, getAffectedItemKeys, projectItem, domainTypes);
         }
         return state;
     }

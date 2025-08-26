@@ -415,7 +415,7 @@ public class GeneralEventProviderIntegrationTests
         public static TestProjection GenerateInitialPayload() =>
             new() { ProcessedValues = new List<string>() };
 
-        public static ResultBox<TestProjection> Project(TestProjection payload, Event ev, List<ITag> tags)
+        public static ResultBox<TestProjection> Project(TestProjection payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes)
         {
             if (ev.Payload is TestProjectionEvent testEvent)
             {

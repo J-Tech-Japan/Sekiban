@@ -67,7 +67,8 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var result = GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>.Project(
             projector,
             classRoomEvent,
-            new List<ITag> { new ClassRoomTag(classRoomId) });
+            new List<ITag> { new ClassRoomTag(classRoomId) },
+            _domainTypes);
 
         Assert.True(result.IsSuccess);
         var updatedProjector = result.GetValue();
@@ -111,13 +112,15 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var result1 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
             projector,
             mixedEvent,
-            new List<ITag> { new StudentTag(studentId1), new ClassRoomTag(classRoomId) });
+            new List<ITag> { new StudentTag(studentId1), new ClassRoomTag(classRoomId) },
+            _domainTypes);
         var projector1 = result1.GetValue();
 
         var result2 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
             projector1,
             studentOnlyEvent,
-            new List<ITag> { new StudentTag(studentId2) });
+            new List<ITag> { new StudentTag(studentId2) },
+            _domainTypes);
         var projector2 = result2.GetValue();
 
         // Assert
@@ -152,7 +155,8 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var result = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
             projector,
             weatherEvent,
-            new List<ITag> { new WeatherForecastTag(forecastId) });
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes);
         var updatedProjector = result.GetValue();
 
         // Assert

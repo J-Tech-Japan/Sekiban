@@ -438,7 +438,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         public static string MultiProjectorVersion => "1.0.0";
 
-        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags)
+        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes)
         {
             var result = ev.Payload switch
             {

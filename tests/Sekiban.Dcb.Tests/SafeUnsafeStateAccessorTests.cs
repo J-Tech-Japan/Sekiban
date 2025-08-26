@@ -215,7 +215,8 @@ public class SafeUnsafeStateAccessorTests
         public static ResultBox<EfficientTestProjector> Project(
             EfficientTestProjector payload,
             Event ev,
-            List<ITag> tags)
+            List<ITag> tags,
+            DcbDomainTypes domainTypes)
         {
             var result = ev.Payload switch
             {

@@ -1,6 +1,10 @@
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
+using System.Text.Json;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -8,6 +12,14 @@ namespace Sekiban.Dcb.Tests;
 /// </summary>
 public class SafeUnsafeProjectionStateTests
 {
+    private readonly DcbDomainTypes _domainTypes = new DcbDomainTypes(
+        new SimpleEventTypes(),
+        new SimpleTagTypes(),
+        new SimpleTagProjectorTypes(),
+        new SimpleTagStatePayloadTypes(),
+        new SimpleMultiProjectorTypes(),
+        new SimpleQueryTypes(),
+        new JsonSerializerOptions());
 
     /// <summary>
     ///     Create an event with specific timestamp and ID
@@ -62,13 +74,13 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process the same event multiple times
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, _domainTypes);
         var firstState = state.GetCurrentState();
 
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, _domainTypes);
         var secondState = state.GetCurrentState();
 
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, _domainTypes);
         var thirdState = state.GetCurrentState();
 
         // Assert - The item should only be updated once (duplicates are ignored)
@@ -131,10 +143,10 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process events out of order
-        state = state.ProcessEvent(event3, getAffectedIds, projectItem); // Third
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem); // First  
-        state = state.ProcessEvent(event4, getAffectedIds, projectItem); // Fourth
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem); // Second
+        state = state.ProcessEvent(event3, getAffectedIds, projectItem, _domainTypes); // Third
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, _domainTypes); // First  
+        state = state.ProcessEvent(event4, getAffectedIds, projectItem, _domainTypes); // Fourth
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, _domainTypes); // Second
 
         var unsafeState = state.GetCurrentState();
 
@@ -202,10 +214,10 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process events in mixed order
-        state = state.ProcessEvent(unsafeEvent1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(safeEvent2, getAffectedIds, projectItem);
-        state = state.ProcessEvent(unsafeEvent2, getAffectedIds, projectItem);
-        state = state.ProcessEvent(safeEvent1, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent1, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(safeEvent2, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(unsafeEvent2, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(safeEvent1, getAffectedIds, projectItem, _domainTypes);
 
         var currentState = state.GetCurrentState();
         var safeStateOnly = state.GetSafeState();
@@ -276,8 +288,8 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, _domainTypes);
 
         // Assert
         Assert.Equal(1, processCount); // Now only processes once (duplicate ignored)
@@ -336,13 +348,13 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process unsafe events
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, _domainTypes);
 
         // Try to process duplicates (should be ignored)
         var stateBeforeDup = state;
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, _domainTypes);
 
         // Duplicates should have been ignored
         Assert.Equal(stateBeforeDup, state);
@@ -354,8 +366,8 @@ public class SafeUnsafeProjectionStateTests
         // After events become safe, try processing them again
         // They should NOT be blocked as duplicates anymore since they're safe
         // and no longer tracked in _processedEventIds
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, _domainTypes);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, _domainTypes);
 
         // Assert - Safe events can be processed again (IDs were cleaned up)
         var currentState = state.GetCurrentState();

@@ -226,12 +226,12 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         // Process events through the single state accessor
         foreach (var ev in events)
         {
-            // Use reflection to call ProcessEvent method
+            // Use reflection to call ProcessEvent method with domainTypes
             var accessorType = _singleStateAccessor!.GetType();
             var method = accessorType.GetMethod("ProcessEvent");
             if (method != null)
             {
-                _singleStateAccessor = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold });
+                _singleStateAccessor = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
             }
 
             // Update tracking
@@ -255,7 +255,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
 
             // Always update unsafe state
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags);
+            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags, _domain);
             if (!unsafeProjected.IsSuccess)
             {
                 throw unsafeProjected.GetException();
@@ -305,7 +305,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         {
             var getUnsafeMethod = accessorType.GetMethod("GetUnsafeState");
             statePayload
-                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, null) ??
+                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain }) ??
                     _singleStateAccessor);
         } else
         {
@@ -477,7 +477,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         foreach (var ev in allEvents)
         {
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var projected = _types.Project(_projectorName, newSafeProjector, ev, tags);
+            var projected = _types.Project(_projectorName, newSafeProjector, ev, tags, _domain);
             if (!projected.IsSuccess)
             {
                 throw projected.GetException();

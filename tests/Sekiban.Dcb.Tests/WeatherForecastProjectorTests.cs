@@ -1,15 +1,33 @@
 using Dcb.Domain.Projections;
 using Dcb.Domain.Weather;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
+using System.Text.Json;
 namespace Sekiban.Dcb.Tests;
 
 public class WeatherForecastProjectorTests
 {
     private readonly WeatherForecastProjection _projector;
+    private readonly DcbDomainTypes _domainTypes;
 
-    public WeatherForecastProjectorTests() => _projector = WeatherForecastProjection.GenerateInitialPayload();
+    public WeatherForecastProjectorTests()
+    {
+        _projector = WeatherForecastProjection.GenerateInitialPayload();
+        
+        // Create a minimal DomainTypes for testing
+        _domainTypes = new DcbDomainTypes(
+            new SimpleEventTypes(),
+            new SimpleTagTypes(),
+            new SimpleTagProjectorTypes(),
+            new SimpleTagStatePayloadTypes(),
+            new SimpleMultiProjectorTypes(),
+            new SimpleQueryTypes(),
+            new JsonSerializerOptions());
+    }
 
     [Fact]
     public void Projector_OnlyProcessesEventsWithWeatherForecastTag()
@@ -35,13 +53,14 @@ public class WeatherForecastProjectorTests
         );
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag });
+        var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag }, _domainTypes);
         var projectorAfterTag = result1.GetValue();
 
         var result2 = WeatherForecastProjection.Project(
             projectorAfterTag,
             eventWithoutWeatherTag,
-            new List<ITag> { otherTag });
+            new List<ITag> { otherTag },
+            _domainTypes);
         var projectorAfterNoTag = result2.GetValue();
 
         // Assert
@@ -86,10 +105,10 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-5));
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag }, _domainTypes);
         var afterSafe = result1.GetValue();
 
-        var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag }, _domainTypes);
         var afterUnsafe = result2.GetValue();
 
         // Assert
@@ -133,7 +152,7 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-30));
 
         // Act - Process event with multiple tags
-        var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 });
+        var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 }, _domainTypes);
         var afterMultipleTags = result.GetValue();
 
         // Assert
@@ -170,10 +189,10 @@ public class WeatherForecastProjectorTests
         var deleteEvent = CreateEvent(new WeatherForecastDeleted(forecastId), DateTime.UtcNow.AddSeconds(-25));
 
         // Act
-        var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag });
+        var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag }, _domainTypes);
         var afterCreate = result1.GetValue();
 
-        var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag });
+        var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag }, _domainTypes);
         var afterDelete = result2.GetValue();
 
         // Assert

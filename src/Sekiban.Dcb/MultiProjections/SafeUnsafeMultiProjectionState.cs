@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
@@ -32,11 +33,11 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     /// <summary>
     ///     Gets the unsafe state (includes all events)
     /// </summary>
-    public T GetUnsafeState()
+    public T GetUnsafeState(DcbDomainTypes domainTypes)
     {
         if (!_unsafeStateCacheValid)
         {
-            _unsafeStateCache = ComputeUnsafeState();
+            _unsafeStateCache = ComputeUnsafeState(domainTypes);
             _unsafeStateCacheValid = true;
         }
         return _unsafeStateCache!;
@@ -45,7 +46,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     /// <summary>
     ///     Process an event and update the state
     /// </summary>
-    public ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold)
+    public ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
         // Check for duplicate event
         if (_processedEventIds.Contains(evt.Id))
@@ -55,8 +56,8 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         }
 
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
-        // Tags need to be provided as proper ITag instances - parsing should happen at actor level
-        var tags = new List<ITag>();
+        // Parse tags using DomainTypes
+        var tags = evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
 
         // Mark processed
         _processedEventIds.Add(evt.Id);
@@ -71,7 +72,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
         {
             // Safe event - apply directly to safe state
-            var result = T.Project(_safeState, evt, tags);
+            var result = T.Project(_safeState, evt, tags, domainTypes);
             if (!result.IsSuccess)
             {
                 throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
@@ -83,11 +84,11 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
             _processedEventIds.Remove(evt.Id);
 
             // Process any unsafe events that are now safe
-            ProcessUnsafeEventsToSafe(safeWindowThreshold, tags);
+            ProcessUnsafeEventsToSafe(safeWindowThreshold, domainTypes);
         } else
         {
             // Unsafe event - add to buffer
-            var currentState = GetUnsafeState();
+            var currentState = GetUnsafeState(domainTypes);
             _unsafeEvents.Add((evt, currentState));
         }
 
@@ -98,7 +99,7 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
     public string GetLastSortableUniqueId() => _lastSortableUniqueId;
     public int GetVersion() => _version;
 
-    private void ProcessUnsafeEventsToSafe(SortableUniqueId safeWindowThreshold, List<ITag> tags)
+    private void ProcessUnsafeEventsToSafe(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
         var eventsToPromote = new List<(Event evt, T stateBefore)>();
         var eventsToKeep = new List<(Event evt, T stateBefore)>();
@@ -118,7 +119,8 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         // Apply promoted events to safe state
         foreach (var item in eventsToPromote.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
-            var result = T.Project(_safeState, item.evt, tags);
+            var promotedTags = item.evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+            var result = T.Project(_safeState, item.evt, promotedTags, domainTypes);
             if (result.IsSuccess)
             {
                 _safeState = result.GetValue();
@@ -135,16 +137,15 @@ public record SafeUnsafeMultiProjectionState<T> : ISafeAndUnsafeStateAccessor<T>
         _unsafeStateCacheValid = false;
     }
 
-    private T ComputeUnsafeState()
+    private T ComputeUnsafeState(DcbDomainTypes domainTypes)
     {
         var state = _safeState;
 
         // Apply all unsafe events in order
         foreach (var item in _unsafeEvents.OrderBy(e => e.evt.SortableUniqueIdValue))
         {
-            // Tags need to be provided as proper ITag instances - parsing should happen at actor level
-            var tags = new List<ITag>();
-            var result = T.Project(state, item.evt, tags);
+            var tags = item.evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+            var result = T.Project(state, item.evt, tags, domainTypes);
             if (result.IsSuccess)
             {
                 state = result.GetValue();

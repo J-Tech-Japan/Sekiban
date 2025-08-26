@@ -1,15 +1,19 @@
 using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
+using System.Text.Json;
 namespace Sekiban.Dcb.Tests.Queries;
 
 public class GeneralQueryExecutorTestsV2
 {
     private readonly GeneralQueryExecutor _queryExecutor;
     private readonly IServiceProvider _serviceProvider;
+    private readonly DcbDomainTypes _domainTypes;
 
     public GeneralQueryExecutorTestsV2()
     {
@@ -17,6 +21,16 @@ public class GeneralQueryExecutorTestsV2
         services.AddSingleton<GeneralQueryExecutor>();
         _serviceProvider = services.BuildServiceProvider();
         _queryExecutor = new GeneralQueryExecutor(_serviceProvider);
+        
+        // Create a minimal DomainTypes for testing
+        _domainTypes = new DcbDomainTypes(
+            new SimpleEventTypes(),
+            new SimpleTagTypes(),
+            new SimpleTagProjectorTypes(),
+            new SimpleTagStatePayloadTypes(),
+            new SimpleMultiProjectorTypes(),
+            new SimpleQueryTypes(),
+            new JsonSerializerOptions());
     }
 
     private TestMultiProjector CreateSampleProjector()
@@ -38,7 +52,7 @@ public class GeneralQueryExecutorTestsV2
 
         foreach (var (evt, tags) in events)
         {
-            var result = TestMultiProjector.Project(projector, evt, tags);
+            var result = TestMultiProjector.Project(projector, evt, tags, _domainTypes);
             if (result.IsSuccess)
             {
                 projector = result.GetValue();

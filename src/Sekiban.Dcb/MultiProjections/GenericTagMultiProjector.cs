@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
@@ -36,7 +37,8 @@ public record
     public static ResultBox<GenericTagMultiProjector<TTagProjector, TTagGroup>> Project(
         GenericTagMultiProjector<TTagProjector, TTagGroup> payload,
         Event ev,
-        List<ITag> tags)
+        List<ITag> tags,
+        DcbDomainTypes domainTypes)
     {
         // Filter tags to only process tags of the specified tag group type
         var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
@@ -60,7 +62,7 @@ public record
 
         // Update threshold and process the event
         var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -193,7 +195,7 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState() =>
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState(DcbDomainTypes domainTypes) =>
         // Return current state (includes unsafe)
         this;
 
@@ -202,31 +204,16 @@ public record
     /// </summary>
     public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>> ProcessEvent(
         Event evt,
-        SortableUniqueId safeWindowThreshold)
+        SortableUniqueId safeWindowThreshold,
+        DcbDomainTypes domainTypes)
     {
-        // Parse tag strings into ITag instances - only parse tags belonging to our tag group
-        var tags = new List<ITag>();
-        foreach (var tagString in evt.Tags)
-        {
-            // Parse the tag string format "group:content"
-            var parts = tagString.Split(':', 2);
-            if (parts.Length == 2 && parts[0] == TTagGroup.TagGroupName)
-            {
-                // This tag belongs to our tag group, create proper instance
-                try
-                {
-                    var tag = TTagGroup.FromContent(parts[1]);
-                    tags.Add(tag);
-                }
-                catch
-                {
-                    // If parsing fails, skip this tag
-                }
-            }
-        }
+        // Parse tag strings into ITag instances using DomainTypes - only keep tags belonging to our tag group
+        var tags = evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .ToList();
 
-        // Use the static Project method
-        var result = Project(this, evt, tags);
+        // Use the static Project method with the provided domainTypes
+        var result = Project(this, evt, tags, domainTypes);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");

@@ -1,7 +1,9 @@
 using Dcb.Domain.Weather;
 using Orleans;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
@@ -36,7 +38,8 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     public static ResultBox<WeatherForecastProjection> Project(
         WeatherForecastProjection payload,
         Event ev,
-        List<ITag> tags)
+        List<ITag> tags,
+        DcbDomainTypes domainTypes)
     {
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
@@ -102,7 +105,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                     }
                     : null, // Can't update non-existent item
 
-                WeatherForecastDeleted _ => null, // Delete the item
+                WeatherForecastDeleted => null, // Delete the item
 
                 _ => current // Unknown event type, keep current state
             };
@@ -113,7 +116,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
         // Update threshold and process event
         var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem, domainTypes);
 
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}, Safe forecasts: {updatedState.GetSafeState().Count}");

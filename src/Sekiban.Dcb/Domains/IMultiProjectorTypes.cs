@@ -14,7 +14,8 @@ public interface IMultiProjectorTypes
         string multiProjectorName,
         IMultiProjectionPayload payload,
         Event ev,
-        List<ITag> tags);
+        List<ITag> tags,
+        DcbDomainTypes domainTypes);
 
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
 

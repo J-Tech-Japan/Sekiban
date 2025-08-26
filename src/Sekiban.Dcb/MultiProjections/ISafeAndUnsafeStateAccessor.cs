@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -18,16 +19,18 @@ public interface ISafeAndUnsafeStateAccessor<T> where T : IMultiProjectionPayloa
     /// <summary>
     ///     Gets the unsafe state (includes all events including those within the safe window)
     /// </summary>
+    /// <param name="domainTypes">The domain types for tag parsing</param>
     /// <returns>The unsafe projection state</returns>
-    T GetUnsafeState();
+    T GetUnsafeState(DcbDomainTypes domainTypes);
 
     /// <summary>
     ///     Processes an event and returns the updated state
     /// </summary>
     /// <param name="evt">The event to process</param>
     /// <param name="safeWindowThreshold">The threshold for determining if an event is safe</param>
+    /// <param name="domainTypes">The domain types for tag parsing</param>
     /// <returns>The updated state</returns>
-    ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold);
+    ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes);
 
     /// <summary>
     ///     Gets the last processed event ID
