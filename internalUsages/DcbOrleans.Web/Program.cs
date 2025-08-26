@@ -34,6 +34,12 @@ builder.Services.AddHttpClient<ClassRoomApiClient>(client =>
     client.BaseAddress = new Uri("https+http://apiservice");
 });
 
+// Add EnrollmentApiClient
+builder.Services.AddHttpClient<EnrollmentApiClient>(client =>
+{
+    client.BaseAddress = new Uri("https+http://apiservice");
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

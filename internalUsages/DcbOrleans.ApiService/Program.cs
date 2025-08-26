@@ -392,7 +392,7 @@ apiRoute
 // Enrollment endpoints
 apiRoute
     .MapPost(
-        "/enrollments",
+        "/enrollments/add",
         async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
@@ -415,7 +415,7 @@ apiRoute
 
 apiRoute
     .MapPost(
-        "/drop",
+        "/enrollments/drop",
         async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);

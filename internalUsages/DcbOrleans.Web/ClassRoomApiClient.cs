@@ -9,6 +9,7 @@ public class ClassRoomApiClient(HttpClient httpClient)
     {
         public Guid classRoomId { get; set; }
         public Guid eventId { get; set; }
+        public string? sortableUniqueId { get; set; }
         public string? message { get; set; }
     }
     
@@ -68,7 +69,7 @@ public class ClassRoomApiClient(HttpClient httpClient)
                         result.eventId, 
                         result.classRoomId, 
                         null, 
-                        null);
+                        result.sortableUniqueId);
                 }
             }
             else
