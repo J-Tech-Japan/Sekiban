@@ -8,14 +8,14 @@ public class AggregateListProjectorNamingTest
     {
         // Test with UserProjector
         var userProjectorName = AggregateListProjector<UserProjector>.GetMultiProjectorName();
-        Assert.Equal("aggregatelistprojector-userprojector", userProjectorName);
+        Assert.Equal("alp-userprojector", userProjectorName);  // Using "alp" abbreviation for AggregateListProjector
         Assert.Equal(userProjectorName.ToLowerInvariant(), userProjectorName);
         Assert.DoesNotContain("`", userProjectorName);
         Assert.DoesNotContain("_", userProjectorName);
 
         // Test with ShoppingCartProjector
         var cartProjectorName = AggregateListProjector<ShoppingCartProjector>.GetMultiProjectorName();
-        Assert.Equal("aggregatelistprojector-shoppingcartprojector", cartProjectorName);
+        Assert.Equal("alp-shoppingcartprojector", cartProjectorName);  // Using "alp" abbreviation
         Assert.Equal(cartProjectorName.ToLowerInvariant(), cartProjectorName);
     }
 
