@@ -1,6 +1,10 @@
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Queries;
+using System.Text.Json;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -8,6 +12,14 @@ namespace Sekiban.Dcb.Tests;
 /// </summary>
 public class SafeUnsafeProjectionStateTests
 {
+    private readonly DcbDomainTypes _domainTypes = new DcbDomainTypes(
+        new SimpleEventTypes(),
+        new SimpleTagTypes(),
+        new SimpleTagProjectorTypes(),
+        new SimpleTagStatePayloadTypes(),
+        new SimpleMultiProjectorTypes(),
+        new SimpleQueryTypes(),
+        new JsonSerializerOptions());
 
     /// <summary>
     ///     Create an event with specific timestamp and ID
@@ -35,7 +47,7 @@ public class SafeUnsafeProjectionStateTests
 
         // Create safe window threshold (events older than 5 seconds are safe)
         var threshold = SortableUniqueId.Generate(now.AddSeconds(-5), Guid.Empty);
-        state = state with { SafeWindowThreshold = threshold };
+        // SafeWindowThreshold is no longer stored in state - it's passed as parameter
 
         // Create an unsafe event (within 5 seconds)
         var unsafeEvent = CreateEvent(eventId, itemId, "Update 1", now.AddSeconds(-3));
@@ -62,13 +74,13 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process the same event multiple times
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, threshold);
         var firstState = state.GetCurrentState();
 
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, threshold);
         var secondState = state.GetCurrentState();
 
-        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent, getAffectedIds, projectItem, threshold);
         var thirdState = state.GetCurrentState();
 
         // Assert - The item should only be updated once (duplicates are ignored)
@@ -100,7 +112,7 @@ public class SafeUnsafeProjectionStateTests
 
         // Create safe window threshold (events older than 10 seconds are safe)
         var threshold = SortableUniqueId.Generate(now.AddSeconds(-10), Guid.Empty);
-        state = state with { SafeWindowThreshold = threshold };
+        // SafeWindowThreshold is no longer stored in state - it's passed as parameter
 
         // Create unsafe events (within 10 seconds) with different timestamps
         var event1 = CreateEvent(Guid.NewGuid(), itemId, "First", now.AddSeconds(-8));
@@ -131,18 +143,19 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process events out of order
-        state = state.ProcessEvent(event3, getAffectedIds, projectItem); // Third
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem); // First  
-        state = state.ProcessEvent(event4, getAffectedIds, projectItem); // Fourth
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem); // Second
+        state = state.ProcessEvent(event3, getAffectedIds, projectItem, threshold); // Third
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, threshold); // First  
+        state = state.ProcessEvent(event4, getAffectedIds, projectItem, threshold); // Fourth
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, threshold); // Second
 
         var unsafeState = state.GetCurrentState();
 
         // Move threshold forward so all events become safe
         var newThreshold = SortableUniqueId.Generate(now, Guid.Empty);
-        state = state.UpdateSafeWindowThreshold(newThreshold, getAffectedIds, projectItem);
+        // UpdateSafeWindowThreshold is no longer needed - threshold is passed as parameter
+        // state = state.UpdateSafeWindowThreshold(newThreshold, getAffectedIds, projectItem);
 
-        var safeState = state.GetSafeState();
+        var safeState = state.GetSafeState(newThreshold, getAffectedIds, projectItem);
 
         // Assert
         Assert.Single(unsafeState);
@@ -172,7 +185,7 @@ public class SafeUnsafeProjectionStateTests
 
         // Create safe window threshold (events older than 5 seconds are safe)
         var threshold = SortableUniqueId.Generate(now.AddSeconds(-5), Guid.Empty);
-        state = state with { SafeWindowThreshold = threshold };
+        // SafeWindowThreshold is no longer stored in state - it's passed as parameter
 
         // Create mix of safe and unsafe events
         var safeEvent1 = CreateEvent(Guid.NewGuid(), itemId, "Safe1", now.AddSeconds(-10));
@@ -202,13 +215,13 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process events in mixed order
-        state = state.ProcessEvent(unsafeEvent1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(safeEvent2, getAffectedIds, projectItem);
-        state = state.ProcessEvent(unsafeEvent2, getAffectedIds, projectItem);
-        state = state.ProcessEvent(safeEvent1, getAffectedIds, projectItem);
+        state = state.ProcessEvent(unsafeEvent1, getAffectedIds, projectItem, threshold);
+        state = state.ProcessEvent(safeEvent2, getAffectedIds, projectItem, threshold);
+        state = state.ProcessEvent(unsafeEvent2, getAffectedIds, projectItem, threshold);
+        state = state.ProcessEvent(safeEvent1, getAffectedIds, projectItem, threshold);
 
         var currentState = state.GetCurrentState();
-        var safeStateOnly = state.GetSafeState();
+        var safeStateOnly = state.GetSafeState(threshold, getAffectedIds, projectItem);
 
         // Assert
         Assert.Single(currentState);
@@ -246,7 +259,7 @@ public class SafeUnsafeProjectionStateTests
 
         // Create safe window threshold
         var threshold = SortableUniqueId.Generate(now.AddSeconds(-5), Guid.Empty);
-        state = state with { SafeWindowThreshold = threshold };
+        // SafeWindowThreshold is no longer stored in state - it's passed as parameter
 
         // Create duplicate events with same ID and timestamp
         var event1 = CreateEvent(eventId, itemId, "Update", now.AddSeconds(-3));
@@ -276,8 +289,8 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, threshold);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, threshold);
 
         // Assert
         Assert.Equal(1, processCount); // Now only processes once (duplicate ignored)
@@ -308,7 +321,7 @@ public class SafeUnsafeProjectionStateTests
 
         // Start with old threshold (everything is unsafe)
         var oldThreshold = SortableUniqueId.Generate(now.AddSeconds(-10), Guid.Empty);
-        state = state with { SafeWindowThreshold = oldThreshold };
+        // SafeWindowThreshold is no longer stored in state - it's passed as parameter
 
         // Create unsafe events
         var event1 = CreateEvent(eventId1, itemId, "First", now.AddSeconds(-5));
@@ -336,26 +349,27 @@ public class SafeUnsafeProjectionStateTests
         };
 
         // Act - Process unsafe events
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, oldThreshold);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, oldThreshold);
 
         // Try to process duplicates (should be ignored)
         var stateBeforeDup = state;
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, oldThreshold);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, oldThreshold);
 
         // Duplicates should have been ignored
         Assert.Equal(stateBeforeDup, state);
 
         // Now move the threshold forward so events become safe
         var newThreshold = SortableUniqueId.Generate(now, Guid.Empty);
-        state = state.UpdateSafeWindowThreshold(newThreshold, getAffectedIds, projectItem);
+        // UpdateSafeWindowThreshold is no longer needed - threshold is passed as parameter
+        // state = state.UpdateSafeWindowThreshold(newThreshold, getAffectedIds, projectItem);
 
         // After events become safe, try processing them again
         // They should NOT be blocked as duplicates anymore since they're safe
         // and no longer tracked in _processedEventIds
-        state = state.ProcessEvent(event1, getAffectedIds, projectItem);
-        state = state.ProcessEvent(event2, getAffectedIds, projectItem);
+        state = state.ProcessEvent(event1, getAffectedIds, projectItem, newThreshold);
+        state = state.ProcessEvent(event2, getAffectedIds, projectItem, newThreshold);
 
         // Assert - Safe events can be processed again (IDs were cleaned up)
         var currentState = state.GetCurrentState();

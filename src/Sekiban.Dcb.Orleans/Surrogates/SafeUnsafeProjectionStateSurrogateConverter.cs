@@ -8,15 +8,12 @@ public sealed class SafeUnsafeProjectionStateSurrogateConverter<TKey, TState> :
 {
     public SafeUnsafeProjectionState<TKey, TState> ConvertFromSurrogate(
         in SafeUnsafeProjectionStateSurrogate<TKey, TState> surrogate) =>
-        // Create a new instance with the SafeWindowThreshold
-        new()
-        {
-            SafeWindowThreshold = surrogate.SafeWindowThreshold
-        };
+        // Create a new instance - state dictionaries will be reconstructed on demand
+        new();
 
     public SafeUnsafeProjectionStateSurrogate<TKey, TState> ConvertToSurrogate(
         in SafeUnsafeProjectionState<TKey, TState> value) =>
-        // Only serialize the SafeWindowThreshold
+        // Create empty surrogate - no persistent state needed
         // The internal dictionaries are private and will be reconstructed on demand
-        new(value.SafeWindowThreshold);
+        new();
 }

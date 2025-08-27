@@ -34,6 +34,7 @@ public record AggregateListProjector<TAggregateProjector>(ImmutableDictionary<Pa
     public static string GetMultiProjectorName()
     {
         var projectorName = typeof(TAggregateProjector).Name.ToLowerInvariant();
-        return $"aggregatelistprojector-{projectorName}";
+        // Use shorter prefix "alp" (AggregateListProjector) to keep within Kubernetes name limits
+        return $"alp-{projectorName}";
     }
 }

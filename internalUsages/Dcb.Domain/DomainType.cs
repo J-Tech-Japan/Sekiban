@@ -51,9 +51,15 @@ public static class DomainType
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjectorWithTagStateProjector>();
             types.MultiProjectorTypes
                 .RegisterProjector<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
+            types.MultiProjectorTypes
+                .RegisterProjector<GenericTagMultiProjector<StudentProjector, StudentTag>>();
+            types.MultiProjectorTypes
+                .RegisterProjector<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>>();
 
             // Register list queries
             types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();
+            types.QueryTypes.RegisterListQuery<GetStudentListQuery>();
+            types.QueryTypes.RegisterListQuery<GetClassRoomListQuery>();
         });
     }
 }

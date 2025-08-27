@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
@@ -14,7 +15,9 @@ public interface IMultiProjectorTypes
         string multiProjectorName,
         IMultiProjectionPayload payload,
         Event ev,
-        List<ITag> tags);
+        List<ITag> tags,
+        DcbDomainTypes domainTypes,
+        SortableUniqueId safeWindowThreshold);
 
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
 

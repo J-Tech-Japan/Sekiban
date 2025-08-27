@@ -175,8 +175,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 // Log warning but don't fail - just skip this persist
                 _lastError = $"State size {stateSize} exceeds limit {_maxStateSize}, skipping persist";
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WARNING: State size {stateSize} exceeds limit {_maxStateSize}, skipping persist for CosmosDB");
                 return ResultBox.FromValue(false); // Return false to indicate skipped
             }
+            
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={stateSize}, Events={_eventsProcessed}, SafePosition={_projectionActor.GetSafeLastSortableUniqueId()}");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
@@ -185,6 +188,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.LastPersistTime = DateTime.UtcNow;
             _state.State.EventsProcessed = _eventsProcessed;
             _state.State.StateSize = stateSize;
+            // Persist safe last position separately from latest processed position
+            _state.State.SafeLastPosition = _projectionActor.GetSafeLastSortableUniqueId();
 
             // Persist to storage
             await _state.WriteStateAsync();
@@ -359,13 +364,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            // Get current position
+            // Get current position and check existing state
             SortableUniqueId? fromPosition = null;
             var currentState = await _projectionActor.GetStateAsync();
-            if (currentState.IsSuccess && !string.IsNullOrEmpty(currentState.GetValue().LastSortableUniqueId))
+            if (currentState.IsSuccess)
             {
-                fromPosition = new SortableUniqueId(currentState.GetValue().LastSortableUniqueId);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                var state = currentState.GetValue();
+                if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+                {
+                    fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                }
+                
+                // Log current Weather state if this is WeatherForecastProjection
+                if (state.Payload != null && state.Payload.GetType().Name == "WeatherForecastProjection")
+                {
+                    dynamic weatherProj = state.Payload;
+                    var forecasts = weatherProj.GetCurrentForecasts();
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] BEFORE REFRESH: {forecasts.Count} weather forecasts in state");
+                }
             }
 
             // Load new events from the event store
@@ -390,6 +407,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     // Persist the updated state
                     await PersistStateAsync();
+                    
+                    // Log Weather state after refresh
+                    var afterState = await _projectionActor.GetStateAsync();
+                    if (afterState.IsSuccess && afterState.GetValue().Payload != null && 
+                        afterState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
+                    {
+                        dynamic weatherProj = afterState.GetValue().Payload;
+                        var forecasts = weatherProj.GetCurrentForecasts();
+                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] AFTER REFRESH: {forecasts.Count} weather forecasts in state");
+                    }
                 } else
                 {
                     Console.WriteLine($"[{this.GetPrimaryKeyString()}] No new events to process");
@@ -417,41 +444,79 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         Console.WriteLine(
             $"[MultiProjectionGrain-{projectorName}] Waiting for lifecycle participant to set up stream...");
 
-        // Create the projection actor
-        _projectionActor = new GeneralMultiProjectionActor(
-            _domainTypes,
-            projectorName,
-            new GeneralMultiProjectionActorOptions
-            {
-                SafeWindowMs = 20000 // 20 seconds
-            });
-
-        // Restore persisted state if available
-        if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
+        // Only create the projection actor if it doesn't exist (first activation)
+        if (_projectionActor == null)
         {
-            try
-            {
-                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Restoring persisted state");
-                var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
-                    _state.State.SerializedState,
-                    _domainTypes.JsonSerializerOptions);
-
-                if (deserializedState != null && _projectionActor != null)
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Creating new projection actor");
+            _projectionActor = new GeneralMultiProjectionActor(
+                _domainTypes,
+                projectorName,
+                new GeneralMultiProjectionActorOptions
                 {
-                    await _projectionActor.SetCurrentState(deserializedState);
-                    _eventsProcessed = _state.State.EventsProcessed;
-                    Console.WriteLine(
-                        $"[MultiProjectionGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
+                    SafeWindowMs = 20000 // 20 seconds
+                });
+
+                // Only restore persisted state on first creation
+                if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
+                {
+                    try
+                    {
+                        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Restoring persisted state from storage");
+                        var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
+                            _state.State.SerializedState,
+                            _domainTypes.JsonSerializerOptions);
+
+                        if (deserializedState != null && _projectionActor != null)
+                        {
+                            await _projectionActor.SetCurrentState(deserializedState);
+                            _eventsProcessed = _state.State.EventsProcessed;
+                            Console.WriteLine(
+                                $"[MultiProjectionGrain-{projectorName}] State restored from storage - Events processed: {_eventsProcessed}");
+                            
+                            // Log Weather state after restoration
+                            var restoredState = await _projectionActor.GetStateAsync();
+                            if (restoredState.IsSuccess && restoredState.GetValue().Payload != null &&
+                                restoredState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
+                            {
+                                dynamic weatherProj = restoredState.GetValue().Payload;
+                                var forecasts = weatherProj.GetCurrentForecasts();
+                                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] RESTORED STATE: {forecasts.Count} weather forecasts");
+                                int count = 0;
+                                foreach (var forecast in forecasts)
+                                {
+                                    if (count >= 5) break;
+                                    Console.WriteLine($"  - {forecast.Value.Location} on {forecast.Value.Date:yyyy-MM-dd}");
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Failed to restore state: {ex.Message}");
+                        // Continue with fresh state
+                    }
+                } else
+                {
+                    Console.WriteLine($"[MultiProjectionGrain-{projectorName}] No persisted state to restore");
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Failed to restore state: {ex.Message}");
-                // Continue with fresh state
-            }
         } else
         {
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] No persisted state to restore");
+            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Projection actor already exists - keeping in-memory state");
+            
+            // Log current in-memory state
+            var currentState = await _projectionActor.GetStateAsync();
+            if (currentState.IsSuccess)
+            {
+                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Current in-memory events processed: {_eventsProcessed}");
+                if (currentState.GetValue().Payload != null &&
+                    currentState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
+                {
+                    dynamic weatherProj = currentState.GetValue().Payload;
+                    var forecasts = weatherProj.GetCurrentForecasts();
+                    Console.WriteLine($"[MultiProjectionGrain-{projectorName}] KEPT IN-MEMORY STATE: {forecasts.Count} weather forecasts");
+                }
+            }
         }
 
         await base.OnActivateAsync(cancellationToken);
@@ -459,6 +524,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
+        Console.WriteLine($"[MultiProjectionGrain-{this.GetPrimaryKeyString()}] DEACTIVATING - Reason: {reason}, Events processed: {_eventsProcessed}");
+        
+        // Log current Weather state before deactivation
+        if (_projectionActor != null)
+        {
+            var currentState = await _projectionActor.GetStateAsync();
+            if (currentState.IsSuccess && currentState.GetValue().Payload != null &&
+                currentState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
+            {
+                dynamic weatherProj = currentState.GetValue().Payload;
+                var forecasts = weatherProj.GetCurrentForecasts();
+                Console.WriteLine($"[MultiProjectionGrain-{this.GetPrimaryKeyString()}] DEACTIVATING WITH: {forecasts.Count} weather forecasts");
+            }
+        }
+        
+        // Persist state before deactivation
+        await PersistStateAsync();
+        
         // Clean up resources
         await StopSubscriptionInternalAsync();
 
@@ -533,14 +616,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             // Determine starting position from persisted state
+            // Use SafeLastPosition as the durable catch-up point to re-apply any windowed events
             SortableUniqueId? fromPosition = null;
-            if (!string.IsNullOrEmpty(_state.State?.LastPosition))
+            var persisted = _state.State; // state object is injected and should not be null
+            if (!string.IsNullOrEmpty(persisted.SafeLastPosition))
             {
-                fromPosition = new SortableUniqueId(_state.State.LastPosition);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from position: {fromPosition.Value}");
-            } else
+                fromPosition = new SortableUniqueId(persisted.SafeLastPosition);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from SAFE position: {fromPosition.Value}");
+            }
+            else if (!string.IsNullOrEmpty(persisted.LastPosition))
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting from beginning (no saved position)");
+                // Fallback to legacy LastPosition if SafeLastPosition not yet stored (backward compatibility)
+                fromPosition = new SortableUniqueId(persisted.LastPosition);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from legacy position: {fromPosition.Value}");
+            }
+            else
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting from beginning (no saved positions)");
             }
 
             // Catch up from event store
@@ -560,9 +652,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _eventsProcessed += events.Count;
                     _lastEventTime = DateTime.UtcNow;
 
-                    // Update position to the last event
+                    // Update LastPosition (latest processed) to the last event
                     var lastEvent = events.Last();
                     _state.State.LastPosition = lastEvent.SortableUniqueIdValue;
+                    // Update SafeLastPosition to current actor safe id after catch-up
+                    _state.State.SafeLastPosition = _projectionActor?.GetSafeLastSortableUniqueId();
 
                     // Persist state after catchup
                     await PersistStateAsync();
@@ -615,7 +709,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     internal async Task ProcessStreamEvent(Event evt)
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProcessStreamEvent: {evt.EventType}");
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProcessStreamEvent: {evt.EventType}, SortableUniqueId: {evt.SortableUniqueIdValue}");
+        
+        // Special logging for Weather events
+        if (evt.EventType.Contains("Weather"))
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] WEATHER EVENT DETECTED: Type={evt.EventType}, Id={evt.Id}, SortableUniqueId={evt.SortableUniqueIdValue}");
+        }
 
         // Don't call EnsureInitializedAsync here - the grain should already be initialized
         // from the lifecycle participant
@@ -642,6 +742,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Process the event through the projection actor
             await _projectionActor.AddEventsAsync(new[] { evt }, false);
+            
             _eventsProcessed++;
             _lastEventTime = DateTime.UtcNow;
             _eventsSinceLastPersist++;
@@ -649,6 +750,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Update position
             _state.State.LastPosition = evt.SortableUniqueIdValue;
 
+            // Special logging for Weather events
+            if (evt.EventType.Contains("Weather"))
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WEATHER EVENT PROCESSED: Events total={_eventsProcessed}, Since persist={_eventsSinceLastPersist}");
+            }
+            
             Console.WriteLine(
                 $"[{this.GetPrimaryKeyString()}] Event processed successfully, total: {_eventsProcessed}");
 
@@ -786,6 +893,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Create a simple observer that directly processes events
             var observer = new GrainEventObserver(this);
+            if (_orleansStream == null)
+            {
+                throw new InvalidOperationException("Stream provider returned null stream instance");
+            }
             _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
 
             Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Successfully subscribed to Orleans stream!");

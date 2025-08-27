@@ -64,10 +64,12 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var classRoomEvent = CreateEvent(new ClassRoomCreated(classRoomId, "Room 101", 30), null);
 
         // Act - Process event with ClassRoomTag
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result = GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>.Project(
             projector,
             classRoomEvent,
-            new List<ITag> { new ClassRoomTag(classRoomId) });
+            new List<ITag> { new ClassRoomTag(classRoomId) },
+            _domainTypes, safeThreshold);
 
         Assert.True(result.IsSuccess);
         var updatedProjector = result.GetValue();
@@ -108,16 +110,19 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var studentOnlyEvent = CreateEvent(new StudentCreated(studentId2, "Bob"), null);
 
         // Act
+        var safeThreshold2 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
             projector,
             mixedEvent,
-            new List<ITag> { new StudentTag(studentId1), new ClassRoomTag(classRoomId) });
+            new List<ITag> { new StudentTag(studentId1), new ClassRoomTag(classRoomId) },
+            _domainTypes, safeThreshold2);
         var projector1 = result1.GetValue();
 
         var result2 = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
             projector1,
             studentOnlyEvent,
-            new List<ITag> { new StudentTag(studentId2) });
+            new List<ITag> { new StudentTag(studentId2) },
+            _domainTypes, safeThreshold2);
         var projector2 = result2.GetValue();
 
         // Assert
@@ -149,10 +154,12 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var weatherEvent = CreateEvent(new WeatherForecastCreated(forecastId, DateTime.Now, 20, "Cloudy"), null);
 
         // Act
+        var safeThreshold3 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
             projector,
             weatherEvent,
-            new List<ITag> { new WeatherForecastTag(forecastId) });
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes, safeThreshold3);
         var updatedProjector = result.GetValue();
 
         // Assert

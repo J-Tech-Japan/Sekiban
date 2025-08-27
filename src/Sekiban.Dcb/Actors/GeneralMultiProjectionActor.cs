@@ -3,6 +3,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Actors;
@@ -221,17 +222,45 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         return Task.FromResult(false);
     }
 
+    /// <summary>
+    ///     Gets the last safe (persisted) sortable unique id. Used by hosts to persist SafeLastPosition.
+    /// </summary>
+    public string GetSafeLastSortableUniqueId() => _safeLastSortableUniqueId;
+
     private async Task AddEventsWithSingleStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
         // Process events through the single state accessor
         foreach (var ev in events)
         {
-            // Use reflection to call ProcessEvent method
+            // Use reflection to call ProcessEvent method with domainTypes
             var accessorType = _singleStateAccessor!.GetType();
             var method = accessorType.GetMethod("ProcessEvent");
             if (method != null)
             {
-                _singleStateAccessor = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold });
+                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain, TimeProvider.System });
+                
+                // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
+                // The actual object is still the same type that implements both interfaces
+                if (result != null)
+                {
+                    // Try to cast directly to IMultiProjectionPayload
+                    _singleStateAccessor = result as IMultiProjectionPayload;
+                    
+                    // If direct cast fails, the result might be wrapped in the interface
+                    // In that case, the actual object should still implement IMultiProjectionPayload
+                    if (_singleStateAccessor == null)
+                    {
+                        throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
             }
 
             // Update tracking
@@ -255,7 +284,13 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
 
             // Always update unsafe state
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags);
+            var unsafeProjected = _types.Project(
+                _projectorName,
+                _unsafeProjector!,
+                ev,
+                tags,
+                _domain,
+                safeWindowThreshold);
             if (!unsafeProjected.IsSuccess)
             {
                 throw unsafeProjected.GetException();
@@ -305,7 +340,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         {
             var getUnsafeMethod = accessorType.GetMethod("GetUnsafeState");
             statePayload
-                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, null) ??
+                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain, TimeProvider.System }) ??
                     _singleStateAccessor);
         } else
         {
@@ -413,24 +448,10 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             {
                 // Use single state pattern
                 _useSingleState = true;
-
-                // Check if we can create a SafeUnsafeMultiProjectionState wrapper
-                var projectorInterfaces = payloadType
-                    .GetInterfaces()
-                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IMultiProjector<>))
-                    .ToList();
-
-                if (projectorInterfaces.Any())
-                {
-                    // Create SafeUnsafeMultiProjectionState wrapper
-                    var projectorInterface = projectorInterfaces.First();
-                    var projectorType = projectorInterface.GetGenericArguments()[0];
-                    var wrapperType = typeof(SafeUnsafeMultiProjectionState<>).MakeGenericType(projectorType);
-                    _singleStateAccessor = Activator.CreateInstance(wrapperType, initialPayload);
-                } else
-                {
-                    _singleStateAccessor = initialPayload;
-                }
+                
+                // The payload already implements ISafeAndUnsafeStateAccessor, use it directly
+                // No need to wrap it in SafeUnsafeMultiProjectionState
+                _singleStateAccessor = initialPayload;
             } else
             {
                 // Use traditional dual state pattern
@@ -449,8 +470,8 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             _allSafeEvents[ev.Id] = ev;
         }
 
-        // Rebuild safe state from all safe events in chronological order
-        await RebuildSafeStateAsync();
+    // Rebuild safe state from all safe events in chronological order (threshold not needed for pure safe rebuild)
+    await RebuildSafeStateAsync();
     }
 
     private async Task RebuildSafeStateAsync()
@@ -477,7 +498,14 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         foreach (var ev in allEvents)
         {
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var projected = _types.Project(_projectorName, newSafeProjector, ev, tags);
+            // Safe rebuildは全イベントが既に safe 扱いなのでダミー閾値(最小値)を使用
+            var projected = _types.Project(
+                _projectorName,
+                newSafeProjector,
+                ev,
+                tags,
+                _domain,
+                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
             if (!projected.IsSuccess)
             {
                 throw projected.GetException();

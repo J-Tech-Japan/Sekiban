@@ -10,7 +10,7 @@ public class KubernetesNameHelperTests
     [InlineData("MultiProjectorActor", "multiprojectoractor")]
     [InlineData("Test_Name-With.Special@Characters!", "test-name-with-special-characters")]
     [InlineData("UPPERCASE", "uppercase")]
-    [InlineData("123StartWithNumber", "123startwithhnumber")]
+    [InlineData("123StartWithNumber", "123startwithnumber")]
     [InlineData("-start-with-hyphen", "start-with-hyphen")]
     [InlineData("end-with-hyphen-", "end-with-hyphen")]
     [InlineData("multiple---hyphens", "multiple-hyphens")]
@@ -71,9 +71,9 @@ public class KubernetesNameHelperTests
         // Arrange
         var projectorNames = new[]
         {
-            "aggregatelistprojector-userprojector",
-            "aggregatelistprojector-orderprojector",
-            "aggregatelistprojector-shoppingcartprojector"
+            "alp-userprojector",
+            "alp-orderprojector",
+            "alp-shoppingcartprojector"
         };
         
         // Assert

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -11,6 +12,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Tests;
+using Sekiban.Dcb.Common;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -194,7 +196,9 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static ResultBox<EmptyTestMultiProjector> Project(
             EmptyTestMultiProjector payload,
             Event ev,
-            List<ITag> tags) => ResultBox.FromValue(payload);
+            List<ITag> tags,
+            DcbDomainTypes domainTypes,
+            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 
     private record TestProjectorMulti : IMultiProjector<TestProjectorMulti>
@@ -202,7 +206,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "test-projector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags) =>
+    public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
             ResultBox.FromValue(payload);
     }
 
@@ -211,7 +215,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-1";
         public static Projector1Multi GenerateInitialPayload() => new();
-        public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags) =>
+    public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
             ResultBox.FromValue(payload);
     }
 
@@ -220,7 +224,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-2";
         public static Projector2Multi GenerateInitialPayload() => new();
-        public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags) =>
+    public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
             ResultBox.FromValue(payload);
     }
 
@@ -230,7 +234,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorName => "subscription-test";
         public static SubscriptionTestMulti GenerateInitialPayload() => new();
         public static ResultBox<SubscriptionTestMulti>
-            Project(SubscriptionTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+            Project(SubscriptionTestMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 
     private record SerializationTestMulti : IMultiProjector<SerializationTestMulti>
@@ -241,7 +245,9 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static ResultBox<SerializationTestMulti> Project(
             SerializationTestMulti payload,
             Event ev,
-            List<ITag> tags) => ResultBox.FromValue(payload);
+            List<ITag> tags,
+            DcbDomainTypes domainTypes,
+            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 
     private record PersistenceTestMulti : IMultiProjector<PersistenceTestMulti>
@@ -250,6 +256,6 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorName => "persistence-test";
         public static PersistenceTestMulti GenerateInitialPayload() => new();
         public static ResultBox<PersistenceTestMulti>
-            Project(PersistenceTestMulti payload, Event ev, List<ITag> tags) => ResultBox.FromValue(payload);
+            Project(PersistenceTestMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 }

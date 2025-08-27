@@ -1,9 +1,12 @@
 @page "/enrollments"
 @using Dcb.Domain.Enrollment
+@using Dcb.Domain.Student
+@using Dcb.Domain.ClassRoom
 @attribute [StreamRendering]
 @rendermode InteractiveServer
 
 @inject IHttpClientFactory HttpClientFactory
+@inject EnrollmentApiClient EnrollmentApiClient
 @inject IJSRuntime JsRuntime
 
 <PageTitle>Enrollments</PageTitle>
@@ -157,6 +160,8 @@
     private string dropMessage = string.Empty;
     private bool dropError;
 
+    private string? lastSortableUniqueId;
+
     public class StudentView
     {
         public Guid StudentId { get; set; }
@@ -193,18 +198,36 @@
         await LoadData();
     }
 
-    private async Task LoadData()
+    private async Task LoadData(string? waitForSortableUniqueId = null)
     {
-        await Task.WhenAll(LoadStudents(), LoadClassrooms(), LoadEnrollments());
+        await Task.WhenAll(
+            LoadStudents(waitForSortableUniqueId), 
+            LoadClassrooms(waitForSortableUniqueId), 
+            LoadEnrollments(waitForSortableUniqueId));
     }
 
-    private async Task LoadStudents()
+    private async Task LoadStudents(string? waitForSortableUniqueId = null)
     {
         try
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<StudentView>>("api/students");
-            students = response ?? new List<StudentView>();
+            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/students";
+            var response = await httpClient.GetFromJsonAsync<List<StudentState>>(requestUri);
+            if (response != null)
+            {
+                students = response.Select(s => new StudentView
+                {
+                    StudentId = s.StudentId,
+                    StudentName = s.Name,
+                    Grade = s.MaxClassCount // Using MaxClassCount as Grade for now
+                }).ToList();
+            }
+            else
+            {
+                students = new List<StudentView>();
+            }
         }
         catch (Exception ex)
         {
@@ -213,13 +236,30 @@
         }
     }
 
-    private async Task LoadClassrooms()
+    private async Task LoadClassrooms(string? waitForSortableUniqueId = null)
     {
         try
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<ClassroomView>>("api/classrooms");
-            classrooms = response ?? new List<ClassroomView>();
+            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/classrooms";
+            var response = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri);
+            if (response != null)
+            {
+                classrooms = response.Select(c => new ClassroomView
+                {
+                    ClassRoomId = c.ClassRoomId,
+                    ClassName = c.Name,
+                    MaxCapacity = c.MaxStudents,
+                    // The .Where in the razor uses EnrolledStudents.Count, so we need to populate dummy entries
+                    EnrolledStudents = Enumerable.Range(0, c.EnrolledCount).Select(_ => new EnrolledStudentView()).ToList()
+                }).ToList();
+            }
+            else
+            {
+                classrooms = new List<ClassroomView>();
+            }
         }
         catch (Exception ex)
         {
@@ -228,13 +268,52 @@
         }
     }
 
-    private async Task LoadEnrollments()
+    private async Task LoadEnrollments(string? waitForSortableUniqueId = null)
     {
         try
         {
+            // Since there's no /api/enrollments endpoint, we need to build enrollment data
+            // from students and classrooms data that we already have
             var httpClient = HttpClientFactory.CreateClient("ApiService");
-            var response = await httpClient.GetFromJsonAsync<List<EnrollmentView>>("api/enrollments");
-            enrollments = response ?? new List<EnrollmentView>();
+            
+            // Build query string with waitForSortableUniqueId if provided
+            var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/students";
+            var classroomsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/classrooms";
+            
+            // Get all students with their enrolled classrooms, waiting for the sortableUniqueId if provided
+            var studentsResponse = await httpClient.GetFromJsonAsync<List<StudentState>>(studentsUri);
+            var classroomsResponse = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(classroomsUri);
+            
+            var enrollmentsList = new List<EnrollmentView>();
+            
+            if (studentsResponse != null && classroomsResponse != null)
+            {
+                foreach (var student in studentsResponse)
+                {
+                    foreach (var classroomId in student.EnrolledClassRoomIds)
+                    {
+                        var classroom = classroomsResponse.FirstOrDefault(c => c.ClassRoomId == classroomId);
+                        if (classroom != null)
+                        {
+                            enrollmentsList.Add(new EnrollmentView
+                            {
+                                StudentId = student.StudentId,
+                                StudentName = student.Name,
+                                Grade = student.MaxClassCount, // Using MaxClassCount as Grade
+                                ClassRoomId = classroom.ClassRoomId,
+                                ClassName = classroom.Name,
+                                EnrollmentDate = DateTime.Now // We don't have the actual enrollment date
+                            });
+                        }
+                    }
+                }
+            }
+            
+            enrollments = enrollmentsList;
         }
         catch (Exception ex)
         {
@@ -254,21 +333,21 @@
 
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new EnrollStudentInClassRoom(studentId, classroomId);
-            var response = await httpClient.PostAsJsonAsync("api/enrollments/add", command);
+            var response = await EnrollmentApiClient.EnrollStudentAsync(command);
 
-            if (response.IsSuccessStatusCode)
+            if (response?.Success == true)
             {
                 enrollmentMessage = "Student enrolled successfully!";
                 enrollmentError = false;
                 selectedStudentId = string.Empty;
                 selectedClassroomId = string.Empty;
-                await LoadData();
-            } else
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadData(lastSortableUniqueId);
+            }
+            else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                enrollmentMessage = $"Failed to enroll student: {error}";
+                enrollmentMessage = response?.Error ?? "Failed to enroll student. Please try again.";
                 enrollmentError = true;
             }
         }
@@ -308,22 +387,22 @@
     {
         try
         {
-            var httpClient = HttpClientFactory.CreateClient("ApiService");
             var command = new DropStudentFromClassRoom(studentId, classroomId);
-            var response = await httpClient.PostAsJsonAsync("api/enrollments/drop", command);
+            var response = await EnrollmentApiClient.DropStudentAsync(command);
 
-            if (response.IsSuccessStatusCode)
+            if (response?.Success == true)
             {
                 dropMessage = "Student dropped successfully!";
                 dropError = false;
                 enrollmentMessage = dropMessage;
                 enrollmentError = dropError;
                 selectedEnrollmentForDrop = string.Empty;
-                await LoadData();
-            } else
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadData(lastSortableUniqueId);
+            }
+            else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                dropMessage = $"Failed to drop student: {error}";
+                dropMessage = response?.Error ?? "Failed to drop student. Please try again.";
                 dropError = true;
                 enrollmentMessage = dropMessage;
                 enrollmentError = dropError;

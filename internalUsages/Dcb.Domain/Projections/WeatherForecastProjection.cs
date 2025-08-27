@@ -1,7 +1,9 @@
 using Dcb.Domain.Weather;
 using Orleans;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
@@ -14,10 +16,6 @@ namespace Dcb.Domain.Projections;
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
 
-    /// <summary>
-    ///     SafeWindow threshold (20 seconds by default)
-    /// </summary>
-    private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
     /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState
     /// </summary>
@@ -36,7 +34,9 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     public static ResultBox<WeatherForecastProjection> Project(
         WeatherForecastProjection payload,
         Event ev,
-        List<ITag> tags)
+        List<ITag> tags,
+        DcbDomainTypes domainTypes,
+    SortableUniqueId safeWindowThreshold)
     {
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
@@ -58,14 +58,17 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
         {
             // Return the forecast IDs from the tags
-            return weatherForecastTags.Select(tag => tag.ForecastId);
+            var ids = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
+            Console.WriteLine($"[WeatherForecastProjection.Project] getAffectedItemIds returning {ids.Count} IDs");
+            return ids;
         };
 
         // Function to project a single item
         Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem = (forecastId, current, evt) =>
         {
+            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem called for forecastId: {forecastId}, current is null: {current == null}, event type: {evt.Payload?.GetType().Name}");
             // Process based on event type
-            return evt.Payload switch
+            var result = evt.Payload switch
             {
                 WeatherForecastCreated created => current != null
                     ? current with // Update existing
@@ -102,34 +105,24 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
                     }
                     : null, // Can't update non-existent item
 
-                WeatherForecastDeleted _ => null, // Delete the item
+                WeatherForecastDeleted => null, // Delete the item
 
                 _ => current // Unknown event type, keep current state
             };
+            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem returning: {(result != null ? "non-null item" : "null")}");
+            return result;
         };
 
-        // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold();
-
-        // Update threshold and process event
-        var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        // Process event with safe window threshold
+        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
 
         Console.WriteLine(
-            $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}, Safe forecasts: {updatedState.GetSafeState().Count}");
+            $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}");
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
 
 
-    /// <summary>
-    ///     Get current SafeWindow threshold
-    /// </summary>
-    private static string GetSafeWindowThreshold()
-    {
-        var threshold = DateTime.UtcNow.Subtract(SafeWindow);
-        return SortableUniqueId.Generate(threshold, Guid.Empty);
-    }
 
     /// <summary>
     ///     Extract timestamp from event's SortableUniqueId
@@ -144,12 +137,12 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     ///     Get all current weather forecasts (including unsafe)
     /// </summary>
-    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts() => State.GetCurrentState();
-
-    /// <summary>
-    ///     Get only safe weather forecasts
-    /// </summary>
-    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetSafeForecasts() => State.GetSafeState();
+    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts()
+    {
+        var current = State.GetCurrentState();
+        Console.WriteLine($"[WeatherForecastProjection.GetCurrentForecasts] Current: {current.Count} items");
+        return current;
+    }
 
     /// <summary>
     ///     Check if a specific forecast has unsafe modifications

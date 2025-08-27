@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
@@ -14,9 +15,9 @@ public record
     where TTagProjector : ITagProjector<TTagProjector> where TTagGroup : IGuidTagGroup<TTagGroup>
 {
     /// <summary>
-    ///     SafeWindow threshold (20 seconds by default)
+    ///     SafeWindow は外部 (Actor) が SortableUniqueId safeWindowThreshold として計算し ProcessEvent 経由で渡す前提。
+    ///     ここでは固定値や内部計算を持たない。
     /// </summary>
-    private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
 
     /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState for TagState
@@ -36,7 +37,9 @@ public record
     public static ResultBox<GenericTagMultiProjector<TTagProjector, TTagGroup>> Project(
         GenericTagMultiProjector<TTagProjector, TTagGroup> payload,
         Event ev,
-        List<ITag> tags)
+        List<ITag> tags,
+        DcbDomainTypes domainTypes,
+        SortableUniqueId safeWindowThreshold)
     {
         // Filter tags to only process tags of the specified tag group type
         var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
@@ -47,9 +50,6 @@ public record
             return ResultBox.FromValue(payload);
         }
 
-        // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold();
-
         // Function to get affected item IDs (filter out nulls)
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
             relevantTags.Select(tag => GetTagId(tag)).Where(id => id.HasValue).Select(id => id!.Value);
@@ -58,11 +58,16 @@ public record
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
             ProjectTagState(tagId, current, evt, relevantTags);
 
-        // Update threshold and process the event
-        var newState = payload.State with { SafeWindowThreshold = threshold };
-        var updatedState = newState.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        // safeWindowThreshold を文字列として State へ渡し safe/unsafe 判定を内部に委譲
+        var updatedState = payload.State.ProcessEvent(
+            ev,
+            getAffectedItemIds,
+            projectItem,
+            safeWindowThreshold.Value);
 
-        return ResultBox.FromValue(payload with { State = updatedState });
+        var newPayload = payload with { State = updatedState };
+        
+        return ResultBox.FromValue(newPayload);
     }
 
     /// <summary>
@@ -137,14 +142,7 @@ public record
         return false;
     }
 
-    /// <summary>
-    ///     Get current SafeWindow threshold
-    /// </summary>
-    private static string GetSafeWindowThreshold()
-    {
-        var threshold = DateTime.UtcNow.Subtract(SafeWindow);
-        return SortableUniqueId.Generate(threshold, Guid.Empty);
-    }
+    // SafeWindow threshold の生成ロジックは削除。Actor が提供する値を使う設計へ移行。
 
     /// <summary>
     ///     Get all current tag states (including unsafe)
@@ -154,7 +152,11 @@ public record
     /// <summary>
     ///     Get only safe tag states
     /// </summary>
-    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates() => State.GetSafeState();
+    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates(
+        string safeWindowThreshold,
+        Func<Event, IEnumerable<Guid>> getAffectedItemKeys,
+        Func<Guid, TagState?, Event, TagState?> projectItem) => 
+        State.GetSafeState(safeWindowThreshold, getAffectedItemKeys, projectItem);
 
     /// <summary>
     ///     Check if a specific tag state has unsafe modifications
@@ -166,15 +168,21 @@ public record
     /// </summary>
     public IEnumerable<ITagStatePayload> GetStatePayloads()
     {
-        return GetCurrentTagStates().Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
+        var currentStates = GetCurrentTagStates();
+        var payloads = currentStates.Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p)).ToList();
+        return payloads;
     }
 
     /// <summary>
     ///     Get only safe state payloads
     /// </summary>
-    public IEnumerable<ITagStatePayload> GetSafeStatePayloads()
+    public IEnumerable<ITagStatePayload> GetSafeStatePayloads(
+        string safeWindowThreshold,
+        Func<Event, IEnumerable<Guid>> getAffectedItemKeys,
+        Func<Guid, TagState?, Event, TagState?> projectItem)
     {
-        return GetSafeTagStates().Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
+        return GetSafeTagStates(safeWindowThreshold, getAffectedItemKeys, projectItem)
+            .Values.Select(ts => ts.Payload).Where(p => !ShouldRemoveItem(p));
     }
 
     #region ISafeAndUnsafeStateAccessor Implementation
@@ -185,16 +193,21 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState() =>
-        // The State already manages safe/unsafe internally
-        // We return the same instance since SafeUnsafeProjectionState handles it
-        this;
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState(
+        SortableUniqueId safeWindowThreshold, 
+        DcbDomainTypes domainTypes, 
+        TimeProvider timeProvider)
+    {
+        // Return this instance - the State already manages safe/unsafe separation internally
+        // GetSafeStatePayloads() will return only safe items when needed for persistence
+        return this;
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState() =>
-        // Return current state (includes unsafe)
+    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
+        // Return current state (includes both safe and unsafe)
         this;
 
     /// <summary>
@@ -202,22 +215,26 @@ public record
     /// </summary>
     public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>> ProcessEvent(
         Event evt,
-        SortableUniqueId safeWindowThreshold)
+        SortableUniqueId safeWindowThreshold,
+        DcbDomainTypes domainTypes,
+        TimeProvider timeProvider)
     {
-        // Extract tags from event
-        var tags = evt.Tags.Select(t => new SimpleTag(t)).Cast<ITag>().ToList();
+        // Parse tag strings into ITag instances using DomainTypes - only keep tags belonging to our tag group
+        var tags = evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .ToList();
 
-        // Use the static Project method
-        var result = Project(this, evt, tags);
+    // Actor から渡された safeWindowThreshold をそのまま State.ProcessEvent に渡すため
+    // Project 内部での SafeWindow 再計算は行わない。
+    var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
         }
 
         var projected = result.GetValue();
-
-        // Update tracking information
-        return projected with
+        var updated = projected with { };
+        return updated with
         {
             LastEventId = evt.Id,
             LastSortableUniqueId = evt.SortableUniqueIdValue,
@@ -229,14 +246,5 @@ public record
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
 
-    /// <summary>
-    ///     Simple tag implementation for processing
-    /// </summary>
-    private record SimpleTag(string Value) : ITag
-    {
-        public bool IsConsistencyTag() => false;
-        public string GetTagGroup() => "";
-        public string GetTagContent() => Value;
-    }
     #endregion
 }

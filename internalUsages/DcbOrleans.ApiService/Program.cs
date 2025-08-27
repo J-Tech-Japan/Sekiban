@@ -40,6 +40,9 @@ builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 // Configure Orleans
 builder.UseOrleans(config =>
 {
+    // Use localhost clustering for development
+    config.UseLocalhostClustering();
+    
     // Add Azure Queue Streams
     config.AddAzureQueueStreams(
         "EventStreamProvider",
@@ -254,6 +257,7 @@ apiRoute
                     {
                         studentId = command.StudentId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student created successfully"
                     });
             }
@@ -261,6 +265,32 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("CreateStudent");
+
+apiRoute
+    .MapGet(
+        "/students",
+        async (
+            [FromServices] ISekibanExecutor executor,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromQuery] string? waitForSortableUniqueId) =>
+        {
+            var query = new GetStudentListQuery 
+            { 
+                PageNumber = pageNumber ?? 1, 
+                PageSize = pageSize ?? 20,
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetStudentList");
 
 apiRoute
     .MapGet(
@@ -300,6 +330,7 @@ apiRoute
                     {
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "ClassRoom created successfully"
                     });
             }
@@ -307,6 +338,32 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("CreateClassRoom");
+
+apiRoute
+    .MapGet(
+        "/classrooms",
+        async (
+            [FromServices] ISekibanExecutor executor,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromQuery] string? waitForSortableUniqueId) =>
+        {
+            var query = new GetClassRoomListQuery 
+            { 
+                PageNumber = pageNumber ?? 1, 
+                PageSize = pageSize ?? 20,
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+            return Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetClassRoomList");
 
 apiRoute
     .MapGet(
@@ -335,7 +392,7 @@ apiRoute
 // Enrollment endpoints
 apiRoute
     .MapPost(
-        "/enrollments",
+        "/enrollments/add",
         async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
@@ -347,6 +404,7 @@ apiRoute
                         studentId = command.StudentId,
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student enrolled successfully"
                     });
             }
@@ -357,7 +415,7 @@ apiRoute
 
 apiRoute
     .MapPost(
-        "/drop",
+        "/enrollments/drop",
         async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
@@ -369,6 +427,7 @@ apiRoute
                         studentId = command.StudentId,
                         classRoomId = command.ClassRoomId,
                         eventId = result.GetValue().EventId,
+                        sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student dropped successfully"
                     });
             }

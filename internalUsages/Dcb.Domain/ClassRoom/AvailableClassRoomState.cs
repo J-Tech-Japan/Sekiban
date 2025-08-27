@@ -1,6 +1,8 @@
+using Orleans;
 using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.ClassRoom;
 
+[GenerateSerializer]
 public record AvailableClassRoomState(Guid ClassRoomId, string Name, int MaxStudents, List<Guid> EnrolledStudentIds)
     : ITagStatePayload
 {
