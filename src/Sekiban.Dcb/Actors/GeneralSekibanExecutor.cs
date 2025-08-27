@@ -344,7 +344,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
 
             // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
             if (!actorResult.IsSuccess)
             {
                 return ResultBox.Error<TResult>(actorResult.GetException());
@@ -426,7 +426,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
 
             // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
             if (!actorResult.IsSuccess)
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(actorResult.GetException());

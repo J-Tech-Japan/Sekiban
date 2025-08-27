@@ -12,7 +12,7 @@ namespace Sekiban.Dcb.Actors;
 ///     General actor implementation that manages a single multi-projector instance by name.
 ///     Maintains both safe and unsafe states with event buffering for handling out-of-order events.
 /// </summary>
-public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
+public class GeneralMultiProjectionActor
 {
 
     private readonly DcbDomainTypes _domain;
