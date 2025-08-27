@@ -76,7 +76,9 @@ public class DebugDatabaseContentTest : PostgresTestBase
         _output.WriteLine("\nData kept in database for manual inspection.");
     }
 
-    public override Task InitializeAsync() =>
-        // Don't clear database for this debug test
-        Task.CompletedTask;
+    public override async Task InitializeAsync()
+    {
+        // Clear database before test
+        await base.InitializeAsync();
+    }
 }
