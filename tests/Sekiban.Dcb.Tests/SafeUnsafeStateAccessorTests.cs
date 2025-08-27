@@ -165,8 +165,16 @@ public class SafeUnsafeStateAccessorTests
         // Arrange
         var actor = new GeneralMultiProjectionActor(_domainTypes, EfficientTestProjector.MultiProjectorName, _options);
 
-        // Create the same event
-        var event1 = CreateEvent(new TestItemAdded("Item1", 100), DateTime.UtcNow.AddSeconds(-10));
+        // Create an event with a specific ID
+        var eventId = Guid.NewGuid();
+        var sortableId = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-10), Guid.NewGuid());
+        var event1 = new Event(
+            new TestItemAdded("Item1", 100),
+            sortableId,
+            nameof(TestItemAdded),
+            eventId, // Use the same event ID for both
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
+            new List<string>());
 
         // Process the same event twice
         await actor.AddEventsAsync(new[] { event1 });
