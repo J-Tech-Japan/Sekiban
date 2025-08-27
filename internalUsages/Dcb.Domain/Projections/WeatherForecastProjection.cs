@@ -150,19 +150,6 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     }
 
     /// <summary>
-    ///     Get only safe weather forecasts - requires threshold and projection functions
-    /// </summary>
-    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetSafeForecasts(
-        string safeWindowThreshold, 
-        Func<Event, IEnumerable<Guid>> getAffectedItemKeys,
-        Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem)
-    {
-        var safe = State.GetSafeState(safeWindowThreshold, getAffectedItemKeys, projectItem);
-        Console.WriteLine($"[WeatherForecastProjection.GetSafeForecasts] Safe: {safe.Count} items");
-        return safe;
-    }
-
-    /// <summary>
     ///     Check if a specific forecast has unsafe modifications
     /// </summary>
     public bool IsForecastUnsafe(Guid forecastId) => State.IsItemUnsafe(forecastId);

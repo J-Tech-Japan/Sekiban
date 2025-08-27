@@ -155,10 +155,11 @@ public class GenericTagMultiProjectorUnsafeDataTests
                 _ => current
             };
         
-        var manualSafeForecasts = manualProjector.GetSafeForecasts(threshold, getAffectedIds, projectItem);
+        // SafeUnsafeProjectionState now manages safe/unsafe internally
+        // We can only check current state and whether items are unsafe
         
         Assert.Equal(2, manualCurrentForecasts.Count); // Should have both forecasts in current
-        Assert.Single(manualSafeForecasts); // Should have only old forecast in safe
+        // Note: Safe state is managed internally by SafeUnsafeProjectionState
         Assert.True(manualProjector.IsForecastUnsafe(forecastId2)); // Recent should be unsafe
         Assert.False(manualProjector.IsForecastUnsafe(forecastId1)); // Old should be safe
 
