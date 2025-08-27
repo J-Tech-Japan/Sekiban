@@ -113,9 +113,13 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             return result;
         };
 
-        // Simply process the event - safe window management is handled by the framework
-        // Don't pass a threshold here - let the framework decide what's safe
-        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem);
+        // Calculate safe window threshold (20 seconds ago from now)
+        var safeWindowThreshold = SortableUniqueId.Generate(
+            timeProvider.GetUtcNow().UtcDateTime.AddSeconds(-20), 
+            Guid.Empty);
+        
+        // Process event with safe window threshold
+        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
 
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}");

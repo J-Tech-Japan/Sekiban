@@ -127,9 +127,55 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates()
     {
-        // Need to provide threshold and projection functions for safe state
-        // For now, return empty until we can determine proper safe window
-        return new Dictionary<Guid, TagState>();
+        // Calculate safe window threshold (20 seconds ago)
+        var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        
+        // Define projection functions
+        Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
+        {
+            // Extract WeatherForecastTag IDs from event tags
+            var tagIds = new List<Guid>();
+            foreach (var tagString in evt.Tags)
+            {
+                var parts = tagString.Split(':', 2);
+                if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
+                {
+                    if (Guid.TryParse(parts[1], out var forecastId))
+                    {
+                        tagIds.Add(forecastId);
+                    }
+                }
+            }
+            return tagIds;
+        };
+        
+        Func<Guid, TagState?, Event, TagState?> projectTagState = (tagId, current, evt) =>
+        {
+            var tag = new WeatherForecastTag(tagId);
+            var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
+            
+            if (current == null)
+            {
+                current = TagState.GetEmpty(tagStateId);
+            }
+            
+            var newPayload = WeatherForecastProjector.Project(current.Payload, evt);
+            
+            if (newPayload is WeatherForecastState { IsDeleted: true })
+            {
+                return null;
+            }
+            
+            return current with
+            {
+                Payload = newPayload,
+                Version = current.Version + 1,
+                LastSortedUniqueId = evt.SortableUniqueIdValue,
+                ProjectorVersion = WeatherForecastProjector.ProjectorVersion
+            };
+        };
+        
+        return State.GetSafeState(threshold, getAffectedIds, projectTagState);
     }
 
     /// <summary>
