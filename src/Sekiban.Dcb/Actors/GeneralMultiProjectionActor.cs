@@ -284,7 +284,13 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
 
             // Always update unsafe state
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var unsafeProjected = _types.Project(_projectorName, _unsafeProjector!, ev, tags, _domain, TimeProvider.System);
+            var unsafeProjected = _types.Project(
+                _projectorName,
+                _unsafeProjector!,
+                ev,
+                tags,
+                _domain,
+                safeWindowThreshold);
             if (!unsafeProjected.IsSuccess)
             {
                 throw unsafeProjected.GetException();
@@ -464,8 +470,8 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             _allSafeEvents[ev.Id] = ev;
         }
 
-        // Rebuild safe state from all safe events in chronological order
-        await RebuildSafeStateAsync();
+    // Rebuild safe state from all safe events in chronological order (threshold not needed for pure safe rebuild)
+    await RebuildSafeStateAsync();
     }
 
     private async Task RebuildSafeStateAsync()
@@ -492,7 +498,14 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         foreach (var ev in allEvents)
         {
             var tags = ev.Tags.Select(tagString => _domain.TagTypes.GetTag(tagString)).ToList();
-            var projected = _types.Project(_projectorName, newSafeProjector, ev, tags, _domain, TimeProvider.System);
+            // Safe rebuildは全イベントが既に safe 扱いなのでダミー閾値(最小値)を使用
+            var projected = _types.Project(
+                _projectorName,
+                newSafeProjector,
+                ev,
+                tags,
+                _domain,
+                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
             if (!projected.IsSuccess)
             {
                 throw projected.GetException();

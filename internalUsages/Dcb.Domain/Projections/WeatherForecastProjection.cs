@@ -36,7 +36,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Event ev,
         List<ITag> tags,
         DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+    SortableUniqueId safeWindowThreshold)
     {
         Console.WriteLine(
             $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
@@ -113,11 +113,6 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             return result;
         };
 
-        // Calculate safe window threshold (20 seconds ago from now)
-        var safeWindowThreshold = SortableUniqueId.Generate(
-            timeProvider.GetUtcNow().UtcDateTime.AddSeconds(-20), 
-            Guid.Empty);
-        
         // Process event with safe window threshold
         var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
 

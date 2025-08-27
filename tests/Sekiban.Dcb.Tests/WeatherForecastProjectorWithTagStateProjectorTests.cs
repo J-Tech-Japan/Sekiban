@@ -42,11 +42,12 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         );
 
         // Act
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             createEvent,
             new List<ITag> { weatherTag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold);
         var afterCreate = result.GetValue();
 
         // Assert
@@ -85,18 +86,19 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             DateTime.UtcNow.AddSeconds(-25));
 
         // Act
+        var safeThreshold2 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold2);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             updateEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold2);
         var afterUpdate = result2.GetValue();
 
         // Assert
@@ -138,18 +140,19 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         var deleteEvent = CreateEvent(new WeatherForecastDeleted(forecastId), DateTime.UtcNow.AddSeconds(-25));
 
         // Act
+        var safeThreshold3 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold3);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             deleteEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold3);
         var afterDelete = result2.GetValue();
 
         // Assert
@@ -183,18 +186,19 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             DateTime.UtcNow.AddSeconds(-25));
 
         // Act
+        var safeThreshold4 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             createEvent1,
             new List<ITag> { tag1 },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold4);
         var after1 = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             after1,
             createEvent2,
             new List<ITag> { tag2 },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold4);
         var after2 = result2.GetValue();
 
         // Assert
@@ -228,18 +232,19 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
             DateTime.UtcNow.AddSeconds(-5));
 
         // Act
+        var safeThreshold5 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             safeEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold5);
         var afterSafe = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterSafe,
             unsafeEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold5);
         var afterUnsafe = result2.GetValue();
 
         // Assert
@@ -280,18 +285,19 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
         var unknownEvent = CreateEvent(new UnknownEventType("Some data"), DateTime.UtcNow.AddSeconds(-25));
 
         // Act
+        var safeThreshold6 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = WeatherForecastProjectorWithTagStateProjector.Project(
             _projector,
             createEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold6);
         var afterCreate = result1.GetValue();
 
         var result2 = WeatherForecastProjectorWithTagStateProjector.Project(
             afterCreate,
             unknownEvent,
             new List<ITag> { tag },
-            _domainTypes, TimeProvider.System);
+            _domainTypes, safeThreshold6);
         var afterUnknown = result2.GetValue();
 
         // Assert

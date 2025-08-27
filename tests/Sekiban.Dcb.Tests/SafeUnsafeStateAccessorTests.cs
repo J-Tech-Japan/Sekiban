@@ -217,7 +217,7 @@ public class SafeUnsafeStateAccessorTests
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
-            TimeProvider timeProvider)
+            SortableUniqueId safeWindowThreshold)
         {
             var result = ev.Payload switch
             {

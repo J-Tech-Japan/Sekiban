@@ -16,6 +16,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Tests;
+using Sekiban.Dcb.Common;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -535,7 +536,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
-            TimeProvider timeProvider) => ResultBox.FromValue(payload);
+            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 
     private record TestProjectorMulti : IMultiProjector<TestProjectorMulti>
@@ -543,7 +544,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "TestProjector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
+    public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
             ResultBox.FromValue(payload);
     }
 
@@ -557,6 +558,6 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
-            TimeProvider timeProvider) => ResultBox.FromValue(payload);
+            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
     }
 }

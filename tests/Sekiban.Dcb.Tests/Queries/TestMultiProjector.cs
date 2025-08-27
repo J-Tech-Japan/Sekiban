@@ -4,6 +4,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Tests.Queries;
 
 /// <summary>
@@ -17,7 +18,7 @@ public record TestMultiProjector : IMultiProjector<TestMultiProjector>
     public static string MultiProjectorName => "TestMultiProjector";
     public static string MultiProjectorVersion => "1.0";
 
-    public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider)
+    public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
     {
         return ev.Payload switch
         {

@@ -50,9 +50,10 @@ public class GeneralQueryExecutorTestsV2
                 new List<ITag>())
         };
 
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         foreach (var (evt, tags) in events)
         {
-            var result = TestMultiProjector.Project(projector, evt, tags, _domainTypes, TimeProvider.System);
+            var result = TestMultiProjector.Project(projector, evt, tags, _domainTypes, safeThreshold);
             if (result.IsSuccess)
             {
                 projector = result.GetValue();

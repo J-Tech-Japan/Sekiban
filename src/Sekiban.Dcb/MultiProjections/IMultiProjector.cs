@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
@@ -14,7 +15,17 @@ public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiPr
     /// <summary>
     ///     Project with tags support for tag-based filtering
     /// </summary>
-    static abstract ResultBox<T> Project(T payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, TimeProvider timeProvider);
+    /// <param name="payload">Current projector payload</param>
+    /// <param name="ev">Event to project</param>
+    /// <param name="tags">Parsed tags for the event</param>
+    /// <param name="domainTypes">Domain type registry</param>
+    /// <param name="safeWindowThreshold">Externally supplied safe window threshold</param>
+    static abstract ResultBox<T> Project(
+        T payload,
+        Event ev,
+        List<ITag> tags,
+        DcbDomainTypes domainTypes,
+        SortableUniqueId safeWindowThreshold);
 
     static abstract T GenerateInitialPayload();
 }

@@ -19,10 +19,6 @@ public record WeatherForecastProjectorWithTagStateProjector :
     // We no longer need an instance since we'll use static methods
 
     /// <summary>
-    ///     SafeWindow threshold (20 seconds by default)
-    /// </summary>
-    private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
-    /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState for TagState
     /// </summary>
     public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
@@ -41,7 +37,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
         Event ev,
         List<ITag> tags,
         DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+    SortableUniqueId safeWindowThreshold)
     {
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
@@ -59,11 +55,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) =>
             ProjectTagState(forecastId, current, evt, weatherForecastTags);
 
-        // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold(timeProvider);
-
         // Process event with threshold
-        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, threshold);
+    var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -106,15 +99,6 @@ public record WeatherForecastProjectorWithTagStateProjector :
             LastSortedUniqueId = ev.SortableUniqueIdValue,
             ProjectorVersion = WeatherForecastProjector.ProjectorVersion
         };
-    }
-
-    /// <summary>
-    ///     Get current SafeWindow threshold
-    /// </summary>
-    private static string GetSafeWindowThreshold(TimeProvider timeProvider)
-    {
-        var threshold = timeProvider.GetUtcNow().UtcDateTime.Subtract(SafeWindow);
-        return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 
     /// <summary>
@@ -257,7 +241,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
         }
 
         // Use the static Project method with provided domainTypes
-        var result = Project(this, evt, tags, domainTypes, timeProvider);
+    var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");

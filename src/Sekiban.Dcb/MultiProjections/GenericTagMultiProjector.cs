@@ -15,9 +15,9 @@ public record
     where TTagProjector : ITagProjector<TTagProjector> where TTagGroup : IGuidTagGroup<TTagGroup>
 {
     /// <summary>
-    ///     SafeWindow threshold (20 seconds by default)
+    ///     SafeWindow は外部 (Actor) が SortableUniqueId safeWindowThreshold として計算し ProcessEvent 経由で渡す前提。
+    ///     ここでは固定値や内部計算を持たない。
     /// </summary>
-    private static readonly TimeSpan SafeWindow = TimeSpan.FromSeconds(20);
 
     /// <summary>
     ///     Internal state managed by SafeUnsafeProjectionState for TagState
@@ -39,7 +39,7 @@ public record
         Event ev,
         List<ITag> tags,
         DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+        SortableUniqueId safeWindowThreshold)
     {
         // Filter tags to only process tags of the specified tag group type
         var relevantTags = tags.OfType<TTagGroup>().Cast<ITag>().ToList();
@@ -50,9 +50,6 @@ public record
             return ResultBox.FromValue(payload);
         }
 
-        // Calculate SafeWindow threshold
-        var threshold = GetSafeWindowThreshold(timeProvider);
-
         // Function to get affected item IDs (filter out nulls)
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
             relevantTags.Select(tag => GetTagId(tag)).Where(id => id.HasValue).Select(id => id!.Value);
@@ -61,8 +58,12 @@ public record
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
             ProjectTagState(tagId, current, evt, relevantTags);
 
-        // Process the event with threshold
-        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, threshold);
+        // safeWindowThreshold を文字列として State へ渡し safe/unsafe 判定を内部に委譲
+        var updatedState = payload.State.ProcessEvent(
+            ev,
+            getAffectedItemIds,
+            projectItem,
+            safeWindowThreshold.Value);
 
         var newPayload = payload with { State = updatedState };
         
@@ -141,14 +142,7 @@ public record
         return false;
     }
 
-    /// <summary>
-    ///     Get current SafeWindow threshold
-    /// </summary>
-    private static string GetSafeWindowThreshold(TimeProvider timeProvider)
-    {
-        var threshold = timeProvider.GetUtcNow().UtcDateTime.Subtract(SafeWindow);
-        return SortableUniqueId.Generate(threshold, Guid.Empty);
-    }
+    // SafeWindow threshold の生成ロジックは削除。Actor が提供する値を使う設計へ移行。
 
     /// <summary>
     ///     Get all current tag states (including unsafe)
@@ -230,24 +224,22 @@ public record
             .Select(domainTypes.TagTypes.GetTag)
             .ToList();
 
-        // Use the static Project method with the provided domainTypes and timeProvider
-        var result = Project(this, evt, tags, domainTypes, timeProvider);
+    // Actor から渡された safeWindowThreshold をそのまま State.ProcessEvent に渡すため
+    // Project 内部での SafeWindow 再計算は行わない。
+    var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
         }
 
         var projected = result.GetValue();
-
-        // Update tracking information
-        var finalResult = projected with
+        var updated = projected with { };
+        return updated with
         {
             LastEventId = evt.Id,
             LastSortableUniqueId = evt.SortableUniqueIdValue,
             Version = Version + 1
         };
-        
-        return finalResult;
     }
 
     public Guid GetLastEventId() => LastEventId;

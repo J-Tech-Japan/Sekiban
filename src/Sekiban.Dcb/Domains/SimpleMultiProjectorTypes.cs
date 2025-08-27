@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
@@ -13,10 +14,8 @@ namespace Sekiban.Dcb.Domains;
 public class SimpleMultiProjectorTypes : IMultiProjectorTypes
 {
     private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
-    private readonly
-        ConcurrentDictionary<string,
-            Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, TimeProvider, ResultBox<IMultiProjectionPayload>>> _projectorFunctions
-            = new();
+    private readonly ConcurrentDictionary<string,
+        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>>> _projectorFunctions = new();
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
     private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
@@ -27,12 +26,11 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         Event ev,
         List<ITag> tags,
         DcbDomainTypes domainTypes,
-        TimeProvider? timeProvider = null)
+        SortableUniqueId safeWindowThreshold)
     {
-        var provider = timeProvider ?? TimeProvider.System;
         if (_projectorFunctions.TryGetValue(multiProjectorName, out var projectorFunc))
         {
-            return projectorFunc(payload, ev, tags, domainTypes, provider);
+            return projectorFunc(payload, ev, tags, domainTypes, safeWindowThreshold);
         }
 
         return ResultBox.Error<IMultiProjectionPayload>(
@@ -122,12 +120,12 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         var projectorName = TProjector.MultiProjectorName;
 
         // Register the projector function
-        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, TimeProvider, ResultBox<IMultiProjectionPayload>> projectFunc
-            = (payload, ev, tags, domainTypes, timeProvider) =>
+    Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
+        = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
             {
                 if (payload is TProjector typedPayload)
                 {
-                    var result = TProjector.Project(typedPayload, ev, tags, domainTypes, timeProvider);
+            var result = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
                     if (result.IsSuccess)
                     {
                         return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());

@@ -97,12 +97,13 @@ public class StudentProjectionDebugTest
 
         // Act - Call the static Project method directly
         var tags = new List<ITag> { studentTag };
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result = GenericTagMultiProjector<StudentProjector, StudentTag>.Project(
             projector, 
             ev, 
             tags, 
             _domainTypes, 
-            _timeProvider);
+            safeThreshold);
 
         // Assert
         Assert.True(result.IsSuccess);

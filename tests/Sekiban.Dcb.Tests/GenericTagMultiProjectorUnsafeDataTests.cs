@@ -81,12 +81,13 @@ public class GenericTagMultiProjectorUnsafeDataTests
         var genericProjector = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload();
         
         // Process old event
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
             genericProjector,
             oldEvent,
             new List<ITag> { new WeatherForecastTag(forecastId1) },
             _domainTypes,
-            _timeProvider);
+            safeThreshold);
         genericProjector = result1.GetValue();
 
         // Process recent event
@@ -95,7 +96,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
             recentEvent,
             new List<ITag> { new WeatherForecastTag(forecastId2) },
             _domainTypes,
-            _timeProvider);
+            safeThreshold);
         genericProjector = result2.GetValue();
 
         // Act - Test Manual Implementation (WeatherForecastProjection)
@@ -110,7 +111,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
             oldEvent,
             new List<ITag> { new WeatherForecastTag(forecastId1) },
             _domainTypes,
-            _timeProvider);
+            safeThreshold);
         manualProjector = manualResult1.GetValue();
         Console.WriteLine($"[Test] After old event, manual projector state count: {manualProjector.GetCurrentForecasts().Count}");
 
@@ -121,7 +122,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
             recentEvent,
             new List<ITag> { new WeatherForecastTag(forecastId2) },
             _domainTypes,
-            _timeProvider);
+            safeThreshold);
         manualProjector = manualResult2.GetValue();
         Console.WriteLine($"[Test] After recent event, manual projector state count: {manualProjector.GetCurrentForecasts().Count}");
 
@@ -233,12 +234,13 @@ public class GenericTagMultiProjectorUnsafeDataTests
             forecastId);
 
         // Process the safe event
+        var safeThreshold2 = SortableUniqueId.Generate(testTime.AddSeconds(-20), Guid.Empty);
         var result = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
             genericProjector,
             safeEvent,
             new List<ITag> { new WeatherForecastTag(forecastId) },
             _domainTypes,
-            testTimeProvider);
+            safeThreshold2);
         genericProjector = result.GetValue();
 
         // Assert - Should be safe initially
@@ -287,7 +289,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
             unsafeEvent,
             new List<ITag> { new WeatherForecastTag(forecastId) },
             _domainTypes,
-            testTimeProvider);
+            safeThreshold2);
         genericProjector = result.GetValue();
 
         // Assert - Should now be marked as unsafe
