@@ -21,6 +21,12 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     [Id(0)]
     public Dictionary<Guid, WeatherForecastItem> Forecasts { get; init; } = new();
 
+    /// <summary>
+    ///     Set of forecast IDs that have been modified by unsafe events (events within the safe window)
+    /// </summary>
+    [Id(1)]
+    public HashSet<Guid> UnsafeForecasts { get; init; } = new();
+
     public static string MultiProjectorName => "WeatherForecastProjection";
 
     public static WeatherForecastProjection GenerateInitialPayload() => new();
@@ -51,6 +57,11 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         
         // Create a copy of the forecasts dictionary for immutability
         var updatedForecasts = new Dictionary<Guid, WeatherForecastItem>(payload.Forecasts);
+        var updatedUnsafeForecasts = new HashSet<Guid>(payload.UnsafeForecasts);
+
+        // Check if event is within safe window
+        var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+        var isEventUnsafe = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold);
 
         // Process each affected forecast
         foreach (var forecastId in forecastIds)
@@ -91,14 +102,21 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             if (result != null)
             {
                 updatedForecasts[forecastId] = result;
+                
+                // Mark as unsafe if event is within safe window
+                if (isEventUnsafe)
+                {
+                    updatedUnsafeForecasts.Add(forecastId);
+                }
             }
             else if (ev.Payload is WeatherForecastDeleted)
             {
                 updatedForecasts.Remove(forecastId);
+                updatedUnsafeForecasts.Remove(forecastId);
             }
         }
 
-        return ResultBox.FromValue(payload with { Forecasts = updatedForecasts });
+        return ResultBox.FromValue(payload with { Forecasts = updatedForecasts, UnsafeForecasts = updatedUnsafeForecasts });
     }
 
 
@@ -119,5 +137,13 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts()
     {
         return Forecasts;
+    }
+
+    /// <summary>
+    ///     Check if a forecast has been modified by unsafe events (events within the safe window)
+    /// </summary>
+    public bool IsForecastUnsafe(Guid forecastId)
+    {
+        return UnsafeForecasts.Contains(forecastId);
     }
 }

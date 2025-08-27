@@ -179,7 +179,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.FromValue(false); // Return false to indicate skipped
             }
             
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={stateSize}, Events={_eventsProcessed}, SafePosition={_projectionActor.GetSafeLastSortableUniqueId()}");
+            var safePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={stateSize}, Events={_eventsProcessed}, SafePosition={safePosition}");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
@@ -189,7 +190,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.EventsProcessed = _eventsProcessed;
             _state.State.StateSize = stateSize;
             // Persist safe last position separately from latest processed position
-            _state.State.SafeLastPosition = _projectionActor.GetSafeLastSortableUniqueId();
+            _state.State.SafeLastPosition = safePosition;
 
             // Persist to storage
             await _state.WriteStateAsync();
@@ -656,7 +657,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     var lastEvent = events.Last();
                     _state.State.LastPosition = lastEvent.SortableUniqueIdValue;
                     // Update SafeLastPosition to current actor safe id after catch-up
-                    _state.State.SafeLastPosition = _projectionActor?.GetSafeLastSortableUniqueId();
+                    _state.State.SafeLastPosition = _projectionActor != null ? await _projectionActor.GetSafeLastSortableUniqueIdAsync() : null;
 
                     // Persist state after catchup
                     await PersistStateAsync();

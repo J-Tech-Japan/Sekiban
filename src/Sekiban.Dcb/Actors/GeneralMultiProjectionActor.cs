@@ -53,7 +53,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         var safeWindowThreshold = GetSafeWindowThreshold();
 
         // Always use single state accessor pattern (wrapped if necessary)
-        await AddEventsWithSingleStateAsync(events, safeWindowThreshold);
+        AddEventsWithSingleState(events, safeWindowThreshold);
     }
 
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
@@ -140,18 +140,18 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         return Task.CompletedTask;
     }
 
-    public Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync(bool canGetUnsafeState = true)
+    public async Task<ResultBox<SerializableMultiProjectionState>> GetSerializableStateAsync(bool canGetUnsafeState = true)
     {
         InitializeProjectorsIfNeeded();
 
         // Get state from the single accessor
-        var stateResult = GetStateAsync(canGetUnsafeState);
-        if (!stateResult.Result.IsSuccess)
+        var stateResult = await GetStateAsync(canGetUnsafeState);
+        if (!stateResult.IsSuccess)
         {
-            return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(stateResult.Result.GetException()));
+            return ResultBox.Error<SerializableMultiProjectionState>(stateResult.GetException());
         }
 
-        var multiProjectionState = stateResult.Result.GetValue();
+        var multiProjectionState = stateResult.GetValue();
         var projectorToSerialize = multiProjectionState.Payload;
         var lastEventId = multiProjectionState.LastEventId;
         var lastSortableId = multiProjectionState.LastSortableUniqueId;
@@ -164,7 +164,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         var versionResult = _types.GetProjectorVersion(_projectorName);
         if (!versionResult.IsSuccess)
         {
-            return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(versionResult.GetException()));
+            return ResultBox.Error<SerializableMultiProjectionState>(versionResult.GetException());
         }
         var projectorVersion = versionResult.GetValue();
 
@@ -177,7 +177,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ResultBox.Error<SerializableMultiProjectionState>(ex));
+            return ResultBox.Error<SerializableMultiProjectionState>(ex);
         }
 
         var state = new SerializableMultiProjectionState(
@@ -192,7 +192,7 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             multiProjectionState.IsSafeState
         );
 
-        return Task.FromResult(ResultBox.FromValue(state));
+        return ResultBox.FromValue(state);
     }
 
     public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
@@ -218,21 +218,21 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
     /// <summary>
     ///     Gets the last safe (persisted) sortable unique id. Used by hosts to persist SafeLastPosition.
     /// </summary>
-    public string GetSafeLastSortableUniqueId()
+    public async Task<string> GetSafeLastSortableUniqueIdAsync()
     {
         InitializeProjectorsIfNeeded();
         
         // Get safe state to retrieve its last sortable unique ID
-        var stateResult = GetStateAsync(canGetUnsafeState: false);
-        if (stateResult.Result.IsSuccess)
+        var stateResult = await GetStateAsync(canGetUnsafeState: false);
+        if (stateResult.IsSuccess)
         {
-            return stateResult.Result.GetValue().LastSortableUniqueId;
+            return stateResult.GetValue().LastSortableUniqueId;
         }
         
         return string.Empty;
     }
 
-    private async Task AddEventsWithSingleStateAsync(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
+    private void AddEventsWithSingleState(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
         // Process events through the single state accessor
         foreach (var ev in events)
@@ -273,8 +273,6 @@ public class GeneralMultiProjectionActor : IMultiProjectionActorCommon
             _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
             _unsafeVersion++;
         }
-
-        await Task.CompletedTask;
     }
 
 
