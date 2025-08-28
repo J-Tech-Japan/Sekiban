@@ -65,7 +65,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         Assert.NotNull(status);
         Assert.Equal("test-projector", status.ProjectorName);
         Assert.Equal(0, status.EventsProcessed);
-        Assert.False(status.IsSubscriptionActive);
+        Assert.True(status.IsSubscriptionActive); // Grain auto-subscribes on activation
     }
 
     [Fact]
@@ -89,21 +89,21 @@ public class MinimalOrleansTests : IAsyncLifetime
         // Arrange
         var grain = _client.GetGrain<IMultiProjectionGrain>("subscription-test");
 
-        // Act - Get initial status
+        // Act - Get initial status (already subscribed due to auto-subscription)
         var initialStatus = await grain.GetStatusAsync();
-
-        // Start subscription
-        await grain.StartSubscriptionAsync();
-        var activeStatus = await grain.GetStatusAsync();
 
         // Stop subscription
         await grain.StopSubscriptionAsync();
         var stoppedStatus = await grain.GetStatusAsync();
 
+        // Start subscription again
+        await grain.StartSubscriptionAsync();
+        var activeStatus = await grain.GetStatusAsync();
+
         // Assert
-        Assert.False(initialStatus.IsSubscriptionActive);
-        Assert.True(activeStatus.IsSubscriptionActive);
+        Assert.True(initialStatus.IsSubscriptionActive); // Auto-subscribed on activation
         Assert.False(stoppedStatus.IsSubscriptionActive);
+        Assert.True(activeStatus.IsSubscriptionActive);
     }
 
     [Fact]

@@ -199,6 +199,34 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task StartSubscriptionAsync()
     {
         await EnsureInitializedAsync();
+        
+        // Subscribe to Orleans stream if not already subscribed
+        if (_orleansStreamHandle == null && _orleansStream != null)
+        {
+            try
+            {
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Starting subscription to Orleans stream");
+                
+                var observer = new StreamObserver(this);
+                _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
+                
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
+            }
+            catch (Exception ex)
+            {
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
+                _lastError = $"Stream subscription failed: {ex.Message}";
+                throw;
+            }
+        }
+        else if (_orleansStreamHandle != null)
+        {
+            var projectorName = this.GetPrimaryKeyString();
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream subscription already active");
+        }
+        
         await CatchUpFromEventStoreAsync();
     }
 
