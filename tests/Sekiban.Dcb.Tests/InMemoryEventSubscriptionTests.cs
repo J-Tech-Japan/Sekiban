@@ -90,7 +90,9 @@ public class InMemoryEventSubscriptionTests
     {
         // Arrange
         using var subscription = new InMemoryEventSubscription();
-        var filter = new EventTypeFilter(new HashSet<string> { "TypeA", "TypeC" });
+        // Create inline filter for event types
+        var allowedTypes = new HashSet<string> { "TypeA", "TypeC" };
+        IEventFilter filter = new InlineEventFilter(evt => allowedTypes.Contains(evt.EventType));
 
         var receivedEvents = new List<Event>();
         var handle = await subscription.SubscribeWithFilterAsync(
@@ -273,9 +275,12 @@ public class InMemoryEventSubscriptionTests
         // Arrange
         using var subscription = new InMemoryEventSubscription();
 
-        var typeFilter = new EventTypeFilter(new HashSet<string> { "TypeA", "TypeB" });
-        var tagFilter = new EventTagFilter(new HashSet<string> { "important" });
-        var compositeFilter = new CompositeEventFilter(new List<IEventFilter> { typeFilter, tagFilter });
+        // Create inline composite filter
+        var allowedTypes = new HashSet<string> { "TypeA", "TypeB" };
+        var requiredTags = new HashSet<string> { "important" };
+        IEventFilter compositeFilter = new InlineEventFilter(evt => 
+            allowedTypes.Contains(evt.EventType) && 
+            evt.Tags.Any(tag => requiredTags.Contains(tag)));
 
         var receivedEvents = new List<Event>();
         var handle = await subscription.SubscribeWithFilterAsync(
@@ -327,5 +332,18 @@ public class InMemoryEventSubscriptionTests
     private record TestEventPayload : IEventPayload
     {
         public string Data { get; init; } = "";
+    }
+
+    // Inline implementation of IEventFilter for testing
+    private class InlineEventFilter : IEventFilter
+    {
+        private readonly Func<Event, bool> _predicate;
+
+        public InlineEventFilter(Func<Event, bool> predicate)
+        {
+            _predicate = predicate;
+        }
+
+        public bool ShouldInclude(Event evt) => _predicate(evt);
     }
 }
