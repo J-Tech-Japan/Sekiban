@@ -4,7 +4,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 // Add Azure Storage emulator for Orleans
 var storage = builder
     .AddAzureStorage("azurestorage")
-    .RunAsEmulator(opt => opt.WithDataVolume());
+    // .RunAsEmulator(opt => opt.WithDataVolume());
+    .RunAsEmulator();
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -14,7 +15,7 @@ var queue = storage.AddQueues("DcbOrleansQueue");
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
-    .WithDataVolume()
+    // .WithDataVolume()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans

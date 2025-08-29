@@ -9,6 +9,7 @@ using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
+using Microsoft.Extensions.Logging;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
@@ -23,11 +24,20 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure logging to suppress Azure Storage warnings in development
+if (builder.Environment.IsDevelopment())
+{
+    builder.Logging.AddFilter("Azure.Core", LogLevel.Error);
+    builder.Logging.AddFilter("Azure.Storage", LogLevel.Error);
+    builder.Logging.AddFilter("Orleans.AzureUtils", LogLevel.Error);
+}
+
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+
 
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -45,64 +55,85 @@ builder.UseOrleans(config =>
     // Use localhost clustering for development
     config.UseLocalhostClustering();
     
-    // Add Azure Queue Streams
-    config.AddAzureQueueStreams(
-        "EventStreamProvider",
-        configurator =>
+    // Check if we should use in-memory streams (for development/testing)
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    
+    if (useInMemoryStreams)
+    {
+        // Use in-memory streams for development/testing
+        config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            configurator.ConfigureAzureQueue(options =>
-            {
-                options.Configure<IServiceProvider>((queueOptions, sp) =>
-                {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                    queueOptions.QueueNames =
-                    [
-                        "dcborleans-eventstreamprovider-0",
-                        "dcborleans-eventstreamprovider-1",
-                        "dcborleans-eventstreamprovider-2"
-                    ];
-                    queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                });
-            });
-            configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
-
-            configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-            {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                opt.BatchContainerBatchSize = 256;
-                opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-            }));
-            configurator.ConfigureCacheSize(8192);
+            configurator.ConfigurePartitioning(2);
         });
-
-    config.AddAzureQueueStreams(
-        "DcbOrleansQueue",
-        configurator =>
+        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            configurator.ConfigureAzureQueue(options =>
-            {
-                options.Configure<IServiceProvider>((queueOptions, sp) =>
-                {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                    queueOptions.QueueNames =
-                    [
-                        "dcborleans-queue-0",
-                        "dcborleans-queue-1",
-                        "dcborleans-queue-2"
-                    ];
-                    queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                });
-            });
-            configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
-
-            configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-            {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                opt.BatchContainerBatchSize = 256;
-                opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-            }));
-            configurator.ConfigureCacheSize(8192);
+            configurator.ConfigurePartitioning(2);
         });
+        
+        // Add memory storage for PubSubStore when using in-memory streams
+        config.AddMemoryGrainStorage("PubSubStore");
+    }
+    else
+    {
+        // Add Azure Queue Streams for production
+        config.AddAzureQueueStreams(
+            "EventStreamProvider",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
+
+        config.AddAzureQueueStreams(
+            "DcbOrleansQueue",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
+    }
 
     // Configure grain storage providers
     // Even though Aspire sets configuration via environment variables,
@@ -149,18 +180,21 @@ builder.UseOrleans(config =>
             });
         });
 
-    // Add grain storage for PubSub (used by Orleans streaming)
-    config.AddAzureTableGrainStorage(
-        "PubSubStore",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
+    // Add grain storage for PubSub (used by Orleans streaming) - only for Azure Queue Streams
+    if (!useInMemoryStreams)
+    {
+        config.AddAzureTableGrainStorage(
+            "PubSubStore",
+            options =>
             {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
-                opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                });
+                options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
             });
-            options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
-        });
+    }
 
     // Add grain storage for the stream provider
     config.AddAzureTableGrainStorage(
@@ -568,6 +602,38 @@ apiRoute
     .WithName("UpdateWeatherForecastLocation")
     .WithOpenApi();
 
+
+// Weather Count endpoint
+apiRoute
+    .MapGet(
+        "/weatherforecast/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCount");
 
 apiRoute
     .MapPost(

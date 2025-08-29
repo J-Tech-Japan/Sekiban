@@ -10,8 +10,6 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using System.Text;
 using System.Text.Json;
-using Sekiban.Dcb.Snapshots;
-using Sekiban.Dcb.Snapshots;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -40,12 +38,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string? _lastError;
     private long _eventsProcessed;
     private DateTime? _lastEventTime;
+    
+    // Event batching
+    private readonly List<Event> _eventBuffer = new();
+    private DateTime _lastBufferFlush = DateTime.UtcNow;
+    private readonly int _batchSize = 50; // Process events in batches of 50
+    private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(100); // Flush after 100ms
+    private IDisposable? _batchTimer;
 
     // Delegate these to configuration
-    private readonly int _persistBatchSize = 100;
+    private readonly int _persistBatchSize = 100; // Used in ProcessEventBatch
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
-    private readonly int _maxStateSize = 2 * 1024 * 1024;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -202,7 +206,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var projectorName = this.GetPrimaryKeyString();
                 Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Starting subscription to Orleans stream");
                 
-                var observer = new StreamObserver(this);
+                var observer = new StreamBatchObserver(this);
                 _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
                 
                 Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
@@ -394,8 +398,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await _orleansStreamHandle.UnsubscribeAsync();
         }
 
+        // Flush any remaining events
+        await FlushEventBufferAsync();
+        
         _persistTimer?.Dispose();
         _fallbackTimer?.Dispose();
+        _batchTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
@@ -423,6 +431,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 DueTime = _fallbackCheckInterval,
                 Period = TimeSpan.FromMinutes(1),
+                Interleave = true
+            });
+
+        // Set up batch flush timer
+        _batchTimer = this.RegisterGrainTimer(
+            async () => await FlushEventBufferAsync(),
+            new GrainTimerCreationOptions
+            {
+                DueTime = _batchTimeout,
+                Period = _batchTimeout,
                 Interleave = true
             });
     }
@@ -539,67 +557,126 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     /// <summary>
-    ///     Process stream event
+    ///     Process a batch of events from the stream
     /// </summary>
-    internal async Task ProcessStreamEvent(Event evt)
+    internal async Task ProcessEventBatch(IReadOnlyList<Event> events)
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProcessStreamEvent: {evt.EventType}, SortableUniqueId: {evt.SortableUniqueIdValue}");
-        
         if (!_isInitialized || _projectionActor == null)
         {
             await EnsureInitializedAsync();
         }
 
-        if (_projectionActor == null) return;
+        if (_projectionActor == null || events.Count == 0) return;
 
         try
         {
-            // Check for duplicate
-            if (await _projectionActor.IsSortableUniqueIdReceived(evt.SortableUniqueIdValue))
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
+            
+            // Filter out duplicates in batch - check all at once for efficiency
+            var uniqueEvents = new List<Event>();
+            var duplicateCount = 0;
+            
+            // Group check for duplicates to reduce async calls
+            foreach (var evt in events)
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event {evt.Id} already processed, skipping");
-                return;
+                if (!await _projectionActor.IsSortableUniqueIdReceived(evt.SortableUniqueIdValue))
+                {
+                    uniqueEvents.Add(evt);
+                }
+                else
+                {
+                    duplicateCount++;
+                }
             }
 
-            // Process the event
-            await _projectionActor.AddEventsAsync(new[] { evt }, false);
-            _eventsProcessed++;
-            _lastEventTime = DateTime.UtcNow;
+            if (uniqueEvents.Count > 0)
+            {
+                // Process all unique events at once
+                await _projectionActor.AddEventsAsync(uniqueEvents, false);
+                _eventsProcessed += uniqueEvents.Count;
+                _lastEventTime = DateTime.UtcNow;
 
-            // Update position
-            _state.State.LastPosition = evt.SortableUniqueIdValue;
+                // Update position to last event
+                var lastEvent = uniqueEvents.Last();
+                _state.State.LastPosition = lastEvent.SortableUniqueIdValue;
 
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event processed successfully, total: {_eventsProcessed}");
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Batch processed: {uniqueEvents.Count} unique events (filtered {duplicateCount} duplicates), total: {_eventsProcessed}");
+                
+                // Persist state after processing a batch if it's large enough
+                if (uniqueEvents.Count >= _persistBatchSize)
+                {
+                    await PersistStateAsync();
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] All {events.Count} events in batch were duplicates");
+            }
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to process stream event: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing stream event: {ex}");
+            _lastError = $"Failed to process event batch: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing event batch: {ex}");
         }
     }
 
-    // Orleans stream observer
-    private class StreamObserver : IAsyncObserver<Event>
+    /// <summary>
+    ///     Process buffered events - called by timer
+    /// </summary>
+    private async Task FlushEventBufferAsync()
+    {
+        List<Event> eventsToProcess;
+        lock (_eventBuffer)
+        {
+            if (_eventBuffer.Count == 0) return;
+            
+            eventsToProcess = new List<Event>(_eventBuffer);
+            _eventBuffer.Clear();
+            _lastBufferFlush = DateTime.UtcNow;
+        }
+
+        await ProcessEventBatch(eventsToProcess);
+    }
+
+    // Orleans stream batch observer - processes events in batches for efficiency
+    private class StreamBatchObserver : IAsyncBatchObserver<Event>
     {
         private readonly MultiProjectionGrain _grain;
 
-        public StreamObserver(MultiProjectionGrain grain) => _grain = grain;
+        public StreamBatchObserver(MultiProjectionGrain grain) => _grain = grain;
+
+        // Batch processing method - Orleans v9.0+ uses IList<SequentialItem<T>>
+        public async Task OnNextAsync(IList<SequentialItem<Event>> batch)
+        {
+            var events = batch.Select(item => item.Item).ToList();
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received batch of {events.Count} events");
+            await _grain.ProcessEventBatch(events);
+        }
+
+        // Legacy batch method for compatibility
+        public async Task OnNextBatchAsync(IEnumerable<Event> batch, StreamSequenceToken? token = null)
+        {
+            var events = batch.ToList();
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received legacy batch of {events.Count} events");
+            await _grain.ProcessEventBatch(events);
+        }
 
         public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
         {
-            Console.WriteLine($"[StreamObserver-{_grain.GetPrimaryKeyString()}] Received event {item.EventType}, ID: {item.Id}");
-            await _grain.ProcessStreamEvent(item);
+            // Single event fallback - treat as batch of 1
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {item.EventType}, ID: {item.Id}");
+            await _grain.ProcessEventBatch(new[] { item });
         }
 
         public Task OnCompletedAsync() 
         {
-            Console.WriteLine($"[StreamObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            Console.WriteLine($"[StreamObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
             _grain._lastError = $"Stream error: {ex.Message}";
             return Task.CompletedTask;
         }
@@ -633,7 +710,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Getting stream for {orleansStream.StreamNamespace}/{orleansStream.StreamId}");
             
-            var observer = new StreamObserver(this);
+            var observer = new StreamBatchObserver(this);
             _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
             
             Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
