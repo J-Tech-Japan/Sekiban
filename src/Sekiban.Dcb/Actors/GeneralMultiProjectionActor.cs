@@ -53,8 +53,16 @@ public class GeneralMultiProjectionActor
 
         var safeWindowThreshold = GetSafeWindowThreshold();
 
+        // Sort incoming events by SortableUniqueId to ensure deterministic processing order
+        // and avoid order-dependent anomalies under concurrent delivery
+        var orderedDistinct = events
+            .GroupBy(e => e.Id)
+            .Select(g => g.First())
+            .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
         // Always use single state accessor pattern (wrapped if necessary)
-        AddEventsWithSingleState(events, safeWindowThreshold);
+        AddEventsWithSingleState(orderedDistinct, safeWindowThreshold);
     }
 
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
@@ -332,24 +340,23 @@ public class GeneralMultiProjectionActor
             OffloadedState: offloaded));
     }
 
-    public Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
+    public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
     {
         if (string.IsNullOrEmpty(sortableUniqueId))
         {
-            return Task.FromResult(false);
+            return false;
         }
 
-        // Check if the sortable unique ID has been processed in the unsafe state
-        // The unsafe state contains all events including the most recent ones
-        if (!string.IsNullOrEmpty(_unsafeLastSortableUniqueId))
+        // Use SAFE state progress for correctness. This avoids false positives
+        // when out-of-order events have been applied only to the unsafe state.
+        var stateRb = await GetStateAsync(canGetUnsafeState: false);
+        if (!stateRb.IsSuccess)
         {
-            // Compare sortable unique IDs - if the requested ID is less than or equal to 
-            // the last processed ID, then it has been received
-            var comparison = string.Compare(sortableUniqueId, _unsafeLastSortableUniqueId, StringComparison.Ordinal);
-            return Task.FromResult(comparison <= 0);
+            return false;
         }
-
-        return Task.FromResult(false);
+        var safeLast = stateRb.GetValue().LastSortableUniqueId ?? string.Empty;
+        if (string.IsNullOrEmpty(safeLast)) return false;
+        return string.Compare(sortableUniqueId, safeLast, StringComparison.Ordinal) <= 0;
     }
 
     /// <summary>
@@ -412,7 +419,12 @@ public class GeneralMultiProjectionActor
 
                 // Update tracking - these are managed separately from the wrapper's internal state
                 _unsafeLastEventId = ev.Id;
-                _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+                // Keep monotonic max for sortable unique id
+                if (string.IsNullOrEmpty(_unsafeLastSortableUniqueId) ||
+                    string.Compare(ev.SortableUniqueIdValue, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+                }
                 _unsafeVersion++;
             }
             catch (Exception ex)

@@ -553,7 +553,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Get current position
         SortableUniqueId? fromPosition = null;
-        var currentState = await _projectionActor.GetStateAsync();
+        // Use SAFE state for determining catch-up position to avoid
+        // skipping events that are only present in the unsafe window
+        var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
         if (currentState.IsSuccess)
         {
             var state = currentState.GetValue();
@@ -596,7 +598,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
-            
+
             // Track event deliveries for debugging
             foreach (var evt in events)
             {
@@ -611,47 +613,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _eventDeliveryCount[evt.Id] = 1;
                 }
             }
-            
-            // Filter out duplicates in batch - check all at once for efficiency
-            var uniqueEvents = new List<Event>();
-            var duplicateCount = 0;
-            
-            // Group check for duplicates to reduce async calls
-            foreach (var evt in events)
-            {
-                if (!await _projectionActor.IsSortableUniqueIdReceived(evt.SortableUniqueIdValue))
-                {
-                    uniqueEvents.Add(evt);
-                }
-                else
-                {
-                    duplicateCount++;
-                }
-            }
 
-            if (uniqueEvents.Count > 0)
-            {
-                // Process all unique events at once
-                // For stream events, we consider catch-up as always finished
-                await _projectionActor.AddEventsAsync(uniqueEvents, true);
-                _eventsProcessed += uniqueEvents.Count;
-                _lastEventTime = DateTime.UtcNow;
+            // Forward all delivered events to the actor which performs
+            // correct idempotency and ordering internally.
+            await _projectionActor.AddEventsAsync(events, true);
+            _eventsProcessed += events.GroupBy(e => e.Id).Count();
+            _lastEventTime = DateTime.UtcNow;
 
-                // Update position to last event
-                var lastEvent = uniqueEvents.Last();
-                _state.State.LastPosition = lastEvent.SortableUniqueIdValue;
+            // Update position to the maximum SortableUniqueId in the batch (monotonic)
+            var maxSortableId = events
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .Last()
+                .SortableUniqueIdValue;
+            _state.State.LastPosition = maxSortableId;
 
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Batch processed: {uniqueEvents.Count} unique events (filtered {duplicateCount} duplicates), total: {_eventsProcessed}");
-                
-                // Persist state after processing a batch if it's large enough
-                if (uniqueEvents.Count >= _persistBatchSize)
-                {
-                    await PersistStateAsync();
-                }
-            }
-            else
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Batch processed: {events.Count} events, total: {_eventsProcessed}");
+
+            // Persist state after processing a batch if it's large enough
+            if (events.Count >= _persistBatchSize)
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] All {events.Count} events in batch were duplicates");
+                await PersistStateAsync();
             }
         }
         catch (Exception ex)
