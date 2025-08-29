@@ -155,15 +155,15 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
 
 app.MapGet("/status", async () =>
 {
-    // Get weather count if possible
+    // Before start, do NOT access API endpoints to avoid activating grains
     int? weatherCount = null;
     EventDeliveryStatistics? eventStats = null;
-    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ApiBaseUrl")))
+    if (state.IsRunning && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ApiBaseUrl")))
     {
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
-            
+
             // Get weather count
             var countPath = state.UseSingle ? "/api/weatherforecastsingle/count" : "/api/weatherforecast/count";
             var response = await http.GetAsync(countPath);
@@ -173,7 +173,7 @@ app.MapGet("/status", async () =>
                 var countData = JsonSerializer.Deserialize<WeatherCountResponse>(json);
                 weatherCount = countData?.totalCount;
             }
-            
+
             // Get event delivery statistics
             var statsPath = state.UseSingle ? "/api/weatherforecastsingle/event-statistics" : "/api/weatherforecast/event-statistics";
             var statsResponse = await http.GetAsync(statsPath);
