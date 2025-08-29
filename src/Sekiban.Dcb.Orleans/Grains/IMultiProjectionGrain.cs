@@ -78,4 +78,20 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Manually refresh the projection by catching up from the event store
     /// </summary>
     Task RefreshAsync();
+
+    /// <summary>
+    ///     Testing aid: request deactivation to simulate restart/activation cycle.
+    /// </summary>
+    Task RequestDeactivationAsync();
+
+    /// <summary>
+    ///     Testing aid: overwrite persisted snapshot's ProjectorVersion to simulate mismatch.
+    ///     Returns false if there is no persisted state to overwrite.
+    /// </summary>
+    Task<bool> OverwritePersistedStateVersionAsync(string newVersion);
+
+    /// <summary>
+    ///     Testing aid: seed events into the backing event store to support catch-up tests.
+    /// </summary>
+    Task SeedEventsAsync(IReadOnlyList<Event> events);
 }

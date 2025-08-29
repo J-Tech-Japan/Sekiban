@@ -87,6 +87,20 @@ public class GeneralMultiProjectionActor
 
     public Task SetCurrentState(SerializableMultiProjectionState state)
     {
+        // Validate projector version before restoring state
+        var versionResult = _types.GetProjectorVersion(_projectorName);
+        if (!versionResult.IsSuccess)
+        {
+            throw versionResult.GetException();
+        }
+
+        var currentVersion = versionResult.GetValue();
+        if (!string.Equals(currentVersion, state.ProjectorVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Snapshot projector version mismatch. Current='{currentVersion}', Snapshot='{state.ProjectorVersion}' for projector '{_projectorName}'.");
+        }
+
         var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
         if (!rb.IsSuccess)
         {

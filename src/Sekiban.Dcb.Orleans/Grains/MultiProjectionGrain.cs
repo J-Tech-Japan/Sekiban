@@ -358,7 +358,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to restore state: {ex.Message}");
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to restore state: {ex.Message}. Falling back to event store catch-up and clearing snapshot.");
+                    // Clear invalid snapshot and persist cleared state to avoid repeated failures
+                    try
+                    {
+                        _state.State.SerializedState = null;
+                        _state.State.EventsProcessed = 0;
+                        await _state.WriteStateAsync();
+                    }
+                    catch (Exception clearEx)
+                    {
+                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to clear invalid snapshot: {clearEx.Message}");
+                    }
                 }
             }
             else
@@ -368,6 +379,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         await base.OnActivateAsync(cancellationToken);
+
+        // After activation, always catch up from the event store to ensure up-to-date state
+        await CatchUpFromEventStoreAsync();
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -414,6 +428,57 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 Period = TimeSpan.FromMinutes(1),
                 Interleave = true
             });
+    }
+
+    public Task RequestDeactivationAsync()
+    {
+        DeactivateOnIdle();
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> OverwritePersistedStateVersionAsync(string newVersion)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_state.State?.SerializedState))
+            {
+                return false;
+            }
+
+            var stored = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
+                _state.State!.SerializedState!, _domainTypes.JsonSerializerOptions);
+            if (stored == null) return false;
+
+            var modified = new SerializableMultiProjectionState(
+                stored.Payload,
+                stored.MultiProjectionPayloadType,
+                stored.ProjectorName,
+                newVersion,
+                stored.LastSortableUniqueId,
+                stored.LastEventId,
+                stored.Version,
+                stored.IsCatchedUp,
+                stored.IsSafeState);
+
+            _state.State.SerializedState = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
+            await _state.WriteStateAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"OverwritePersistedStateVersion failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    public async Task SeedEventsAsync(IReadOnlyList<Event> events)
+    {
+        if (_eventStore == null) return;
+        var result = await _eventStore.WriteEventsAsync(events);
+        if (!result.IsSuccess)
+        {
+            throw result.GetException();
+        }
     }
 
     private async Task FallbackEventCheckAsync()

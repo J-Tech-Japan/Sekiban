@@ -251,6 +251,39 @@ public class GeneralMultiProjectionActorCatchingUpTests
     }
 
     [Fact]
+    public async Task SetCurrentState_Should_Throw_On_ProjectorVersion_Mismatch()
+    {
+        // Arrange: build actor and create a safe snapshot
+        var actor = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
+
+        var oldEvent = CreateEvent(new TestEventCreated("Safe Item"), DateTime.UtcNow.AddSeconds(-10));
+        await actor.AddEventsAsync(new[] { oldEvent });
+
+        var snapshotResult = await actor.GetSerializableStateAsync(canGetUnsafeState: false);
+        Assert.True(snapshotResult.IsSuccess);
+        var snapshot = snapshotResult.GetValue();
+
+        // Make projector version intentionally mismatch
+        var mismatchedSnapshot = snapshot with { ProjectorVersion = "9.9.9" };
+
+        var restoredActor = new GeneralMultiProjectionActor(
+            _domainTypes,
+            TestMultiProjector.MultiProjectorName,
+            _options);
+
+        // Act & Assert: SetCurrentState should throw InvalidOperationException
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await restoredActor.SetCurrentState(mismatchedSnapshot));
+
+        // And the actor should remain at its initial state (no items)
+        var stateAfterFailedRestore = await restoredActor.GetStateAsync(canGetUnsafeState: false);
+        Assert.True(stateAfterFailedRestore.IsSuccess);
+        var payload = stateAfterFailedRestore.GetValue().Payload as TestMultiProjector;
+        Assert.NotNull(payload);
+        Assert.Empty(payload!.Items);
+    }
+
+    [Fact]
     public async Task GetStateAsync_WithNoBufferedEvents_AlwaysReturnsSafeState()
     {
         // Arrange
