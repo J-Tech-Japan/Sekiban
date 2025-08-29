@@ -4,12 +4,13 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-using Sekiban.Dcb.Orleans.MultiProjections;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using System.Text;
 using System.Text.Json;
+using Sekiban.Dcb.Snapshots;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -69,22 +70,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return await _projectionActor.GetStateAsync(canGetUnsafeState);
     }
 
-    public async Task<ResultBox<SerializableMultiProjectionStateDto>> GetSerializableStateAsync(bool canGetUnsafeState = true)
+    public async Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true)
     {
         await EnsureInitializedAsync();
 
         if (_projectionActor == null)
         {
-            return ResultBox.Error<SerializableMultiProjectionStateDto>(
+            return ResultBox.Error<string>(
                 new InvalidOperationException("Projection actor not initialized"));
         }
 
-        var rb = await _projectionActor.GetSerializableStateAsync(canGetUnsafeState);
-        if (!rb.IsSuccess) 
-            return ResultBox.Error<SerializableMultiProjectionStateDto>(rb.GetException());
-        
-        var dto = SerializableMultiProjectionStateDto.FromCore(rb.GetValue());
-        return ResultBox.FromValue(dto);
+        var rb = await _projectionActor.GetSnapshotAsync(canGetUnsafeState);
+        if (!rb.IsSuccess)
+            return ResultBox.Error<string>(rb.GetException());
+        var json = JsonSerializer.Serialize(rb.GetValue(), _domainTypes.JsonSerializerOptions);
+        return ResultBox.FromValue(json);
     }
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)
@@ -114,10 +114,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         long stateSize = 0;
         if (_projectionActor != null)
         {
-            var serializableState = await _projectionActor.GetSerializableStateAsync();
-            if (serializableState.IsSuccess)
+            var snapshot = await _projectionActor.GetSnapshotAsync();
+            if (snapshot.IsSuccess)
             {
-                var json = JsonSerializer.Serialize(serializableState.GetValue(), _domainTypes.JsonSerializerOptions);
+                var json = JsonSerializer.Serialize(snapshot.GetValue(), _domainTypes.JsonSerializerOptions);
                 stateSize = Encoding.UTF8.GetByteCount(json);
             }
         }
@@ -144,35 +144,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
 
-            // Get serializable state
-            var stateResult = await _projectionActor.GetSerializableStateAsync(false); // Safe state only
-            if (!stateResult.IsSuccess)
+            // Ask actor to build a persistable snapshot (with size validation + offload included)
+            var persistable = await _projectionActor.BuildSnapshotForPersistenceAsync(false);
+            if (!persistable.IsSuccess)
             {
-                return ResultBox.Error<bool>(stateResult.GetException());
-            }
-
-            var serializableState = stateResult.GetValue();
-            var json = JsonSerializer.Serialize(serializableState, _domainTypes.JsonSerializerOptions);
-            var stateSize = Encoding.UTF8.GetByteCount(json);
-            
-            // Size check (could be moved to configuration)
-            if (stateSize > _maxStateSize)
-            {
-                _lastError = $"State size {stateSize} exceeds limit {_maxStateSize}";
+                _lastError = persistable.GetException().Message;
                 Console.WriteLine($"[{this.GetPrimaryKeyString()}] WARNING: {_lastError}");
                 return ResultBox.FromValue(false);
             }
 
-            var safePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={stateSize}, Events={_eventsProcessed}, SafePosition={safePosition}");
+            var data = persistable.GetValue();
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId}");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
-            _state.State.SerializedState = json;
-            _state.State.LastPosition = safePosition;
-            _state.State.SafeLastPosition = safePosition;
+            _state.State.SerializedState = data.Json;
+            _state.State.LastPosition = data.SafeLastSortableUniqueId;
+            _state.State.SafeLastPosition = data.SafeLastSortableUniqueId;
             _state.State.EventsProcessed = _eventsProcessed;
-            _state.State.StateSize = stateSize;
+            _state.State.StateSize = data.Size;
             _state.State.LastPersistTime = DateTime.UtcNow;
 
             await _state.WriteStateAsync();
@@ -345,13 +335,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 try
                 {
                     Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Restoring persisted state from storage");
-                    var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
+                    var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
                         _state.State.SerializedState,
                         _domainTypes.JsonSerializerOptions);
 
                     if (deserializedState != null)
                     {
-                        await _projectionActor.SetCurrentState(deserializedState);
+                        await _projectionActor.SetSnapshotAsync(deserializedState);
                         _eventsProcessed = _state.State.EventsProcessed;
                         Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
                     }
@@ -445,20 +435,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return false;
             }
 
-            var stored = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
+            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
                 _state.State!.SerializedState!, _domainTypes.JsonSerializerOptions);
-            if (stored == null) return false;
+            if (envelope == null) return false;
 
-            var modified = new SerializableMultiProjectionState(
-                stored.Payload,
-                stored.MultiProjectionPayloadType,
-                stored.ProjectorName,
-                newVersion,
-                stored.LastSortableUniqueId,
-                stored.LastEventId,
-                stored.Version,
-                stored.IsCatchedUp,
-                stored.IsSafeState);
+            SerializableMultiProjectionStateEnvelope modified;
+            if (!envelope.IsOffloaded && envelope.InlineState != null)
+            {
+                var s = envelope.InlineState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    false,
+                    new SerializableMultiProjectionState(
+                        s.Payload, s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
+                        s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState),
+                    null);
+            }
+            else if (envelope.OffloadedState != null)
+            {
+                var o = envelope.OffloadedState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    true,
+                    null,
+                    new SerializableMultiProjectionStateOffloaded(
+                        o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
+                        newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
+                        o.PayloadLength));
+            }
+            else
+            {
+                return false;
+            }
 
             _state.State.SerializedState = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
             await _state.WriteStateAsync();

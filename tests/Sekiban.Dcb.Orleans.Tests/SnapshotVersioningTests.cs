@@ -59,10 +59,11 @@ public class SnapshotVersioningTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
 
-        var serStateAfter = await grain2.GetSerializableStateAsync(canGetUnsafeState: false);
+        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
         Assert.True(serStateAfter.IsSuccess);
-        var dto = serStateAfter.GetValue();
-        Assert.Equal(5, dto.Version);
+        var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
+        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.Equal(5, version);
     }
 
     [Fact]
@@ -89,10 +90,11 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
 
         // Should not throw; should rebuild from event store and reach 7
-        var serStateAfter = await grain2.GetSerializableStateAsync(canGetUnsafeState: false);
+        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
         Assert.True(serStateAfter.IsSuccess);
-        var dto = serStateAfter.GetValue();
-        Assert.Equal(7, dto.Version);
+        var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
+        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.Equal(7, version);
     }
 
     private static Event CreateEvent(IEventPayload payload, DateTime when)

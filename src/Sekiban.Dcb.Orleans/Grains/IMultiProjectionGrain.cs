@@ -1,7 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-using Sekiban.Dcb.Orleans.MultiProjections;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Queries;
 namespace Sekiban.Dcb.Orleans.Grains;
 
@@ -18,11 +18,9 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
 
     /// <summary>
-    ///     Get the serializable state for persistence
+    ///     Get snapshot envelope (inline or offloaded) as JSON according to actor policy.
     /// </summary>
-    /// <param name="canGetUnsafeState">Whether to return unsafe state (default: true)</param>
-    /// <returns>The serializable multi-projection state</returns>
-    Task<ResultBox<SerializableMultiProjectionStateDto>> GetSerializableStateAsync(bool canGetUnsafeState = true);
+    Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true);
 
     /// <summary>
     ///     Manually add events to the projection (mainly for testing)

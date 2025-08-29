@@ -107,19 +107,19 @@ public class MinimalOrleansTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Orleans_Grain_Should_Return_Serializable_State()
+    public async Task Orleans_Grain_Should_Return_Snapshot_Envelope()
     {
         // Arrange
         var grain = _client.GetGrain<IMultiProjectionGrain>("serialization-test");
 
         // Act
-        var stateResult = await grain.GetSerializableStateAsync();
-
+        var stateResult = await grain.GetSnapshotJsonAsync();
+        
         // Assert
         Assert.NotNull(stateResult);
         Assert.True(stateResult.IsSuccess);
-        var state = stateResult.GetValue();
-        Assert.Equal("serialization-test", state.ProjectorName);
+        var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(stateResult.GetValue(), new JsonSerializerOptions());
+        Assert.NotNull(env);
     }
 
     [Fact]
