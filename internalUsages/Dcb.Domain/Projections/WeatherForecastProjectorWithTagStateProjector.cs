@@ -48,15 +48,18 @@ public record WeatherForecastProjectorWithTagStateProjector :
             return ResultBox.FromValue(payload);
         }
 
-        // Function to get affected item IDs
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => weatherForecastTags.Select(tag => tag.ForecastId);
+        // Function to get affected item IDs for any event passed by state (do NOT capture current tags)
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Select(t => t.ForecastId);
 
         // Function to project a single item
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) =>
-            ProjectTagState(forecastId, current, evt, weatherForecastTags);
+            ProjectTagState(forecastId, current, evt);
 
-        // Process event with threshold
-    var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
+        // Process event with threshold (pass as string value)
+        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold.Value);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -66,18 +69,10 @@ public record WeatherForecastProjectorWithTagStateProjector :
     private static TagState? ProjectTagState(
         Guid forecastId,
         TagState? current,
-        Event ev,
-        List<WeatherForecastTag> tags)
+        Event ev)
     {
-        // Find the tag that corresponds to this forecast ID
-        var tag = tags.FirstOrDefault(t => t.ForecastId == forecastId);
-        if (tag == null)
-        {
-            return current; // Tag not found, keep current state
-        }
-
         // Create TagStateId for this tag
-        var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
+        var tagStateId = new TagStateId(new WeatherForecastTag(forecastId), WeatherForecastProjector.ProjectorName);
 
         // If current is null, create empty TagState
         var tagState = current ?? TagState.GetEmpty(tagStateId);
@@ -223,25 +218,15 @@ public record WeatherForecastProjectorWithTagStateProjector :
         DcbDomainTypes domainTypes,
         TimeProvider timeProvider)
     {
-        // Extract tags from event - specifically looking for WeatherForecastTag
-        var tags = new List<ITag>();
-        foreach (var tagString in evt.Tags)
-        {
-            // Parse the tag string format "group:content"
-            var parts = tagString.Split(':', 2);
-            if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
-            {
-                // This is a WeatherForecastTag - parse the GUID content
-                if (Guid.TryParse(parts[1], out var forecastId))
-                {
-                    tags.Add(new WeatherForecastTag(forecastId));
-                }
-            }
-            // Ignore other tags since this projector only processes WeatherForecastTag
-        }
+        // Extract tags via domainTypes and keep only WeatherForecastTag
+        var tags = evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Cast<ITag>()
+            .ToList();
 
         // Use the static Project method with provided domainTypes
-    var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
+        var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
@@ -261,6 +246,12 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public Guid GetLastEventId() => LastEventId;
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
+
+    /// <summary>
+    ///     Indicates whether there are buffered (unsafe) events affecting the current state
+    ///     Used by the actor via reflection to decide if unsafe state should be returned.
+    /// </summary>
+    public bool HasBufferedEvents() => State.GetUnsafeKeys().Any();
 
     #endregion
 }

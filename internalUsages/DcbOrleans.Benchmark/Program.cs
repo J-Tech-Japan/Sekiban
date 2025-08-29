@@ -158,7 +158,7 @@ app.MapGet("/status", async () =>
     // Before start, do NOT access API endpoints to avoid activating grains
     int? weatherCount = null;
     EventDeliveryStatistics? eventStats = null;
-    if (state.IsRunning && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ApiBaseUrl")))
+    if ((state.IsRunning || state.HasRun) && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ApiBaseUrl")))
     {
         try
         {
@@ -215,6 +215,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
     state.Reset(total ?? GetEnvInt("BENCH_TOTAL", 10000), concurrency ?? GetEnvInt("BENCH_CONCURRENCY", 32));
     state.UseSingle = string.Equals(mode, "single", StringComparison.OrdinalIgnoreCase);
     state.StopOnError = stopOnError ?? false;
+    state.HasRun = true;
     _ = Task.Run(() => RunAsync(apiBase!, state));
     return Results.Accepted($"/status", new { message = "Started", state.Total, state.Concurrency, state.StopOnError });
 });
@@ -340,6 +341,7 @@ sealed class BenchState
     public int QueryPageCount;
     public bool StopOnError;
     public bool UseSingle;
+    public bool HasRun;
     public bool Canceled => _cts?.IsCancellationRequested == true;
     public string? LastError;
     private System.Diagnostics.Stopwatch _sw = new();
