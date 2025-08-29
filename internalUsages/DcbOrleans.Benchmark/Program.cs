@@ -56,10 +56,11 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       const total = document.getElementById('total').value || 10000;
       const conc = document.getElementById('conc').value || 32;
       const stopOnError = document.getElementById('stopOnError').checked ? 'true' : 'false';
+      const mode = document.getElementById('endpointMode').value;
       const btn = document.getElementById('startBtn');
       btn.disabled = true;
       try {{
-        const r = await fetch(`/run?total=${{total}}&concurrency=${{conc}}&stopOnError=${{stopOnError}}`, {{ method: 'POST' }});
+        const r = await fetch(`/run?total=${{total}}&concurrency=${{conc}}&stopOnError=${{stopOnError}}&mode=${{mode}}`, {{ method: 'POST' }});
         const t = await r.text();
         log(`POST /run => ${{r.status}}\n${{t}}`);
       }} catch (e) {{
@@ -113,6 +114,12 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <label>Total <input id='total' type='number' min='1' value='10000' /></label>
     <label>Concurrency <input id='conc' type='number' min='1' value='32' /></label>
     <label><input id='stopOnError' type='checkbox' checked /> Stop on first error</label>
+    <label>Endpoint
+      <select id='endpointMode'>
+        <option value='standard'>/weatherforecast</option>
+        <option value='single'>/weatherforecastsingle</option>
+      </select>
+    </label>
     <button id='startBtn' onclick='startRun()'>開始</button>
     <a href='/status' target='_blank'>/status を開く</a>
   </div>
@@ -158,7 +165,8 @@ app.MapGet("/status", async () =>
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
             
             // Get weather count
-            var response = await http.GetAsync("/api/weatherforecast/count");
+            var countPath = state.UseSingle ? "/api/weatherforecastsingle/count" : "/api/weatherforecast/count";
+            var response = await http.GetAsync(countPath);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -167,7 +175,8 @@ app.MapGet("/status", async () =>
             }
             
             // Get event delivery statistics
-            var statsResponse = await http.GetAsync("/api/weatherforecast/event-statistics");
+            var statsPath = state.UseSingle ? "/api/weatherforecastsingle/event-statistics" : "/api/weatherforecast/event-statistics";
+            var statsResponse = await http.GetAsync(statsPath);
             if (statsResponse.IsSuccessStatusCode)
             {
                 var json = await statsResponse.Content.ReadAsStringAsync();
@@ -190,11 +199,12 @@ app.MapGet("/status", async () =>
         state.Canceled,
         state.LastError,
         WeatherCount = weatherCount,
-        EventStats = eventStats
+        EventStats = eventStats,
+        EndpointMode = state.UseSingle ? "single" : "standard"
     });
 });
 
-app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError) =>
+app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, string? mode) =>
 {
     if (state.IsRunning) return Results.BadRequest(new { message = "Already running" });
 
@@ -203,6 +213,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError) =>
         return Results.BadRequest(new { message = "ApiBaseUrl env is not set" });
 
     state.Reset(total ?? GetEnvInt("BENCH_TOTAL", 10000), concurrency ?? GetEnvInt("BENCH_CONCURRENCY", 32));
+    state.UseSingle = string.Equals(mode, "single", StringComparison.OrdinalIgnoreCase);
     state.StopOnError = stopOnError ?? false;
     _ = Task.Run(() => RunAsync(apiBase!, state));
     return Results.Accepted($"/status", new { message = "Started", state.Total, state.Concurrency, state.StopOnError });
@@ -299,7 +310,8 @@ static async Task RunAsync(string apiBase, BenchState state)
         state.Stop();
 
         // verify query
-        var listRes = await http.GetAsync($"/api/weatherforecast?pageNumber=1&pageSize=1000");
+        var listPath = state.UseSingle ? "/api/weatherforecastsingle" : "/api/weatherforecast";
+        var listRes = await http.GetAsync($"{listPath}?pageNumber=1&pageSize=1000");
         if (listRes.IsSuccessStatusCode)
         {
             var json = await listRes.Content.ReadAsStringAsync();
@@ -327,6 +339,7 @@ sealed class BenchState
     public int Errors;
     public int QueryPageCount;
     public bool StopOnError;
+    public bool UseSingle;
     public bool Canceled => _cts?.IsCancellationRequested == true;
     public string? LastError;
     private System.Diagnostics.Stopwatch _sw = new();
