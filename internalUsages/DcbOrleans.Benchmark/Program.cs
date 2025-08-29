@@ -42,6 +42,14 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       // Update last update timestamp
       const now = new Date().toLocaleTimeString();
       document.getElementById('lastUpdate').textContent = now;
+      
+      // Update event statistics if available
+      if (s.eventStats) {{
+        document.getElementById('uniqueEvents').textContent = s.eventStats.totalUniqueEvents;
+        document.getElementById('totalDeliveries').textContent = s.eventStats.totalDeliveries;
+        document.getElementById('duplicateDeliveries').textContent = s.eventStats.duplicateDeliveries;
+        document.getElementById('maxDeliveryCount').textContent = s.eventStats.maxDeliveryCount;
+      }}
     }}
 
     async function startRun() {{
@@ -123,6 +131,12 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
   <div class='row'>
     <div>最終更新: <strong id='lastUpdate'>-</strong></div>
   </div>
+  <div class='row' style='background:#f0f0f0; padding:0.5rem; margin-top:0.5rem'>
+    <div>ユニークイベント: <strong id='uniqueEvents'>-</strong></div>
+    <div>総配信数: <strong id='totalDeliveries'>-</strong></div>
+    <div>重複配信: <strong id='duplicateDeliveries'>-</strong></div>
+    <div>最大配信回数: <strong id='maxDeliveryCount'>-</strong></div>
+  </div>
   <h3>ログ</h3>
   <div id='log'></div>
   <p style='margin-top:1rem'>
@@ -136,17 +150,28 @@ app.MapGet("/status", async () =>
 {
     // Get weather count if possible
     int? weatherCount = null;
+    EventDeliveryStatistics? eventStats = null;
     if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ApiBaseUrl")))
     {
         try
         {
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
+            
+            // Get weather count
             var response = await http.GetAsync("/api/weatherforecast/count");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
                 var countData = JsonSerializer.Deserialize<WeatherCountResponse>(json);
                 weatherCount = countData?.totalCount;
+            }
+            
+            // Get event delivery statistics
+            var statsResponse = await http.GetAsync("/api/weatherforecast/event-statistics");
+            if (statsResponse.IsSuccessStatusCode)
+            {
+                var json = await statsResponse.Content.ReadAsStringAsync();
+                eventStats = JsonSerializer.Deserialize<EventDeliveryStatistics>(json);
             }
         }
         catch { /* Ignore errors */ }
@@ -164,7 +189,8 @@ app.MapGet("/status", async () =>
         state.StopOnError,
         state.Canceled,
         state.LastError,
-        WeatherCount = weatherCount
+        WeatherCount = weatherCount,
+        EventStats = eventStats
     });
 });
 
@@ -325,6 +351,17 @@ public class WeatherCountResponse
     public int unsafeCount { get; set; }
     public bool isSafeState { get; set; }
     public string? lastProcessedEventId { get; set; }
+}
+
+// Helper class for deserializing event delivery statistics
+public class EventDeliveryStatistics
+{
+    public int totalUniqueEvents { get; set; }
+    public long totalDeliveries { get; set; }
+    public long duplicateDeliveries { get; set; }
+    public int eventsWithMultipleDeliveries { get; set; }
+    public int maxDeliveryCount { get; set; }
+    public double averageDeliveryCount { get; set; }
 }
 
 static class Helpers

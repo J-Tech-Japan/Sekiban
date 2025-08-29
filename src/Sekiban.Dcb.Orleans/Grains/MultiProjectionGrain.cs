@@ -39,6 +39,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private long _eventsProcessed;
     private DateTime? _lastEventTime;
     
+    // Event delivery tracking for debugging
+    private readonly Dictionary<Guid, int> _eventDeliveryCount = new();
+    private long _totalDeliveries = 0;
+    private long _duplicateDeliveries = 0;
+    
     // Event batching
     private readonly List<Event> _eventBuffer = new();
     private DateTime _lastBufferFlush = DateTime.UtcNow;
@@ -76,6 +81,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         return await _projectionActor.GetStateAsync(canGetUnsafeState);
+    }
+    
+    /// <summary>
+    ///     Get event delivery statistics for debugging
+    /// </summary>
+    public Task<EventDeliveryStatistics> GetEventDeliveryStatisticsAsync()
+    {
+        var stats = new EventDeliveryStatistics
+        {
+            TotalUniqueEvents = _eventDeliveryCount.Count,
+            TotalDeliveries = _totalDeliveries,
+            DuplicateDeliveries = _duplicateDeliveries,
+            EventsWithMultipleDeliveries = _eventDeliveryCount.Count(kvp => kvp.Value > 1),
+            MaxDeliveryCount = _eventDeliveryCount.Count > 0 ? _eventDeliveryCount.Values.Max() : 0,
+            AverageDeliveryCount = _eventDeliveryCount.Count > 0 
+                ? (double)_totalDeliveries / _eventDeliveryCount.Count 
+                : 0
+        };
+        
+        return Task.FromResult(stats);
     }
 
     public async Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true)
@@ -572,6 +597,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
             
+            // Track event deliveries for debugging
+            foreach (var evt in events)
+            {
+                _totalDeliveries++;
+                if (_eventDeliveryCount.ContainsKey(evt.Id))
+                {
+                    _eventDeliveryCount[evt.Id]++;
+                    _duplicateDeliveries++;
+                }
+                else
+                {
+                    _eventDeliveryCount[evt.Id] = 1;
+                }
+            }
+            
             // Filter out duplicates in batch - check all at once for efficiency
             var uniqueEvents = new List<Event>();
             var duplicateCount = 0;
@@ -592,7 +632,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (uniqueEvents.Count > 0)
             {
                 // Process all unique events at once
-                await _projectionActor.AddEventsAsync(uniqueEvents, false);
+                // For stream events, we consider catch-up as always finished
+                await _projectionActor.AddEventsAsync(uniqueEvents, true);
                 _eventsProcessed += uniqueEvents.Count;
                 _lastEventTime = DateTime.UtcNow;
 
@@ -617,6 +658,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _lastError = $"Failed to process event batch: {ex.Message}";
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing event batch: {ex}");
+            
+            // Log inner exception for better debugging
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Inner exception: {ex.InnerException}");
+                _lastError += $" Inner: {ex.InnerException.Message}";
+            }
         }
     }
 

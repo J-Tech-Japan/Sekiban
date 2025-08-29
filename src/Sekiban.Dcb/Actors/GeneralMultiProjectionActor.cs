@@ -374,41 +374,55 @@ public class GeneralMultiProjectionActor
         // Process events through the single state accessor
         foreach (var ev in events)
         {
-            // Use reflection to call ProcessEvent method with domainTypes
-            var accessorType = _singleStateAccessor!.GetType();
-            var method = accessorType.GetMethod("ProcessEvent");
-            if (method != null)
+            try
             {
-                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain, TimeProvider.System });
-                
-                // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
-                // The actual object is still the same type that implements both interfaces
-                if (result != null)
+                // Use reflection to call ProcessEvent method with domainTypes
+                var accessorType = _singleStateAccessor!.GetType();
+                var method = accessorType.GetMethod("ProcessEvent");
+                if (method != null)
                 {
-                    // Try to cast directly to IMultiProjectionPayload
-                    _singleStateAccessor = result as IMultiProjectionPayload;
+                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain, TimeProvider.System });
                     
-                    // If direct cast fails, the result might be wrapped in the interface
-                    // In that case, the actual object should still implement IMultiProjectionPayload
-                    if (_singleStateAccessor == null)
+                    // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
+                    // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
+                    if (result != null)
                     {
-                        throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
+                        // The result should be the same object or a new instance that implements IMultiProjectionPayload
+                        // For DualStateProjectionWrapper.ProcessEvent, it returns 'this' so the object reference shouldn't change
+                        // But we still need to handle the case where a new instance might be returned
+                        if (result is IMultiProjectionPayload payload)
+                        {
+                            _singleStateAccessor = payload;
+                        }
+                        else
+                        {
+                            // This should not happen with proper implementation, but log for debugging
+                            throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
+                        }
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
                     }
                 }
                 else
                 {
-                    throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
+                    throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
                 }
-            }
-            else
-            {
-                throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
-            }
 
-            // Update tracking
-            _unsafeLastEventId = ev.Id;
-            _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
-            _unsafeVersion++;
+                // Update tracking - these are managed separately from the wrapper's internal state
+                _unsafeLastEventId = ev.Id;
+                _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+                _unsafeVersion++;
+            }
+            catch (Exception ex)
+            {
+                // Log the error with event details for debugging
+                var innerEx = ex.InnerException ?? ex;
+                throw new InvalidOperationException(
+                    $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
+                    innerEx);
+            }
         }
     }
 

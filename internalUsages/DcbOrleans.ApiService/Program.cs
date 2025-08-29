@@ -15,6 +15,7 @@ using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
+using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
@@ -60,14 +61,36 @@ builder.UseOrleans(config =>
     
     if (useInMemoryStreams)
     {
-        // Use in-memory streams for development/testing
+        // Use in-memory streams for development/testing with enhanced configuration
         config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            configurator.ConfigurePartitioning(2);
+            // Increase partitions for better parallelism
+            configurator.ConfigurePartitioning(8);
+            
+            // Configure pulling agent for better batch processing
+            configurator.ConfigurePullingAgent(options =>
+            {
+                options.Configure(opt =>
+                {
+                    // Process events more frequently
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    // Increase batch size for better throughput
+                    opt.BatchContainerBatchSize = 100;
+                });
+            });
         });
+        
         config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            configurator.ConfigurePartitioning(2);
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
+            {
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
+            });
         });
         
         // Add memory storage for PubSubStore when using in-memory streams
@@ -634,6 +657,19 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastCount");
+
+// Event delivery statistics endpoint
+apiRoute
+    .MapGet(
+        "/weatherforecast/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatistics");
 
 apiRoute
     .MapPost(
