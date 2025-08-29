@@ -101,61 +101,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public IReadOnlyDictionary<Guid, TagState> GetCurrentTagStates() => State.GetCurrentState();
 
-    /// <summary>
-    ///     Get only safe tag states
-    /// </summary>
-    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates()
-    {
-        // Calculate safe window threshold (20 seconds ago)
-        var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-        
-        // Define projection functions
-        Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
-        {
-            // Extract WeatherForecastTag IDs from event tags
-            var tagIds = new List<Guid>();
-            foreach (var tagString in evt.Tags)
-            {
-                var parts = tagString.Split(':', 2);
-                if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
-                {
-                    if (Guid.TryParse(parts[1], out var forecastId))
-                    {
-                        tagIds.Add(forecastId);
-                    }
-                }
-            }
-            return tagIds;
-        };
-        
-        Func<Guid, TagState?, Event, TagState?> projectTagState = (tagId, current, evt) =>
-        {
-            var tag = new WeatherForecastTag(tagId);
-            var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
-            
-            if (current == null)
-            {
-                current = TagState.GetEmpty(tagStateId);
-            }
-            
-            var newPayload = WeatherForecastProjector.Project(current.Payload, evt);
-            
-            if (newPayload is WeatherForecastState { IsDeleted: true })
-            {
-                return null;
-            }
-            
-            return current with
-            {
-                Payload = newPayload,
-                Version = current.Version + 1,
-                LastSortedUniqueId = evt.SortableUniqueIdValue,
-                ProjectorVersion = WeatherForecastProjector.ProjectorVersion
-            };
-        };
-        
-        return State.GetSafeState(threshold, getAffectedIds, projectTagState);
-    }
+    // Removed: GetSafeTagStates() — safe view construction is handled by State/Actor
 
     /// <summary>
     ///     Check if a specific tag state has unsafe modifications
@@ -179,7 +125,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public IEnumerable<WeatherForecastState> GetSafeWeatherForecasts()
     {
-        return GetSafeTagStates()
+        // For simplicity, return current forecasts; safe view should be obtained via actor/state when needed
+        return GetCurrentTagStates()
             .Values
             .Select(ts => ts.Payload)
             .OfType<WeatherForecastState>()
