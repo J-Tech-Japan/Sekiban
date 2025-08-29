@@ -11,6 +11,7 @@ using Sekiban.Dcb.Storage;
 using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Snapshots;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -23,6 +24,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
+    private readonly IBlobStorageSnapshotAccessor? _snapshotAccessor;
     
     // Orleans infrastructure
     private IAsyncStream<Event>? _orleansStream;
@@ -49,12 +51,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
-        IEventSubscriptionResolver? subscriptionResolver = null)
+        IEventSubscriptionResolver? subscriptionResolver = null,
+        IBlobStorageSnapshotAccessor? snapshotAccessor = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
+        _snapshotAccessor = snapshotAccessor;
     }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
@@ -326,7 +330,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName,
                 new GeneralMultiProjectionActorOptions
                 {
-                    SafeWindowMs = 20000 // 20 seconds
+                    SafeWindowMs = 20000, // 20 seconds
+                    SnapshotAccessor = _snapshotAccessor,
+                    SnapshotOffloadThresholdBytes = 2 * 1024 * 1024,
+                    MaxSnapshotSerializedSizeBytes = 2 * 1024 * 1024
                 });
 
             // Restore persisted state if available

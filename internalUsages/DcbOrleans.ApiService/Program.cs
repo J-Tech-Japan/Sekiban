@@ -19,6 +19,8 @@ using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.BlobStorage.AzureStorage;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
@@ -205,6 +207,14 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
+// Snapshot offload: Azure Blob Storage accessor (Azurite in dev)
+builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
+{
+    // Prefer configuration value, fallback to Azurite dev storage
+    var conn = builder.Configuration.GetConnectionString("SekibanAzureStorage") ?? "UseDevelopmentStorage=true";
+    var container = builder.Configuration.GetValue<string>("Sekiban:SnapshotContainer") ?? "dcb-snapshots";
+    return new AzureBlobStorageSnapshotAccessor(conn, container);
+});
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
