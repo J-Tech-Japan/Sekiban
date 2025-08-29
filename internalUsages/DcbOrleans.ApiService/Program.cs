@@ -570,6 +570,35 @@ apiRoute
     .WithOpenApi()
     .WithName("GetWeatherForecast");
 
+// Weather endpoints (Single projector with SafeUnsafeProjectionState)
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastListSingleQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastSingle");
+
 apiRoute
     .MapPost(
         "/inputweatherforecast",
@@ -658,6 +687,39 @@ apiRoute
     .WithOpenApi()
     .WithName("GetWeatherForecastCount");
 
+// Weather Count endpoint for Single projector
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountSingleQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    isSingle = true,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCountSingle");
+
 // Event delivery statistics endpoint
 apiRoute
     .MapGet(
@@ -670,6 +732,19 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("GetEventDeliveryStatistics");
+
+// Event delivery statistics endpoint for Single projector
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatisticsSingle");
 
 apiRoute
     .MapPost(
