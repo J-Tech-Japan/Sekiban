@@ -207,7 +207,8 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                             Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
                         .ToList()
                         .AsReadOnly();
-                    _ = Task.Run(() => _eventPublisher.PublishAsync(publishEvents, CancellationToken.None));
+                    // Enqueue publish requests for background processing (at-least-once). Non-blocking
+                    _ = _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
                 }
 
                 // Return success result

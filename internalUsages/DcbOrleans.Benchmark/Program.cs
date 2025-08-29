@@ -118,6 +118,7 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       <select id='endpointMode'>
         <option value='standard'>/weatherforecast</option>
         <option value='single'>/weatherforecastsingle</option>
+        <option value='generic'>/weatherforecastgeneric</option>
       </select>
     </label>
     <button id='startBtn' onclick='startRun()'>開始</button>
@@ -165,7 +166,10 @@ app.MapGet("/status", async () =>
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
 
             // Get weather count
-            var countPath = state.UseSingle ? "/api/weatherforecastsingle/count" : "/api/weatherforecast/count";
+            var mode = state.Mode ?? (state.UseSingle ? "single" : "standard");
+            var countPath = mode == "single"
+                ? "/api/weatherforecastsingle/count"
+                : mode == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
             var response = await http.GetAsync(countPath);
             if (response.IsSuccessStatusCode)
             {
@@ -175,7 +179,9 @@ app.MapGet("/status", async () =>
             }
 
             // Get event delivery statistics
-            var statsPath = state.UseSingle ? "/api/weatherforecastsingle/event-statistics" : "/api/weatherforecast/event-statistics";
+            var statsPath = mode == "single"
+                ? "/api/weatherforecastsingle/event-statistics"
+                : mode == "generic" ? "/api/weatherforecastgeneric/event-statistics" : "/api/weatherforecast/event-statistics";
             var statsResponse = await http.GetAsync(statsPath);
             if (statsResponse.IsSuccessStatusCode)
             {
@@ -200,7 +206,7 @@ app.MapGet("/status", async () =>
         state.LastError,
         WeatherCount = weatherCount,
         EventStats = eventStats,
-        EndpointMode = state.UseSingle ? "single" : "standard"
+        EndpointMode = state.Mode ?? (state.UseSingle ? "single" : "standard")
     });
 });
 
@@ -213,7 +219,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
         return Results.BadRequest(new { message = "ApiBaseUrl env is not set" });
 
     state.Reset(total ?? GetEnvInt("BENCH_TOTAL", 10000), concurrency ?? GetEnvInt("BENCH_CONCURRENCY", 32));
-    state.UseSingle = string.Equals(mode, "single", StringComparison.OrdinalIgnoreCase);
+    state.Mode = (mode ?? (state.UseSingle ? "single" : "standard")).ToLowerInvariant();
     state.StopOnError = stopOnError ?? false;
     state.HasRun = true;
     _ = Task.Run(() => RunAsync(apiBase!, state));
@@ -311,7 +317,10 @@ static async Task RunAsync(string apiBase, BenchState state)
         state.Stop();
 
         // verify query
-        var listPath = state.UseSingle ? "/api/weatherforecastsingle" : "/api/weatherforecast";
+        var mode2 = state.Mode ?? (state.UseSingle ? "single" : "standard");
+        var listPath = mode2 == "single"
+            ? "/api/weatherforecastsingle"
+            : mode2 == "generic" ? "/api/weatherforecastgeneric" : "/api/weatherforecast";
         var listRes = await http.GetAsync($"{listPath}?pageNumber=1&pageSize=1000");
         if (listRes.IsSuccessStatusCode)
         {
@@ -341,6 +350,7 @@ sealed class BenchState
     public int QueryPageCount;
     public bool StopOnError;
     public bool UseSingle;
+    public string? Mode;
     public bool HasRun;
     public bool Canceled => _cts?.IsCancellationRequested == true;
     public string? LastError;

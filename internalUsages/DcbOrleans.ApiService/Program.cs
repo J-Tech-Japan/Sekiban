@@ -570,6 +570,35 @@ apiRoute
     .WithOpenApi()
     .WithName("GetWeatherForecast");
 
+// Weather endpoints (GenericTagMultiProjector)
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastListGenericQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastGeneric");
+
 // Weather endpoints (Single projector with SafeUnsafeProjectionState)
 apiRoute
     .MapGet(
@@ -687,6 +716,39 @@ apiRoute
     .WithOpenApi()
     .WithName("GetWeatherForecastCount");
 
+// Weather Count endpoint for Generic projector
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountGenericQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    isGeneric = true,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCountGeneric");
+
 // Weather Count endpoint for Single projector
 apiRoute
     .MapGet(
@@ -732,6 +794,19 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("GetEventDeliveryStatistics");
+
+// Event delivery statistics endpoint for Generic projector
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatisticsGeneric");
 
 // Event delivery statistics endpoint for Single projector
 apiRoute

@@ -50,13 +50,18 @@ public record
             return ResultBox.FromValue(payload);
         }
 
-        // Function to get affected item IDs (filter out nulls)
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
-            relevantTags.Select(tag => GetTagId(tag)).Where(id => id.HasValue).Select(id => id!.Value);
+        // Function to get affected item IDs from the actual event being processed
+        // Do NOT capture current tags; resolve from evt.Tags every time for correctness
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<TTagGroup>()
+            .Select(tag => GetTagId(tag))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value);
 
-        // Function to project a single item
+        // Function to project a single item (independent of captured tag list)
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
-            ProjectTagState(tagId, current, evt, relevantTags);
+            ProjectTagState(tagId, current, evt);
 
         // safeWindowThreshold を文字列として State へ渡し safe/unsafe 判定を内部に委譲
         var updatedState = payload.State.ProcessEvent(
@@ -73,21 +78,11 @@ public record
     /// <summary>
     ///     Project a single tag state
     /// </summary>
-    private static TagState? ProjectTagState(Guid tagId, TagState? current, Event ev, List<ITag> tags)
+    private static TagState? ProjectTagState(Guid tagId, TagState? current, Event ev)
     {
-        // Find the tag that corresponds to this ID (must be of type TTagGroup)
-        var tag = tags.FirstOrDefault(t =>
-        {
-            var id = GetTagId(t);
-            return id.HasValue && id.Value == tagId;
-        });
-        if (tag == null)
-        {
-            return current; // Tag not found, keep current state
-        }
-
-        // Create TagStateId for this tag
-        var tagStateId = new TagStateId(tag, TTagProjector.ProjectorName);
+        // Create TagStateId for this tagId by constructing the tag from content via generic interface
+        var tagGroup = TTagGroup.FromContent(tagId.ToString());
+        var tagStateId = new TagStateId(tagGroup, TTagProjector.ProjectorName);
 
         // If current is null, create empty TagState
         var tagState = current ?? TagState.GetEmpty(tagStateId);
@@ -245,6 +240,12 @@ public record
     public Guid GetLastEventId() => LastEventId;
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
+
+    /// <summary>
+    ///     Indicates whether there are buffered (unsafe) events affecting the current state
+    ///     Used by the actor via reflection to decide if unsafe state should be returned.
+    /// </summary>
+    public bool HasBufferedEvents() => State.GetUnsafeKeys().Any();
 
     #endregion
 }
