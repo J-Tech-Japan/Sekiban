@@ -39,15 +39,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private long _eventsProcessed;
     private DateTime? _lastEventTime;
     
-    // Event delivery tracking for debugging
-    private readonly Dictionary<Guid, int> _eventDeliveryCount = new();
-    private long _totalDeliveries = 0;
-    private long _duplicateDeliveries = 0;
-    // Per-source tracking
-    private readonly Dictionary<Guid, int> _streamDeliveryCount = new();
-    private readonly Dictionary<Guid, int> _catchUpDeliveryCount = new();
-    private long _streamDeliveries = 0;
-    private long _catchUpDeliveries = 0;
+    // Event delivery statistics (debug/no-op selectable)
+    private readonly Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics _eventStats;
     
     // Event batching
     private readonly List<Event> _eventBuffer = new();
@@ -66,13 +59,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
         IEventSubscriptionResolver? subscriptionResolver = null,
-        IBlobStorageSnapshotAccessor? snapshotAccessor = null)
+        IBlobStorageSnapshotAccessor? snapshotAccessor = null,
+        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _snapshotAccessor = snapshotAccessor;
+        _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
     }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
@@ -93,22 +88,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     public Task<EventDeliveryStatistics> GetEventDeliveryStatisticsAsync()
     {
+        var snap = _eventStats.Snapshot();
         var stats = new EventDeliveryStatistics
         {
-            TotalUniqueEvents = _eventDeliveryCount.Count,
-            TotalDeliveries = _totalDeliveries,
-            DuplicateDeliveries = _duplicateDeliveries,
-            EventsWithMultipleDeliveries = _eventDeliveryCount.Count(kvp => kvp.Value > 1),
-            MaxDeliveryCount = _eventDeliveryCount.Count > 0 ? _eventDeliveryCount.Values.Max() : 0,
-            AverageDeliveryCount = _eventDeliveryCount.Count > 0 
-                ? (double)_totalDeliveries / _eventDeliveryCount.Count 
-                : 0,
-            StreamUniqueEvents = _streamDeliveryCount.Count,
-            StreamDeliveries = _streamDeliveries,
-            CatchUpUniqueEvents = _catchUpDeliveryCount.Count,
-            CatchUpDeliveries = _catchUpDeliveries
+            TotalUniqueEvents = snap.totalUnique,
+            TotalDeliveries = snap.totalDeliveries,
+            DuplicateDeliveries = snap.duplicateDeliveries,
+            EventsWithMultipleDeliveries = snap.eventsWithMultipleDeliveries,
+            MaxDeliveryCount = snap.maxDeliveryCount,
+            AverageDeliveryCount = snap.averageDeliveryCount,
+            StreamUniqueEvents = snap.streamUnique,
+            StreamDeliveries = snap.streamDeliveries,
+            CatchUpUniqueEvents = snap.catchUpUnique,
+            CatchUpDeliveries = snap.catchUpDeliveries,
+            Message = snap.message
         };
-        
+
         return Task.FromResult(stats);
     }
 
@@ -140,30 +135,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Track event deliveries as well for events coming from the EventStore catch-up
         // so that delivery statistics include both stream and catch-up paths.
-        foreach (var evt in events)
-        {
-            _totalDeliveries++;
-            if (_eventDeliveryCount.ContainsKey(evt.Id))
-            {
-                _eventDeliveryCount[evt.Id]++;
-                _duplicateDeliveries++;
-            }
-            else
-            {
-                _eventDeliveryCount[evt.Id] = 1;
-            }
-
-            // Catch-up source specific
-            _catchUpDeliveries++;
-            if (_catchUpDeliveryCount.ContainsKey(evt.Id))
-            {
-                _catchUpDeliveryCount[evt.Id]++;
-            }
-            else
-            {
-                _catchUpDeliveryCount[evt.Id] = 1;
-            }
-        }
+        _eventStats.RecordCatchUpBatch(events);
 
         // Delegate to projection actor
         await _projectionActor.AddEventsAsync(events, finishedCatchUp);
@@ -642,30 +614,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
 
             // Track event deliveries for debugging
-            foreach (var evt in events)
-            {
-                _totalDeliveries++;
-                if (_eventDeliveryCount.ContainsKey(evt.Id))
-                {
-                    _eventDeliveryCount[evt.Id]++;
-                    _duplicateDeliveries++;
-                }
-                else
-                {
-                    _eventDeliveryCount[evt.Id] = 1;
-                }
-
-                // Stream source specific
-                _streamDeliveries++;
-                if (_streamDeliveryCount.ContainsKey(evt.Id))
-                {
-                    _streamDeliveryCount[evt.Id]++;
-                }
-                else
-                {
-                    _streamDeliveryCount[evt.Id] = 1;
-                }
-            }
+            _eventStats.RecordStreamBatch(events);
 
             // Forward all delivered events to the actor which performs
             // correct idempotency and ordering internally.

@@ -65,4 +65,10 @@ public class EventDeliveryStatistics
     /// </summary>
     [Id(9)]
     public long CatchUpDeliveries { get; set; }
+
+    /// <summary>
+    /// Optional message (e.g., when statistics are not being recorded).
+    /// </summary>
+    [Id(10)]
+    public string? Message { get; set; }
 }

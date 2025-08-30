@@ -236,6 +236,16 @@ builder.UseOrleans(config =>
     config.ConfigureServices(services =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
+        // Event delivery statistics: enable detailed recording only in Development
+        if (builder.Environment.IsDevelopment())
+        {
+            // Per-grain (per-activation) instance for stats to keep instances isolated
+            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.RecordingMultiProjectionEventStatistics>();
+        }
+        else
+        {
+            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
+        }
     });
 
     // Orleans will automatically discover and use the EventSurrogate
