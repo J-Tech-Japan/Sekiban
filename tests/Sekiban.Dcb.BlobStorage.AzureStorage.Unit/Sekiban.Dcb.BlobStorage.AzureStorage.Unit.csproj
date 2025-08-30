@@ -8,16 +8,13 @@
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Testing" Version="9.4.1" />
-    <PackageReference Include="Aspire.Hosting" Version="9.4.1" />
     <PackageReference Include="xunit" Version="2.9.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.24.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
     <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj" />
-    <ProjectReference Include="AppHost\Sekiban.Dcb.BlobStorage.AzureStorage.Unit.AppHost.csproj" />
   </ItemGroup>
 </Project>

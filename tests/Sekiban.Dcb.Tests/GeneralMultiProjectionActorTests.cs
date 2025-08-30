@@ -1,6 +1,7 @@
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.Tests;
 
@@ -20,7 +21,7 @@ public class GeneralMultiProjectionActorTests
     private static Event MakeEvent<TPayload>(TPayload payload) where TPayload : IEventPayload =>
         new(
             payload,
-            Guid.NewGuid().ToString("N"),
+            SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             typeof(TPayload).FullName!,
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"), "test"),

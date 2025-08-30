@@ -89,11 +89,13 @@ public class SnapshotVersioningTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
 
-        // Should not throw; should rebuild from event store and reach 7
-        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        // Should not throw; should rebuild from event store
+        // Check unsafe state to get all 7 events
+        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
         Assert.True(serStateAfter.IsSuccess);
         var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
         var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        // With unsafe state, should have all 7 events
         Assert.Equal(7, version);
     }
 

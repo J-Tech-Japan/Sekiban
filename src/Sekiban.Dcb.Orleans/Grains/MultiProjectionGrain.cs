@@ -23,6 +23,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IBlobStorageSnapshotAccessor? _snapshotAccessor;
+    private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     
     // Orleans infrastructure
     private IAsyncStream<Event>? _orleansStream;
@@ -35,6 +36,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     
     // Simple tracking
     private bool _isInitialized;
+    private bool _avoidOverlapOnce;
     private string? _lastError;
     private long _eventsProcessed;
     private DateTime? _lastEventTime;
@@ -60,7 +62,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IEventStore eventStore,
         IEventSubscriptionResolver? subscriptionResolver = null,
         IBlobStorageSnapshotAccessor? snapshotAccessor = null,
-        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats = null)
+        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats = null,
+        GeneralMultiProjectionActorOptions? actorOptions = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
@@ -68,6 +71,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _snapshotAccessor = snapshotAccessor;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
+        _injectedActorOptions = actorOptions;
     }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
@@ -138,7 +142,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStats.RecordCatchUpBatch(events);
 
         // Delegate to projection actor
-        await _projectionActor.AddEventsAsync(events, finishedCatchUp);
+        await _projectionActor.AddEventsAsync(events, finishedCatchUp, Sekiban.Dcb.Actors.EventSource.CatchUp);
         _eventsProcessed += events.Count;
         
         if (events.Count > 0)
@@ -359,19 +363,28 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         Console.WriteLine($"[SimplifiedPureGrain] OnActivateAsync for {projectorName}");
 
         // Create projection actor
+        bool forceFullCatchUp = false;
         if (_projectionActor == null)
         {
             Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Creating new projection actor");
+            // Merge injected options with grain-specific snapshot accessor
+            var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+            var mergedOptions = new GeneralMultiProjectionActorOptions
+            {
+                SafeWindowMs = baseOptions.SafeWindowMs,
+                SnapshotAccessor = _snapshotAccessor ?? baseOptions.SnapshotAccessor,
+                SnapshotOffloadThresholdBytes = baseOptions.SnapshotOffloadThresholdBytes,
+                MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
+                EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
+                MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
+                LagEmaAlpha = baseOptions.LagEmaAlpha,
+                LagDecayPerSecond = baseOptions.LagDecayPerSecond
+            };
+
             _projectionActor = new GeneralMultiProjectionActor(
                 _domainTypes,
                 projectorName,
-                new GeneralMultiProjectionActorOptions
-                {
-                    SafeWindowMs = 20000, // 20 seconds
-                    SnapshotAccessor = _snapshotAccessor,
-                    SnapshotOffloadThresholdBytes = 2 * 1024 * 1024,
-                    MaxSnapshotSerializedSizeBytes = 2 * 1024 * 1024
-                });
+                mergedOptions);
 
             // Restore persisted state if available
             if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
@@ -388,34 +401,73 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         await _projectionActor.SetSnapshotAsync(deserializedState);
                         _eventsProcessed = _state.State.EventsProcessed;
                         Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
+                        // Avoid overlap on the first catch-up after snapshot restore
+                        _avoidOverlapOnce = true;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to restore state: {ex.Message}. Falling back to event store catch-up and clearing snapshot.");
-                    // Clear invalid snapshot and persist cleared state to avoid repeated failures
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restore version mismatch or error: {ex.Message}. Restoring payload in compatibility mode and catching up from store.");
+                    // Try compatibility restore: ignore version and use snapshot payload to ensure current values are available
                     try
                     {
-                        _state.State.SerializedState = null;
-                        _state.State.EventsProcessed = 0;
-                        await _state.WriteStateAsync();
+                        var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                            _state.State!.SerializedState!,
+                            _domainTypes.JsonSerializerOptions);
+                        if (deserializedState != null)
+                        {
+                            SerializableMultiProjectionState reconstructed = deserializedState.IsOffloaded
+                                ? new SerializableMultiProjectionState(
+                                    await _snapshotAccessor!.ReadAsync(deserializedState.OffloadedState!.OffloadKey, default),
+                                    deserializedState.OffloadedState!.MultiProjectionPayloadType,
+                                    deserializedState.OffloadedState!.ProjectorName,
+                                    deserializedState.OffloadedState!.ProjectorVersion,
+                                    deserializedState.OffloadedState!.LastSortableUniqueId,
+                                    deserializedState.OffloadedState!.LastEventId,
+                                    deserializedState.OffloadedState!.Version,
+                                    deserializedState.OffloadedState!.IsCatchedUp,
+                                    deserializedState.OffloadedState!.IsSafeState)
+                                : deserializedState.InlineState!;
+
+                            await _projectionActor.SetCurrentStateIgnoringVersion(reconstructed);
+                            // Avoid overlap on the first catch-up after snapshot compatibility restore
+                            _avoidOverlapOnce = true;
+                        }
+                        // Keep persisted positions; no full replay
+                        forceFullCatchUp = false;
                     }
                     catch (Exception clearEx)
                     {
-                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to clear invalid snapshot: {clearEx.Message}");
+                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Compatibility restore failed: {clearEx.Message}");
+                        // As a last resort, clear snapshot and do incremental catch-up
+                        try
+                        {
+                            _state.State!.SerializedState = null;
+                            _state.State.EventsProcessed = 0;
+                            await _state.WriteStateAsync();
+                            forceFullCatchUp = false;
+                        }
+                        catch
+                        {
+                            forceFullCatchUp = false;
+                        }
                     }
                 }
             }
             else
             {
                 Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] No persisted state to restore");
+                // If positions exist in persisted grain state, resume from there; otherwise full catch-up
+                var hasPersistedPos = !string.IsNullOrEmpty(_state.State?.SafeLastPosition) || !string.IsNullOrEmpty(_state.State?.LastPosition);
+                forceFullCatchUp = !hasPersistedPos;
             }
         }
 
         await base.OnActivateAsync(cancellationToken);
 
-        // After activation, always catch up from the event store to ensure up-to-date state
-        await CatchUpFromEventStoreAsync();
+        // After activation, catch up from the event store.
+        // If snapshot restore failed or there was no snapshot, perform a full catch-up to rebuild current state immediately.
+        await CatchUpFromEventStoreAsync(forceFullCatchUp);
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -538,6 +590,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task SeedEventsAsync(IReadOnlyList<Event> events)
     {
         if (_eventStore == null) return;
+        // Tag events with projector name to scope catch-up reads
+        var projectorName = this.GetPrimaryKeyString();
+        var tagString = $"Projector:{projectorName}";
+        foreach (var e in events)
+        {
+            if (!e.Tags.Contains(tagString)) e.Tags.Add(tagString);
+        }
+
         var result = await _eventStore.WriteEventsAsync(events);
         if (!result.IsSuccess)
         {
@@ -555,22 +615,37 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    private async Task CatchUpFromEventStoreAsync()
+    private async Task CatchUpFromEventStoreAsync(bool forceFull = false)
     {
         if (_projectionActor == null || _eventStore == null) return;
 
         // Get current position
         SortableUniqueId? fromPosition = null;
-        // Use SAFE state for determining catch-up position to avoid
-        // skipping events that are only present in the unsafe window
-        var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
-        if (currentState.IsSuccess)
+        if (!forceFull)
         {
-            var state = currentState.GetValue();
-            if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+            // Use SAFE state for determining catch-up position to avoid
+            // skipping events that are only present in the unsafe window
+            var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+            if (currentState.IsSuccess)
             {
-                fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                var state = currentState.GetValue();
+                if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+                {
+                    fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                }
+            }
+
+            // Fallback to persisted positions if actor has none
+            if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.SafeLastPosition))
+            {
+                fromPosition = new SortableUniqueId(_state.State.SafeLastPosition);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted SafeLastPosition: {fromPosition.Value}");
+            }
+            else if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.LastPosition))
+            {
+                fromPosition = new SortableUniqueId(_state.State.LastPosition);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted LastPosition: {fromPosition.Value}");
             }
         }
 
@@ -578,12 +653,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         SortableUniqueId? overlappedFrom = null;
         if (fromPosition != null)
         {
-            var overlapValue = fromPosition.GetSafeId();
-            overlappedFrom = new SortableUniqueId(overlapValue);
+            if (_avoidOverlapOnce)
+            {
+                overlappedFrom = fromPosition;
+                _avoidOverlapOnce = false;
+            }
+            else
+            {
+                var overlapValue = fromPosition.GetSafeId();
+                overlappedFrom = new SortableUniqueId(overlapValue);
+            }
         }
+        // Prefer reading events scoped by projector tag to avoid cross-projector bleed
+        var projectorTag = new SimpleStringTag($"Projector:{this.GetPrimaryKeyString()}");
         var eventsResult = overlappedFrom == null
-            ? await _eventStore.ReadAllEventsAsync(since: null)
-            : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
+            ? await _eventStore.ReadEventsByTagAsync(projectorTag, since: null)
+            : await _eventStore.ReadEventsByTagAsync(projectorTag, overlappedFrom.Value);
+
+        // Fallback: if store doesn't support tag read or no tag streams yet, read all
+        if (!eventsResult.IsSuccess)
+        {
+            eventsResult = overlappedFrom == null
+                ? await _eventStore.ReadAllEventsAsync(since: null)
+                : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
+        }
 
         if (eventsResult.IsSuccess)
         {
@@ -618,7 +711,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Forward all delivered events to the actor which performs
             // correct idempotency and ordering internally.
-            await _projectionActor.AddEventsAsync(events, true);
+            await _projectionActor.AddEventsAsync(events, true, Sekiban.Dcb.Actors.EventSource.Stream);
             _eventsProcessed += events.GroupBy(e => e.Id).Count();
             _lastEventTime = DateTime.UtcNow;
 
@@ -711,6 +804,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _grain._lastError = $"Stream error: {ex.Message}";
             return Task.CompletedTask;
         }
+    }
+
+    // Minimal ITag implementation backed by a preformatted string
+    private sealed record SimpleStringTag(string Tag) : Sekiban.Dcb.Tags.ITag
+    {
+        public string GetTagGroup() => Tag.Contains(':') ? Tag.Split(':')[0] : "Projector";
+        public string GetTagContent() => Tag.Contains(':') ? Tag.Split(':', 2)[1] : Tag;
+        public bool IsConsistencyTag() => false;
+        public string GetTag() => Tag;
     }
 
     #region ILifecycleParticipant

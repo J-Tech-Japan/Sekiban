@@ -31,6 +31,12 @@ public class GeneralMultiProjectionActor
     private string _unsafeLastSortableUniqueId = string.Empty;
     private int _unsafeVersion;
 
+    // Dynamic SafeWindow tracking (observed stream lag)
+    private double _observedLagMs; // EMA of observed lag in ms
+    private DateTime _lastLagUpdateUtc = DateTime.MinValue;
+    private double _maxLagMs; // Decayed running maximum of observed lag
+    private DateTime _lastMaxUpdateUtc = DateTime.MinValue;
+
     public GeneralMultiProjectionActor(
         DcbDomainTypes domainTypes,
         string projectorName,
@@ -43,13 +49,19 @@ public class GeneralMultiProjectionActor
         _options = options ?? new GeneralMultiProjectionActorOptions();
     }
 
-    public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)
+    public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true, EventSource source = EventSource.Unknown)
     {
         // Initialize projectors if needed
         InitializeProjectorsIfNeeded();
 
         // Update catching up state
         _isCatchedUp = finishedCatchUp;
+
+        // Update dynamic lag from stream if enabled
+        if (_options.EnableDynamicSafeWindow && source == EventSource.Stream && events.Count > 0)
+        {
+            UpdateObservedLag(events);
+        }
 
         var safeWindowThreshold = GetSafeWindowThreshold();
 
@@ -158,6 +170,53 @@ public class GeneralMultiProjectionActor
         _unsafeVersion = state.Version;
 
         // Restore catching up state
+        _isCatchedUp = state.IsCatchedUp;
+
+        return Task.CompletedTask;
+    }
+
+    // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
+    public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
+    {
+        var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
+        if (!rb.IsSuccess)
+        {
+            throw rb.GetException();
+        }
+
+        var loadedPayload = rb.GetValue();
+
+        var payloadType = loadedPayload.GetType();
+        var accessorInterfaces = payloadType
+            .GetInterfaces()
+            .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISafeAndUnsafeStateAccessor<>))
+            .ToList();
+
+        if (accessorInterfaces.Any())
+        {
+            _singleStateAccessor = loadedPayload;
+        }
+        else
+        {
+            var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payloadType);
+            _singleStateAccessor = Activator.CreateInstance(
+                wrapperType,
+                loadedPayload,
+                _projectorName,
+                _types,
+                _jsonOptions,
+                state.Version,
+                state.LastEventId,
+                state.LastSortableUniqueId) as IMultiProjectionPayload;
+            if (_singleStateAccessor == null)
+            {
+                throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");
+            }
+        }
+
+        _unsafeLastEventId = state.LastEventId;
+        _unsafeLastSortableUniqueId = state.LastSortableUniqueId;
+        _unsafeVersion = state.Version;
         _isCatchedUp = state.IsCatchedUp;
 
         return Task.CompletedTask;
@@ -469,7 +528,21 @@ public class GeneralMultiProjectionActor
             lastSortableId = (string)(projection?.GetType().GetProperty("LastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
             lastEventId = (Guid)(projection?.GetType().GetProperty("LastEventId")?.GetValue(projection) ?? _unsafeLastEventId);
             stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
-            isSafeState = false;
+            
+            // Check if the unsafe state is actually safe (no events within safe window)
+            // This happens when all events are outside the safe window
+            if (!string.IsNullOrEmpty(lastSortableId))
+            {
+                var lastEventTime = new SortableUniqueId(lastSortableId).GetDateTime();
+                var safeThresholdTime = safeWindowThreshold.GetDateTime();
+                // If the last event is before the safe threshold, it means there are no unsafe events
+                isSafeState = lastEventTime <= safeThresholdTime;
+            }
+            else
+            {
+                // No events at all, so it's safe
+                isSafeState = true;
+            }
         }
         else
         {
@@ -562,8 +635,69 @@ public class GeneralMultiProjectionActor
 
     private SortableUniqueId GetSafeWindowThreshold()
     {
-        var threshold = DateTime.UtcNow.AddMilliseconds(-_options.SafeWindowMs);
+        var effectiveWindow = _options.SafeWindowMs;
+        if (_options.EnableDynamicSafeWindow)
+        {
+            var extraEma = GetDecayedObservedLagMs();
+            var extraMax = GetDecayedMaxLagMs();
+            var extra = Math.Min(Math.Max(extraEma, extraMax), _options.MaxExtraSafeWindowMs);
+            effectiveWindow = (int)Math.Max(0, Math.Min(int.MaxValue, (long)_options.SafeWindowMs + (long)extra));
+        }
+        var threshold = DateTime.UtcNow.AddMilliseconds(-effectiveWindow);
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
+    }
+
+    private void UpdateObservedLag(IReadOnlyList<Event> events)
+    {
+        var now = DateTime.UtcNow;
+        // Representative lag: capped max of the batch
+        double batchMax = 0;
+        foreach (var ev in events)
+        {
+            var ts = new SortableUniqueId(ev.SortableUniqueIdValue).GetDateTime();
+            var lagMs = (now - ts).TotalMilliseconds;
+            if (lagMs > batchMax) batchMax = lagMs;
+        }
+        // Clamp to [0, MaxExtra]
+        batchMax = Math.Max(0, Math.Min(batchMax, _options.MaxExtraSafeWindowMs));
+
+        // Apply decay and update EMA
+        var decayedEma = GetDecayedObservedLagMs();
+        var alpha = Math.Clamp(_options.LagEmaAlpha, 0.01, 1.0);
+        _observedLagMs = alpha * batchMax + (1 - alpha) * decayedEma;
+        _lastLagUpdateUtc = now;
+
+        // Update decayed running max: max(current decayed max, batchMax)
+        var decayedMax = GetDecayedMaxLagMs();
+        _maxLagMs = Math.Max(decayedMax, batchMax);
+        _lastMaxUpdateUtc = now;
+    }
+
+    private double GetDecayedObservedLagMs()
+    {
+        if (_lastLagUpdateUtc == DateTime.MinValue || _observedLagMs <= 0)
+        {
+            return Math.Max(0, _observedLagMs);
+        }
+        var now = DateTime.UtcNow;
+        var seconds = Math.Max(0, (now - _lastLagUpdateUtc).TotalSeconds);
+        var decay = Math.Clamp(_options.LagDecayPerSecond, 0.5, 1.0);
+        var factor = Math.Pow(decay, seconds);
+        return Math.Max(0, _observedLagMs * factor);
+    }
+
+    private double GetDecayedMaxLagMs()
+    {
+        if (_lastMaxUpdateUtc == DateTime.MinValue || _maxLagMs <= 0)
+        {
+            return Math.Max(0, _maxLagMs);
+        }
+        var now = DateTime.UtcNow;
+        var seconds = Math.Max(0, (now - _lastMaxUpdateUtc).TotalSeconds);
+        // Reuse LagDecayPerSecond unless a separate option is added later
+        var decay = Math.Clamp(_options.LagDecayPerSecond, 0.5, 1.0);
+        var factor = Math.Pow(decay, seconds);
+        return Math.Max(0, _maxLagMs * factor);
     }
 
 }
