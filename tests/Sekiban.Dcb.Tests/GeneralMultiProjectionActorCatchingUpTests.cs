@@ -110,11 +110,11 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent }, false);
 
         // Act - Get serializable state with canGetUnsafeState = false
-        var serializableState = await actor.GetSerializableStateAsync(canGetUnsafeState: false);
+        var envelope = await actor.GetSnapshotAsync(canGetUnsafeState: false);
 
         // Assert
-        Assert.True(serializableState.IsSuccess);
-        var state = serializableState.GetValue();
+        Assert.True(envelope.IsSuccess);
+        var state = envelope.GetValue().InlineState!;
 
         // Should be safe state
         Assert.True(state.IsSafeState);
@@ -136,11 +136,11 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent });
 
         // Act - Get serializable state with canGetUnsafeState = true (default)
-        var serializableState = await actor.GetSerializableStateAsync(canGetUnsafeState: true);
+        var envelope = await actor.GetSnapshotAsync(canGetUnsafeState: true);
 
         // Assert
-        Assert.True(serializableState.IsSuccess);
-        var state = serializableState.GetValue();
+        Assert.True(envelope.IsSuccess);
+        var state = envelope.GetValue().InlineState!;
 
         // Should be unsafe state (because there are buffered events)
         Assert.False(state.IsSafeState);
@@ -158,11 +158,11 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor1.AddEventsAsync(new[] { event1 }, false);
 
         // Get serializable state
-        var serializableState = await actor1.GetSerializableStateAsync();
+        var serializableState = await actor1.GetSnapshotAsync();
 
         // Create new actor and load state
         var actor2 = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
-        await actor2.SetCurrentState(serializableState.GetValue());
+        await actor2.SetSnapshotAsync(serializableState.GetValue());
 
         // Act
         var reloadedState = await actor2.GetStateAsync();
@@ -188,11 +188,11 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await actor.AddEventsAsync(new[] { recentEvent1, recentEvent2 });
 
         // Act - Get state for snapshot (safe state only)
-        var snapshotState = await actor.GetSerializableStateAsync(canGetUnsafeState: false);
+        var snapshotState = await actor.GetSnapshotAsync(canGetUnsafeState: false);
 
         // Assert
         Assert.True(snapshotState.IsSuccess);
-        var state = snapshotState.GetValue();
+        var state = snapshotState.GetValue().InlineState!;
 
         // Should be safe state suitable for snapshots
         Assert.True(state.IsSafeState);
@@ -203,7 +203,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
             _domainTypes,
             TestMultiProjector.MultiProjectorName,
             _options);
-        await restoredActor.SetCurrentState(state);
+        await restoredActor.SetSnapshotAsync(new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, state, null));
 
         var restoredState = await restoredActor.GetStateAsync();
         var payload = restoredState.GetValue().Payload as TestMultiProjector;
@@ -248,6 +248,51 @@ public class GeneralMultiProjectionActorCatchingUpTests
         Assert.Contains("Safe Item", defaultPayload.Items);
         Assert.Contains("Unsafe Item", defaultPayload.Items);
         Assert.False(defaultState.GetValue().IsSafeState);
+    }
+
+    [Fact]
+    public async Task SetCurrentState_Should_Throw_On_ProjectorVersion_Mismatch()
+    {
+        // Arrange: build actor and create a safe snapshot
+        var actor = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
+
+        var oldEvent = CreateEvent(new TestEventCreated("Safe Item"), DateTime.UtcNow.AddSeconds(-10));
+        await actor.AddEventsAsync(new[] { oldEvent });
+
+        var snapshotResult = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        Assert.True(snapshotResult.IsSuccess);
+        var snapshot = snapshotResult.GetValue();
+
+        // Make projector version intentionally mismatch
+        // Modify inline state's ProjectorVersion
+        var inline = snapshot.InlineState!;
+        var mismatchedInline = new Sekiban.Dcb.MultiProjections.SerializableMultiProjectionState(
+            inline.Payload,
+            inline.MultiProjectionPayloadType,
+            inline.ProjectorName,
+            "9.9.9",
+            inline.LastSortableUniqueId,
+            inline.LastEventId,
+            inline.Version,
+            inline.IsCatchedUp,
+            inline.IsSafeState);
+        var mismatchedSnapshot = new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, mismatchedInline, null);
+
+        var restoredActor = new GeneralMultiProjectionActor(
+            _domainTypes,
+            TestMultiProjector.MultiProjectorName,
+            _options);
+
+        // Act & Assert: SetCurrentState should throw InvalidOperationException
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await restoredActor.SetSnapshotAsync(mismatchedSnapshot));
+
+        // And the actor should remain at its initial state (no items)
+        var stateAfterFailedRestore = await restoredActor.GetStateAsync(canGetUnsafeState: false);
+        Assert.True(stateAfterFailedRestore.IsSuccess);
+        var payload = stateAfterFailedRestore.GetValue().Payload as TestMultiProjector;
+        Assert.NotNull(payload);
+        Assert.Empty(payload!.Items);
     }
 
     [Fact]

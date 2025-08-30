@@ -165,7 +165,7 @@ public class StudentProjectionDebugTest
 
         // Act - Call ProcessEvent through the interface
         _output.WriteLine("Calling ProcessEvent through ISafeAndUnsafeStateAccessor interface...");
-        var processed = accessor.ProcessEvent(ev, safeWindowThreshold, _domainTypes, _timeProvider);
+        var processed = accessor.ProcessEvent(ev, safeWindowThreshold, _domainTypes);
         
         // Assert
         Assert.NotNull(processed);

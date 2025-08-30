@@ -207,7 +207,8 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                             Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
                         .ToList()
                         .AsReadOnly();
-                    _ = Task.Run(() => _eventPublisher.PublishAsync(publishEvents, CancellationToken.None));
+                    // Enqueue publish requests for background processing (at-least-once). Non-blocking
+                    _ = _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
                 }
 
                 // Return success result
@@ -344,7 +345,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
 
             // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
             if (!actorResult.IsSuccess)
             {
                 return ResultBox.Error<TResult>(actorResult.GetException());
@@ -426,7 +427,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             }
 
             // Get the multi-projection actor
-            var actorResult = await _actorAccessor.GetActorAsync<IMultiProjectionActorCommon>(projectorName);
+            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
             if (!actorResult.IsSuccess)
             {
                 return ResultBox.Error<ListQueryResult<TResult>>(actorResult.GetException());

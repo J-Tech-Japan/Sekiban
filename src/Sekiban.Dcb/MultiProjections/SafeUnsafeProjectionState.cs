@@ -180,8 +180,9 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
                     }
 
                     // Reprocess unsafe events on top of new safe state (which might be null)
+                    // Ensure deterministic ordering when applying remaining unsafe events
                     var unsafeState = currentItemState;
-                    foreach (var unsafeEvent in stillUnsafeEvents)
+                    foreach (var unsafeEvent in stillUnsafeEvents.OrderBy(e => e.SortableUniqueIdValue))
                     {
                         var affectedKeys = getAffectedItemKeys(unsafeEvent);
                         if (affectedKeys.Contains(itemKey))
@@ -243,12 +244,8 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
         Func<TKey, TState?, Event, TState?> projectItem,
         string? safeWindowThreshold = null)
     {
-        // Check for duplicate event
-        if (_processedEventIds.Contains(evt.Id))
-        {
-            // Duplicate event - ignore without error
-            return this;
-        }
+        // Do not suppress safe events using the global processed set.
+        // Safe events may legitimately affect multiple keys; per-item handling is safer.
 
         var newCurrentData = new Dictionary<TKey, TState>(_currentData);
         var newSafeBackup = new Dictionary<TKey, SafeStateBackup<TState>>(_safeBackup);

@@ -58,8 +58,15 @@ public static class DomainType
 
             // Register list queries
             types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();
+            types.QueryTypes.RegisterListQuery<GetWeatherForecastListSingleQuery>();
+            types.QueryTypes.RegisterListQuery<GetWeatherForecastListGenericQuery>();
             types.QueryTypes.RegisterListQuery<GetStudentListQuery>();
             types.QueryTypes.RegisterListQuery<GetClassRoomListQuery>();
+            
+            // Register regular queries
+            types.QueryTypes.RegisterQuery<GetWeatherForecastCountQuery>();
+            types.QueryTypes.RegisterQuery<GetWeatherForecastCountSingleQuery>();
+            types.QueryTypes.RegisterQuery<GetWeatherForecastCountGenericQuery>();
         });
     }
 }

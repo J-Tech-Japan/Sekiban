@@ -2,7 +2,10 @@ using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add Azure Storage emulator for Orleans
-var storage = builder.AddAzureStorage("azurestorage").RunAsEmulator();
+var storage = builder
+    .AddAzureStorage("azurestorage")
+    // .RunAsEmulator(opt => opt.WithDataVolume());
+    .RunAsEmulator();
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -38,5 +41,15 @@ builder
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);
+
+// Add benchmark project (load generator)
+var bench = builder
+    .AddProject<DcbOrleans_Benchmark>("bench")
+    .WithReference(apiService)
+    .WaitFor(apiService)
+    .WithEnvironment("ApiBaseUrl", apiService.GetEndpoint("http"))
+    .WithEnvironment("BENCH_TOTAL", "10000")
+    .WithEnvironment("BENCH_CONCURRENCY", "32")
+    .WithHttpEndpoint();
 
 builder.Build().Run();

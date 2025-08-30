@@ -64,15 +64,14 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Orleans_Grain_Should_Return_Serializable_State()
+    public async Task Orleans_Grain_Should_Return_Snapshot_Envelope()
     {
         await EnsureInitializedAsync();
         var grain = _client.GetGrain<IMultiProjectionGrain>("serialization-test");
-        var stateResult = await grain.GetSerializableStateAsync();
+        var stateResult = await grain.GetSnapshotJsonAsync();
         Assert.NotNull(stateResult);
         Assert.True(stateResult.IsSuccess);
-        var state = stateResult.GetValue();
-        Assert.Equal("serialization-test", state.ProjectorName);
+        Assert.False(string.IsNullOrEmpty(stateResult.GetValue()));
     }
 
     [Fact]

@@ -10,17 +10,22 @@ using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.Projections;
 
 /// <summary>
-///     Weather forecast projection state using SafeUnsafeProjectionState
+///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
 [GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
-
     /// <summary>
-    ///     Internal state managed by SafeUnsafeProjectionState
+    ///     Dictionary of weather forecasts by ID
     /// </summary>
     [Id(0)]
-    public SafeUnsafeProjectionState<Guid, WeatherForecastItem> State { get; init; } = new();
+    public Dictionary<Guid, WeatherForecastItem> Forecasts { get; init; } = new();
+
+    /// <summary>
+    ///     Set of forecast IDs that have been modified by unsafe events (events within the safe window)
+    /// </summary>
+    [Id(1)]
+    public HashSet<Guid> UnsafeForecasts { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjection";
 
@@ -36,90 +41,82 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         Event ev,
         List<ITag> tags,
         DcbDomainTypes domainTypes,
-    SortableUniqueId safeWindowThreshold)
+        SortableUniqueId safeWindowThreshold)
     {
-        Console.WriteLine(
-            $"[WeatherForecastProjection.Project] Processing event: {ev.EventType}, Tags: {string.Join(", ", tags.Select(t => t.GetType().Name))}");
-
         // Check if event has WeatherForecastTag
         var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
 
         if (weatherForecastTags.Count == 0)
         {
-            Console.WriteLine("[WeatherForecastProjection.Project] No WeatherForecastTag found, skipping event");
             // No WeatherForecastTag, skip this event
             return ResultBox.FromValue(payload);
         }
 
-        Console.WriteLine(
-            $"[WeatherForecastProjection.Project] Found {weatherForecastTags.Count} WeatherForecastTag(s)");
+        // Get the forecast IDs from the tags
+        var forecastIds = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
+        
+        // Create a copy of the forecasts dictionary for immutability
+        var updatedForecasts = new Dictionary<Guid, WeatherForecastItem>(payload.Forecasts);
+        var updatedUnsafeForecasts = new HashSet<Guid>(payload.UnsafeForecasts);
 
-        // Function to get affected item IDs
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
-        {
-            // Return the forecast IDs from the tags
-            var ids = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
-            Console.WriteLine($"[WeatherForecastProjection.Project] getAffectedItemIds returning {ids.Count} IDs");
-            return ids;
-        };
+        // Check if event is within safe window
+        var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+        var isEventUnsafe = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold);
 
-        // Function to project a single item
-        Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem = (forecastId, current, evt) =>
+        // Process each affected forecast
+        foreach (var forecastId in forecastIds)
         {
-            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem called for forecastId: {forecastId}, current is null: {current == null}, event type: {evt.Payload?.GetType().Name}");
+            var current = updatedForecasts.TryGetValue(forecastId, out var existing) ? existing : null;
+            
             // Process based on event type
-            var result = evt.Payload switch
+            var result = ev.Payload switch
             {
-                WeatherForecastCreated created => current != null
-                    ? current with // Update existing
-                    {
-                        Location = created.Location,
-                        Date = created.Date.ToDateTime(TimeOnly.MinValue),
-                        TemperatureC = created.TemperatureC,
-                        Summary = created.Summary,
-                        LastUpdated = GetEventTimestamp(evt)
-                    }
-                    : new WeatherForecastItem( // Create new
-                        forecastId,
-                        created.Location,
-                        created.Date.ToDateTime(TimeOnly.MinValue),
-                        created.TemperatureC,
-                        created.Summary,
-                        GetEventTimestamp(evt)),
+                WeatherForecastCreated created => new WeatherForecastItem(
+                    forecastId,
+                    created.Location,
+                    created.Date.ToDateTime(TimeOnly.MinValue),
+                    created.TemperatureC,
+                    created.Summary,
+                    GetEventTimestamp(ev)),
 
-                WeatherForecastUpdated updated => current != null
-                    ? current with // Update existing
-                    {
-                        Location = updated.Location,
-                        TemperatureC = updated.TemperatureC,
-                        Summary = updated.Summary,
-                        LastUpdated = GetEventTimestamp(evt)
-                    }
-                    : null, // Can't update non-existent item
+                WeatherForecastUpdated updated when current != null => current with
+                {
+                    Location = updated.Location,
+                    TemperatureC = updated.TemperatureC,
+                    Summary = updated.Summary,
+                    LastUpdated = GetEventTimestamp(ev)
+                },
 
-                LocationNameChanged locationChanged => current != null
-                    ? current with // Update location name only
-                    {
-                        Location = locationChanged.NewLocationName,
-                        LastUpdated = GetEventTimestamp(evt)
-                    }
-                    : null, // Can't update non-existent item
+                LocationNameChanged locationChanged when current != null => current with
+                {
+                    Location = locationChanged.NewLocationName,
+                    LastUpdated = GetEventTimestamp(ev)
+                },
 
                 WeatherForecastDeleted => null, // Delete the item
 
-                _ => current // Unknown event type, keep current state
+                _ => current // Unknown event type or can't update non-existent item
             };
-            Console.WriteLine($"[WeatherForecastProjection.Project] projectItem returning: {(result != null ? "non-null item" : "null")}");
-            return result;
-        };
 
-        // Process event with safe window threshold
-        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
+            // Update the dictionary
+            if (result != null)
+            {
+                updatedForecasts[forecastId] = result;
+                
+                // Mark as unsafe if event is within safe window
+                if (isEventUnsafe)
+                {
+                    updatedUnsafeForecasts.Add(forecastId);
+                }
+            }
+            else if (ev.Payload is WeatherForecastDeleted)
+            {
+                updatedForecasts.Remove(forecastId);
+                updatedUnsafeForecasts.Remove(forecastId);
+            }
+        }
 
-        Console.WriteLine(
-            $"[WeatherForecastProjection.Project] After processing - Current forecasts: {updatedState.GetCurrentState().Count}");
-
-        return ResultBox.FromValue(payload with { State = updatedState });
+        return ResultBox.FromValue(payload with { Forecasts = updatedForecasts, UnsafeForecasts = updatedUnsafeForecasts });
     }
 
 
@@ -135,17 +132,18 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     }
 
     /// <summary>
-    ///     Get all current weather forecasts (including unsafe)
+    ///     Get all current weather forecasts
     /// </summary>
     public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts()
     {
-        var current = State.GetCurrentState();
-        Console.WriteLine($"[WeatherForecastProjection.GetCurrentForecasts] Current: {current.Count} items");
-        return current;
+        return Forecasts;
     }
 
     /// <summary>
-    ///     Check if a specific forecast has unsafe modifications
+    ///     Check if a forecast has been modified by unsafe events (events within the safe window)
     /// </summary>
-    public bool IsForecastUnsafe(Guid forecastId) => State.IsItemUnsafe(forecastId);
+    public bool IsForecastUnsafe(Guid forecastId)
+    {
+        return UnsafeForecasts.Contains(forecastId);
+    }
 }

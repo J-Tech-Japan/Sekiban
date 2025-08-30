@@ -48,15 +48,18 @@ public record WeatherForecastProjectorWithTagStateProjector :
             return ResultBox.FromValue(payload);
         }
 
-        // Function to get affected item IDs
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => weatherForecastTags.Select(tag => tag.ForecastId);
+        // Function to get affected item IDs for any event passed by state (do NOT capture current tags)
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Select(t => t.ForecastId);
 
         // Function to project a single item
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) =>
-            ProjectTagState(forecastId, current, evt, weatherForecastTags);
+            ProjectTagState(forecastId, current, evt);
 
-        // Process event with threshold
-    var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold);
+        // Process event with threshold (pass as string value)
+        var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold.Value);
 
         return ResultBox.FromValue(payload with { State = updatedState });
     }
@@ -66,18 +69,10 @@ public record WeatherForecastProjectorWithTagStateProjector :
     private static TagState? ProjectTagState(
         Guid forecastId,
         TagState? current,
-        Event ev,
-        List<WeatherForecastTag> tags)
+        Event ev)
     {
-        // Find the tag that corresponds to this forecast ID
-        var tag = tags.FirstOrDefault(t => t.ForecastId == forecastId);
-        if (tag == null)
-        {
-            return current; // Tag not found, keep current state
-        }
-
         // Create TagStateId for this tag
-        var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
+        var tagStateId = new TagStateId(new WeatherForecastTag(forecastId), WeatherForecastProjector.ProjectorName);
 
         // If current is null, create empty TagState
         var tagState = current ?? TagState.GetEmpty(tagStateId);
@@ -106,61 +101,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public IReadOnlyDictionary<Guid, TagState> GetCurrentTagStates() => State.GetCurrentState();
 
-    /// <summary>
-    ///     Get only safe tag states
-    /// </summary>
-    public IReadOnlyDictionary<Guid, TagState> GetSafeTagStates()
-    {
-        // Calculate safe window threshold (20 seconds ago)
-        var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-        
-        // Define projection functions
-        Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
-        {
-            // Extract WeatherForecastTag IDs from event tags
-            var tagIds = new List<Guid>();
-            foreach (var tagString in evt.Tags)
-            {
-                var parts = tagString.Split(':', 2);
-                if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
-                {
-                    if (Guid.TryParse(parts[1], out var forecastId))
-                    {
-                        tagIds.Add(forecastId);
-                    }
-                }
-            }
-            return tagIds;
-        };
-        
-        Func<Guid, TagState?, Event, TagState?> projectTagState = (tagId, current, evt) =>
-        {
-            var tag = new WeatherForecastTag(tagId);
-            var tagStateId = new TagStateId(tag, WeatherForecastProjector.ProjectorName);
-            
-            if (current == null)
-            {
-                current = TagState.GetEmpty(tagStateId);
-            }
-            
-            var newPayload = WeatherForecastProjector.Project(current.Payload, evt);
-            
-            if (newPayload is WeatherForecastState { IsDeleted: true })
-            {
-                return null;
-            }
-            
-            return current with
-            {
-                Payload = newPayload,
-                Version = current.Version + 1,
-                LastSortedUniqueId = evt.SortableUniqueIdValue,
-                ProjectorVersion = WeatherForecastProjector.ProjectorVersion
-            };
-        };
-        
-        return State.GetSafeState(threshold, getAffectedIds, projectTagState);
-    }
+    // Removed: GetSafeTagStates() — safe view construction is handled by State/Actor
 
     /// <summary>
     ///     Check if a specific tag state has unsafe modifications
@@ -184,7 +125,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// </summary>
     public IEnumerable<WeatherForecastState> GetSafeWeatherForecasts()
     {
-        return GetSafeTagStates()
+        // For simplicity, return current forecasts; safe view should be obtained via actor/state when needed
+        return GetCurrentTagStates()
             .Values
             .Select(ts => ts.Payload)
             .OfType<WeatherForecastState>()
@@ -199,20 +141,32 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetSafeState(
+    public SafeProjection<WeatherForecastProjectorWithTagStateProjector> GetSafeProjection(
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider) =>
-        // The State already manages safe/unsafe internally
-        // We return the same instance since SafeUnsafeProjectionState handles it
-        this;
+        DcbDomainTypes domainTypes)
+    {
+        Func<Event, IEnumerable<Guid>> getIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Select(t => t.ForecastId);
+
+        Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) => ProjectTagState(forecastId, current, evt);
+        var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
+        var safeLast = safeDict.Count > 0 ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var version = safeDict.Values.Sum(ts => ts.Version);
+        return new SafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, safeLast, version);
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
-        // Return current state (includes unsafe)
-        this;
+    public UnsafeProjection<WeatherForecastProjectorWithTagStateProjector> GetUnsafeProjection(DcbDomainTypes domainTypes)
+    {
+        var current = State.GetCurrentState();
+        var last = current.Count > 0 ? current.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var version = current.Values.Sum(ts => ts.Version);
+        return new UnsafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, last, Guid.Empty, version);
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
@@ -220,36 +174,23 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+        DcbDomainTypes domainTypes)
     {
-        // Extract tags from event - specifically looking for WeatherForecastTag
-        var tags = new List<ITag>();
-        foreach (var tagString in evt.Tags)
-        {
-            // Parse the tag string format "group:content"
-            var parts = tagString.Split(':', 2);
-            if (parts.Length == 2 && parts[0] == WeatherForecastTag.TagGroupName)
-            {
-                // This is a WeatherForecastTag - parse the GUID content
-                if (Guid.TryParse(parts[1], out var forecastId))
-                {
-                    tags.Add(new WeatherForecastTag(forecastId));
-                }
-            }
-            // Ignore other tags since this projector only processes WeatherForecastTag
-        }
+        // Extract tags via domainTypes and keep only WeatherForecastTag
+        var tags = evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Cast<ITag>()
+            .ToList();
 
         // Use the static Project method with provided domainTypes
-    var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
+        var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
         }
 
         var projected = result.GetValue();
-
-        // Update tracking information
         return projected with
         {
             LastEventId = evt.Id,

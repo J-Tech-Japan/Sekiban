@@ -176,11 +176,11 @@ public class GeneralMultiProjectionActorSafeWindowTests
         await actor1.AddEventsAsync(new[] { oldEvent });
 
         // Get serializable state
-        var serializableState = await actor1.GetSerializableStateAsync();
+        var serializableState = await actor1.GetSnapshotAsync();
 
         // Create new actor and load state
         var actor2 = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
-        await actor2.SetCurrentState(serializableState.GetValue());
+        await actor2.SetSnapshotAsync(serializableState.GetValue());
 
         // Add new event within safe window
         var recentEvent = CreateEvent(new TestEventCreated("Recent Item"), DateTime.UtcNow.AddSeconds(-2));

@@ -4,7 +4,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-using Sekiban.Dcb.Orleans.MultiProjections;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
@@ -13,58 +13,67 @@ using System.Text.Json;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
-///     Orleans grain implementation for multi-projection
+///     Simplified pure infrastructure grain with minimal business logic
+///     Demonstrates separation of concerns
 /// </summary>
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
-    private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
-    private readonly int _maxStateSize = 2 * 1024 * 1024; // 2MB default limit
-    private readonly int _persistBatchSize = 100; // Batch events before persisting
-
-    // Configuration
-    private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
-    private long _eventsProcessed;
-    private int _eventsSinceLastPersist;
-    private IDisposable? _fallbackTimer;
-
-    // State management
-    private bool _isInitialized;
-    private bool _isSubscriptionActive;
-    private string? _lastError;
-    private DateTime? _lastEventTime;
-    private DateTime _lastPersistTime;
+    private readonly IBlobStorageSnapshotAccessor? _snapshotAccessor;
+    
+    // Orleans infrastructure
     private IAsyncStream<Event>? _orleansStream;
-
-    // Orleans stream components
     private StreamSubscriptionHandle<Event>? _orleansStreamHandle;
-
-    // Timers
     private IDisposable? _persistTimer;
-
-    // Core components
+    private IDisposable? _fallbackTimer;
+    
+    // Core projection actor - contains business logic
     private GeneralMultiProjectionActor? _projectionActor;
+    
+    // Simple tracking
+    private bool _isInitialized;
+    private string? _lastError;
+    private long _eventsProcessed;
+    private DateTime? _lastEventTime;
+    
+    // Event delivery statistics (debug/no-op selectable)
+    private readonly Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics _eventStats;
+    
+    // Event batching
+    private readonly List<Event> _eventBuffer = new();
+    private DateTime _lastBufferFlush = DateTime.UtcNow;
+    private readonly int _batchSize = 50; // Process events in batches of 50
+    private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(100); // Flush after 100ms
+    private IDisposable? _batchTimer;
+
+    // Delegate these to configuration
+    private readonly int _persistBatchSize = 100; // Used in ProcessEventBatch
+    private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
-        IEventSubscriptionResolver? subscriptionResolver = null)
+        IEventSubscriptionResolver? subscriptionResolver = null,
+        IBlobStorageSnapshotAccessor? snapshotAccessor = null,
+        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        // Use provided resolver or fall back to default
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
+        _snapshotAccessor = snapshotAccessor;
+        _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
     }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
         await EnsureInitializedAsync();
-
+        
         if (_projectionActor == null)
         {
             return ResultBox.Error<MultiProjectionState>(
@@ -73,22 +82,46 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         return await _projectionActor.GetStateAsync(canGetUnsafeState);
     }
+    
+    /// <summary>
+    ///     Get event delivery statistics for debugging
+    /// </summary>
+    public Task<EventDeliveryStatistics> GetEventDeliveryStatisticsAsync()
+    {
+        var snap = _eventStats.Snapshot();
+        var stats = new EventDeliveryStatistics
+        {
+            TotalUniqueEvents = snap.totalUnique,
+            TotalDeliveries = snap.totalDeliveries,
+            DuplicateDeliveries = snap.duplicateDeliveries,
+            EventsWithMultipleDeliveries = snap.eventsWithMultipleDeliveries,
+            MaxDeliveryCount = snap.maxDeliveryCount,
+            AverageDeliveryCount = snap.averageDeliveryCount,
+            StreamUniqueEvents = snap.streamUnique,
+            StreamDeliveries = snap.streamDeliveries,
+            CatchUpUniqueEvents = snap.catchUpUnique,
+            CatchUpDeliveries = snap.catchUpDeliveries,
+            Message = snap.message
+        };
 
-    public async Task<ResultBox<SerializableMultiProjectionStateDto>> GetSerializableStateAsync(
-        bool canGetUnsafeState = true)
+        return Task.FromResult(stats);
+    }
+
+    public async Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true)
     {
         await EnsureInitializedAsync();
 
         if (_projectionActor == null)
         {
-            return ResultBox.Error<SerializableMultiProjectionStateDto>(
+            return ResultBox.Error<string>(
                 new InvalidOperationException("Projection actor not initialized"));
         }
 
-        var rb = await _projectionActor.GetSerializableStateAsync(canGetUnsafeState);
-        if (!rb.IsSuccess) return ResultBox.Error<SerializableMultiProjectionStateDto>(rb.GetException());
-        var dto = SerializableMultiProjectionStateDto.FromCore(rb.GetValue());
-        return ResultBox.FromValue(dto);
+        var rb = await _projectionActor.GetSnapshotAsync(canGetUnsafeState);
+        if (!rb.IsSuccess)
+            return ResultBox.Error<string>(rb.GetException());
+        var json = JsonSerializer.Serialize(rb.GetValue(), _domainTypes.JsonSerializerOptions);
+        return ResultBox.FromValue(json);
     }
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)
@@ -100,51 +133,46 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             throw new InvalidOperationException("Projection actor not initialized");
         }
 
+        // Track event deliveries as well for events coming from the EventStore catch-up
+        // so that delivery statistics include both stream and catch-up paths.
+        _eventStats.RecordCatchUpBatch(events);
+
+        // Delegate to projection actor
         await _projectionActor.AddEventsAsync(events, finishedCatchUp);
         _eventsProcessed += events.Count;
-
+        
         if (events.Count > 0)
         {
             _lastEventTime = DateTime.UtcNow;
-            _eventsSinceLastPersist += events.Count;
-
-            // Persist state after processing a batch of events or if caught up
-            // This balances between data safety and performance
-            if (_eventsSinceLastPersist >= _persistBatchSize || finishedCatchUp)
-            {
-                await PersistStateAsync();
-                _eventsSinceLastPersist = 0;
-            }
         }
     }
 
     public async Task<MultiProjectionGrainStatus> GetStatusAsync()
     {
         var currentPosition = _state.State?.LastPosition;
-        var isCaughtUp = _isSubscriptionActive;
-
-        // Calculate state size
+        var isCaughtUp = _orleansStreamHandle != null;
+        
         long stateSize = 0;
         if (_projectionActor != null)
         {
-            var serializableState = await _projectionActor.GetSerializableStateAsync();
-            if (serializableState.IsSuccess)
+            var snapshot = await _projectionActor.GetSnapshotAsync();
+            if (snapshot.IsSuccess)
             {
-                var json = JsonSerializer.Serialize(serializableState.GetValue(), _domainTypes.JsonSerializerOptions);
+                var json = JsonSerializer.Serialize(snapshot.GetValue(), _domainTypes.JsonSerializerOptions);
                 stateSize = Encoding.UTF8.GetByteCount(json);
             }
         }
 
         return new MultiProjectionGrainStatus(
             this.GetPrimaryKeyString(),
-            _isSubscriptionActive,
+            _orleansStreamHandle != null,
             isCaughtUp,
             currentPosition,
             _eventsProcessed,
             _lastEventTime,
-            _lastPersistTime,
+            DateTime.UtcNow,
             stateSize,
-            _lastError != null,
+            !string.IsNullOrEmpty(_lastError),
             _lastError);
     }
 
@@ -157,65 +185,80 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
 
-            // Get the serializable state
-            var stateResult = await _projectionActor.GetSerializableStateAsync(false); // Only persist safe state
-            if (!stateResult.IsSuccess)
+            // Ask actor to build a persistable snapshot (with size validation + offload included)
+            var persistable = await _projectionActor.BuildSnapshotForPersistenceAsync(false);
+            if (!persistable.IsSuccess)
             {
-                return ResultBox.Error<bool>(stateResult.GetException());
+                _lastError = persistable.GetException().Message;
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WARNING: {_lastError}");
+                return ResultBox.FromValue(false);
             }
 
-            var serializableState = stateResult.GetValue();
-
-            // Serialize to check size
-            var json = JsonSerializer.Serialize(serializableState, _domainTypes.JsonSerializerOptions);
-            var stateSize = Encoding.UTF8.GetByteCount(json);
-
-            // Check size limit
-            if (stateSize > _maxStateSize)
-            {
-                // Log warning but don't fail - just skip this persist
-                _lastError = $"State size {stateSize} exceeds limit {_maxStateSize}, skipping persist";
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WARNING: State size {stateSize} exceeds limit {_maxStateSize}, skipping persist for CosmosDB");
-                return ResultBox.FromValue(false); // Return false to indicate skipped
-            }
-            
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={stateSize}, Events={_eventsProcessed}, SafePosition={_projectionActor.GetSafeLastSortableUniqueId()}");
+            var data = persistable.GetValue();
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId}");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
-            _state.State.SerializedState = json;
-            // Position is updated in ProcessStreamEvent when events are processed
-            _state.State.LastPersistTime = DateTime.UtcNow;
+            _state.State.SerializedState = data.Json;
+            _state.State.LastPosition = data.SafeLastSortableUniqueId;
+            _state.State.SafeLastPosition = data.SafeLastSortableUniqueId;
             _state.State.EventsProcessed = _eventsProcessed;
-            _state.State.StateSize = stateSize;
-            // Persist safe last position separately from latest processed position
-            _state.State.SafeLastPosition = _projectionActor.GetSafeLastSortableUniqueId();
+            _state.State.StateSize = data.Size;
+            _state.State.LastPersistTime = DateTime.UtcNow;
 
-            // Persist to storage
             await _state.WriteStateAsync();
-
-            _lastPersistTime = DateTime.UtcNow;
-            _lastError = null; // Clear error on successful persist
-            _eventsSinceLastPersist = 0; // Reset counter after successful persist
-
-            return ResultBox.FromValue(true); // Return true for success
+            _lastError = null;
+            
+            return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to persist state: {ex.Message}";
+            _lastError = $"Persistence failed: {ex.Message}";
             return ResultBox.Error<bool>(ex);
         }
     }
 
     public async Task StopSubscriptionAsync()
     {
-        await StopSubscriptionInternalAsync();
+        if (_orleansStreamHandle != null)
+        {
+            await _orleansStreamHandle.UnsubscribeAsync();
+            _orleansStreamHandle = null;
+        }
     }
 
     public async Task StartSubscriptionAsync()
     {
         await EnsureInitializedAsync();
-        await StartSubscriptionInternalAsync();
+        
+        // Subscribe to Orleans stream if not already subscribed
+        if (_orleansStreamHandle == null && _orleansStream != null)
+        {
+            try
+            {
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Starting subscription to Orleans stream");
+                
+                var observer = new StreamBatchObserver(this);
+                _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
+                
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
+            }
+            catch (Exception ex)
+            {
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
+                _lastError = $"Stream subscription failed: {ex.Message}";
+                throw;
+            }
+        }
+        else if (_orleansStreamHandle != null)
+        {
+            var projectorName = this.GetPrimaryKeyString();
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream subscription already active");
+        }
+        
+        await CatchUpFromEventStoreAsync();
     }
 
     public async Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query)
@@ -224,33 +267,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (_projectionActor == null)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Projection actor is null");
             return new QueryResultGeneral(null!, string.Empty, query);
         }
 
         try
         {
-            // Get the current state
             var stateResult = await _projectionActor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                Console.WriteLine(
-                    $"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Failed to get state - {stateResult.GetException()?.Message}");
                 return new QueryResultGeneral(null!, string.Empty, query);
             }
 
             var state = stateResult.GetValue();
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] ExecuteQueryAsync: Got state - Version={state.Version}, IsCaughtUp={state.IsCatchedUp}, LastEventId={state.LastEventId}");
-
-            // Create a provider function that returns the payload
             var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
-
-            // Get service provider from grain context
-            var serviceProvider = ServiceProvider;
-
-            // Execute the query using QueryTypes
-            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(query, projectorProvider, serviceProvider);
+            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
+                query, 
+                projectorProvider, 
+                ServiceProvider);
 
             if (result.IsSuccess)
             {
@@ -262,7 +295,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            _lastError = $"Query execution failed: {ex.Message}";
+            _lastError = $"Query failed: {ex.Message}";
             return new QueryResultGeneral(null!, string.Empty, query);
         }
     }
@@ -271,68 +304,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        // If no events have been processed yet, try to refresh from event store
         if (_eventsProcessed == 0)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] No events processed yet, refreshing from event store");
             await RefreshAsync();
         }
 
         if (_projectionActor == null)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null");
             return ListQueryResultGeneral.Empty;
         }
 
         try
         {
-            // Get the current state
             var stateResult = await _projectionActor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                Console.WriteLine(
-                    $"[{this.GetPrimaryKeyString()}] Failed to get state: {stateResult.GetException()?.Message}");
                 return ListQueryResultGeneral.Empty;
             }
 
             var state = stateResult.GetValue();
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] State retrieved. Payload type: {state.Payload?.GetType().Name}, Events processed: {_eventsProcessed}");
-
-            // Create a provider function that returns the payload
-            var projectorProvider = () =>
-            {
-                if (state.Payload == null)
-                {
-                    return Task.FromResult(
-                        ResultBox.Error<IMultiProjectionPayload>(
-                            new InvalidOperationException("Projection state payload is null")));
-                }
-                return Task.FromResult(ResultBox.FromValue(state.Payload));
-            };
-
-            // Get service provider from grain context
-            var serviceProvider = ServiceProvider;
-
-            // Execute the list query using the new method that returns ListQueryResultGeneral directly
+            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
             var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
                 query,
                 projectorProvider,
-                serviceProvider);
+                ServiceProvider);
 
-            if (result.IsSuccess)
-            {
-                return result.GetValue();
-            }
-
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Query execution failed: {result.GetException()?.Message}");
-            return ListQueryResultGeneral.Empty;
+            return result.IsSuccess ? result.GetValue() : ListQueryResultGeneral.Empty;
         }
         catch (Exception ex)
         {
-            _lastError = $"List query execution failed: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Exception in ExecuteListQueryAsync: {ex}");
+            _lastError = $"List query failed: {ex.Message}";
             return ListQueryResultGeneral.Empty;
         }
     }
@@ -340,584 +341,419 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
     {
         await EnsureInitializedAsync();
-
-        if (_projectionActor == null)
-        {
-            return false;
-        }
-
+        
+        if (_projectionActor == null) return false;
+        
         return await _projectionActor.IsSortableUniqueIdReceived(sortableUniqueId);
     }
 
     public async Task RefreshAsync()
     {
-        Console.WriteLine(
-            $"[{this.GetPrimaryKeyString()}] RefreshAsync called - manually catching up from event store");
-
-        await EnsureInitializedAsync();
-
-        if (_projectionActor == null || _eventStore == null)
-        {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Cannot refresh - missing components");
-            return;
-        }
-
-        try
-        {
-            // Get current position and check existing state
-            SortableUniqueId? fromPosition = null;
-            var currentState = await _projectionActor.GetStateAsync();
-            if (currentState.IsSuccess)
-            {
-                var state = currentState.GetValue();
-                if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
-                {
-                    fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
-                }
-                
-                // Log current Weather state if this is WeatherForecastProjection
-                if (state.Payload != null && state.Payload.GetType().Name == "WeatherForecastProjection")
-                {
-                    dynamic weatherProj = state.Payload;
-                    var forecasts = weatherProj.GetCurrentForecasts();
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] BEFORE REFRESH: {forecasts.Count} weather forecasts in state");
-                }
-            }
-
-            // Load new events from the event store
-            var eventsResult = fromPosition == null
-                ? await _eventStore.ReadAllEventsAsync(since: null)
-                : await _eventStore.ReadAllEventsAsync(since: fromPosition.Value);
-
-            if (eventsResult.IsSuccess)
-            {
-                var newEvents = eventsResult.GetValue().ToList();
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Found {newEvents.Count} events in event store");
-
-                if (newEvents.Any())
-                {
-                    // Process the new events
-                    await _projectionActor.AddEventsAsync(newEvents);
-                    _eventsProcessed += newEvents.Count;
-                    _lastEventTime = DateTime.UtcNow;
-
-                    Console.WriteLine(
-                        $"[{this.GetPrimaryKeyString()}] Processed {newEvents.Count} new events, total: {_eventsProcessed}");
-
-                    // Persist the updated state
-                    await PersistStateAsync();
-                    
-                    // Log Weather state after refresh
-                    var afterState = await _projectionActor.GetStateAsync();
-                    if (afterState.IsSuccess && afterState.GetValue().Payload != null && 
-                        afterState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
-                    {
-                        dynamic weatherProj = afterState.GetValue().Payload;
-                        var forecasts = weatherProj.GetCurrentForecasts();
-                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] AFTER REFRESH: {forecasts.Count} weather forecasts in state");
-                    }
-                } else
-                {
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] No new events to process");
-                }
-            } else
-            {
-                Console.WriteLine(
-                    $"[{this.GetPrimaryKeyString()}] Failed to read events: {eventsResult.GetException()?.Message}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _lastError = $"Refresh failed: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refresh error: {ex}");
-        }
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refreshing from event store");
+        await CatchUpFromEventStoreAsync();
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        // Just prepare basic setup during activation
-        // Stream subscription will happen in lifecycle participant
         var projectorName = this.GetPrimaryKeyString();
+        Console.WriteLine($"[SimplifiedPureGrain] OnActivateAsync for {projectorName}");
 
-        Console.WriteLine($"[MultiProjectionGrain] OnActivateAsync for {projectorName}");
-        Console.WriteLine(
-            $"[MultiProjectionGrain-{projectorName}] Waiting for lifecycle participant to set up stream...");
-
-        // Only create the projection actor if it doesn't exist (first activation)
+        // Create projection actor
         if (_projectionActor == null)
         {
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Creating new projection actor");
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Creating new projection actor");
             _projectionActor = new GeneralMultiProjectionActor(
                 _domainTypes,
                 projectorName,
                 new GeneralMultiProjectionActorOptions
                 {
-                    SafeWindowMs = 20000 // 20 seconds
+                    SafeWindowMs = 20000, // 20 seconds
+                    SnapshotAccessor = _snapshotAccessor,
+                    SnapshotOffloadThresholdBytes = 2 * 1024 * 1024,
+                    MaxSnapshotSerializedSizeBytes = 2 * 1024 * 1024
                 });
 
-                // Only restore persisted state on first creation
-                if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
+            // Restore persisted state if available
+            if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
+            {
+                try
                 {
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Restoring persisted state from storage");
+                    var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                        _state.State.SerializedState,
+                        _domainTypes.JsonSerializerOptions);
+
+                    if (deserializedState != null)
+                    {
+                        await _projectionActor.SetSnapshotAsync(deserializedState);
+                        _eventsProcessed = _state.State.EventsProcessed;
+                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to restore state: {ex.Message}. Falling back to event store catch-up and clearing snapshot.");
+                    // Clear invalid snapshot and persist cleared state to avoid repeated failures
                     try
                     {
-                        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Restoring persisted state from storage");
-                        var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionState>(
-                            _state.State.SerializedState,
-                            _domainTypes.JsonSerializerOptions);
-
-                        if (deserializedState != null && _projectionActor != null)
-                        {
-                            await _projectionActor.SetCurrentState(deserializedState);
-                            _eventsProcessed = _state.State.EventsProcessed;
-                            Console.WriteLine(
-                                $"[MultiProjectionGrain-{projectorName}] State restored from storage - Events processed: {_eventsProcessed}");
-                            
-                            // Log Weather state after restoration
-                            var restoredState = await _projectionActor.GetStateAsync();
-                            if (restoredState.IsSuccess && restoredState.GetValue().Payload != null &&
-                                restoredState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
-                            {
-                                dynamic weatherProj = restoredState.GetValue().Payload;
-                                var forecasts = weatherProj.GetCurrentForecasts();
-                                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] RESTORED STATE: {forecasts.Count} weather forecasts");
-                                int count = 0;
-                                foreach (var forecast in forecasts)
-                                {
-                                    if (count >= 5) break;
-                                    Console.WriteLine($"  - {forecast.Value.Location} on {forecast.Value.Date:yyyy-MM-dd}");
-                                    count++;
-                                }
-                            }
-                        }
+                        _state.State.SerializedState = null;
+                        _state.State.EventsProcessed = 0;
+                        await _state.WriteStateAsync();
                     }
-                    catch (Exception ex)
+                    catch (Exception clearEx)
                     {
-                        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Failed to restore state: {ex.Message}");
-                        // Continue with fresh state
+                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Failed to clear invalid snapshot: {clearEx.Message}");
                     }
-                } else
-                {
-                    Console.WriteLine($"[MultiProjectionGrain-{projectorName}] No persisted state to restore");
                 }
-        } else
-        {
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Projection actor already exists - keeping in-memory state");
-            
-            // Log current in-memory state
-            var currentState = await _projectionActor.GetStateAsync();
-            if (currentState.IsSuccess)
+            }
+            else
             {
-                Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Current in-memory events processed: {_eventsProcessed}");
-                if (currentState.GetValue().Payload != null &&
-                    currentState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
-                {
-                    dynamic weatherProj = currentState.GetValue().Payload;
-                    var forecasts = weatherProj.GetCurrentForecasts();
-                    Console.WriteLine($"[MultiProjectionGrain-{projectorName}] KEPT IN-MEMORY STATE: {forecasts.Count} weather forecasts");
-                }
+                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] No persisted state to restore");
             }
         }
 
         await base.OnActivateAsync(cancellationToken);
+
+        // After activation, always catch up from the event store to ensure up-to-date state
+        await CatchUpFromEventStoreAsync();
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[MultiProjectionGrain-{this.GetPrimaryKeyString()}] DEACTIVATING - Reason: {reason}, Events processed: {_eventsProcessed}");
-        
-        // Log current Weather state before deactivation
-        if (_projectionActor != null)
-        {
-            var currentState = await _projectionActor.GetStateAsync();
-            if (currentState.IsSuccess && currentState.GetValue().Payload != null &&
-                currentState.GetValue().Payload.GetType().Name == "WeatherForecastProjection")
-            {
-                dynamic weatherProj = currentState.GetValue().Payload;
-                var forecasts = weatherProj.GetCurrentForecasts();
-                Console.WriteLine($"[MultiProjectionGrain-{this.GetPrimaryKeyString()}] DEACTIVATING WITH: {forecasts.Count} weather forecasts");
-            }
-        }
+        Console.WriteLine($"[SimplifiedPureGrain-{this.GetPrimaryKeyString()}] Deactivating - Reason: {reason}");
         
         // Persist state before deactivation
         await PersistStateAsync();
         
-        // Clean up resources
-        await StopSubscriptionInternalAsync();
-
-        // Unsubscribe from Orleans stream if we have a direct subscription
+        // Clean up Orleans resources
         if (_orleansStreamHandle != null)
         {
-            try
-            {
-                await _orleansStreamHandle.UnsubscribeAsync();
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Unsubscribed from Orleans stream");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error unsubscribing from stream: {ex.Message}");
-            }
+            await _orleansStreamHandle.UnsubscribeAsync();
         }
 
+        // Flush any remaining events
+        await FlushEventBufferAsync();
+        
         _persistTimer?.Dispose();
         _fallbackTimer?.Dispose();
+        _batchTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
 
     private async Task EnsureInitializedAsync()
     {
-        if (_isInitialized)
-            return;
+        if (_isInitialized) return;
 
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Initializing grain for the first time");
         _isInitialized = true;
 
-        // Set up periodic persistence timer if not already set
-        if (_persistTimer == null)
-        {
-            _persistTimer = this.RegisterGrainTimer(
-                async () => await PersistStateAsync(),
-                new GrainTimerCreationOptions
-                {
-                    DueTime = _persistInterval,
-                    Period = _persistInterval,
-                    Interleave = true
-                });
-        }
+        // Set up periodic persistence timer
+        _persistTimer = this.RegisterGrainTimer(
+            async () => await PersistStateAsync(),
+            new GrainTimerCreationOptions
+            {
+                DueTime = _persistInterval,
+                Period = _persistInterval,
+                Interleave = true
+            });
 
-        // Set up fallback timer to check for new events if stream is not working
-        if (_fallbackTimer == null)
-        {
-            _fallbackTimer = this.RegisterGrainTimer(
-                async () => await FallbackEventCheckAsync(),
-                new GrainTimerCreationOptions
-                {
-                    DueTime = _fallbackCheckInterval,
-                    Period = _fallbackCheckInterval,
-                    Interleave = true
-                });
-        }
+        // Set up fallback check timer
+        _fallbackTimer = this.RegisterGrainTimer(
+            async () => await FallbackEventCheckAsync(),
+            new GrainTimerCreationOptions
+            {
+                DueTime = _fallbackCheckInterval,
+                Period = TimeSpan.FromMinutes(1),
+                Interleave = true
+            });
 
-        await Task.CompletedTask;
+        // Set up batch flush timer
+        _batchTimer = this.RegisterGrainTimer(
+            async () => await FlushEventBufferAsync(),
+            new GrainTimerCreationOptions
+            {
+                DueTime = _batchTimeout,
+                Period = _batchTimeout,
+                Interleave = true
+            });
     }
 
-    private async Task StartSubscriptionInternalAsync()
+    public Task RequestDeactivationAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] StartSubscriptionInternalAsync called");
+        DeactivateOnIdle();
+        return Task.CompletedTask;
+    }
 
-        if (_isSubscriptionActive || _projectionActor == null)
-        {
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Skipping subscription start - already active or missing components");
-            return;
-        }
-
+    public async Task<bool> OverwritePersistedStateVersionAsync(string newVersion)
+    {
         try
         {
-            // Determine starting position from persisted state
-            // Use SafeLastPosition as the durable catch-up point to re-apply any windowed events
-            SortableUniqueId? fromPosition = null;
-            var persisted = _state.State; // state object is injected and should not be null
-            if (!string.IsNullOrEmpty(persisted.SafeLastPosition))
+            if (string.IsNullOrEmpty(_state.State?.SerializedState))
             {
-                fromPosition = new SortableUniqueId(persisted.SafeLastPosition);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from SAFE position: {fromPosition.Value}");
+                return false;
             }
-            else if (!string.IsNullOrEmpty(persisted.LastPosition))
+
+            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                _state.State!.SerializedState!, _domainTypes.JsonSerializerOptions);
+            if (envelope == null) return false;
+
+            SerializableMultiProjectionStateEnvelope modified;
+            if (!envelope.IsOffloaded && envelope.InlineState != null)
             {
-                // Fallback to legacy LastPosition if SafeLastPosition not yet stored (backward compatibility)
-                fromPosition = new SortableUniqueId(persisted.LastPosition);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from legacy position: {fromPosition.Value}");
+                var s = envelope.InlineState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    false,
+                    new SerializableMultiProjectionState(
+                        s.Payload, s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
+                        s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState),
+                    null);
+            }
+            else if (envelope.OffloadedState != null)
+            {
+                var o = envelope.OffloadedState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    true,
+                    null,
+                    new SerializableMultiProjectionStateOffloaded(
+                        o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
+                        newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
+                        o.PayloadLength));
             }
             else
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting from beginning (no saved positions)");
+                return false;
             }
 
-            // Catch up from event store
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catching up from event store");
-            var eventsResult = fromPosition == null
-                ? await _eventStore.ReadAllEventsAsync(since: null)
-                : await _eventStore.ReadAllEventsAsync(since: fromPosition.Value);
-
-            if (eventsResult.IsSuccess)
-            {
-                var events = eventsResult.GetValue().ToList();
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Found {events.Count} events to catch up");
-
-                if (events.Any())
-                {
-                    await _projectionActor.AddEventsAsync(events);
-                    _eventsProcessed += events.Count;
-                    _lastEventTime = DateTime.UtcNow;
-
-                    // Update LastPosition (latest processed) to the last event
-                    var lastEvent = events.Last();
-                    _state.State.LastPosition = lastEvent.SortableUniqueIdValue;
-                    // Update SafeLastPosition to current actor safe id after catch-up
-                    _state.State.SafeLastPosition = _projectionActor?.GetSafeLastSortableUniqueId();
-
-                    // Persist state after catchup
-                    await PersistStateAsync();
-
-                    Console.WriteLine(
-                        $"[{this.GetPrimaryKeyString()}] Catchup complete, processed {events.Count} events");
-                }
-            } else
-            {
-                Console.WriteLine(
-                    $"[{this.GetPrimaryKeyString()}] Failed to read events from store: {eventsResult.GetException()?.Message}");
-            }
-
-            _isSubscriptionActive = true;
-            _lastError = null;
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Subscription started successfully, now receiving live events from Orleans stream");
+            _state.State.SerializedState = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
+            await _state.WriteStateAsync();
+            return true;
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to start subscription: {ex.Message}";
-            _isSubscriptionActive = false;
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Failed to start subscription: {ex}");
-            throw;
+            _lastError = $"OverwritePersistedStateVersion failed: {ex.Message}";
+            return false;
         }
     }
 
-    private async Task StopSubscriptionInternalAsync()
+    public async Task SeedEventsAsync(IReadOnlyList<Event> events)
     {
-        _isSubscriptionActive = false;
-        await Task.CompletedTask; // Keep async signature
+        if (_eventStore == null) return;
+        var result = await _eventStore.WriteEventsAsync(events);
+        if (!result.IsSuccess)
+        {
+            throw result.GetException();
+        }
     }
 
-    /// <summary>
-    ///     Fallback mechanism to check for new events if stream is not working
-    /// </summary>
     private async Task FallbackEventCheckAsync()
     {
-        // Only run fallback if we haven't received events via stream recently
+        // Only run fallback if we haven't received events recently
         if (_lastEventTime == null || DateTime.UtcNow - _lastEventTime > TimeSpan.FromMinutes(1))
         {
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Fallback: No stream events for over 1 minute, checking event store");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Fallback: No stream events for over 1 minute, checking event store");
             await RefreshAsync();
         }
     }
 
-    /// <summary>
-    ///     Process an event received from the Orleans stream
-    /// </summary>
-    internal async Task ProcessStreamEvent(Event evt)
+    private async Task CatchUpFromEventStoreAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProcessStreamEvent: {evt.EventType}, SortableUniqueId: {evt.SortableUniqueIdValue}");
-        
-        // Special logging for Weather events
-        if (evt.EventType.Contains("Weather"))
+        if (_projectionActor == null || _eventStore == null) return;
+
+        // Get current position
+        SortableUniqueId? fromPosition = null;
+        // Use SAFE state for determining catch-up position to avoid
+        // skipping events that are only present in the unsafe window
+        var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+        if (currentState.IsSuccess)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] WEATHER EVENT DETECTED: Type={evt.EventType}, Id={evt.Id}, SortableUniqueId={evt.SortableUniqueIdValue}");
+            var state = currentState.GetValue();
+            if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+            {
+                fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+            }
         }
 
-        // Don't call EnsureInitializedAsync here - the grain should already be initialized
-        // from the lifecycle participant
+        // Load events from store with overlap to avoid boundary misses
+        SortableUniqueId? overlappedFrom = null;
+        if (fromPosition != null)
+        {
+            var overlapValue = fromPosition.GetSafeId();
+            overlappedFrom = new SortableUniqueId(overlapValue);
+        }
+        var eventsResult = overlappedFrom == null
+            ? await _eventStore.ReadAllEventsAsync(since: null)
+            : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
+
+        if (eventsResult.IsSuccess)
+        {
+            var events = eventsResult.GetValue().ToList();
+            if (events.Any())
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (from={(overlappedFrom?.Value ?? "<begin>")})");
+                await AddEventsAsync(events, true);
+                await PersistStateAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Process a batch of events from the stream
+    /// </summary>
+    internal async Task ProcessEventBatch(IReadOnlyList<Event> events)
+    {
         if (!_isInitialized || _projectionActor == null)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Grain not ready to process events, initializing first");
             await EnsureInitializedAsync();
         }
 
-        if (_projectionActor == null)
-        {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null, cannot process event");
-            return;
-        }
+        if (_projectionActor == null || events.Count == 0) return;
 
         try
         {
-            // Check if we've already processed this event
-            if (await _projectionActor.IsSortableUniqueIdReceived(evt.SortableUniqueIdValue))
-            {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Event {evt.Id} already processed, skipping");
-                return;
-            }
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
 
-            // Process the event through the projection actor
-            await _projectionActor.AddEventsAsync(new[] { evt }, false);
-            
-            _eventsProcessed++;
+            // Track event deliveries for debugging
+            _eventStats.RecordStreamBatch(events);
+
+            // Forward all delivered events to the actor which performs
+            // correct idempotency and ordering internally.
+            await _projectionActor.AddEventsAsync(events, true);
+            _eventsProcessed += events.GroupBy(e => e.Id).Count();
             _lastEventTime = DateTime.UtcNow;
-            _eventsSinceLastPersist++;
 
-            // Update position
-            _state.State.LastPosition = evt.SortableUniqueIdValue;
+            // Update position to the maximum SortableUniqueId in the batch (monotonic)
+            var maxSortableId = events
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .Last()
+                .SortableUniqueIdValue;
+            _state.State.LastPosition = maxSortableId;
 
-            // Special logging for Weather events
-            if (evt.EventType.Contains("Weather"))
-            {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WEATHER EVENT PROCESSED: Events total={_eventsProcessed}, Since persist={_eventsSinceLastPersist}");
-            }
-            
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Event processed successfully, total: {_eventsProcessed}");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Batch processed: {events.Count} events, total: {_eventsProcessed}");
 
-            // Persist state after batch
-            if (_eventsSinceLastPersist >= _persistBatchSize)
+            // Persist state after processing a batch if it's large enough
+            if (events.Count >= _persistBatchSize)
             {
                 await PersistStateAsync();
-                _eventsSinceLastPersist = 0;
             }
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to process stream event: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing stream event: {ex}");
+            _lastError = $"Failed to process event batch: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing event batch: {ex}");
+            
+            // Log inner exception for better debugging
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Inner exception: {ex.InnerException}");
+                _lastError += $" Inner: {ex.InnerException.Message}";
+            }
         }
     }
 
     /// <summary>
-    ///     Fallback method for processing events directly (used when DirectOrleansEventSubscription is not available)
+    ///     Process buffered events - called by timer
     /// </summary>
-    internal async Task OnStreamEventReceived(Event evt)
+    private async Task FlushEventBufferAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] OnStreamEventReceived: {evt.EventType}");
-
-        // Ensure the grain is initialized before processing stream events
-        if (!_isInitialized)
+        List<Event> eventsToProcess;
+        lock (_eventBuffer)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Grain not initialized yet, initializing now");
-            await EnsureInitializedAsync();
+            if (_eventBuffer.Count == 0) return;
+            
+            eventsToProcess = new List<Event>(_eventBuffer);
+            _eventBuffer.Clear();
+            _lastBufferFlush = DateTime.UtcNow;
         }
 
-        if (_projectionActor == null)
-        {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ProjectionActor is null, cannot process event");
-            return;
-        }
-
-        try
-        {
-            // Add the event to the projection
-            await _projectionActor.AddEventsAsync(new[] { evt });
-            _eventsProcessed++;
-            _lastEventTime = DateTime.UtcNow;
-            _eventsSinceLastPersist++;
-
-            Console.WriteLine(
-                $"[{this.GetPrimaryKeyString()}] Event processed successfully, total: {_eventsProcessed}");
-
-            // Persist state after batch or periodically
-            if (_eventsSinceLastPersist >= _persistBatchSize)
-            {
-                await PersistStateAsync();
-                _eventsSinceLastPersist = 0;
-            }
-        }
-        catch (Exception ex)
-        {
-            _lastError = $"Failed to process stream event: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing stream event: {ex}");
-        }
+        await ProcessEventBatch(eventsToProcess);
     }
 
-    /// <summary>
-    ///     Observer class for receiving events from Orleans streams
-    /// </summary>
-    private class GrainEventObserver : IAsyncObserver<Event>
+    // Orleans stream batch observer - processes events in batches for efficiency
+    private class StreamBatchObserver : IAsyncBatchObserver<Event>
     {
         private readonly MultiProjectionGrain _grain;
 
-        public GrainEventObserver(MultiProjectionGrain grain) => _grain = grain;
+        public StreamBatchObserver(MultiProjectionGrain grain) => _grain = grain;
+
+        // Batch processing method - Orleans v9.0+ uses IList<SequentialItem<T>>
+        public async Task OnNextAsync(IList<SequentialItem<Event>> batch)
+        {
+            var events = batch.Select(item => item.Item).ToList();
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received batch of {events.Count} events");
+            await _grain.ProcessEventBatch(events);
+        }
+
+        // Legacy batch method for compatibility
+        public async Task OnNextBatchAsync(IEnumerable<Event> batch, StreamSequenceToken? token = null)
+        {
+            var events = batch.ToList();
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received legacy batch of {events.Count} events");
+            await _grain.ProcessEventBatch(events);
+        }
 
         public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
         {
-            Console.WriteLine(
-                $"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Received event {item.EventType}, ID: {item.Id}");
-
-            // Process the event directly through the projection actor
-            await _grain.ProcessStreamEvent(item);
+            // Single event fallback - treat as batch of 1
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {item.EventType}, ID: {item.Id}");
+            await _grain.ProcessEventBatch(new[] { item });
         }
 
-        public Task OnCompletedAsync()
+        public Task OnCompletedAsync() 
         {
-            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            Console.WriteLine($"[GrainEventObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
+            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
             _grain._lastError = $"Stream error: {ex.Message}";
             return Task.CompletedTask;
         }
     }
 
-    #region ILifecycleParticipant implementation
-    /// <summary>
-    ///     Method to participate in the grain lifecycle.
-    ///     Registers a custom stage to be executed after the Activate stage.
-    /// </summary>
-    /// <param name="lifecycle">Grain lifecycle</param>
+    #region ILifecycleParticipant
     public void Participate(IGrainLifecycle lifecycle)
     {
-        Console.WriteLine("[MultiProjectionGrain] Participate called - registering lifecycle stage");
+        Console.WriteLine("[SimplifiedPureGrain] Participate called - registering lifecycle stage");
         var stage = GrainLifecycleStage.Activate + 100;
         lifecycle.Subscribe(GetType().FullName!, stage, InitStreamsAsync, CloseStreamsAsync);
-        Console.WriteLine($"[MultiProjectionGrain] Lifecycle stage registered at {stage}");
+        Console.WriteLine($"[SimplifiedPureGrain] Lifecycle stage registered at {stage}");
     }
 
-    /// <summary>
-    ///     Method to initialize the stream.
-    ///     Executed after the Activate stage.
-    /// </summary>
     private async Task InitStreamsAsync(CancellationToken ct)
     {
         var projectorName = this.GetPrimaryKeyString();
-        Console.WriteLine($"[MultiProjectionGrain-{projectorName}] InitStreamsAsync called in lifecycle stage");
-
-        // Use the resolver to determine which stream to subscribe to
+        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] InitStreamsAsync called in lifecycle stage");
+        
         var streamInfo = _subscriptionResolver.Resolve(projectorName);
         if (streamInfo is not OrleansSekibanStream orleansStream)
         {
-            throw new InvalidOperationException($"Expected OrleansSekibanStream but got {streamInfo?.GetType().Name}");
+            throw new InvalidOperationException($"Invalid stream type: {streamInfo?.GetType().Name}");
         }
 
-        // Subscribe to the Orleans stream
         var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
-        _orleansStream
-            = streamProvider.GetStream<Event>(StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
+        _orleansStream = streamProvider.GetStream<Event>(
+            StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
 
         try
         {
-            Console.WriteLine(
-                $"[MultiProjectionGrain-{projectorName}] Getting stream for {orleansStream.StreamNamespace}/{orleansStream.StreamId}");
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Stream created: {_orleansStream != null}");
-
-            // Create a simple observer that directly processes events
-            var observer = new GrainEventObserver(this);
-            if (_orleansStream == null)
-            {
-                throw new InvalidOperationException("Stream provider returned null stream instance");
-            }
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Getting stream for {orleansStream.StreamNamespace}/{orleansStream.StreamId}");
+            
+            var observer = new StreamBatchObserver(this);
             _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
-
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Successfully subscribed to Orleans stream!");
-            Console.WriteLine($"[MultiProjectionGrain-{projectorName}] Stream handle: {_orleansStreamHandle != null}");
-
-            // Initialize the grain without doing a full catchup
-            // The catchup will happen in OnActivateAsync
+            
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
             _isInitialized = true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(
-                $"[MultiProjectionGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
+            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
             _lastError = $"Stream subscription failed: {ex.Message}";
         }
     }
 
-    /// <summary>
-    ///     Method to clean up the stream.
-    ///     Executed when the grain is deactivated.
-    /// </summary>
     private Task CloseStreamsAsync(CancellationToken ct) =>
         _orleansStreamHandle?.UnsubscribeAsync() ?? Task.CompletedTask;
     #endregion

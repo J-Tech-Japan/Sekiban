@@ -3,6 +3,8 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Tags;
+using System.Threading.Channels;
+using System.Collections.Concurrent;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
@@ -13,6 +15,10 @@ public class OrleansEventPublisher : IEventPublisher
     private readonly IClusterClient _clusterClient;
     private readonly ILogger<OrleansEventPublisher> _logger;
     private readonly IStreamDestinationResolver _resolver;
+    private readonly Channel<PublishItem> _channel;
+    private readonly Task _processor;
+
+    private record PublishItem(string Provider, string Namespace, Guid StreamId, Event Event, int Attempt);
 
     public OrleansEventPublisher(
         IClusterClient clusterClient,
@@ -22,15 +28,20 @@ public class OrleansEventPublisher : IEventPublisher
         _clusterClient = clusterClient;
         _resolver = resolver;
         _logger = logger;
+        // Unbounded channel for simplicity; projection side is idempotent
+        _channel = Channel.CreateUnbounded<PublishItem>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+        _processor = Task.Run(ProcessQueueAsync);
     }
 
     public async Task PublishAsync(
         IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Publishing {EventCount} events to Orleans streams", events.Count);
-
-        var failedEvents = new List<(Event Event, Exception Exception)>();
+        _logger.LogInformation("Queueing {EventCount} events to Orleans streams (at-least-once)", events.Count);
 
         foreach (var (evt, tags) in events)
         {
@@ -41,70 +52,60 @@ public class OrleansEventPublisher : IEventPublisher
                 {
                     if (s is OrleansSekibanStream os)
                     {
-                        _logger.LogDebug(
-                            "Publishing event {EventType} (ID: {EventId}, SortableUniqueId: {SortableUniqueId}) to stream {Provider}/{Namespace}/{StreamId}",
-                            evt.EventType,
-                            evt.Id,
-                            evt.SortableUniqueIdValue,
-                            os.ProviderName,
-                            os.StreamNamespace,
-                            os.StreamId);
-
-                        try
-                        {
-                            var provider = _clusterClient.GetStreamProvider(os.ProviderName);
-                            var stream = provider.GetStream<Event>(StreamId.Create(os.StreamNamespace, os.StreamId));
-
-                            // Publish the entire Event object
-                            await stream.OnNextAsync(evt);
-
-                            _logger.LogDebug("Event {EventId} published successfully to Orleans stream", evt.Id);
-                        }
-                        catch (Exception streamEx)
-                        {
-                            _logger.LogError(
-                                streamEx,
-                                "Failed to publish event {EventType} (ID: {EventId}) to Orleans stream {Provider}/{Namespace}/{StreamId}",
-                                evt.EventType,
-                                evt.Id,
-                                os.ProviderName,
-                                os.StreamNamespace,
-                                os.StreamId);
-                            failedEvents.Add((evt, streamEx));
-                        }
+                        var item = new PublishItem(os.ProviderName, os.StreamNamespace, os.StreamId, evt, 0);
+                        _channel.Writer.TryWrite(item);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
+                _logger.LogError(ex,
                     "Failed to resolve streams for event {EventType} (ID: {EventId})",
-                    evt.EventType,
-                    evt.Id);
-                failedEvents.Add((evt, ex));
+                    evt.EventType, evt.Id);
             }
         }
 
-        if (failedEvents.Any())
-        {
-            _logger.LogWarning(
-                "Failed to publish {FailedCount} out of {TotalCount} events to Orleans streams. These events are persisted in the event store and will be available through catch-up reads.",
-                failedEvents.Count,
-                events.Count);
+        // Return immediately; background processor ensures at-least-once with retry and logging
+        await Task.CompletedTask;
+    }
 
-            // Log details of failed events for debugging
-            foreach (var (evt, ex) in failedEvents)
-            {
-                _logger.LogDebug(
-                    "Failed event details - Type: {EventType}, ID: {EventId}, Error: {ErrorMessage}",
-                    evt.EventType,
-                    evt.Id,
-                    ex.Message);
-            }
-        } else if (events.Any())
+    private async Task ProcessQueueAsync()
+    {
+        const int baseDelayMs = 100; // base backoff
+        const int maxDelayMs = 5000; // cap
+
+        await foreach (var item in _channel.Reader.ReadAllAsync())
         {
-            _logger.LogInformation("Successfully published all {EventCount} events to Orleans streams", events.Count);
+            try
+            {
+                var provider = _clusterClient.GetStreamProvider(item.Provider);
+                var stream = provider.GetStream<Event>(StreamId.Create(item.Namespace, item.StreamId));
+                await stream.OnNextAsync(item.Event);
+                _logger.LogDebug("Published event {EventId} to {Provider}/{Namespace}/{StreamId}",
+                    item.Event.Id, item.Provider, item.Namespace, item.StreamId);
+            }
+            catch (Exception ex)
+            {
+                var nextAttempt = item.Attempt + 1;
+                var delay = Math.Min(maxDelayMs, baseDelayMs * (int)Math.Pow(2, Math.Min(10, item.Attempt)));
+                _logger.LogWarning(ex,
+                    "Publish failed for event {EventId} (attempt {Attempt}). Retrying in {Delay} ms",
+                    item.Event.Id, nextAttempt, delay);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(delay);
+                        // re-enqueue with incremented attempt
+                        _channel.Writer.TryWrite(item with { Attempt = nextAttempt });
+                    }
+                    catch (Exception delayEx)
+                    {
+                        _logger.LogError(delayEx, "Failed to re-enqueue event {EventId}", item.Event.Id);
+                    }
+                });
+            }
         }
     }
 }

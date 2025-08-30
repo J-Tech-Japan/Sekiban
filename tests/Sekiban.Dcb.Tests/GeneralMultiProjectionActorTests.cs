@@ -40,9 +40,11 @@ public class GeneralMultiProjectionActorTests
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentDroppedFromClassRoom(s1, Guid.NewGuid())) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentCreated(s2, "Hanako", 1)) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentEnrolledInClassRoom(s2, Guid.NewGuid())) });
-        var stateRb = await actor.GetSerializableStateAsync();
-        Assert.True(stateRb.IsSuccess);
-        var state = stateRb.GetValue();
+        var envRb = await actor.GetSnapshotAsync();
+        Assert.True(envRb.IsSuccess);
+        var env = envRb.GetValue();
+        Assert.False(env.IsOffloaded);
+        var state = env.InlineState!;
         Assert.Equal(StudentSummaries.MultiProjectorName, state.ProjectorName);
         Assert.Equal("1.0.0", state.ProjectorVersion);
         Assert.Equal(6, state.Version);
@@ -70,17 +72,21 @@ public class GeneralMultiProjectionActorTests
         var s1 = Guid.NewGuid();
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentCreated(s1, "Hanako", 1)) });
         await actor.AddEventsAsync(new[] { MakeEvent(new StudentEnrolledInClassRoom(s1, Guid.NewGuid())) });
-        var savedRb = await actor.GetSerializableStateAsync();
-        Assert.True(savedRb.IsSuccess);
-        var saved = savedRb.GetValue();
+        var savedEnvRb = await actor.GetSnapshotAsync();
+        Assert.True(savedEnvRb.IsSuccess);
+        var savedEnv = savedEnvRb.GetValue();
+        Assert.False(savedEnv.IsOffloaded);
+        var saved = savedEnv.InlineState!;
 
         var actor2 = new GeneralMultiProjectionActor(domain, StudentSummaries.MultiProjectorName);
-        await actor2.SetCurrentState(saved);
+        await actor2.SetSnapshotAsync(new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, saved, null));
 
         await actor2.AddEventsAsync(new[] { MakeEvent(new StudentDroppedFromClassRoom(s1, Guid.NewGuid())) });
-        var stateRb2 = await actor2.GetSerializableStateAsync();
-        Assert.True(stateRb2.IsSuccess);
-        var state2 = stateRb2.GetValue();
+        var envRb2 = await actor2.GetSnapshotAsync();
+        Assert.True(envRb2.IsSuccess);
+        var env2 = envRb2.GetValue();
+        Assert.False(env2.IsOffloaded);
+        var state2 = env2.InlineState!;
         Assert.Equal("1.0.0", state2.ProjectorVersion);
         Assert.Equal(3, state2.Version);
 

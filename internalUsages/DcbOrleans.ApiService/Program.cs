@@ -9,23 +9,36 @@ using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
+using Microsoft.Extensions.Logging;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
+using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.BlobStorage.AzureStorage;
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure logging to suppress Azure Storage warnings in development
+if (builder.Environment.IsDevelopment())
+{
+    builder.Logging.AddFilter("Azure.Core", LogLevel.Error);
+    builder.Logging.AddFilter("Azure.Storage", LogLevel.Error);
+    builder.Logging.AddFilter("Orleans.AzureUtils", LogLevel.Error);
+}
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+
 
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -43,64 +56,107 @@ builder.UseOrleans(config =>
     // Use localhost clustering for development
     config.UseLocalhostClustering();
     
-    // Add Azure Queue Streams
-    config.AddAzureQueueStreams(
-        "EventStreamProvider",
-        configurator =>
+    // Check if we should use in-memory streams (for development/testing)
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    
+    if (useInMemoryStreams)
+    {
+        // Use in-memory streams for development/testing with enhanced configuration
+        config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            configurator.ConfigureAzureQueue(options =>
+            // Increase partitions for better parallelism
+            configurator.ConfigurePartitioning(8);
+            
+            // Configure pulling agent for better batch processing
+            configurator.ConfigurePullingAgent(options =>
             {
-                options.Configure<IServiceProvider>((queueOptions, sp) =>
+                options.Configure(opt =>
                 {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                    queueOptions.QueueNames =
-                    [
-                        "dcborleans-eventstreamprovider-0",
-                        "dcborleans-eventstreamprovider-1",
-                        "dcborleans-eventstreamprovider-2"
-                    ];
-                    queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    // Process events more frequently
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    // Increase batch size for better throughput
+                    opt.BatchContainerBatchSize = 100;
                 });
             });
-            configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
-
-            configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-            {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                opt.BatchContainerBatchSize = 256;
-                opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-            }));
-            configurator.ConfigureCacheSize(8192);
         });
-
-    config.AddAzureQueueStreams(
-        "DcbOrleansQueue",
-        configurator =>
+        
+        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            configurator.ConfigureAzureQueue(options =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                options.Configure<IServiceProvider>((queueOptions, sp) =>
+                options.Configure(opt =>
                 {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                    queueOptions.QueueNames =
-                    [
-                        "dcborleans-queue-0",
-                        "dcborleans-queue-1",
-                        "dcborleans-queue-2"
-                    ];
-                    queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
                 });
             });
-            configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
-
-            configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-            {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                opt.BatchContainerBatchSize = 256;
-                opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-            }));
-            configurator.ConfigureCacheSize(8192);
         });
+        
+        // Add memory storage for PubSubStore when using in-memory streams
+        config.AddMemoryGrainStorage("PubSubStore");
+    }
+    else
+    {
+        // Add Azure Queue Streams for production
+        config.AddAzureQueueStreams(
+            "EventStreamProvider",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
+
+        config.AddAzureQueueStreams(
+            "DcbOrleansQueue",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
+    }
 
     // Configure grain storage providers
     // Even though Aspire sets configuration via environment variables,
@@ -147,18 +203,21 @@ builder.UseOrleans(config =>
             });
         });
 
-    // Add grain storage for PubSub (used by Orleans streaming)
-    config.AddAzureTableGrainStorage(
-        "PubSubStore",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
+    // Add grain storage for PubSub (used by Orleans streaming) - only for Azure Queue Streams
+    if (!useInMemoryStreams)
+    {
+        config.AddAzureTableGrainStorage(
+            "PubSubStore",
+            options =>
             {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
-                opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                });
+                options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
             });
-            options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
-        });
+    }
 
     // Add grain storage for the stream provider
     config.AddAzureTableGrainStorage(
@@ -177,6 +236,16 @@ builder.UseOrleans(config =>
     config.ConfigureServices(services =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
+        // Event delivery statistics: enable detailed recording only in Development
+        if (builder.Environment.IsDevelopment())
+        {
+            // Per-grain (per-activation) instance for stats to keep instances isolated
+            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.RecordingMultiProjectionEventStatistics>();
+        }
+        else
+        {
+            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
+        }
     });
 
     // Orleans will automatically discover and use the EventSurrogate
@@ -205,6 +274,14 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
+// Snapshot offload: Azure Blob Storage accessor (Azurite in dev)
+builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
+{
+    // Prefer configuration value, fallback to Azurite dev storage
+    var conn = builder.Configuration.GetConnectionString("SekibanAzureStorage") ?? "UseDevelopmentStorage=true";
+    var container = builder.Configuration.GetValue<string>("Sekiban:SnapshotContainer") ?? "dcb-snapshots";
+    return new AzureBlobStorageSnapshotAccessor(conn, container);
+});
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
@@ -483,6 +560,8 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutor executor) =>
         {
+            pageNumber ??= 1;
+            pageSize ??= 100;
             var query = new GetWeatherForecastListQuery
             {
                 WaitForSortableUniqueId = waitForSortableUniqueId,
@@ -502,6 +581,68 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("GetWeatherForecast");
+
+// Weather endpoints (GenericTagMultiProjector)
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            pageNumber ??= 1;
+            pageSize ??= 100;
+            var query = new GetWeatherForecastListGenericQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastGeneric");
+
+// Weather endpoints (Single projector with SafeUnsafeProjectionState)
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            pageNumber ??= 1;
+            pageSize ??= 100;
+            var query = new GetWeatherForecastListSingleQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var queryResult = result.GetValue();
+                return Results.Ok(queryResult.Items);
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastSingle");
 
 apiRoute
     .MapPost(
@@ -558,6 +699,143 @@ apiRoute
     .WithName("UpdateWeatherForecastLocation")
     .WithOpenApi();
 
+
+// Weather Count endpoint
+apiRoute
+    .MapGet(
+        "/weatherforecast/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCount");
+
+// Weather Count endpoint for Generic projector
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountGenericQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    isGeneric = true,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCountGeneric");
+
+// Weather Count endpoint for Single projector
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle/count",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromServices] ISekibanExecutor executor) =>
+        {
+            var query = new GetWeatherForecastCountSingleQuery
+            {
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+
+            if (result.IsSuccess)
+            {
+                var countResult = (WeatherForecastCountResult)result.GetValue();
+                return Results.Ok(new
+                {
+                    totalCount = countResult.TotalCount,
+                    safeCount = countResult.SafeCount,
+                    unsafeCount = countResult.UnsafeCount,
+                    isSafeState = countResult.IsSafeState,
+                    isSingle = true,
+                    lastProcessedEventId = countResult.LastProcessedEventId
+                });
+            }
+
+            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastCountSingle");
+
+// Event delivery statistics endpoint
+apiRoute
+    .MapGet(
+        "/weatherforecast/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatistics");
+
+// Event delivery statistics endpoint for Generic projector
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatisticsGeneric");
+
+// Event delivery statistics endpoint for Single projector
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle/event-statistics",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var stats = await grain.GetEventDeliveryStatisticsAsync();
+            return Results.Ok(stats);
+        })
+    .WithOpenApi()
+    .WithName("GetEventDeliveryStatisticsSingle");
 
 apiRoute
     .MapPost(
