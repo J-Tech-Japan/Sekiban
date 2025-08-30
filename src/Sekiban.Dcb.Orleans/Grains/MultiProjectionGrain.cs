@@ -606,7 +606,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         SortableUniqueId? overlappedFrom = null;
         if (fromPosition != null)
         {
-            var overlapValue = fromPosition.Value.GetSafeId();
+            var overlapValue = fromPosition.GetSafeId();
             overlappedFrom = new SortableUniqueId(overlapValue);
         }
         var eventsResult = overlappedFrom == null
