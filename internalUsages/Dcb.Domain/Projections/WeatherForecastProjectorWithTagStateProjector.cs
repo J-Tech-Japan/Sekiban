@@ -141,20 +141,32 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetSafeState(
+    public SafeProjection<WeatherForecastProjectorWithTagStateProjector> GetSafeProjection(
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider) =>
-        // The State already manages safe/unsafe internally
-        // We return the same instance since SafeUnsafeProjectionState handles it
-        this;
+        DcbDomainTypes domainTypes)
+    {
+        Func<Event, IEnumerable<Guid>> getIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<WeatherForecastTag>()
+            .Select(t => t.ForecastId);
+
+        Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) => ProjectTagState(forecastId, current, evt);
+        var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
+        var safeLast = safeDict.Count > 0 ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var version = safeDict.Values.Sum(ts => ts.Version);
+        return new SafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, safeLast, version);
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public WeatherForecastProjectorWithTagStateProjector GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
-        // Return current state (includes unsafe)
-        this;
+    public UnsafeProjection<WeatherForecastProjectorWithTagStateProjector> GetUnsafeProjection(DcbDomainTypes domainTypes)
+    {
+        var current = State.GetCurrentState();
+        var last = current.Count > 0 ? current.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var version = current.Values.Sum(ts => ts.Version);
+        return new UnsafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, last, Guid.Empty, version);
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
@@ -162,8 +174,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+        DcbDomainTypes domainTypes)
     {
         // Extract tags via domainTypes and keep only WeatherForecastTag
         var tags = evt.Tags
@@ -180,8 +191,6 @@ public record WeatherForecastProjectorWithTagStateProjector :
         }
 
         var projected = result.GetValue();
-
-        // Update tracking information
         return projected with
         {
             LastEventId = evt.Id,
@@ -193,12 +202,6 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public Guid GetLastEventId() => LastEventId;
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
-
-    /// <summary>
-    ///     Indicates whether there are buffered (unsafe) events affecting the current state
-    ///     Used by the actor via reflection to decide if unsafe state should be returned.
-    /// </summary>
-    public bool HasBufferedEvents() => State.GetUnsafeKeys().Any();
 
     #endregion
 }

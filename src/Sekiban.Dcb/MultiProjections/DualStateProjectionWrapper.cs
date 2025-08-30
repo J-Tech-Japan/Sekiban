@@ -60,32 +60,19 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         _unsafeLastSortableUniqueId = initialLastSortableUniqueId ?? string.Empty;
     }
 
-    public T GetSafeState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes, TimeProvider timeProvider)
+    public SafeProjection<T> GetSafeProjection(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
-        // Process any buffered events that are now safe
         ProcessBufferedEvents(safeWindowThreshold, domainTypes);
-        
-        return _safeProjector;
+        return new SafeProjection<T>(_safeProjector, _safeLastSortableUniqueId, _safeVersion);
     }
 
-    public T GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider)
-    {
-        return _unsafeProjector;
-    }
+    public UnsafeProjection<T> GetUnsafeProjection(DcbDomainTypes domainTypes)
+        => new UnsafeProjection<T>(_unsafeProjector, _unsafeLastSortableUniqueId, _unsafeLastEventId, _unsafeVersion);
     
-    /// <summary>
-    /// Checks if there are any buffered events that make the state unsafe
-    /// </summary>
-    public bool HasBufferedEvents()
-    {
-        return _bufferedEvents.Count > 0;
-    }
-
     public ISafeAndUnsafeStateAccessor<T> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+        DcbDomainTypes domainTypes)
     {
         // Check if this event has already been processed (duplicate prevention)
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
@@ -134,20 +121,10 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         return this;
     }
 
-    public Guid GetLastEventId()
-    {
-        return _unsafeLastEventId;
-    }
-
-    public string GetLastSortableUniqueId()
-    {
-        return _unsafeLastSortableUniqueId;
-    }
-
-    public int GetVersion()
-    {
-        return _unsafeVersion;
-    }
+    // Legacy getters no longer required by interface; kept if external callers rely
+    public Guid GetLastEventId() => _unsafeLastEventId;
+    public string GetLastSortableUniqueId() => _unsafeLastSortableUniqueId;
+    public int GetVersion() => _unsafeVersion;
 
     private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {

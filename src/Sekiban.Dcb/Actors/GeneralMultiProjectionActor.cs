@@ -385,10 +385,10 @@ public class GeneralMultiProjectionActor
             {
                 // Use reflection to call ProcessEvent method with domainTypes
                 var accessorType = _singleStateAccessor!.GetType();
-                var method = accessorType.GetMethod("ProcessEvent");
-                if (method != null)
-                {
-                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain, TimeProvider.System });
+            var method = accessorType.GetMethod("ProcessEvent");
+            if (method != null)
+            {
+                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
                     
                     // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
                     // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
@@ -451,44 +451,36 @@ public class GeneralMultiProjectionActor
 
         var safeWindowThreshold = GetSafeWindowThreshold();
 
-        // Use reflection to get the appropriate state
+        // Use reflection to get the appropriate state with explicit metadata
         var accessorType = _singleStateAccessor!.GetType();
         IMultiProjectionPayload statePayload;
         bool isSafeState;
+        string lastSortableId;
+        Guid lastEventId;
+        int stateVersion;
 
-        // Check if there are buffered events (for wrapped projections)
-        var hasBufferedEventsMethod = accessorType.GetMethod("HasBufferedEvents");
-        var hasBufferedEvents = hasBufferedEventsMethod != null && 
-            (bool)(hasBufferedEventsMethod.Invoke(_singleStateAccessor, null) ?? false);
-
-        if (canGetUnsafeState && hasBufferedEvents)
+        if (canGetUnsafeState)
         {
-            // Return unsafe state when requested and there are buffered events
-            var getUnsafeMethod = accessorType.GetMethod("GetUnsafeState");
-            statePayload
-                = (IMultiProjectionPayload)(getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain, TimeProvider.System }) ??
-                    _singleStateAccessor);
+            var getUnsafeMethod = accessorType.GetMethod("GetUnsafeProjection");
+            var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain });
+            // projection has properties: State, LastSortableUniqueId, LastEventId, Version
+            statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
+            lastSortableId = (string)(projection?.GetType().GetProperty("LastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
+            lastEventId = (Guid)(projection?.GetType().GetProperty("LastEventId")?.GetValue(projection) ?? _unsafeLastEventId);
+            stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
             isSafeState = false;
-        } else
+        }
+        else
         {
-            // Return safe state when:
-            // 1. canGetUnsafeState is false, OR
-            // 2. there are no buffered events (even if canGetUnsafeState is true)
-            var getSafeMethod = accessorType.GetMethod("GetSafeState");
-            statePayload
-                = (IMultiProjectionPayload)(getSafeMethod?.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain, TimeProvider.System }) ?? _singleStateAccessor);
+            var getSafeMethod = accessorType.GetMethod("GetSafeProjection");
+            var projection = getSafeMethod?.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain });
+            // projection has properties: State, SafeLastSortableUniqueId, Version
+            statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
+            lastSortableId = (string)(projection?.GetType().GetProperty("SafeLastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
+            lastEventId = Guid.Empty;
+            stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
             isSafeState = true;
         }
-
-        // Get version info
-        var getVersionMethod = accessorType.GetMethod("GetVersion");
-        var getLastEventIdMethod = accessorType.GetMethod("GetLastEventId");
-        var getLastSortableIdMethod = accessorType.GetMethod("GetLastSortableUniqueId");
-
-        var stateVersion = (int)(getVersionMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeVersion);
-        var lastEventId = (Guid)(getLastEventIdMethod?.Invoke(_singleStateAccessor, null) ?? _unsafeLastEventId);
-        var lastSortableId = (string)(getLastSortableIdMethod?.Invoke(_singleStateAccessor, null) ??
-            _unsafeLastSortableUniqueId);
 
         var state = new MultiProjectionState(
             statePayload,

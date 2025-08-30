@@ -188,22 +188,37 @@ public record
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetSafeState(
-        SortableUniqueId safeWindowThreshold, 
-        DcbDomainTypes domainTypes, 
-        TimeProvider timeProvider)
+    public SafeProjection<GenericTagMultiProjector<TTagProjector, TTagGroup>> GetSafeProjection(
+        SortableUniqueId safeWindowThreshold,
+        DcbDomainTypes domainTypes)
     {
-        // Return this instance - the State already manages safe/unsafe separation internally
-        // GetSafeStatePayloads() will return only safe items when needed for persistence
-        return this;
+        // Build safe view to compute safe last position and version
+        Func<Event, IEnumerable<Guid>> getIds = evt => evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<TTagGroup>()
+            .Select(tag => GetTagId(tag))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value);
+
+        Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) => ProjectTagState(tagId, current, evt);
+
+        var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
+        var safeLast = safeDict.Count > 0 ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var version = safeDict.Values.Sum(ts => ts.Version);
+        return new SafeProjection<GenericTagMultiProjector<TTagProjector, TTagGroup>>(this, safeLast, version);
     }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
-    public GenericTagMultiProjector<TTagProjector, TTagGroup> GetUnsafeState(DcbDomainTypes domainTypes, TimeProvider timeProvider) =>
-        // Return current state (includes both safe and unsafe)
-        this;
+    public UnsafeProjection<GenericTagMultiProjector<TTagProjector, TTagGroup>> GetUnsafeProjection(DcbDomainTypes domainTypes)
+    {
+        var current = State.GetCurrentState();
+        var last = current.Count > 0 ? current.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        // LastEventId is not tracked here; return Guid.Empty
+        var version = current.Values.Sum(ts => ts.Version);
+        return new UnsafeProjection<GenericTagMultiProjector<TTagProjector, TTagGroup>>(this, last, Guid.Empty, version);
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
@@ -211,8 +226,7 @@ public record
     public ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>> ProcessEvent(
         Event evt,
         SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes,
-        TimeProvider timeProvider)
+        DcbDomainTypes domainTypes)
     {
         // Parse tag strings into ITag instances using DomainTypes - only keep tags belonging to our tag group
         var tags = evt.Tags
@@ -240,12 +254,6 @@ public record
     public Guid GetLastEventId() => LastEventId;
     public string GetLastSortableUniqueId() => LastSortableUniqueId;
     public int GetVersion() => Version;
-
-    /// <summary>
-    ///     Indicates whether there are buffered (unsafe) events affecting the current state
-    ///     Used by the actor via reflection to decide if unsafe state should be returned.
-    /// </summary>
-    public bool HasBufferedEvents() => State.GetUnsafeKeys().Any();
 
     #endregion
 }

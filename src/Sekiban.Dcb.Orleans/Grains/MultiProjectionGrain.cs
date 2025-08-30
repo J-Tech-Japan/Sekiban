@@ -602,17 +602,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
 
-        // Load events from store
-        var eventsResult = fromPosition == null
+        // Load events from store with overlap to avoid boundary misses
+        SortableUniqueId? overlappedFrom = null;
+        if (fromPosition != null)
+        {
+            var overlapValue = fromPosition.Value.GetSafeId();
+            overlappedFrom = new SortableUniqueId(overlapValue);
+        }
+        var eventsResult = overlappedFrom == null
             ? await _eventStore.ReadAllEventsAsync(since: null)
-            : await _eventStore.ReadAllEventsAsync(since: fromPosition.Value);
+            : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
 
         if (eventsResult.IsSuccess)
         {
             var events = eventsResult.GetValue().ToList();
             if (events.Any())
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store");
+                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (from={(overlappedFrom?.Value ?? "<begin>")})");
                 await AddEventsAsync(events, true);
                 await PersistStateAsync();
             }
