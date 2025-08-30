@@ -43,6 +43,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly Dictionary<Guid, int> _eventDeliveryCount = new();
     private long _totalDeliveries = 0;
     private long _duplicateDeliveries = 0;
+    // Per-source tracking
+    private readonly Dictionary<Guid, int> _streamDeliveryCount = new();
+    private readonly Dictionary<Guid, int> _catchUpDeliveryCount = new();
+    private long _streamDeliveries = 0;
+    private long _catchUpDeliveries = 0;
     
     // Event batching
     private readonly List<Event> _eventBuffer = new();
@@ -97,7 +102,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             MaxDeliveryCount = _eventDeliveryCount.Count > 0 ? _eventDeliveryCount.Values.Max() : 0,
             AverageDeliveryCount = _eventDeliveryCount.Count > 0 
                 ? (double)_totalDeliveries / _eventDeliveryCount.Count 
-                : 0
+                : 0,
+            StreamUniqueEvents = _streamDeliveryCount.Count,
+            StreamDeliveries = _streamDeliveries,
+            CatchUpUniqueEvents = _catchUpDeliveryCount.Count,
+            CatchUpDeliveries = _catchUpDeliveries
         };
         
         return Task.FromResult(stats);
@@ -127,6 +136,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (_projectionActor == null)
         {
             throw new InvalidOperationException("Projection actor not initialized");
+        }
+
+        // Track event deliveries as well for events coming from the EventStore catch-up
+        // so that delivery statistics include both stream and catch-up paths.
+        foreach (var evt in events)
+        {
+            _totalDeliveries++;
+            if (_eventDeliveryCount.ContainsKey(evt.Id))
+            {
+                _eventDeliveryCount[evt.Id]++;
+                _duplicateDeliveries++;
+            }
+            else
+            {
+                _eventDeliveryCount[evt.Id] = 1;
+            }
+
+            // Catch-up source specific
+            _catchUpDeliveries++;
+            if (_catchUpDeliveryCount.ContainsKey(evt.Id))
+            {
+                _catchUpDeliveryCount[evt.Id]++;
+            }
+            else
+            {
+                _catchUpDeliveryCount[evt.Id] = 1;
+            }
         }
 
         // Delegate to projection actor
@@ -611,6 +647,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 else
                 {
                     _eventDeliveryCount[evt.Id] = 1;
+                }
+
+                // Stream source specific
+                _streamDeliveries++;
+                if (_streamDeliveryCount.ContainsKey(evt.Id))
+                {
+                    _streamDeliveryCount[evt.Id]++;
+                }
+                else
+                {
+                    _streamDeliveryCount[evt.Id] = 1;
                 }
             }
 

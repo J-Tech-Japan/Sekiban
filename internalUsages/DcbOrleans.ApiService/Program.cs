@@ -550,6 +550,8 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutor executor) =>
         {
+            pageNumber ??= 1;
+            pageSize ??= 100;
             var query = new GetWeatherForecastListQuery
             {
                 WaitForSortableUniqueId = waitForSortableUniqueId,
@@ -580,6 +582,8 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutor executor) =>
         {
+            pageNumber ??= 1;
+            pageSize ??= 100;
             var query = new GetWeatherForecastListGenericQuery
             {
                 WaitForSortableUniqueId = waitForSortableUniqueId,
@@ -609,6 +613,8 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutor executor) =>
         {
+            pageNumber ??= 1;
+            pageSize ??= 100;
             var query = new GetWeatherForecastListSingleQuery
             {
                 WaitForSortableUniqueId = waitForSortableUniqueId,

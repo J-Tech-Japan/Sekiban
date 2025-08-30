@@ -41,4 +41,28 @@ public class EventDeliveryStatistics
     /// </summary>
     [Id(5)]
     public double AverageDeliveryCount { get; set; }
+
+    /// <summary>
+    /// Total unique events received via Orleans stream
+    /// </summary>
+    [Id(6)]
+    public int StreamUniqueEvents { get; set; }
+
+    /// <summary>
+    /// Total deliveries received via Orleans stream
+    /// </summary>
+    [Id(7)]
+    public long StreamDeliveries { get; set; }
+
+    /// <summary>
+    /// Total unique events received via EventStore catch-up
+    /// </summary>
+    [Id(8)]
+    public int CatchUpUniqueEvents { get; set; }
+
+    /// <summary>
+    /// Total deliveries received via EventStore catch-up
+    /// </summary>
+    [Id(9)]
+    public long CatchUpDeliveries { get; set; }
 }

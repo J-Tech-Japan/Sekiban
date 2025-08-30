@@ -49,6 +49,14 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
         document.getElementById('totalDeliveries').textContent = s.eventStats.totalDeliveries;
         document.getElementById('duplicateDeliveries').textContent = s.eventStats.duplicateDeliveries;
         document.getElementById('maxDeliveryCount').textContent = s.eventStats.maxDeliveryCount;
+        if (typeof s.eventStats.streamUniqueEvents !== 'undefined') {{
+          document.getElementById('streamUnique').textContent = s.eventStats.streamUniqueEvents;
+          document.getElementById('streamDeliveries').textContent = s.eventStats.streamDeliveries;
+        }}
+        if (typeof s.eventStats.catchUpUniqueEvents !== 'undefined') {{
+          document.getElementById('catchupUnique').textContent = s.eventStats.catchUpUniqueEvents;
+          document.getElementById('catchupDeliveries').textContent = s.eventStats.catchUpDeliveries;
+        }}
       }}
     }}
 
@@ -144,6 +152,12 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <div>総配信数: <strong id='totalDeliveries'>-</strong></div>
     <div>重複配信: <strong id='duplicateDeliveries'>-</strong></div>
     <div>最大配信回数: <strong id='maxDeliveryCount'>-</strong></div>
+  </div>
+  <div class='row' style='background:#f7f7f7; padding:0.5rem; margin-top:0.25rem'>
+    <div>Stream ユニーク: <strong id='streamUnique'>-</strong></div>
+    <div>Stream 配信数: <strong id='streamDeliveries'>-</strong></div>
+    <div>CatchUp ユニーク: <strong id='catchupUnique'>-</strong></div>
+    <div>CatchUp 配信数: <strong id='catchupDeliveries'>-</strong></div>
   </div>
   <h3>ログ</h3>
   <div id='log'></div>
@@ -321,7 +335,7 @@ static async Task RunAsync(string apiBase, BenchState state)
         var listPath = mode2 == "single"
             ? "/api/weatherforecastsingle"
             : mode2 == "generic" ? "/api/weatherforecastgeneric" : "/api/weatherforecast";
-        var listRes = await http.GetAsync($"{listPath}?pageNumber=1&pageSize=1000");
+        var listRes = await http.GetAsync($"{listPath}?pageNumber=1&pageSize=100");
         if (listRes.IsSuccessStatusCode)
         {
             var json = await listRes.Content.ReadAsStringAsync();
@@ -387,6 +401,10 @@ public class EventDeliveryStatistics
     public int eventsWithMultipleDeliveries { get; set; }
     public int maxDeliveryCount { get; set; }
     public double averageDeliveryCount { get; set; }
+    public int? streamUniqueEvents { get; set; }
+    public long? streamDeliveries { get; set; }
+    public int? catchUpUniqueEvents { get; set; }
+    public long? catchUpDeliveries { get; set; }
 }
 
 static class Helpers
