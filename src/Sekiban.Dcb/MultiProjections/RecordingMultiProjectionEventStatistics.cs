@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Events;
+using System.Linq;
 
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -91,4 +92,3 @@ public class RecordingMultiProjectionEventStatistics : IMultiProjectionEventStat
         );
     }
 }
-

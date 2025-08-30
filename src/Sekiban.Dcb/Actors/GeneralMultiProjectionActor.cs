@@ -347,16 +347,17 @@ public class GeneralMultiProjectionActor
             return false;
         }
 
-        // Use SAFE state progress for correctness. This avoids false positives
-        // when out-of-order events have been applied only to the unsafe state.
-        var stateRb = await GetStateAsync(canGetUnsafeState: false);
+        // Use UNSAFE progress for responsiveness: we only need to know whether
+        // the actor has ingested the event, not whether it is outside the safe window.
+        // This keeps waitForSortableUniqueId from blocking ~SafeWindowMs unnecessarily.
+        var stateRb = await GetStateAsync(canGetUnsafeState: true);
         if (!stateRb.IsSuccess)
         {
             return false;
         }
-        var safeLast = stateRb.GetValue().LastSortableUniqueId ?? string.Empty;
-        if (string.IsNullOrEmpty(safeLast)) return false;
-        return string.Compare(sortableUniqueId, safeLast, StringComparison.Ordinal) <= 0;
+        var last = stateRb.GetValue().LastSortableUniqueId ?? string.Empty;
+        if (string.IsNullOrEmpty(last)) return false;
+        return string.Compare(sortableUniqueId, last, StringComparison.Ordinal) <= 0;
     }
 
     /// <summary>
