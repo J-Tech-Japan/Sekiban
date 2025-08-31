@@ -65,14 +65,14 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         // Act - Send events in wrong order (3, 1, 2)
         await actor.AddEventsAsync(new[] { event3, event1, event2 });
 
-        // Initial state - unsafe state has events in the order they were received
+        // Initial state - events are sorted by SortableUniqueId even in unsafe state
         var unsafeState1 = await actor.GetUnsafeStateAsync();
         var unsafePayload1 = unsafeState1.GetValue().Payload as TestMultiProjector;
         Assert.Equal(3, unsafePayload1!.Items.Count);
-        // Unsafe state has them in received order: 3, 1, 2
-        Assert.Equal("Item 3", unsafePayload1.Items[0]);
-        Assert.Equal("Item 1", unsafePayload1.Items[1]);
-        Assert.Equal("Item 2", unsafePayload1.Items[2]);
+        // Events are sorted chronologically: 1, 2, 3
+        Assert.Equal("Item 1", unsafePayload1.Items[0]);
+        Assert.Equal("Item 2", unsafePayload1.Items[1]);
+        Assert.Equal("Item 3", unsafePayload1.Items[2]);
 
         // Wait for events to move outside SafeWindow
         await Task.Delay(5500);

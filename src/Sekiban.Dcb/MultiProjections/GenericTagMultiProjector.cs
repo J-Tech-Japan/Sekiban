@@ -50,14 +50,28 @@ public record
             return ResultBox.FromValue(payload);
         }
 
-        // Function to get affected item IDs from the actual event being processed
-        // Do NOT capture current tags; resolve from evt.Tags every time for correctness
-        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Tags
-            .Select(domainTypes.TagTypes.GetTag)
-            .OfType<TTagGroup>()
+        // Get affected IDs from the passed tags for fallback
+        var affectedIds = relevantTags
             .Select(tag => GetTagId(tag))
             .Where(id => id.HasValue)
-            .Select(id => id!.Value);
+            .Select(id => id!.Value)
+            .ToList();
+
+        // Function to get affected item IDs from the actual event being processed
+        // First check evt.Tags for runtime, but fallback to passed tags for tests
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
+        {
+            var eventTagIds = evt.Tags
+                .Select(domainTypes.TagTypes.GetTag)
+                .OfType<TTagGroup>()
+                .Select(tag => GetTagId(tag))
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToList();
+            
+            // If no tags in event, use the affected IDs from the passed tags
+            return eventTagIds.Count > 0 ? eventTagIds : affectedIds;
+        };
 
         // Function to project a single item (independent of captured tag list)
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>

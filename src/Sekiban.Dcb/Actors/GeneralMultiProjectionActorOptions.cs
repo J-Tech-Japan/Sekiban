@@ -30,4 +30,22 @@ public class GeneralMultiProjectionActorOptions
     ///     Default is 2MB to align with Cosmos DB item size limits.
     /// </summary>
     public int MaxSnapshotSerializedSizeBytes { get; set; } = 2 * 1024 * 1024;
+
+    // Dynamic SafeWindow controls (optional; default OFF)
+    public bool EnableDynamicSafeWindow { get; set; } = false;
+
+    /// <summary>
+    /// Maximum extra milliseconds that can be added to SafeWindow by dynamic lag tracking.
+    /// </summary>
+    public int MaxExtraSafeWindowMs { get; set; } = 30000;
+
+    /// <summary>
+    /// Exponential moving average alpha for stream lag (0..1]. Larger values react faster.
+    /// </summary>
+    public double LagEmaAlpha { get; set; } = 0.2;
+
+    /// <summary>
+    /// Per-second decay factor applied to observed lag when no updates (0..1]. Closer to 1 decays slower.
+    /// </summary>
+    public double LagDecayPerSecond { get; set; } = 0.98;
 }

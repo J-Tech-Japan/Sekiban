@@ -1,6 +1,4 @@
 using System.Text;
-using Aspire.Hosting;
-using Aspire.Hosting.Testing;
 using Azure.Storage.Blobs;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -9,39 +7,30 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
-using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Xunit;
 
 namespace Sekiban.Dcb.BlobStorage.AzureStorage.Unit;
 
-public class StorageSpecs : IAsyncLifetime
+/// <summary>
+/// Simple storage tests using Docker-based Azurite
+/// </summary>
+[Collection("AzuriteCollection")]
+public class SimpleStorageTests
 {
-    private DistributedApplication _app = default!;
+    private readonly AzuriteTestFixture _fixture;
 
-    public async Task InitializeAsync()
+    public SimpleStorageTests(AzuriteTestFixture fixture)
     {
-        var builder = await DistributedApplicationTestingBuilder
-            .CreateAsync<Projects.Sekiban_Dcb_BlobStorage_AzureStorage_Unit_AppHost>();
-
-        _app = await builder.BuildAsync();
-        await _app.StartAsync();
-
-        // Azurite may take a moment to come up; do a short delay
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        _fixture = fixture;
     }
-
-    public async Task DisposeAsync() => await _app.DisposeAsync();
 
     [Fact]
     public async Task AzureBlobAccessor_Can_Write_And_Read()
     {
-        // Use Azurite connection string exposed by emulator
-        var connectionString = "UseDevelopmentStorage=true";
+        // Use the connection string from the fixture
         var container = "snapshots-unit";
-
-        var accessor = new AzureBlobStorageSnapshotAccessor(connectionString, container);
+        var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, container);
         var projector = "unit-projector";
 
         var bytes = Encoding.UTF8.GetBytes("hello world");
@@ -57,7 +46,7 @@ public class StorageSpecs : IAsyncLifetime
     {
         // Arrange domain
         var domain = CreateDomain();
-        var accessor = new AzureBlobStorageSnapshotAccessor("UseDevelopmentStorage=true", "snapshots-actor");
+        var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, "snapshots-actor");
         var options = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = 1000,
