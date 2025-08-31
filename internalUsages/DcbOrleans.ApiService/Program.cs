@@ -850,6 +850,51 @@ apiRoute
     .WithOpenApi()
     .WithName("GetEventDeliveryStatisticsSingle");
 
+// Projection status endpoints (do not execute projections)
+apiRoute
+    .MapGet(
+        "/weatherforecast/status",
+        async ([FromServices] IClusterClient client) =>
+        {
+            try
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+                var status = await grain.GetStatusAsync();
+                return Results.Ok(status);
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { projector = "WeatherForecastProjection", error = ex.Message });
+            }
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastStatus");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastgeneric/status",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var status = await grain.GetStatusAsync();
+            return Results.Ok(status);
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastGenericStatus");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastsingle/status",
+        async ([FromServices] IClusterClient client) =>
+        {
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var status = await grain.GetStatusAsync();
+            return Results.Ok(status);
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastSingleStatus");
+
+
 apiRoute
     .MapPost(
         "/removeweatherforecast",

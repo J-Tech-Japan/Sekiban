@@ -48,11 +48,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly List<Event> _eventBuffer = new();
     private DateTime _lastBufferFlush = DateTime.UtcNow;
     private readonly int _batchSize = 50; // Process events in batches of 50
-    private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(100); // Flush after 100ms
+    private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(50); // Flush promptly but return quickly to stream
     private IDisposable? _batchTimer;
+    private IDisposable? _immediateFlushTimer;
+    private bool _subscriptionStarting;
+    private bool _catchUpRunning;
+    private DateTime _lastCatchUpUtc = DateTime.MinValue;
+    private readonly TimeSpan _minCatchUpInterval = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _overlapCooldown = TimeSpan.FromSeconds(10);
 
     // Delegate these to configuration
-    private readonly int _persistBatchSize = 100; // Used in ProcessEventBatch
+    private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
 
@@ -83,7 +89,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return ResultBox.Error<MultiProjectionState>(
                 new InvalidOperationException("Projection actor not initialized"));
         }
-
+        await StartSubscriptionAsync();
+        await CatchUpFromEventStoreAsync();
         return await _projectionActor.GetStateAsync(canGetUnsafeState);
     }
     
@@ -234,19 +241,59 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task StartSubscriptionAsync()
     {
         await EnsureInitializedAsync();
-        
+
+        // Defensive: ensure stream is prepared even if lifecycle hook hasn't run yet
+        if (_orleansStream == null)
+        {
+            var projectorName = this.GetPrimaryKeyString();
+            var streamInfo = _subscriptionResolver.Resolve(projectorName);
+            if (streamInfo is OrleansSekibanStream orleansStream)
+            {
+                var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
+                _orleansStream = streamProvider.GetStream<Event>(
+                    StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
+            }
+        }
+
         // Subscribe to Orleans stream if not already subscribed
-        if (_orleansStreamHandle == null && _orleansStream != null)
+        if (_orleansStreamHandle == null && _orleansStream != null && !_subscriptionStarting)
         {
             try
             {
+                _subscriptionStarting = true;
                 var projectorName = this.GetPrimaryKeyString();
                 Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Starting subscription to Orleans stream");
-                
+
                 var observer = new StreamBatchObserver(this);
-                _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
-                
-                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
+
+                // Check for existing persistent subscriptions and resume/deduplicate
+                var existing = await _orleansStream.GetAllSubscriptionHandles();
+                if (existing != null && existing.Count > 0)
+                {
+                    // Resume the oldest handle
+                    var primary = existing[0];
+                    _orleansStreamHandle = await primary.ResumeAsync(observer);
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Resumed existing stream subscription ({existing.Count} handles found)");
+
+                    // Unsubscribe duplicates
+                    for (int i = 1; i < existing.Count; i++)
+                    {
+                        try
+                        {
+                            await existing[i].UnsubscribeAsync();
+                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Unsubscribed duplicate stream subscription handle #{i}");
+                        }
+                        catch (Exception exDup)
+                        {
+                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] WARNING: Failed to unsubscribe duplicate handle #{i}: {exDup.Message}");
+                        }
+                    }
+                }
+                else
+                {
+                    _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream (new)");
+                }
             }
             catch (Exception ex)
             {
@@ -255,14 +302,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _lastError = $"Stream subscription failed: {ex.Message}";
                 throw;
             }
+            finally
+            {
+                _subscriptionStarting = false;
+            }
         }
         else if (_orleansStreamHandle != null)
         {
             var projectorName = this.GetPrimaryKeyString();
             Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream subscription already active");
         }
-        
-        await CatchUpFromEventStoreAsync();
+        // Do not auto-catch-up here; catch-up will be triggered by state/query access
     }
 
     public async Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query)
@@ -276,6 +326,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            await StartSubscriptionAsync();
+            // Avoid forcing catch-up on every query. Subscription will advance state.
+            // Only catch up here if subscription is not active.
+            if (_orleansStreamHandle == null)
+            {
+                await CatchUpFromEventStoreAsync();
+            }
             var stateResult = await _projectionActor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
@@ -308,9 +365,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        if (_eventsProcessed == 0)
+        await StartSubscriptionAsync();
+        if (_orleansStreamHandle == null)
         {
-            await RefreshAsync();
+            await CatchUpFromEventStoreAsync();
         }
 
         if (_projectionActor == null)
@@ -590,14 +648,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task SeedEventsAsync(IReadOnlyList<Event> events)
     {
         if (_eventStore == null) return;
-        // Tag events with projector name to scope catch-up reads
-        var projectorName = this.GetPrimaryKeyString();
-        var tagString = $"Projector:{projectorName}";
-        foreach (var e in events)
-        {
-            if (!e.Tags.Contains(tagString)) e.Tags.Add(tagString);
-        }
-
         var result = await _eventStore.WriteEventsAsync(events);
         if (!result.IsSuccess)
         {
@@ -619,74 +669,98 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_projectionActor == null || _eventStore == null) return;
 
-        // Get current position
-        SortableUniqueId? fromPosition = null;
-        if (!forceFull)
+        // Coalesce frequent calls: skip if another catch-up is running
+        if (_catchUpRunning)
         {
-            // Use SAFE state for determining catch-up position to avoid
-            // skipping events that are only present in the unsafe window
-            var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
-            if (currentState.IsSuccess)
+            return;
+        }
+        // Rate-limit non-forced catch-ups to avoid thrashing and duplicates
+        if (!forceFull && (DateTime.UtcNow - _lastCatchUpUtc) < _minCatchUpInterval)
+        {
+            return;
+        }
+        // If stream is actively delivering events recently, skip catch-up to avoid overlap
+        if (!forceFull && _lastEventTime != null && (DateTime.UtcNow - _lastEventTime.Value) < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _catchUpRunning = true;
+        
+        try
+        {
+            // Get current position
+            SortableUniqueId? fromPosition = null;
+            if (!forceFull)
             {
-                var state = currentState.GetValue();
-                if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+                // Use SAFE state for determining catch-up position to avoid
+                // skipping events that are only present in the unsafe window
+                var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+                if (currentState.IsSuccess)
                 {
-                    fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                    var state = currentState.GetValue();
+                    if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+                    {
+                        fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
+                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                    }
+                }
+
+                // Fallback to persisted positions if actor has none
+                if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.SafeLastPosition))
+                {
+                    fromPosition = new SortableUniqueId(_state.State.SafeLastPosition);
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted SafeLastPosition: {fromPosition.Value}");
+                }
+                else if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.LastPosition))
+                {
+                    fromPosition = new SortableUniqueId(_state.State.LastPosition);
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted LastPosition: {fromPosition.Value}");
                 }
             }
 
-            // Fallback to persisted positions if actor has none
-            if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.SafeLastPosition))
+            // Load events from store with conditional overlap to avoid boundary misses without thrashing
+            SortableUniqueId? overlappedFrom = null;
+            if (fromPosition != null)
             {
-                fromPosition = new SortableUniqueId(_state.State.SafeLastPosition);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted SafeLastPosition: {fromPosition.Value}");
+                // Only apply overlap if last catch-up was not very recent
+                var shouldOverlap = (DateTime.UtcNow - _lastCatchUpUtc) > _overlapCooldown;
+                if (_avoidOverlapOnce)
+                {
+                    overlappedFrom = fromPosition;
+                    _avoidOverlapOnce = false;
+                }
+                else if (shouldOverlap)
+                {
+                    var overlapValue = fromPosition.GetSafeId();
+                    overlappedFrom = new SortableUniqueId(overlapValue);
+                }
+                else
+                {
+                    overlappedFrom = fromPosition;
+                }
             }
-            else if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.LastPosition))
-            {
-                fromPosition = new SortableUniqueId(_state.State.LastPosition);
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted LastPosition: {fromPosition.Value}");
-            }
-        }
 
-        // Load events from store with overlap to avoid boundary misses
-        SortableUniqueId? overlappedFrom = null;
-        if (fromPosition != null)
-        {
-            if (_avoidOverlapOnce)
-            {
-                overlappedFrom = fromPosition;
-                _avoidOverlapOnce = false;
-            }
-            else
-            {
-                var overlapValue = fromPosition.GetSafeId();
-                overlappedFrom = new SortableUniqueId(overlapValue);
-            }
-        }
-        // Prefer reading events scoped by projector tag to avoid cross-projector bleed
-        var projectorTag = new SimpleStringTag($"Projector:{this.GetPrimaryKeyString()}");
-        var eventsResult = overlappedFrom == null
-            ? await _eventStore.ReadEventsByTagAsync(projectorTag, since: null)
-            : await _eventStore.ReadEventsByTagAsync(projectorTag, overlappedFrom.Value);
-
-        // Fallback: if store doesn't support tag read or no tag streams yet, read all
-        if (!eventsResult.IsSuccess)
-        {
-            eventsResult = overlappedFrom == null
+            // Read all events from store (projector-specific filtering is handled by projector logic)
+            var eventsResult = overlappedFrom == null
                 ? await _eventStore.ReadAllEventsAsync(since: null)
                 : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
-        }
 
-        if (eventsResult.IsSuccess)
-        {
-            var events = eventsResult.GetValue().ToList();
-            if (events.Any())
+            if (eventsResult.IsSuccess)
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (from={(overlappedFrom?.Value ?? "<begin>")})");
-                await AddEventsAsync(events, true);
-                await PersistStateAsync();
+                var events = eventsResult.GetValue().ToList();
+                if (events.Any())
+                {
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (from={(overlappedFrom?.Value ?? "<begin>")})");
+                    await AddEventsAsync(events, true);
+                    await PersistStateAsync();
+                }
             }
+        }
+        finally
+        {
+            _lastCatchUpUtc = DateTime.UtcNow;
+            _catchUpRunning = false;
         }
     }
 
@@ -770,26 +844,29 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         public StreamBatchObserver(MultiProjectionGrain grain) => _grain = grain;
 
         // Batch processing method - Orleans v9.0+ uses IList<SequentialItem<T>>
-        public async Task OnNextAsync(IList<SequentialItem<Event>> batch)
+        public Task OnNextAsync(IList<SequentialItem<Event>> batch)
         {
             var events = batch.Select(item => item.Item).ToList();
             Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received batch of {events.Count} events");
-            await _grain.ProcessEventBatch(events);
+            _grain.EnqueueStreamEvents(events);
+            return Task.CompletedTask;
         }
 
         // Legacy batch method for compatibility
-        public async Task OnNextBatchAsync(IEnumerable<Event> batch, StreamSequenceToken? token = null)
+        public Task OnNextBatchAsync(IEnumerable<Event> batch, StreamSequenceToken? token = null)
         {
             var events = batch.ToList();
             Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received legacy batch of {events.Count} events");
-            await _grain.ProcessEventBatch(events);
+            _grain.EnqueueStreamEvents(events);
+            return Task.CompletedTask;
         }
 
-        public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
+        public Task OnNextAsync(Event item, StreamSequenceToken? token = null)
         {
-            // Single event fallback - treat as batch of 1
+            // Single event fallback - enqueue as batch of 1
             Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {item.EventType}, ID: {item.Id}");
-            await _grain.ProcessEventBatch(new[] { item });
+            _grain.EnqueueStreamEvents(new[] { item });
+            return Task.CompletedTask;
         }
 
         public Task OnCompletedAsync() 
@@ -806,13 +883,41 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    // Minimal ITag implementation backed by a preformatted string
-    private sealed record SimpleStringTag(string Tag) : Sekiban.Dcb.Tags.ITag
+    // (removed test-only projector tag scoping)
+
+    internal void EnqueueStreamEvents(IEnumerable<Event> events)
     {
-        public string GetTagGroup() => Tag.Contains(':') ? Tag.Split(':')[0] : "Projector";
-        public string GetTagContent() => Tag.Contains(':') ? Tag.Split(':', 2)[1] : Tag;
-        public bool IsConsistencyTag() => false;
-        public string GetTag() => Tag;
+        var list = events as IList<Event> ?? events.ToList();
+        if (list.Count == 0) return;
+        lock (_eventBuffer)
+        {
+            _eventBuffer.AddRange(list);
+        }
+        _lastEventTime = DateTime.UtcNow;
+        // Do not record deliveries here to avoid double-counting.
+        // Delivery statistics are recorded after successful processing
+        // inside ProcessEventBatch.
+
+        // Schedule a near-immediate flush to avoid long lag before first timer tick
+        if (_immediateFlushTimer == null)
+        {
+            _immediateFlushTimer = this.RegisterGrainTimer(
+                async () =>
+                {
+                    try { await FlushEventBufferAsync(); }
+                    finally
+                    {
+                        _immediateFlushTimer?.Dispose();
+                        _immediateFlushTimer = null;
+                    }
+                },
+                new GrainTimerCreationOptions
+                {
+                    DueTime = TimeSpan.FromMilliseconds(5),
+                    Period = Timeout.InfiniteTimeSpan,
+                    Interleave = true
+                });
+        }
     }
 
     #region ILifecycleParticipant
@@ -838,25 +943,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
         _orleansStream = streamProvider.GetStream<Event>(
             StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
-
-        try
-        {
-            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Getting stream for {orleansStream.StreamNamespace}/{orleansStream.StreamId}");
-            
-            var observer = new StreamBatchObserver(this);
-            _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
-            
-            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream!");
-            _isInitialized = true;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
-            _lastError = $"Stream subscription failed: {ex.Message}";
-        }
+        // Do NOT subscribe here. Subscription will start lazily on first query/state access.
+        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream prepared (lazy subscription)");
+        _isInitialized = true;
     }
 
-    private Task CloseStreamsAsync(CancellationToken ct) =>
-        _orleansStreamHandle?.UnsubscribeAsync() ?? Task.CompletedTask;
+    private async Task CloseStreamsAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (_orleansStream != null)
+            {
+                var handles = await _orleansStream.GetAllSubscriptionHandles();
+                foreach (var h in handles)
+                {
+                    try { await h.UnsubscribeAsync(); }
+                    catch { /* ignore */ }
+                }
+            }
+            else if (_orleansStreamHandle != null)
+            {
+                await _orleansStreamHandle.UnsubscribeAsync();
+            }
+        }
+        finally
+        {
+            _orleansStreamHandle = null;
+        }
+    }
     #endregion
 }

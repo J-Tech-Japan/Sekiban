@@ -164,6 +164,38 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
   <p style='margin-top:1rem'>
     エンドポイント: <code>POST /run?total=&lt;int&gt;&amp;concurrency=&lt;int&gt;</code>, <code>GET /status</code>
   </p>
+
+  <h3>Projection 状況</h3>
+  <div style='display:grid; grid-template-columns: 160px 1fr 1fr; gap:.5rem; align-items:center;'>
+    <div></div><div><strong>Count (実行)</strong></div><div><strong>Status (非実行)</strong></div>
+    <div>standard</div>
+    <div><button onclick='loadCount(&quot;standard&quot;)'>fetch</button> <code id='count-standard'>-</code></div>
+    <div><button onclick='loadStatus(&quot;standard&quot;)'>fetch</button> <code id='status-standard'>-</code></div>
+    <div>single</div>
+    <div><button onclick='loadCount(&quot;single&quot;)'>fetch</button> <code id='count-single'>-</code></div>
+    <div><button onclick='loadStatus(&quot;single&quot;)'>fetch</button> <code id='status-single'>-</code></div>
+    <div>generic</div>
+    <div><button onclick='loadCount(&quot;generic&quot;)'>fetch</button> <code id='count-generic'>-</code></div>
+    <div><button onclick='loadStatus(&quot;generic&quot;)'>fetch</button> <code id='status-generic'>-</code></div>
+  </div>
+  <script>
+    async function loadCount(mode) {{
+      const r = await fetch('/projection/count?mode=' + mode);
+      const j = await r.json();
+      const id = 'count-' + mode;
+      if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
+      document.getElementById(id).textContent = 'total:' + j.totalCount + ' safe:' + j.safeCount + ' unsafe:' + j.unsafeCount + ' safeState:' + j.isSafeState;
+    }}
+    async function loadStatus(mode) {{
+      const r = await fetch('/projection/status?mode=' + mode);
+      const j = await r.json();
+      const id = 'status-' + mode;
+      if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
+      // まだプロジェクション未構築の可能性を表示
+      const notInit = (j.stateSize===0 && !j.isSubscriptionActive && !j.isCaughtUp);
+      document.getElementById(id).textContent = notInit ? 'not projected yet' : ('caughtUp:' + j.isCaughtUp + ' pos:' + (j.currentPosition ?? '') + ' size:' + j.stateSize + ' events:' + j.eventsProcessed);
+    }}
+  </script>
 </body>
 </html>
 ", "text/html"));
@@ -179,20 +211,8 @@ app.MapGet("/status", async () =>
         {
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
 
-            // Get weather count
+            // Get event delivery statistics only (does not execute projection)
             var mode = state.Mode ?? (state.UseSingle ? "single" : "standard");
-            var countPath = mode == "single"
-                ? "/api/weatherforecastsingle/count"
-                : mode == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
-            var response = await http.GetAsync(countPath);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                var countData = JsonSerializer.Deserialize<WeatherCountResponse>(json);
-                weatherCount = countData?.totalCount;
-            }
-
-            // Get event delivery statistics
             var statsPath = mode == "single"
                 ? "/api/weatherforecastsingle/event-statistics"
                 : mode == "generic" ? "/api/weatherforecastgeneric/event-statistics" : "/api/weatherforecast/event-statistics";
@@ -202,6 +222,27 @@ app.MapGet("/status", async () =>
                 var json = await statsResponse.Content.ReadAsStringAsync();
                 eventStats = JsonSerializer.Deserialize<EventDeliveryStatistics>(json);
             }
+
+            // Throttle count fetch to reduce duplicate deliveries from frequent catch-ups
+            var now = DateTime.UtcNow;
+            var cache = state.GetOrCreateCountCache(mode);
+            var minInterval = state.IsRunning ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(10);
+            if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
+            {
+                var countPath = mode == "single"
+                    ? "/api/weatherforecastsingle/count"
+                    : mode == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
+                var countResponse = await http.GetAsync(countPath);
+                if (countResponse.IsSuccessStatusCode)
+                {
+                    var json = await countResponse.Content.ReadAsStringAsync();
+                    var count = JsonSerializer.Deserialize<WeatherCountResponse>(json);
+                    cache.Value = count?.totalCount;
+                    cache.LastFetchedUtc = now;
+                }
+                // On failure, keep previous cached value
+            }
+            weatherCount = cache.Value;
         }
         catch { /* Ignore errors */ }
     }
@@ -218,7 +259,7 @@ app.MapGet("/status", async () =>
         state.StopOnError,
         state.Canceled,
         state.LastError,
-        WeatherCount = weatherCount,
+        WeatherCount = weatherCount, // null means "not fetched"; use Projection 状況の Count(fetch) で取得
         EventStats = eventStats,
         EndpointMode = state.Mode ?? (state.UseSingle ? "single" : "standard")
     });
@@ -236,8 +277,60 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
     state.Mode = (mode ?? (state.UseSingle ? "single" : "standard")).ToLowerInvariant();
     state.StopOnError = stopOnError ?? false;
     state.HasRun = true;
+
+    // Kick off a query ONLY for the selected mode to start its subscription
+    // Use the Count endpoint so it aligns with the UI’s projection section
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var countPath = state.Mode switch
+        {
+            "single" => "/api/weatherforecastsingle/count",
+            "generic" => "/api/weatherforecastgeneric/count",
+            _ => "/api/weatherforecast/count"
+        };
+        var _ = await http.GetAsync(countPath);
+    }
+    catch { /* ignore preflight count error */ }
+
     _ = Task.Run(() => RunAsync(apiBase!, state));
     return Results.Accepted($"/status", new { message = "Started", state.Total, state.Concurrency, state.StopOnError });
+});
+
+// Projection count (triggers projection)
+app.MapGet("/projection/count", async (string? mode) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var path = m=="single"? "/api/weatherforecastsingle/count" : m=="generic"? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
+    try{
+        using var http = new HttpClient{ BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync(path);
+        if(!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
+        var json = await res.Content.ReadAsStringAsync();
+        return Results.Text(json, "application/json");
+    } catch(Exception ex){
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// Projection status (does not execute projection)
+app.MapGet("/projection/status", async (string? mode) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var path = m=="single"? "/api/weatherforecastsingle/status" : m=="generic"? "/api/weatherforecastgeneric/status" : "/api/weatherforecast/status";
+    try{
+        using var http = new HttpClient{ BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync(path);
+        if(!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
+        var json = await res.Content.ReadAsStringAsync();
+        return Results.Text(json, "application/json");
+    } catch(Exception ex){
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
 
 app.Run();
@@ -380,6 +473,23 @@ sealed class BenchState
     public void Start() => _sw.Start();
     public void Stop() => _sw.Stop();
     public void Cancel() => _cts?.Cancel();
+
+    private readonly Dictionary<string, CountCache> _countCache = new(StringComparer.OrdinalIgnoreCase);
+    public CountCache GetOrCreateCountCache(string mode)
+    {
+        if (!_countCache.TryGetValue(mode, out var c))
+        {
+            c = new CountCache();
+            _countCache[mode] = c;
+        }
+        return c;
+    }
+}
+
+sealed class CountCache
+{
+    public int? Value { get; set; }
+    public DateTime? LastFetchedUtc { get; set; }
 }
 
 // Helper class for deserializing weather count response
