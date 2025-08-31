@@ -19,6 +19,8 @@ public sealed class MultiProjectionGrainStatusSurrogateConverter : IConverter<Mu
             surrogate.LastEventTime,
             surrogate.LastPersistTime,
             surrogate.StateSize,
+            surrogate.SafeStateSize,
+            surrogate.UnsafeStateSize,
             surrogate.HasError,
             surrogate.LastError);
 
@@ -32,6 +34,8 @@ public sealed class MultiProjectionGrainStatusSurrogateConverter : IConverter<Mu
             value.LastEventTime,
             value.LastPersistTime,
             value.StateSize,
+            value.SafeStateSize,
+            value.UnsafeStateSize,
             value.HasError,
             value.LastError);
 }

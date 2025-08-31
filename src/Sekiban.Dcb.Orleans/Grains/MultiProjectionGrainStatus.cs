@@ -21,6 +21,10 @@ public record MultiProjectionGrainStatus(
     DateTime? LastPersistTime,
     [property: Id(7)]
     long StateSize,
+    [property: Id(10)]
+    long SafeStateSize,
+    [property: Id(11)]
+    long UnsafeStateSize,
     [property: Id(8)]
     bool HasError,
     [property: Id(9)]

@@ -193,7 +193,13 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
       // まだプロジェクション未構築の可能性を表示
       const notInit = (j.stateSize===0 && !j.isSubscriptionActive && !j.isCaughtUp);
-      document.getElementById(id).textContent = notInit ? 'not projected yet' : ('caughtUp:' + j.isCaughtUp + ' pos:' + (j.currentPosition ?? '') + ' size:' + j.stateSize + ' events:' + j.eventsProcessed);
+      if (notInit) {{
+        document.getElementById(id).textContent = 'not projected yet';
+      }} else {{
+        const safeSize = (typeof j.safeStateSize !== 'undefined') ? (' safeSize:' + j.safeStateSize) : '';
+        const unsafeSize = (typeof j.unsafeStateSize !== 'undefined') ? (' unsafeSize:' + j.unsafeStateSize) : '';
+        document.getElementById(id).textContent = 'caughtUp:' + j.isCaughtUp + ' pos:' + (j.currentPosition ?? '') + ' size:' + j.stateSize + safeSize + unsafeSize + ' events:' + j.eventsProcessed;
+      }}
     }}
   </script>
 </body>

@@ -164,13 +164,35 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var isCaughtUp = _orleansStreamHandle != null;
         
         long stateSize = 0;
+        long safeStateSize = 0;
+        long unsafeStateSize = 0;
         if (_projectionActor != null)
         {
-            var snapshot = await _projectionActor.GetSnapshotAsync();
-            if (snapshot.IsSuccess)
+            try
             {
-                var json = JsonSerializer.Serialize(snapshot.GetValue(), _domainTypes.JsonSerializerOptions);
-                stateSize = Encoding.UTF8.GetByteCount(json);
+                // Compute both safe and unsafe sizes from in-memory state (payload only, with runtime type)
+                var unsafeStateResult = await _projectionActor.GetStateAsync(canGetUnsafeState: true);
+                var safeStateResult = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+
+                if (unsafeStateResult.IsSuccess)
+                {
+                    var us = unsafeStateResult.GetValue();
+                    unsafeStateSize = EstimatePayloadJsonSize(us.Payload, includeUnsafeDetails: true);
+                }
+
+                if (safeStateResult.IsSuccess)
+                {
+                    var ss = safeStateResult.GetValue();
+                    safeStateSize = EstimatePayloadJsonSize(ss.Payload, includeUnsafeDetails: false);
+                }
+
+                stateSize = safeStateSize; // Backward-compatible: report safe payload size in StateSize
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[{projectorName}] Status payload sizes -> safe:{safeStateSize} bytes, unsafe:{unsafeStateSize} bytes");
+            }
+            catch
+            {
+                // Ignore errors when estimating size during status fetch
             }
         }
 
@@ -183,8 +205,94 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastEventTime,
             DateTime.UtcNow,
             stateSize,
+            safeStateSize,
+            unsafeStateSize,
             !string.IsNullOrEmpty(_lastError),
             _lastError);
+    }
+
+    private long EstimatePayloadJsonSize(object payload, bool includeUnsafeDetails)
+    {
+        try
+        {
+            // Special handling for TagState-based projectors (payloads exposing a 'State' property
+            // of type SafeUnsafeProjectionState<,>), where direct JSON would be minimal due to
+            // private fields. Build a representative DTO to reflect collection sizes.
+            var payloadType = payload.GetType();
+            var stateProp = payloadType.GetProperty("State");
+            if (stateProp != null)
+            {
+                var stateObj = stateProp.GetValue(payload);
+                if (stateObj != null && stateObj.GetType().Name.StartsWith("SafeUnsafeProjectionState"))
+                {
+                    var stateType = stateObj.GetType();
+                    var currentDataField = stateType.GetField("_currentData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    var safeBackupField = stateType.GetField("_safeBackup", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+                    var currentData = currentDataField?.GetValue(stateObj) as System.Collections.IDictionary;
+                    var safeBackup = safeBackupField?.GetValue(stateObj) as System.Collections.IDictionary;
+
+                    var safeKeys = new List<string>();
+                    var unsafeKeys = new List<string>();
+                    var unsafeEventIds = new List<string>();
+
+                    if (currentData != null)
+                    {
+                        foreach (System.Collections.DictionaryEntry de in currentData)
+                        {
+                            var keyStr = de.Key?.ToString() ?? string.Empty;
+                            safeKeys.Add(keyStr);
+                        }
+                    }
+                    if (safeBackup != null)
+                    {
+                        var backupKeys = new HashSet<string>();
+                        foreach (System.Collections.DictionaryEntry de in safeBackup)
+                        {
+                            var keyStr = de.Key?.ToString() ?? string.Empty;
+                            backupKeys.Add(keyStr);
+                        }
+                        // Unsafe keys are those in backup
+                        unsafeKeys.AddRange(backupKeys);
+                        // Safe-only keys are those not in backup
+                        safeKeys = safeKeys.Where(k => !backupKeys.Contains(k)).ToList();
+
+                        if (includeUnsafeDetails)
+                        {
+                            foreach (System.Collections.DictionaryEntry de in safeBackup)
+                            {
+                                var backupVal = de.Value; // SafeStateBackup<TState>
+                                var unsafeEventsProp = backupVal?.GetType().GetProperty("UnsafeEvents");
+                                var list = unsafeEventsProp?.GetValue(backupVal) as System.Collections.IEnumerable;
+                                if (list != null)
+                                {
+                                    foreach (var ev in list)
+                                    {
+                                        var idProp = ev.GetType().GetProperty("Id");
+                                        var id = idProp?.GetValue(ev)?.ToString() ?? string.Empty;
+                                        unsafeEventIds.Add(id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    object dto = includeUnsafeDetails
+                        ? new { safeKeys, unsafeKeys, unsafeEventIds }
+                        : new { safeKeys };
+                    var json = JsonSerializer.Serialize(dto, _domainTypes.JsonSerializerOptions);
+                    return Encoding.UTF8.GetByteCount(json);
+                }
+            }
+
+            // Default: serialize payload itself with runtime type
+            var defJson = JsonSerializer.Serialize(payload, payload.GetType(), _domainTypes.JsonSerializerOptions);
+            return Encoding.UTF8.GetByteCount(defJson);
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public async Task<ResultBox<bool>> PersistStateAsync()
@@ -327,6 +435,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             await StartSubscriptionAsync();
+            // Promote safe window before executing query so Safe/Unsafe are up-to-date
+            if (_projectionActor != null)
+            {
+                _ = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+            }
             // Avoid forcing catch-up on every query. Subscription will advance state.
             // Only catch up here if subscription is not active.
             if (_orleansStreamHandle == null)
@@ -366,6 +479,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await EnsureInitializedAsync();
 
         await StartSubscriptionAsync();
+        // Promote safe window before executing query so Safe/Unsafe are current
+        if (_projectionActor != null)
+        {
+            _ = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+        }
         if (_orleansStreamHandle == null)
         {
             await CatchUpFromEventStoreAsync();
