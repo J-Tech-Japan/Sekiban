@@ -31,7 +31,8 @@ public record GetWeatherForecastCountSingleQuery :
             SafeCount: safeCount,
             UnsafeCount: unsafeCount,
             IsSafeState: unsafeCount == 0,
-            LastProcessedEventId: string.Empty
+            LastProcessedEventId: string.Empty,
+            SafeVersion: safeCount
         ));
     }
 }

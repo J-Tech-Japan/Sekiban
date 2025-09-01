@@ -736,6 +736,7 @@ apiRoute
                     safeCount = countResult.SafeCount,
                     unsafeCount = countResult.UnsafeCount,
                     isSafeState = countResult.IsSafeState,
+                    safeVersion = countResult.SafeVersion,
                     lastProcessedEventId = countResult.LastProcessedEventId
                 });
             }
@@ -769,6 +770,7 @@ apiRoute
                     unsafeCount = countResult.UnsafeCount,
                     isSafeState = countResult.IsSafeState,
                     isGeneric = true,
+                    safeVersion = countResult.SafeVersion,
                     lastProcessedEventId = countResult.LastProcessedEventId
                 });
             }
@@ -802,6 +804,7 @@ apiRoute
                     unsafeCount = countResult.UnsafeCount,
                     isSafeState = countResult.IsSafeState,
                     isSingle = true,
+                    safeVersion = countResult.SafeVersion,
                     lastProcessedEventId = countResult.LastProcessedEventId
                 });
             }

@@ -30,7 +30,8 @@ public record GetWeatherForecastCountQuery :
             SafeCount: safeCount,
             UnsafeCount: unsafeCount,
             IsSafeState: unsafeCount == 0,  // If no unsafe forecasts, state is safe
-            LastProcessedEventId: string.Empty  // This info is not available in query context
+            LastProcessedEventId: string.Empty,  // This info is not available in query context
+            SafeVersion: safeCount
         ));
     }
 }
@@ -44,5 +45,6 @@ public record WeatherForecastCountResult(
     [property: Id(1)] int SafeCount,
     [property: Id(2)] int UnsafeCount,
     [property: Id(3)] bool IsSafeState,
-    [property: Id(4)] string LastProcessedEventId
+    [property: Id(4)] string LastProcessedEventId,
+    [property: Id(5)] int SafeVersion
 );

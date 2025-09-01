@@ -205,7 +205,8 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       const j = await r.json();
       const id = 'count-' + mode;
       if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
-      document.getElementById(id).textContent = 'total:' + j.totalCount + ' safe:' + j.safeCount + ' unsafe:' + j.unsafeCount + ' safeState:' + j.isSafeState;
+  const sv = (typeof j.safeVersion !== 'undefined') ? (' safeVersion:' + j.safeVersion) : '';
+  document.getElementById(id).textContent = 'total:' + j.totalCount + ' safe:' + j.safeCount + ' unsafe:' + j.unsafeCount + ' safeState:' + j.isSafeState + sv;
     }}
     async function loadStatus(mode) {{
       const r = await fetch('/projection/status?mode=' + mode);

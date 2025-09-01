@@ -35,11 +35,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
     public static string Serialize(DcbDomainTypes domainTypes, WeatherForecastProjection safePayload)
     {
-        // Prefer Safe-only: exclude unsafe forecasts
-        var safeDict = safePayload.Forecasts
-            .Where(kv => !safePayload.UnsafeForecasts.Contains(kv.Key))
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
-        var dto = new { forecasts = safeDict };
+    var dto = new { forecasts = safePayload.Forecasts };
         return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
     }
 

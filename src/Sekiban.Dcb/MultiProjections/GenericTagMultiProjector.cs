@@ -259,6 +259,14 @@ public record
     private Guid LastEventId { get; init; } = Guid.Empty;
     private string LastSortableUniqueId { get; init; } = string.Empty;
     private int Version { get; init; }
+    public int SafeVersion
+    {
+        get
+        {
+            var current = State.GetCurrentState();
+            return current.Values.Sum(ts => ts.Version);
+        }
+    }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state

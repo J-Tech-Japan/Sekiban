@@ -22,6 +22,14 @@ public record WeatherForecastProjectorWithTagStateProjector :
     ///     Internal state managed by SafeUnsafeProjectionState for TagState
     /// </summary>
     public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
+    public int SafeVersion
+    {
+        get
+        {
+            var current = State.GetCurrentState();
+            return current.Values.Sum(ts => ts.Version);
+        }
+    }
 
     public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
 

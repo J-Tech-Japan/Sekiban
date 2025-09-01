@@ -317,6 +317,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
 
+            // Phase1: force promotion of buffered events before snapshot
+            try
+            {
+                var promote = _projectionActor.GetType().GetMethod("ForcePromoteBufferedEvents", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                promote?.Invoke(_projectionActor, Array.Empty<object>());
+            }
+            catch { }
+
             // Ask actor to build a persistable snapshot (with size validation + offload included)
             var persistable = await _projectionActor.BuildSnapshotForPersistenceAsync(false);
             if (!persistable.IsSuccess)
@@ -327,6 +335,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var data = persistable.GetValue();
+            try
+            {
+                var unsafeStateInfo = await _projectionActor.GetStateAsync(true);
+                var safeStateInfo = await _projectionActor.GetStateAsync(false);
+                if (unsafeStateInfo.IsSuccess && safeStateInfo.IsSuccess)
+                {
+                    var unsafeSt = unsafeStateInfo.GetValue();
+                    var safeSt = safeStateInfo.GetValue();
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist debug safe(last={safeSt.LastSortableUniqueId} ver={safeSt.Version} isSafe={safeSt.IsSafeState}) unsafe(last={unsafeSt.LastSortableUniqueId} ver={unsafeSt.Version} isSafe={unsafeSt.IsSafeState})");
+                }
+            }
+            catch { }
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId}");
 
             // Update grain state
@@ -348,6 +368,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastError = $"Persistence failed: {ex.Message}";
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    // Debug: force promotion of ALL buffered events regardless of window
+    public Task ForcePromoteAllAsync()
+    {
+        if (_projectionActor != null)
+        {
+            try
+            {
+                var m = _projectionActor.GetType().GetMethod("ForcePromoteAllBufferedEvents", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                m?.Invoke(_projectionActor, Array.Empty<object>());
+            }
+            catch { }
+        }
+        return Task.CompletedTask;
     }
 
     public async Task StopSubscriptionAsync()

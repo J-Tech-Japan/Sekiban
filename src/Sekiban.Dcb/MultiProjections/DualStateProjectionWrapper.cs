@@ -36,6 +36,8 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     private Guid _unsafeLastEventId;
     private string _unsafeLastSortableUniqueId = string.Empty;
 
+    public int SafeVersion => _safeVersion;
+
     public DualStateProjectionWrapper(
         T initialProjector,
         string projectorName,
@@ -159,6 +161,19 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
             }
             
             RebuildSafeState(domainTypes);
+            try
+            {
+                Console.WriteLine($"[SafePromotion] projector={_projectorName} promoted={eventsToProcess.Count} bufferedRemaining={_bufferedEvents.Count} safeTotal={_allSafeEvents.Count} threshold={safeWindowThreshold.Value}");
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                Console.WriteLine($"[SafePromotion] projector={_projectorName} promoted=0 buffered={_bufferedEvents.Count} safeTotal={_allSafeEvents.Count} threshold={safeWindowThreshold.Value}");
+            }
+            catch { }
         }
     }
 

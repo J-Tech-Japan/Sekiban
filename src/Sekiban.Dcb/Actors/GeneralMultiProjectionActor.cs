@@ -371,6 +371,15 @@ public class GeneralMultiProjectionActor
         bool canGetUnsafeState = false,
         CancellationToken cancellationToken = default)
     {
+        // Phase1 safeguard: promote buffered events before building a safe snapshot
+        try
+        {
+            ForcePromoteBufferedEvents();
+        }
+        catch
+        {
+            // Ignore promotion errors to avoid blocking persistence
+        }
         var envelopeRb = await GetSnapshotAsync(canGetUnsafeState, cancellationToken);
         if (!envelopeRb.IsSuccess)
         {
@@ -389,8 +398,8 @@ public class GeneralMultiProjectionActor
         }
 
         // Safe position for hosts to persist
-        var safePosition = await GetSafeLastSortableUniqueIdAsync();
-        return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
+    var safePosition = await GetSafeLastSortableUniqueIdAsync();
+    return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
     }
 
     /// <summary>
@@ -543,6 +552,46 @@ public class GeneralMultiProjectionActor
         }
     }
 
+    // Phase1: forcibly process buffered events by requesting a safe projection threshold evaluation
+    private void ForcePromoteBufferedEvents()
+    {
+        if (_singleStateAccessor == null) return;
+        try
+        {
+            // Request safe projection which triggers buffered event promotion inside wrapper
+            var accessorType = _singleStateAccessor.GetType();
+            var getSafeMethod = accessorType.GetMethod("GetSafeProjection");
+            if (getSafeMethod != null)
+            {
+                var threshold = GetSafeWindowThreshold();
+                _ = getSafeMethod.Invoke(_singleStateAccessor, new object[] { threshold, _domain });
+            }
+        }
+        catch
+        {
+            // Swallow - best effort only
+        }
+    }
+
+    // Debug helper: force promotion with artificially large safe window (promote everything)
+    private void ForcePromoteAllBufferedEvents()
+    {
+        if (_singleStateAccessor == null) return;
+        try
+        {
+            var accessorType = _singleStateAccessor.GetType();
+            var getSafeMethod = accessorType.GetMethod("GetSafeProjection");
+            if (getSafeMethod != null)
+            {
+                // Use MaxValue threshold so全イベントが IsEarlierThanOrEqual となり昇格
+                var maxThreshold = SortableUniqueId.MaxValue;
+                _ = getSafeMethod.Invoke(_singleStateAccessor, new object[] { maxThreshold, _domain });
+                Console.WriteLine($"[SafePromotion] projector={_projectorName} force-promote-all invoked threshold={maxThreshold.Value}");
+            }
+        }
+        catch { }
+    }
+
 
     private Task<ResultBox<MultiProjectionState>> GetStateFromSingleAccessorAsync(bool canGetUnsafeState)
     {
@@ -566,6 +615,16 @@ public class GeneralMultiProjectionActor
 
         if (canGetUnsafeState)
         {
+            // Auto-promotion: unsafe取得要求でも古いバッファを昇格させる (SafeProjection 呼び出しで内部 ProcessBufferedEvents 実行)
+            try
+            {
+                var autoSafeMethod = accessorType.GetMethod("GetSafeProjection");
+                if (autoSafeMethod != null)
+                {
+                    _ = autoSafeMethod.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain });
+                }
+            }
+            catch { }
             var getUnsafeMethod = accessorType.GetMethod("GetUnsafeProjection");
             var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain });
             // projection has properties: State, LastSortableUniqueId, LastEventId, Version
@@ -689,6 +748,11 @@ public class GeneralMultiProjectionActor
             effectiveWindow = (int)Math.Max(0, Math.Min(int.MaxValue, (long)_options.SafeWindowMs + (long)extra));
         }
         var threshold = DateTime.UtcNow.AddMilliseconds(-effectiveWindow);
+        try
+        {
+            Console.WriteLine($"[SafeWindow] projector={_projectorName} baseMs={_options.SafeWindowMs} effectiveMs={effectiveWindow} emaLagMs={_observedLagMs:F1} maxLagMs={_maxLagMs:F1} now={DateTime.UtcNow:O} threshold={threshold:O}");
+        }
+        catch { }
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
 
