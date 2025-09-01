@@ -23,18 +23,13 @@ public record GetWeatherForecastCountGenericQuery :
         GetWeatherForecastCountGenericQuery query,
         IQueryContext context)
     {
-        var tagStates = projector.GetCurrentTagStates();
-        var totalCount = tagStates.Count;
-        var unsafeCount = tagStates.Keys.Count(id => projector.IsTagStateUnsafe(id));
-        var safeCount = totalCount - unsafeCount;
-
+        var safeVersion = context.SafeVersion ?? 0;
+        var unsafeVersion = context.UnsafeVersion ?? safeVersion;
+        var total = projector.GetCurrentTagStates().Count; // tag states equal number of forecasts
         return ResultBox.FromValue(new WeatherForecastCountResult(
-            TotalCount: totalCount,
-            SafeCount: safeCount,
-            UnsafeCount: unsafeCount,
-            IsSafeState: unsafeCount == 0,
-            LastProcessedEventId: string.Empty,
-            SafeVersion: safeCount
+            SafeVersion: safeVersion,
+            UnsafeVersion: unsafeVersion,
+            TotalCount: total
         ));
     }
 }

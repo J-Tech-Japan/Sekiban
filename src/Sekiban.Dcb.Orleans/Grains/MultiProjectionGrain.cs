@@ -483,10 +483,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             await StartSubscriptionAsync();
-            // Promote safe window before executing query so Safe/Unsafe are up-to-date
+            ResultBox<MultiProjectionState>? safeStateResultBox = null;
             if (_projectionActor != null)
             {
-                _ = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+                safeStateResultBox = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
             }
             // Avoid forcing catch-up on every query. Subscription will advance state.
             // Only catch up here if subscription is not active.
@@ -502,10 +502,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             var state = stateResult.GetValue();
             var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            int? safeVersion = null;
+            string? safeThreshold = null;
+            DateTime? safeThresholdTime = null;
+            int? unsafeVersion = null;
+            try
+            {
+                if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
+                {
+                    safeVersion = safeStateResultBox.GetValue().Version;
+                }
+                else
+                {
+                    var payloadType = state.Payload.GetType();
+                    var safeVersionProp = payloadType.GetProperty("SafeVersion");
+                    if (safeVersionProp != null)
+                    {
+                        safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
+                    }
+                }
+                if (_projectionActor != null)
+                {
+                    var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
+                    safeThreshold = actorSafeThreshold.Value;
+                    try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+                }
+                unsafeVersion = state.Version;
+            }
+            catch { }
             var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
                 query, 
                 projectorProvider, 
-                ServiceProvider);
+                ServiceProvider,
+                safeVersion,
+                safeThreshold,
+                safeThresholdTime,
+                unsafeVersion);
 
             if (result.IsSuccess)
             {
@@ -527,10 +559,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await EnsureInitializedAsync();
 
         await StartSubscriptionAsync();
-        // Promote safe window before executing query so Safe/Unsafe are current
+        ResultBox<MultiProjectionState>? safeStateResultBox = null;
         if (_projectionActor != null)
         {
-            _ = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+            safeStateResultBox = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
         }
         if (_orleansStreamHandle == null)
         {
@@ -552,10 +584,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             var state = stateResult.GetValue();
             var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            int? safeVersion = null;
+            string? safeThreshold = null;
+            DateTime? safeThresholdTime = null;
+            int? unsafeVersion = null;
+            try
+            {
+                if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
+                {
+                    safeVersion = safeStateResultBox.GetValue().Version;
+                }
+                else
+                {
+                    var payloadType = state.Payload.GetType();
+                    var safeVersionProp = payloadType.GetProperty("SafeVersion");
+                    if (safeVersionProp != null)
+                    {
+                        safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
+                    }
+                }
+                if (_projectionActor != null)
+                {
+                    var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
+                    safeThreshold = actorSafeThreshold.Value;
+                    try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+                }
+                unsafeVersion = state.Version;
+            }
+            catch { }
             var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
                 query,
                 projectorProvider,
-                ServiceProvider);
+                ServiceProvider,
+                safeVersion,
+                safeThreshold,
+                safeThresholdTime,
+                unsafeVersion);
 
             return result.IsSuccess ? result.GetValue() : ListQueryResultGeneral.Empty;
         }

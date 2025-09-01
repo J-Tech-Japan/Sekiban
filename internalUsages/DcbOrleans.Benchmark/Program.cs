@@ -35,7 +35,7 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       document.getElementById('lastError').textContent = s.lastError ?? '';
       
       // Show processing indicator if weather count is still updating after benchmark completion
-      if (!s.isRunning && s.weatherCount !== null && s.weatherCount < (s.created * 2)) {{
+  if (!s.isRunning && s.weatherCount !== null && s.weatherCount < s.created) {{
         document.getElementById('weatherCount').textContent = s.weatherCount + ' (処理中...)';
       }}
       
@@ -205,8 +205,8 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       const j = await r.json();
       const id = 'count-' + mode;
       if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
-  const sv = (typeof j.safeVersion !== 'undefined') ? (' safeVersion:' + j.safeVersion) : '';
-  document.getElementById(id).textContent = 'total:' + j.totalCount + ' safe:' + j.safeCount + ' unsafe:' + j.unsafeCount + ' safeState:' + j.isSafeState + sv;
+  document.getElementById(id).textContent = 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') ;
+  document.getElementById(id).textContent = 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') + ' totalCount:' + (j.totalCount ?? '-') ;
     }}
     async function loadStatus(mode) {{
       const r = await fetch('/projection/status?mode=' + mode);
@@ -305,7 +305,7 @@ app.MapGet("/status", async () =>
             var now = DateTime.UtcNow;
             var cache = state.GetOrCreateCountCache(mode);
             var minInterval = state.IsRunning ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(10);
-            if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
+      if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
             {
                 var countPath = mode == "single"
                     ? "/api/weatherforecastsingle/count"
@@ -315,7 +315,7 @@ app.MapGet("/status", async () =>
                 {
                     var json = await countResponse.Content.ReadAsStringAsync();
                     var count = JsonSerializer.Deserialize<WeatherCountResponse>(json);
-                    cache.Value = count?.totalCount;
+        cache.Value = count?.totalCount;
                     cache.LastFetchedUtc = now;
                 }
                 // On failure, keep previous cached value
@@ -663,11 +663,9 @@ sealed class CountCache
 // Helper class for deserializing weather count response
 public class WeatherCountResponse
 {
-    public int totalCount { get; set; }
-    public int safeCount { get; set; }
-    public int unsafeCount { get; set; }
-    public bool isSafeState { get; set; }
-    public string? lastProcessedEventId { get; set; }
+  public int safeVersion { get; set; }
+  public int unsafeVersion { get; set; }
+  public int totalCount { get; set; }
 }
 
 // Helper class for deserializing event delivery statistics

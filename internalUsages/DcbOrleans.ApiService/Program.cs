@@ -730,15 +730,12 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                return Results.Ok(new
-                {
-                    totalCount = countResult.TotalCount,
-                    safeCount = countResult.SafeCount,
-                    unsafeCount = countResult.UnsafeCount,
-                    isSafeState = countResult.IsSafeState,
-                    safeVersion = countResult.SafeVersion,
-                    lastProcessedEventId = countResult.LastProcessedEventId
-                });
+                    return Results.Ok(new
+                    {
+                        safeVersion = countResult.SafeVersion,
+                        unsafeVersion = countResult.UnsafeVersion,
+                        totalCount = countResult.TotalCount
+                    });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
@@ -763,16 +760,13 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                return Results.Ok(new
-                {
-                    totalCount = countResult.TotalCount,
-                    safeCount = countResult.SafeCount,
-                    unsafeCount = countResult.UnsafeCount,
-                    isSafeState = countResult.IsSafeState,
-                    isGeneric = true,
-                    safeVersion = countResult.SafeVersion,
-                    lastProcessedEventId = countResult.LastProcessedEventId
-                });
+                    return Results.Ok(new
+                    {
+                        safeVersion = countResult.SafeVersion,
+                        unsafeVersion = countResult.UnsafeVersion,
+                        totalCount = countResult.TotalCount,
+                        isGeneric = true
+                    });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
@@ -797,16 +791,13 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                return Results.Ok(new
-                {
-                    totalCount = countResult.TotalCount,
-                    safeCount = countResult.SafeCount,
-                    unsafeCount = countResult.UnsafeCount,
-                    isSafeState = countResult.IsSafeState,
-                    isSingle = true,
-                    safeVersion = countResult.SafeVersion,
-                    lastProcessedEventId = countResult.LastProcessedEventId
-                });
+                    return Results.Ok(new
+                    {
+                        safeVersion = countResult.SafeVersion,
+                        unsafeVersion = countResult.UnsafeVersion,
+                        totalCount = countResult.TotalCount,
+                        isSingle = true
+                    });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });

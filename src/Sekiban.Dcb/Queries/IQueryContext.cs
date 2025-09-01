@@ -23,4 +23,24 @@ public interface IQueryContext
     /// <typeparam name="T">The service type</typeparam>
     /// <returns>The service instance or null</returns>
     T? GetServiceOrDefault<T>() where T : class;
+
+    /// <summary>
+    ///     Safe projection version (number of events incorporated into safe state)
+    /// </summary>
+    int? SafeVersion { get; }
+
+    /// <summary>
+    ///     Safe window threshold SortableUniqueId (string value)
+    /// </summary>
+    string? SafeWindowThreshold { get; }
+
+    /// <summary>
+    ///     Safe window threshold time (derived from SortableUniqueId)
+    /// </summary>
+    DateTime? SafeWindowThresholdTime { get; }
+
+    /// <summary>
+    ///     Current (unsafe) projection version including events not yet safe
+    /// </summary>
+    int? UnsafeVersion { get; }
 }

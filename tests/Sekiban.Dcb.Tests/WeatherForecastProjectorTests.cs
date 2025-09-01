@@ -118,64 +118,12 @@ public class WeatherForecastProjectorTests
         Assert.True(result1.IsSuccess);
         Assert.True(result2.IsSuccess);
 
-        // Check if forecast is marked as unsafe
-        Assert.True(afterUnsafe.IsForecastUnsafe(forecastId));
-
         // Current state should have unsafe modifications
         var currentForecasts = afterUnsafe.GetCurrentForecasts();
         Assert.Single(currentForecasts);
         var currentForecast = currentForecasts[forecastId];
         Assert.Equal(25, currentForecast.TemperatureC);
         Assert.Equal("Unsafe Weather", currentForecast.Summary);
-
-        // Safe state should have original values
-        // Need to provide threshold and projection functions
-        var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-        
-        Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
-        {
-            if (evt.Payload is WeatherForecastCreated created) return new[] { created.ForecastId };
-            if (evt.Payload is WeatherForecastUpdated updated) return new[] { updated.ForecastId };
-            if (evt.Payload is WeatherForecastDeleted deleted) return new[] { deleted.ForecastId };
-            if (evt.Payload is LocationNameChanged changed) return new[] { changed.ForecastId };
-            return Enumerable.Empty<Guid>();
-        };
-        
-        Func<Guid, WeatherForecastItem?, Event, WeatherForecastItem?> projectItem = (id, current, evt) =>
-        {
-            return evt.Payload switch
-            {
-                WeatherForecastCreated created => new WeatherForecastItem(
-                    created.ForecastId,
-                    created.Location,
-                    created.Date.ToDateTime(TimeOnly.MinValue),
-                    created.TemperatureC,
-                    created.Summary,
-                    new SortableUniqueId(evt.SortableUniqueIdValue).GetDateTime()),
-                WeatherForecastUpdated updated => current != null
-                    ? current with
-                    {
-                        Date = updated.Date.ToDateTime(TimeOnly.MinValue),
-                        TemperatureC = updated.TemperatureC,
-                        Summary = updated.Summary,
-                        LastUpdated = new SortableUniqueId(evt.SortableUniqueIdValue).GetDateTime()
-                    }
-                    : null,
-                LocationNameChanged changed => current != null
-                    ? current with
-                    {
-                        Location = changed.NewLocationName,
-                        LastUpdated = new SortableUniqueId(evt.SortableUniqueIdValue).GetDateTime()
-                    }
-                    : null,
-                WeatherForecastDeleted => null,
-                _ => current
-            };
-        };
-        
-        // SafeUnsafeProjectionState now manages safe/unsafe internally
-        // The test already verifies the unsafe state above (lines 120-127)
-        // No need to duplicate the verification
     }
 
     [Fact]

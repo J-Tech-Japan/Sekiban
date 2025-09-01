@@ -23,7 +23,11 @@ public class SimpleQueryTypes : IQueryTypes
     public async Task<ResultBox<object>> ExecuteQueryAsync(
         IQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null)
     {
         var queryType = query.GetType();
 
@@ -56,7 +60,7 @@ public class SimpleQueryTypes : IQueryTypes
         }
 
         var projector = projectorResult.GetValue();
-        var context = new QueryContext(serviceProvider);
+    var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
 
         // Invoke the static method
         try
@@ -92,7 +96,11 @@ public class SimpleQueryTypes : IQueryTypes
     public async Task<ResultBox<object>> ExecuteListQueryAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null)
     {
         var queryType = query.GetType();
 
@@ -116,7 +124,7 @@ public class SimpleQueryTypes : IQueryTypes
         }
 
         var projector = projectorResult.GetValue();
-        var context = new QueryContext(serviceProvider);
+    var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
 
         // Get HandleFilter method
         var handleFilterMethod = queryType.GetMethod("HandleFilter", BindingFlags.Public | BindingFlags.Static);
@@ -207,10 +215,21 @@ public class SimpleQueryTypes : IQueryTypes
     public async Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null)
     {
         // First execute the query normally
-        var result = await ExecuteListQueryAsync(query, projectorProvider, serviceProvider);
+        var result = await ExecuteListQueryAsync(
+            query,
+            projectorProvider,
+            serviceProvider,
+            safeVersion,
+            safeWindowThreshold,
+            safeWindowThresholdTime,
+            unsafeVersion);
 
         if (!result.IsSuccess)
         {

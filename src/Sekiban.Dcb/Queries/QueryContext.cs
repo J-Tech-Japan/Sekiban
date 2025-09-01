@@ -6,10 +6,25 @@ namespace Sekiban.Dcb.Queries;
 /// </summary>
 public class QueryContext : IQueryContext
 {
-
-    public QueryContext(IServiceProvider serviceProvider) =>
+    public QueryContext(
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+        DateTime? safeWindowThresholdTime = null,
+        int? unsafeVersion = null)
+    {
         ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        SafeVersion = safeVersion;
+        SafeWindowThreshold = safeWindowThreshold;
+        SafeWindowThresholdTime = safeWindowThresholdTime;
+        UnsafeVersion = unsafeVersion;
+    }
+
     public IServiceProvider ServiceProvider { get; }
+    public int? SafeVersion { get; }
+    public string? SafeWindowThreshold { get; }
+    public DateTime? SafeWindowThresholdTime { get; }
+    public int? UnsafeVersion { get; }
 
     public T GetService<T>() where T : notnull => ServiceProvider.GetRequiredService<T>();
 

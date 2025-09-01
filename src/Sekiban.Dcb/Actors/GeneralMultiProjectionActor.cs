@@ -756,6 +756,12 @@ public class GeneralMultiProjectionActor
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
 
+    /// <summary>
+    ///     Public helper to obtain current safe window threshold without triggering state mutation.
+    ///     (Primarily used to supply query context metadata.)
+    /// </summary>
+    public SortableUniqueId PeekCurrentSafeWindowThreshold() => GetSafeWindowThreshold();
+
     private void UpdateObservedLag(IReadOnlyList<Event> events)
     {
         var now = DateTime.UtcNow;
