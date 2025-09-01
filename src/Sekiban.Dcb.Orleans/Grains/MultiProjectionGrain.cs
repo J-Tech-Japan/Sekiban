@@ -201,7 +201,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 stateSize = safeStateSize; // Backward-compatible: report safe payload size in StateSize
                 var projectorName = this.GetPrimaryKeyString();
-                Console.WriteLine($"[{projectorName}] Status payload sizes -> safe:{safeStateSize} bytes, unsafe:{unsafeStateSize} bytes");
+                Console.WriteLine($"[{projectorName}] State size - Safe: {safeStateSize:N0} bytes, Unsafe: {unsafeStateSize:N0} bytes, Events: {_eventsProcessed:N0}");
             }
             catch
             {
@@ -317,7 +317,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist start at {startUtc:O}");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting persistence at {startUtc:yyyy-MM-dd HH:mm:ss.fff} UTC");
 
             // Phase1: force promotion of buffered events before snapshot
             try
@@ -345,12 +345,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     var unsafeSt = unsafeStateInfo.GetValue();
                     var safeSt = safeStateInfo.GetValue();
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist debug safe(last={safeSt.LastSortableUniqueId} ver={safeSt.Version} isSafe={safeSt.IsSafeState}) unsafe(last={unsafeSt.LastSortableUniqueId} ver={unsafeSt.Version} isSafe={unsafeSt.IsSafeState})");
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Snapshot state - Safe: {safeSt.Version} events @ {safeSt.LastSortableUniqueId?.Substring(0, 20) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {unsafeSt.LastSortableUniqueId?.Substring(0, 20) ?? "empty"}");
                 }
             }
             catch { }
             var storageProviderName = "OrleansStorage"; // 現在利用しているプロバイダ名想定
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId} provider={storageProviderName} container=sekiban-grainstate key={this.GetPrimaryKeyString()}.json");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Writing snapshot: {data.Size:N0} bytes, {_eventsProcessed:N0} events, checkpoint: {data.SafeLastSortableUniqueId?.Substring(0, 20) ?? "empty"}...");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
@@ -364,13 +364,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await _state.WriteStateAsync();
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist success elapsed={(finishUtc-startUtc).TotalMilliseconds:F1}ms size={data.Size} eventsProcessed={_eventsProcessed} safeLast={data.SafeLastSortableUniqueId}");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Persistence completed in {(finishUtc-startUtc).TotalMilliseconds:F0}ms - {data.Size:N0} bytes, {_eventsProcessed:N0} events saved");
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
             _lastError = $"Persistence failed: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist error: {ex.Message}");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✗ Persistence failed: {ex.Message}");
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -646,7 +646,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task RefreshAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refreshing from event store");
+        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refreshing: Re-reading events from event store");
         await CatchUpFromEventStoreAsync();
     }
 
@@ -695,7 +695,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         _eventsProcessed = _state.State.EventsProcessed;
                         // Clear processed event IDs to prevent double counting after snapshot restore
                         _processedEventIds.Clear();
-                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
+                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restored successfully - Position: {deserializedState.InlineState?.LastSortableUniqueId ?? "(empty)"}, Events: {_eventsProcessed}");
                         // Avoid overlap on the first catch-up after snapshot restore
                         _avoidOverlapOnce = true;
                     }
@@ -939,7 +939,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
                     {
                         fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
-                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Current position: {fromPosition.Value}");
+                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from checkpoint: {fromPosition.Value}");
                     }
                 }
 
@@ -1017,7 +1017,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         filtered.Add(ev);
                     }
 
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (apply={filtered.Count} skipped={skippedAlreadyApplied}) (from={(overlappedFrom?.Value ?? "<begin>")}) lastApplied={(currentLastSortable ?? "<none>")}");
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catch-up: {events.Count} events fetched, {filtered.Count} new, {skippedAlreadyApplied} already applied (from: {(overlappedFrom?.Value ?? "start")} to: {(currentLastSortable ?? "none")})");
                     if (filtered.Count > 0)
                     {
                         await AddEventsAsync(filtered, true);
@@ -1047,7 +1047,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Stream batch received: {events.Count} events");
 
         // Track event deliveries for debugging
         _eventStats.RecordStreamBatch(events);
@@ -1077,7 +1077,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .SortableUniqueIdValue;
             _state.State.LastPosition = maxSortableId;
 
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Batch processed: {events.Count} events, total: {_eventsProcessed}");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Processed {events.Count} events - Total: {_eventsProcessed:N0} events");
 
             // Persist state after processing a batch if it's large enough
             if (events.Count >= _persistBatchSize)

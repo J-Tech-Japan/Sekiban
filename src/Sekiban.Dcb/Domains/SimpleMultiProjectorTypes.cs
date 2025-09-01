@@ -19,6 +19,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
     private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
+    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, object, string> serialize, 
+                                                    Func<DcbDomainTypes, string, object> deserialize)> _customSerializers = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
         string multiProjectorName,
@@ -161,5 +163,99 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+    }
+    
+    /// <summary>
+    ///     Serializes a multi-projection payload to JSON string.
+    ///     Uses custom serialization if registered, otherwise falls back to standard JSON serialization.
+    /// </summary>
+    public ResultBox<string> Serialize(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        IMultiProjectionPayload payload)
+    {
+        try
+        {
+            if (_customSerializers.TryGetValue(projectorName, out var serializers))
+            {
+                return ResultBox.FromValue(serializers.serialize(domainTypes, payload));
+            }
+            
+            // Fallback: standard JSON serialization with runtime type
+            var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
+            return ResultBox.FromValue(json);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+    
+    /// <summary>
+    ///     Deserializes a JSON string to a multi-projection payload.
+    ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
+    /// </summary>
+    public ResultBox<IMultiProjectionPayload> Deserialize(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string json)
+    {
+        try
+        {
+            if (_customSerializers.TryGetValue(projectorName, out var serializers))
+            {
+                return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, json));
+            }
+            
+            // Fallback: standard JSON deserialization
+            if (_projectorTypes.TryGetValue(projectorName, out var type))
+            {
+                var result = JsonSerializer.Deserialize(json, type, domainTypes.JsonSerializerOptions) as IMultiProjectionPayload;
+                if (result != null)
+                {
+                    return ResultBox.FromValue(result);
+                }
+                return ResultBox.Error<IMultiProjectionPayload>(
+                    new InvalidOperationException($"Failed to deserialize to {type.Name}"));
+            }
+            
+            return ResultBox.Error<IMultiProjectionPayload>(
+                new KeyNotFoundException($"Projector '{projectorName}' not found"));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
+    
+    /// <summary>
+    ///     Registers a projector with custom serialization support.
+    ///     The projector must implement IMultiProjectorWithCustomSerialization interface.
+    /// </summary>
+    public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
+        where T : IMultiProjectorWithCustomSerialization<T>, new()
+    {
+        try
+        {
+            var projectorName = T.MultiProjectorName;
+            var type = typeof(T);
+            
+            // Store custom serialization delegates
+            _customSerializers[projectorName] = (
+                serialize: (domain, payload) => T.Serialize(domain, (T)payload),
+                deserialize: (domain, json) => T.Deserialize(domain, json)
+            );
+            
+            // Register the projector using the base RegisterProjector method
+            // Since IMultiProjectorWithCustomSerialization<T> inherits from IMultiProjector<T>,
+            // we can directly call RegisterProjector
+            RegisterProjector<T>();
+            
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
     }
 }

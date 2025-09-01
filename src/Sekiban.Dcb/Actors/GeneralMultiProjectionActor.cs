@@ -127,23 +127,12 @@ public class GeneralMultiProjectionActor
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
-        var deserializeMethod = projType.GetMethod(
-            "Deserialize",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-            new Type[] { typeof(DcbDomainTypes), typeof(string) });
-        IMultiProjectionPayload loadedPayload;
-        if (deserializeMethod != null)
-        {
-            loadedPayload = (IMultiProjectionPayload)deserializeMethod.Invoke(null, new object[] { _domain, payloadJson })!;
-            Console.WriteLine($"[{_projectorName}] Deserialize: projector-defined Deserialize");
-        }
-        else
-        {
-            var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
-            if (!rb.IsSuccess) throw rb.GetException();
-            loadedPayload = rb.GetValue();
-            Console.WriteLine($"[{_projectorName}] Deserialize: registry fallback");
-        }
+        // Use the new Deserialize method from IMultiProjectorTypes
+        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, payloadJson);
+        if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
+        
+        var loadedPayload = deserializeResult.GetValue();
+        Console.WriteLine($"[{_projectorName}] Deserialize: via IMultiProjectorTypes");
 
         // Check if the payload type implements ISafeAndUnsafeStateAccessor
         var payloadType = loadedPayload.GetType();
@@ -197,23 +186,12 @@ public class GeneralMultiProjectionActor
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
-        var deserializeMethod = projType.GetMethod(
-            "Deserialize",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-            new Type[] { typeof(DcbDomainTypes), typeof(string) });
-        IMultiProjectionPayload loadedPayload;
-        if (deserializeMethod != null)
-        {
-            loadedPayload = (IMultiProjectionPayload)deserializeMethod.Invoke(null, new object[] { _domain, payloadJson })!;
-            Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): projector-defined Deserialize");
-        }
-        else
-        {
-            var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
-            if (!rb.IsSuccess) throw rb.GetException();
-            loadedPayload = rb.GetValue();
-            Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): registry fallback");
-        }
+        // Use the new Deserialize method from IMultiProjectorTypes
+        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, payloadJson);
+        if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
+        
+        var loadedPayload = deserializeResult.GetValue();
+        Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): via IMultiProjectorTypes");
 
         var payloadType = loadedPayload.GetType();
         var accessorInterfaces = payloadType
@@ -265,24 +243,17 @@ public class GeneralMultiProjectionActor
 
         try
         {
-            // Prefer projector-defined serializer for safe-only snapshots
-            var payloadType = payload.GetType();
-            var serializeMethod = payloadType.GetMethod(
-                "Serialize",
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-                new Type[] { typeof(DcbDomainTypes), payloadType });
-            string json;
-            if (serializeMethod != null)
+            // Use the new Serialize method from IMultiProjectorTypes
+            var serializeResult = _types.Serialize(_projectorName, _domain, payload);
+            if (!serializeResult.IsSuccess)
             {
-                json = (string)serializeMethod.Invoke(null, new object[] { _domain, payload })!;
-                Console.WriteLine($"[{_projectorName}] Serialize: projector-defined Serialize");
+                return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
             }
-            else
-            {
-                json = JsonSerializer.Serialize(payload, payloadType, _jsonOptions);
-                Console.WriteLine($"[{_projectorName}] Serialize: runtime-type fallback");
-            }
+            
+            var json = serializeResult.GetValue();
+            Console.WriteLine($"[{_projectorName}] Serialize: via IMultiProjectorTypes");
             var bytes = Encoding.UTF8.GetBytes(json);
+            var payloadType = payload.GetType();
             var state = new SerializableMultiProjectionState(
                 bytes,
                 payloadType.FullName ?? payloadType.Name,

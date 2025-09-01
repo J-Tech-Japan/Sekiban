@@ -10,9 +10,10 @@ namespace Dcb.Domain.Projections;
 
 /// <summary>
 ///     Weather forecast projection using TagState with SafeUnsafeProjectionState
+///     Implements custom serialization to properly handle SafeUnsafeProjectionState
 /// </summary>
 public record WeatherForecastProjectorWithTagStateProjector :
-    IMultiProjector<WeatherForecastProjectorWithTagStateProjector>,
+    IMultiProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>,
     ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 

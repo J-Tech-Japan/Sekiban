@@ -7,10 +7,11 @@ namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
 ///     Generic multi-projector that works with any tag projector and specific tag group
+///     Implements custom serialization to properly handle SafeUnsafeProjectionState
 /// </summary>
 public record
     GenericTagMultiProjector<TTagProjector, TTagGroup> :
-    IMultiProjector<GenericTagMultiProjector<TTagProjector, TTagGroup>>,
+    IMultiProjectorWithCustomSerialization<GenericTagMultiProjector<TTagProjector, TTagGroup>>,
     ISafeAndUnsafeStateAccessor<GenericTagMultiProjector<TTagProjector, TTagGroup>>
     where TTagProjector : ITagProjector<TTagProjector> where TTagGroup : IGuidTagGroup<TTagGroup>
 {
