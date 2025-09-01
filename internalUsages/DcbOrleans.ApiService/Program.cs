@@ -168,6 +168,7 @@ builder.UseOrleans(config =>
         options.Configure<IServiceProvider>((opt, sp) =>
         {
             opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+            opt.ContainerName = "sekiban-grainstate"; // 明示コンテナ
         });
     });
 
@@ -179,6 +180,7 @@ builder.UseOrleans(config =>
             options.Configure<IServiceProvider>((opt, sp) =>
             {
                 opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.ContainerName = "sekiban-grainstate";
             });
         });
 
@@ -190,6 +192,7 @@ builder.UseOrleans(config =>
             options.Configure<IServiceProvider>((opt, sp) =>
             {
                 opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.ContainerName = "sekiban-grainstate";
             });
         });
 
@@ -896,12 +899,23 @@ apiRoute
         {
             try
             {
+                var start = DateTime.UtcNow;
+                Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
                 var grain = client.GetGrain<IMultiProjectionGrain>(name);
                 var rb = await grain.PersistStateAsync();
-                return rb.IsSuccess ? Results.Ok(new { success = rb.GetValue() }) : Results.BadRequest(new { error = rb.GetException()?.Message });
+                var end = DateTime.UtcNow;
+                if (rb.IsSuccess)
+                {
+                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end-start).TotalMilliseconds:F1}ms");
+                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end-start).TotalMilliseconds });
+                }
+                var err = rb.GetException()?.Message;
+                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end-start).TotalMilliseconds:F1}ms error={err}");
+                return Results.BadRequest(new { error = err, elapsedMs = (end-start).TotalMilliseconds });
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[PersistEndpoint] Exception name={name} error={ex.Message}");
                 return Results.BadRequest(new { error = ex.Message });
             }
         })

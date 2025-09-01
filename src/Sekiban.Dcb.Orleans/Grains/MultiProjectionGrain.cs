@@ -312,10 +312,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         try
         {
+            var startUtc = DateTime.UtcNow;
             if (_projectionActor == null)
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist start at {startUtc:O}");
 
             // Phase1: force promotion of buffered events before snapshot
             try
@@ -347,7 +349,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
             }
             catch { }
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId}");
+            var storageProviderName = "OrleansStorage"; // 現在利用しているプロバイダ名想定
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persisting state: Size={data.Size}, Events={_eventsProcessed}, SafePosition={data.SafeLastSortableUniqueId} provider={storageProviderName} container=sekiban-grainstate key={this.GetPrimaryKeyString()}.json");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
@@ -360,12 +363,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             await _state.WriteStateAsync();
             _lastError = null;
-            
+            var finishUtc = DateTime.UtcNow;
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist success elapsed={(finishUtc-startUtc).TotalMilliseconds:F1}ms size={data.Size} eventsProcessed={_eventsProcessed} safeLast={data.SafeLastSortableUniqueId}");
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
             _lastError = $"Persistence failed: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Persist error: {ex.Message}");
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -983,9 +988,41 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var events = eventsResult.GetValue().ToList();
                 if (events.Any())
                 {
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (from={(overlappedFrom?.Value ?? "<begin>")})");
-                    await AddEventsAsync(events, true);
-                    await PersistStateAsync();
+                    string? currentLastSortable = null;
+                    try
+                    {
+                        var unsafeState = await _projectionActor.GetStateAsync(true);
+                        if (unsafeState.IsSuccess)
+                        {
+                            var val = unsafeState.GetValue();
+                            if (!string.IsNullOrEmpty(val.LastSortableUniqueId)) currentLastSortable = val.LastSortableUniqueId;
+                        }
+                    }
+                    catch { }
+
+                    int skippedAlreadyApplied = 0;
+                    var filtered = new List<Sekiban.Dcb.Events.Event>(events.Count);
+                    foreach (var ev in events)
+                    {
+                        if (currentLastSortable != null && string.Compare(ev.SortableUniqueIdValue, currentLastSortable, StringComparison.Ordinal) <= 0)
+                        {
+                            skippedAlreadyApplied++;
+                            continue;
+                        }
+                        if (_processedEventIds.Contains(ev.Id.ToString()))
+                        {
+                            skippedAlreadyApplied++;
+                            continue;
+                        }
+                        filtered.Add(ev);
+                    }
+
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing {events.Count} events from store (apply={filtered.Count} skipped={skippedAlreadyApplied}) (from={(overlappedFrom?.Value ?? "<begin>")}) lastApplied={(currentLastSortable ?? "<none>")}");
+                    if (filtered.Count > 0)
+                    {
+                        await AddEventsAsync(filtered, true);
+                        await PersistStateAsync();
+                    }
                 }
             }
         }
