@@ -166,17 +166,38 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
   </p>
 
   <h3>Projection 状況</h3>
-  <div style='display:grid; grid-template-columns: 160px 1fr 1fr; gap:.5rem; align-items:center;'>
-    <div></div><div><strong>Count (実行)</strong></div><div><strong>Status (非実行)</strong></div>
+  <div class='row' style='margin:.25rem 0'>
+    <label><input type='checkbox' id='snapshotUnsafe' checked/> Snapshot unsafe</label>
+  </div>
+  <div style='display:grid; grid-template-columns: 160px 1fr 1fr 1fr 1fr 1fr 1fr; gap:.5rem; align-items:center;'>
+    <div></div>
+    <div><strong>Count (実行)</strong></div>
+    <div><strong>Status (非実行)</strong></div>
+    <div><strong>Persist</strong></div>
+    <div><strong>Deactivate</strong></div>
+    <div><strong>Snapshot</strong></div>
+    <div><strong>Refresh</strong></div>
     <div>standard</div>
     <div><button onclick='loadCount(&quot;standard&quot;)'>fetch</button> <code id='count-standard'>-</code></div>
     <div><button onclick='loadStatus(&quot;standard&quot;)'>fetch</button> <code id='status-standard'>-</code></div>
+    <div><button onclick='doPersist(&quot;standard&quot;)'>persist</button></div>
+    <div><button onclick='doDeactivate(&quot;standard&quot;)'>deactivate</button></div>
+    <div><button onclick='doSnapshot(&quot;standard&quot;)'>snapshot</button></div>
+    <div><button onclick='doRefresh(&quot;standard&quot;)'>refresh</button></div>
     <div>single</div>
     <div><button onclick='loadCount(&quot;single&quot;)'>fetch</button> <code id='count-single'>-</code></div>
     <div><button onclick='loadStatus(&quot;single&quot;)'>fetch</button> <code id='status-single'>-</code></div>
+    <div><button onclick='doPersist(&quot;single&quot;)'>persist</button></div>
+    <div><button onclick='doDeactivate(&quot;single&quot;)'>deactivate</button></div>
+    <div><button onclick='doSnapshot(&quot;single&quot;)'>snapshot</button></div>
+    <div><button onclick='doRefresh(&quot;single&quot;)'>refresh</button></div>
     <div>generic</div>
     <div><button onclick='loadCount(&quot;generic&quot;)'>fetch</button> <code id='count-generic'>-</code></div>
     <div><button onclick='loadStatus(&quot;generic&quot;)'>fetch</button> <code id='status-generic'>-</code></div>
+    <div><button onclick='doPersist(&quot;generic&quot;)'>persist</button></div>
+    <div><button onclick='doDeactivate(&quot;generic&quot;)'>deactivate</button></div>
+    <div><button onclick='doSnapshot(&quot;generic&quot;)'>snapshot</button></div>
+    <div><button onclick='doRefresh(&quot;generic&quot;)'>refresh</button></div>
   </div>
   <script>
     async function loadCount(mode) {{
@@ -199,6 +220,56 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
         const safeSize = (typeof j.safeStateSize !== 'undefined') ? (' safeSize:' + j.safeStateSize) : '';
         const unsafeSize = (typeof j.unsafeStateSize !== 'undefined') ? (' unsafeSize:' + j.unsafeStateSize) : '';
         document.getElementById(id).textContent = 'caughtUp:' + j.isCaughtUp + ' pos:' + (j.currentPosition ?? '') + ' size:' + j.stateSize + safeSize + unsafeSize + ' events:' + j.eventsProcessed;
+      }}
+    }}
+
+    async function doPersist(mode) {{
+      try {{
+        const r = await fetch('/projection/persist?mode=' + mode, {{ method: 'POST' }});
+        const t = await r.text();
+        log(`Persist(${{mode}}) => ${{r.status}} ${{t}}`);
+      }} catch (e) {{
+        log(`Persist(${{mode}}) failed: ` + e);
+      }}
+    }}
+
+    async function doDeactivate(mode) {{
+      try {{
+        const r = await fetch('/projection/deactivate?mode=' + mode, {{ method: 'POST' }});
+        const t = await r.text();
+        log(`Deactivate(${{mode}}) => ${{r.status}} ${{t}}`);
+      }} catch (e) {{
+        log(`Deactivate(${{mode}}) failed: ` + e);
+      }}
+    }}
+
+    async function doSnapshot(mode) {{
+      try {{
+        const unsafeState = document.getElementById('snapshotUnsafe').checked ? 'true' : 'false';
+        const r = await fetch('/projection/snapshot?mode=' + mode + '&unsafeState=' + unsafeState);
+        const txt = await r.text();
+        if (!r.ok) {{ log(`Snapshot(${{mode}}) => ${{r.status}} ${{txt}}`); return; }}
+        try {{
+          const j = JSON.parse(txt);
+          const off = j.IsOffloaded === true;
+          const ver = off ? j.OffloadedState?.Version : j.InlineState?.Version;
+          const len = off ? (j.OffloadedState?.PayloadLength ?? 0) : ((j.InlineState?.Payload ?? '').length ?? 0);
+          log(`Snapshot(${{mode}}) ok: offloaded=${{off}}, version=${{ver}}, payloadLength=${{len}}`);
+        }} catch {{
+          log(`Snapshot(${{mode}}) ok: length=${{txt.length}}`);
+        }}
+      }} catch (e) {{
+        log(`Snapshot(${{mode}}) failed: ` + e);
+      }}
+    }}
+
+    async function doRefresh(mode) {{
+      try {{
+        const r = await fetch('/projection/refresh?mode=' + mode, {{ method: 'POST' }});
+        const t = await r.text();
+        log(`Refresh(${{mode}}) => ${{r.status}} ${{t}}`);
+      }} catch (e) {{
+        log(`Refresh(${{mode}}) failed: ` + e);
       }}
     }}
   </script>
@@ -339,11 +410,101 @@ app.MapGet("/projection/status", async (string? mode) =>
     }
 });
 
+// Projection control: persist state
+app.MapPost("/projection/persist", async (string? mode) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var name = GetProjectorName(m);
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.PostAsync($"/api/projections/persist?name={Uri.EscapeDataString(name)}", null);
+        var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
+        return Results.Text(json, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// Projection control: deactivate grain
+app.MapPost("/projection/deactivate", async (string? mode) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var name = GetProjectorName(m);
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.PostAsync($"/api/projections/deactivate?name={Uri.EscapeDataString(name)}", null);
+        var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
+        return Results.Text(json, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// Projection control: snapshot fetch
+app.MapGet("/projection/snapshot", async (string? mode, bool? unsafeState) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var name = GetProjectorName(m);
+    var unsafeFlag = unsafeState ?? true;
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync($"/api/projections/snapshot?name={Uri.EscapeDataString(name)}&unsafeState={(unsafeFlag ? "true" : "false")}");
+        var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
+        return Results.Text(txt, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// Projection control: refresh (catch-up)
+app.MapPost("/projection/refresh", async (string? mode) =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    var m = (mode ?? "standard").ToLowerInvariant();
+    var name = GetProjectorName(m);
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.PostAsync($"/api/projections/refresh?name={Uri.EscapeDataString(name)}", null);
+        var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
+        return Results.Text(json, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.Run();
 return;
 
 static int GetEnvInt(string name, int def)
     => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) ? v : def;
+
+static string GetProjectorName(string mode)
+    => mode == "single" ? "WeatherForecastProjectorWithTagStateProjector"
+       : mode == "generic" ? "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"
+       : "WeatherForecastProjection";
 
 static async Task RunAsync(string apiBase, BenchState state)
 {

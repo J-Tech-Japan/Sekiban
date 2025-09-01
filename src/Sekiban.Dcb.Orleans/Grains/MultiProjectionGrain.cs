@@ -39,6 +39,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private bool _avoidOverlapOnce;
     private string? _lastError;
     private long _eventsProcessed;
+    private HashSet<string> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private DateTime? _lastEventTime;
     
     // Event delivery statistics (debug/no-op selectable)
@@ -148,13 +149,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // so that delivery statistics include both stream and catch-up paths.
         _eventStats.RecordCatchUpBatch(events);
 
-        // Delegate to projection actor
-        await _projectionActor.AddEventsAsync(events, finishedCatchUp, Sekiban.Dcb.Actors.EventSource.CatchUp);
-        _eventsProcessed += events.Count;
+        // Filter out already processed events to prevent double counting
+        var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
         
-        if (events.Count > 0)
+        if (newEvents.Count > 0)
         {
-            _lastEventTime = DateTime.UtcNow;
+            // Delegate to projection actor
+            await _projectionActor.AddEventsAsync(newEvents, finishedCatchUp, Sekiban.Dcb.Actors.EventSource.CatchUp);
+            _eventsProcessed += newEvents.Count;
+            
+            // Mark events as processed
+            foreach (var ev in newEvents)
+            {
+                _processedEventIds.Add(ev.Id.ToString());
+            }
+            
+            if (newEvents.Count > 0)
+            {
+                _lastEventTime = DateTime.UtcNow;
+            }
         }
     }
 
@@ -576,6 +589,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     {
                         await _projectionActor.SetSnapshotAsync(deserializedState);
                         _eventsProcessed = _state.State.EventsProcessed;
+                        // Clear processed event IDs to prevent double counting after snapshot restore
+                        _processedEventIds.Clear();
                         Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] State restored - Events processed: {_eventsProcessed}");
                         // Avoid overlap on the first catch-up after snapshot restore
                         _avoidOverlapOnce = true;
@@ -898,14 +913,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Processing batch of {events.Count} events");
 
-            // Track event deliveries for debugging
-            _eventStats.RecordStreamBatch(events);
+        // Track event deliveries for debugging
+        _eventStats.RecordStreamBatch(events);
 
-            // Forward all delivered events to the actor which performs
-            // correct idempotency and ordering internally.
-            await _projectionActor.AddEventsAsync(events, true, Sekiban.Dcb.Actors.EventSource.Stream);
-            _eventsProcessed += events.GroupBy(e => e.Id).Count();
+        // Filter out already processed events to prevent double counting
+        var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
+        
+        if (newEvents.Count > 0)
+        {
+            // Forward only new events to the actor
+            await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
+            _eventsProcessed += newEvents.Count;
+            
+            // Mark events as processed
+            foreach (var ev in newEvents)
+            {
+                _processedEventIds.Add(ev.Id.ToString());
+            }
+            
             _lastEventTime = DateTime.UtcNow;
+        }
 
             // Update position to the maximum SortableUniqueId in the batch (monotonic)
             var maxSortableId = events
