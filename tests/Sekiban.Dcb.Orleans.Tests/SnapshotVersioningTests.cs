@@ -127,7 +127,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
                         var multiProjectorTypes = new SimpleMultiProjectorTypes();
                         var queryTypes = new SimpleQueryTypes();
 
-                        multiProjectorTypes.RegisterProjector<CounterProjector>();
+                        multiProjectorTypes.RegisterProjector<Sekiban.Dcb.Orleans.Tests.CounterProjector>();
 
                         return new DcbDomainTypes(
                             eventTypes,
@@ -154,18 +154,41 @@ public class SnapshotVersioningTests : IAsyncLifetime
     // Simple event payload for tests
     private record TestEvt(string Name) : IEventPayload;
 
-    // Projector counting processed events (safe/unsafe window agnostic for simplicity)
-    private record CounterProjector(int Count) : IMultiProjector<CounterProjector>
+    // Projector moved to top-level (Support/CounterProjector.cs)
+
+    [Fact]
+    public async Task SerializeDeserialize_Should_Be_Used_In_Persist_And_Restore()
     {
-        public CounterProjector() : this(0) {}
-        public static string MultiProjectorVersion => "1.0";
-        public static string MultiProjectorName => "snap-proj";
-        public static CounterProjector GenerateInitialPayload() => new(0);
-        public static ResultBox<CounterProjector> Project(
-            CounterProjector payload,
-            Event ev,
-            List<ITag> tags,
-            DcbDomainTypes domainTypes,
-            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload with { Count = payload.Count + 1 });
+        global::Sekiban.Dcb.Orleans.Tests.CounterProjector.SerializeCalls = 0;
+        global::Sekiban.Dcb.Orleans.Tests.CounterProjector.DeserializeCalls = 0;
+
+        var grainId = global::Sekiban.Dcb.Orleans.Tests.CounterProjector.MultiProjectorName;
+        var grain = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        // Seed 3 events
+        var events = Enumerable.Range(0, 3).Select(i => CreateEvent(new TestEvt($"s{i}"), DateTime.UtcNow.AddSeconds(-30 + i))).ToList();
+        await grain.SeedEventsAsync(events);
+        await grain.RefreshAsync();
+
+        // Persist snapshot -> should invoke custom Serialize
+        var persist = await grain.PersistStateAsync();
+        Assert.True(persist.IsSuccess);
+        Assert.True(global::Sekiban.Dcb.Orleans.Tests.CounterProjector.SerializeCalls > 0);
+
+        // Deactivate to force restore from snapshot -> should invoke custom Deserialize
+        await grain.RequestDeactivationAsync();
+        var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        // Access state to ensure activation/restoration happened
+        var stateRb = await grain2.GetStatusAsync();
+        Assert.NotNull(stateRb);
+        Assert.True(global::Sekiban.Dcb.Orleans.Tests.CounterProjector.DeserializeCalls > 0);
+
+        // Verify by snapshot (avoid returning projector payload type through Orleans deep copy)
+        var snap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
+        Assert.True(snap.IsSuccess);
+        var env = System.Text.Json.JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(snap.GetValue());
+        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.Equal(3, version);
     }
 }

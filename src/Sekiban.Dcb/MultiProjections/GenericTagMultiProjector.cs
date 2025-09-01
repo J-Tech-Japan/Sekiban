@@ -31,6 +31,67 @@ public record
 
     public static GenericTagMultiProjector<TTagProjector, TTagGroup> GenerateInitialPayload() => new();
 
+    public static string Serialize(DcbDomainTypes domainTypes, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
+    {
+        var current = payload.State.GetCurrentState();
+        var items = new List<object>(current.Count);
+        foreach (var (id, ts) in current)
+        {
+            var payloadType = ts.Payload.GetType();
+            var payloadName = payloadType.Name;
+            var payloadJson = System.Text.Json.JsonSerializer.Serialize(ts.Payload, payloadType, domainTypes.JsonSerializerOptions);
+            items.Add(new
+            {
+                id,
+                type = payloadName,
+                payload = payloadJson,
+                version = ts.Version,
+                last = ts.LastSortedUniqueId
+            });
+        }
+        var dto = new { v = 1, items };
+        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+    }
+
+    public static GenericTagMultiProjector<TTagProjector, TTagGroup> Deserialize(DcbDomainTypes domainTypes, string json)
+    {
+        var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
+        var map = new Dictionary<Guid, TagState>();
+        var tagProjectorName = TTagProjector.ProjectorName;
+        if (obj != null && obj.TryGetPropertyValue("items", out var itemsNode) && itemsNode is System.Text.Json.Nodes.JsonArray arr)
+        {
+            foreach (var n in arr)
+            {
+                if (n is System.Text.Json.Nodes.JsonObject item)
+                {
+                    var id = item["id"]?.GetValue<Guid>() ?? Guid.Empty;
+                    var type = item["type"]?.GetValue<string>() ?? string.Empty;
+                    var payloadJson = item["payload"]?.GetValue<string>() ?? "{}";
+                    var version = item["version"]?.GetValue<int>() ?? 0;
+                    var last = item["last"]?.GetValue<string>() ?? string.Empty;
+
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
+                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
+                    if (!rb.IsSuccess) continue;
+                    var payload = rb.GetValue();
+
+                    var tag = TTagGroup.FromContent(id.ToString());
+                    var tagStateId = new TagStateId(tag, tagProjectorName);
+                    var ts = TagState.GetEmpty(tagStateId) with
+                    {
+                        Payload = payload,
+                        Version = version,
+                        LastSortedUniqueId = last,
+                        ProjectorVersion = TTagProjector.ProjectorVersion
+                    };
+                    map[id] = ts;
+                }
+            }
+        }
+        var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+        return new GenericTagMultiProjector<TTagProjector, TTagGroup> { State = state };
+    }
+
     /// <summary>
     ///     Project with tag filtering - processes events based on tags
     /// </summary>

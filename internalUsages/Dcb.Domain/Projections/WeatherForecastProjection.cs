@@ -33,6 +33,37 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
     public static string MultiProjectorVersion => "1.0.0";
 
+    public static string Serialize(DcbDomainTypes domainTypes, WeatherForecastProjection safePayload)
+    {
+        // Prefer Safe-only: exclude unsafe forecasts
+        var safeDict = safePayload.Forecasts
+            .Where(kv => !safePayload.UnsafeForecasts.Contains(kv.Key))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var dto = new { forecasts = safeDict };
+        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+    }
+
+    public static WeatherForecastProjection Deserialize(DcbDomainTypes domainTypes, string json)
+    {
+        var node = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
+        var result = new WeatherForecastProjection();
+        if (node != null && node.TryGetPropertyValue("forecasts", out var forecastsNode) && forecastsNode is System.Text.Json.Nodes.JsonObject fobj)
+        {
+            var dict = new Dictionary<Guid, WeatherForecastItem>();
+            foreach (var kv in fobj)
+            {
+                if (Guid.TryParse(kv.Key, out var id) && kv.Value != null)
+                {
+                    var itemJson = kv.Value!.ToJsonString(domainTypes.JsonSerializerOptions);
+                    var item = System.Text.Json.JsonSerializer.Deserialize<WeatherForecastItem>(itemJson, domainTypes.JsonSerializerOptions);
+                    if (item != null) dict[id] = item;
+                }
+            }
+            result = result with { Forecasts = dict, UnsafeForecasts = new HashSet<Guid>() };
+        }
+        return result;
+    }
+
     /// <summary>
     ///     Project with tag filtering - only processes events with WeatherForecastTag
     /// </summary>

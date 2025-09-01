@@ -28,4 +28,5 @@ public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiPr
         SortableUniqueId safeWindowThreshold);
 
     static abstract T GenerateInitialPayload();
+
 }
