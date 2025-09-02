@@ -58,6 +58,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly TimeSpan _minCatchUpInterval = TimeSpan.FromSeconds(5);
     private readonly TimeSpan _overlapCooldown = TimeSpan.FromSeconds(10);
 
+    // Catch-up state management
+    private class CatchUpProgress
+    {
+        public SortableUniqueId? CurrentPosition { get; set; }
+        public SortableUniqueId? TargetPosition { get; set; }
+        public bool IsActive { get; set; }
+        public int ConsecutiveEmptyBatches { get; set; }
+        public DateTime LastAttempt { get; set; }
+        public int BatchesProcessed { get; set; }
+        public DateTime StartTime { get; set; }
+    }
+    
+    private CatchUpProgress _catchUpProgress = new();
+    private IDisposable? _catchUpTimer;
+    private readonly Queue<Event> _pendingStreamEvents = new();
+    private const int CatchUpBatchSize = 5000;
+    private const int MaxConsecutiveEmptyBatches = 3;
+    private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1);
+
     // Delegate these to configuration
     private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
@@ -769,6 +788,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         Console.WriteLine($"[SimplifiedPureGrain-{this.GetPrimaryKeyString()}] Deactivating - Reason: {reason}");
         
+        // Stop catch-up if active
+        if (_catchUpProgress.IsActive)
+        {
+            _catchUpProgress.IsActive = false;
+            _catchUpTimer?.Dispose();
+            _catchUpTimer = null;
+        }
+        
         // Persist state before deactivation
         await PersistStateAsync();
         
@@ -784,6 +811,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _persistTimer?.Dispose();
         _fallbackTimer?.Dispose();
         _batchTimer?.Dispose();
+        _catchUpTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
@@ -904,133 +932,316 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task CatchUpFromEventStoreAsync(bool forceFull = false)
     {
+        // Legacy method for compatibility - now triggers timer-based catch-up
         if (_projectionActor == null || _eventStore == null) return;
-
-        // Coalesce frequent calls: skip if another catch-up is running
-        if (_catchUpRunning)
+        
+        // If catch-up is already active, skip
+        if (_catchUpProgress.IsActive)
         {
             return;
         }
-        // Rate-limit non-forced catch-ups to avoid thrashing and duplicates
-        if (!forceFull && (DateTime.UtcNow - _lastCatchUpUtc) < _minCatchUpInterval)
+        
+        // Start timer-based catch-up if needed
+        await InitiateCatchUpIfNeeded(forceFull);
+    }
+    
+    private async Task InitiateCatchUpIfNeeded(bool forceFull = false)
+    {
+        var projectorName = this.GetPrimaryKeyString();
+        
+        // Get current position
+        SortableUniqueId? currentPosition = await GetCurrentPositionAsync();
+        
+        // Get latest position in event store
+        var latestResult = await _eventStore.ReadAllEventsAsync(since: null);
+        if (!latestResult.IsSuccess || !latestResult.GetValue().Any())
         {
+            Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
             return;
         }
-        // If stream is actively delivering events recently, skip catch-up to avoid overlap
-        if (!forceFull && _lastEventTime != null && (DateTime.UtcNow - _lastEventTime.Value) < TimeSpan.FromSeconds(2))
+        
+        var latestEvent = latestResult.GetValue().LastOrDefault();
+        if (latestEvent == null)
         {
+            Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
             return;
         }
-
-        _catchUpRunning = true;
+        var targetPosition = new SortableUniqueId(latestEvent.SortableUniqueIdValue);
+        
+        // Check if catch-up is needed
+        if (currentPosition != null && currentPosition.Value == targetPosition.Value)
+        {
+            Console.WriteLine($"[{projectorName}] Already at latest position, no catch-up needed");
+            return;
+        }
+        
+        // Initialize catch-up progress
+        _catchUpProgress = new CatchUpProgress
+        {
+            CurrentPosition = currentPosition,
+            TargetPosition = targetPosition,
+            IsActive = true,
+            ConsecutiveEmptyBatches = 0,
+            BatchesProcessed = 0,
+            StartTime = DateTime.UtcNow,
+            LastAttempt = DateTime.MinValue
+        };
+        
+        Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} to {targetPosition.Value}");
+        
+        // Start catch-up timer
+        StartCatchUpTimer();
+    }
+    
+    private void StartCatchUpTimer()
+    {
+        if (_catchUpTimer != null)
+        {
+            return; // Timer already running
+        }
+        
+        _catchUpTimer = this.RegisterGrainTimer(
+            async () => await ProcessCatchUpBatchAsync(),
+            new GrainTimerCreationOptions
+            {
+                DueTime = TimeSpan.FromMilliseconds(100),
+                Period = _catchUpInterval,
+                Interleave = true
+            });
+    }
+    
+    private async Task ProcessCatchUpBatchAsync()
+    {
+        if (!_catchUpProgress.IsActive)
+        {
+            _catchUpTimer?.Dispose();
+            _catchUpTimer = null;
+            return;
+        }
+        
+        var projectorName = this.GetPrimaryKeyString();
         
         try
         {
-            // Get current position
-            SortableUniqueId? fromPosition = null;
-            if (!forceFull)
+            // Process one batch
+            var processed = await ProcessSingleCatchUpBatch();
+            
+            if (processed == 0)
             {
-                // Use SAFE state for determining catch-up position to avoid
-                // skipping events that are only present in the unsafe window
-                var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
-                if (currentState.IsSuccess)
+                _catchUpProgress.ConsecutiveEmptyBatches++;
+                if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
                 {
-                    var state = currentState.GetValue();
-                    if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
-                    {
-                        fromPosition = new SortableUniqueId(state.LastSortableUniqueId);
-                        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Resuming from checkpoint: {fromPosition.Value}");
-                    }
-                }
-
-                // Fallback to persisted positions if actor has none
-                if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.SafeLastPosition))
-                {
-                    fromPosition = new SortableUniqueId(_state.State.SafeLastPosition);
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted SafeLastPosition: {fromPosition.Value}");
-                }
-                else if (fromPosition == null && !string.IsNullOrEmpty(_state.State?.LastPosition))
-                {
-                    fromPosition = new SortableUniqueId(_state.State.LastPosition);
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Using persisted LastPosition: {fromPosition.Value}");
+                    // Catch-up complete
+                    await CompleteCatchUp();
                 }
             }
-
-            // Load events from store with conditional overlap to avoid boundary misses without thrashing
-            SortableUniqueId? overlappedFrom = null;
-            if (fromPosition != null)
+            else
             {
-                // Only apply overlap if last catch-up was not very recent
-                var shouldOverlap = (DateTime.UtcNow - _lastCatchUpUtc) > _overlapCooldown;
-                if (_avoidOverlapOnce)
-                {
-                    overlappedFrom = fromPosition;
-                    _avoidOverlapOnce = false;
-                }
-                else if (shouldOverlap)
-                {
-                    var overlapValue = fromPosition.GetSafeId();
-                    overlappedFrom = new SortableUniqueId(overlapValue);
-                }
-                else
-                {
-                    overlappedFrom = fromPosition;
-                }
-            }
-
-            // Read all events from store (projector-specific filtering is handled by projector logic)
-            var eventsResult = overlappedFrom == null
-                ? await _eventStore.ReadAllEventsAsync(since: null)
-                : await _eventStore.ReadAllEventsAsync(since: overlappedFrom.Value);
-
-            if (eventsResult.IsSuccess)
-            {
-                var events = eventsResult.GetValue().ToList();
-                if (events.Any())
-                {
-                    string? currentLastSortable = null;
-                    try
-                    {
-                        var unsafeState = await _projectionActor.GetStateAsync(true);
-                        if (unsafeState.IsSuccess)
-                        {
-                            var val = unsafeState.GetValue();
-                            if (!string.IsNullOrEmpty(val.LastSortableUniqueId)) currentLastSortable = val.LastSortableUniqueId;
-                        }
-                    }
-                    catch { }
-
-                    int skippedAlreadyApplied = 0;
-                    var filtered = new List<Sekiban.Dcb.Events.Event>(events.Count);
-                    foreach (var ev in events)
-                    {
-                        if (currentLastSortable != null && string.Compare(ev.SortableUniqueIdValue, currentLastSortable, StringComparison.Ordinal) <= 0)
-                        {
-                            skippedAlreadyApplied++;
-                            continue;
-                        }
-                        if (_processedEventIds.Contains(ev.Id.ToString()))
-                        {
-                            skippedAlreadyApplied++;
-                            continue;
-                        }
-                        filtered.Add(ev);
-                    }
-
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Catch-up: {events.Count} events fetched, {filtered.Count} new, {skippedAlreadyApplied} already applied (from: {(overlappedFrom?.Value ?? "start")} to: {(currentLastSortable ?? "none")})");
-                    if (filtered.Count > 0)
-                    {
-                        await AddEventsAsync(filtered, true);
-                        await PersistStateAsync();
-                    }
-                }
+                _catchUpProgress.ConsecutiveEmptyBatches = 0;
+                _catchUpProgress.BatchesProcessed++;
             }
         }
-        finally
+        catch (Exception ex)
         {
-            _lastCatchUpUtc = DateTime.UtcNow;
-            _catchUpRunning = false;
+            _lastError = $"Catch-up batch failed: {ex.Message}";
+            Console.WriteLine($"[{projectorName}] Catch-up batch error: {ex.Message}");
+            // Continue with next timer execution
         }
+    }
+    
+    private async Task<int> ProcessSingleCatchUpBatch()
+    {
+        if (_projectionActor == null || _eventStore == null) return 0;
+        
+        var projectorName = this.GetPrimaryKeyString();
+        
+        // Read batch of events
+        var eventsResult = _catchUpProgress.CurrentPosition == null
+            ? await _eventStore.ReadAllEventsAsync(since: null)
+            : await _eventStore.ReadAllEventsAsync(since: _catchUpProgress.CurrentPosition.Value);
+        
+        if (!eventsResult.IsSuccess)
+        {
+            Console.WriteLine($"[{projectorName}] Failed to read events: {eventsResult.GetException().Message}");
+            return 0;
+        }
+        
+        var allEvents = eventsResult.GetValue().ToList();
+        if (allEvents.Count == 0)
+        {
+            return 0;
+        }
+        
+        // Limit batch size to CatchUpBatchSize
+        var events = allEvents.Take(CatchUpBatchSize).ToList();
+        
+        // Filter out already processed events
+        var filtered = new List<Event>();
+        foreach (var ev in events)
+        {
+            // Skip if already processed
+            if (_processedEventIds.Contains(ev.Id.ToString()))
+            {
+                continue;
+            }
+            
+            // Skip if before current position
+            if (_catchUpProgress.CurrentPosition != null && 
+                string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+            
+            filtered.Add(ev);
+        }
+        
+        if (filtered.Count == 0)
+        {
+            // Update position even if no new events
+            if (events.Count > 0)
+            {
+                var lastEvent = events.Last();
+                _catchUpProgress.CurrentPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
+            }
+            return 0;
+        }
+        
+        // Separate safe and unsafe events
+        var safeThreshold = GetSafeWindowThreshold();
+        var safeEvents = new List<Event>();
+        var unsafeEvents = new List<Event>();
+        
+        foreach (var ev in filtered)
+        {
+            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+            if (eventTime.IsEarlierThanOrEqual(safeThreshold))
+            {
+                safeEvents.Add(ev);
+            }
+            else
+            {
+                unsafeEvents.Add(ev);
+            }
+        }
+        
+        // Process safe events immediately
+        if (safeEvents.Count > 0)
+        {
+            Console.WriteLine($"[{projectorName}] Catch-up: Processing {safeEvents.Count} safe events");
+            await _projectionActor.AddEventsAsync(safeEvents, true, EventSource.CatchUp);
+            _eventsProcessed += safeEvents.Count;
+            
+            // Mark as processed
+            foreach (var ev in safeEvents)
+            {
+                _processedEventIds.Add(ev.Id.ToString());
+            }
+        }
+        
+        // Buffer unsafe events for later
+        if (unsafeEvents.Count > 0)
+        {
+            Console.WriteLine($"[{projectorName}] Catch-up: Buffering {unsafeEvents.Count} unsafe events");
+            foreach (var ev in unsafeEvents)
+            {
+                _eventBuffer.Add(ev);
+                _processedEventIds.Add(ev.Id.ToString());
+            }
+            _eventsProcessed += unsafeEvents.Count;
+        }
+        
+        // Update position
+        var lastProcessed = filtered.Last();
+        _catchUpProgress.CurrentPosition = new SortableUniqueId(lastProcessed.SortableUniqueIdValue);
+        
+        // Periodic persistence
+        if (_eventsProcessed % 10000 == 0)
+        {
+            await PersistStateAsync();
+        }
+        
+        // Log progress
+        var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
+        Console.WriteLine($"[{projectorName}] Catch-up progress: Batch #{_catchUpProgress.BatchesProcessed}, " +
+                         $"{_eventsProcessed:N0} events total, position: {_catchUpProgress.CurrentPosition?.Value.Substring(0, 20)}..., " +
+                         $"elapsed: {elapsed.TotalSeconds:F1}s");
+        
+        return filtered.Count;
+    }
+    
+    private async Task CompleteCatchUp()
+    {
+        var projectorName = this.GetPrimaryKeyString();
+        
+        // Stop timer
+        _catchUpTimer?.Dispose();
+        _catchUpTimer = null;
+        
+        // Final persistence
+        await PersistStateAsync();
+        
+        // Process any pending stream events
+        await ProcessPendingStreamEvents();
+        
+        _catchUpProgress.IsActive = false;
+        
+        var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
+        Console.WriteLine($"[{projectorName}] ✓ Catch-up completed: {_catchUpProgress.BatchesProcessed} batches, " +
+                         $"{_eventsProcessed:N0} events, elapsed: {elapsed.TotalSeconds:F1}s");
+    }
+    
+    private async Task ProcessPendingStreamEvents()
+    {
+        if (_pendingStreamEvents.Count == 0) return;
+        
+        var projectorName = this.GetPrimaryKeyString();
+        var events = new List<Event>();
+        
+        while (_pendingStreamEvents.Count > 0)
+        {
+            events.Add(_pendingStreamEvents.Dequeue());
+        }
+        
+        Console.WriteLine($"[{projectorName}] Processing {events.Count} pending stream events");
+        await _projectionActor!.AddEventsAsync(events, false, EventSource.Stream);
+    }
+    
+    private async Task<SortableUniqueId?> GetCurrentPositionAsync()
+    {
+        if (_projectionActor == null) return null;
+        
+        // Try to get from current state
+        var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+        if (currentState.IsSuccess)
+        {
+            var state = currentState.GetValue();
+            if (!string.IsNullOrEmpty(state.LastSortableUniqueId))
+            {
+                return new SortableUniqueId(state.LastSortableUniqueId);
+            }
+        }
+        
+        // Fallback to persisted state
+        if (!string.IsNullOrEmpty(_state.State?.SafeLastPosition))
+        {
+            return new SortableUniqueId(_state.State.SafeLastPosition);
+        }
+        
+        if (!string.IsNullOrEmpty(_state.State?.LastPosition))
+        {
+            return new SortableUniqueId(_state.State.LastPosition);
+        }
+        
+        return null;
+    }
+    
+    private SortableUniqueId GetSafeWindowThreshold()
+    {
+        // Use actor's safe window calculation if available
+        var now = DateTime.UtcNow;
+        var safeWindowMs = _injectedActorOptions?.SafeWindowMs ?? 20000;
+        var threshold = now.AddMilliseconds(-safeWindowMs);
+        return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 
     /// <summary>
@@ -1049,26 +1260,59 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             Console.WriteLine($"[{this.GetPrimaryKeyString()}] Stream batch received: {events.Count} events");
 
-        // Track event deliveries for debugging
-        _eventStats.RecordStreamBatch(events);
+            // Track event deliveries for debugging
+            _eventStats.RecordStreamBatch(events);
 
-        // Filter out already processed events to prevent double counting
-        var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
-        
-        if (newEvents.Count > 0)
-        {
-            // Forward only new events to the actor
-            await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
-            _eventsProcessed += newEvents.Count;
-            
-            // Mark events as processed
-            foreach (var ev in newEvents)
+            // If catch-up is active, buffer events for later
+            if (_catchUpProgress.IsActive)
             {
-                _processedEventIds.Add(ev.Id.ToString());
+                var buffered = 0;
+                foreach (var ev in events)
+                {
+                    var eventPos = new SortableUniqueId(ev.SortableUniqueIdValue);
+                    
+                    // Only buffer events that are newer than our catch-up position
+                    if (_catchUpProgress.CurrentPosition == null || 
+                        eventPos.IsLaterThan(_catchUpProgress.CurrentPosition))
+                    {
+                        _pendingStreamEvents.Enqueue(ev);
+                        buffered++;
+                    }
+                    // Else: duplicate event that will be caught up, ignore
+                }
+                
+                if (buffered > 0)
+                {
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Buffered {buffered} stream events during catch-up (queue size: {_pendingStreamEvents.Count})");
+                }
+                
+                // Limit buffer size to prevent memory issues
+                const int MaxPendingEvents = 50000;
+                while (_pendingStreamEvents.Count > MaxPendingEvents)
+                {
+                    _pendingStreamEvents.Dequeue();
+                }
+                
+                return;
             }
+
+            // Normal processing mode - filter and process
+            var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
             
-            _lastEventTime = DateTime.UtcNow;
-        }
+            if (newEvents.Count > 0)
+            {
+                // Forward only new events to the actor
+                await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
+                _eventsProcessed += newEvents.Count;
+                
+                // Mark events as processed
+                foreach (var ev in newEvents)
+                {
+                    _processedEventIds.Add(ev.Id.ToString());
+                }
+                
+                _lastEventTime = DateTime.UtcNow;
+            }
 
             // Update position to the maximum SortableUniqueId in the batch (monotonic)
             var maxSortableId = events
@@ -1077,10 +1321,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .SortableUniqueIdValue;
             _state.State.LastPosition = maxSortableId;
 
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Processed {events.Count} events - Total: {_eventsProcessed:N0} events");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Processed {newEvents.Count} events - Total: {_eventsProcessed:N0} events");
 
             // Persist state after processing a batch if it's large enough
-            if (events.Count >= _persistBatchSize)
+            if (newEvents.Count >= _persistBatchSize)
             {
                 await PersistStateAsync();
             }
