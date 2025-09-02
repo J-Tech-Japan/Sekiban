@@ -11,6 +11,9 @@ var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
 var queue = storage.AddQueues("DcbOrleansQueue");
 
+// Add dedicated blob storage for MultiProjection snapshot offloading
+var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
+
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
@@ -33,6 +36,7 @@ var apiService = builder
     .AddProject<DcbOrleans_ApiService>("apiservice")
     .WithReference(postgres)
     .WithReference(orleans)
+    .WithReference(multiProjectionOffload)
     .WaitFor(postgres);
 
 // Add the Web frontend

@@ -67,10 +67,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
-        IEventSubscriptionResolver? subscriptionResolver = null,
-        IBlobStorageSnapshotAccessor? snapshotAccessor = null,
-        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats = null,
-        GeneralMultiProjectionActorOptions? actorOptions = null)
+        IEventSubscriptionResolver? subscriptionResolver,
+        IBlobStorageSnapshotAccessor? snapshotAccessor,
+        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
+        GeneralMultiProjectionActorOptions? actorOptions)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));

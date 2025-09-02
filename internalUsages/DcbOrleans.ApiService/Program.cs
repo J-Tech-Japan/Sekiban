@@ -1,6 +1,7 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
+using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain;
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
@@ -48,6 +49,7 @@ builder.Services.AddOpenApi();
 builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
 builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
 builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
+builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
 builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 
 // Configure Orleans
@@ -290,13 +292,12 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
-// Snapshot offload: Azure Blob Storage accessor (Azurite in dev)
+// Snapshot offload: Azure Blob Storage accessor using dedicated Aspire-configured BlobServiceClient
 builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 {
-    // Prefer configuration value, fallback to Azurite dev storage
-    var conn = builder.Configuration.GetConnectionString("SekibanAzureStorage") ?? "UseDevelopmentStorage=true";
-    var container = builder.Configuration.GetValue<string>("Sekiban:SnapshotContainer") ?? "dcb-snapshots";
-    return new AzureBlobStorageSnapshotAccessor(conn, container);
+    var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
+    var containerName = "multiprojection-snapshot-offload";
+    return new AzureBlobStorageSnapshotAccessor(blobServiceClient, containerName);
 });
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
