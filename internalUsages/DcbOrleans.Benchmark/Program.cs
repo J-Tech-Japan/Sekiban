@@ -22,6 +22,8 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     #log {{ white-space: pre-wrap; background:#0b1020; color:#e6edf3; padding:1rem; border-radius:.5rem; max-height:40vh; overflow:auto; }}
   </style>
   <script>
+    let lastWeatherCount = null;
+    let stableSince = null;
     async function fetchStatus() {{
       const r = await fetch('/status');
       const s = await r.json();
@@ -33,17 +35,11 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       document.getElementById('canceled').textContent = s.canceled ? 'Yes' : 'No';
       document.getElementById('weatherCount').textContent = s.weatherCount !== null && s.weatherCount !== undefined ? s.weatherCount : '-';
       document.getElementById('lastError').textContent = s.lastError ?? '';
-      
-      // Show processing indicator if weather count is still updating after benchmark completion
-  if (!s.isRunning && s.weatherCount !== null && s.weatherCount < s.created) {{
+      if (!s.isRunning && s.weatherCount !== null && s.weatherCount < s.created) {{
         document.getElementById('weatherCount').textContent = s.weatherCount + ' (処理中...)';
       }}
-      
-      // Update last update timestamp
       const now = new Date().toLocaleTimeString();
       document.getElementById('lastUpdate').textContent = now;
-      
-      // Update event statistics if available
       if (s.eventStats) {{
         document.getElementById('uniqueEvents').textContent = s.eventStats.totalUniqueEvents;
         document.getElementById('totalDeliveries').textContent = s.eventStats.totalDeliveries;
@@ -58,6 +54,17 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
           document.getElementById('catchupDeliveries').textContent = s.eventStats.catchUpDeliveries;
         }}
       }}
+      if (!s.isRunning && s.weatherCount !== null && s.weatherCount !== undefined) {{
+        if (lastWeatherCount === s.weatherCount) {{
+          if (!stableSince) stableSince = Date.now();
+        }} else {{
+          lastWeatherCount = s.weatherCount;
+          stableSince = null;
+        }}
+      }} else {{
+        stableSince = null;
+      }}
+      return s;
     }}
 
     async function startRun() {{
@@ -85,34 +92,17 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       el.scrollTop = el.scrollHeight;
     }}
 
-    // Dynamic interval for status updates
-    let statusInterval = setInterval(fetchStatus, 1000);
-    let lastWeatherCount = 0;
-    let unchangedCounter = 0;
-    
-    // Auto-adjust polling interval based on activity
-    setInterval(() => {{
-      fetch('/status').then(r => r.json()).then(s => {{
-        if (!s.isRunning && s.weatherCount !== null) {{
-          if (s.weatherCount === lastWeatherCount) {{
-            unchangedCounter++;
-            // If count hasn't changed for 30 seconds, slow down polling to every 5 seconds
-            if (unchangedCounter > 30) {{
-              clearInterval(statusInterval);
-              statusInterval = setInterval(fetchStatus, 5000);
-            }}
-          }} else {{
-            unchangedCounter = 0;
-            lastWeatherCount = s.weatherCount;
-            // If count is changing, ensure we're polling every second
-            clearInterval(statusInterval);
-            statusInterval = setInterval(fetchStatus, 1000);
-          }}
-        }}
-      }});
-    }}, 1000);
-    
-    window.addEventListener('load', fetchStatus);
+    async function statusLoop() {{
+      try {{
+        const s = await fetchStatus();
+        let delay = 1000;
+        if (!s.isRunning && stableSince && (Date.now() - stableSince) > 30000) delay = 5000;
+        setTimeout(statusLoop, delay);
+      }} catch {{
+        setTimeout(statusLoop, 3000);
+      }}
+    }}
+    window.addEventListener('load', statusLoop);
   </script>
 </head>
 <body>
@@ -200,13 +190,23 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <div><button onclick='doRefresh(&quot;generic&quot;)'>refresh</button></div>
   </div>
   <script>
+    const countLastValues = {{}};
     async function loadCount(mode) {{
       const r = await fetch('/projection/count?mode=' + mode);
       const j = await r.json();
       const id = 'count-' + mode;
-      if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
-  document.getElementById(id).textContent = 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') ;
-  document.getElementById(id).textContent = 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') + ' totalCount:' + (j.totalCount ?? '-') ;
+      if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; log('Count(' + mode + ') error: ' + j.error); return; }}
+      const txt = 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') + ' totalCount:' + (j.totalCount ?? '-') ;
+      document.getElementById(id).textContent = txt;
+      const prev = countLastValues[mode];
+      if(prev === undefined) {{
+        log('Count(' + mode + ') => ' + txt + ' (初回)');
+      }} else if(prev === j.totalCount) {{
+        log('Count(' + mode + ') => ' + txt + ' (変化なし)');
+      }} else {{
+        log('Count(' + mode + ') => ' + txt + ' (更新)');
+      }}
+      countLastValues[mode] = j.totalCount;
     }}
     async function loadStatus(mode) {{
       const r = await fetch('/projection/status?mode=' + mode);

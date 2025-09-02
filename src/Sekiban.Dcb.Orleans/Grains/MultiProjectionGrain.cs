@@ -1274,16 +1274,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
         
-        // Process safe events as safe (false = outside safe window)
-        if (safeEvents.Count > 0)
+        // Process all events - the actor will determine safe/unsafe based on current time
+        // The second parameter is finishedCatchUp, not withinSafeWindow!
+        var allEvents = safeEvents.Concat(unsafeEvents).OrderBy(e => e.SortableUniqueIdValue).ToList();
+        if (allEvents.Count > 0)
         {
-            await _projectionActor!.AddEventsAsync(safeEvents, false, EventSource.Stream);
-        }
-        
-        // Process unsafe events as unsafe (true = within safe window)
-        if (unsafeEvents.Count > 0)
-        {
-            await _projectionActor!.AddEventsAsync(unsafeEvents, true, EventSource.Stream);
+            await _projectionActor!.AddEventsAsync(allEvents, true, EventSource.Stream);
         }
     }
     
@@ -1400,19 +1396,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
                 }
                 
-                // Process safe events as safe (false = outside safe window)
-                if (safeStreamEvents.Count > 0)
-                {
-                    await _projectionActor.AddEventsAsync(safeStreamEvents, false, Sekiban.Dcb.Actors.EventSource.Stream);
-                    _eventsProcessed += safeStreamEvents.Count;
-                }
-                
-                // Process unsafe events as unsafe (true = within safe window)
-                if (unsafeStreamEvents.Count > 0)
-                {
-                    await _projectionActor.AddEventsAsync(unsafeStreamEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
-                    _eventsProcessed += unsafeStreamEvents.Count;
-                }
+                // Process all events together - the actor will determine safe/unsafe based on current time
+                // The second parameter is finishedCatchUp, not withinSafeWindow!
+                await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
+                _eventsProcessed += newEvents.Count;
                 
                 // Mark all events as processed
                 foreach (var ev in newEvents)
@@ -1461,16 +1448,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         HashSet<string> unsafeIds;
         lock (_eventBuffer)
         {
-            if (_eventBuffer.Count == 0) return;
-            
-            eventsToProcess = new List<Event>(_eventBuffer);
-            unsafeIds = new HashSet<string>(_unsafeEventIds);
-            _eventBuffer.Clear();
-            _unsafeEventIds.Clear();
-            _lastBufferFlush = DateTime.UtcNow;
+            if (_eventBuffer.Count == 0)
+            {
+                // Even if buffer is empty, trigger safe promotion periodically
+                // to ensure events transition from unsafe to safe over time
+                eventsToProcess = new List<Event>();
+                unsafeIds = new HashSet<string>();
+            }
+            else
+            {
+                eventsToProcess = new List<Event>(_eventBuffer);
+                unsafeIds = new HashSet<string>(_unsafeEventIds);
+                _eventBuffer.Clear();
+                _unsafeEventIds.Clear();
+                _lastBufferFlush = DateTime.UtcNow;
+            }
         }
-
-        await ProcessBufferedEventsWithSafetyInfo(eventsToProcess, unsafeIds);
+        
+        if (eventsToProcess.Count > 0)
+        {
+            await ProcessBufferedEventsWithSafetyInfo(eventsToProcess, unsafeIds);
+        }
+        else
+        {
+            // Even if no events to process, trigger safe promotion
+            await TriggerSafePromotion();
+        }
     }
     
     /// <summary>
@@ -1511,21 +1514,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
             }
             
-            // Process safe events as safe (false = outside safe window)
-            if (safeEvents.Count > 0)
-            {
-                Console.WriteLine($"[{projectorName}] Processing {safeEvents.Count} buffered safe events");
-                await _projectionActor.AddEventsAsync(safeEvents, false, EventSource.Stream);
-                _eventsProcessed += safeEvents.Count;
-            }
-            
-            // Process unsafe events as unsafe (true = within safe window)
-            if (unsafeEvents.Count > 0)
-            {
-                Console.WriteLine($"[{projectorName}] Processing {unsafeEvents.Count} buffered unsafe events");
-                await _projectionActor.AddEventsAsync(unsafeEvents, true, EventSource.Stream);
-                _eventsProcessed += unsafeEvents.Count;
-            }
+            // Process all events together - the actor will determine safe/unsafe based on current time
+            // The second parameter is finishedCatchUp, not withinSafeWindow!
+            Console.WriteLine($"[{projectorName}] Processing {events.Count} buffered events");
+            await _projectionActor.AddEventsAsync(events, true, EventSource.Stream);
+            _eventsProcessed += events.Count;
             
             // Update position
             var maxSortableId = events
@@ -1535,6 +1528,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.LastPosition = maxSortableId;
             
             Console.WriteLine($"[{projectorName}] ✓ Processed {events.Count} buffered events - Total: {_eventsProcessed:N0} events");
+            
+            // Trigger safe promotion after processing buffered events
+            // This ensures that events transition from unsafe to safe as time passes
+            await TriggerSafePromotion();
         }
         catch (Exception ex)
         {
@@ -1596,9 +1593,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var list = events as IList<Event> ?? events.ToList();
         if (list.Count == 0) return;
+        
+        // Evaluate each event's safe/unsafe status at the time of enqueuing
+        var safeThreshold = GetSafeWindowThreshold();
+        
         lock (_eventBuffer)
         {
-            _eventBuffer.AddRange(list);
+            foreach (var ev in list)
+            {
+                _eventBuffer.Add(ev);
+                
+                // Mark events that are within the safe window as unsafe
+                var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+                if (!eventTime.IsEarlierThanOrEqual(safeThreshold))
+                {
+                    _unsafeEventIds.Add(ev.Id.ToString());
+                }
+            }
         }
         _lastEventTime = DateTime.UtcNow;
         // Do not record deliveries here to avoid double-counting.
