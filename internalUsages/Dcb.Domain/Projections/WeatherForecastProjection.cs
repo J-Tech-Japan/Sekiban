@@ -28,15 +28,17 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjection safePayload)
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjection safePayload)
     {
     if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
     var dto = new { forecasts = safePayload.Forecasts };
-        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        return GzipCompression.CompressString(json);
     }
 
-    public static WeatherForecastProjection Deserialize(DcbDomainTypes domainTypes, string json)
+    public static WeatherForecastProjection Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
     {
+        var json = GzipCompression.DecompressToString(data);
         var node = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
         var result = new WeatherForecastProjection();
         if (node != null && node.TryGetPropertyValue("forecasts", out var forecastsNode) && forecastsNode is System.Text.Json.Nodes.JsonObject fobj)
@@ -53,7 +55,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             }
             result = result with { Forecasts = dict };
         }
-        return result;
+    return result;
     }
 
     /// <summary>

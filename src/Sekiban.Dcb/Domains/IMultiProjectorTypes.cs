@@ -42,7 +42,7 @@ public interface IMultiProjectorTypes
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used when projector needs safe-only construction</param>
     /// <param name="payload">The payload to serialize</param>
     /// <returns>Serialized JSON string</returns>
-    ResultBox<string> Serialize(
+    ResultBox<byte[]> Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
@@ -62,7 +62,7 @@ public interface IMultiProjectorTypes
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
-        string json);
+        byte[] data);
     
     /// <summary>
     ///     Registers a projector with custom serialization support.

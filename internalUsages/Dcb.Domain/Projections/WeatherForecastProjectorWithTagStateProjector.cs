@@ -38,7 +38,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold))
         {
@@ -71,11 +71,13 @@ public record WeatherForecastProjectorWithTagStateProjector :
             });
         }
         var dto = new { v = 1, items };
-        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        return GzipCompression.CompressString(json);
     }
 
-    public static WeatherForecastProjectorWithTagStateProjector Deserialize(DcbDomainTypes domainTypes, string json)
+    public static WeatherForecastProjectorWithTagStateProjector Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
     {
+        var json = GzipCompression.DecompressToString(data);
         var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
         var map = new Dictionary<Guid, TagState>();
         var tagProjectorName = WeatherForecastProjector.ProjectorName;
@@ -110,8 +112,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
                 }
             }
         }
-        var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
-        return new WeatherForecastProjectorWithTagStateProjector { State = state };
+    var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+    return new WeatherForecastProjectorWithTagStateProjector { State = state };
     }
 
     /// <summary>

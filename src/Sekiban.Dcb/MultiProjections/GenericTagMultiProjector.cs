@@ -32,15 +32,11 @@ public record
 
     public static GenericTagMultiProjector<TTagProjector, TTagGroup> GenerateInitialPayload() => new();
 
-    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
     {
-        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
-        {
-            throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
-        }
-        // Build safe dictionary view using supplied threshold
-        Func<Event, IEnumerable<Guid>> getAffectedIds = evt => Enumerable.Empty<Guid>(); // No dynamic reconstruction for generic; use current since events not replayed here
-        Func<Guid, TagState?, Event, TagState?> projectItem = (id, current, ev) => current; // Identity (no replay logic available here)
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        Func<Event, IEnumerable<Guid>> getAffectedIds = _ => Enumerable.Empty<Guid>();
+        Func<Guid, TagState?, Event, TagState?> projectItem = (_, current, _) => current;
         var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedIds, projectItem);
         var items = new List<object>(safeDict.Count);
         foreach (var (id, ts) in safeDict)
@@ -58,46 +54,46 @@ public record
             });
         }
         var dto = new { v = 1, items };
-        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+    var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+    return GzipCompression.CompressString(json);
     }
 
-    public static GenericTagMultiProjector<TTagProjector, TTagGroup> Deserialize(DcbDomainTypes domainTypes, string json)
+    public static GenericTagMultiProjector<TTagProjector, TTagGroup> Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
     {
-        var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
-        var map = new Dictionary<Guid, TagState>();
-        var tagProjectorName = TTagProjector.ProjectorName;
-        if (obj != null && obj.TryGetPropertyValue("items", out var itemsNode) && itemsNode is System.Text.Json.Nodes.JsonArray arr)
-        {
-            foreach (var n in arr)
+    var json = GzipCompression.DecompressToString(data);
+    var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
+    var map = new Dictionary<Guid, TagState>();
+    var tagProjectorName = TTagProjector.ProjectorName;
+    if (obj != null && obj.TryGetPropertyValue("items", out var itemsNode) && itemsNode is System.Text.Json.Nodes.JsonArray arr)
             {
-                if (n is System.Text.Json.Nodes.JsonObject item)
+                foreach (var n in arr)
                 {
-                    var id = item["id"]?.GetValue<Guid>() ?? Guid.Empty;
-                    var type = item["type"]?.GetValue<string>() ?? string.Empty;
-                    var payloadJson = item["payload"]?.GetValue<string>() ?? "{}";
-                    var version = item["version"]?.GetValue<int>() ?? 0;
-                    var last = item["last"]?.GetValue<string>() ?? string.Empty;
-
-                    var bytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
-                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
-                    if (!rb.IsSuccess) continue;
-                    var payload = rb.GetValue();
-
-                    var tag = TTagGroup.FromContent(id.ToString());
-                    var tagStateId = new TagStateId(tag, tagProjectorName);
-                    var ts = TagState.GetEmpty(tagStateId) with
+                    if (n is System.Text.Json.Nodes.JsonObject item)
                     {
-                        Payload = payload,
-                        Version = version,
-                        LastSortedUniqueId = last,
-                        ProjectorVersion = TTagProjector.ProjectorVersion
-                    };
-                    map[id] = ts;
+                        var id = item["id"]?.GetValue<Guid>() ?? Guid.Empty;
+                        var type = item["type"]?.GetValue<string>() ?? string.Empty;
+                        var payloadJson = item["payload"]?.GetValue<string>() ?? "{}";
+                        var version = item["version"]?.GetValue<int>() ?? 0;
+                        var last = item["last"]?.GetValue<string>() ?? string.Empty;
+                        var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
+                        var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, payloadBytes);
+                        if (!rb.IsSuccess) continue;
+                        var payload = rb.GetValue();
+                        var tag = TTagGroup.FromContent(id.ToString());
+                        var tagStateId = new TagStateId(tag, tagProjectorName);
+                        var ts = TagState.GetEmpty(tagStateId) with
+                        {
+                            Payload = payload,
+                            Version = version,
+                            LastSortedUniqueId = last,
+                            ProjectorVersion = TTagProjector.ProjectorVersion
+                        };
+                        map[id] = ts;
+                    }
                 }
             }
-        }
-        var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
-        return new GenericTagMultiProjector<TTagProjector, TTagGroup> { State = state };
+    var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+    return new GenericTagMultiProjector<TTagProjector, TTagGroup> { State = state };
     }
 
     /// <summary>

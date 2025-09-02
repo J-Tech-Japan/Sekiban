@@ -18,15 +18,15 @@ public interface IMultiProjectorWithCustomSerialization<TSelf> : IMultiProjector
     /// <param name="domainTypes">Domain types containing serialization options</param>
     /// <param name="payload">The payload instance to serialize</param>
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used to build safe view; callers MUST supply</param>
-    /// <returns>JSON string representation of the payload</returns>
-    static abstract string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
+    /// <returns>Binary serialized representation of the payload</returns>
+    static abstract byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
     
     /// <summary>
     ///     Deserializes a JSON string back to the projector payload.
     ///     This method must be implemented as a static method in the implementing class.
     /// </summary>
     /// <param name="domainTypes">Domain types containing serialization options</param>
-    /// <param name="json">JSON string to deserialize</param>
+    /// <param name="data">Binary serialized bytes</param>
     /// <returns>Deserialized payload instance</returns>
-    static abstract TSelf Deserialize(DcbDomainTypes domainTypes, string json);
+    static abstract TSelf Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data);
 }

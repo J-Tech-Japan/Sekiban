@@ -57,15 +57,17 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public static string MultiProjectorName => nameof(StudentSummaries);
 
-    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, StudentSummaries safePayload)
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, StudentSummaries safePayload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
         var dto = new { students = safePayload.Students };
-        return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        return GzipCompression.CompressString(json);
     }
 
-    public static StudentSummaries Deserialize(DcbDomainTypes domainTypes, string json)
+    public static StudentSummaries Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
     {
+        var json = GzipCompression.DecompressToString(data);
         var node = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
         if (node != null && node.TryGetPropertyValue("students", out var s) && s is System.Text.Json.Nodes.JsonObject sobj)
         {
@@ -81,7 +83,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
             }
             return new StudentSummaries(dict);
         }
-        return new StudentSummaries(new Dictionary<Guid, Item>());
+    return new StudentSummaries(new Dictionary<Guid, Item>());
     }
     /// <summary>
     ///     学生ごとのサマリです。

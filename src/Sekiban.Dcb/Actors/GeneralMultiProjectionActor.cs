@@ -123,13 +123,13 @@ public class GeneralMultiProjectionActor
         }
 
         // Use projector-defined deserializer if available
-        var payloadJson = Encoding.UTF8.GetString(state.Payload);
+    var payloadBytes = state.Payload;
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from IMultiProjectorTypes
     var safeThreshold = GetSafeWindowThreshold();
-    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadJson);
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
         
         var loadedPayload = deserializeResult.GetValue();
@@ -183,13 +183,13 @@ public class GeneralMultiProjectionActor
     // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
     public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
     {
-        var payloadJson = Encoding.UTF8.GetString(state.Payload);
+    var payloadBytes = state.Payload;
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from IMultiProjectorTypes
     var safeThreshold = GetSafeWindowThreshold();
-    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadJson);
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
         
         var loadedPayload = deserializeResult.GetValue();
@@ -253,9 +253,8 @@ public class GeneralMultiProjectionActor
                 return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
             }
             
-            var json = serializeResult.GetValue();
-            Console.WriteLine($"[{_projectorName}] Serialize: via IMultiProjectorTypes");
-            var bytes = Encoding.UTF8.GetBytes(json);
+            var bytes = serializeResult.GetValue();
+            Console.WriteLine($"[{_projectorName}] Serialize(binary): via IMultiProjectorTypes len={bytes.Length}");
             var payloadType = payload.GetType();
             var state = new SerializableMultiProjectionState(
                 bytes,
