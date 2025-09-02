@@ -463,43 +463,41 @@ public class GeneralMultiProjectionActor
 
     private void AddEventsWithSingleState(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
+        // Cache the method reference outside the loop
+        var accessorType = _singleStateAccessor!.GetType();
+        var method = accessorType.GetMethod("ProcessEvent");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
+        }
+        
         // Process events through the single state accessor
         foreach (var ev in events)
         {
             try
             {
-                // Use reflection to call ProcessEvent method with domainTypes
-                var accessorType = _singleStateAccessor!.GetType();
-            var method = accessorType.GetMethod("ProcessEvent");
-            if (method != null)
-            {
-                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
+                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
                     
-                    // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
-                    // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
-                    if (result != null)
+                // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
+                // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
+                if (result != null)
+                {
+                    // The result should be the same object or a new instance that implements IMultiProjectionPayload
+                    // For DualStateProjectionWrapper.ProcessEvent, it returns 'this' so the object reference shouldn't change
+                    // But we still need to handle the case where a new instance might be returned
+                    if (result is IMultiProjectionPayload payload)
                     {
-                        // The result should be the same object or a new instance that implements IMultiProjectionPayload
-                        // For DualStateProjectionWrapper.ProcessEvent, it returns 'this' so the object reference shouldn't change
-                        // But we still need to handle the case where a new instance might be returned
-                        if (result is IMultiProjectionPayload payload)
-                        {
-                            _singleStateAccessor = payload;
-                        }
-                        else
-                        {
-                            // This should not happen with proper implementation, but log for debugging
-                            throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
-                        }
+                        _singleStateAccessor = payload;
                     }
                     else
                     {
-                        throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
+                        // This should not happen with proper implementation, but log for debugging
+                        throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
                     }
                 }
                 else
                 {
-                    throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
+                    throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
                 }
 
                 // Update tracking - these are managed separately from the wrapper's internal state

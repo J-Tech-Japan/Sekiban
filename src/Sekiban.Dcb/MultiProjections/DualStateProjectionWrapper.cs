@@ -89,6 +89,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         
         // Process the event through projection
         var tags = evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+        
         var unsafeProjected = _types.Project(
             _projectorName,
             _unsafeProjector,
@@ -115,9 +116,26 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
         else
         {
-            // Add to safe events and process
+            // Add to safe events collection
             _allSafeEvents[evt.Id] = evt;
-            RebuildSafeState(domainTypes);
+            
+            // Incremental update of safe state instead of full rebuild
+            // Process just this new event through the safe projector
+            var safeProjected = _types.Project(
+                _projectorName,
+                _safeProjector,
+                evt,
+                tags,
+                domainTypes,
+                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
+            
+            if (safeProjected.IsSuccess)
+            {
+                _safeProjector = (T)safeProjected.GetValue();
+                _safeLastEventId = evt.Id;
+                _safeLastSortableUniqueId = evt.SortableUniqueIdValue;
+                _safeVersion++;
+            }
         }
         
         return this;
@@ -161,19 +179,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
             }
             
             RebuildSafeState(domainTypes);
-            try
-            {
-                Console.WriteLine($"[SafePromotion] projector={_projectorName} promoted={eventsToProcess.Count} bufferedRemaining={_bufferedEvents.Count} safeTotal={_allSafeEvents.Count} threshold={safeWindowThreshold.Value}");
-            }
-            catch { }
-        }
-        else
-        {
-            try
-            {
-                Console.WriteLine($"[SafePromotion] projector={_projectorName} promoted=0 buffered={_bufferedEvents.Count} safeTotal={_allSafeEvents.Count} threshold={safeWindowThreshold.Value}");
-            }
-            catch { }
         }
     }
 

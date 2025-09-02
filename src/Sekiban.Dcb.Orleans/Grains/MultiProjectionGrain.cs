@@ -74,9 +74,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private CatchUpProgress _catchUpProgress = new();
     private IDisposable? _catchUpTimer;
     private readonly Queue<Event> _pendingStreamEvents = new();
-    private const int CatchUpBatchSize = 5000;
-    private const int MaxConsecutiveEmptyBatches = 3;
-    private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1);
+    private const int CatchUpBatchSize = 3000; // Optimized batch size after fixing O(n²) issue
+    private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
+    private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
 
     // Delegate these to configuration
     private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
@@ -1001,11 +1001,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return; // Timer already running
         }
         
+        var projectorName = this.GetPrimaryKeyString();
+        Console.WriteLine($"[{projectorName}] Starting catch-up timer with interval: {_catchUpInterval.TotalMilliseconds}ms");
+        
         _catchUpTimer = this.RegisterGrainTimer(
             async () => await ProcessCatchUpBatchAsync(),
             new GrainTimerCreationOptions
             {
-                DueTime = TimeSpan.FromMilliseconds(100),
+                DueTime = TimeSpan.Zero, // Start immediately
                 Period = _catchUpInterval,
                 Interleave = true
             });
@@ -1056,6 +1059,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         
         var projectorName = this.GetPrimaryKeyString();
         
+        // Always use small batch size to avoid blocking
+        var batchSize = CatchUpBatchSize;
+        
         // Read batch of events
         var eventsResult = _catchUpProgress.CurrentPosition == null
             ? await _eventStore.ReadAllEventsAsync(since: null)
@@ -1073,8 +1079,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return 0;
         }
         
-        // Limit batch size to CatchUpBatchSize
-        var events = allEvents.Take(CatchUpBatchSize).ToList();
+        // Limit batch size based on whether this is initial catch-up
+        var events = allEvents.Take(batchSize).ToList();
         
         // Filter out already processed events
         var filtered = new List<Event>();
@@ -1125,12 +1131,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
         
-        // Process safe events immediately
+        // Process safe events immediately (false = outside safe window, these are "safe" to persist)
         if (safeEvents.Count > 0)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             Console.WriteLine($"[{projectorName}] Catch-up: Processing {safeEvents.Count} safe events");
-            await _projectionActor.AddEventsAsync(safeEvents, true, EventSource.CatchUp);
+            await _projectionActor.AddEventsAsync(safeEvents, false, EventSource.CatchUp);
+            sw.Stop();
             _eventsProcessed += safeEvents.Count;
+            
+            if (sw.ElapsedMilliseconds > 1000)
+            {
+                Console.WriteLine($"[{projectorName}] WARNING: AddEventsAsync took {sw.ElapsedMilliseconds}ms for {safeEvents.Count} events");
+            }
             
             // Mark as processed
             foreach (var ev in safeEvents)
@@ -1156,17 +1169,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var lastProcessed = filtered.Last();
         _catchUpProgress.CurrentPosition = new SortableUniqueId(lastProcessed.SortableUniqueIdValue);
         
-        // Periodic persistence
-        if (_eventsProcessed % 10000 == 0)
+        // Periodic persistence - only persist every 5000 events during catch-up
+        if (_eventsProcessed > 0 && _eventsProcessed % 5000 == 0)
         {
+            Console.WriteLine($"[{projectorName}] Persisting state at {_eventsProcessed:N0} events");
             await PersistStateAsync();
         }
         
-        // Log progress
-        var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
-        Console.WriteLine($"[{projectorName}] Catch-up progress: Batch #{_catchUpProgress.BatchesProcessed}, " +
-                         $"{_eventsProcessed:N0} events total, position: {_catchUpProgress.CurrentPosition?.Value.Substring(0, 20)}..., " +
-                         $"elapsed: {elapsed.TotalSeconds:F1}s");
+        // Log progress only every 10 batches to reduce log spam
+        if (_catchUpProgress.BatchesProcessed % 10 == 0 || filtered.Count == 0)
+        {
+            var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
+            var eventsPerSecond = _eventsProcessed > 0 && elapsed.TotalSeconds > 0 
+                ? (_eventsProcessed / elapsed.TotalSeconds).ToString("F0")
+                : "0";
+            Console.WriteLine($"[{projectorName}] Catch-up: Batch #{_catchUpProgress.BatchesProcessed}, " +
+                             $"{_eventsProcessed:N0} events ({eventsPerSecond}/sec), " +
+                             $"elapsed: {elapsed.TotalSeconds:F1}s");
+        }
         
         return filtered.Count;
     }
@@ -1362,11 +1382,39 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             
             if (newEvents.Count > 0)
             {
-                // Forward only new events to the actor
-                await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
-                _eventsProcessed += newEvents.Count;
+                // Determine safe/unsafe for each event based on current time
+                var safeThreshold = GetSafeWindowThreshold();
+                var safeStreamEvents = new List<Event>();
+                var unsafeStreamEvents = new List<Event>();
                 
-                // Mark events as processed
+                foreach (var ev in newEvents)
+                {
+                    var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+                    if (eventTime.IsEarlierThanOrEqual(safeThreshold))
+                    {
+                        safeStreamEvents.Add(ev);
+                    }
+                    else
+                    {
+                        unsafeStreamEvents.Add(ev);
+                    }
+                }
+                
+                // Process safe events as safe (false = outside safe window)
+                if (safeStreamEvents.Count > 0)
+                {
+                    await _projectionActor.AddEventsAsync(safeStreamEvents, false, Sekiban.Dcb.Actors.EventSource.Stream);
+                    _eventsProcessed += safeStreamEvents.Count;
+                }
+                
+                // Process unsafe events as unsafe (true = within safe window)
+                if (unsafeStreamEvents.Count > 0)
+                {
+                    await _projectionActor.AddEventsAsync(unsafeStreamEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
+                    _eventsProcessed += unsafeStreamEvents.Count;
+                }
+                
+                // Mark all events as processed
                 foreach (var ev in newEvents)
                 {
                     _processedEventIds.Add(ev.Id.ToString());
