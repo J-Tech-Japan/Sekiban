@@ -38,11 +38,25 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static string Serialize(DcbDomainTypes domainTypes, WeatherForecastProjectorWithTagStateProjector payload)
+    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
     {
-        var current = payload.State.GetCurrentState();
-        var items = new List<object>(current.Count);
-        foreach (var (id, ts) in current)
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        }
+        // Build safe state using supplied threshold
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Payload switch
+        {
+            WeatherForecastCreated created => new[] { created.ForecastId },
+            WeatherForecastUpdated updated => new[] { updated.ForecastId },
+            WeatherForecastDeleted deleted => new[] { deleted.ForecastId },
+            LocationNameChanged changed => new[] { changed.ForecastId },
+            _ => Enumerable.Empty<Guid>()
+        };
+        Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, ev) => ProjectTagState(forecastId, current, ev);
+        var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedItemIds, projectItem);
+        var items = new List<object>(safeDict.Count);
+        foreach (var (id, ts) in safeDict)
         {
             var payloadType = ts.Payload.GetType();
             var payloadName = payloadType.Name;

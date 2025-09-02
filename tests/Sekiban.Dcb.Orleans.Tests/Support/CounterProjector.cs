@@ -25,8 +25,9 @@ public record CounterProjector([property: Id(0)] int Count) : IMultiProjector<Co
     // Instrumentation for serializer path verification
     public static int SerializeCalls;
     public static int DeserializeCalls;
-    public static string Serialize(DcbDomainTypes domainTypes, CounterProjector safePayload)
+    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, CounterProjector safePayload)
     {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
         SerializeCalls++;
         return System.Text.Json.JsonSerializer.Serialize(new { v = 1, count = safePayload.Count }, domainTypes.JsonSerializerOptions);
     }

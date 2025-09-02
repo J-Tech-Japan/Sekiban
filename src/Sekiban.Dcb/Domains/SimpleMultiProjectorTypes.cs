@@ -19,8 +19,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
     private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
-    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, object, string> serialize, 
-                                                    Func<DcbDomainTypes, string, object> deserialize)> _customSerializers = new();
+    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, string, object, string> serialize, 
+                                                    Func<DcbDomainTypes, string, string, object> deserialize)> _customSerializers = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
         string multiProjectorName,
@@ -172,13 +172,18 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     public ResultBox<string> Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
         IMultiProjectionPayload payload)
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+            {
+                return ResultBox.Error<string>(new ArgumentException("safeWindowThreshold must be supplied"));
+            }
             if (_customSerializers.TryGetValue(projectorName, out var serializers))
             {
-                return ResultBox.FromValue(serializers.serialize(domainTypes, payload));
+                return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
             
             // Fallback: standard JSON serialization with runtime type
@@ -198,13 +203,18 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     public ResultBox<IMultiProjectionPayload> Deserialize(
         string projectorName,
         DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
         string json)
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+            {
+                return ResultBox.Error<IMultiProjectionPayload>(new ArgumentException("safeWindowThreshold must be supplied"));
+            }
             if (_customSerializers.TryGetValue(projectorName, out var serializers))
             {
-                return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, json));
+                return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, safeWindowThreshold, json));
             }
             
             // Fallback: standard JSON deserialization
@@ -242,8 +252,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             
             // Store custom serialization delegates
             _customSerializers[projectorName] = (
-                serialize: (domain, payload) => T.Serialize(domain, (T)payload),
-                deserialize: (domain, json) => T.Deserialize(domain, json)
+                serialize: (domain, safeWindowThreshold, payload) => T.Serialize(domain, safeWindowThreshold, (T)payload),
+                deserialize: (domain, safeWindowThreshold, json) => T.Deserialize(domain, json) // safeWindowThreshold may influence future logic
             );
             
             // Register the projector using the base RegisterProjector method

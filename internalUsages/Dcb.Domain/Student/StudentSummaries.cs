@@ -57,8 +57,9 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public static string MultiProjectorName => nameof(StudentSummaries);
 
-    public static string Serialize(DcbDomainTypes domainTypes, StudentSummaries safePayload)
+    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, StudentSummaries safePayload)
     {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
         var dto = new { students = safePayload.Students };
         return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
     }

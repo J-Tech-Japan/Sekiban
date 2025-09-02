@@ -128,7 +128,8 @@ public class GeneralMultiProjectionActor
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from IMultiProjectorTypes
-        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, payloadJson);
+    var safeThreshold = GetSafeWindowThreshold();
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadJson);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
         
         var loadedPayload = deserializeResult.GetValue();
@@ -187,7 +188,8 @@ public class GeneralMultiProjectionActor
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from IMultiProjectorTypes
-        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, payloadJson);
+    var safeThreshold = GetSafeWindowThreshold();
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadJson);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
         
         var loadedPayload = deserializeResult.GetValue();
@@ -244,7 +246,8 @@ public class GeneralMultiProjectionActor
         try
         {
             // Use the new Serialize method from IMultiProjectorTypes
-            var serializeResult = _types.Serialize(_projectorName, _domain, payload);
+            var safeThreshold = GetSafeWindowThreshold();
+            var serializeResult = _types.Serialize(_projectorName, _domain, safeThreshold.Value, payload);
             if (!serializeResult.IsSuccess)
             {
                 return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());

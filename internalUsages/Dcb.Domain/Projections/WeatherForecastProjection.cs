@@ -28,8 +28,9 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static string Serialize(DcbDomainTypes domainTypes, WeatherForecastProjection safePayload)
+    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjection safePayload)
     {
+    if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
     var dto = new { forecasts = safePayload.Forecasts };
         return System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
     }

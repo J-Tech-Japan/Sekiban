@@ -32,11 +32,18 @@ public record
 
     public static GenericTagMultiProjector<TTagProjector, TTagGroup> GenerateInitialPayload() => new();
 
-    public static string Serialize(DcbDomainTypes domainTypes, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
+    public static string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
     {
-        var current = payload.State.GetCurrentState();
-        var items = new List<object>(current.Count);
-        foreach (var (id, ts) in current)
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        }
+        // Build safe dictionary view using supplied threshold
+        Func<Event, IEnumerable<Guid>> getAffectedIds = evt => Enumerable.Empty<Guid>(); // No dynamic reconstruction for generic; use current since events not replayed here
+        Func<Guid, TagState?, Event, TagState?> projectItem = (id, current, ev) => current; // Identity (no replay logic available here)
+        var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedIds, projectItem);
+        var items = new List<object>(safeDict.Count);
+        foreach (var (id, ts) in safeDict)
         {
             var payloadType = ts.Payload.GetType();
             var payloadName = payloadType.Name;

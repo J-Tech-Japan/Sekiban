@@ -17,8 +17,9 @@ public interface IMultiProjectorWithCustomSerialization<TSelf> : IMultiProjector
     /// </summary>
     /// <param name="domainTypes">Domain types containing serialization options</param>
     /// <param name="payload">The payload instance to serialize</param>
+    /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used to build safe view; callers MUST supply</param>
     /// <returns>JSON string representation of the payload</returns>
-    static abstract string Serialize(DcbDomainTypes domainTypes, TSelf payload);
+    static abstract string Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
     
     /// <summary>
     ///     Deserializes a JSON string back to the projector payload.
