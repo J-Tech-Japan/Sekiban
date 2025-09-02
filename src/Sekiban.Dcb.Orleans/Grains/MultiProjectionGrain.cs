@@ -47,6 +47,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     
     // Event batching
     private readonly List<Event> _eventBuffer = new();
+    private readonly HashSet<string> _unsafeEventIds = new(); // Track which buffered events are unsafe
     private DateTime _lastBufferFlush = DateTime.UtcNow;
     private readonly int _batchSize = 50; // Process events in batches of 50
     private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(50); // Flush promptly but return quickly to stream
@@ -1145,6 +1146,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             foreach (var ev in unsafeEvents)
             {
                 _eventBuffer.Add(ev);
+                _unsafeEventIds.Add(ev.Id.ToString()); // Mark as unsafe
                 _processedEventIds.Add(ev.Id.ToString());
             }
             _eventsProcessed += unsafeEvents.Count;
@@ -1177,6 +1179,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpTimer?.Dispose();
         _catchUpTimer = null;
         
+        // Process all buffered events first
+        await FlushEventBufferAsync();
+        
+        // Force promotion of any events that are now safe
+        await TriggerSafePromotion();
+        
         // Final persistence
         await PersistStateAsync();
         
@@ -1188,6 +1196,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
         Console.WriteLine($"[{projectorName}] ✓ Catch-up completed: {_catchUpProgress.BatchesProcessed} batches, " +
                          $"{_eventsProcessed:N0} events, elapsed: {elapsed.TotalSeconds:F1}s");
+    }
+    
+    private async Task TriggerSafePromotion()
+    {
+        try
+        {
+            if (_projectionActor != null)
+            {
+                var projectorName = this.GetPrimaryKeyString();
+                Console.WriteLine($"[{projectorName}] Triggering safe promotion check after catch-up");
+                
+                // Get the current safe state to trigger promotion
+                var safeState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+                if (safeState.IsSuccess)
+                {
+                    var state = safeState.GetValue();
+                    Console.WriteLine($"[{projectorName}] Safe state after promotion: version={state.Version}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error during safe promotion: {ex.Message}");
+        }
     }
     
     private async Task ProcessPendingStreamEvents()
@@ -1203,7 +1235,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         
         Console.WriteLine($"[{projectorName}] Processing {events.Count} pending stream events");
-        await _projectionActor!.AddEventsAsync(events, false, EventSource.Stream);
+        
+        // Determine safe/unsafe status for each event
+        var safeThreshold = GetSafeWindowThreshold();
+        var safeEvents = new List<Event>();
+        var unsafeEvents = new List<Event>();
+        
+        foreach (var ev in events)
+        {
+            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+            if (eventTime.IsEarlierThanOrEqual(safeThreshold))
+            {
+                safeEvents.Add(ev);
+            }
+            else
+            {
+                unsafeEvents.Add(ev);
+            }
+        }
+        
+        // Process safe events as safe (false = outside safe window)
+        if (safeEvents.Count > 0)
+        {
+            await _projectionActor!.AddEventsAsync(safeEvents, false, EventSource.Stream);
+        }
+        
+        // Process unsafe events as unsafe (true = within safe window)
+        if (unsafeEvents.Count > 0)
+        {
+            await _projectionActor!.AddEventsAsync(unsafeEvents, true, EventSource.Stream);
+        }
     }
     
     private async Task<SortableUniqueId?> GetCurrentPositionAsync()
@@ -1349,16 +1410,89 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task FlushEventBufferAsync()
     {
         List<Event> eventsToProcess;
+        HashSet<string> unsafeIds;
         lock (_eventBuffer)
         {
             if (_eventBuffer.Count == 0) return;
             
             eventsToProcess = new List<Event>(_eventBuffer);
+            unsafeIds = new HashSet<string>(_unsafeEventIds);
             _eventBuffer.Clear();
+            _unsafeEventIds.Clear();
             _lastBufferFlush = DateTime.UtcNow;
         }
 
-        await ProcessEventBatch(eventsToProcess);
+        await ProcessBufferedEventsWithSafetyInfo(eventsToProcess, unsafeIds);
+    }
+    
+    /// <summary>
+    ///     Process buffered events with knowledge of their safe/unsafe status
+    /// </summary>
+    private async Task ProcessBufferedEventsWithSafetyInfo(List<Event> events, HashSet<string> unsafeIds)
+    {
+        if (_projectionActor == null || events.Count == 0) return;
+        
+        try
+        {
+            var projectorName = this.GetPrimaryKeyString();
+            
+            // Separate events based on whether they were marked as unsafe
+            var safeEvents = new List<Event>();
+            var unsafeEvents = new List<Event>();
+            
+            foreach (var ev in events)
+            {
+                if (unsafeIds.Contains(ev.Id.ToString()))
+                {
+                    unsafeEvents.Add(ev);
+                }
+                else
+                {
+                    // Re-evaluate based on current safe window
+                    var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
+                    var safeThreshold = GetSafeWindowThreshold();
+                    
+                    if (eventTime.IsEarlierThanOrEqual(safeThreshold))
+                    {
+                        safeEvents.Add(ev);
+                    }
+                    else
+                    {
+                        unsafeEvents.Add(ev);
+                    }
+                }
+            }
+            
+            // Process safe events as safe (false = outside safe window)
+            if (safeEvents.Count > 0)
+            {
+                Console.WriteLine($"[{projectorName}] Processing {safeEvents.Count} buffered safe events");
+                await _projectionActor.AddEventsAsync(safeEvents, false, EventSource.Stream);
+                _eventsProcessed += safeEvents.Count;
+            }
+            
+            // Process unsafe events as unsafe (true = within safe window)
+            if (unsafeEvents.Count > 0)
+            {
+                Console.WriteLine($"[{projectorName}] Processing {unsafeEvents.Count} buffered unsafe events");
+                await _projectionActor.AddEventsAsync(unsafeEvents, true, EventSource.Stream);
+                _eventsProcessed += unsafeEvents.Count;
+            }
+            
+            // Update position
+            var maxSortableId = events
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .Last()
+                .SortableUniqueIdValue;
+            _state.State.LastPosition = maxSortableId;
+            
+            Console.WriteLine($"[{projectorName}] ✓ Processed {events.Count} buffered events - Total: {_eventsProcessed:N0} events");
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Failed to process buffered events: {ex.Message}";
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing buffered events: {ex}");
+        }
     }
 
     // Orleans stream batch observer - processes events in batches for efficiency
