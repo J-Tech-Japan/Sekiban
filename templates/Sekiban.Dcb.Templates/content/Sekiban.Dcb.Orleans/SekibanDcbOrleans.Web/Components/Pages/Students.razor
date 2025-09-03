@@ -1,0 +1,264 @@
+@page "/students"
+@using Dcb.Domain.Student
+@using System.ComponentModel.DataAnnotations
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+@inject StudentApiClient StudentApiClient
+@inject IJSRuntime JsRuntime
+@inject ILogger<Students> Logger
+
+<PageTitle>Students</PageTitle>
+
+<h1>Student Management</h1>
+
+<div>
+    <button class="btn btn-primary mb-3" @onclick="OpenAddStudentModal">Add New Student</button>
+</div>
+
+<h3>Student List</h3>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="col-form-label">Page Size:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnPageSizeChanged">
+            <option value="5" selected="@(pageSize == 5)">5</option>
+            <option value="10" selected="@(pageSize == 10)">10</option>
+            <option value="20" selected="@(pageSize == 20)">20</option>
+            <option value="50" selected="@(pageSize == 50)">50</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <span class="col-form-label text-muted">
+            @if (students != null)
+            {
+                @:Showing @students.Count items
+            }
+        </span>
+    </div>
+</div>
+
+@if (students == null)
+{
+    <p><em>Loading...</em></p>
+} else if (students.Count == 0)
+{
+    <p>No students registered. Click "Add New Student" to create one.</p>
+} else
+{
+    <table class="table">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Max Classes</th>
+            <th>Enrolled Classes</th>
+            <th>Available Slots</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var student in students)
+        {
+            <tr>
+                <td>@student.Name</td>
+                <td>@student.MaxClassCount</td>
+                <td>@student.EnrolledClassRoomIds.Count</td>
+                <td>@student.GetRemaining()</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+            <nav aria-label="Student list pagination">
+                <ul class="pagination">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)"
+                                disabled="@(currentPage == 1)">
+                            Previous
+                        </button>
+                    </li>
+                    @for (var i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    {
+                        var pageNumber = i;
+                        <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(pageNumber)">
+                                @pageNumber
+                            </button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages || totalPages == 0 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)"
+                                disabled="@(currentPage == totalPages || totalPages == 0)">
+                            Next
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div class="text-muted">
+            Page @currentPage of @(totalPages > 0 ? totalPages : 1)
+        </div>
+    </div>
+}
+
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" data-bs-backdrop="static" tabindex="-1"
+     aria-labelledby="addStudentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <EditForm FormName="add-student" Model="@studentModel" OnValidSubmit="HandleAddStudentSubmit">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addStudentModalLabel">Add New Student</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAddModal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <DataAnnotationsValidator/>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Student Name</label>
+                        <InputText id="name" class="form-control" @bind-Value="studentModel.Name"/>
+                        <ValidationMessage For="@(() => studentModel.Name)" class="text-danger"/>
+                    </div>
+                    <div class="mb-3">
+                        <label for="maxClasses" class="form-label">Maximum Classes</label>
+                        <InputNumber id="maxClasses" class="form-control" @bind-Value="studentModel.MaxClassCount"/>
+                        <ValidationMessage For="@(() => studentModel.MaxClassCount)" class="text-danger"/>
+                    </div>
+                    @if (!string.IsNullOrEmpty(studentModel.Error))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @studentModel.Error
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Student</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private List<StudentState>? students;
+    private StudentModel studentModel = new();
+    private string? lastSortableUniqueId;
+
+    // Pagination fields
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages = 1;
+    private int totalItems;
+
+    public class StudentModel
+    {
+        [Required(ErrorMessage = "Student name is required")]
+        public string? Name { get; set; }
+
+        [Range(1, 10, ErrorMessage = "Maximum classes must be between 1 and 10")]
+        public int MaxClassCount { get; set; } = 5;
+
+        public string? Error { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStudents();
+    }
+
+    private async Task LoadStudents(string? waitForSortableUniqueId = null)
+    {
+        try
+        {
+            var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId);
+
+            students = result?.ToList() ?? new List<StudentState>();
+
+            // For now, estimate total pages based on if we got a full page
+            if (students.Count < pageSize && currentPage == 1)
+            {
+                totalPages = 1;
+                totalItems = students.Count;
+            } else if (students.Count == pageSize)
+            {
+                // Assume there might be more pages
+                totalPages = Math.Max(totalPages, currentPage + 1);
+                totalItems = students.Count * currentPage;
+            } else
+            {
+                totalPages = currentPage;
+                totalItems = (currentPage - 1) * pageSize + students.Count;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading students");
+            students = new List<StudentState>();
+            totalPages = 1;
+            totalItems = 0;
+        }
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage < 1 || newPage > totalPages && totalPages > 0)
+            return;
+
+        currentPage = newPage;
+        await LoadStudents(lastSortableUniqueId);
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize))
+        {
+            pageSize = newSize;
+            currentPage = 1; // Reset to first page when changing page size
+            await LoadStudents(lastSortableUniqueId);
+        }
+    }
+
+    private async Task CloseAddModal()
+    {
+        studentModel = new StudentModel();
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addStudentModal'))?.hide()");
+    }
+
+    private async Task OpenAddStudentModal()
+    {
+        studentModel = new StudentModel { MaxClassCount = 5 };
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addStudentModal')).show()");
+    }
+
+    private async Task HandleAddStudentSubmit()
+    {
+        try
+        {
+            var command = new CreateStudent(
+                Guid.NewGuid(),
+                studentModel.Name!,
+                studentModel.MaxClassCount);
+
+            var response = await StudentApiClient.CreateStudentAsync(command);
+
+            if (response?.Success == true)
+            {
+                lastSortableUniqueId = response.SortableUniqueId;
+                currentPage = 1; // Go to first page to see the new item
+                await LoadStudents(lastSortableUniqueId);
+                await CloseAddModal();
+            } else
+            {
+                studentModel.Error = response?.Error ?? "Failed to add student. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            studentModel.Error = $"Failed to add student: {ex.Message}";
+        }
+    }
+}

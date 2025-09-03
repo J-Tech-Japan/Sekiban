@@ -1,0 +1,33 @@
+using Dcb.Domain.Enrollment;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
+namespace Dcb.Domain.Student;
+
+public class StudentProjector : ITagProjector<StudentProjector>
+{
+    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorName => nameof(StudentProjector);
+
+    public static ITagStatePayload Project(ITagStatePayload current, Event ev) =>
+        (current, ev.Payload) switch
+        {
+            (EmptyTagStatePayload, StudentCreated created) => new StudentState(
+                created.StudentId,
+                created.Name,
+                created.MaxClassCount,
+                new List<Guid>()),
+
+            (StudentState state, StudentEnrolledInClassRoom enrolled) when state.GetRemaining() > 0 => state with
+            {
+                EnrolledClassRoomIds
+                = state.EnrolledClassRoomIds.Concat(new[] { enrolled.ClassRoomId }).Distinct().ToList()
+            },
+
+            (StudentState state, StudentDroppedFromClassRoom dropped) => state with
+            {
+                EnrolledClassRoomIds = state.EnrolledClassRoomIds.Where(id => id != dropped.ClassRoomId).ToList()
+            },
+
+            _ => current
+        };
+}
