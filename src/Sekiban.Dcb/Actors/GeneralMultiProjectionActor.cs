@@ -122,13 +122,18 @@ public class GeneralMultiProjectionActor
                 $"Snapshot projector version mismatch. Current='{currentVersion}', Snapshot='{state.ProjectorVersion}' for projector '{_projectorName}'.");
         }
 
-        var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
-        if (!rb.IsSuccess)
-        {
-            throw rb.GetException();
-        }
-
-        var loadedPayload = rb.GetValue();
+        // Use projector-defined deserializer if available
+    var payloadBytes = state.Payload;
+        var projTypeRb = _types.GetProjectorType(state.ProjectorName);
+        if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
+        var projType = projTypeRb.GetValue();
+        // Use the new Deserialize method from IMultiProjectorTypes
+    var safeThreshold = GetSafeWindowThreshold();
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+        if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
+        
+        var loadedPayload = deserializeResult.GetValue();
+        Console.WriteLine($"[{_projectorName}] Deserialize: via IMultiProjectorTypes");
 
         // Check if the payload type implements ISafeAndUnsafeStateAccessor
         var payloadType = loadedPayload.GetType();
@@ -178,13 +183,17 @@ public class GeneralMultiProjectionActor
     // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
     public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
     {
-        var rb = _types.Deserialize(state.Payload, state.ProjectorName, _jsonOptions);
-        if (!rb.IsSuccess)
-        {
-            throw rb.GetException();
-        }
-
-        var loadedPayload = rb.GetValue();
+    var payloadBytes = state.Payload;
+        var projTypeRb = _types.GetProjectorType(state.ProjectorName);
+        if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
+        var projType = projTypeRb.GetValue();
+        // Use the new Deserialize method from IMultiProjectorTypes
+    var safeThreshold = GetSafeWindowThreshold();
+    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+        if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
+        
+        var loadedPayload = deserializeResult.GetValue();
+        Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): via IMultiProjectorTypes");
 
         var payloadType = loadedPayload.GetType();
         var accessorInterfaces = payloadType
@@ -236,11 +245,20 @@ public class GeneralMultiProjectionActor
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), _jsonOptions);
-            var bytes = Encoding.UTF8.GetBytes(json);
+            // Use the new Serialize method from IMultiProjectorTypes
+            var safeThreshold = GetSafeWindowThreshold();
+            var serializeResult = _types.Serialize(_projectorName, _domain, safeThreshold.Value, payload);
+            if (!serializeResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
+            }
+            
+            var bytes = serializeResult.GetValue();
+            Console.WriteLine($"[{_projectorName}] Serialize(binary): via IMultiProjectorTypes len={bytes.Length}");
+            var payloadType = payload.GetType();
             var state = new SerializableMultiProjectionState(
                 bytes,
-                payload.GetType().FullName ?? payload.GetType().Name,
+                payloadType.FullName ?? payloadType.Name,
                 _projectorName,
                 projectorVersion,
                 multiProjectionState.LastSortableUniqueId,
@@ -326,6 +344,15 @@ public class GeneralMultiProjectionActor
         bool canGetUnsafeState = false,
         CancellationToken cancellationToken = default)
     {
+        // Phase1 safeguard: promote buffered events before building a safe snapshot
+        try
+        {
+            ForcePromoteBufferedEvents();
+        }
+        catch
+        {
+            // Ignore promotion errors to avoid blocking persistence
+        }
         var envelopeRb = await GetSnapshotAsync(canGetUnsafeState, cancellationToken);
         if (!envelopeRb.IsSuccess)
         {
@@ -344,8 +371,8 @@ public class GeneralMultiProjectionActor
         }
 
         // Safe position for hosts to persist
-        var safePosition = await GetSafeLastSortableUniqueIdAsync();
-        return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
+    var safePosition = await GetSafeLastSortableUniqueIdAsync();
+    return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
     }
 
     /// <summary>
@@ -438,43 +465,41 @@ public class GeneralMultiProjectionActor
 
     private void AddEventsWithSingleState(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
+        // Cache the method reference outside the loop
+        var accessorType = _singleStateAccessor!.GetType();
+        var method = accessorType.GetMethod("ProcessEvent");
+        if (method == null)
+        {
+            throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
+        }
+        
         // Process events through the single state accessor
         foreach (var ev in events)
         {
             try
             {
-                // Use reflection to call ProcessEvent method with domainTypes
-                var accessorType = _singleStateAccessor!.GetType();
-            var method = accessorType.GetMethod("ProcessEvent");
-            if (method != null)
-            {
-                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
+                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
                     
-                    // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
-                    // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
-                    if (result != null)
+                // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
+                // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
+                if (result != null)
+                {
+                    // The result should be the same object or a new instance that implements IMultiProjectionPayload
+                    // For DualStateProjectionWrapper.ProcessEvent, it returns 'this' so the object reference shouldn't change
+                    // But we still need to handle the case where a new instance might be returned
+                    if (result is IMultiProjectionPayload payload)
                     {
-                        // The result should be the same object or a new instance that implements IMultiProjectionPayload
-                        // For DualStateProjectionWrapper.ProcessEvent, it returns 'this' so the object reference shouldn't change
-                        // But we still need to handle the case where a new instance might be returned
-                        if (result is IMultiProjectionPayload payload)
-                        {
-                            _singleStateAccessor = payload;
-                        }
-                        else
-                        {
-                            // This should not happen with proper implementation, but log for debugging
-                            throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
-                        }
+                        _singleStateAccessor = payload;
                     }
                     else
                     {
-                        throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
+                        // This should not happen with proper implementation, but log for debugging
+                        throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
                     }
                 }
                 else
                 {
-                    throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
+                    throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
                 }
 
                 // Update tracking - these are managed separately from the wrapper's internal state
@@ -496,6 +521,46 @@ public class GeneralMultiProjectionActor
                     innerEx);
             }
         }
+    }
+
+    // Phase1: forcibly process buffered events by requesting a safe projection threshold evaluation
+    private void ForcePromoteBufferedEvents()
+    {
+        if (_singleStateAccessor == null) return;
+        try
+        {
+            // Request safe projection which triggers buffered event promotion inside wrapper
+            var accessorType = _singleStateAccessor.GetType();
+            var getSafeMethod = accessorType.GetMethod("GetSafeProjection");
+            if (getSafeMethod != null)
+            {
+                var threshold = GetSafeWindowThreshold();
+                _ = getSafeMethod.Invoke(_singleStateAccessor, new object[] { threshold, _domain });
+            }
+        }
+        catch
+        {
+            // Swallow - best effort only
+        }
+    }
+
+    // Debug helper: force promotion with artificially large safe window (promote everything)
+    private void ForcePromoteAllBufferedEvents()
+    {
+        if (_singleStateAccessor == null) return;
+        try
+        {
+            var accessorType = _singleStateAccessor.GetType();
+            var getSafeMethod = accessorType.GetMethod("GetSafeProjection");
+            if (getSafeMethod != null)
+            {
+                // Use MaxValue threshold so全イベントが IsEarlierThanOrEqual となり昇格
+                var maxThreshold = SortableUniqueId.MaxValue;
+                _ = getSafeMethod.Invoke(_singleStateAccessor, new object[] { maxThreshold, _domain });
+                Console.WriteLine($"[SafePromotion] projector={_projectorName} force-promote-all invoked threshold={maxThreshold.Value}");
+            }
+        }
+        catch { }
     }
 
 
@@ -521,6 +586,16 @@ public class GeneralMultiProjectionActor
 
         if (canGetUnsafeState)
         {
+            // Auto-promotion: unsafe取得要求でも古いバッファを昇格させる (SafeProjection 呼び出しで内部 ProcessBufferedEvents 実行)
+            try
+            {
+                var autoSafeMethod = accessorType.GetMethod("GetSafeProjection");
+                if (autoSafeMethod != null)
+                {
+                    _ = autoSafeMethod.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain });
+                }
+            }
+            catch { }
             var getUnsafeMethod = accessorType.GetMethod("GetUnsafeProjection");
             var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain });
             // projection has properties: State, LastSortableUniqueId, LastEventId, Version
@@ -644,8 +719,19 @@ public class GeneralMultiProjectionActor
             effectiveWindow = (int)Math.Max(0, Math.Min(int.MaxValue, (long)_options.SafeWindowMs + (long)extra));
         }
         var threshold = DateTime.UtcNow.AddMilliseconds(-effectiveWindow);
+        try
+        {
+            Console.WriteLine($"[SafeWindow] projector={_projectorName} baseMs={_options.SafeWindowMs} effectiveMs={effectiveWindow} emaLagMs={_observedLagMs:F1} maxLagMs={_maxLagMs:F1} now={DateTime.UtcNow:O} threshold={threshold:O}");
+        }
+        catch { }
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
+
+    /// <summary>
+    ///     Public helper to obtain current safe window threshold without triggering state mutation.
+    ///     (Primarily used to supply query context metadata.)
+    /// </summary>
+    public SortableUniqueId PeekCurrentSafeWindowThreshold() => GetSafeWindowThreshold();
 
     private void UpdateObservedLag(IReadOnlyList<Event> events)
     {

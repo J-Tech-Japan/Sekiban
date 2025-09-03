@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Orleans.Concurrency;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
@@ -33,6 +34,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Get the status of the grain
     /// </summary>
     /// <returns>Status information</returns>
+    [AlwaysInterleave]
     Task<MultiProjectionGrainStatus> GetStatusAsync();
 
     /// <summary>
@@ -96,5 +98,6 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <summary>
     ///     Get event delivery statistics for debugging duplicate/missing events
     /// </summary>
+    [AlwaysInterleave]
     Task<EventDeliveryStatistics> GetEventDeliveryStatisticsAsync();
 }

@@ -21,16 +21,13 @@ public record GetWeatherForecastCountQuery :
         GetWeatherForecastCountQuery query,
         IQueryContext context)
     {
-        var totalCount = projector.Forecasts.Count;
-        var unsafeCount = projector.UnsafeForecasts.Count;
-        var safeCount = totalCount - unsafeCount;
-        
+        var safeVersion = context.SafeVersion ?? 0;
+        var unsafeVersion = context.UnsafeVersion ?? safeVersion;
+        var total = projector.Forecasts.Count;
         return ResultBox.FromValue(new WeatherForecastCountResult(
-            TotalCount: totalCount,
-            SafeCount: safeCount,
-            UnsafeCount: unsafeCount,
-            IsSafeState: unsafeCount == 0,  // If no unsafe forecasts, state is safe
-            LastProcessedEventId: string.Empty  // This info is not available in query context
+            SafeVersion: safeVersion,
+            UnsafeVersion: unsafeVersion,
+            TotalCount: total
         ));
     }
 }
@@ -40,9 +37,7 @@ public record GetWeatherForecastCountQuery :
 /// </summary>
 [GenerateSerializer]
 public record WeatherForecastCountResult(
-    [property: Id(0)] int TotalCount,
-    [property: Id(1)] int SafeCount,
-    [property: Id(2)] int UnsafeCount,
-    [property: Id(3)] bool IsSafeState,
-    [property: Id(4)] string LastProcessedEventId
+    [property: Id(0)] int SafeVersion,
+    [property: Id(1)] int UnsafeVersion,
+    [property: Id(2)] int TotalCount
 );

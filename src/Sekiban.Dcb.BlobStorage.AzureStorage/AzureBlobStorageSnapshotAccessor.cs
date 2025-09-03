@@ -21,6 +21,12 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         _prefix = prefix ?? string.Empty;
     }
 
+    public AzureBlobStorageSnapshotAccessor(BlobServiceClient blobServiceClient, string containerName, string? prefix = null)
+    {
+        _container = blobServiceClient.GetBlobContainerClient(containerName);
+        _prefix = prefix ?? string.Empty;
+    }
+
     public async Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default)
     {
         await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);

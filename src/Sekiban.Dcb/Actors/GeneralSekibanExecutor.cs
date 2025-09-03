@@ -369,10 +369,36 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             var serviceProvider = _actorAccessor as IServiceProvider ??
                 throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
 
+            int? safeVersion = null;
+            string? safeThreshold = null;
+            DateTime? safeThresholdTime = null;
+            int? unsafeVersion = null;
+            try
+            {
+                var accessorType = state.Payload.GetType();
+                // If the payload implements ISafeAndUnsafeStateAccessor<T>, it has SafeVersion property.
+                var safeVersionProp = accessorType.GetProperty("SafeVersion");
+                if (safeVersionProp != null)
+                {
+                    safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
+                }
+                var unsafeVersionProp = accessorType.GetProperty("GetVersion") ?? accessorType.GetProperty("Version");
+                // fallback: use state.Version as unsafe version
+                unsafeVersion = state.Version;
+                // Attempt to get current safe window threshold from actor (more precise than last safe id)
+                var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
+                safeThreshold = actorSafeThreshold.Value;
+                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+            }
+            catch { }
             var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
                 queryCommon,
                 projectorProvider,
-                serviceProvider);
+                serviceProvider,
+                safeVersion,
+                safeThreshold,
+                safeThresholdTime,
+                unsafeVersion);
 
             if (!result.IsSuccess)
             {
@@ -451,10 +477,32 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             var serviceProvider = _actorAccessor as IServiceProvider ??
                 throw new InvalidOperationException("ActorAccessor must implement IServiceProvider");
 
+            int? safeVersion = null;
+            string? safeThreshold = null;
+            DateTime? safeThresholdTime = null;
+            int? unsafeVersion = null;
+            try
+            {
+                var accessorType = state.Payload.GetType();
+                var safeVersionProp = accessorType.GetProperty("SafeVersion");
+                if (safeVersionProp != null)
+                {
+                    safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
+                }
+                unsafeVersion = state.Version;
+                var actorSafeThreshold = actor.PeekCurrentSafeWindowThreshold();
+                safeThreshold = actorSafeThreshold.Value;
+                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+            }
+            catch { }
             var result = await _domainTypes.QueryTypes.ExecuteListQueryAsync(
                 queryCommon,
                 projectorProvider,
-                serviceProvider);
+                serviceProvider,
+                safeVersion,
+                safeThreshold,
+                safeThresholdTime,
+                unsafeVersion);
 
             if (!result.IsSuccess)
             {

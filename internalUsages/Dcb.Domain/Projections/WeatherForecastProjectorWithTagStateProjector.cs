@@ -10,9 +10,10 @@ namespace Dcb.Domain.Projections;
 
 /// <summary>
 ///     Weather forecast projection using TagState with SafeUnsafeProjectionState
+///     Implements custom serialization to properly handle SafeUnsafeProjectionState
 /// </summary>
 public record WeatherForecastProjectorWithTagStateProjector :
-    IMultiProjector<WeatherForecastProjectorWithTagStateProjector>,
+    IMultiProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>,
     ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 
@@ -22,12 +23,98 @@ public record WeatherForecastProjectorWithTagStateProjector :
     ///     Internal state managed by SafeUnsafeProjectionState for TagState
     /// </summary>
     public SafeUnsafeProjectionState<Guid, TagState> State { get; init; } = new();
+    public int SafeVersion
+    {
+        get
+        {
+            var current = State.GetCurrentState();
+            return current.Values.Sum(ts => ts.Version);
+        }
+    }
 
     public static string MultiProjectorName => "WeatherForecastProjectorWithTagStateProjector";
 
     public static WeatherForecastProjectorWithTagStateProjector GenerateInitialPayload() => new();
 
     public static string MultiProjectorVersion => "1.0.0";
+
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
+    {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        }
+        // Build safe state using supplied threshold
+        Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt => evt.Payload switch
+        {
+            WeatherForecastCreated created => new[] { created.ForecastId },
+            WeatherForecastUpdated updated => new[] { updated.ForecastId },
+            WeatherForecastDeleted deleted => new[] { deleted.ForecastId },
+            LocationNameChanged changed => new[] { changed.ForecastId },
+            _ => Enumerable.Empty<Guid>()
+        };
+        Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, ev) => ProjectTagState(forecastId, current, ev);
+        var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedItemIds, projectItem);
+        var items = new List<object>(safeDict.Count);
+        foreach (var (id, ts) in safeDict)
+        {
+            var payloadType = ts.Payload.GetType();
+            var payloadName = payloadType.Name;
+            var payloadJson = System.Text.Json.JsonSerializer.Serialize(ts.Payload, payloadType, domainTypes.JsonSerializerOptions);
+            items.Add(new
+            {
+                id,
+                type = payloadName,
+                payload = payloadJson,
+                version = ts.Version,
+                last = ts.LastSortedUniqueId
+            });
+        }
+        var dto = new { v = 1, items };
+        var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        return GzipCompression.CompressString(json);
+    }
+
+    public static WeatherForecastProjectorWithTagStateProjector Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
+    {
+        var json = GzipCompression.DecompressToString(data);
+        var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
+        var map = new Dictionary<Guid, TagState>();
+        var tagProjectorName = WeatherForecastProjector.ProjectorName;
+        if (obj != null && obj.TryGetPropertyValue("items", out var itemsNode) && itemsNode is System.Text.Json.Nodes.JsonArray arr)
+        {
+            foreach (var n in arr)
+            {
+                if (n is System.Text.Json.Nodes.JsonObject item)
+                {
+                    var id = item["id"]?.GetValue<Guid>() ?? Guid.Empty;
+                    var type = item["type"]?.GetValue<string>() ?? string.Empty;
+                    var payloadJson = item["payload"]?.GetValue<string>() ?? "{}";
+                    var version = item["version"]?.GetValue<int>() ?? 0;
+                    var last = item["last"]?.GetValue<string>() ?? string.Empty;
+
+                    ITagStatePayload payload;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
+                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
+                    if (!rb.IsSuccess) continue;
+                    payload = rb.GetValue();
+
+                    var tag = new Dcb.Domain.Weather.WeatherForecastTag(id);
+                    var tagStateId = new TagStateId(tag, tagProjectorName);
+                    var ts = TagState.GetEmpty(tagStateId) with
+                    {
+                        Payload = payload,
+                        Version = version,
+                        LastSortedUniqueId = last,
+                        ProjectorVersion = WeatherForecastProjector.ProjectorVersion
+                    };
+                    map[id] = ts;
+                }
+            }
+        }
+    var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+    return new WeatherForecastProjectorWithTagStateProjector { State = state };
+    }
 
     /// <summary>
     ///     Project with tag filtering - only processes events with WeatherForecastTag

@@ -36,6 +36,8 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     private Guid _unsafeLastEventId;
     private string _unsafeLastSortableUniqueId = string.Empty;
 
+    public int SafeVersion => _safeVersion;
+
     public DualStateProjectionWrapper(
         T initialProjector,
         string projectorName,
@@ -78,6 +80,17 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
         var isInSafeWindow = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold);
         
+        // Debug logging for safe window evaluation
+        if (_projectorName == "WeatherForecastProjection" && _unsafeVersion % 1000 == 0)
+        {
+            var eventDateTime = eventTime.GetDateTime();
+            var thresholdDateTime = safeWindowThreshold.GetDateTime();
+            var ageMs = (thresholdDateTime - eventDateTime).TotalMilliseconds;
+            Console.WriteLine($"[DualStateWrapper-{_projectorName}] Event age: {ageMs:F0}ms, " +
+                             $"isInSafeWindow: {isInSafeWindow}, " +
+                             $"safeVersion: {_safeVersion}, unsafeVersion: {_unsafeVersion}");
+        }
+        
         // Check if event already exists in either safe events or buffered events
         if (_allSafeEvents.ContainsKey(evt.Id) || _bufferedEvents.ContainsKey(evt.Id))
         {
@@ -87,6 +100,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         
         // Process the event through projection
         var tags = evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+        
         var unsafeProjected = _types.Project(
             _projectorName,
             _unsafeProjector,
@@ -113,9 +127,26 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
         else
         {
-            // Add to safe events and process
+            // Add to safe events collection
             _allSafeEvents[evt.Id] = evt;
-            RebuildSafeState(domainTypes);
+            
+            // Incremental update of safe state instead of full rebuild
+            // Process just this new event through the safe projector
+            var safeProjected = _types.Project(
+                _projectorName,
+                _safeProjector,
+                evt,
+                tags,
+                domainTypes,
+                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
+            
+            if (safeProjected.IsSuccess)
+            {
+                _safeProjector = (T)safeProjected.GetValue();
+                _safeLastEventId = evt.Id;
+                _safeLastSortableUniqueId = evt.SortableUniqueIdValue;
+                _safeVersion++;
+            }
         }
         
         return this;
@@ -131,6 +162,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         var eventsToProcess = new List<Event>();
         var keysToRemove = new List<Guid>();
         
+        // Debug logging
+        if (_projectorName == "WeatherForecastProjection" && _bufferedEvents.Count > 0)
+        {
+            Console.WriteLine($"[ProcessBufferedEvents-{_projectorName}] Checking {_bufferedEvents.Count} buffered events for promotion");
+        }
+        
         // Find events that are now outside safe window
         foreach (var kvp in _bufferedEvents)
         {
@@ -144,6 +181,13 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
             }
         }
         
+        // Debug logging
+        if (_projectorName == "WeatherForecastProjection" && eventsToProcess.Count > 0)
+        {
+            Console.WriteLine($"[ProcessBufferedEvents-{_projectorName}] Promoting {eventsToProcess.Count} events to safe, " +
+                             $"{_bufferedEvents.Count - eventsToProcess.Count} remain buffered");
+        }
+        
         // Remove processed events from buffer
         foreach (var key in keysToRemove)
         {
@@ -153,12 +197,18 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         // Add newly safe events to our collection and rebuild
         if (eventsToProcess.Count > 0)
         {
+            // Increment safe version for each promoted event
+            var promotedCount = eventsToProcess.Count;
+            
             foreach (var ev in eventsToProcess)
             {
                 _allSafeEvents[ev.Id] = ev;
             }
             
             RebuildSafeState(domainTypes);
+            
+            // After rebuild, increment the safe version by the number of promoted events
+            _safeVersion += promotedCount;
         }
     }
 
@@ -179,7 +229,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
         
         var newSafeProjector = (T)rebuiltProjector.GetValue();
-        var newSafeVersion = 0;
+        // IMPORTANT: Don't reset the version to 0. The version should reflect the total
+        // number of events processed as safe. When this is called after restoring from
+        // a snapshot, _allSafeEvents only contains new events from catch-up, not all
+        // historical events. We should preserve the base version count.
+        // The safe version has already been incremented for each event in ProcessEvent,
+        // so we don't need to recalculate it here.
         var newSafeLastEventId = Guid.Empty;
         var newSafeLastSortableId = string.Empty;
         
@@ -203,13 +258,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
             newSafeProjector = (T)projected.GetValue();
             newSafeLastEventId = ev.Id;
             newSafeLastSortableId = ev.SortableUniqueIdValue;
-            newSafeVersion++;
         }
         
         _safeProjector = newSafeProjector;
         _safeLastEventId = newSafeLastEventId;
         _safeLastSortableUniqueId = newSafeLastSortableId;
-        _safeVersion = newSafeVersion;
+        // Don't update _safeVersion here - it's updated in ProcessBufferedEvents
     }
 
     private T CloneProjector(T source)

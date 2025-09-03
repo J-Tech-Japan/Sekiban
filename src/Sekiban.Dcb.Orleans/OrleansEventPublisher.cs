@@ -41,7 +41,11 @@ public class OrleansEventPublisher : IEventPublisher
         IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Queueing {EventCount} events to Orleans streams (at-least-once)", events.Count);
+        // Reduce noise: only trace this queueing operation
+        if (_logger.IsEnabled(LogLevel.Trace))
+        {
+            _logger.LogTrace("Queueing {EventCount} events to Orleans streams (at-least-once)", events.Count);
+        }
 
         foreach (var (evt, tags) in events)
         {
@@ -81,8 +85,11 @@ public class OrleansEventPublisher : IEventPublisher
                 var provider = _clusterClient.GetStreamProvider(item.Provider);
                 var stream = provider.GetStream<Event>(StreamId.Create(item.Namespace, item.StreamId));
                 await stream.OnNextAsync(item.Event);
-                _logger.LogDebug("Published event {EventId} to {Provider}/{Namespace}/{StreamId}",
-                    item.Event.Id, item.Provider, item.Namespace, item.StreamId);
+                if (_logger.IsEnabled(LogLevel.Trace))
+                {
+                    _logger.LogTrace("Published event {EventId} to {Provider}/{Namespace}/{StreamId}",
+                        item.Event.Id, item.Provider, item.Namespace, item.StreamId);
+                }
             }
             catch (Exception ex)
             {

@@ -23,7 +23,11 @@ public interface IQueryTypes
     Task<ResultBox<object>> ExecuteQueryAsync(
         IQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider);
+    IServiceProvider serviceProvider,
+    int? safeVersion = null,
+    string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null);
 
     /// <summary>
     ///     Execute a list query
@@ -31,7 +35,11 @@ public interface IQueryTypes
     Task<ResultBox<object>> ExecuteListQueryAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider);
+    IServiceProvider serviceProvider,
+    int? safeVersion = null,
+    string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null);
 
     /// <summary>
     ///     Execute a list query and return a general result for serialization
@@ -39,7 +47,11 @@ public interface IQueryTypes
     Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
-        IServiceProvider serviceProvider);
+    IServiceProvider serviceProvider,
+    int? safeVersion = null,
+    string? safeWindowThreshold = null,
+    DateTime? safeWindowThresholdTime = null,
+    int? unsafeVersion = null);
 
     /// <summary>
     ///     Get the multi-projector type for a query

@@ -15,4 +15,8 @@ public interface ISafeAndUnsafeStateAccessor<T> where T : IMultiProjectionPayloa
     SafeProjection<T> GetSafeProjection(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes);
     UnsafeProjection<T> GetUnsafeProjection(DcbDomainTypes domainTypes);
     ISafeAndUnsafeStateAccessor<T> ProcessEvent(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes);
+    /// <summary>
+    ///     Number of events that have been incorporated into the safe (window-cleared) projection state.
+    /// </summary>
+    int SafeVersion { get; }
 }

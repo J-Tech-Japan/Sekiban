@@ -526,6 +526,16 @@ public record SafeUnsafeProjectionState<TKey, TState> where TKey : notnull where
     ///     Get all unsafe item keys
     /// </summary>
     public IEnumerable<TKey> GetUnsafeKeys() => _safeBackup.Keys;
+
+    /// <summary>
+    ///     Factory: build a state with provided current data (no unsafe backups)
+    /// </summary>
+    public static SafeUnsafeProjectionState<TKey, TState> FromCurrentData(IReadOnlyDictionary<TKey, TState> data)
+        => new SafeUnsafeProjectionState<TKey, TState>(
+            new Dictionary<TKey, TState>(data),
+            new Dictionary<TKey, SafeStateBackup<TState>>(),
+            null,
+            null);
 }
 /// <summary>
 ///     Type alias for backward compatibility with Guid keys
