@@ -377,6 +377,7 @@ temp/
 
 # TypeScript build outputs
 dist/
+!**/wwwroot/lib/**/dist/
 *.tsbuildinfo
 
 # Backup files
