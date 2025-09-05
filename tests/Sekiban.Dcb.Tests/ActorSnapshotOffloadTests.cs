@@ -73,7 +73,7 @@ public class ActorSnapshotOffloadTests
         // Add a few events with relatively large strings to exceed a tiny threshold
         foreach (var i in Enumerable.Range(0, 5))
         {
-            var created = new Created(new string('x', 1000));
+            var created = new Created(GenerateRandomString(1024));
             await actor.AddEventsAsync(new[] { Ev(created) });
         }
 
@@ -92,7 +92,7 @@ public class ActorSnapshotOffloadTests
         // Re-apply same events to actorWithPolicy
         foreach (var i in Enumerable.Range(0, 5))
         {
-            var created = new Created(new string('x', 1000));
+            var created = new Created(GenerateRandomString(1024));
             await actorWithPolicy.AddEventsAsync(new[] { Ev(created) });
         }
 
@@ -138,6 +138,15 @@ public class ActorSnapshotOffloadTests
     }
 
     public record Created(string Text) : IEventPayload;
+
+    private static string GenerateRandomString(int size)
+    {
+        var rng = Random.Shared;
+        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var buffer = new char[size];
+        for (int i = 0; i < size; i++) buffer[i] = chars[rng.Next(chars.Length)];
+        return new string(buffer);
+    }
 
     public record BigPayloadProjector(List<string> Items) : IMultiProjector<BigPayloadProjector>
     {
