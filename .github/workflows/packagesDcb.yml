@@ -39,3 +39,6 @@ jobs:
     - name: Pack Sekiban.Dcb.CosmosDb
       run: |
         dotnet nuget push "src/Sekiban.Dcb.CosmosDb/bin/Release/Sekiban.Dcb.CosmosDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Sekiban.Dcb.BlobStorage.AzureStorage
+      run: |
+        dotnet nuget push "src/Sekiban.Dcb.BlobStorage.AzureStorage/bin/Release/Sekiban.Dcb.BlobStorage.AzureStorage.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

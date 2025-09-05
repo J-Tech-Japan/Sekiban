@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using System.Collections.Concurrent;
 namespace Sekiban.Dcb.InMemory;
@@ -8,7 +9,7 @@ namespace Sekiban.Dcb.InMemory;
 ///     In-memory implementation of IActorObjectAccessor
 ///     Manages and provides access to actor instances
 /// </summary>
-public class InMemoryObjectAccessor : IActorObjectAccessor
+public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
 {
     private readonly ConcurrentDictionary<string, object> _actors = new();
     private readonly object _creationLock = new();
@@ -25,6 +26,12 @@ public class InMemoryObjectAccessor : IActorObjectAccessor
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
+
+    /// <summary>
+    /// Simple IServiceProvider implementation. For now we don't resolve external services,
+    /// but query execution path requires a non-null provider; return null for any service type.
+    /// </summary>
+    public object? GetService(Type serviceType) => null;
 
     public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
     {
@@ -115,6 +122,38 @@ public class InMemoryObjectAccessor : IActorObjectAccessor
         {
             // Format: "TagGroup:TagContent:TagProjectorName"
             return new GeneralTagStateActor(actorId, _eventStore, _domainTypes, this) as T;
+        }
+
+        // Create MultiProjectionActor (projectorName passed as actorId)
+        // Create MultiProjectionActor (projectorName passed as actorId)
+        // Use IsAssignableFrom plus name match fallback to avoid edge cases with type identity (e.g. test shadow copies)
+        if (typeof(T) == typeof(GeneralMultiProjectionActor) ||
+            typeof(GeneralMultiProjectionActor).IsAssignableFrom(typeof(T)) ||
+            typeof(T).Name == nameof(GeneralMultiProjectionActor))
+        {
+            var projectorName = actorId; // actorId is the projector name
+            var actor = new GeneralMultiProjectionActor(_domainTypes, projectorName);
+            try
+            {
+                // Initial catch-up: feed all existing events
+                var eventsRb = _eventStore.ReadAllEventsAsync();
+                eventsRb.Wait();
+                if (eventsRb.Result.IsSuccess)
+                {
+                    var events = eventsRb.Result.GetValue().ToList();
+                    if (events.Count > 0)
+                    {
+                        // Synchronously apply (API is async but we can Wait in this limited in-memory context)
+                        // Initial replay is a catch-up phase
+                        actor.AddEventsAsync(events, finishedCatchUp: true, EventSource.CatchUp).Wait();
+                    }
+                }
+            }
+            catch
+            {
+                // Swallow - projection will appear empty if replay fails
+            }
+            return actor as T;
         }
 
         return null;
