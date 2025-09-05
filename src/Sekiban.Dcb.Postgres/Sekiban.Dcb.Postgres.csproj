@@ -8,14 +8,14 @@
         <AssemblyName>Sekiban.Dcb.Postgres</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Postgres</RootNamespace>
         <PackageId>Sekiban.Dcb.Postgres</PackageId>
-        <Version>1.0.2-preview04</Version>
+        <Version>1.0.2-preview05</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary PostgreSQL Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>1.0.2-preview04</PackageVersion>
+        <PackageVersion>1.0.2-preview05</PackageVersion>
         <Description>PostgreSQL event store and persistence layer for Sekiban DCB</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;postgresql;postgres</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -38,7 +38,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.8"/>
         <PackageReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8"/>
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.1">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
