@@ -15,6 +15,7 @@ using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
@@ -23,7 +24,6 @@ using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
-using SekibanDcbOrleans.ApiService;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsDevelopment())
@@ -237,7 +237,7 @@ builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 {
     var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
-    return new MinimalBlobStorageSnapshotAccessor(blobServiceClient);
+    return new AzureBlobStorageSnapshotAccessor(blobServiceClient, "multiprojection-snapshot-offload");
 });
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
