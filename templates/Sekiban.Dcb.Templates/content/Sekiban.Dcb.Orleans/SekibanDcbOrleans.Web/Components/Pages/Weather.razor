@@ -381,7 +381,8 @@
         {
             var command = new CreateWeatherForecast
             {
-                ForecastId = Guid.NewGuid(),
+                // Server will generate ForecastId when using external payload
+                ForecastId = Guid.Empty,
                 Location = forecastModel.Location!,
                 Date = DateOnly.FromDateTime(forecastModel.Date!.Value),
                 TemperatureC = forecastModel.TemperatureC,
