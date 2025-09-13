@@ -159,6 +159,13 @@ var secretVars = concat([
     keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/${orleansClusteringConnectionStringSecretName}'
     identity: 'System'
   }
+  // Always expose a Storage Table connection string for Orleans table usages
+  // (checkpointer, PubSub, etc.) regardless of clustering type.
+  {
+    name: 'table-connection-string-name'
+    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansClusteringConnectionString'
+    identity: 'System'
+  }
   {
     name: 'myproject-grain-state-secret'
     keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/${orleansGrainStateConnectionStringSecretName}'
@@ -185,7 +192,7 @@ var envVars = concat([
   }
   {
     name: 'ConnectionStrings__DcbOrleansGrainTable'
-    secretRef: 'orleans-clustering-connection-string-name'
+    secretRef: 'table-connection-string-name'
   }
   {
     name: 'ConnectionStrings__DcbOrleansGrainState'
