@@ -27,13 +27,13 @@
   <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
-  <PackageReference Include="Scalar.AspNetCore" Version="2.8.1" />
-  <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="1.0.2-preview05" />
+  <PackageReference Include="Scalar.AspNetCore" Version="2.8.3" />
+  <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="1.0.2-preview06" />
   <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
-  <PackageReference Include="Sekiban.Dcb" Version="1.0.2-preview05" />
-  <PackageReference Include="Sekiban.Dcb.Orleans" Version="1.0.2-preview05" />
-  <PackageReference Include="Sekiban.Dcb.Postgres" Version="1.0.2-preview05" />
-  <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="1.0.2-preview05" />
+  <PackageReference Include="Sekiban.Dcb" Version="1.0.2-preview06" />
+  <PackageReference Include="Sekiban.Dcb.Orleans" Version="1.0.2-preview06" />
+  <PackageReference Include="Sekiban.Dcb.Postgres" Version="1.0.2-preview06" />
+  <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="1.0.2-preview06" />
   <!-- Sekiban.Dcb.BlobStorage.AzureStorage package not yet published to NuGet; remove for now -->
   </ItemGroup>
 </Project>
