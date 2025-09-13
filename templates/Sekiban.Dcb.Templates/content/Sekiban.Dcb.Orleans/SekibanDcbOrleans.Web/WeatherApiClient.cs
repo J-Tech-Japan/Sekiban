@@ -42,7 +42,15 @@ public class WeatherApiClient(HttpClient httpClient)
         CreateWeatherForecast command,
         CancellationToken cancellationToken = default)
     {
-        var response = await httpClient.PostAsJsonAsync("/api/inputweatherforecast", command, cancellationToken);
+        // Post in external-compatible shape (no ForecastId, TemperatureC as object { value })
+        var payload = new
+        {
+            Location = command.Location,
+            Date = command.Date.ToString("yyyy-MM-dd"),
+            Summary = command.Summary,
+            TemperatureC = new { value = (double)command.TemperatureC }
+        };
+        var response = await httpClient.PostAsJsonAsync("/api/inputweatherforecast", payload, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
     }

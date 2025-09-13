@@ -149,7 +149,7 @@ builder.UseOrleans(config =>
                     {
                         cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
                         cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                        cp.ConfigureTableServiceClient(
+                        cp.TableServiceClient = new TableServiceClient(
                             builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
                     }));
                 });
@@ -171,7 +171,7 @@ builder.UseOrleans(config =>
                     {
                         cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
                         cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                        cp.ConfigureTableServiceClient(
+                        cp.TableServiceClient = new TableServiceClient(
                             builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
                     }));
 
@@ -766,7 +766,7 @@ apiRoute
                     {
                         success = true,
                         eventId = result.GetValue().EventId,
-                        aggregateId = command.ForecastId,
+                        aggregateId = command.ForecastId == Guid.Empty ? (Guid?)null : (Guid?)command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
             return Results.BadRequest(
