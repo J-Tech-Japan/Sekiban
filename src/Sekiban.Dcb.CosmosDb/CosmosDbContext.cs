@@ -113,8 +113,7 @@ public class CosmosDbContext : IDisposable
         };
 
         var eventsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            eventsContainerProperties,
-            ThroughputProperties.CreateAutoscaleThroughput(1000));
+            eventsContainerProperties);
         _eventsContainer = eventsContainerResponse.Container;
 
         _logger?.LogInformation("Events container initialized");
@@ -127,8 +126,7 @@ public class CosmosDbContext : IDisposable
         };
 
         var tagsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            tagsContainerProperties,
-            ThroughputProperties.CreateAutoscaleThroughput(1000));
+            tagsContainerProperties);
         _tagsContainer = tagsContainerResponse.Container;
 
         _logger?.LogInformation("Tags container initialized");

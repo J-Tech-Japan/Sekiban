@@ -46,11 +46,11 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 // Add Azure Storage clients for Orleans
-builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
-builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
-builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
-builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
+builder.AddKeyedAzureTableClient("DcbOrleansClusteringTable");
+builder.AddKeyedAzureTableClient("DcbOrleansGrainTable");
+builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
+builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
+builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
 
 // Configure Orleans
 builder.UseOrleans(config =>
