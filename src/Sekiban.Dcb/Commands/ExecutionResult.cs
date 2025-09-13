@@ -1,3 +1,4 @@
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
 
@@ -9,5 +10,7 @@ public record ExecutionResult(
     long EventPosition,
     IReadOnlyList<TagWriteResult> TagWrites,
     TimeSpan Duration,
+    IEnumerable<Event> Events,
     Dictionary<string, object>? Metadata = null,
-    string? SortableUniqueId = null);
+    string? SortableUniqueId = null
+    );

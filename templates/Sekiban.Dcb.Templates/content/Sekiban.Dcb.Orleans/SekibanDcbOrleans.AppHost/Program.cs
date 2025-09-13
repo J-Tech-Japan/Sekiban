@@ -37,8 +37,7 @@ var apiService = builder
     .WithReference(postgres)
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
-    .WaitFor(postgres)
-    .WithHttpEndpoint();
+    .WaitFor(postgres);
 
 // Add the Web frontend
 builder

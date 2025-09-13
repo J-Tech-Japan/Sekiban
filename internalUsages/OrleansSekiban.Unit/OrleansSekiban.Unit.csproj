@@ -13,8 +13,8 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
-        <PackageReference Include="Sekiban.Pure.Orleans.xUnit" Version="1.0.2-preview06"/>
-        <PackageReference Include="Sekiban.Pure.xUnit" Version="1.0.2-preview06"/>
+        <PackageReference Include="Sekiban.Pure.Orleans.xUnit" Version="1.0.2-preview07"/>
+        <PackageReference Include="Sekiban.Pure.xUnit" Version="1.0.2-preview07"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
             <PrivateAssets>all</PrivateAssets>
