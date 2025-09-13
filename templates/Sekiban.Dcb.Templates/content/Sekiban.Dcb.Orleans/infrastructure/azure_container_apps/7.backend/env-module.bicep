@@ -10,7 +10,7 @@ param databaseType string = 'cosmos'
 param orleansClusterType string = 'cosmos'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'azurestorage' //'eventhub'
+param orleansQueueType string = 'eventhub' //'azurestorage'
 
 // Database connection string parameter names (for application settings)
 var databaseConnectionStringName = databaseType == 'postgres' ? 'DcbPostgres' : 'SekibanDcbCosmos'

@@ -8,7 +8,7 @@ param authorizationRuleName string = 'EventHubClientAuthRule'
 param keyVaultName string = 'kv-${resourceGroup().name}'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'azurestorage' //'eventhub'
+param orleansQueueType string = 'eventhub' //'azurestorage'
 
 // Reference existing Event Hub Namespace
 resource namespace 'Microsoft.EventHub/namespaces@2022-10-01-preview' existing = if (orleansQueueType == 'eventhub') {

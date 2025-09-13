@@ -8,7 +8,7 @@ param location string = resourceGroup().location
 param namespaceName string = 'ehns-${resourceGroup().name}'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'azurestorage' //'eventhub'
+param orleansQueueType string = 'eventhub' //'azurestorage'
 
 @description('Event Hub capacity (throughput units)')
 param skuCapacity int = 1

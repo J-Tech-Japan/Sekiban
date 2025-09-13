@@ -9,7 +9,7 @@ param orleansClusterType string = 'cosmos'
 param orleansDefaultGrainType string = 'cosmos'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'azurestorage' //'eventhub'
+param orleansQueueType string = 'eventhub' //'azurestorage'
 
 // 1. Key Vault
 module keyVaultCreate '1.keyvault/create.bicep' = {

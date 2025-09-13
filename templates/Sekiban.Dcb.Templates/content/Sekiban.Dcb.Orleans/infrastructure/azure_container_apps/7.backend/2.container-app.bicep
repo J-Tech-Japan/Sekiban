@@ -5,7 +5,7 @@ var acrName = replace(toLower('acr-${resourceGroup().name}'), '-', '')
 var containerImage string = '${acrName}.azurecr.io/${containerAppName}:latest'
 
 @description('The params provided by aca_main.bicep.')
-param orleansQueueType string  = 'azurestorage'
+param orleansQueueType string  = 'eventhub'
 param orleansClusterType string = 'cosmos'
 param orleansDefaultGrainType string = 'cosmos'
 
