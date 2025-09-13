@@ -9,6 +9,7 @@ resource eventsDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023
   name: '${cosmosDbAccountName}/${sekibanDbName}'
 }
 
+// events container: partition by /id
 resource eventsEventsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
   parent: eventsDatabase
   name: 'events'
@@ -17,12 +18,38 @@ resource eventsEventsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabas
       id: 'events'
       partitionKey: {
         paths: [
-          '/rootPartitionKey'
-          '/aggregateGroup'
-          '/partitionKey'
+          '/id'
         ]
-        kind: 'MultiHash'
-        version: 2
+        kind: 'Hash'
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+      }
+    }
+  }
+  dependsOn: [
+    eventsDatabase
+  ]
+}
+
+// tags container: partition by /tag
+resource eventsTagsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-04-15' = {
+  parent: eventsDatabase
+  name: 'tags'
+  properties: {
+    resource: {
+      id: 'tags'
+      partitionKey: {
+        paths: [
+          '/tag'
+        ]
+        kind: 'Hash'
       }
       indexingPolicy: {
         indexingMode: 'consistent'

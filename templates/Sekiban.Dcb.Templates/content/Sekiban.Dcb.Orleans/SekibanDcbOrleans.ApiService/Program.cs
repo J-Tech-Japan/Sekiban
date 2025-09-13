@@ -36,11 +36,24 @@ if (builder.Environment.IsDevelopment())
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
-builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
-builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
-builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
+if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() != "cosmos")
+{
+    builder.AddKeyedAzureTableClient("DcbOrleansClusteringTable");
+}
+
+if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos")
+{
+    builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
+}
+
+if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos" || 
+    (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
+{
+    builder.AddKeyedAzureTableClient("DcbOrleansGrainTable");
+}
+
+builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
+builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
 
 builder.UseOrleans(config =>
 {
@@ -93,21 +106,52 @@ builder.UseOrleans(config =>
     }
     else
     {
-        if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
-        {
-            config.AddCosmosGrainStorage("PubSubStore", options =>
+    if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
+    {
+        config.AddEventHubStreams(
+            "EventStreamProvider",
+            configurator =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
-                options.ConfigureCosmosClient(connectionString);
-                options.IsResourceCreationEnabled = true;
+                // Existing Event Hub connection settings
+                configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                {
+                    options.ConfigureEventHubConnection(
+                        builder.Configuration.GetConnectionString("OrleansEventHub"),
+                        builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                        "$Default");
+                }));
+                // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                {
+                    cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
+                    cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                    cp.ConfigureTableServiceClient(
+                        builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                }));
             });
-            config.AddCosmosGrainStorage("EventStreamProvider", options =>
+        config.AddEventHubStreams(
+            "DcbOrleansQueue",
+            configurator =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
-                options.ConfigureCosmosClient(connectionString);
-                options.IsResourceCreationEnabled = true;
+                // Existing Event Hub connection settings
+                configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                {
+                    options.ConfigureEventHubConnection(
+                        builder.Configuration.GetConnectionString("OrleansEventHub"),
+                        builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                        "$Default");
+                }));
+
+                // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                {
+                    cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
+                    cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                    cp.ConfigureTableServiceClient(
+                        builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                }));
+
+                // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
             });
         }
         else

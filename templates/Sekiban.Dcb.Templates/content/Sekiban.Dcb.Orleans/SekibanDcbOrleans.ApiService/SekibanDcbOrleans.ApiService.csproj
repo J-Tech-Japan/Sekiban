@@ -25,6 +25,7 @@
   <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
+  <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
   <PackageReference Include="Scalar.AspNetCore" Version="2.8.1" />
   <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="1.0.2-preview05" />
   <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
