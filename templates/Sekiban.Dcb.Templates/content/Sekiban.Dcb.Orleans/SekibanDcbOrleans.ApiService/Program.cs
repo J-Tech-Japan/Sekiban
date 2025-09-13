@@ -2,7 +2,8 @@ using System.Net;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
-using Microsoft.Extensions.DependencyInjection;
+using Azure.Core.Extensions;
+using Microsoft.Extensions.Azure;
 using Dcb.Domain;
 using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
@@ -11,20 +12,20 @@ using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
-using Microsoft.Extensions.Logging;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.CosmosDb;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
-using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.Snapshots;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsDevelopment())
@@ -33,27 +34,49 @@ if (builder.Environment.IsDevelopment())
     builder.Logging.AddFilter("Azure.Storage", LogLevel.Error);
     builder.Logging.AddFilter("Orleans.AzureUtils", LogLevel.Error);
 }
+
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+
+// Log key configuration switches early for troubleshooting
+var cfgClustering = (builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower();
+var cfgGrainDefault = (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower();
+var cfgQueueType = (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower();
+Console.WriteLine($"Config switches => ORLEANS_CLUSTERING_TYPE={cfgClustering}, ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}, ORLEANS_QUEUE_TYPE={cfgQueueType}");
 if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() != "cosmos")
-{
-    builder.AddKeyedAzureTableClient("DcbOrleansClusteringTable");
-}
+    Console.WriteLine("Registering keyed Azure Table ServiceClient: DcbOrleansClusteringTable");
+    builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
 
 if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos")
-{
-    builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
-}
+    Console.WriteLine("Registering keyed Azure Blob ServiceClient: DcbOrleansGrainState");
+    builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
 
-if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos" || 
+if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos" ||
     (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
-{
-    builder.AddKeyedAzureTableClient("DcbOrleansGrainTable");
-}
+    Console.WriteLine("Registering keyed Azure Table ServiceClient: DcbOrleansGrainTable");
+    builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
 
-builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
+Console.WriteLine("Registering keyed Azure Blob ServiceClient: MultiProjectionOffload");
+builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
+Console.WriteLine("Registering keyed Azure Queue ServiceClient: DcbOrleansQueue");
+builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
+
+// Ensure Orleans fallbacks (GetRequiredKeyedService) can resolve clients even if options aren't set
+builder.Services.AddKeyedSingleton<QueueServiceClient>(
+    "DcbOrleansQueue",
+    (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
+// Some Orleans Azure Queue configurations use the provider name as the DI key.
+// Register an alias for the EventStreamProvider as well, resolving via the same connection.
+builder.Services.AddKeyedSingleton<QueueServiceClient>(
+    "EventStreamProvider",
+    (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
+builder.Services.AddKeyedSingleton<BlobServiceClient>(
+    "DcbOrleansGrainState",
+    (sp, _) => sp.GetRequiredService<IAzureClientFactory<BlobServiceClient>>().CreateClient("DcbOrleansGrainState"));
+builder.Services.AddKeyedSingleton<BlobServiceClient>(
+    "MultiProjectionOffload",
+    (sp, _) => sp.GetRequiredService<IAzureClientFactory<BlobServiceClient>>().CreateClient("MultiProjectionOffload"));
 
 builder.UseOrleans(config =>
 {
@@ -75,12 +98,13 @@ builder.UseOrleans(config =>
             });
         }
     }
+
     var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
     if (useInMemoryStreams)
     {
         config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePartitioning();
             configurator.ConfigurePullingAgent(options =>
             {
                 options.Configure(opt =>
@@ -92,7 +116,7 @@ builder.UseOrleans(config =>
         });
         config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePartitioning();
             configurator.ConfigurePullingAgent(options =>
             {
                 options.Configure(opt =>
@@ -106,117 +130,123 @@ builder.UseOrleans(config =>
     }
     else
     {
-    if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
-    {
-        config.AddEventHubStreams(
-            "EventStreamProvider",
-            configurator =>
-            {
-                // Existing Event Hub connection settings
-                configurator.ConfigureEventHub(ob => ob.Configure(options =>
-                {
-                    options.ConfigureEventHubConnection(
-                        builder.Configuration.GetConnectionString("OrleansEventHub"),
-                        builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
-                        "$Default");
-                }));
-                // 🔑 NEW –‑ tell Orleans where to persist checkpoints
-                configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
-                {
-                    cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
-                    cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                    cp.ConfigureTableServiceClient(
-                        builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
-                }));
-            });
-        config.AddEventHubStreams(
-            "DcbOrleansQueue",
-            configurator =>
-            {
-                // Existing Event Hub connection settings
-                configurator.ConfigureEventHub(ob => ob.Configure(options =>
-                {
-                    options.ConfigureEventHubConnection(
-                        builder.Configuration.GetConnectionString("OrleansEventHub"),
-                        builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
-                        "$Default");
-                }));
-
-                // 🔑 NEW –‑ tell Orleans where to persist checkpoints
-                configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
-                {
-                    cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
-                    cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                    cp.ConfigureTableServiceClient(
-                        builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
-                }));
-
-                // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
-            });
-        }
-        else
+        if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
         {
-
-            config.AddAzureQueueStreams(
+            config.AddEventHubStreams(
                 "EventStreamProvider",
                 configurator =>
                 {
-                    configurator.ConfigureAzureQueue(options =>
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
-                        options.Configure<IServiceProvider>((queueOptions, sp) =>
-                        {
-                            queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                            queueOptions.QueueNames =
-                            [
-                                "dcborleans-eventstreamprovider-0",
-                                "dcborleans-eventstreamprovider-1",
-                                "dcborleans-eventstreamprovider-2"
-                            ];
-                            queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                        });
-                    });
-                    configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                        ob.Configure(o => o.TotalQueueCount = 3));
-                    configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-                    {
-                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                        opt.BatchContainerBatchSize = 256;
-                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
                     }));
-                    configurator.ConfigureCacheSize(8192);
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.ConfigureTableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
                 });
-            config.AddAzureQueueStreams(
+            config.AddEventHubStreams(
                 "DcbOrleansQueue",
                 configurator =>
                 {
-                    configurator.ConfigureAzureQueue(options =>
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
-                        options.Configure<IServiceProvider>((queueOptions, sp) =>
-                        {
-                            queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                            queueOptions.QueueNames =
-                            [
-                                "dcborleans-queue-0",
-                                "dcborleans-queue-1",
-                                "dcborleans-queue-2"
-                            ];
-                            queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                        });
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
+                    }));
+
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.ConfigureTableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
+
+                    // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
+                });
+        }
+        else
+        {
+            config.AddAzureQueueStreams(
+                "EventStreamProvider",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
                     });
-                    configurator.Configure<HashRingStreamQueueMapperOptions>(ob =>
-                        ob.Configure(o => o.TotalQueueCount = 3));
-                    configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "EventStreamProvider",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "EventStreamProvider",
+                    opt =>
                     {
                         opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
                         opt.BatchContainerBatchSize = 256;
                         opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-                    }));
-                    configurator.ConfigureCacheSize(8192);
+                    });
+            });
+            config.AddAzureQueueStreams(
+                "DcbOrleansQueue",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
                 });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "DcbOrleansQueue",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "DcbOrleansQueue",
+                    opt =>
+                    {
+                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                        opt.BatchContainerBatchSize = 256;
+                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                    });
+            });
         }
     }
 
-    if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
+    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
+    if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorageAsDefault(options =>
         {
@@ -262,7 +292,6 @@ builder.UseOrleans(config =>
                 options.IsResourceCreationEnabled = true;
             });
         if (!useInMemoryStreams)
-        {
             config.AddCosmosGrainStorage(
                 "PubSubStore",
                 options =>
@@ -272,15 +301,23 @@ builder.UseOrleans(config =>
                     options.ConfigureCosmosClient(connectionString);
                     options.IsResourceCreationEnabled = true;
                 });
-        }
     }
     else
     {
+        Console.WriteLine("Configuring Azure Blob as default grain storage (non-cosmos setting)");
         config.AddAzureBlobGrainStorageAsDefault(options =>
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("StorageConfig");
+                var client = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                if (client is null)
+                {
+                    var hasConn = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbOrleansGrainState"));
+                    logger?.LogError("BlobServiceClient(DcbOrleansGrainState) not resolved. ConnectionStrings:DcbOrleansGrainState present={present}", hasConn);
+                    Console.WriteLine($"ERROR: BlobServiceClient(DcbOrleansGrainState) not resolved. ConnectionStrings:DcbOrleansGrainState present={hasConn}");
+                }
+                opt.BlobServiceClient = client;
                 opt.ContainerName = "sekiban-grainstate";
             });
         });
@@ -290,7 +327,10 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("StorageConfig");
+                    var client = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    if (client is null) logger?.LogError("BlobServiceClient(DcbOrleansGrainState) not resolved for OrleansStorage");
+                    opt.BlobServiceClient = client;
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -300,7 +340,10 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("StorageConfig");
+                    var client = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    if (client is null) logger?.LogError("BlobServiceClient(DcbOrleansGrainState) not resolved for dcb-orleans-queue");
+                    opt.BlobServiceClient = client;
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -325,7 +368,6 @@ builder.UseOrleans(config =>
                 options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
             });
         if (!useInMemoryStreams)
-        {
             config.AddAzureTableGrainStorage(
                 "PubSubStore",
                 options =>
@@ -335,9 +377,9 @@ builder.UseOrleans(config =>
                         opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
                         opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
                     });
-                    options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
+                    options.Configure<IGrainStorageSerializer>((op, serializer) =>
+                        op.GrainStorageSerializer = serializer);
                 });
-        }
     }
 
 
@@ -358,14 +400,10 @@ builder.UseOrleans(config =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
         if (builder.Environment.IsDevelopment())
-        {
-            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.RecordingMultiProjectionEventStatistics>();
-        }
+            services.AddTransient<IMultiProjectionEventStatistics, RecordingMultiProjectionEventStatistics>();
         else
-        {
-            services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
-        }
-        var dynamicOptions = new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions
+            services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
+        var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = 20000,
             EnableDynamicSafeWindow = !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
@@ -373,7 +411,7 @@ builder.UseOrleans(config =>
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
         };
-        services.AddTransient<Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
+        services.AddTransient<GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
     });
 });
 var domainTypes = DomainType.GetDomainTypes();
@@ -388,6 +426,7 @@ else
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
 }
+
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
@@ -405,15 +444,10 @@ builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 if (builder.Environment.IsDevelopment())
-{
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("AllowAll", policy =>
-        {
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-        });
+        options.AddPolicy("AllowAll", policy => { policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod(); });
     });
-}
 var app = builder.Build();
 var apiRoute = app.MapGroup("/api");
 app.UseExceptionHandler();
@@ -423,6 +457,7 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
     app.UseCors("AllowAll");
 }
+
 apiRoute
     .MapPost(
         "/students",
@@ -430,7 +465,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -439,7 +473,6 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student created successfully"
                     });
-            }
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -465,6 +498,7 @@ apiRoute
                 var queryResult = result.GetValue();
                 return Results.Ok(queryResult.Items);
             }
+
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -488,6 +522,7 @@ apiRoute
                         version = state.Version
                     });
             }
+
             return Results.NotFound(new { error = $"Student {studentId} not found" });
         })
     .WithOpenApi()
@@ -499,7 +534,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -508,7 +542,6 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "ClassRoom created successfully"
                     });
-            }
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -534,6 +567,7 @@ apiRoute
                 var queryResult = result.GetValue();
                 return Results.Ok(queryResult.Items);
             }
+
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -557,6 +591,7 @@ apiRoute
                         version = state.Version
                     });
             }
+
             return Results.NotFound(new { error = $"ClassRoom {classRoomId} not found" });
         })
     .WithOpenApi()
@@ -568,7 +603,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -578,7 +612,6 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student enrolled successfully"
                     });
-            }
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -590,7 +623,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -600,7 +632,6 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student dropped successfully"
                     });
-            }
             return Results.BadRequest(new { error = result.GetException().Message });
         })
     .WithOpenApi()
@@ -629,11 +660,12 @@ apiRoute
                             })
                         });
                 }
+
                 return Results.BadRequest(new { error = result.GetException()?.Message });
             }
             catch (Exception ex)
             {
-                return Results.Problem(detail: ex.Message);
+                return Results.Problem(ex.Message);
             }
         })
     .WithOpenApi()
@@ -661,6 +693,7 @@ apiRoute
                 var queryResult = result.GetValue();
                 return Results.Ok(queryResult.Items);
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
     .WithOpenApi()
@@ -688,6 +721,7 @@ apiRoute
                 var queryResult = result.GetValue();
                 return Results.Ok(queryResult.Items);
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
     .WithOpenApi()
@@ -715,6 +749,7 @@ apiRoute
                 var queryResult = result.GetValue();
                 return Results.Ok(queryResult.Items);
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
     .WithOpenApi()
@@ -726,7 +761,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -735,7 +769,6 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            }
             return Results.BadRequest(
                 new
                 {
@@ -752,7 +785,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -761,7 +793,6 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            }
             return Results.BadRequest(
                 new
                 {
@@ -785,7 +816,7 @@ apiRoute
             var result = await executor.QueryAsync(query);
             if (result.IsSuccess)
             {
-                var countResult = (WeatherForecastCountResult)result.GetValue();
+                var countResult = result.GetValue();
                 return Results.Ok(new
                 {
                     safeVersion = countResult.SafeVersion,
@@ -793,6 +824,7 @@ apiRoute
                     totalCount = countResult.TotalCount
                 });
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
     .WithOpenApi()
@@ -811,7 +843,7 @@ apiRoute
             var result = await executor.QueryAsync(query);
             if (result.IsSuccess)
             {
-                var countResult = (WeatherForecastCountResult)result.GetValue();
+                var countResult = result.GetValue();
                 return Results.Ok(new
                 {
                     safeVersion = countResult.SafeVersion,
@@ -820,6 +852,7 @@ apiRoute
                     isGeneric = true
                 });
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
     .WithOpenApi()
@@ -838,7 +871,7 @@ apiRoute
             var result = await executor.QueryAsync(query);
             if (result.IsSuccess)
             {
-                var countResult = (WeatherForecastCountResult)result.GetValue();
+                var countResult = result.GetValue();
                 return Results.Ok(new
                 {
                     safeVersion = countResult.SafeVersion,
@@ -847,6 +880,7 @@ apiRoute
                     isSingle = true
                 });
             }
+
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
     .WithOpenApi()
@@ -867,7 +901,8 @@ apiRoute
         "/weatherforecastgeneric/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(
+                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -907,7 +942,8 @@ apiRoute
         "/weatherforecastgeneric/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(
+                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -936,9 +972,7 @@ apiRoute
                 var rb = await grain.PersistStateAsync();
                 var end = DateTime.UtcNow;
                 if (rb.IsSuccess)
-                {
                     return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
-                }
                 var err = rb.GetException()?.Message;
                 return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
             }
@@ -993,7 +1027,7 @@ apiRoute
             try
             {
                 var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+                var rb = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
                 if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
                 return Results.Text(rb.GetValue(), "application/json");
             }
@@ -1013,7 +1047,9 @@ apiRoute
             {
                 var grain = client.GetGrain<IMultiProjectionGrain>(name);
                 var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-                return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
+                return ok
+                    ? Results.Ok(new { success = true })
+                    : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
             }
             catch (Exception ex)
             {
@@ -1029,7 +1065,6 @@ apiRoute
         {
             var result = await executor.ExecuteAsync(command);
             if (result.IsSuccess)
-            {
                 return Results.Ok(
                     new
                     {
@@ -1038,7 +1073,6 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            }
             return Results.BadRequest(
                 new
                 {
@@ -1060,7 +1094,6 @@ apiRoute
                 var query = new GetWeatherForecastListQuery();
                 var result = await executor.QueryAsync(query);
                 if (result.IsSuccess)
-                {
                     return Results.Ok(
                         new
                         {
@@ -1068,7 +1101,6 @@ apiRoute
                             message = "Successfully executed query through Orleans",
                             itemCount = result.GetValue().TotalCount
                         });
-                }
                 return Results.Ok(
                     new
                     {

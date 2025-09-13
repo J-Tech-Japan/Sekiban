@@ -49,8 +49,6 @@ param orleansGatewayPort int = 30000
 param orleansSiloPort int = 11111
 param orleansGrainStorageDefaultProviderType string = 'AzureBlobStorage'
 param orleansGrainStorageDefaultServiceKey string = 'MyProjectGrainState'
-param orleansGrainStorageMyProjectQueueProviderType string = 'AzureBlobStorage'
-param orleansGrainStorageMyProjectQueueServiceKey string = 'MyProjectGrainState'
 param orleansServiceId string = 'orleans-service-${uniqueString('${resourceGroup().name}service')}'
 param orleansStreamingMyProjectQueueProviderType string = 'AzureQueueStorage'
 param orleansStreamingMyProjectQueueServiceKey string = 'MyProjectQueue'
@@ -233,14 +231,7 @@ var envVars = concat([
     name: 'Orleans__Endpoints__SiloPort'
     value: string(orleansSiloPort)
   }
-  {
-    name: 'Orleans__GrainStorage__MyProjectQueue__ProviderType'
-    value: orleansGrainStorageMyProjectQueueProviderType
-  }
-  {
-    name: 'Orleans__GrainStorage__MyProjectQueue__ServiceKey'
-    value: orleansGrainStorageMyProjectQueueServiceKey
-  }
+  // Removed legacy MyProjectQueue grain storage provider env vars
   {
     name: 'Orleans__ServiceId'
     value: orleansServiceId
