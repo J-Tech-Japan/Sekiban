@@ -6,14 +6,14 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Dapr</PackageId>
-        <Version>1.0.2-preview06</Version>
+        <Version>1.0.2-preview07</Version>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
         <Title>Sekiban.Pure.Dapr</Title>
         <Description>Event Sourcing and CQRS Framework with Dapr integration</Description>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Dapr Integration</PackageDescription>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageVersion>1.0.2-preview06</PackageVersion>
+        <PackageVersion>1.0.2-preview07</PackageVersion>
         <AssemblyName>Sekiban.Pure.Dapr</AssemblyName>
         <RootNamespace>Sekiban.Pure.Dapr</RootNamespace>
         <IncludeSymbols>true</IncludeSymbols>

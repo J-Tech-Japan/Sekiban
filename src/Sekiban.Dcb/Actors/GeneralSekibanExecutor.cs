@@ -91,7 +91,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
             if (collectedEvents.Count == 0)
             {
                 return ResultBox.FromValue(
-                    new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed));
+                    new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed,[]));
             }
 
             // Step 3: Collect tags across all events
@@ -218,6 +218,7 @@ public class GeneralSekibanExecutor : ISekibanExecutor
                         writtenEvents.Count, // event count as a placeholder for position (multi-event)
                         tagWriteResults.ToList(),
                         stopwatch.Elapsed,
+                        writtenEvents,
                         new Dictionary<string, object>
                         {
                             ["EventCount"] = writtenEvents.Count,

@@ -674,7 +674,7 @@ apiRoute
                     {
                         success = true,
                         eventId = result.GetValue().EventId,
-                        aggregateId = command.ForecastId,
+                        aggregateId = result.GetValue().Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>()?.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
             }

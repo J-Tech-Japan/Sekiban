@@ -6,7 +6,6 @@ namespace Dcb.Domain.Weather;
 
 public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 {
-    [Required]
     public Guid ForecastId { get; init; }
 
     [Required]
@@ -24,7 +23,8 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 
     public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
     {
-        var tag = new WeatherForecastTag(ForecastId);
+        var forecastId = ForecastId != Guid.Empty ? ForecastId : Guid.CreateVersion7();
+        var tag = new WeatherForecastTag(forecastId);
         var exists = await context.TagExistsAsync(tag);
 
         if (!exists.IsSuccess)
@@ -32,10 +32,10 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 
         if (exists.GetValue())
             return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} already exists"));
+                new ApplicationException($"Weather forecast {forecastId} already exists"));
 
         return EventOrNone.EventWithTags(
-            new WeatherForecastCreated(ForecastId, Location, Date, TemperatureC, Summary),
+            new WeatherForecastCreated(forecastId, Location, Date, TemperatureC, Summary),
             tag);
     }
 }

@@ -23,7 +23,7 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 
     public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
     {
-        var id = ForecastId != Guid.Empty ? ForecastId : Guid.NewGuid();
+        var id = ForecastId != Guid.Empty ? ForecastId : Guid.CreateVersion7();
         var tag = new WeatherForecastTag(id);
         var exists = await context.TagExistsAsync(tag);
 
