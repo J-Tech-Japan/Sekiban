@@ -1,7 +1,29 @@
 #!/bin/bash
 
-# Get the resource group name from parameter or use default
-RESOURCE_GROUP=${1:-$(basename $(pwd) | sed 's/\./-/g')}
+if [ -z "$1" ]; then
+	echo "Usage: $0 <environment-name|path-to-.local.json>"
+	exit 1
+fi
+
+ARG_INPUT="$1"
+if [[ "$ARG_INPUT" == *.local.json ]]; then
+	BASENAME="${ARG_INPUT##*/}"
+	ENVIRONMENT="${BASENAME%.local.json}"
+	CONFIG_FILE="$BASENAME"
+	CONFIG_PATH="$ARG_INPUT"
+else
+	ENVIRONMENT="$ARG_INPUT"
+	CONFIG_FILE="${ENVIRONMENT}.local.json"
+	CONFIG_PATH="$CONFIG_FILE"
+fi
+
+if [ ! -f "$CONFIG_PATH" ]; then
+	echo "Error: Configuration file $CONFIG_PATH not found"
+	exit 1
+fi
+
+# Get the resource group name from config
+RESOURCE_GROUP=$(jq -r '.resourceGroupName' "$CONFIG_PATH")
 
 # Extract Key Vault name from the create.bicep file
 KV_NAME="kv-$RESOURCE_GROUP"

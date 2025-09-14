@@ -7,23 +7,32 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-ENVIRONMENT=$1
-CONFIG_FILE="${ENVIRONMENT}.local.json"
+ARG_INPUT="$1"
+if [[ "$ARG_INPUT" == *.local.json ]]; then
+    BASENAME="${ARG_INPUT##*/}"
+    ENVIRONMENT="${BASENAME%.local.json}"
+    CONFIG_FILE="$BASENAME"
+    CONFIG_PATH="$ARG_INPUT"
+else
+    ENVIRONMENT="$ARG_INPUT"
+    CONFIG_FILE="${ENVIRONMENT}.local.json"
+    CONFIG_PATH="$CONFIG_FILE"
+fi
 
 # Check if config file exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: Configuration file $CONFIG_FILE not found"
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "Error: Configuration file $CONFIG_PATH not found"
     exit 1
 fi
 
 # get resource group name from {environment}.local.json parameter name is "resourceGroupName"
-RESOURCE_GROUP=$(jq -r '.resourceGroupName' "$CONFIG_FILE")
+RESOURCE_GROUP=$(jq -r '.resourceGroupName' "$CONFIG_PATH")
 KEYVAULT_NAME="kv-${RESOURCE_GROUP}"
 # get location name from {environment}.local.json parameter name is "location"
-LOCATION=$(jq -r '.location' "$CONFIG_FILE")
+LOCATION=$(jq -r '.location' "$CONFIG_PATH")
 
 # Get backend relative path from config file
-BACKEND_PATH=$(jq -r '.backendRelativePath' "$CONFIG_FILE")
+BACKEND_PATH=$(jq -r '.backendRelativePath' "$CONFIG_PATH")
 
 # Verify the backend path exists
 if [ ! -d "$BACKEND_PATH" ]; then

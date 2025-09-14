@@ -3,7 +3,6 @@ param cosmosDbAccountName string = 'cosmos-${resourceGroup().name}'
 
 param orleansClusterType string = 'cosmos'
 
-// Orleans database and container resources only when orleansClusterType is 'cosmos'
 resource orleansDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-04-15' = if (orleansClusterType == 'cosmos') {
   name: '${cosmosDbAccountName}/Orleans'
   properties: {

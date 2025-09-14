@@ -1,4 +1,5 @@
 param appServiceName string = 'backend-${resourceGroup().name}'
+param keyVaultName string = 'kv-${resourceGroup().name}'
 @description('Database type to use (cosmos or postgres)')
 @allowed(['cosmos', 'postgres'])
 param databaseType string = 'cosmos'
@@ -25,38 +26,39 @@ param orleansGatewayPort int = 30000
 param orleansSiloPort int = 11111
 param orleansGrainStorageDefaultProviderType string = 'AzureBlobStorage'
 param orleansGrainStorageDefaultServiceKey string = 'OrleansSekibanGrainState'
-param orleansGrainStorageOrleansSekibanQueueProviderType string = 'AzureBlobStorage'
-param orleansGrainStorageOrleansSekibanQueueServiceKey string = 'OrleansSekibanGrainState'
 param orleansServiceId string = 'orleans-service-${uniqueString('${resourceGroup().name}service')}'
-param orleansStreamingOrleansSekibanQueueProviderType string = 'AzureQueueStorage'
-param orleansStreamingOrleansSekibanQueueServiceKey string = 'OrleansSekibanQueue'
+param orleansStreamingMyProjectQueueProviderType string = 'AzureQueueStorage'
+param orleansStreamingMyProjectQueueServiceKey string = 'MyProjectQueue'
 
-// Reference to the existing App Service
 resource webApp 'Microsoft.Web/sites@2022-09-01' existing = {
   name: appServiceName
 }
 
-// get existing Application Insights
 resource applicationInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: applicationInsightsName
 }
-// get instrumentation key
 var applicationInsightsInstrumentationKey = applicationInsights.properties.InstrumentationKey
-// get connection string
 var applicationInsightsConnectionString = applicationInsights.properties.ConnectionString
 
-// Update the App Service with app settings
 resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
   parent: webApp
   name: 'appsettings'
   properties: {
+    ConnectionStrings__SekibanDcbCosmos: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanCosmosDbConnectionString)'
+    ConnectionStrings__DcbPostgres: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanPostgresConnectionString)'
+    ConnectionStrings__OrleansCosmos: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanCosmosDbConnectionString)'
+    ConnectionStrings__DcbOrleansClusteringTable: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansClusteringConnectionString)'
+    ConnectionStrings__DcbOrleansGrainTable: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansClusteringConnectionString)'
+    ConnectionStrings__DcbOrleansGrainState: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansGrainStateConnectionString)'
+    ConnectionStrings__MultiProjectionOffload: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansGrainStateConnectionString)'
+    ConnectionStrings__OrleansEventHub: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/EventHubConnectionString)'
+    ConnectionStrings__DcbOrleansQueue: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansQueueConnectionString)'
+
     ASPNETCORE_ENVIRONMENT: aspNetCoreEnvironment
     APPINSIGHTS_INSTRUMENTATIONKEY: applicationInsightsInstrumentationKey
     APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsightsConnectionString
     ApplicationInsightsAgent_EXTENSION_VERSION: '~3'
     Sekiban__Database: databaseType
-    // Orleans cluster settings - only added if orleansClusterType is not 'cosmos'
-    // When orleansClusterType is 'cosmos', these settings are completely omitted since they're controlled by code
     ...(orleansClusterType != 'cosmos' ? {
       Orleans__ClusterId: orleansClusterId
       Orleans__Clustering__ProviderType: orleansClusteringProviderType
@@ -75,14 +77,11 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     Orleans__EnableDistributedTracing: string(orleansEnableDistributedTracing)
     Orleans__Endpoints__GatewayPort: string(orleansGatewayPort)
     Orleans__Endpoints__SiloPort: string(orleansSiloPort)
-    Orleans__GrainStorage__OrleansSekibanQueue__ProviderType: orleansGrainStorageOrleansSekibanQueueProviderType
-    Orleans__GrainStorage__OrleansSekibanQueue__ServiceKey: orleansGrainStorageOrleansSekibanQueueServiceKey
     Orleans__ServiceId: orleansServiceId
     ...(orleansQueueType != 'eventhub' ? {
-      Orleans__Streaming__OrleansSekibanQueue__ProviderType: orleansStreamingOrleansSekibanQueueProviderType
-      Orleans__Streaming__OrleansSekibanQueue__ServiceKey: orleansStreamingOrleansSekibanQueueServiceKey
+      Orleans__Streaming__MyProjectQueue__ProviderType: orleansStreamingMyProjectQueueProviderType
+      Orleans__Streaming__MyProjectQueue__ServiceKey: orleansStreamingMyProjectQueueServiceKey
     } : {})
-    // EventHub settings - only added if orleansQueueType is 'eventhub'
     ...(orleansQueueType == 'eventhub' ? {
       ORLEANS_QUEUE_TYPE: 'eventhub'
       ORLEANS_QUEUE_EVENTHUB_NAME: eventHubName
