@@ -2,7 +2,7 @@
 param cosmosDbAccountName string = 'cosmos-${resourceGroup().name}'
 
 @description('The database name to create in the Cosmos DB account')
-param sekibanDbName string = 'SekibanDb'
+param sekibanDbName string = 'SekibanDcb'
 
 // Reference the existing first Cosmos DB account
 resource sekibanDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' existing = {
