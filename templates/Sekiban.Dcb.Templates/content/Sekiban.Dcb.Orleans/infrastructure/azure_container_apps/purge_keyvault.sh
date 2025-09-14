@@ -5,11 +5,20 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-ENVIRONMENT=$1
-CONFIG_FILE="${ENVIRONMENT}.local.json"
+ARG_INPUT="$1"
+if [[ "$ARG_INPUT" == *.local.json ]]; then
+    BASENAME="${ARG_INPUT##*/}"
+    ENVIRONMENT="${BASENAME%.local.json}"
+    CONFIG_FILE="$BASENAME"
+    CONFIG_PATH="$ARG_INPUT"
+else
+    ENVIRONMENT="$ARG_INPUT"
+    CONFIG_FILE="${ENVIRONMENT}.local.json"
+    CONFIG_PATH="$CONFIG_FILE"
+fi
 
 # get resource group name from {environment}.local.json parameter name is "resourceGroupName"
-RESOURCE_GROUP=$(jq -r '.resourceGroupName' "$CONFIG_FILE")
+RESOURCE_GROUP=$(jq -r '.resourceGroupName' "$CONFIG_PATH")
 
 # Extract Key Vault name from the create.bicep file
 KV_NAME="kv-$RESOURCE_GROUP"
