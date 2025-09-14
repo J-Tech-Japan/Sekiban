@@ -4,6 +4,12 @@
 
 ```bash
 # Login by specifying tenant ID
+# Azure Login
+
+1. First you need to login with az login for your target Azure Tenant.
+
+```bash
+# Login by specifying tenant ID
 az login --tenant <tenant-id>
 
 # Or login using organization domain name
@@ -15,20 +21,20 @@ az login --tenant <tenant-id> --use-device-code
 
 1. Create Setting File
 
-create your deploy file as mydeploy.local.json
-Use only lower case and '-' and number in your resource group name
+Create your deploy file as `mydeploy.local.json`.
+Use only lower case, numbers, and `-` in your resource group name.
 
 ```json
 {
-    "resourceGroupName": "your-resource-888",
-    "location": "japaneast",
-    "backendRelativePath": "../../OrleansSekiban.ApiService",
-    "frontendRelativePath": "../../OrleansSekiban.Web",
-    "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
+  "resourceGroupName": "your-resource-888",
+  "location": "japaneast",
+  "backendRelativePath": "../../OrleansSekiban.ApiService",
+  "frontendRelativePath": "../../OrleansSekiban.Web",
+  "logincommand": "az login --tenant yourorg.onmicrosoft.com --use-device-code"
 }
 ```
 
-remember file name 'mydeploy' and use in following step
+Remember file name `mydeploy` and use it in the following steps.
 
 You can now pass either of the following as the first argument to all scripts:
 
@@ -40,7 +46,6 @@ You can now pass either of the following as the first argument to all scripts:
 You might need to install jq library to your environment.
 
 <https://jqlang.org/download/>
-
 
 ```bash
 # create resource group
@@ -125,7 +130,6 @@ chmod +x ./code_deploy_backend.sh
 ./code_deploy_backend.sh ./mydeploy.local.json
 ```
 
-
 1. Deploy Frontend Code
 
 ```bash
@@ -151,7 +155,6 @@ chmod +x ./generate_azure_credentials.sh
 ```
 
 json will print on the screen, you will keep that json as AZURE_CREDENTIALS_MYDEPLOY in github secrets.
-
 
 1. Setup Github Actions
 
