@@ -19,5 +19,5 @@ jobs:
         dotnet pack
     - name: Push Template
       run: |
-        dotnet nuget push "templates/Sekiban.Dcb.Templates/bin/Release/Sekiban.Dcb.Templates.0.1.2.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+        dotnet nuget push "templates/Sekiban.Dcb.Templates/bin/Release/Sekiban.Dcb.Templates.0.1.3.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
         
