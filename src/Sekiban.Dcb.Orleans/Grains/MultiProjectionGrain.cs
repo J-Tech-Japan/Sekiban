@@ -365,12 +365,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     var unsafeSt = unsafeStateInfo.GetValue();
                     var safeSt = safeStateInfo.GetValue();
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Snapshot state - Safe: {safeSt.Version} events @ {safeSt.LastSortableUniqueId?.Substring(0, 20) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {unsafeSt.LastSortableUniqueId?.Substring(0, 20) ?? "empty"}");
+                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Snapshot state - Safe: {safeSt.Version} events @ {(safeSt.LastSortableUniqueId?.Length >= 20 ? safeSt.LastSortableUniqueId.Substring(0, 20) : safeSt.LastSortableUniqueId) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {(unsafeSt.LastSortableUniqueId?.Length >= 20 ? unsafeSt.LastSortableUniqueId.Substring(0, 20) : unsafeSt.LastSortableUniqueId) ?? "empty"}");
                 }
             }
             catch { }
             var storageProviderName = "OrleansStorage"; // 現在利用しているプロバイダ名想定
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Writing snapshot: {data.Size:N0} bytes, {_eventsProcessed:N0} events, checkpoint: {data.SafeLastSortableUniqueId?.Substring(0, 20) ?? "empty"}...");
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Writing snapshot: {data.Size:N0} bytes, {_eventsProcessed:N0} events, checkpoint: {(data.SafeLastSortableUniqueId?.Length >= 20 ? data.SafeLastSortableUniqueId.Substring(0, 20) : data.SafeLastSortableUniqueId) ?? "empty"}...");
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();

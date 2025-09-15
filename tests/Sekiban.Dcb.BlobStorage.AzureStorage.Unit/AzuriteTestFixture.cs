@@ -20,9 +20,9 @@ public class AzuriteTestFixture : IAsyncLifetime
         // Generate unique container name to avoid conflicts
         var containerName = $"azurite-test-{Guid.NewGuid():N}";
         
-        // Start new Azurite container with random ports to avoid conflicts
+        // Start new Azurite container with random ports to avoid conflicts and skip API version check
         var result = await RunCommandAsync("docker", 
-            $"run -d --name {containerName} -P mcr.microsoft.com/azure-storage/azurite");
+            $"run -d --name {containerName} -P mcr.microsoft.com/azure-storage/azurite azurite --skipApiVersionCheck");
         
         _containerId = result.Trim();
         Console.WriteLine($"Started Azurite container: {_containerId}");

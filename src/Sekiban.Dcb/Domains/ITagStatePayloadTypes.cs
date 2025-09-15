@@ -22,4 +22,11 @@ public interface ITagStatePayloadTypes
     /// <param name="jsonBytes">The JSON bytes to deserialize</param>
     /// <returns>ResultBox containing the deserialized payload or error</returns>
     ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes);
+
+    /// <summary>
+    ///     Serializes a tag state payload to JSON bytes
+    /// </summary>
+    /// <param name="payload">The payload to serialize</param>
+    /// <returns>ResultBox containing the serialized JSON bytes or error</returns>
+    ResultBox<byte[]> SerializePayload(ITagStatePayload payload);
 }

@@ -62,6 +62,28 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
         }
     }
 
+    public ResultBox<byte[]> SerializePayload(ITagStatePayload payload)
+    {
+        try
+        {
+            // Special handling for empty payload
+            if (payload is EmptyTagStatePayload)
+            {
+                return ResultBox.FromValue(Array.Empty<byte>());
+            }
+
+            // Serialize the payload to JSON
+            var json = JsonSerializer.Serialize(payload, payload.GetType(), _jsonSerializerOptions);
+            var jsonBytes = Encoding.UTF8.GetBytes(json);
+
+            return ResultBox.FromValue(jsonBytes);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<byte[]>(ex);
+        }
+    }
+
     public void RegisterPayloadType<T>(string? name = null) where T : ITagStatePayload
     {
         var payloadName = name ?? typeof(T).Name;

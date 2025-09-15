@@ -52,11 +52,36 @@ builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
 builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
 builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
 
+// Add Cosmos DB client for Orleans (if using Cosmos)
+if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos" ||
+    (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
+{
+    builder.AddAzureCosmosClient("OrleansCosmos");
+}
+
+var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
+
 // Configure Orleans
 builder.UseOrleans(config =>
 {
-    // Use localhost clustering for development
-    config.UseLocalhostClustering();
+    if (builder.Environment.IsDevelopment())
+    {
+        config.UseLocalhostClustering();
+    }
+    else
+    {
+        if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
+        {
+            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                   throw new InvalidOperationException();
+            config.UseCosmosClustering(options =>
+            {
+                options.ConfigureCosmosClient(connectionString);
+                // this can be enabled if you use Provisioning 
+                // options.IsResourceCreationEnabled = true;
+            });
+        }
+    }
     
     // Check if we should use in-memory streams (for development/testing)
     var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
@@ -161,58 +186,157 @@ builder.UseOrleans(config =>
     }
 
     // Configure grain storage providers
-    // Even though Aspire sets configuration via environment variables,
-    // we still need to explicitly register the storage providers
-
-    // Default storage using Azure Blob Storage
-    config.AddAzureBlobGrainStorageAsDefault(options =>
+    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
+    if (cfgGrainDefault == "cosmos")
     {
-        options.Configure<IServiceProvider>((opt, sp) =>
+        config.AddCosmosGrainStorageAsDefault(options =>
         {
-            opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
-            opt.ContainerName = "sekiban-grainstate"; // 明示コンテナ
+            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                   throw new InvalidOperationException();
+            options.ConfigureCosmosClient(connectionString);
+            options.IsResourceCreationEnabled = true;
         });
-    });
+    }
+    else
+    {
+        // Default storage using Azure Blob Storage
+        config.AddAzureBlobGrainStorageAsDefault(options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.ContainerName = "sekiban-grainstate"; // 明示コンテナ
+            });
+        });
+    }
 
     // OrleansStorage provider for MultiProjectionGrain
-    config.AddAzureBlobGrainStorage(
-        "OrleansStorage",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "OrleansStorage",
+            options =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
-                opt.ContainerName = "sekiban-grainstate";
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
             });
-        });
+    }
+    else
+    {
+        config.AddAzureBlobGrainStorage(
+            "OrleansStorage",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.ContainerName = "sekiban-grainstate";
+                });
+            });
+    }
 
     // Additional named storage providers
-    config.AddAzureBlobGrainStorage(
-        "dcb-orleans-queue",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "dcb-orleans-queue",
+            options =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
-                opt.ContainerName = "sekiban-grainstate";
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
             });
-        });
+    }
+    else
+    {
+        config.AddAzureBlobGrainStorage(
+            "dcb-orleans-queue",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.ContainerName = "sekiban-grainstate";
+                });
+            });
+    }
 
-    config.AddAzureTableGrainStorage(
-        "DcbOrleansGrainTable",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "DcbOrleansGrainTable",
+            options =>
             {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
             });
-        });
+    }
+    else
+    {
+        config.AddAzureTableGrainStorage(
+            "DcbOrleansGrainTable",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                });
+            });
+    }
 
     // Add grain storage for PubSub (used by Orleans streaming) - only for Azure Queue Streams
     if (!useInMemoryStreams)
     {
+        if (cfgGrainDefault == "cosmos")
+        {
+            config.AddCosmosGrainStorage(
+                "PubSubStore",
+                options =>
+                {
+                    var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                           throw new InvalidOperationException();
+                    options.ConfigureCosmosClient(connectionString);
+                    options.IsResourceCreationEnabled = true;
+                });
+        }
+        else
+        {
+            config.AddAzureTableGrainStorage(
+                "PubSubStore",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((opt, sp) =>
+                    {
+                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                        opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                    });
+                    options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
+                });
+        }
+    }
+
+    // Add grain storage for the stream provider
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "EventStreamProvider",
+            options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+    }
+    else
+    {
         config.AddAzureTableGrainStorage(
-            "PubSubStore",
+            "EventStreamProvider",
             options =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
@@ -223,19 +347,6 @@ builder.UseOrleans(config =>
                 options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
             });
     }
-
-    // Add grain storage for the stream provider
-    config.AddAzureTableGrainStorage(
-        "EventStreamProvider",
-        options =>
-        {
-            options.Configure<IServiceProvider>((opt, sp) =>
-            {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
-                opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
-            });
-            options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
-        });
 
     // Orleans will automatically discover grains in the same assembly
     config.ConfigureServices(services =>
