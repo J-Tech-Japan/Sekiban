@@ -3,10 +3,11 @@ namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
 ///     State object for caching tag state in Orleans grain storage
+///     Uses SerializableTagState to avoid interface serialization issues
 /// </summary>
 [GenerateSerializer]
 public class TagStateCacheState
 {
     [Id(0)]
-    public TagState? CachedState { get; set; }
+    public SerializableTagState? CachedState { get; set; }
 }

@@ -102,7 +102,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         var tagStateId = this.GetPrimaryKeyString();
 
         // Create the actor instance with Orleans-specific cache persistence
-        var tagStatePersistent = new OrleansTagStatePersistent(_cache);
+        var tagStatePersistent = new OrleansTagStatePersistent(_cache, _domainTypes.TagStatePayloadTypes);
         _actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,

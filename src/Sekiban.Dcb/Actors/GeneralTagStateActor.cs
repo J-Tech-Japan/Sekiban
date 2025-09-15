@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -86,12 +87,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 tagState.ProjectorVersion);
         }
 
-        var jsonOptions = _domainTypes.JsonSerializerOptions;
-        var payloadJson = JsonSerializer.Serialize(tagState.Payload, tagState.Payload.GetType(), jsonOptions);
-        var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+        // Use ITagStatePayloadTypes for serialization
+        var serializeResult = _domainTypes.TagStatePayloadTypes.SerializePayload(tagState.Payload);
+        if (!serializeResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to serialize payload: {serializeResult.GetException().Message}");
+        }
 
         return new SerializableTagState(
-            payloadBytes,
+            serializeResult.GetValue(),
             tagState.Version,
             tagState.LastSortedUniqueId,
             tagState.TagGroup,
