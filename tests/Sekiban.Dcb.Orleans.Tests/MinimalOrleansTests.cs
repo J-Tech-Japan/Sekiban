@@ -183,6 +183,16 @@ public class MinimalOrleansTests : IAsyncLifetime
                     services.AddSingleton<IEventStore, InMemoryEventStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+                    // Add mock IBlobStorageSnapshotAccessor for tests
+                    services.AddSingleton<Sekiban.Dcb.Snapshots.IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
+                    // Add event statistics for MultiProjectionGrain
+                    services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
+                    // Add actor options for MultiProjectionGrain
+                    services.AddTransient<Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions>(_ => new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions
+                    {
+                        SafeWindowMs = 20000,
+                        SnapshotOffloadThresholdBytes = 2 * 1024 * 1024
+                    });
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("OrleansStorage")

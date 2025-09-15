@@ -1,4 +1,3 @@
-using Orleans.TestingHost;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Tags;
@@ -7,22 +6,21 @@ using Xunit;
 
 namespace Sekiban.Dcb.Orleans.Tests;
 
-public class OrleansTagStatePersistentTests : IClassFixture<TestClusterFixture>
+public class OrleansTagStatePersistentTests
 {
-    private readonly TestCluster _cluster;
     private readonly ITagStatePayloadTypes _payloadTypes;
 
-    public OrleansTagStatePersistentTests(TestClusterFixture fixture)
+    public OrleansTagStatePersistentTests()
     {
-        _cluster = fixture.Cluster;
-        _payloadTypes = new SimpleTagStatePayloadTypes(new JsonSerializerOptions
+        var simpleTypes = new SimpleTagStatePayloadTypes(new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
         });
         
         // Register test payload types
-        _payloadTypes.RegisterPayloadType<TestStatePayload>();
+        simpleTypes.RegisterPayloadType<TestStatePayload>();
+        _payloadTypes = simpleTypes;
     }
 
     [Fact]

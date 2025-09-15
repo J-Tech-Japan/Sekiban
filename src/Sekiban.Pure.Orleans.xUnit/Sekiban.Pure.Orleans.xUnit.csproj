@@ -7,12 +7,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.Orleans.xUnit</PackageId>
-        <Version>1.0.2-preview07</Version>
+        <Version>1.0.2-preview08</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans xUnit Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>1.0.2-preview07</PackageVersion>
+        <PackageVersion>1.0.2-preview08</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.Orleans.xUnit</AssemblyName>
         <RootNamespace>Sekiban.Pure.Orleans.xUnit</RootNamespace>
@@ -31,7 +31,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.2.1"/>
-        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.2-preview07"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="1.0.2-preview08"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>

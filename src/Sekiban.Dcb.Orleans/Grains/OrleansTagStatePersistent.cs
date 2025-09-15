@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 ///     Orleans-specific implementation of ITagStatePersistent using grain state
 ///     Converts between TagState and SerializableTagState for storage
 /// </summary>
-internal class OrleansTagStatePersistent : ITagStatePersistent
+public class OrleansTagStatePersistent : ITagStatePersistent
 {
     private readonly IPersistentState<TagStateCacheState> _cache;
     private readonly ITagStatePayloadTypes _payloadTypes;

@@ -9,7 +9,7 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 [GenerateSerializer]
-public record CounterProjector([property: Id(0)] int Count) : IMultiProjector<CounterProjector>
+public record CounterProjector([property: Id(0)] int Count) : IMultiProjectorWithCustomSerialization<CounterProjector>
 {
     public CounterProjector() : this(0) {}
     public static string MultiProjectorVersion => "1.0";

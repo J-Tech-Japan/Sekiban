@@ -16,7 +16,9 @@
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.8"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.8"/>
         <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.1" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.1" />
         <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.1"/>
         <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1"/>
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1"/>
