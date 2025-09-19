@@ -2,277 +2,166 @@
 
 ## Overview
 
-The DCB (Dynamic Consistency Boundary) is an event sourcing system that provides dynamic consistency boundaries and scalability through actor-based architecture.
+The DCB (Dynamic Consistency Boundary) runtime is an event-sourced platform that guards tag-level consistency by coordinating write reservations through actors. In concrete terms, “strong consistency” means that every command reserves all involved tags, persists all resulting events through a single `IEventStore.WriteEventsAsync` call, and only then releases those reservations. The project does **not** advertise the full ACID guarantees of a relational database; atomicity and durability depend on the event-store backend, and any work outside the reserved tags remains eventually consistent.
 
 ## Related Documents
 
-- [Interfaces](./interfaces.md) - Core interface definitions
-- [Records](./records.md) - Record type definitions
+- [Interfaces](./interfaces.md) – Core interface definitions
+- [Records](./records.md) – Record type definitions
 
-## Core Components
+## Implemented Capabilities
 
-### Command Flow
+- **Multi-tag reservation** – `GeneralSekibanExecutor` gathers reservations from every tag flagged as `IsConsistencyTag()` and aborts the command if any reservation fails (src/Sekiban.Dcb/Actors/GeneralSekibanExecutor.cs:112-163).
+- **Best-effort two phase** – Reservations are confirmed only after `WriteEventsAsync` succeeds; failures trigger `CancelReservationAsync` on already-held reservations (src/Sekiban.Dcb/Actors/GeneralSekibanExecutor.cs:189-233).
+- **Reservation expiry** – `TagConsistentActorOptions.CancellationWindowSeconds` bounds reservation lifetime and `CleanupExpiredReservations` clears stale entries (src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs:236-250).
+- **Version-aware isolation** – `GeneralTagConsistentActor.MakeReservationAsync` rejects stale `SortableUniqueId` expectations, enabling optimistic concurrency; automated tests verify that conflicting updates fail (src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs:83-110, tests/Sekiban.Dcb.Tests/OptimisticLockingTest.cs:200-214).
+- **Read-your-write safety** – `ConfirmReservationAsync` forces the next TagConsistentActor call to re-catch-up from the event store, while `GeneralTagStateActor` only projects events up to that actor-reported id (src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs:126-134, src/Sekiban.Dcb/Actors/GeneralTagStateActor.cs:109-140).
+- **Unified event/tag persistence** – All `IEventStore` implementations persist event payloads and tag rows together; Postgres uses an RDBMS transaction while Cosmos DB issues best-effort multi-item writes (src/Sekiban.Dcb.Postgres/PostgresEventStore.cs:130-177, src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs:175-231).
+- **Cached projections** – `GeneralTagStateActor` stores materialized state in-memory and refreshes it only when the SortableUniqueId advances or the projector version changes (src/Sekiban.Dcb/Actors/GeneralTagStateActor.cs:109-308).
 
-```mermaid
-stateDiagram-v2
-    [*] --> Command: Client Request
-    
-    Command --> CommandExecutor: Execute
-    
-    CommandExecutor --> CommandContext: Create Context
-    CommandExecutor --> Handle: Process with Context
-    
-    CommandContext --> TagStateActor: Request State
-    TagStateActor --> TagConsistentActor: Get Latest SortableUniqueId
-    TagConsistentActor --> TagStateActor: Latest SortableUniqueId
-    
-    Handle --> CommandContext: Use Context
-    Handle --> CommandExecutor: Return (Tags, Events)
-    
-    CommandExecutor --> TagConsistentActor: Tag Write Reservation
-    TagConsistentActor --> TagReader: Read Tags (if idle)
-    TagConsistentActor --> CommandExecutor: Reservation Code/Rejection
-    
-    CommandExecutor --> TagWriter: Write Tags (if all reserved)
-    CommandExecutor --> EventWriter: Write Events (if all reserved)
-    
-    CommandExecutor --> TagConsistentActor: Tag Write Completed/Cancelled
-    CommandExecutor --> [*]: Success/Failure
-    
-    TagStateActor --> EventReader: Read Events
-    
-    EventWriter --> EventsTagsStore: Persist Events
-    TagWriter --> EventsTagsStore: Persist Tags
-    EventReader --> EventsTagsStore: Query Events
-    TagReader --> EventsTagsStore: Query Tags
-```
-
-## Component Responsibilities
-
-### Command
-
-- Entry point for all operations
-- Contains the intent and data for state changes
-- Validated before processing
-
-### CommandExecutor
-
-- Orchestrates command execution
-- Creates and manages CommandContext
-- Passes CommandContext to Handle for processing
-- Receives Tags and Events from Handle
-- Requests write reservations from TagConsistentActors
-- Only proceeds with writes if all tags are reserved
-- Writes Tags through TagWriter and Events through EventWriter
-- Sends completion or cancellation signals to TagConsistentActors
-- Manages transaction boundaries and rollback on failures
-
-### CommandContext
-
-- Provides access to tag state during command processing
-- Encapsulates state access patterns
-- Can request state from TagStateActor
-- Maintains consistency during command execution
-- Provides transactional context for handlers
-
-### Handle
-
-- Command handler that processes the business logic
-- Receives Command and CommandContext as parameters
-- Validates command against current state
-- Returns Tags and Events to CommandExecutor
-- Pure function that doesn't perform side effects
-
-### TagConsistentActor
-
-- Ensures consistency per tag (aggregate)
-- Reads initial state from TagReader when starting from idle
-- Manages write reservations for tags
-- Issues reservation codes when accepting write requests
-- Blocks other requests while holding an active reservation
-- Supports reservation cancellation and expiration
-- Releases reservation upon receiving "Tag Write Completed" signal
-- Prevents concurrent modifications through reservation mechanism
-- Provides latest sortable unique ID to TagStateActor to ensure state consistency without additional TagReader queries
-
-### TagStateActor
-
-- Manages the current state of a specific tag
-- Asks TagConsistentActor for the latest sortable unique ID to determine what's newest without querying TagReader
-- Reads events from EventReader to reconstruct state up to the latest sortable unique ID
-- Caches state in memory for performance
-- Provides state to CommandContext for queries
-- Does not write state directly (read-only actor)
-
-### TagReader
-
-- Reads tags from EventsTagsStore
-- Provides tag metadata and version information
-- Used by TagConsistentActor when starting from idle
-
-### TagWriter
-
-- Writes tags to EventsTagsStore
-- Records tag versions and metadata
-- Called by CommandExecutor after successful reservation
-
-### EventReader
-
-- Reads events from EventsTagsStore
-- Used by TagStateActor to reconstruct state from events
-- Supports event replay and projection building
-- Enables event sourcing queries
-
-### EventWriter
-
-- Writes events to EventsTagsStore
-- Ensures event ordering and consistency
-- Called by CommandExecutor after successful reservation
-- Handles event persistence failures
-
-### EventsTagsStore
-
-- Unified storage for both events and tags
-- Provides atomic writes for consistency
-- Supports queries for events and tag metadata
-- Initial implementation without separate state store
-
-## State Management Flow
+## Command Flow
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant CommandExecutor
     participant CommandContext
-    participant Handle
-    participant TagConsistentActor
     participant TagStateActor
-    participant TagReader
-    participant TagWriter
-    participant EventWriter
-    participant EventsTagsStore
-    
-    Client->>CommandExecutor: Send Command
-    CommandExecutor->>CommandContext: Create Context
-    CommandExecutor->>Handle: Process(Command, Context)
-    
-    Handle->>CommandContext: Request Tag State
-    CommandContext->>TagStateActor: Get State
-    TagStateActor->>TagConsistentActor: Get Latest SortableUniqueId
-    TagConsistentActor-->>TagStateActor: Latest SortableUniqueId
-    TagStateActor->>EventReader: Read Events (up to Latest SortableUniqueId)
-    EventReader->>EventsTagsStore: Query Events
-    EventsTagsStore-->>EventReader: Event Data
-    EventReader-->>TagStateActor: Events
-    TagStateActor->>TagStateActor: Reconstruct State
-    TagStateActor-->>CommandContext: Current State
-    CommandContext-->>Handle: State Data
-    
-    Handle->>Handle: Business Logic
-    Handle-->>CommandExecutor: Return (Tags, Events)
-    
-    Note over CommandExecutor,TagConsistentActor: Reservation Phase
-    loop For each tag
-        CommandExecutor->>TagConsistentActor: Tag Write Reservation
-        opt TagConsistentActor is idle
-            TagConsistentActor->>TagReader: Read Tags
-            TagReader->>EventsTagsStore: Query Tags
-            EventsTagsStore-->>TagReader: Tag Data
-            TagReader-->>TagConsistentActor: Tags
-        end
-        TagConsistentActor-->>CommandExecutor: Reservation Code or Rejection
+    participant TagConsistentActor
+    participant EventStore
+
+    Client->>CommandExecutor: Execute(command)
+    CommandExecutor->>CommandContext: Create context
+    CommandExecutor->>CommandContext: Invoke handler
+
+    CommandContext->>TagStateActor: Load state
+    TagStateActor->>TagConsistentActor: GetLatestSortableUniqueId
+    TagConsistentActor-->>TagStateActor: latestId | ""
+    TagStateActor->>EventStore: Read events ≤ latestId
+    EventStore-->>TagStateActor: Event stream
+    TagStateActor-->>CommandContext: Projection snapshot
+
+    Note over CommandExecutor,TagConsistentActor: Reservation phase
+    loop Each consistency tag
+        CommandExecutor->>TagConsistentActor: MakeReservation(lastId)
+        TagConsistentActor-->>CommandExecutor: Reservation | Error
     end
-    
-    alt All tags reserved
-        CommandExecutor->>EventWriter: Write Events
-        EventWriter->>EventsTagsStore: Persist Events
-        EventsTagsStore-->>EventWriter: Success
-        
-        CommandExecutor->>TagWriter: Write Tags
-        TagWriter->>EventsTagsStore: Persist Tags
-        EventsTagsStore-->>TagWriter: Success
-        
-        loop For each reserved tag
-            CommandExecutor->>TagConsistentActor: Tag Write Completed
-            TagConsistentActor->>TagConsistentActor: Release Reservation
+
+    alt Any reservation failed
+        CommandExecutor->>TagConsistentActor: CancelReservation (held ones)
+        CommandExecutor-->>Client: Conflict error
+    else All reserved
+        CommandExecutor->>EventStore: WriteEvents(events + tags)
+        alt Write failed
+            CommandExecutor->>TagConsistentActor: CancelReservation (held ones)
+            CommandExecutor-->>Client: Persistence error
+        else Write succeeded
+            CommandExecutor->>TagConsistentActor: ConfirmReservation (held ones)
+            TagConsistentActor->>TagConsistentActor: Require catch-up
+            CommandExecutor-->>Client: ExecutionResult
         end
-        
-        CommandExecutor-->>Client: Success Result
-    else Any tag rejected
-        loop For each reserved tag
-            CommandExecutor->>TagConsistentActor: Cancel Reservation
-            TagConsistentActor->>TagConsistentActor: Release Reservation
-        end
-        
-        CommandExecutor-->>Client: Failure Result
     end
 ```
 
-## Actor Design
+## TagConsistentActor Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> CatchingUp : first access / post-confirm
+    CatchingUp --> Idle : Load latest SortableUniqueId from event store
+    Idle --> Reserved : MakeReservation succeeds
+    Idle --> Rejected : Active hold or version mismatch
+    Reserved --> CatchingUp : ConfirmReservation (matching reservation)
+    Reserved --> Idle : CancelReservation or expiry
+    Rejected --> Idle : Retry after window resets
+```
+
+## Component Responsibilities
+
+### CommandExecutor
+
+- Validates commands and instantiates `GeneralCommandContext`.
+- Collects events emitted by the handler as well as those appended through the context.
+- Requests reservations for every consistency tag using the last known SortableUniqueId when none is supplied explicitly.
+- Calls `IEventStore.WriteEventsAsync` once all reservations succeed and cancels otherwise.
+- Confirms reservations on success (best effort) and cancels them if the write fails.
+- Optionally publishes events asynchronously through an `IEventPublisher` implementation.
+
+### CommandContext
+
+- Fetches tag projections via TagStateActors and records the exact `TagState` instances used during command validation.
+- Offers helpers for optimistic concurrency by exposing the `LastSortedUniqueId` for accessed tags.
+- Provides convenience methods to append additional events and to query tag existence or latest ids without duplicating work.
+
+### Command Handlers
+
+- Contain business logic that inspects projections via the context and returns domain events with tags.
+- Remain side-effect free; the executor handles persistence and reservation lifecycles.
+
+### TagConsistentActor
+
+- Lazily catches up from the event store to discover the latest committed SortableUniqueId.
+- Maintains at most one in-flight reservation and validates optimistic version checks.
+- Stores reservation metadata in-memory with expirations driven by `TagConsistentActorOptions`.
+- On confirmation, clears the reservation and forces the next request to re-catch-up.
+- On cancellation or expiry, simply removes the reservation; there is no persisted decision log.
+
+### TagStateActor
+
+- Requests the latest SortableUniqueId from the TagConsistentActor that owns the tag.
+- Replays events from the event store up to that id, either incrementally from cache or via full rebuild when the projector version changes.
+- Persists projections in-memory via `ITagStatePersistent` to avoid redundant replays.
+- Never mutates state directly; it only materializes read models.
+
+### Event Store
+
+- Serves as the single persistence boundary for event payloads and tag associations.
+- Offers read APIs for global streams and tag-filtered subsequences.
+- Implements `WriteEventsAsync` to persist both events and tag records in one call; transactional strength depends on the concrete backend.
 
 ### Actor Identification
 
-Actors in the DCB system use specific ID patterns for routing and isolation:
+- `TagConsistentActor` id: `"[tagGroupName]:[tagContentName]"`
+- `TagStateActor` id: `"[tagGroupName]:[tagContentName]:[ProjectorName]"`
 
-#### TagConsistentActor ID
-
-```string
-"[tagGroupName]:[tagContentName]"
-```
-
-Example: `"Account:12345"` or `"Order:ABC-789"`
-
-#### TagStateActor ID
-
-```string
-"[tagGroupName]:[tagContentName]:[TagProjectorName]"
-```
-
-Example: `"Account:12345:BalanceProjector"` or `"Order:ABC-789:StatusProjector"`
-
-This naming convention ensures:
-
-- Clear separation between different tag groups
-- Unique identification of consistency boundaries
-- Support for multiple projections per tag
+These conventions support deterministic routing, isolation between tags, and multiple projections per tag.
 
 ## Tag Write Reservation Mechanism
 
-The reservation mechanism ensures strong consistency across multiple tags:
-
-1. **Reservation Request**: CommandExecutor requests write reservations from all TagConsistentActors involved
-2. **Reservation Response**: Each TagConsistentActor either:
-   - Accepts: Returns a reservation code and blocks other requests
-   - Rejects: Returns rejection if already reserved or unavailable
-3. **Write Decision**:
-   - If all tags reserved: Proceed with writes to EventStore and StateStore
-   - If any tag rejected: Cancel all obtained reservations
-4. **Completion Signal**: After successful writes, send "Tag Write Completed" to release reservations
-5. **Expiration**: Reservations automatically expire after timeout to prevent deadlocks
+1. **Request** – `GeneralSekibanExecutor` asks each TagConsistentActor for a reservation, optionally passing the last observed SortableUniqueId.
+2. **Validation** – The actor refuses the reservation when another hold is active or when the optimistic version mismatches the current id.
+3. **Persistence** – The executor persists all events and tag rows through a single `WriteEventsAsync` call once every reservation is granted.
+4. **Confirm or Cancel** – Success triggers best-effort confirmation so the actor can release the hold and mark itself for catch-up; failures result in best-effort cancellation. No decision log or retry worker exists today, and operational recovery relies on clients retrying commands after faults.
+5. **Expiry** – Reservations expire after `CancellationWindowSeconds` and are purged on the next actor access.
 
 ## Key Design Principles
 
-1. **Tag-based Consistency**: Each tag (aggregate) has its own consistency boundary managed by a dedicated actor
-2. **Event Sourcing**: All state changes are captured as events, enabling audit trails and temporal queries
-3. **Actor Model**: Leverages actors for concurrency control and state isolation
-4. **CQRS Pattern**: Separates read and write operations for optimal performance
-5. **Eventual Consistency**: Cross-tag operations are eventually consistent while maintaining strong consistency within each tag
+1. **Tag-based Consistency** – Each tag represents a dynamic consistency boundary managed by a dedicated actor.
+2. **Event Sourcing** – All state mutations are captured as events, enabling audits and temporal queries.
+3. **Actor Isolation** – Actors provide natural concurrency control and cache locality for hot tags.
+4. **CQRS Alignment** – Reads and writes are separated; command handlers never persist directly.
+5. **Scoped Strong Consistency** – Operations within the reserved tag set are coordinated; outside that scope the system remains eventually consistent.
+6. **Observability** – Reservation, confirmation, and cancellation flows carry correlation data so they can be traced, with future metrics expected to surface contention and failure patterns.
 
 ## Benefits
 
-- **Scalability**: Tags can be distributed across multiple nodes
-- **Consistency**: Actor model ensures no concurrent modifications
-- **Auditability**: Complete event history for every state change
-- **Performance**: In-memory state caching with persistent backing
-- **Resilience**: Event sourcing enables state reconstruction
+- **Scalability** – Tag-level actors can be distributed across nodes to balance load.
+- **Deterministic Concurrency** – Reservations and optimistic version checks prevent conflicting updates.
+- **Auditability** – Every business fact is captured as an immutable event.
+- **Performance** – Cached projections avoid reprocessing entire streams on each read.
+- **Resilience** – Actors can re-catch-up from the event store after restarts or reservation confirmations.
+
+## Trade-offs
+
+- **Fault recovery** – Reservation confirmations and cancellations are best effort with no persisted decision log; if the coordinator fails mid-flight, downstream convergence depends on clients retrying the command.
+- **Observability gaps** – Although `EventMetadata.CorrelationId` exists, there is no formal metrics pipeline yet to expose reservation success rates, latency, or conflict hotspots.
+- **Hot-tag contention** – Frequently accessed tags can suffer higher reservation failure rates, requiring careful boundary design or tag partitioning strategies.
+- **Backend dependence** – Postgres benefits from transactional guarantees, whereas Cosmos DB operates on a best-effort basis, shifting the effective consistency to the storage provider.
 
 ## CommandContext Usage Pattern
 
-The CommandContext provides a clean abstraction for command handlers to access aggregate state.
-
-Key benefits:
-
-- State access is controlled and consistent
-- Handlers remain pure and testable
-- Cross-aggregate operations are explicit
-- Transaction boundaries are clear
+1. Create a command handler that receives `ICommandContext`.
+2. Fetch the necessary tag states via `context.GetStateAsync<TProjector>(tag)`.
+3. Perform business validation using the returned projections.
+4. Return an `EventPayloadWithTags` (or append multiple events) that lists every tag involved.
+5. Rely on `GeneralSekibanExecutor` to handle reservations, persistence, and publication.
