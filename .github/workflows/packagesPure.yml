@@ -1,66 +1,65 @@
 name: nuget package release for Pure
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'pure-v*'
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-    - name: Restore dependencies
-      run: |
-        pushd ./
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.slnx
-    - name: Build with dotnet
-      run: |
-        pushd ./
-        dotnet build Sekiban.slnx -c Release
-    - name: Pack Pure
-      run: |
-        dotnet nuget push "src/Sekiban.Pure/bin/Release/Sekiban.Pure.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure AspNetCore
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.AspNetCore/bin/Release/Sekiban.Pure.AspNetCore.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure CosmosDb
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.CosmosDb/bin/Release/Sekiban.Pure.CosmosDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure NUnit
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.NUnit/bin/Release/Sekiban.Pure.NUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure Orleans
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.Orleans/bin/Release/Sekiban.Pure.Orleans.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure Orleans NUnit
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.Orleans.NUnit/bin/Release/Sekiban.Pure.Orleans.NUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure Orleans xUnit
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.Orleans.xUnit/bin/Release/Sekiban.Pure.Orleans.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure Dapr C#
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.Dapr/bin/Release/Sekiban.Pure.Dapr.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure Postgres
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.Postgres/bin/Release/Sekiban.Pure.Postgres.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure SourceGenerator
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.SourceGenerator/bin/Release/Sekiban.Pure.SourceGenerator.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure xUnit
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.xUnit/bin/Release/Sekiban.Pure.xUnit.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Pure ReadModel
-      run: |
-        dotnet nuget push "src/Sekiban.Pure.ReadModel/bin/Release/Sekiban.Pure.ReadModel.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Detect version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" != pure-v* ]]; then
+            echo "Unexpected tag format: $TAG"
+            exit 1
+          fi
+          echo "VERSION=${TAG#pure-v}" >> $GITHUB_ENV
+
+      - name: Restore dependencies
+        run: |
+          dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
+          dotnet restore Sekiban.slnx
+
+      - name: Build with dotnet
+        run: dotnet build Sekiban.slnx -c Release
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack src/Sekiban.Pure/Sekiban.Pure.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.AspNetCore/Sekiban.Pure.AspNetCore.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.CosmosDb/Sekiban.Pure.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.NUnit/Sekiban.Pure.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.Orleans/Sekiban.Pure.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.Orleans.NUnit/Sekiban.Pure.Orleans.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.Orleans.xUnit/Sekiban.Pure.Orleans.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.Dapr/Sekiban.Pure.Dapr.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.Postgres/Sekiban.Pure.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Pure.ReadModel/Sekiban.Pure.ReadModel.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.nupkg
   

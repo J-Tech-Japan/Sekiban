@@ -125,23 +125,17 @@ public class GeneralSekibanExecutorDomainTests
         // Act - Execute with inline handler function
         var result = await _commandExecutor.ExecuteAsync(
             command,
-            async (cmd, context) =>
-            {
-                var tag = new StudentTag(cmd.StudentId);
-                var existsResult = await context.TagExistsAsync(tag);
-
-                if (!existsResult.IsSuccess)
-                {
-                    return ResultBox.Error<EventOrNone>(existsResult.GetException());
-                }
-
-                if (existsResult.GetValue())
-                {
-                    return ResultBox.Error<EventOrNone>(new ApplicationException("Student Already Exists"));
-                }
-
-                return EventOrNone.EventWithTags(new StudentCreated(cmd.StudentId, cmd.Name, cmd.MaxClassCount), tag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new StudentTag(cmd.StudentId))
+                    .Combine(tag => context.TagExistsAsync(tag))
+                    .Verify((_, exists) => exists
+                        ? ExceptionOrNone.FromException(new ApplicationException("Student Already Exists"))
+                        : ExceptionOrNone.None)
+                    .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                        new StudentCreated(cmd.StudentId, cmd.Name, cmd.MaxClassCount),
+                        tag)));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -554,23 +548,19 @@ public class GeneralSekibanExecutorDomainTests
     public record CreateTeacherCommand(Guid TeacherId, string Name, string Subject)
         : ICommandWithHandler<CreateTeacherCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
-        {
-            var tag = new TeacherTag(TeacherId);
-            var existsResult = await context.TagExistsAsync(tag);
-
-            if (!existsResult.IsSuccess)
-            {
-                return ResultBox.Error<EventOrNone>(existsResult.GetException());
-            }
-
-            if (existsResult.GetValue())
-            {
-                return ResultBox.Error<EventOrNone>(new ApplicationException($"Teacher {TeacherId} already exists"));
-            }
-
-            return EventOrNone.EventWithTags(new TeacherCreated(TeacherId, Name, Subject), tag);
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTeacherCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TeacherTag(command.TeacherId))
+                .Combine(tag => context.TagExistsAsync(tag))
+                .Verify((tag, exists) => exists
+                    ? ExceptionOrNone.FromException(
+                        new ApplicationException($"Teacher {command.TeacherId} already exists"))
+                    : ExceptionOrNone.None)
+                .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                    new TeacherCreated(command.TeacherId, command.Name, command.Subject),
+                    tag));
+        
     }
 
     // Supporting types for the test

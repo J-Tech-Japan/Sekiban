@@ -396,12 +396,15 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         public Guid AggregateId { get; init; }
         public string Name { get; init; } = string.Empty;
-        public Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
-        {
-            var @event = new TestEntityCreatedEvent { AggregateId = AggregateId, Name = Name };
-            var tag = new TestAggregateTag(AggregateId);
-            return Task.FromResult(EventOrNone.EventWithTags(@event, tag));
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTestEntityCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestAggregateTag(command.AggregateId))
+                .Conveyor(tag => EventOrNone.EventWithTags(
+                    new TestEntityCreatedEvent { AggregateId = command.AggregateId, Name = command.Name },
+                    tag))
+                .ToTask();
+        
     }
 
     private record UpdateTestEntityCommand : ICommandWithHandler<UpdateTestEntityCommand>
@@ -409,19 +412,22 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public Guid AggregateId { get; init; }
         public string NewName { get; init; } = string.Empty;
 
-        public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
-        {
-            var tag = new TestAggregateTag(AggregateId);
-            var state = await context.GetStateAsync<TestProjector>(tag);
+        public static Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestEntityCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestAggregateTag(command.AggregateId))
+                .Conveyor(async tag =>
+                {
+                    var state = await context.GetStateAsync<TestProjector>(tag);
+                    if (!state.IsSuccess)
+                    {
+                        return ResultBox.Error<EventOrNone>(new InvalidOperationException("Aggregate not found"));
+                    }
 
-            if (!state.IsSuccess)
-            {
-                return ResultBox.Error<EventOrNone>(new InvalidOperationException("Aggregate not found"));
-            }
-
-            var @event = new TestEntityUpdatedEvent { AggregateId = AggregateId, Name = NewName };
-            return EventOrNone.EventWithTags(@event, tag);
-        }
+                    return EventOrNone.EventWithTags(
+                        new TestEntityUpdatedEvent { AggregateId = command.AggregateId, Name = command.NewName },
+                        tag);
+                });
     }
 
     [GenerateSerializer]

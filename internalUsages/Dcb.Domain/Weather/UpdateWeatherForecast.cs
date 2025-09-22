@@ -22,29 +22,31 @@ public record UpdateWeatherForecast : ICommandWithHandler<UpdateWeatherForecast>
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
-    {
-        var tag = new WeatherForecastTag(ForecastId);
-        var exists = await context.TagExistsAsync(tag);
+    public static Task<ResultBox<EventOrNone>> HandleAsync(UpdateWeatherForecast command, ICommandContext context) =>
+        ResultBox
+            .Start
+            .Remap(_ => new WeatherForecastTag(command.ForecastId))
+            .Combine(tag => context.TagExistsAsync(tag))
+            .Verify((tag, exists) => exists
+                ? ExceptionOrNone.None
+                : ExceptionOrNone.FromException(
+                    new ApplicationException($"Weather forecast {command.ForecastId} does not exist")))
+            .Combine((tag, _) => context.GetStateAsync<WeatherForecastProjector>(tag))
+            .Verify((_, _, state) =>
+            {
+                var payload = state.Payload as WeatherForecastState;
+                return payload?.IsDeleted == true
+                    ? ExceptionOrNone.FromException(
+                        new ApplicationException($"Weather forecast {command.ForecastId} has been deleted"))
+                    : ExceptionOrNone.None;
+            })
+            .Conveyor((tag, _, _) => EventOrNone.EventWithTags(
+                new WeatherForecastUpdated(
+                    command.ForecastId,
+                    command.Location,
+                    command.Date,
+                    command.TemperatureC,
+                    command.Summary),
+                tag));
 
-        if (!exists.IsSuccess)
-            return ResultBox.Error<EventOrNone>(exists.GetException());
-
-        if (!exists.GetValue())
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} does not exist"));
-
-        var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
-        if (!state.IsSuccess)
-            return ResultBox.Error<EventOrNone>(state.GetException());
-
-        var payload = state.GetValue().Payload as WeatherForecastState;
-        if (payload?.IsDeleted == true)
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} has been deleted"));
-
-        return EventOrNone.EventWithTags(
-            new WeatherForecastUpdated(ForecastId, Location, Date, TemperatureC, Summary),
-            tag);
-    }
 }
