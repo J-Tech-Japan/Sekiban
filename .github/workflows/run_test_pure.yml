@@ -1,13 +1,23 @@
-name: Run Backend Regular Test
+name: Run Pure Tests
 
 on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
     paths:
-      - "src/**"
-      - "tests/**"
-      - "samples/**"
+      - 'src/Sekiban.Pure/**'
+      - 'src/Sekiban.Pure.AspNetCore/**'
+      - 'src/Sekiban.Pure.CosmosDb/**'
+      - 'src/Sekiban.Pure.Dapr/**'
+      - 'src/Sekiban.Pure.NUnit/**'
+      - 'src/Sekiban.Pure.Orleans/**'
+      - 'src/Sekiban.Pure.Orleans.NUnit/**'
+      - 'src/Sekiban.Pure.Orleans.xUnit/**'
+      - 'src/Sekiban.Pure.Postgres/**'
+      - 'src/Sekiban.Pure.Postgres.MigrationHost/**'
+      - 'src/Sekiban.Pure.ReadModel/**'
+      - 'src/Sekiban.Pure.SourceGenerator/**'
+      - 'src/Sekiban.Pure.xUnit/**'
 concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
