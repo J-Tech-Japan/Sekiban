@@ -1,44 +1,57 @@
 name: nuget package release for DCB
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'dcb-v*'
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-    - name: Restore dependencies
-      run: |
-        pushd ./
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.slnx
-    - name: Build with dotnet
-      run: |
-        pushd ./
-        dotnet build Sekiban.slnx -c Release
-    - name: Pack Sekiban.Dcb
-      run: |
-        dotnet nuget push "src/Sekiban.Dcb/bin/Release/Sekiban.Dcb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Sekiban.Dcb.Orleans
-      run: |
-        dotnet nuget push "src/Sekiban.Dcb.Orleans/bin/Release/Sekiban.Dcb.Orleans.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Sekiban.Dcb.Postgres
-      run: |
-        dotnet nuget push "src/Sekiban.Dcb.Postgres/bin/Release/Sekiban.Dcb.Postgres.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Sekiban.Dcb.CosmosDb
-      run: |
-        dotnet nuget push "src/Sekiban.Dcb.CosmosDb/bin/Release/Sekiban.Dcb.CosmosDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-    - name: Pack Sekiban.Dcb.BlobStorage.AzureStorage
-      run: |
-        dotnet nuget push "src/Sekiban.Dcb.BlobStorage.AzureStorage/bin/Release/Sekiban.Dcb.BlobStorage.AzureStorage.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Detect version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" != dcb-v* ]]; then
+            echo "Unexpected tag format: $TAG"
+            exit 1
+          fi
+          echo "VERSION=${TAG#dcb-v}" >> $GITHUB_ENV
+
+      - name: Restore dependencies
+        run: |
+          dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
+          dotnet restore Sekiban.slnx
+
+      - name: Build with dotnet
+        run: dotnet build Sekiban.slnx -c Release
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack src/Sekiban.Dcb/Sekiban.Dcb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Dcb.Orleans/Sekiban.Dcb.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.nupkg
