@@ -29,7 +29,7 @@ public class TagPatternMatchingTests
         List<ITag> tags = [new FallbackTag("Other", "X"), new StudentTag(sid)];
         var content = tags switch
         {
-            [.., StudentTag st] => st.GetTagContent(),
+            [.., StudentTag st] => ((ITag)st).GetTagContent(),
             _ => null
         };
         Assert.Equal(sid.ToString(), content);
