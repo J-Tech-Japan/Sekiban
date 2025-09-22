@@ -115,8 +115,3 @@ public class AzuriteTestFixture : IAsyncLifetime
         return output;
     }
 }
-
-[CollectionDefinition("AzuriteCollection")]
-public class AzuriteCollection : ICollectionFixture<AzuriteTestFixture>
-{
-}

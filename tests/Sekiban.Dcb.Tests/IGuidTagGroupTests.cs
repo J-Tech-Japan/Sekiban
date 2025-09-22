@@ -58,9 +58,9 @@ public class IGuidTagGroupTests
         var weatherTag = new WeatherForecastTag(id);
 
         // Act & Assert
-        Assert.Equal(classRoomTag.GetId().ToString(), classRoomTag.GetTagContent());
-        Assert.Equal(studentTag.GetId().ToString(), studentTag.GetTagContent());
-        Assert.Equal(weatherTag.GetId().ToString(), weatherTag.GetTagContent());
+        Assert.Equal(classRoomTag.GetId().ToString(), ((ITag)classRoomTag).GetTagContent());
+        Assert.Equal(studentTag.GetId().ToString(), ((ITag)studentTag).GetTagContent());
+        Assert.Equal(weatherTag.GetId().ToString(), ((ITag)weatherTag).GetTagContent());
     }
 
     [Fact]

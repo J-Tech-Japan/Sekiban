@@ -3,9 +3,6 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 namespace Sekiban.Dcb.MultiProjections;
 
-public readonly record struct SafeProjection<T>(T State, string SafeLastSortableUniqueId, int Version) where T : IMultiProjectionPayload;
-public readonly record struct UnsafeProjection<T>(T State, string LastSortableUniqueId, Guid LastEventId, int Version) where T : IMultiProjectionPayload;
-
 /// <summary>
 /// Interface for projections that expose safe/unsafe views with explicit metadata
 /// </summary>
