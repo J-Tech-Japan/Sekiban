@@ -41,21 +41,21 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
     /// </summary>
     public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventWithTags) =>
         ResultBox.FromValue(FromValue(eventWithTags));
+    public static Task<ResultBox<EventOrNone>> EventAsync(EventPayloadWithTags eventWithTags) =>
+        ResultBox.FromValue(FromValue(eventWithTags)).ToTask();
     public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params IEnumerable<ITag> tags) =>
         ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList())));
+    public static Task<ResultBox<EventOrNone>> EventWithTagsAsync(IEventPayload eventPayload, params IEnumerable<ITag> tags) =>
+        ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList()))).ToTask();
 
     /// <summary>
     ///     Creates a ResultBox containing an event with tags
     /// </summary>
     public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, params ITag[] tags) =>
         ResultBox.FromValue(FromValue(eventPayload, tags));
-
-    /// <summary>
-    ///     Creates a ResultBox containing an event with tags
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, List<ITag> tags) =>
-        ResultBox.FromValue(FromValue(eventPayload, tags));
-
+    public static Task<ResultBox<EventOrNone>> EventAsync(IEventPayload eventPayload, params ITag[] tags) =>
+        ResultBox.FromValue(FromValue(eventPayload, tags)).ToTask();
+    
     /// <summary>
     ///     Gets the EventPayloadWithTags value
     /// </summary>

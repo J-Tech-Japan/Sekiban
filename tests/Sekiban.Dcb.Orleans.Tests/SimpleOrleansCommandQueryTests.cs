@@ -396,12 +396,13 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         public Guid AggregateId { get; init; }
         public string Name { get; init; } = string.Empty;
-        public Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTestEntityCommand command, ICommandContext context)
         {
-            var @event = new TestEntityCreatedEvent { AggregateId = AggregateId, Name = Name };
-            var tag = new TestAggregateTag(AggregateId);
+            var @event = new TestEntityCreatedEvent { AggregateId = command.AggregateId, Name = command.Name };
+            var tag = new TestAggregateTag(command.AggregateId);
             return Task.FromResult(EventOrNone.EventWithTags(@event, tag));
         }
+        
     }
 
     private record UpdateTestEntityCommand : ICommandWithHandler<UpdateTestEntityCommand>
@@ -409,17 +410,15 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public Guid AggregateId { get; init; }
         public string NewName { get; init; } = string.Empty;
 
-        public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestEntityCommand command, ICommandContext context)
         {
-            var tag = new TestAggregateTag(AggregateId);
+            var tag = new TestAggregateTag(command.AggregateId);
             var state = await context.GetStateAsync<TestProjector>(tag);
-
             if (!state.IsSuccess)
             {
                 return ResultBox.Error<EventOrNone>(new InvalidOperationException("Aggregate not found"));
             }
-
-            var @event = new TestEntityUpdatedEvent { AggregateId = AggregateId, Name = NewName };
+            var @event = new TestEntityUpdatedEvent { AggregateId = command.AggregateId, Name = command.NewName };
             return EventOrNone.EventWithTags(@event, tag);
         }
     }

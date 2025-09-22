@@ -49,5 +49,5 @@ public interface ICommandContext
     /// </summary>
     /// <param name="ev">The event with tags to append</param>
     /// <returns>ResultBox containing EventOrNone representing the appended event</returns>
-    ResultBox<EventOrNone> AppendEvent(EventPayloadWithTags ev);
+    Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev);
 }

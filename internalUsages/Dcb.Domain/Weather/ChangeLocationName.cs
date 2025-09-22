@@ -13,9 +13,9 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
     [StringLength(100, MinimumLength = 1)]
     public string NewLocationName { get; init; } = string.Empty;
 
-    public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+    public static async Task<ResultBox<EventOrNone>> HandleAsync(ChangeLocationName command, ICommandContext context)
     {
-        var tag = new WeatherForecastTag(ForecastId);
+        var tag = new WeatherForecastTag(command.ForecastId);
         var exists = await context.TagExistsAsync(tag);
 
         if (!exists.IsSuccess)
@@ -23,7 +23,7 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
 
         if (!exists.GetValue())
             return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} does not exist"));
+                new ApplicationException($"Weather forecast {command.ForecastId} does not exist"));
 
         var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
         if (!state.IsSuccess)
@@ -32,14 +32,14 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
         var payload = state.GetValue().Payload as WeatherForecastState;
         if (payload?.IsDeleted == true)
             return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} has been deleted"));
+                new ApplicationException($"Weather forecast {command.ForecastId} has been deleted"));
 
         // Check if the location name is actually changing
-        if (payload?.Location == NewLocationName)
+        if (payload?.Location == command.NewLocationName)
             return EventOrNone.None;
 
         return EventOrNone.EventWithTags(
-            new LocationNameChanged(ForecastId, NewLocationName, payload?.Location ?? string.Empty),
+            new LocationNameChanged(command.ForecastId, command.NewLocationName, payload?.Location ?? string.Empty),
             tag);
     }
 }

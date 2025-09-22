@@ -261,30 +261,30 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
         }
     }
 
-    public ResultBox<EventOrNone> AppendEvent(EventPayloadWithTags ev)
+    public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
     {
         try
         {
             if (ev == null)
             {
-                return ResultBox.Error<EventOrNone>(new ArgumentNullException(nameof(ev)));
+                return ResultBox.Error<EventOrNone>(new ArgumentNullException(nameof(ev))).ToTask();
             }
 
             // Validate all tags in the event before appending
             var validationErrors = TagValidator.ValidateTags(ev.Tags);
             if (validationErrors.Count > 0)
             {
-                return ResultBox.Error<EventOrNone>(new TagValidationErrorsException(validationErrors));
+                return ResultBox.Error<EventOrNone>(new TagValidationErrorsException(validationErrors)).ToTask();
             }
 
             // Store the event for later processing by CommandExecutor
             _appendedEvents.Add(ev);
 
-            return EventOrNone.Event(ev);
+            return EventOrNone.EventAsync(ev);
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<EventOrNone>(ex);
+            return ResultBox.Error<EventOrNone>(ex).ToTask();
         }
     }
 

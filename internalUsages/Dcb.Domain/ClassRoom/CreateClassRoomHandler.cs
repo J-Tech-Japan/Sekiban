@@ -9,7 +9,7 @@ public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
         ResultBox
             .Start
             .Remap(_ => new ClassRoomTag(command.ClassRoomId))
-            .Combine(tag => context.TagExistsAsync(tag))
+            .Combine(context.TagExistsAsync)
             .Verify((_, existsResult) =>
                 existsResult
                     ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom Already Exists"))

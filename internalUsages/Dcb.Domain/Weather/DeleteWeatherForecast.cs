@@ -9,9 +9,9 @@ public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
     [Required]
     public Guid ForecastId { get; init; }
 
-    public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+    public static async Task<ResultBox<EventOrNone>> HandleAsync(DeleteWeatherForecast command, ICommandContext context)
     {
-        var tag = new WeatherForecastTag(ForecastId);
+        var tag = new WeatherForecastTag(command.ForecastId);
         var exists = await context.TagExistsAsync(tag);
 
         if (!exists.IsSuccess)
@@ -19,7 +19,7 @@ public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
 
         if (!exists.GetValue())
             return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} does not exist"));
+                new ApplicationException($"Weather forecast {command.ForecastId} does not exist"));
 
         var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
         if (!state.IsSuccess)
@@ -28,8 +28,8 @@ public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
         var payload = state.GetValue().Payload as WeatherForecastState;
         if (payload?.IsDeleted == true)
             return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {ForecastId} has already been deleted"));
+                new ApplicationException($"Weather forecast {command.ForecastId} has already been deleted"));
 
-        return EventOrNone.EventWithTags(new WeatherForecastDeleted(ForecastId), tag);
+        return EventOrNone.EventWithTags(new WeatherForecastDeleted(command.ForecastId), tag);
     }
 }

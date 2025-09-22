@@ -21,9 +21,9 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+    public static async Task<ResultBox<EventOrNone>> HandleAsync(CreateWeatherForecast command, ICommandContext context)
     {
-        var forecastId = ForecastId != Guid.Empty ? ForecastId : Guid.CreateVersion7();
+        var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
         var tag = new WeatherForecastTag(forecastId);
         var exists = await context.TagExistsAsync(tag);
 
@@ -35,7 +35,7 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
                 new ApplicationException($"Weather forecast {forecastId} already exists"));
 
         return EventOrNone.EventWithTags(
-            new WeatherForecastCreated(forecastId, Location, Date, TemperatureC, Summary),
+            new WeatherForecastCreated(forecastId, command.Location, command.Date, command.TemperatureC, command.Summary),
             tag);
     }
 }

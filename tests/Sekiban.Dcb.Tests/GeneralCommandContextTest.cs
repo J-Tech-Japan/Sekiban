@@ -216,7 +216,7 @@ public class GeneralCommandContextTest
     }
 
     [Fact]
-    public void AppendEvent_AddsEventToContext()
+    public async Task AppendEvent_AddsEventToContext()
     {
         // Arrange
         var tag = new TestTag();
@@ -224,7 +224,7 @@ public class GeneralCommandContextTest
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
 
         // Act
-        var result = _commandContext.AppendEvent(eventWithTags);
+        var result = await _commandContext.AppendEvent(eventWithTags);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -234,10 +234,10 @@ public class GeneralCommandContextTest
     }
 
     [Fact]
-    public void AppendEvent_WithNull_ReturnsError()
+    public async Task AppendEvent_WithNull_ReturnsError()
     {
         // Act
-        var result = _commandContext.AppendEvent(null!);
+        var result = await _commandContext.AppendEvent(null!);
 
         // Assert
         Assert.False(result.IsSuccess);

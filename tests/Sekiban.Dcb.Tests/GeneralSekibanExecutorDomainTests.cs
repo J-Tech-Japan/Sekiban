@@ -554,9 +554,9 @@ public class GeneralSekibanExecutorDomainTests
     public record CreateTeacherCommand(Guid TeacherId, string Name, string Subject)
         : ICommandWithHandler<CreateTeacherCommand>
     {
-        public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(CreateTeacherCommand command, ICommandContext context)
         {
-            var tag = new TeacherTag(TeacherId);
+            var tag = new TeacherTag(command.TeacherId);
             var existsResult = await context.TagExistsAsync(tag);
 
             if (!existsResult.IsSuccess)
@@ -566,11 +566,12 @@ public class GeneralSekibanExecutorDomainTests
 
             if (existsResult.GetValue())
             {
-                return ResultBox.Error<EventOrNone>(new ApplicationException($"Teacher {TeacherId} already exists"));
+                return ResultBox.Error<EventOrNone>(new ApplicationException($"Teacher {command.TeacherId} already exists"));
             }
 
-            return EventOrNone.EventWithTags(new TeacherCreated(TeacherId, Name, Subject), tag);
+            return EventOrNone.EventWithTags(new TeacherCreated(command.TeacherId, command.Name, command.Subject), tag);
         }
+        
     }
 
     // Supporting types for the test
