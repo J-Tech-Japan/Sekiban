@@ -11,6 +11,10 @@ on:
       - 'src/Sekiban.Dcb.Orleans/**'
       - 'src/Sekiban.Dcb.Postgres/**'
       - 'src/Sekiban.Dcb.Postgres.MigrationHost/**'
+      - 'tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
+      - 'tests/Sekiban.Dcb.Orleans.Tests/**'
+      - 'tests/Sekiban.Dcb.Postgres.Tests/**'
+      - 'tests/Sekiban.Dcb.Tests/**'
 
 concurrency:
   group: DcbTestWorkflow

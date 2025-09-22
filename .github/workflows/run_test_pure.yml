@@ -18,6 +18,9 @@ on:
       - 'src/Sekiban.Pure.ReadModel/**'
       - 'src/Sekiban.Pure.SourceGenerator/**'
       - 'src/Sekiban.Pure.xUnit/**'
+      - 'tests/MemStat.Net.Test/**'
+      - 'tests/Pure.Domain.Test/**'
+      - 'tests/Pure.Domain.xUnit/**'
 concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
