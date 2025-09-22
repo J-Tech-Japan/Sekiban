@@ -16,3 +16,22 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
     /// </summary>
     public Guid GetId() => StudentId;
 }
+
+public record YearlyStudentsTag(int Year) : IIntTagGroup<YearlyStudentsTag>
+{
+
+    public bool IsConsistencyTag() => true;
+    public string GetTagContent() => Year.ToString();
+    public static string TagGroupName => "YearlyStudents";
+    public int GetId() => Year;
+    static YearlyStudentsTag ITagGroup<YearlyStudentsTag>.FromContent(string content) => new(int.Parse(content));
+}
+
+public record StudentCodeTag(string StudentCode) : IStringTagGroup<StudentCodeTag>
+{
+    public bool IsConsistencyTag() => false;
+    public string GetTagContent() => StudentCode;
+    public static string TagGroupName => "StudentCode";
+    public string GetId() => StudentCode;
+    static StudentCodeTag ITagGroup<StudentCodeTag>.FromContent(string content) => new(content);
+}
