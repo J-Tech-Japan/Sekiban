@@ -15,5 +15,16 @@ public interface IGuidTagGroup<TTagGroup> : ITagGroup<TTagGroup> where TTagGroup
     /// </summary>
     /// <returns>The GUID identifier</returns>
     Guid GetId();
-    static abstract new TTagGroup FromContent(string content);
+}
+
+public interface IStringTagGroup<TTagGroup> : ITagGroup<TTagGroup> where TTagGroup : IStringTagGroup<TTagGroup>
+{
+
+    // Re-declare static abstract members to avoid CS8920
+    static abstract new string TagGroupName { get; }
+    /// <summary>
+    ///     Get the string identifier for this tag
+    /// </summary>
+    /// <returns>The string identifier</returns>
+    string GetId();
 }
