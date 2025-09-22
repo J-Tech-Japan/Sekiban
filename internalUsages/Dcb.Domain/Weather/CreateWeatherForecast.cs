@@ -21,21 +21,20 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public static async Task<ResultBox<EventOrNone>> HandleAsync(CreateWeatherForecast command, ICommandContext context)
-    {
-        var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
-        var tag = new WeatherForecastTag(forecastId);
-        var exists = await context.TagExistsAsync(tag);
-
-        if (!exists.IsSuccess)
-            return ResultBox.Error<EventOrNone>(exists.GetException());
-
-        if (exists.GetValue())
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {forecastId} already exists"));
-
-        return EventOrNone.EventWithTags(
-            new WeatherForecastCreated(forecastId, command.Location, command.Date, command.TemperatureC, command.Summary),
-            tag);
-    }
+    public static Task<ResultBox<EventOrNone>> HandleAsync(CreateWeatherForecast command, ICommandContext context) =>
+        ResultBox
+            .Start
+            .Remap(_ =>
+            {
+                var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
+                return (ForecastId: forecastId, Tag: new WeatherForecastTag(forecastId));
+            })
+            .Combine(state => context.TagExistsAsync(state.Tag))
+            .Verify((state, exists) =>
+                exists
+                    ? ExceptionOrNone.FromException(new ApplicationException($"Weather forecast {state.ForecastId} already exists"))
+                    : ExceptionOrNone.None)
+            .Conveyor((state, _) => EventOrNone.EventWithTags(
+                new WeatherForecastCreated(state.ForecastId, command.Location, command.Date, command.TemperatureC, command.Summary),
+                state.Tag));
 }

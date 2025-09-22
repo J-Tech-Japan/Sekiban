@@ -157,34 +157,33 @@ public class GeneralSekibanExecutorTest
 
     private class TestCommandHandler : ICommandHandler<TestCommand>
     {
-        public static async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
-        {
-            // Create test events
-            var testTag = new TestTag();
-            var testEvent = new TestEvent(command.Name, command.Value);
-
-            // Check if tag exists
-            var exists = await context.TagExistsAsync(testTag);
-
-            // Get current state to track dependencies
-            var stateResult = await context.GetStateAsync<TestProjector>(testTag);
-
-            return EventOrNone.Event(testEvent, testTag);
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestTag())
+                .Combine(tag => context.TagExistsAsync(tag))
+                .Combine((tag, _) => context.GetStateAsync<TestProjector>(tag))
+                .Conveyor((tag, _, _) => EventOrNone.Event(new TestEvent(command.Name, command.Value), tag));
     }
 
     // Error handler for testing failures
     private class ErrorCommandHandler : ICommandHandler<TestCommand>
     {
         public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
-            Task.FromResult(ResultBox.Error<EventOrNone>(new InvalidOperationException("Handler error")));
+            ResultBox
+                .Start
+                .Conveyor(_ => ResultBox.Error<EventOrNone>(new InvalidOperationException("Handler error")))
+                .ToTask();
     }
 
     // No events handler
     private class NoEventsCommandHandler : ICommandHandler<TestCommand>
     {
         public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
-            Task.FromResult(EventOrNone.None);
+            ResultBox
+                .Start
+                .Conveyor(_ => EventOrNone.None)
+                .ToTask();
     }
 
     // Test types
@@ -205,34 +204,27 @@ public class GeneralSekibanExecutorTest
     }
     private class AccessStateCommandHandler : ICommandHandler<TestCommand>
     {
-        public static async Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
-        {
-            var testTag = new TestTag();
-
-            // Access state to ensure it's tracked
-            var stateResult = await context.GetStateAsync<TestProjector>(testTag);
-            var exists = await context.TagExistsAsync(testTag);
-            var latestId = await context.GetTagLatestSortableUniqueIdAsync(testTag);
-
-            // Create event
-            var testEvent = new TestEvent(command.Name, command.Value);
-
-            return EventOrNone.Event(testEvent, testTag);
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestTag())
+                .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                .Combine((tag, _) => context.TagExistsAsync(tag))
+                .Combine((tag, _, _) => context.GetTagLatestSortableUniqueIdAsync(tag))
+                .Conveyor((tag, _, _, _) => EventOrNone.Event(new TestEvent(command.Name, command.Value), tag));
     }
 
     // Handler that creates events with multiple tags
     private class MultiTagCommandHandler : ICommandHandler<TestCommand>
     {
-        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context)
-        {
-            var tag1 = new TestTag();
-            var tag2 = new TestTag2();
-
-            var testEvent = new TestEvent(command.Name, command.Value);
-
-            return Task.FromResult(EventOrNone.Event(testEvent, tag1, tag2));
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(TestCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Conveyor(_ => EventOrNone.Event(
+                    new TestEvent(command.Name, command.Value),
+                    new TestTag(),
+                    new TestTag2()))
+                .ToTask();
     }
 
     private record TestTag2 : ITag

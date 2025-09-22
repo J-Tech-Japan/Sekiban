@@ -53,13 +53,16 @@ public class OptimisticLockingTest
         var updateCommand = new UpdateTestCommand(tagId, 2);
         var updateResult = await _commandExecutor.ExecuteAsync(
             updateCommand,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) =>
+                    {
+                        var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                        return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+                    }));
 
         // Assert
         Assert.True(updateResult.IsSuccess);
@@ -88,25 +91,30 @@ public class OptimisticLockingTest
         var firstUpdateCommand = new UpdateTestCommand(tagId, 2);
         var firstUpdateResult = await _commandExecutor.ExecuteAsync(
             firstUpdateCommand,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                        new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
+                        tag)));
         Assert.True(firstUpdateResult.IsSuccess);
 
         // Act - Try to update with the OLD (initial) version - should fail
         var secondUpdateCommand = new UpdateTestCommand(tagId, 3);
         var updateResult = await _commandExecutor.ExecuteAsync(
             secondUpdateCommand,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, initialVersion);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) =>
+                    {
+                        var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, initialVersion);
+                        return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+                    }));
 
         // Assert - Should fail due to version mismatch
         Assert.False(updateResult.IsSuccess);
@@ -129,12 +137,14 @@ public class OptimisticLockingTest
             var updateCommand = new UpdateTestCommand(tagId, i);
             var updateResult = await _commandExecutor.ExecuteAsync(
                 updateCommand,
-                async (cmd, context) =>
-                {
-                    var tag = new TestTag(cmd.TagId);
-                    var state = await context.GetStateAsync<TestProjector>(tag);
-                    return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
-                });
+                (cmd, context) =>
+                    ResultBox
+                        .Start
+                        .Remap(_ => new TestTag(cmd.TagId))
+                        .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                        .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                            new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
+                            tag)));
             Assert.True(updateResult.IsSuccess);
         }
 
@@ -142,12 +152,14 @@ public class OptimisticLockingTest
         var finalUpdateCommand = new UpdateTestCommand(tagId, 6);
         var finalUpdateResult = await _commandExecutor.ExecuteAsync(
             finalUpdateCommand,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                        new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
+                        tag)));
 
         // Assert
         Assert.True(finalUpdateResult.IsSuccess);
@@ -183,22 +195,28 @@ public class OptimisticLockingTest
 
         var task1 = _commandExecutor.ExecuteAsync(
             update1,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) =>
+                    {
+                        var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                        return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+                    }));
         var task2 = _commandExecutor.ExecuteAsync(
             update2,
-            async (cmd, context) =>
-            {
-                var tag = new TestTag(cmd.TagId);
-                var state = await context.GetStateAsync<TestProjector>(tag);
-                var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
-                return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
-            });
+            (cmd, context) =>
+                ResultBox
+                    .Start
+                    .Remap(_ => new TestTag(cmd.TagId))
+                    .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                    .Conveyor((tag, _) =>
+                    {
+                        var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(tag, currentVersion);
+                        return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), consistencyTag);
+                    }));
 
         var results = await Task.WhenAll(task1, task2);
 
@@ -229,12 +247,14 @@ public class OptimisticLockingTest
             var updateCommand = new UpdateTestCommand(tagId, i);
             var updateResult = await _commandExecutor.ExecuteAsync(
                 updateCommand,
-                async (cmd, context) =>
-                {
-                    var tag = new TestTag(cmd.TagId);
-                    var state = await context.GetStateAsync<TestProjector>(tag);
-                    return EventOrNone.EventWithTags(new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion), tag);
-                });
+                (cmd, context) =>
+                    ResultBox
+                        .Start
+                        .Remap(_ => new TestTag(cmd.TagId))
+                        .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                        .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                            new TestEvent($"Updated-{cmd.TagId}", cmd.NewVersion),
+                            tag)));
             Assert.True(updateResult.IsSuccess);
         }
 
@@ -308,27 +328,23 @@ public class OptimisticLockingTest
 
     private class CreateTestHandler : ICommandHandler<CreateTestCommand>
     {
-        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTestCommand command, ICommandContext context)
-        {
-            var tag = new TestTag(command.TagId);
-            return Task.FromResult(EventOrNone.EventWithTags(new TestEvent($"Created-{command.TagId}", 1), tag));
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(CreateTestCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestTag(command.TagId))
+                .Conveyor(tag => EventOrNone.EventWithTags(new TestEvent($"Created-{command.TagId}", 1), tag))
+                .ToTask();
     }
 
     private class UpdateTestHandlerWithConsistencyFrom : ICommandHandler<UpdateTestCommand>
     {
-        public static async Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestCommand command, ICommandContext context)
-        {
-            var tag = new TestTag(command.TagId);
-
-            // Get current state
-            await context.GetStateAsync<TestProjector>(tag);
-
-            // Use ConsistencyTag.From which doesn't specify version
-            var consistencyTag = ConsistencyTag.From(tag);
-            return EventOrNone.EventWithTags(
-                new TestEvent($"Updated-{command.TagId}", command.NewVersion),
-                consistencyTag);
-        }
+        public static Task<ResultBox<EventOrNone>> HandleAsync(UpdateTestCommand command, ICommandContext context) =>
+            ResultBox
+                .Start
+                .Remap(_ => new TestTag(command.TagId))
+                .Combine(tag => context.GetStateAsync<TestProjector>(tag))
+                .Conveyor((tag, _) => EventOrNone.EventWithTags(
+                    new TestEvent($"Updated-{command.TagId}", command.NewVersion),
+                    ConsistencyTag.From(tag)));
     }
 }

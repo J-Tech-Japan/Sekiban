@@ -9,27 +9,24 @@ public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
     [Required]
     public Guid ForecastId { get; init; }
 
-    public static async Task<ResultBox<EventOrNone>> HandleAsync(DeleteWeatherForecast command, ICommandContext context)
-    {
-        var tag = new WeatherForecastTag(command.ForecastId);
-        var exists = await context.TagExistsAsync(tag);
+    public static Task<ResultBox<EventOrNone>> HandleAsync(DeleteWeatherForecast command, ICommandContext context) =>
+        ResultBox
+            .Start
+            .Remap(_ => new WeatherForecastTag(command.ForecastId))
+            .Combine(tag => context.TagExistsAsync(tag))
+            .Verify((tag, exists) => exists
+                ? ExceptionOrNone.None
+                : ExceptionOrNone.FromException(
+                    new ApplicationException($"Weather forecast {command.ForecastId} does not exist")))
+            .Combine((tag, _) => context.GetStateAsync<WeatherForecastProjector>(tag))
+            .Verify((_, _, state) =>
+            {
+                var payload = state.Payload as WeatherForecastState;
+                return payload?.IsDeleted == true
+                    ? ExceptionOrNone.FromException(
+                        new ApplicationException($"Weather forecast {command.ForecastId} has already been deleted"))
+                    : ExceptionOrNone.None;
+            })
+            .Conveyor((tag, _, _) => EventOrNone.EventWithTags(new WeatherForecastDeleted(command.ForecastId), tag));
 
-        if (!exists.IsSuccess)
-            return ResultBox.Error<EventOrNone>(exists.GetException());
-
-        if (!exists.GetValue())
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {command.ForecastId} does not exist"));
-
-        var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
-        if (!state.IsSuccess)
-            return ResultBox.Error<EventOrNone>(state.GetException());
-
-        var payload = state.GetValue().Payload as WeatherForecastState;
-        if (payload?.IsDeleted == true)
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {command.ForecastId} has already been deleted"));
-
-        return EventOrNone.EventWithTags(new WeatherForecastDeleted(command.ForecastId), tag);
-    }
 }
