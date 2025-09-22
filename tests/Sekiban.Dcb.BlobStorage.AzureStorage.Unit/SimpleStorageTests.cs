@@ -51,14 +51,14 @@ public class SimpleStorageTests
         {
             SafeWindowMs = 1000,
             SnapshotAccessor = accessor,
-            SnapshotOffloadThresholdBytes = 1024 // small threshold to force offload
+            SnapshotOffloadThresholdBytes = 100 // very small threshold to ensure offload
         };
         var actor = new GeneralMultiProjectionActor(domain, BigPayloadProjector.MultiProjectorName, options);
 
         // Add a few large events
-        foreach (var i in Enumerable.Range(0, 5))
+        foreach (var i in Enumerable.Range(0, 10))
         {
-            var payload = new Created(new string('x', 2000));
+            var payload = new Created(new string('x', 5000)); // larger payload
             await actor.AddEventsAsync(new[] { MakeEvent(payload) });
         }
 
@@ -77,7 +77,7 @@ public class SimpleStorageTests
         var state = await restored.GetStateAsync(false);
         Assert.True(state.IsSuccess);
         var proj = (BigPayloadProjector)state.GetValue().Payload;
-        Assert.Equal(5, proj.Items.Count);
+        Assert.Equal(10, proj.Items.Count);
     }
 
     private static Event MakeEvent(IEventPayload payload)
