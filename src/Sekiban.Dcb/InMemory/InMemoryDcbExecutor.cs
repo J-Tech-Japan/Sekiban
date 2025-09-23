@@ -37,24 +37,26 @@ public class InMemoryDcbExecutor : ISekibanExecutor
     /// </summary>
     public InMemoryDcbExecutor(DcbDomainTypes domainTypes) : this(domainTypes, new InternalInMemoryEventStore()) { }
 
-    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteAsync<TCommand>(
         TCommand command,
         Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
-        CancellationToken cancellationToken = default) where TCommand : ICommand =>
+        CancellationToken cancellationToken) =>
         _inner.ExecuteAsync(command, handlerFunc, cancellationToken);
 
-    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+    Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteAsync<TCommand>(
         TCommand command,
-        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand> =>
+        CancellationToken cancellationToken) =>
         _inner.ExecuteAsync(command, cancellationToken);
 
-    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) => _inner.GetTagStateAsync(tagStateId);
+    Task<ResultBox<TagState>> ISekibanExecutor.GetTagStateAsync(TagStateId tagStateId) =>
+        _inner.GetTagStateAsync(tagStateId);
 
-    public Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull =>
+    Task<ResultBox<TResult>> ISekibanExecutor.QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 
-    public Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
-        where TResult : notnull => _inner.QueryAsync(queryCommon);
+    Task<ResultBox<ListQueryResult<TResult>>> ISekibanExecutor.QueryAsync<TResult>(
+        IListQueryCommon<TResult> queryCommon) =>
+        _inner.QueryAsync(queryCommon);
 
     /// <summary>
     ///     Minimal internal in-memory event store (single process, test support)
