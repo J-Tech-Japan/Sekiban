@@ -5,6 +5,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.InMemory; // InMemoryDcbExecutor
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Tags;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
@@ -21,7 +22,7 @@ public class InMemoryDcbExecutorIntegrationTests
 	public async Task CreateStudent_Then_QueryStudentList_Should_Return_Student()
 	{
 		var domain = DomainType.GetDomainTypes();
-		var executor = new InMemoryDcbExecutor(domain);
+		ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
 
 		var studentId = Guid.NewGuid();
 		var name = "Integration Test Student";
@@ -41,5 +42,30 @@ public class InMemoryDcbExecutorIntegrationTests
 		var students = queryResult.GetValue().Items.ToList();
 		Assert.Contains(students, s => s.StudentId == studentId && s.Name == name);
 	}
-}
 
+	[Fact]
+	public async Task CreateStudent_Command_Should_Populate_TagState()
+	{
+		var domain = DomainType.GetDomainTypes();
+		ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+
+		var studentId = Guid.NewGuid();
+		var name = "Integration TagState Student";
+		var maxClassCount = 4;
+		var command = new CreateStudent(studentId, name, maxClassCount);
+
+		var commandResult = await executor.ExecuteAsync(command);
+		Assert.True(commandResult.IsSuccess);
+
+		var tagStateId = TagStateId.FromProjector<StudentProjector>(new StudentTag(studentId));
+		var tagStateResult = await executor.GetTagStateAsync(tagStateId);
+		Assert.True(tagStateResult.IsSuccess);
+
+		var tagState = tagStateResult.GetValue();
+		var studentState = Assert.IsType<StudentState>(tagState.Payload);
+		Assert.Equal(studentId, studentState.StudentId);
+		Assert.Equal(name, studentState.Name);
+		Assert.Equal(maxClassCount, studentState.MaxClassCount);
+		Assert.Empty(studentState.EnrolledClassRoomIds);
+	}
+}
