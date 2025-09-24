@@ -260,8 +260,10 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             return ResultBox.Error<string>(ex);
         }
     }
+    public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags) =>
+        AppendEvent(new EventPayloadWithTags(ev, tags?.ToList() ?? new List<ITag>()));
 
-    public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
+    private Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
     {
         try
         {

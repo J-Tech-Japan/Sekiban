@@ -85,17 +85,19 @@ public class EventPublishingTests
 
     private class MultiEventHandler : ICommandHandler<TestPublishCommand>
     {
-        public static Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
+        public static async Task<ResultBox<EventOrNone>> HandleAsync(TestPublishCommand command, ICommandContext context)
         {
             var tag = new TestPublishTag();
             var evt1 = new TestPublishEvent(command.Name + "1");
             var evt2 = new TestPublishEvent(command.Name + "2");
 
-            // Append first event via context to simulate multi-event production
-            context.AppendEvent(new EventPayloadWithTags(evt1, new List<ITag> { tag }));
+            var appendResult = await context.AppendEvent(evt1, tag);
+            if (!appendResult.IsSuccess)
+            {
+                return appendResult;
+            }
 
-            // Return second event as the handler result
-            return Task.FromResult(EventOrNone.Event(evt2, tag));
+            return EventOrNone.Event(evt2, tag);
         }
     }
 }
