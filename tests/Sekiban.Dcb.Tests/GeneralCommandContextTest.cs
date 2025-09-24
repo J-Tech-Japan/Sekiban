@@ -224,20 +224,23 @@ public class GeneralCommandContextTest
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
 
         // Act
-        var result = await _commandContext.AppendEvent(eventWithTags);
+        var result = await _commandContext.AppendEvent(eventPayload, tag);
 
         // Assert
         Assert.True(result.IsSuccess);
         var appendedEvents = _commandContext.GetAppendedEvents();
         Assert.Single(appendedEvents);
-        Assert.Equal(eventWithTags, appendedEvents[0]);
+        var appended = appendedEvents[0];
+        Assert.Equal(eventWithTags.Event, appended.Event);
+        Assert.Equal(eventWithTags.Tags.Count, appended.Tags.Count);
+        Assert.All(appended.Tags, t => Assert.IsType<TestTag>(t));
     }
 
     [Fact]
     public async Task AppendEvent_WithNull_ReturnsError()
     {
         // Act
-        var result = await _commandContext.AppendEvent(null!);
+        var result = await _commandContext.AppendEvent((IEventPayload)null!, new TestTag());
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -251,7 +254,7 @@ public class GeneralCommandContextTest
         var tag = new TestTag();
         var eventPayload = new TestEvent("Test");
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
-        _commandContext.AppendEvent(eventWithTags);
+        _commandContext.AppendEvent(eventPayload, tag).GetAwaiter().GetResult();
 
         // Act
 #pragma warning disable CS0618 // Testing deprecated method
@@ -311,7 +314,7 @@ public class GeneralCommandContextTest
         // Append an event
         var eventPayload = new TestEvent("Test2");
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
-        _commandContext.AppendEvent(eventWithTags);
+        _commandContext.AppendEvent(eventPayload, tag).GetAwaiter().GetResult();
 
         // Act
         _commandContext.ClearResults();

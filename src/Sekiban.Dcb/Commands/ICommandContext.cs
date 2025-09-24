@@ -48,6 +48,7 @@ public interface ICommandContext
     ///     Appends an event with tags to the context
     /// </summary>
     /// <param name="ev">The event with tags to append</param>
+    /// <param name="tags"></param>
     /// <returns>ResultBox containing EventOrNone representing the appended event</returns>
-    Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev);
+    Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags);
 }

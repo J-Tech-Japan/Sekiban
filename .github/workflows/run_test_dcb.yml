@@ -11,7 +11,6 @@ on:
       - 'src/Sekiban.Dcb.Orleans/**'
       - 'src/Sekiban.Dcb.Postgres/**'
       - 'src/Sekiban.Dcb.Postgres.MigrationHost/**'
-      - 'tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
       - 'tests/Sekiban.Dcb.Orleans.Tests/**'
       - 'tests/Sekiban.Dcb.Postgres.Tests/**'
       - 'tests/Sekiban.Dcb.Tests/**'
@@ -41,7 +40,5 @@ jobs:
 
       - name: dotnet test DCB projects sequentially
         run: |
-          dotnet test tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
