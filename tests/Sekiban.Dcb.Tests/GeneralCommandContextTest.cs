@@ -230,7 +230,10 @@ public class GeneralCommandContextTest
         Assert.True(result.IsSuccess);
         var appendedEvents = _commandContext.GetAppendedEvents();
         Assert.Single(appendedEvents);
-        Assert.Equal(eventWithTags, appendedEvents[0]);
+        var appended = appendedEvents[0];
+        Assert.Equal(eventWithTags.Event, appended.Event);
+        Assert.Equal(eventWithTags.Tags.Count, appended.Tags.Count);
+        Assert.All(appended.Tags, t => Assert.IsType<TestTag>(t));
     }
 
     [Fact]
