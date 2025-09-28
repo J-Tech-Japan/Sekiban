@@ -25,8 +25,7 @@ public record GetWeatherForecastListQuery :
         GetWeatherForecastListQuery query,
         IQueryContext context)
     {
-        // Always use GetCurrentForecasts() for queries (includes unsafe state)
-        // GetSafeForecasts() should only be used for special cases requiring guaranteed consistency
+        // Always use GetCurrentForecasts() for queries
         var forecasts = projector.GetCurrentForecasts();
 
         return ResultBox.FromValue(forecasts.Values.AsEnumerable());

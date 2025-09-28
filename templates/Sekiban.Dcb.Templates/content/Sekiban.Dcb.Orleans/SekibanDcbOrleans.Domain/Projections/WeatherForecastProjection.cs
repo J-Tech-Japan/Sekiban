@@ -1,4 +1,5 @@
 using Dcb.Domain.Weather;
+using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
@@ -6,23 +7,69 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
+
 namespace Dcb.Domain.Projections;
 
 /// <summary>
-///     Weather forecast projection that maintains separate safe and unsafe states
+///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
+[GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
-    public static string MultiProjectorName => nameof(WeatherForecastProjection);
-    public static string MultiProjectorVersion => "1.0.0";
-
-    // Safe: Strictly consistent state (only includes safe events)
-    // Unsafe: Includes all events (may be ahead but less consistent)
+    /// <summary>
+    ///     Dictionary of weather forecasts by ID
+    /// </summary>
+    [Id(0)]
     public Dictionary<Guid, WeatherForecastItem> Forecasts { get; init; } = new();
-    public Dictionary<Guid, WeatherForecastItem> UnsafeForecasts { get; init; } = new();
+
+    public static string MultiProjectorName => "WeatherForecastProjection";
 
     public static WeatherForecastProjection GenerateInitialPayload() => new();
 
+    public static string MultiProjectorVersion => "1.0.0";
+
+    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjection safePayload)
+    {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        }
+
+        var dto = new { forecasts = safePayload.Forecasts };
+        var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
+        return GzipCompression.CompressString(json);
+    }
+
+    public static WeatherForecastProjection Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
+    {
+        var json = GzipCompression.DecompressToString(data);
+        var node = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
+        var result = new WeatherForecastProjection();
+        if (node != null && node.TryGetPropertyValue("forecasts", out var forecastsNode) && forecastsNode is System.Text.Json.Nodes.JsonObject fobj)
+        {
+            var dict = new Dictionary<Guid, WeatherForecastItem>();
+            foreach (var kv in fobj)
+            {
+                if (Guid.TryParse(kv.Key, out var id) && kv.Value != null)
+                {
+                    var itemJson = kv.Value.ToJsonString(domainTypes.JsonSerializerOptions);
+                    var item = System.Text.Json.JsonSerializer.Deserialize<WeatherForecastItem>(itemJson, domainTypes.JsonSerializerOptions);
+                    if (item != null)
+                    {
+                        dict[id] = item;
+                    }
+                }
+            }
+
+            result = result with { Forecasts = dict };
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Project with tag filtering - only processes events with WeatherForecastTag
+    /// </summary>
     public static ResultBox<WeatherForecastProjection> Project(
         WeatherForecastProjection payload,
         Event ev,
@@ -30,81 +77,80 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         DcbDomainTypes domainTypes,
         SortableUniqueId safeWindowThreshold)
     {
-        try
-        {
-            // WeatherForecastTag filter - if no tag, skip
-            var forecastTags = tags.OfType<WeatherForecastTag>().ToList();
-            if (!forecastTags.Any())
-            {
-                return ResultBox.FromValue(payload);
-            }
+        var weatherForecastTags = tags.OfType<WeatherForecastTag>().ToList();
 
-            var state = payload with
+        if (weatherForecastTags.Count == 0)
+        {
+            // No WeatherForecastTag, skip this event
+            return ResultBox.FromValue(payload);
+        }
+
+        // Get the forecast IDs from the tags
+        var forecastIds = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
+
+        // Create a copy of the forecasts dictionary for immutability
+        var updatedForecasts = new Dictionary<Guid, WeatherForecastItem>(payload.Forecasts);
+
+        // Process each affected forecast
+        foreach (var forecastId in forecastIds)
+        {
+            updatedForecasts.TryGetValue(forecastId, out var current);
+
+            // Project based on event type
+            WeatherForecastItem? next = ev.Payload switch
             {
-                Forecasts = new Dictionary<Guid, WeatherForecastItem>(payload.Forecasts),
-                UnsafeForecasts = new Dictionary<Guid, WeatherForecastItem>(payload.UnsafeForecasts)
+                WeatherForecastCreated created => new WeatherForecastItem(
+                    forecastId,
+                    created.Location,
+                    created.Date.ToDateTime(TimeOnly.MinValue),
+                    created.TemperatureC,
+                    created.Summary,
+                    GetEventTimestamp(ev)),
+
+                WeatherForecastUpdated updated when current != null => current with
+                {
+                    Location = updated.Location,
+                    TemperatureC = updated.TemperatureC,
+                    Summary = updated.Summary,
+                    LastUpdated = GetEventTimestamp(ev)
+                },
+
+                LocationNameChanged locationChanged when current != null => current with
+                {
+                    Location = locationChanged.NewLocationName,
+                    LastUpdated = GetEventTimestamp(ev)
+                },
+
+                WeatherForecastDeleted => null,
+
+                _ => current
             };
 
-            // Tag-based processing
-            foreach (var tag in forecastTags)
+            if (next != null)
             {
-                var id = tag.ForecastId;
-                switch (ev.Payload)
-                {
-                    case WeatherForecastCreated created:
-                        var newItem = new WeatherForecastItem(
-                            created.ForecastId,
-                            created.Location,
-                            created.Date.ToDateTime(TimeOnly.MinValue),
-                            created.TemperatureC,
-                            created.Summary,
-                            DateTime.UtcNow);
-                        state.Forecasts[id] = newItem;
-                        state.UnsafeForecasts[id] = newItem;
-                        break;
-                    case WeatherForecastUpdated updated:
-                        if (state.UnsafeForecasts.TryGetValue(id, out var existing))
-                        {
-                            var updatedItem = existing with
-                            {
-                                Location = updated.Location,
-                                Date = updated.Date.ToDateTime(TimeOnly.MinValue),
-                                TemperatureC = updated.TemperatureC,
-                                Summary = updated.Summary,
-                                LastUpdated = DateTime.UtcNow
-                            };
-                            state.UnsafeForecasts[id] = updatedItem;
-                            state.Forecasts[id] = updatedItem;
-                        }
-                        break;
-                    case WeatherForecastDeleted deleted:
-                        state.Forecasts.Remove(id);
-                        state.UnsafeForecasts.Remove(id);
-                        break;
-                    case LocationNameChanged changed:
-                        if (state.UnsafeForecasts.TryGetValue(id, out var existingItem))
-                        {
-                            var changedItem = existingItem with
-                            {
-                                Location = changed.NewLocationName,
-                                LastUpdated = DateTime.UtcNow
-                            };
-                            state.UnsafeForecasts[id] = changedItem;
-                            state.Forecasts[id] = changedItem;
-                        }
-                        break;
-                }
+                updatedForecasts[forecastId] = next;
             }
-            return ResultBox.FromValue(state);
+            else if (ev.Payload is WeatherForecastDeleted)
+            {
+                updatedForecasts.Remove(forecastId);
+            }
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<WeatherForecastProjection>(ex);
-        }
+
+        return ResultBox.FromValue(payload with { Forecasts = updatedForecasts });
     }
 
-    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetSafeForecasts()
-        => Forecasts;
-    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts()
-        => UnsafeForecasts;
+    /// <summary>
+    ///     Extract timestamp from the event's SortableUniqueId
+    /// </summary>
+    private static DateTime GetEventTimestamp(Event ev)
+    {
+        var sortableId = new SortableUniqueId(ev.SortableUniqueIdValue);
+        return sortableId.GetDateTime();
+    }
+
+    /// <summary>
+    ///     Get all current weather forecasts
+    /// </summary>
+    public IReadOnlyDictionary<Guid, WeatherForecastItem> GetCurrentForecasts() => Forecasts;
 }
+
