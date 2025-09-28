@@ -6,7 +6,6 @@ public record WeatherForecastTag(Guid ForecastId) : IGuidTagGroup<WeatherForecas
     public static string TagGroupName => "WeatherForecast";
 
     public bool IsConsistencyTag() => true;
-    public string GetTagContent() => ForecastId.ToString();
 
     public static WeatherForecastTag FromContent(string content)
     {
@@ -17,8 +16,5 @@ public record WeatherForecastTag(Guid ForecastId) : IGuidTagGroup<WeatherForecas
         throw new ArgumentException($"Invalid forecast ID format: {content}");
     }
 
-    /// <summary>
-    ///     Get the GUID identifier for this tag
-    /// </summary>
     public Guid GetId() => ForecastId;
 }

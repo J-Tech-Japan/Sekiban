@@ -16,7 +16,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
                 ? ExceptionOrNone.FromException(new ApplicationException("Student is not enrolled in this classroom"))
                 : ExceptionOrNone.None)
             .Remap((studentTag, studentState) => new ClassRoomTag(command.ClassRoomId))
-            .Combine(classRoomTag => context.TagExistsAsync(classRoomTag))
+            .Combine(context.TagExistsAsync)
             .Verify((_, classRoomExistsResult) => !classRoomExistsResult
                 ? ExceptionOrNone.FromException(new ApplicationException("ClassRoom not found"))
                 : ExceptionOrNone.None)
