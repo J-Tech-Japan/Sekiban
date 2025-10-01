@@ -6,7 +6,6 @@ namespace Dcb.Domain.Weather;
 
 public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 {
-    // Allow server-side generation when not provided
     public Guid ForecastId { get; init; }
 
     [Required]
@@ -16,28 +15,28 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
     [Required]
     public DateOnly Date { get; init; }
 
+    [Required]
     public TemperatureCelsius TemperatureC { get; init; }
 
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public async Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context)
-    {
-        var id = ForecastId != Guid.Empty ? ForecastId : Guid.CreateVersion7();
-        var tag = new WeatherForecastTag(id);
-        var exists = await context.TagExistsAsync(tag);
-
-        if (!exists.IsSuccess)
-            return ResultBox.Error<EventOrNone>(exists.GetException());
-
-        if (exists.GetValue())
-            return ResultBox.Error<EventOrNone>(
-                new ApplicationException($"Weather forecast {id} already exists"));
-
-        // Basic range guard for TemperatureC
-        var temp = System.Math.Clamp(TemperatureC.ToInt(), -50, 50);
-        return EventOrNone.EventWithTags(
-            new WeatherForecastCreated(id, Location, Date, temp, Summary),
-            tag);
-    }
+    public static Task<ResultBox<EventOrNone>> HandleAsync(CreateWeatherForecast command, ICommandContext context) =>
+        ResultBox
+            .Start
+            .Remap(_ =>
+            {
+                var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
+                var tag = new WeatherForecastTag(forecastId);
+                var temperature = System.Math.Clamp(command.TemperatureC.ToInt(), -50, 50);
+                return (ForecastId: forecastId, Tag: tag, TemperatureC: temperature);
+            })
+            .Combine(state => context.TagExistsAsync(state.Tag))
+            .Verify((state, exists) =>
+                exists
+                    ? ExceptionOrNone.FromException(new ApplicationException($"Weather forecast {state.ForecastId} already exists"))
+                    : ExceptionOrNone.None)
+            .Conveyor((state, _) => EventOrNone.EventWithTags(
+                new WeatherForecastCreated(state.ForecastId, command.Location, command.Date, state.TemperatureC, command.Summary),
+                state.Tag));
 }

@@ -24,13 +24,13 @@ public record CreateStudent : ICommandWithHandler<CreateStudent>
         MaxClassCount = maxClassCount;
     }
 
-    public Task<ResultBox<EventOrNone>> HandleAsync(ICommandContext context) => ResultBox
+    public static Task<ResultBox<EventOrNone>> HandleAsync(CreateStudent command, ICommandContext context) => ResultBox
         .Start
-        .Remap(_ => new StudentTag(StudentId))
-        .Combine(tag => context.TagExistsAsync(tag))
+        .Remap(_ => new StudentTag(command.StudentId))
+        .Combine(context.TagExistsAsync)
         .Verify((_, existsResult) =>
             existsResult
                 ? ExceptionOrNone.FromException(new ApplicationException("Student Already Exists"))
                 : ExceptionOrNone.None)
-        .Conveyor((tag, _) => EventOrNone.EventWithTags(new StudentCreated(StudentId, Name, MaxClassCount), tag));
+        .Conveyor((tag, _) => EventOrNone.EventWithTags(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag));
 }
