@@ -1,5 +1,9 @@
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
@@ -25,7 +29,7 @@ public class GeneralQueryExecutor
         TQuery query,
         Func<Task<ResultBox<TMultiProjector>>> projectorProvider)
         where TMultiProjector : IMultiProjector<TMultiProjector>
-        where TQuery : IMultiProjectionQuery<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
         var projectorResult = await projectorProvider();
@@ -37,7 +41,7 @@ public class GeneralQueryExecutor
         var projector = projectorResult.GetValue();
         var context = new QueryContext(_serviceProvider);
 
-        return TQuery.HandleQuery(projector, query, context);
+        return MultiProjectionQueryInvoker<TMultiProjector, TQuery, TOutput>.Handle(projector, query, context);
     }
 
     /// <summary>
@@ -53,7 +57,7 @@ public class GeneralQueryExecutor
         TQuery query,
         Func<Task<ResultBox<TMultiProjector>>> projectorProvider)
         where TMultiProjector : IMultiProjector<TMultiProjector>
-        where TQuery : IMultiProjectionListQuery<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
         var projectorResult = await projectorProvider();
@@ -66,7 +70,8 @@ public class GeneralQueryExecutor
         var context = new QueryContext(_serviceProvider);
 
         // Filter
-        var filterResult = TQuery.HandleFilter(projector, query, context);
+        var filterResult = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
+            .Filter(projector, query, context);
         if (!filterResult.IsSuccess)
         {
             return ResultBox.Error<ListQueryResult<TOutput>>(filterResult.GetException());
@@ -75,7 +80,8 @@ public class GeneralQueryExecutor
         var filteredItems = filterResult.GetValue();
 
         // Sort
-        var sortResult = TQuery.HandleSort(filteredItems, query, context);
+        var sortResult = MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
+            .Sort(filteredItems, query, context);
         if (!sortResult.IsSuccess)
         {
             return ResultBox.Error<ListQueryResult<TOutput>>(sortResult.GetException());
@@ -84,7 +90,9 @@ public class GeneralQueryExecutor
         var sortedItems = sortResult.GetValue().ToList();
 
         // Apply pagination
-        var result = ListQueryResult<TOutput>.CreatePaginated(query, sortedItems);
+        var result = query is IQueryPagingParameter pagingParameter
+            ? ListQueryResult<TOutput>.CreatePaginated(pagingParameter, sortedItems)
+            : new ListQueryResult<TOutput>(sortedItems.Count, null, null, null, sortedItems);
 
         return ResultBox.FromValue(result);
     }
@@ -164,5 +172,158 @@ public class GeneralQueryExecutor
             : new ListQueryResult<TOutput>(sortedItems.Count, null, null, null, sortedItems);
 
         return ResultBox.FromValue(result);
+    }
+
+    private static class MultiProjectionQueryInvoker<TMultiProjector, TQuery, TOutput>
+        where TMultiProjector : IMultiProjector<TMultiProjector>
+        where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
+        where TOutput : notnull
+    {
+        public static readonly Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>> Handle =
+            CreateHandler();
+
+        private static Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>> CreateHandler()
+        {
+            var queryType = typeof(TQuery);
+            var method = queryType.GetMethod("HandleQuery", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException(
+                    $"Query type {queryType.Name} must define a public static HandleQuery method.");
+
+            if (method.ReturnType.IsGenericType &&
+                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            {
+                var returnArg = method.ReturnType.GetGenericArguments()[0];
+                if (returnArg != typeof(TOutput))
+                {
+                    throw new InvalidOperationException(
+                        $"HandleQuery return type mismatch. Expected ResultBox<{typeof(TOutput).Name}> but got ResultBox<{returnArg.Name}>.");
+                }
+
+                var del = method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, ResultBox<TOutput>>>();
+                return del;
+            }
+
+            if (!typeof(TOutput).IsAssignableFrom(method.ReturnType))
+            {
+                throw new InvalidOperationException(
+                    $"HandleQuery return type mismatch. Expected {typeof(TOutput).Name} or ResultBox<{typeof(TOutput).Name}> but got {method.ReturnType.Name}.");
+            }
+
+            var valueDelegate =
+                method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, TOutput>>();
+
+            return (projector, query, context) =>
+            {
+                try
+                {
+                    var value = valueDelegate(projector, query, context);
+                    return ResultBox.FromValue(value);
+                }
+                catch (Exception ex)
+                {
+                    return ResultBox.Error<TOutput>(ex);
+                }
+            };
+        }
+    }
+
+    private static class MultiProjectionListQueryInvoker<TMultiProjector, TQuery, TOutput>
+        where TMultiProjector : IMultiProjector<TMultiProjector>
+        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
+        where TOutput : notnull
+    {
+        public static readonly Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> Filter =
+            CreateFilter();
+
+        public static readonly Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>
+            Sort = CreateSort();
+
+        private static Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> CreateFilter()
+        {
+            var queryType = typeof(TQuery);
+            var method = queryType.GetMethod("HandleFilter", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException(
+                    $"List query type {queryType.Name} must define a public static HandleFilter method.");
+
+            if (method.ReturnType.IsGenericType &&
+                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            {
+                var returnArg = method.ReturnType.GetGenericArguments()[0];
+                if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(returnArg))
+                {
+                    throw new InvalidOperationException(
+                        $"HandleFilter return type mismatch. Expected ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got ResultBox<{returnArg.Name}>.");
+                }
+
+                var del = method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>>();
+                return del;
+            }
+
+            if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(method.ReturnType))
+            {
+                throw new InvalidOperationException(
+                    $"HandleFilter return type mismatch. Expected IEnumerable<{typeof(TOutput).Name}> or ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got {method.ReturnType.Name}.");
+            }
+
+            var valueDelegate =
+                method.CreateDelegate<Func<TMultiProjector, TQuery, IQueryContext, IEnumerable<TOutput>>>();
+
+            return (projector, query, context) =>
+            {
+                try
+                {
+                    var value = valueDelegate(projector, query, context);
+                    return ResultBox.FromValue(value);
+                }
+                catch (Exception ex)
+                {
+                    return ResultBox.Error<IEnumerable<TOutput>>(ex);
+                }
+            };
+        }
+
+        private static Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>> CreateSort()
+        {
+            var queryType = typeof(TQuery);
+            var method = queryType.GetMethod("HandleSort", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException(
+                    $"List query type {queryType.Name} must define a public static HandleSort method.");
+
+            if (method.ReturnType.IsGenericType &&
+                method.ReturnType.GetGenericTypeDefinition() == typeof(ResultBox<>))
+            {
+                var returnArg = method.ReturnType.GetGenericArguments()[0];
+                if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(returnArg))
+                {
+                    throw new InvalidOperationException(
+                        $"HandleSort return type mismatch. Expected ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got ResultBox<{returnArg.Name}>.");
+                }
+
+                var del = method.CreateDelegate<Func<IEnumerable<TOutput>, TQuery, IQueryContext, ResultBox<IEnumerable<TOutput>>>>();
+                return del;
+            }
+
+            if (!typeof(IEnumerable<TOutput>).IsAssignableFrom(method.ReturnType))
+            {
+                throw new InvalidOperationException(
+                    $"HandleSort return type mismatch. Expected IEnumerable<{typeof(TOutput).Name}> or ResultBox<IEnumerable<{typeof(TOutput).Name}>> but got {method.ReturnType.Name}.");
+            }
+
+            var valueDelegate =
+                method.CreateDelegate<Func<IEnumerable<TOutput>, TQuery, IQueryContext, IEnumerable<TOutput>>>();
+
+            return (items, query, context) =>
+            {
+                try
+                {
+                    var value = valueDelegate(items, query, context);
+                    return ResultBox.FromValue(value);
+                }
+                catch (Exception ex)
+                {
+                    return ResultBox.Error<IEnumerable<TOutput>>(ex);
+                }
+            };
+        }
     }
 }

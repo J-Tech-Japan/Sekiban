@@ -1,7 +1,10 @@
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 namespace Sekiban.Dcb.Queries;
 
@@ -67,25 +70,17 @@ public class SimpleQueryTypes : IQueryTypes
         {
             var result = handleMethod.Invoke(null, new object[] { projector, query, context });
 
-            // Check if result is a ResultBox<T>
-            if (result != null &&
-                result.GetType().IsGenericType &&
-                result.GetType().GetGenericTypeDefinition().Name == "ResultBox`1")
+            if (IsResultBox(result))
             {
-                var isSuccess = result.GetType().GetProperty("IsSuccess")?.GetValue(result) as bool?;
-
-                if (isSuccess == true)
-                {
-                    var getValue = result.GetType().GetMethod("GetValue");
-                    var value = getValue?.Invoke(result, null);
-                    return ResultBox.FromValue(value!);
-                }
-                var getException = result.GetType().GetMethod("GetException");
-                var exception = getException?.Invoke(result, null) as Exception;
-                return ResultBox.Error<object>(exception ?? new Exception("Query execution failed"));
+                return ExtractResultBoxValue(result);
             }
 
-            return ResultBox.Error<object>(new InvalidOperationException("Invalid result from HandleQuery"));
+            if (result is null)
+            {
+                return ResultBox.Error<object>(new InvalidOperationException("HandleQuery returned null result"));
+            }
+
+            return ResultBox.FromValue(result);
         }
         catch (Exception ex)
         {
@@ -148,43 +143,23 @@ public class SimpleQueryTypes : IQueryTypes
         {
             // Execute filter
             var filterResult = handleFilterMethod.Invoke(null, new object[] { projector, query, context });
-            if (filterResult == null ||
-                !filterResult.GetType().IsGenericType ||
-                filterResult.GetType().GetGenericTypeDefinition().Name != "ResultBox`1")
+            var filteredItemsResult = ExtractEnumerableResult(filterResult);
+            if (!filteredItemsResult.IsSuccess)
             {
-                return ResultBox.Error<object>(new Exception("Filter execution failed - invalid result type"));
+                return ResultBox.Error<object>(filteredItemsResult.GetException());
             }
 
-            var filterIsSuccess = filterResult.GetType().GetProperty("IsSuccess")?.GetValue(filterResult) as bool?;
-            if (filterIsSuccess != true)
-            {
-                var filterException
-                    = filterResult.GetType().GetMethod("GetException")?.Invoke(filterResult, null) as Exception;
-                return ResultBox.Error<object>(filterException ?? new Exception("Filter execution failed"));
-            }
-
-            var getFilterValue = filterResult.GetType().GetMethod("GetValue");
-            var filteredItems = getFilterValue?.Invoke(filterResult, null);
+            var filteredItems = filteredItemsResult.GetValue();
 
             // Execute sort
-            var sortResult = handleSortMethod.Invoke(null, new[] { filteredItems, query, context });
-            if (sortResult == null ||
-                !sortResult.GetType().IsGenericType ||
-                sortResult.GetType().GetGenericTypeDefinition().Name != "ResultBox`1")
+            var sortResult = handleSortMethod.Invoke(null, new object?[] { filteredItems, query, context });
+            var sortedItemsResult = ExtractEnumerableResult(sortResult);
+            if (!sortedItemsResult.IsSuccess)
             {
-                return ResultBox.Error<object>(new Exception("Sort execution failed - invalid result type"));
+                return ResultBox.Error<object>(sortedItemsResult.GetException());
             }
 
-            var sortIsSuccess = sortResult.GetType().GetProperty("IsSuccess")?.GetValue(sortResult) as bool?;
-            if (sortIsSuccess != true)
-            {
-                var sortException
-                    = sortResult.GetType().GetMethod("GetException")?.Invoke(sortResult, null) as Exception;
-                return ResultBox.Error<object>(sortException ?? new Exception("Sort execution failed"));
-            }
-
-            var getSortValue = sortResult.GetType().GetMethod("GetValue");
-            var sortedItems = getSortValue?.Invoke(sortResult, null) as IEnumerable<object>;
+            var sortedItems = sortedItemsResult.GetValue().Cast<object>();
 
             // Apply pagination if query implements IQueryPagingParameter
             if (query is IQueryPagingParameter pagingParam)
@@ -308,12 +283,21 @@ public class SimpleQueryTypes : IQueryTypes
     /// <typeparam name="TQuery">The query type</typeparam>
     /// <typeparam name="TOutput">The output type</typeparam>
     public void RegisterQuery<TProjector, TQuery, TOutput>() where TProjector : IMultiProjector<TProjector>
-        where TQuery : IMultiProjectionQuery<TProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
         var queryType = typeof(TQuery);
         var projectorType = typeof(TProjector);
         var outputType = typeof(TOutput);
+
+        var (inferredProjector, inferredOutput) = ExtractQuerySignature(queryType);
+        if (inferredProjector != projectorType || inferredOutput != outputType)
+        {
+            throw new InvalidOperationException(
+                $"Query type '{queryType.Name}' generic parameters do not match registration. " +
+                $"Interface declares {inferredProjector.Name} -> {inferredOutput.Name}, " +
+                $"registration supplied {projectorType.Name} -> {outputType.Name}");
+        }
 
         // Check if already registered
         if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
@@ -348,21 +332,7 @@ public class SimpleQueryTypes : IQueryTypes
     {
         var queryType = typeof(TQuery);
 
-        // Find the IMultiProjectionQuery interface
-        var queryInterface = queryType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IMultiProjectionQuery<,,>));
-
-        if (queryInterface == null)
-        {
-            throw new InvalidOperationException(
-                $"Query type '{queryType.Name}' does not implement IMultiProjectionQuery<,,>");
-        }
-
-        // Extract the generic arguments
-        var genericArgs = queryInterface.GetGenericArguments();
-        var projectorType = genericArgs[0];
-        var outputType = genericArgs[2];
+        var (projectorType, outputType) = ExtractQuerySignature(queryType);
 
         // Check if already registered
         if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
@@ -396,12 +366,21 @@ public class SimpleQueryTypes : IQueryTypes
     /// <typeparam name="TQuery">The query type</typeparam>
     /// <typeparam name="TOutput">The output type</typeparam>
     public void RegisterListQuery<TProjector, TQuery, TOutput>() where TProjector : IMultiProjector<TProjector>
-        where TQuery : IMultiProjectionListQuery<TProjector, TQuery, TOutput>, IEquatable<TQuery>
+        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
     {
         var queryType = typeof(TQuery);
         var projectorType = typeof(TProjector);
         var outputType = typeof(TOutput);
+
+        var (inferredProjector, inferredOutput) = ExtractListQuerySignature(queryType);
+        if (inferredProjector != projectorType || inferredOutput != outputType)
+        {
+            throw new InvalidOperationException(
+                $"List query type '{queryType.Name}' generic parameters do not match registration. " +
+                $"Interface declares {inferredProjector.Name} -> {inferredOutput.Name}, " +
+                $"registration supplied {projectorType.Name} -> {outputType.Name}");
+        }
 
         // Check if already registered
         if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
@@ -436,22 +415,7 @@ public class SimpleQueryTypes : IQueryTypes
     {
         var queryType = typeof(TQuery);
 
-        // Find the IMultiProjectionListQuery interface
-        var listQueryInterface = queryType
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType &&
-                i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQuery<,,>));
-
-        if (listQueryInterface == null)
-        {
-            throw new InvalidOperationException(
-                $"Query type '{queryType.Name}' does not implement IMultiProjectionListQuery<,,>");
-        }
-
-        // Extract the generic arguments
-        var genericArgs = listQueryInterface.GetGenericArguments();
-        var projectorType = genericArgs[0];
-        var outputType = genericArgs[2];
+        var (projectorType, outputType) = ExtractListQuerySignature(queryType);
 
         // Check if already registered
         if (!_queryToProjectorMap.TryAdd(queryType, projectorType))
@@ -476,5 +440,94 @@ public class SimpleQueryTypes : IQueryTypes
         _responseTypes.Add(outputType);
         _typeNameMap[queryType.Name] = queryType;
         _typeNameMap[queryType.FullName ?? queryType.Name] = queryType;
+    }
+
+    private static bool IsResultBox(object? result) =>
+        result != null &&
+        result.GetType().IsGenericType &&
+        result.GetType().GetGenericTypeDefinition() == typeof(ResultBox<>);
+
+    private static ResultBox<object> ExtractResultBoxValue(object? result)
+    {
+        if (result is null)
+        {
+            return ResultBox.Error<object>(new InvalidOperationException("ResultBox value is null"));
+        }
+
+        var isSuccess = result.GetType().GetProperty("IsSuccess")?.GetValue(result) as bool?;
+        if (isSuccess == true)
+        {
+            var getValue = result.GetType().GetMethod("GetValue");
+            var value = getValue?.Invoke(result, null);
+            return ResultBox.FromValue(value!);
+        }
+
+        var getException = result.GetType().GetMethod("GetException");
+        var exception = getException?.Invoke(result, null) as Exception;
+        return ResultBox.Error<object>(exception ?? new Exception("Query execution failed"));
+    }
+
+    private static ResultBox<IEnumerable<object>> ExtractEnumerableResult(object? result)
+    {
+        if (IsResultBox(result))
+        {
+            var boxResult = ExtractResultBoxValue(result!);
+            if (!boxResult.IsSuccess)
+            {
+                return ResultBox.Error<IEnumerable<object>>(boxResult.GetException());
+            }
+
+            if (boxResult.GetValue() is IEnumerable enumerableBox)
+            {
+                return ResultBox.FromValue(enumerableBox.Cast<object>());
+            }
+
+            return ResultBox.Error<IEnumerable<object>>(
+                new InvalidOperationException("Handle method returned ResultBox with invalid value type"));
+        }
+
+        if (result is IEnumerable enumerable)
+        {
+            return ResultBox.FromValue(enumerable.Cast<object>());
+        }
+
+        return ResultBox.Error<IEnumerable<object>>(
+            new InvalidOperationException("Query handler returned invalid result type"));
+    }
+
+    private static (Type ProjectorType, Type OutputType) ExtractQuerySignature(Type queryType)
+    {
+        var queryInterface = queryType
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType &&
+                (i.GetGenericTypeDefinition() == typeof(IMultiProjectionQuery<,,>) ||
+                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionQueryWithoutResult<,,>)));
+
+        if (queryInterface == null)
+        {
+            throw new InvalidOperationException(
+                $"Query type '{queryType.Name}' must implement either IMultiProjectionQuery<,,> or IMultiProjectionQueryWithoutResult<,,>.");
+        }
+
+        var genericArgs = queryInterface.GetGenericArguments();
+        return (genericArgs[0], genericArgs[2]);
+    }
+
+    private static (Type ProjectorType, Type OutputType) ExtractListQuerySignature(Type queryType)
+    {
+        var queryInterface = queryType
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType &&
+                (i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQuery<,,>) ||
+                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQueryWithoutResult<,,>)));
+
+        if (queryInterface == null)
+        {
+            throw new InvalidOperationException(
+                $"Query type '{queryType.Name}' must implement either IMultiProjectionListQuery<,,> or IMultiProjectionListQueryWithoutResult<,,>.");
+        }
+
+        var genericArgs = queryInterface.GetGenericArguments();
+        return (genericArgs[0], genericArgs[2]);
     }
 }

@@ -39,6 +39,14 @@ var apiService = builder
     .WithReference(multiProjectionOffload)
     .WaitFor(postgres);
 
+// Add the WithoutResult API Service
+var withoutResultApiService = builder
+    .AddProject<DcbOrleans_WithoutResult_ApiService>("withoutresultapiservice")
+    .WithReference(postgres)
+    .WithReference(orleans)
+    .WithReference(multiProjectionOffload)
+    .WaitFor(postgres);
+
 // Add the Web frontend
 builder
     .AddProject<DcbOrleans_Web>("webfrontend")

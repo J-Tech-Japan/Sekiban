@@ -14,9 +14,10 @@
     <Project Path="internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
     <Project Path="internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
     <Project Path="internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
     <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
-    <Project Path="internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
+    <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
     <Project Path="internalUsages/MemStat.Console/MemStat.Console.csproj" />
     <Project Path="internalUsages/MemStat.Net.Web/MemStat.Net.Web.csproj" />
     <Project Path="internalUsages/OrleansSekiban.ApiService/OrleansSekiban.ApiService.csproj" />
@@ -27,9 +28,16 @@
     <Project Path="internalUsages/OrleansSekiban.Web/OrleansSekiban.Web.csproj" />
     <Project Path="internalUsages/Pure.Domain/Pure.Domain.csproj" />
     <Project Path="internalUsages/SharedDomain/SharedDomain.csproj" />
+    <Project Path="internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj" Type="C#">
+      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
+      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
+      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
+      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
+    </Project>
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MemStat.Net/MemStat.Net.csproj" />
+    <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans/Sekiban.Dcb.Orleans.csproj" />
     <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
@@ -48,17 +56,16 @@
     <Project Path="src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj" />
     <Project Path="src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj" />
     <Project Path="src/Sekiban.Pure/Sekiban.Pure.csproj" />
-    <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/MemStat.Net.Test/MemStat.Net.Test.csproj" />
     <Project Path="tests/Pure.Domain.Test/Pure.Domain.Test.csproj" />
     <Project Path="tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj" />
+    <Project Path="tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />
     <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj" />
     <Project Path="tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj" />
-    <Project Path="tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="tools/SekibanDocumentMcpSse/SekibanDocumentMcpSse.csproj" />
