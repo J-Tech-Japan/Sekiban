@@ -8,6 +8,7 @@ using Dcb.Domain.WithoutResult.Enrollment;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
+using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,9 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+
+// Add global exception handler
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 
 
@@ -455,22 +459,15 @@ apiRoute
         "/students",
         async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var execution = await executor.ExecuteAsync(command);
-                return Results.Ok(
-                    new
-                    {
-                        studentId = command.StudentId,
-                        eventId = execution.EventId,
-                        sortableUniqueId = execution.SortableUniqueId,
-                        message = "Student created successfully"
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var execution = await executor.ExecuteAsync(command);
+            return Results.Ok(
+                new
+                {
+                    studentId = command.StudentId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Student created successfully"
+                });
         })
     .WithOpenApi()
     .WithName("CreateStudent");
@@ -484,21 +481,14 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
         {
-            try
+            var query = new GetStudentListQuery
             {
-                var query = new GetStudentListQuery
-                {
-                    PageNumber = pageNumber ?? 1,
-                    PageSize = pageSize ?? 20,
-                    WaitForSortableUniqueId = waitForSortableUniqueId
-                };
-                var result = await executor.QueryAsync(query);
-                return Results.Ok(result.Items);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                PageNumber = pageNumber ?? 1,
+                PageSize = pageSize ?? 20,
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+            return Results.Ok(result.Items);
         })
     .WithOpenApi()
     .WithName("GetStudentList");
@@ -508,22 +498,16 @@ apiRoute
         "/students/{studentId:guid}",
         async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var tag = new StudentTag(studentId);
-                var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(StudentProjector)));
-                return Results.Ok(
-                    new
-                    {
-                        studentId,
-                        payload = state.Payload as dynamic,
-                        version = state.Version
-                    });
-            }
-            catch (Exception)
-            {
-                return Results.NotFound(new { error = $"Student {studentId} not found" });
-            }
+            var tag = new StudentTag(studentId);
+            var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(StudentProjector)));
+
+            return Results.Ok(
+                new
+                {
+                    studentId,
+                    payload = state.Payload as dynamic,
+                    version = state.Version
+                });
         })
     .WithOpenApi()
     .WithName("GetStudent");
@@ -534,22 +518,15 @@ apiRoute
         "/classrooms",
         async ([FromBody] CreateClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
-                return Results.Ok(
-                    new
-                    {
-                        classRoomId = command.ClassRoomId,
-                        eventId = result.EventId,
-                        sortableUniqueId = result.SortableUniqueId,
-                        message = "ClassRoom created successfully"
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
+            return Results.Ok(
+                new
+                {
+                    classRoomId = command.ClassRoomId,
+                    eventId = result.EventId,
+                    sortableUniqueId = result.SortableUniqueId,
+                    message = "ClassRoom created successfully"
+                });
         })
     .WithOpenApi()
     .WithName("CreateClassRoom");
@@ -563,21 +540,14 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
         {
-            try
+            var query = new GetClassRoomListQuery
             {
-                var query = new GetClassRoomListQuery
-                {
-                    PageNumber = pageNumber ?? 1,
-                    PageSize = pageSize ?? 20,
-                    WaitForSortableUniqueId = waitForSortableUniqueId
-                };
-                var result = await executor.QueryAsync(query);
-                return Results.Ok(result.Items);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                PageNumber = pageNumber ?? 1,
+                PageSize = pageSize ?? 20,
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var result = await executor.QueryAsync(query);
+            return Results.Ok(result.Items);
         })
     .WithOpenApi()
     .WithName("GetClassRoomList");
@@ -587,22 +557,16 @@ apiRoute
         "/classrooms/{classRoomId:guid}",
         async (Guid classRoomId, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var tag = new ClassRoomTag(classRoomId);
-                var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(ClassRoomProjector)));
-                return Results.Ok(
-                    new
-                    {
-                        classRoomId,
-                        payload = state.Payload,
-                        version = state.Version
-                    });
-            }
-            catch (Exception)
-            {
-                return Results.NotFound(new { error = $"ClassRoom {classRoomId} not found" });
-            }
+            var tag = new ClassRoomTag(classRoomId);
+            var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(ClassRoomProjector)));
+
+            return Results.Ok(
+                new
+                {
+                    classRoomId,
+                    payload = state.Payload,
+                    version = state.Version
+                });
         })
     .WithOpenApi()
     .WithName("GetClassRoom");
@@ -613,23 +577,16 @@ apiRoute
         "/enrollments/add",
         async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
-                return Results.Ok(
-                    new
-                    {
-                        studentId = command.StudentId,
-                        classRoomId = command.ClassRoomId,
-                        eventId = result.EventId,
-                        sortableUniqueId = result.SortableUniqueId,
-                        message = "Student enrolled successfully"
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
+            return Results.Ok(
+                new
+                {
+                    studentId = command.StudentId,
+                    classRoomId = command.ClassRoomId,
+                    eventId = result.EventId,
+                    sortableUniqueId = result.SortableUniqueId,
+                    message = "Student enrolled successfully"
+                });
         })
     .WithOpenApi()
     .WithName("EnrollStudent");
@@ -639,23 +596,16 @@ apiRoute
         "/enrollments/drop",
         async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
-                return Results.Ok(
-                    new
-                    {
-                        studentId = command.StudentId,
-                        classRoomId = command.ClassRoomId,
-                        eventId = result.EventId,
-                        sortableUniqueId = result.SortableUniqueId,
-                        message = "Student dropped successfully"
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
+            return Results.Ok(
+                new
+                {
+                    studentId = command.StudentId,
+                    classRoomId = command.ClassRoomId,
+                    eventId = result.EventId,
+                    sortableUniqueId = result.SortableUniqueId,
+                    message = "Student dropped successfully"
+                });
         })
     .WithOpenApi()
     .WithName("DropStudent");
@@ -666,33 +616,21 @@ apiRoute
         "/debug/events",
         async ([FromServices] IEventStore eventStore) =>
         {
-            try
-            {
-                var result = await eventStore.ReadAllEventsAsync();
-                if (result.IsSuccess)
+            var result = await eventStore.ReadAllEventsAsync();
+            var events = result.GetValue().ToList();
+            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+            return Results.Ok(
+                new
                 {
-                    var events = result.GetValue().ToList();
-                    Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
-                    return Results.Ok(
-                        new
-                        {
-                            totalEvents = events.Count,
-                            events = events.Select(e => new
-                            {
-                                id = e.Id,
-                                type = e.EventType,
-                                sortableId = e.SortableUniqueIdValue,
-                                tags = e.Tags
-                            })
-                        });
-                }
-                return Results.BadRequest(new { error = result.GetException()?.Message });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Debug] Exception: {ex}");
-                return Results.Problem(detail: ex.Message);
-            }
+                    totalEvents = events.Count,
+                    events = events.Select(e => new
+                    {
+                        id = e.Id,
+                        type = e.EventType,
+                        sortableId = e.SortableUniqueIdValue,
+                        tags = e.Tags
+                    })
+                });
         })
     .WithOpenApi()
     .WithName("DebugGetEvents");
@@ -707,23 +645,16 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            pageNumber ??= 1;
+            pageSize ??= 100;
+            var query = new GetWeatherForecastListQuery
             {
-                pageNumber ??= 1;
-                pageSize ??= 100;
-                var query = new GetWeatherForecastListQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId,
-                    PageNumber = pageNumber,
-                    PageSize = pageSize
-                };
-                var result = await executor.QueryAsync(query);
-                return Results.Ok(result.Items);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+            return Results.Ok(result.Items);
         })
     .WithOpenApi()
     .WithName("GetWeatherForecast");
@@ -738,23 +669,16 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            pageNumber ??= 1;
+            pageSize ??= 100;
+            var query = new GetWeatherForecastListGenericQuery
             {
-                pageNumber ??= 1;
-                pageSize ??= 100;
-                var query = new GetWeatherForecastListGenericQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId,
-                    PageNumber = pageNumber,
-                    PageSize = pageSize
-                };
-                var result = await executor.QueryAsync(query);
-                return Results.Ok(result.Items);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+            return Results.Ok(result.Items);
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastGeneric");
@@ -769,23 +693,16 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            pageNumber ??= 1;
+            pageSize ??= 100;
+            var query = new GetWeatherForecastListSingleQuery
             {
-                pageNumber ??= 1;
-                pageSize ??= 100;
-                var query = new GetWeatherForecastListSingleQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId,
-                    PageNumber = pageNumber,
-                    PageSize = pageSize
-                };
-                var result = await executor.QueryAsync(query);
-                return Results.Ok(result.Items);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                WaitForSortableUniqueId = waitForSortableUniqueId,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+            var result = await executor.QueryAsync(query);
+            return Results.Ok(result.Items);
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastSingle");
@@ -795,23 +712,16 @@ apiRoute
         "/inputweatherforecast",
         async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command);
-                var createdEvent = result.Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>();
-                return Results.Ok(
-                    new
-                    {
-                        success = true,
-                        eventId = result.EventId,
-                        aggregateId = createdEvent?.ForecastId ?? command.ForecastId,
-                        sortableUniqueId = result.SortableUniqueId
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { success = false, error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command);
+            var createdEvent = result.Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>();
+            return Results.Ok(
+                new
+                {
+                    success = true,
+                    eventId = result.EventId,
+                    aggregateId = createdEvent?.ForecastId ?? command.ForecastId,
+                    sortableUniqueId = result.SortableUniqueId
+                });
         })
     .WithName("InputWeatherForecast")
     .WithOpenApi();
@@ -822,22 +732,15 @@ apiRoute
         "/updateweatherforecastlocation",
         async ([FromBody] ChangeLocationName command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command);
-                return Results.Ok(
-                    new
-                    {
-                        success = true,
-                        eventId = result.EventId,
-                        aggregateId = command.ForecastId,
-                        sortableUniqueId = result.SortableUniqueId
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { success = false, error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command);
+            return Results.Ok(
+                new
+                {
+                    success = true,
+                    eventId = result.EventId,
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.SortableUniqueId
+                });
         })
     .WithName("UpdateWeatherForecastLocation")
     .WithOpenApi();
@@ -851,24 +754,17 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            var query = new GetWeatherForecastCountQuery
             {
-                var query = new GetWeatherForecastCountQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId
-                };
-                var countResult = await executor.QueryAsync(query);
-                return Results.Ok(new
-                {
-                    safeVersion = countResult.SafeVersion,
-                    unsafeVersion = countResult.UnsafeVersion,
-                    totalCount = countResult.TotalCount
-                });
-            }
-            catch (Exception ex)
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var countResult = await executor.QueryAsync(query);
+            return Results.Ok(new
             {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                safeVersion = countResult.SafeVersion,
+                unsafeVersion = countResult.UnsafeVersion,
+                totalCount = countResult.TotalCount
+            });
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastCount");
@@ -881,25 +777,18 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            var query = new GetWeatherForecastCountGenericQuery
             {
-                var query = new GetWeatherForecastCountGenericQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId
-                };
-                var countResult = await executor.QueryAsync(query);
-                return Results.Ok(new
-                {
-                    safeVersion = countResult.SafeVersion,
-                    unsafeVersion = countResult.UnsafeVersion,
-                    totalCount = countResult.TotalCount,
-                    isGeneric = true
-                });
-            }
-            catch (Exception ex)
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var countResult = await executor.QueryAsync(query);
+            return Results.Ok(new
             {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                safeVersion = countResult.SafeVersion,
+                unsafeVersion = countResult.UnsafeVersion,
+                totalCount = countResult.TotalCount,
+                isGeneric = true
+            });
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastCountGeneric");
@@ -912,25 +801,18 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
+            var query = new GetWeatherForecastCountSingleQuery
             {
-                var query = new GetWeatherForecastCountSingleQuery
-                {
-                    WaitForSortableUniqueId = waitForSortableUniqueId
-                };
-                var countResult = await executor.QueryAsync(query);
-                return Results.Ok(new
-                {
-                    safeVersion = countResult.SafeVersion,
-                    unsafeVersion = countResult.UnsafeVersion,
-                    totalCount = countResult.TotalCount,
-                    isSingle = true
-                });
-            }
-            catch (Exception ex)
+                WaitForSortableUniqueId = waitForSortableUniqueId
+            };
+            var countResult = await executor.QueryAsync(query);
+            return Results.Ok(new
             {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+                safeVersion = countResult.SafeVersion,
+                unsafeVersion = countResult.UnsafeVersion,
+                totalCount = countResult.TotalCount,
+                isSingle = true
+            });
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastCountSingle");
@@ -980,16 +862,9 @@ apiRoute
         "/weatherforecast/status",
         async ([FromServices] IClusterClient client) =>
         {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
-                var status = await grain.GetStatusAsync();
-                return Results.Ok(status);
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { projector = "WeatherForecastProjection", error = ex.Message });
-            }
+            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var status = await grain.GetStatusAsync();
+            return Results.Ok(status);
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastStatus");
@@ -1024,27 +899,19 @@ apiRoute
         "/projections/persist",
         async ([FromQuery] string name, [FromServices] IClusterClient client) =>
         {
-            try
+            var start = DateTime.UtcNow;
+            Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
+            var grain = client.GetGrain<IMultiProjectionGrain>(name);
+            var rb = await grain.PersistStateAsync();
+            var end = DateTime.UtcNow;
+            if (rb.IsSuccess)
             {
-                var start = DateTime.UtcNow;
-                Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var rb = await grain.PersistStateAsync();
-                var end = DateTime.UtcNow;
-                if (rb.IsSuccess)
-                {
-                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end-start).TotalMilliseconds:F1}ms");
-                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end-start).TotalMilliseconds });
-                }
-                var err = rb.GetException()?.Message;
-                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end-start).TotalMilliseconds:F1}ms error={err}");
-                return Results.BadRequest(new { error = err, elapsedMs = (end-start).TotalMilliseconds });
+                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end-start).TotalMilliseconds:F1}ms");
+                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end-start).TotalMilliseconds });
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[PersistEndpoint] Exception name={name} error={ex.Message}");
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var err = rb.GetException()?.Message;
+            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end-start).TotalMilliseconds:F1}ms error={err}");
+            return Results.BadRequest(new { error = err, elapsedMs = (end-start).TotalMilliseconds });
         })
     .WithOpenApi()
     .WithName("PersistProjectionState");
@@ -1054,16 +921,9 @@ apiRoute
         "/projections/deactivate",
         async ([FromQuery] string name, [FromServices] IClusterClient client) =>
         {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                await grain.RequestDeactivationAsync();
-                return Results.Ok(new { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var grain = client.GetGrain<IMultiProjectionGrain>(name);
+            await grain.RequestDeactivationAsync();
+            return Results.Ok(new { success = true });
         })
     .WithOpenApi()
     .WithName("DeactivateProjection");
@@ -1073,16 +933,9 @@ apiRoute
         "/projections/refresh",
         async ([FromQuery] string name, [FromServices] IClusterClient client) =>
         {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                await grain.RefreshAsync();
-                return Results.Ok(new { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var grain = client.GetGrain<IMultiProjectionGrain>(name);
+            await grain.RefreshAsync();
+            return Results.Ok(new { success = true });
         })
     .WithOpenApi()
     .WithName("RefreshProjection");
@@ -1092,17 +945,10 @@ apiRoute
         "/projections/snapshot",
         async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
         {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-                if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
-                return Results.Text(rb.GetValue(), "application/json");
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var grain = client.GetGrain<IMultiProjectionGrain>(name);
+            var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+            if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+            return Results.Text(rb.GetValue(), "application/json");
         })
     .WithOpenApi()
     .WithName("GetProjectionSnapshot");
@@ -1112,16 +958,9 @@ apiRoute
         "/projections/overwrite-version",
         async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
         {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-                return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            var grain = client.GetGrain<IMultiProjectionGrain>(name);
+            var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
+            return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
         })
     .WithOpenApi()
     .WithName("OverwriteProjectionPersistedVersion");
@@ -1132,22 +971,15 @@ apiRoute
         "/removeweatherforecast",
         async ([FromBody] DeleteWeatherForecast command, [FromServices] ISekibanExecutorWithoutResult executor) =>
         {
-            try
-            {
-                var result = await executor.ExecuteAsync(command);
-                return Results.Ok(
-                    new
-                    {
-                        success = true,
-                        eventId = result.EventId,
-                        aggregateId = command.ForecastId,
-                        sortableUniqueId = result.SortableUniqueId
-                    });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { success = false, error = ex.Message });
-            }
+            var result = await executor.ExecuteAsync(command);
+            return Results.Ok(
+                new
+                {
+                    success = true,
+                    eventId = result.EventId,
+                    aggregateId = command.ForecastId,
+                    sortableUniqueId = result.SortableUniqueId
+                });
         })
     .WithName("RemoveWeatherForecast")
     .WithOpenApi();
@@ -1161,31 +993,18 @@ apiRoute
         "/orleans/test",
         async ([FromServices] ISekibanExecutorWithoutResult executor, [FromServices] ILogger<Program> logger) =>
         {
-            try
-            {
-                logger.LogInformation("Testing Orleans connectivity...");
+            logger.LogInformation("Testing Orleans connectivity...");
 
-                var query = new GetWeatherForecastListQuery();
-                var result = await executor.QueryAsync(query);
+            var query = new GetWeatherForecastListQuery();
+            var result = await executor.QueryAsync(query);
 
-                return Results.Ok(
-                    new
-                    {
-                        status = "Orleans is working",
-                        message = "Successfully executed query through Orleans",
-                        itemCount = result.TotalCount
-                    });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Orleans test failed");
-                return Results.Ok(
-                    new
-                    {
-                        status = "Orleans test failed",
-                        error = ex.Message
-                    });
-            }
+            return Results.Ok(
+                new
+                {
+                    status = "Orleans is working",
+                    message = "Successfully executed query through Orleans",
+                    itemCount = result.TotalCount
+                });
         })
     .WithOpenApi()
     .WithName("TestOrleans");
