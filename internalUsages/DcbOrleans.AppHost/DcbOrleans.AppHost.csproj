@@ -21,6 +21,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\DcbOrleans.ApiService\DcbOrleans.ApiService.csproj"/>
+        <ProjectReference Include="..\DcbOrleans.WithoutResult.ApiService\DcbOrleans.WithoutResult.ApiService.csproj"/>
         <ProjectReference Include="..\DcbOrleans.Web\DcbOrleans.Web.csproj"/>
         <ProjectReference Include="..\DcbOrleans.Benchmark\DcbOrleans.Benchmark.csproj"/>
     </ItemGroup>

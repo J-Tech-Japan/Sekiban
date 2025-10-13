@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>34e8262c-ed2c-453b-b399-8d2662dc3d88</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.4.2" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="9.4.2" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.2" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="9.2.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1"/>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.7.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DcbOrleans.ServiceDefaults\DcbOrleans.ServiceDefaults.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans\Sekiban.Dcb.Orleans.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj"/>
+        <ProjectReference Include="..\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
+    </ItemGroup>
+
+</Project>
