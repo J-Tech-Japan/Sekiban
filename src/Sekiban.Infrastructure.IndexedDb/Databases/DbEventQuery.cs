@@ -13,6 +13,12 @@ public record DbEventQuery
 
     public int? MaxCount { get; private set; }
 
+    public DbEventQuery WithSortableIdStart(string? sortableIdStart) =>
+        this with { SortableIdStart = sortableIdStart };
+
+    public DbEventQuery WithMaxCount(int? maxCount) =>
+        this with { MaxCount = maxCount };
+
     public static DbEventQuery FromEventRetrievalInfo(EventRetrievalInfo eventRetrievalInfo)
     {
         var query = new DbEventQuery();

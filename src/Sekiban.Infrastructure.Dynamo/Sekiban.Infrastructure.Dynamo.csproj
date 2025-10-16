@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.23.8</Version>
+        <Version>0.23.9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.8</PackageVersion>
+        <PackageVersion>0.23.9</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -26,8 +26,8 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.8"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.23.8"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.23.9"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.23.9"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.1"/>
     </ItemGroup>

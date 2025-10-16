@@ -36,16 +36,29 @@ public class IndexedDbDocumentRepository(
         // Use chunked retrieval to avoid loading all events into memory at once
         const int chunkSize = 1000; // Process 1000 events at a time
         var query = DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo);
+        var remaining = query.MaxCount;
+        var nextSortableStart = query.SortableIdStart;
 
-        // Loop through chunks, retrieving one chunk at a time
-        int skip = 0;
         while (true)
         {
+            if (remaining.HasValue && remaining <= 0)
+            {
+                break;
+            }
+
+            var currentChunkSize = remaining.HasValue
+                ? Math.Min(chunkSize, remaining.Value)
+                : chunkSize;
+
+            var chunkQuery = query
+                .WithSortableIdStart(nextSortableStart)
+                .WithMaxCount(remaining.HasValue ? currentChunkSize : query.MaxCount);
+
             var dbEventChunk = await dbFactory.DbActionAsync(async (dbContext) =>
                 eventRetrievalInfo.GetAggregateContainerGroup() switch
                 {
-                    AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunk(query, chunkSize, skip),
-                    AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunk(query, chunkSize, skip),
+                    AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunk(chunkQuery, currentChunkSize, 0),
+                    AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunk(chunkQuery, currentChunkSize, 0),
                     _ => throw new NotImplementedException(),
                 });
 
@@ -62,8 +75,12 @@ public class IndexedDbDocumentRepository(
 
             resultAction(events);
 
-            // Move to next chunk
-            skip += chunkSize;
+            // Prepare for next iteration
+            nextSortableStart = dbEventChunk[^1].SortableUniqueId;
+            if (remaining.HasValue)
+            {
+                remaining -= dbEventChunk.Length;
+            }
         }
 
         return true;
