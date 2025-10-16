@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/tomohisa/Desktop/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
