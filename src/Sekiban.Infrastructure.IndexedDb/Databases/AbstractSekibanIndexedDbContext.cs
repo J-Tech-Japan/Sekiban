@@ -5,6 +5,9 @@ public abstract class AbstractSekibanIndexedDbContext : ISekibanIndexedDbContext
     public async Task<DbEvent[]> GetEventsAsync(DbEventQuery query) =>
         (await DispatchAsync<DbEventQuery, DbEvent[]>("getEventsAsync", query))!;
 
+    public async Task<DbEvent[][]> GetEventsAsyncChunked(DbEventQuery query, int chunkSize) =>
+        (await DispatchAsync<object, DbEvent[][]>("getEventsAsyncChunked", new { query, chunkSize }))!;
+
     public async Task WriteEventAsync(DbEvent payload) =>
         await DispatchAsync("writeEventAsync", payload);
 
@@ -13,6 +16,9 @@ public abstract class AbstractSekibanIndexedDbContext : ISekibanIndexedDbContext
 
     public async Task<DbEvent[]> GetDissolvableEventsAsync(DbEventQuery query) =>
         (await DispatchAsync<DbEventQuery, DbEvent[]>("getDissolvableEventsAsync", query))!;
+
+    public async Task<DbEvent[][]> GetDissolvableEventsAsyncChunked(DbEventQuery query, int chunkSize) =>
+        (await DispatchAsync<object, DbEvent[][]>("getDissolvableEventsAsyncChunked", new { query, chunkSize }))!;
 
     public async Task WriteDissolvableEventAsync(DbEvent payload) =>
         await DispatchAsync("writeDissolvableEventAsync", payload);

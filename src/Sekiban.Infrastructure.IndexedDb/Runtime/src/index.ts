@@ -85,6 +85,74 @@ const filterEvents = async (
 	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 };
 
+// Chunked cursor-based filtering for large datasets
+const filterEventsChunked = async (
+	idb: SekibanDb,
+	store: "events" | "dissolvable-events",
+	query: DbEventQuery,
+	chunkSize: number,
+): Promise<DbEvent[][]> => {
+	const chunks: DbEvent[][] = [];
+	let currentChunk: DbEvent[] = [];
+	let count = 0;
+	const maxCount = query.MaxCount ?? Number.MAX_SAFE_INTEGER;
+
+	const tx = idb.transaction(store, "readonly");
+	const objectStore = tx.objectStore(store);
+
+	// biome-ignore lint/suspicious/noExplicitAny: cursor typing complexity
+	let cursor: any;
+
+	if (query.PartitionKey !== null) {
+		const index = objectStore.index("PartitionKey");
+		cursor = await index.openCursor(query.PartitionKey);
+	} else {
+		cursor = await objectStore.openCursor();
+	}
+
+	while (cursor && count < maxCount) {
+		const event = cursor.value as DbEvent;
+
+		// Apply filters
+		if (
+			(query.RootPartitionKey === null ||
+				event.RootPartitionKey === query.RootPartitionKey) &&
+			(query.PartitionKey === null ||
+				event.PartitionKey === query.PartitionKey) &&
+			(query.AggregateTypes === null ||
+				query.AggregateTypes.includes(event.AggregateType)) &&
+			(query.SortableIdStart === null ||
+				query.SortableIdStart < event.SortableUniqueId) &&
+			(query.SortableIdEnd === null ||
+				event.SortableUniqueId < query.SortableIdEnd)
+		) {
+			currentChunk.push(event);
+			count++;
+
+			if (currentChunk.length >= chunkSize) {
+				// Sort chunk before adding to chunks
+				currentChunk.sort((a, b) =>
+					a.SortableUniqueId.localeCompare(b.SortableUniqueId),
+				);
+				chunks.push(currentChunk);
+				currentChunk = [];
+			}
+		}
+
+		cursor = await cursor.continue();
+	}
+
+	// Add remaining items
+	if (currentChunk.length > 0) {
+		currentChunk.sort((a, b) =>
+			a.SortableUniqueId.localeCompare(b.SortableUniqueId),
+		);
+		chunks.push(currentChunk);
+	}
+
+	return chunks;
+};
+
 const filterBlobs = async (
 	idb: SekibanDb,
 	store:
@@ -111,6 +179,13 @@ const operations = (idb: SekibanDb) => {
 	const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
 		await filterEvents(idb, "events", query);
 
+	// Chunked version that returns events in batches
+	const getEventsAsyncChunked = async (params: {
+		query: DbEventQuery;
+		chunkSize: number;
+	}): Promise<DbEvent[][]> =>
+		await filterEventsChunked(idb, "events", params.query, params.chunkSize);
+
 	const removeAllEventsAsync = async (): Promise<void> => {
 		await idb.clear("events");
 	};
@@ -122,6 +197,18 @@ const operations = (idb: SekibanDb) => {
 	const getDissolvableEventsAsync = async (
 		query: DbEventQuery,
 	): Promise<DbEvent[]> => await filterEvents(idb, "dissolvable-events", query);
+
+	// Chunked version for dissolvable events
+	const getDissolvableEventsAsyncChunked = async (params: {
+		query: DbEventQuery;
+		chunkSize: number;
+	}): Promise<DbEvent[][]> =>
+		await filterEventsChunked(
+			idb,
+			"dissolvable-events",
+			params.query,
+			params.chunkSize,
+		);
 
 	const removeAllDissolvableEventsAsync = async (): Promise<void> => {
 		await idb.clear("dissolvable-events");
@@ -302,10 +389,12 @@ const operations = (idb: SekibanDb) => {
 	return {
 		writeEventAsync,
 		getEventsAsync,
+		getEventsAsyncChunked,
 		removeAllEventsAsync,
 
 		writeDissolvableEventAsync,
 		getDissolvableEventsAsync,
+		getDissolvableEventsAsyncChunked,
 		removeAllDissolvableEventsAsync,
 
 		writeCommandAsync,

@@ -33,19 +33,27 @@ public class IndexedDbDocumentRepository(
 
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
-        var dbEvents = await dbFactory.DbActionAsync(async (dbContext) =>
+        // Use chunked retrieval to avoid loading all events into memory at once
+        const int chunkSize = 1000; // Process 1000 events at a time
+        var query = DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo);
+
+        var dbEventChunks = await dbFactory.DbActionAsync(async (dbContext) =>
             eventRetrievalInfo.GetAggregateContainerGroup() switch
             {
-                AggregateContainerGroup.Default => await dbContext.GetEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
-                AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
+                AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunked(query, chunkSize),
+                AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunked(query, chunkSize),
                 _ => throw new NotImplementedException(),
             });
 
-        var events = dbEvents
-            .Select(x => x.ToEvent(registeredEventTypes))
-            .OfType<IEvent>();
+        // Process each chunk and call resultAction incrementally
+        foreach (var dbEventChunk in dbEventChunks)
+        {
+            var events = dbEventChunk
+                .Select(x => x.ToEvent(registeredEventTypes))
+                .OfType<IEvent>();
 
-        resultAction(events);
+            resultAction(events);
+        }
 
         return true;
     }
