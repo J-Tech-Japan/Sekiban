@@ -5,12 +5,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.23.7</Version>
+        <Version>0.23.8</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.23.7</PackageVersion>
+        <PackageVersion>0.23.8</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -30,7 +30,7 @@
         </PackageReference>
         <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Core" Version="0.23.7"/>
+        <PackageReference Include="Sekiban.Core" Version="0.23.8"/>
     </ItemGroup>
 
     <ItemGroup>
