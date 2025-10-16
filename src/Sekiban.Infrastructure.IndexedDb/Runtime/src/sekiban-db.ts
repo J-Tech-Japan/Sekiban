@@ -52,6 +52,7 @@ interface SekibanDbSchema extends DBSchema {
 			AggregateType: DbSingleProjectionSnapshot["AggregateType"];
 			PayloadVersionIdentifier: DbSingleProjectionSnapshot["PayloadVersionIdentifier"];
 			SavedVersion: DbSingleProjectionSnapshot["SavedVersion"];
+			LastSortableUniqueId: DbSingleProjectionSnapshot["LastSortableUniqueId"];
 		};
 	};
 
@@ -62,6 +63,7 @@ interface SekibanDbSchema extends DBSchema {
 			AggregateContainerGroup: DbMultiProjectionSnapshot["AggregateContainerGroup"];
 			PartitionKey: DbMultiProjectionSnapshot["PartitionKey"];
 			PayloadVersionIdentifier: DbMultiProjectionSnapshot["PayloadVersionIdentifier"];
+			LastSortableUniqueId: DbMultiProjectionSnapshot["LastSortableUniqueId"];
 		};
 	};
 

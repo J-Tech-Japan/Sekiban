@@ -4,10 +4,12 @@ public interface ISekibanIndexedDbContext
 {
     Task WriteEventAsync(DbEvent payload);
     Task<DbEvent[]> GetEventsAsync(DbEventQuery query);
+    Task<DbEvent[][]> GetEventsAsyncChunked(DbEventQuery query, int chunkSize);
     Task RemoveAllEventsAsync();
 
     Task WriteDissolvableEventAsync(DbEvent payload);
     Task<DbEvent[]> GetDissolvableEventsAsync(DbEventQuery query);
+    Task<DbEvent[][]> GetDissolvableEventsAsyncChunked(DbEventQuery query, int chunkSize);
     Task RemoveAllDissolvableEventsAsync();
 
     Task WriteCommandAsync(DbCommand payload);
