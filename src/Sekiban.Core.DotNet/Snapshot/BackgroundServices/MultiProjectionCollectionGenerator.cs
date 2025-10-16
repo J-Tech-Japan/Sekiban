@@ -38,6 +38,15 @@ public class MultiProjectionCollectionGenerator
                         _multiProjectionSnapshotGenerator,
                         new object[] { minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey })!;
                 }
+
+                // For Blazor WASM: Collect garbage after each projection type to prevent memory buildup
+                // On server-side .NET, avoid explicit GC calls as they can hurt performance
+                if (OperatingSystem.IsBrowser())
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                }
             }
         }
         foreach (var aggregatePayloadType in settings.GetAggregateListSnapshotTypes())
@@ -62,6 +71,15 @@ public class MultiProjectionCollectionGenerator
                         _multiProjectionSnapshotGenerator,
                         new object[] { minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey })!;
                 }
+
+                // For Blazor WASM: Collect garbage after each aggregate list type to prevent memory buildup
+                // On server-side .NET, avoid explicit GC calls as they can hurt performance
+                if (OperatingSystem.IsBrowser())
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+                }
             }
         }
         foreach (var singleProjectionPayloadType in settings.GetSingleProjectionListSnapshotTypes())
@@ -85,6 +103,15 @@ public class MultiProjectionCollectionGenerator
                     await (dynamic)generateMethod.Invoke(
                         _multiProjectionSnapshotGenerator,
                         new object[] { minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey })!;
+                }
+
+                // For Blazor WASM: Collect garbage after each single projection list type to prevent memory buildup
+                // On server-side .NET, avoid explicit GC calls as they can hurt performance
+                if (OperatingSystem.IsBrowser())
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
                 }
             }
         }

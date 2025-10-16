@@ -69,9 +69,11 @@ public class IndexedDbDocumentRepository(
             }
 
             // Process the chunk and call resultAction
+            // Materialize the IEnumerable to avoid multiple enumerations
             var events = dbEventChunk
                 .Select(x => x.ToEvent(registeredEventTypes))
-                .OfType<IEvent>();
+                .OfType<IEvent>()
+                .ToArray();
 
             resultAction(events);
 

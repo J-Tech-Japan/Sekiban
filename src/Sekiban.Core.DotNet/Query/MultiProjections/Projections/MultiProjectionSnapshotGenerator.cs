@@ -43,6 +43,7 @@ public class MultiProjectionSnapshotGenerator(
         if (EventRetriverSubstition == null)
         {
             logger.LogInformation($"Will Retrieve events. Current Version is {projector.Version} events for {typeof(TProjection).FullName}");
+            var processedChunks = 0;
             // get events from after snapshot or the initial and project them
             await eventRepository.GetEvents(
                 EventRetrievalInfo.FromNullableValues(
@@ -52,9 +53,10 @@ public class MultiProjectionSnapshotGenerator(
                     ISortableIdCondition.FromMultiProjectionState(state)),
                 events =>
                 {
-                    logger.LogInformation($"MultiProjectionSnapshotGenerator current Version is {projector.Version} prossessing {events.Count()} events for {typeof(TProjection).FullName}");
+                    var eventArray = events as Sekiban.Core.Events.IEvent[] ?? events.ToArray();
+                    logger.LogInformation($"MultiProjectionSnapshotGenerator current Version is {projector.Version} processing {eventArray.Length} events for {typeof(TProjection).FullName}");
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                    foreach (var ev in events)
+                    foreach (var ev in eventArray)
                     {
                         if (ev.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
                             ev.GetSortableUniqueId().IsLaterThanOrEqual(projector.LastSortableUniqueId))
@@ -62,7 +64,24 @@ public class MultiProjectionSnapshotGenerator(
                             projector.ApplyEvent(ev);
                         }
                     }
+                    processedChunks++;
+                    // For Blazor WASM: Periodically collect garbage to prevent memory buildup
+                    // On server-side .NET, avoid explicit GC calls as they can hurt performance
+                    if (processedChunks % 10 == 0 && OperatingSystem.IsBrowser())
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        GC.Collect();
+                    }
                 });
+
+            // Final garbage collection after processing all events (Blazor WASM only)
+            if (OperatingSystem.IsBrowser())
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
         }
         else
         {
