@@ -37,22 +37,33 @@ public class IndexedDbDocumentRepository(
         const int chunkSize = 1000; // Process 1000 events at a time
         var query = DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo);
 
-        var dbEventChunks = await dbFactory.DbActionAsync(async (dbContext) =>
-            eventRetrievalInfo.GetAggregateContainerGroup() switch
-            {
-                AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunked(query, chunkSize),
-                AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunked(query, chunkSize),
-                _ => throw new NotImplementedException(),
-            });
-
-        // Process each chunk and call resultAction incrementally
-        foreach (var dbEventChunk in dbEventChunks)
+        // Loop through chunks, retrieving one chunk at a time
+        int skip = 0;
+        while (true)
         {
+            var dbEventChunk = await dbFactory.DbActionAsync(async (dbContext) =>
+                eventRetrievalInfo.GetAggregateContainerGroup() switch
+                {
+                    AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunk(query, chunkSize, skip),
+                    AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunk(query, chunkSize, skip),
+                    _ => throw new NotImplementedException(),
+                });
+
+            // If no events in this chunk, we've reached the end
+            if (dbEventChunk.Length == 0)
+            {
+                break;
+            }
+
+            // Process the chunk and call resultAction
             var events = dbEventChunk
                 .Select(x => x.ToEvent(registeredEventTypes))
                 .OfType<IEvent>();
 
             resultAction(events);
+
+            // Move to next chunk
+            skip += chunkSize;
         }
 
         return true;
