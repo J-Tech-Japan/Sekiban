@@ -45,13 +45,6 @@ const desc =
 	(x: T, y: T): number =>
 		id(y).localeCompare(id(x));
 
-const eventMatchesQuery = (event: DbEvent, query: DbEventQuery): boolean =>
-	(query.RootPartitionKey === null ||
-		event.RootPartitionKey === query.RootPartitionKey) &&
-	(query.PartitionKey === null || event.PartitionKey === query.PartitionKey) &&
-	(query.AggregateTypes === null ||
-		query.AggregateTypes.includes(event.AggregateType));
-
 const filterEvents = async (
 	idb: SekibanDb,
 	store: "events" | "dissolvable-events",
@@ -92,62 +85,6 @@ const filterEvents = async (
 	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 };
 
-// Get a single chunk of events
-// Returns empty array when no more events are available
-const filterEventsChunk = async (
-	idb: SekibanDb,
-	store: "events" | "dissolvable-events",
-	query: DbEventQuery,
-	chunkSize: number,
-	_skip: number,
-): Promise<DbEvent[]> => {
-	const limit =
-		query.MaxCount !== null ? Math.min(chunkSize, query.MaxCount) : chunkSize;
-
-	if (limit <= 0) {
-		return [];
-	}
-
-	const tx = idb.transaction(store, "readonly");
-	const index = tx.store.index("SortableUniqueId");
-	const range =
-		query.SortableIdStart !== null && query.SortableIdEnd !== null
-			? IDBKeyRange.bound(
-					query.SortableIdStart,
-					query.SortableIdEnd,
-					true,
-					true,
-				)
-			: query.SortableIdStart !== null
-				? IDBKeyRange.lowerBound(query.SortableIdStart, true)
-				: query.SortableIdEnd !== null
-					? IDBKeyRange.upperBound(query.SortableIdEnd, true)
-					: undefined;
-
-	const results: DbEvent[] = [];
-
-	let cursor = await index.openCursor(range);
-	while (cursor !== null) {
-		const current = cursor.value;
-
-		if (!eventMatchesQuery(current, query)) {
-			cursor = await cursor.continue();
-			continue;
-		}
-
-		results.push(current);
-
-		if (results.length >= limit) {
-			break;
-		}
-
-		cursor = await cursor.continue();
-	}
-
-	await tx.done;
-
-	return results;
-};
 const filterBlobs = async (
 	idb: SekibanDb,
 	store:
@@ -174,20 +111,6 @@ const operations = (idb: SekibanDb) => {
 	const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
 		await filterEvents(idb, "events", query);
 
-	// Get single chunk by advancing SortableUniqueId to avoid loading all events
-	const getEventsAsyncChunk = async (params: {
-		query: DbEventQuery;
-		chunkSize: number;
-		skip: number;
-	}): Promise<DbEvent[]> =>
-		await filterEventsChunk(
-			idb,
-			"events",
-			params.query,
-			params.chunkSize,
-			params.skip,
-		);
-
 	const removeAllEventsAsync = async (): Promise<void> => {
 		await idb.clear("events");
 	};
@@ -199,20 +122,6 @@ const operations = (idb: SekibanDb) => {
 	const getDissolvableEventsAsync = async (
 		query: DbEventQuery,
 	): Promise<DbEvent[]> => await filterEvents(idb, "dissolvable-events", query);
-
-	// Same chunking logic for dissolvable events
-	const getDissolvableEventsAsyncChunk = async (params: {
-		query: DbEventQuery;
-		chunkSize: number;
-		skip: number;
-	}): Promise<DbEvent[]> =>
-		await filterEventsChunk(
-			idb,
-			"dissolvable-events",
-			params.query,
-			params.chunkSize,
-			params.skip,
-		);
 
 	const removeAllDissolvableEventsAsync = async (): Promise<void> => {
 		await idb.clear("dissolvable-events");
@@ -393,12 +302,10 @@ const operations = (idb: SekibanDb) => {
 	return {
 		writeEventAsync,
 		getEventsAsync,
-		getEventsAsyncChunk,
 		removeAllEventsAsync,
 
 		writeDissolvableEventAsync,
 		getDissolvableEventsAsync,
-		getDissolvableEventsAsyncChunk,
 		removeAllDissolvableEventsAsync,
 
 		writeCommandAsync,
