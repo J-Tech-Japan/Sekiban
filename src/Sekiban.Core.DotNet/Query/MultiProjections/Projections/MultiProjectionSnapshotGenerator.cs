@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Extensions.Logging;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
@@ -23,6 +24,7 @@ public class MultiProjectionSnapshotGenerator(
     private static readonly JsonSerializerOptions _jsonSerializerOptions = new();
 
     public Func<IMultiProjectionCommon, Task<IMultiProjectionCommon>>? EventRetriverSubstition = null; 
+    public Action<int>? VersionNotification { get; set; }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
         GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
@@ -33,11 +35,24 @@ public class MultiProjectionSnapshotGenerator(
     {
         var projector = new TProjection();
 
+        var versionNotificationInvoked = false;
+        void NotifyVersion()
+        {
+            var notifier = VersionNotification;
+            if (notifier == null)
+            {
+                return;
+            }
+            notifier(projector.Version);
+            versionNotificationInvoked = true;
+        }
+
         // if there is snapshot, load it, if not make a new one
         var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         if (state.Version > 0)
         {
             projector.ApplySnapshot(state);
+            NotifyVersion();
         }
 
         if (EventRetriverSubstition == null)
@@ -62,6 +77,7 @@ public class MultiProjectionSnapshotGenerator(
                             ev.GetSortableUniqueId().IsLaterThanOrEqual(projector.LastSortableUniqueId))
                         {
                             projector.ApplyEvent(ev);
+                            NotifyVersion();
                         }
                     }
                     processedChunks++;
@@ -90,6 +106,7 @@ public class MultiProjectionSnapshotGenerator(
             if (result.GetType() == projector.GetType())
             {
                 projector = (TProjection)result;
+                NotifyVersion();
                 logger.LogInformation($"MultiProjectionSnapshotGenerator end prossessing with EventRetriverSubstition");
             }else{
             {
@@ -128,6 +145,10 @@ public class MultiProjectionSnapshotGenerator(
                 state.Version,
                 usedVersion,
                 minimumNumberOfEventsToGenerateSnapshot);
+        }
+        if (!versionNotificationInvoked)
+        {
+            NotifyVersion();
         }
         return projector.ToState();
     }

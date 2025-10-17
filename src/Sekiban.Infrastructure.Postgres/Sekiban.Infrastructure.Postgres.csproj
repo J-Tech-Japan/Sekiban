@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.24.1</Version>
+        <Version>0.24.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.24.1</PackageVersion>
+        <PackageVersion>0.24.2</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -30,7 +30,7 @@
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.24.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.24.2"/>
     </ItemGroup>
 
     <ItemGroup>

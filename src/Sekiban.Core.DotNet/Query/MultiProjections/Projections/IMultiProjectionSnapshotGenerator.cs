@@ -1,3 +1,4 @@
+using System;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
@@ -7,6 +8,11 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// </summary>
 public interface IMultiProjectionSnapshotGenerator
 {
+    /// <summary>
+    ///     Optional callback invoked when the current projection version changes.
+    /// </summary>
+    Action<int>? VersionNotification { get; set; }
+
     /// <summary>
     ///     Generate MultiProjection Snapshot
     /// </summary>
