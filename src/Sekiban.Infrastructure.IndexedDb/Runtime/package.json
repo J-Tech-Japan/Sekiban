@@ -6,7 +6,7 @@
   "scripts": {
     "lint": "biome check src/",
     "lint:fix": "biome check src/ --write",
-    "build": "tsc --noEmit && esbuild --bundle --minify --platform=neutral --external:node:* --outfile=../wwwroot/sekiban-runtime.mjs src/index.ts"
+    "build": "tsc && esbuild --bundle --minify --platform=neutral --external:node:* --outfile=../wwwroot/sekiban-runtime.mjs src/index.ts"
   },
   "keywords": [],
   "author": "",

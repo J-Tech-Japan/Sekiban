@@ -9,9 +9,9 @@
     "target": "esnext",
     "moduleResolution": "bundler",
     "isolatedModules": true,
-    "outDir": "dist/",
+    "noEmit": true,
   },
   "include": [
-    "src/**/*.ts",
+    "src/",
   ],
 }
