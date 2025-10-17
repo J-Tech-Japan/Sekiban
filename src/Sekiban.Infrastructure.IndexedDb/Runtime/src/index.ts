@@ -10,7 +10,7 @@ import type {
 	DbSingleProjectionSnapshot,
 	DbSingleProjectionSnapshotQuery,
 } from "./models";
-import { type SekibanDb, connect } from "./sekiban-db";
+import { connect, type SekibanDb } from "./sekiban-db";
 
 // biome-ignore lint/suspicious/noExplicitAny: ignore param/return types for deserialize/serialize
 const wrapio = <T extends Record<string, (args: any) => Promise<any>>>(
@@ -48,8 +48,7 @@ const desc =
 const eventMatchesQuery = (event: DbEvent, query: DbEventQuery): boolean =>
 	(query.RootPartitionKey === null ||
 		event.RootPartitionKey === query.RootPartitionKey) &&
-	(query.PartitionKey === null ||
-		event.PartitionKey === query.PartitionKey) &&
+	(query.PartitionKey === null || event.PartitionKey === query.PartitionKey) &&
 	(query.AggregateTypes === null ||
 		query.AggregateTypes.includes(event.AggregateType));
 
@@ -175,7 +174,7 @@ const operations = (idb: SekibanDb) => {
 	const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
 		await filterEvents(idb, "events", query);
 
-		// Get single chunk by advancing SortableUniqueId to avoid loading all events
+	// Get single chunk by advancing SortableUniqueId to avoid loading all events
 	const getEventsAsyncChunk = async (params: {
 		query: DbEventQuery;
 		chunkSize: number;
@@ -201,7 +200,7 @@ const operations = (idb: SekibanDb) => {
 		query: DbEventQuery,
 	): Promise<DbEvent[]> => await filterEvents(idb, "dissolvable-events", query);
 
-		// Same chunking logic for dissolvable events
+	// Same chunking logic for dissolvable events
 	const getDissolvableEventsAsyncChunk = async (params: {
 		query: DbEventQuery;
 		chunkSize: number;
