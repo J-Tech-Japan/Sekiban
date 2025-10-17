@@ -15,6 +15,7 @@ interface SekibanDbSchema extends DBSchema {
 			RootPartitionKey: DbEvent["RootPartitionKey"];
 			PartitionKey: DbEvent["PartitionKey"];
 			AggregateType: DbEvent["AggregateType"];
+			TimeStamp: DbEvent["TimeStamp"];
 			SortableUniqueId: DbEvent["SortableUniqueId"];
 		};
 	};
@@ -26,6 +27,7 @@ interface SekibanDbSchema extends DBSchema {
 			RootPartitionKey: DbEvent["RootPartitionKey"];
 			PartitionKey: DbEvent["PartitionKey"];
 			AggregateType: DbEvent["AggregateType"];
+			TimeStamp: DbEvent["TimeStamp"];
 			SortableUniqueId: DbEvent["SortableUniqueId"];
 		};
 	};
@@ -36,6 +38,7 @@ interface SekibanDbSchema extends DBSchema {
 		indexes: {
 			SortableUniqueId: DbCommand["SortableUniqueId"];
 			PartitionKey: DbCommand["PartitionKey"];
+			TimeStamp: DbCommand["TimeStamp"];
 			AggregateContainerGroup: DbCommand["AggregateContainerGroup"];
 		};
 	};
@@ -50,6 +53,7 @@ interface SekibanDbSchema extends DBSchema {
 			AggregateId: DbSingleProjectionSnapshot["AggregateId"];
 			RootPartitionKey: DbSingleProjectionSnapshot["RootPartitionKey"];
 			AggregateType: DbSingleProjectionSnapshot["AggregateType"];
+			TimeStamp: DbSingleProjectionSnapshot["TimeStamp"];
 			PayloadVersionIdentifier: DbSingleProjectionSnapshot["PayloadVersionIdentifier"];
 			SavedVersion: DbSingleProjectionSnapshot["SavedVersion"];
 			LastSortableUniqueId: DbSingleProjectionSnapshot["LastSortableUniqueId"];
@@ -62,6 +66,7 @@ interface SekibanDbSchema extends DBSchema {
 		indexes: {
 			AggregateContainerGroup: DbMultiProjectionSnapshot["AggregateContainerGroup"];
 			PartitionKey: DbMultiProjectionSnapshot["PartitionKey"];
+			TimeStamp: DbMultiProjectionSnapshot["TimeStamp"];
 			PayloadVersionIdentifier: DbMultiProjectionSnapshot["PayloadVersionIdentifier"];
 			LastSortableUniqueId: DbMultiProjectionSnapshot["LastSortableUniqueId"];
 		};
@@ -106,6 +111,7 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 			events.createIndex("RootPartitionKey", "RootPartitionKey");
 			events.createIndex("PartitionKey", "PartitionKey");
 			events.createIndex("AggregateType", "AggregateType");
+			events.createIndex("TimeStamp", "TimeStamp");
 			events.createIndex("SortableUniqueId", "SortableUniqueId");
 
 			const dissolvableEvents = db.createObjectStore("dissolvable-events", {
@@ -114,6 +120,7 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 			dissolvableEvents.createIndex("RootPartitionKey", "RootPartitionKey");
 			dissolvableEvents.createIndex("PartitionKey", "PartitionKey");
 			dissolvableEvents.createIndex("AggregateType", "AggregateType");
+			dissolvableEvents.createIndex("TimeStamp", "TimeStamp");
 			dissolvableEvents.createIndex("SortableUniqueId", "SortableUniqueId");
 
 			const commands = db.createObjectStore("commands", {
@@ -121,6 +128,7 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 			});
 			commands.createIndex("SortableUniqueId", "SortableUniqueId");
 			commands.createIndex("PartitionKey", "PartitionKey");
+			commands.createIndex("TimeStamp", "TimeStamp");
 			commands.createIndex(
 				"AggregateContainerGroup",
 				"AggregateContainerGroup",
@@ -143,12 +151,17 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 				"RootPartitionKey",
 				"RootPartitionKey",
 			);
+			singleProjectionSnapshots.createIndex("TimeStamp", "TimeStamp");
 			singleProjectionSnapshots.createIndex("AggregateType", "AggregateType");
 			singleProjectionSnapshots.createIndex(
 				"PayloadVersionIdentifier",
 				"PayloadVersionIdentifier",
 			);
 			singleProjectionSnapshots.createIndex("SavedVersion", "SavedVersion");
+			singleProjectionSnapshots.createIndex(
+				"LastSortableUniqueId",
+				"LastSortableUniqueId",
+			);
 
 			const multiProjectionSnapshots = db.createObjectStore(
 				"multi-projection-snapshots",
@@ -158,10 +171,15 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 				"AggregateContainerGroup",
 				"AggregateContainerGroup",
 			);
+			multiProjectionSnapshots.createIndex("TimeStamp", "TimeStamp");
 			multiProjectionSnapshots.createIndex("PartitionKey", "PartitionKey");
 			multiProjectionSnapshots.createIndex(
 				"PayloadVersionIdentifier",
 				"PayloadVersionIdentifier",
+			);
+			multiProjectionSnapshots.createIndex(
+				"LastSortableUniqueId",
+				"LastSortableUniqueId",
 			);
 
 			const singleProjectionStateBlobs = db.createObjectStore(
