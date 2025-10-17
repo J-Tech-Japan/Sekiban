@@ -14,7 +14,7 @@
   "description": "",
   "private": true,
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.2.6",
     "@tsconfig/recommended": "^1.0.8",
     "@types/node": "^22.10.1",
     "esbuild": "^0.24.0",
