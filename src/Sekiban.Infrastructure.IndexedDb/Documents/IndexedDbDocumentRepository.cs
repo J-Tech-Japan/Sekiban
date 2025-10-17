@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
@@ -14,9 +15,12 @@ namespace Sekiban.Infrastructure.IndexedDb.Documents;
 public class IndexedDbDocumentRepository(
     IndexedDbFactory dbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor,
+    IOptions<IndexedDbDocumentRepositoryOptions> repositoryOptions
 ) : IDocumentPersistentRepository, IEventPersistentRepository
 {
+    private readonly int _eventChunkSize = repositoryOptions.Value.EventChunkSize;
+
     public async Task GetAllCommandStringsForAggregateIdAsync(Guid aggregateId, Type aggregatePayloadType, string? sinceSortableUniqueId, string rootPartitionKey, Action<IEnumerable<string>> resultAction) =>
         await dbFactory.DbActionAsync(
             async dbContext =>
@@ -34,7 +38,7 @@ public class IndexedDbDocumentRepository(
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
         // Use chunked retrieval to avoid loading all events into memory at once
-        const int chunkSize = 1000; // Process 1000 events at a time
+        var chunkSize = _eventChunkSize;
         var query = DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo);
         var remaining = query.MaxCount;
         var nextSortableStart = query.SortableIdStart;

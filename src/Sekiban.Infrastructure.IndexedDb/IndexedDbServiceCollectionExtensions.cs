@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,6 +49,7 @@ public static class IndexedDbServiceCollectionExtensions
         where T : class, ISekibanJsRuntime
     {
         services.AddSingleton(indexedDbOptions);
+        services.AddOptions<IndexedDbDocumentRepositoryOptions>();
 
         services.AddTransient<IndexedDbFactory>();
 
@@ -64,5 +66,16 @@ public static class IndexedDbServiceCollectionExtensions
         services.AddSingleton<ISekibanJsRuntime, T>();
 
         return new SekibanIndexedDbOptionsServiceCollection(indexedDbOptions, services);
+    }
+
+    public static SekibanIndexedDbOptionsServiceCollection ConfigureDocumentRepository(
+        this SekibanIndexedDbOptionsServiceCollection collection,
+        Action<IndexedDbDocumentRepositoryOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        collection.ServiceCollection.Configure(configure);
+        return collection;
     }
 }
