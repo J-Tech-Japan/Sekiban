@@ -3,12 +3,12 @@ using Sekiban.Dcb.Validation;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Dcb.Tests;
 
-public class CommandValidatorTests
+public class SekibanValidatorTests
 {
 
     #region Nested Command Validation Tests
     [Fact]
-    public void ValidateCommand_NestedCommandWithErrors_ReturnsNestedErrors()
+    public void Validate_NestedCommandWithErrors_ReturnsNestedErrors()
     {
         // Arrange
         var command = new NestedTestCommand
@@ -23,7 +23,7 @@ public class CommandValidatorTests
         };
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.Equal(3, errors.Count);
@@ -73,20 +73,20 @@ public class CommandValidatorTests
 
     #region Valid Command Tests
     [Fact]
-    public void ValidateCommand_ValidCommand_ReturnsNoErrors()
+    public void Validate_ValidCommand_ReturnsNoErrors()
     {
         // Arrange
         var command = new ValidTestCommand();
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.Empty(errors);
     }
 
     [Fact]
-    public void ValidateCommand_ValidNestedCommand_ReturnsNoErrors()
+    public void Validate_ValidNestedCommand_ReturnsNoErrors()
     {
         // Arrange
         var command = new NestedTestCommand
@@ -96,7 +96,7 @@ public class CommandValidatorTests
         };
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.Empty(errors);
@@ -105,25 +105,25 @@ public class CommandValidatorTests
 
     #region Invalid Command Tests
     [Fact]
-    public void ValidateCommand_NullCommand_ReturnsError()
+    public void Validate_NullCommand_ReturnsError()
     {
         // Act
-        var errors = CommandValidator.ValidateCommand(null!);
+        var errors = SekibanValidator.Validate(null!);
 
         // Assert
         Assert.Single(errors);
-        Assert.Equal("Command", errors[0].PropertyName);
+        Assert.Equal("Object", errors[0].PropertyName);
         Assert.Contains("null", errors[0].ErrorMessage);
     }
 
     [Fact]
-    public void ValidateCommand_InvalidCommand_ReturnsMultipleErrors()
+    public void Validate_InvalidCommand_ReturnsMultipleErrors()
     {
         // Arrange
         var command = new InvalidTestCommand();
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.Equal(4, errors.Count);
@@ -153,28 +153,48 @@ public class CommandValidatorTests
 
     #region Exception Throwing Tests
     [Fact]
-    public void ValidateCommandAndThrow_ValidCommand_DoesNotThrow()
+    public void ValidateAndThrow_ValidCommand_DoesNotThrow()
     {
         // Arrange
         var command = new ValidTestCommand();
 
         // Act & Assert
-        var exception = Record.Exception(() => CommandValidator.ValidateCommandAndThrow(command));
+        var exception = Record.Exception(() => SekibanValidator.ValidateAndThrow(command));
         Assert.Null(exception);
     }
 
     [Fact]
-    public void ValidateCommandAndThrow_InvalidCommand_ThrowsException()
+    public void ValidateAndThrow_InvalidCommand_ThrowsException()
     {
         // Arrange
         var command = new InvalidTestCommand();
 
         // Act & Assert
-        var exception = Assert.Throws<CommandValidationException>(() =>
-            CommandValidator.ValidateCommandAndThrow(command));
+        var exception = Assert.Throws<SekibanValidationException>(() =>
+            SekibanValidator.ValidateAndThrow(command));
 
         Assert.Equal(4, exception.Errors.Count);
         Assert.Contains("4 error(s)", exception.Message);
+    }
+
+    [Fact]
+    public void SekibanValidationException_IsValidationException()
+    {
+        // Arrange
+        var errors = new[]
+        {
+            new SekibanValidationError("Name", "Name is required"),
+            new SekibanValidationError("Age", "Age must be between 1 and 100", 150)
+        };
+
+        // Act
+        var exception = new SekibanValidationException(errors);
+
+        // Assert
+        Assert.IsAssignableFrom<ValidationException>(exception);
+        Assert.NotNull(exception.ValidationResult);
+        Assert.Contains("Name", exception.ValidationResult.MemberNames);
+        Assert.Contains("Age", exception.ValidationResult.MemberNames);
     }
     #endregion
 
@@ -194,7 +214,7 @@ public class CommandValidatorTests
     }
 
     [Fact]
-    public void ValidateCommand_MultipleValidationAttributesPerProperty_ValidatesAll()
+    public void Validate_MultipleValidationAttributesPerProperty_ValidatesAll()
     {
         // Arrange
         var command = new CustomValidationCommand
@@ -205,7 +225,7 @@ public class CommandValidatorTests
         };
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.True(errors.Count >= 3);
@@ -222,7 +242,7 @@ public class CommandValidatorTests
     }
 
     [Fact]
-    public void ValidateCommand_AllAttributesValid_ReturnsNoErrors()
+    public void Validate_AllAttributesValid_ReturnsNoErrors()
     {
         // Arrange
         var command = new CustomValidationCommand
@@ -233,7 +253,7 @@ public class CommandValidatorTests
         };
 
         // Act
-        var errors = CommandValidator.ValidateCommand(command);
+        var errors = SekibanValidator.Validate(command);
 
         // Assert
         Assert.Empty(errors);

@@ -45,10 +45,10 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         try
         {
             // Step 0: Validate command using DataAnnotations attributes
-            var commandValidationErrors = CommandValidator.ValidateCommand(command);
-            if (commandValidationErrors.Count > 0)
+            var validationErrors = SekibanValidator.Validate(command);
+            if (validationErrors.Count > 0)
             {
-                return ResultBox.Error<ExecutionResult>(new CommandValidationException(commandValidationErrors));
+                return ResultBox.Error<ExecutionResult>(new SekibanValidationException(validationErrors));
             }
 
             // Step 1: Create command context
@@ -249,6 +249,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     {
         try
         {
+            // Step 0: Validate tagStateId using DataAnnotations attributes
+            var validationErrors = SekibanValidator.Validate(tagStateId);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<TagState>(new SekibanValidationException(validationErrors));
+            }
+
             // Get the tag state actor for this tag state ID
             var tagStateActorId = tagStateId.GetTagStateId();
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
@@ -317,6 +324,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     {
         try
         {
+            // Step 0: Validate query using DataAnnotations attributes
+            var validationErrors = SekibanValidator.Validate(queryCommon);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<TResult>(new SekibanValidationException(validationErrors));
+            }
+
             // Get the multi-projector type for this query
             var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
             if (!projectorTypeResult.IsSuccess)
@@ -425,6 +439,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     {
         try
         {
+            // Step 0: Validate list query using DataAnnotations attributes
+            var validationErrors = SekibanValidator.Validate(queryCommon);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<ListQueryResult<TResult>>(new SekibanValidationException(validationErrors));
+            }
+
             // Get the multi-projector type for this query
             var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
             if (!projectorTypeResult.IsSuccess)

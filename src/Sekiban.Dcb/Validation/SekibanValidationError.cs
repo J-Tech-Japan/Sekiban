@@ -1,15 +1,15 @@
 namespace Sekiban.Dcb.Validation;
 
 /// <summary>
-///     Represents a single command validation error
+///     Represents a single validation error for Sekiban objects
 /// </summary>
-public class CommandValidationError
+public class SekibanValidationError
 {
     public string PropertyName { get; }
     public string ErrorMessage { get; }
     public object? AttemptedValue { get; }
 
-    public CommandValidationError(string propertyName, string errorMessage, object? attemptedValue = null)
+    public SekibanValidationError(string propertyName, string errorMessage, object? attemptedValue = null)
     {
         PropertyName = propertyName;
         ErrorMessage = errorMessage;
