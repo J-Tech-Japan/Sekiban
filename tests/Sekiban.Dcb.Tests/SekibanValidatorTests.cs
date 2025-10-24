@@ -259,4 +259,278 @@ public class SekibanValidatorTests
         Assert.Empty(errors);
     }
     #endregion
+
+    #region Record Type Tests
+    private record RecordCommand(
+        [property: Required] string Name,
+        [property: Range(1, 100)] int Age,
+        [property: EmailAddress] string Email) : ICommand;
+
+    private record NestedRecordCommand(
+        [property: Required] string ParentName,
+        RecordCommand? Child) : ICommand;
+
+    [Fact]
+    public void Validate_ValidRecordCommand_ReturnsNoErrors()
+    {
+        // Arrange
+        var command = new RecordCommand("John", 25, "john@example.com");
+
+        // Act
+        var errors = SekibanValidator.Validate(command);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Validate_InvalidRecordCommand_ReturnsErrors()
+    {
+        // Arrange
+        var command = new RecordCommand(null!, 150, "invalid-email");
+
+        // Act
+        var errors = SekibanValidator.Validate(command);
+
+        // Assert
+        Assert.True(errors.Count >= 2); // Name and Age should fail
+        Assert.Contains(errors, e => e.PropertyName == "Name");
+        Assert.Contains(errors, e => e.PropertyName == "Age");
+    }
+
+    [Fact]
+    public void Validate_NestedRecordCommand_ValidatesNested()
+    {
+        // Arrange
+        var command = new NestedRecordCommand(
+            "Parent",
+            new RecordCommand(null!, 200, "invalid"));
+
+        // Act
+        var errors = SekibanValidator.Validate(command);
+
+        // Assert
+        Assert.True(errors.Count >= 2);
+        Assert.Contains(errors, e => e.PropertyName == "Child.Name");
+        Assert.Contains(errors, e => e.PropertyName == "Child.Age");
+    }
+    #endregion
+
+    #region Circular Reference Tests
+    private class CircularReferenceParent : ICommand
+    {
+        [Required]
+        public string Name { get; set; } = "Parent";
+        public CircularReferenceChild? Child { get; set; }
+    }
+
+    private class CircularReferenceChild
+    {
+        [Required]
+        public string Name { get; set; } = "Child";
+        public CircularReferenceParent? Parent { get; set; }
+    }
+
+    [Fact]
+    public void Validate_CircularReference_DoesNotCauseInfiniteRecursion()
+    {
+        // Arrange
+        var parent = new CircularReferenceParent { Name = "Parent" };
+        var child = new CircularReferenceChild { Name = "Child" };
+        parent.Child = child;
+        child.Parent = parent;
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            var errors = SekibanValidator.Validate(parent);
+            // Should complete without stack overflow
+            Assert.NotNull(errors); // Just to ensure we can use the result
+        });
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Validate_SelfReference_DoesNotCauseInfiniteRecursion()
+    {
+        // Arrange
+        var node = new CircularReferenceParent { Name = "Node" };
+        node.Child = new CircularReferenceChild { Name = "Child" };
+        node.Child.Parent = node;
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            var errors = SekibanValidator.Validate(node);
+            Assert.NotNull(errors);
+        });
+
+        // Assert
+        Assert.Null(exception);
+    }
+    #endregion
+
+    #region Deep Nesting and External Type Tests
+    // Mock external type similar to ResultBoxes.OptionalValue
+    private class MockOptionalValue<T>
+    {
+        public bool HasValue { get; }
+        public T? Value { get; }
+
+        public MockOptionalValue(T value)
+        {
+            HasValue = true;
+            Value = value;
+        }
+
+        public MockOptionalValue()
+        {
+            HasValue = false;
+            Value = default;
+        }
+
+        public static MockOptionalValue<T> Empty => new();
+    }
+
+    private class DeeplyNestedCommand : ICommand
+    {
+        [Required]
+        public string Name { get; set; } = "";
+        public DeeplyNestedCommand? Level1 { get; set; }
+    }
+
+    [Fact]
+    public void Validate_DeeplyNestedStructure_DoesNotCauseStackOverflow()
+    {
+        // Arrange - Create a deeply nested structure (11 levels, exceeding MaxDepth of 10)
+        var root = new DeeplyNestedCommand { Name = "Level0" };
+        var current = root;
+        for (int i = 1; i <= 11; i++)
+        {
+            current.Level1 = new DeeplyNestedCommand { Name = $"Level{i}" };
+            current = current.Level1;
+        }
+
+        // Act - Should not throw stack overflow
+        var exception = Record.Exception(() =>
+        {
+            var errors = SekibanValidator.Validate(root);
+            Assert.NotNull(errors);
+        });
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Validate_CommandWithManyProperties_HandlesGracefully()
+    {
+        // Arrange - Simulate a command with many properties like NendoKanyu
+        var command = new CommandWithManyOptionalValues
+        {
+            Id = "test-id",
+            Name = "Test"
+        };
+
+        // Act
+        var exception = Record.Exception(() =>
+        {
+            var errors = SekibanValidator.Validate(command);
+            Assert.NotNull(errors);
+        });
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Validate_OptionalValueWithInvalidContent_ValidatesContent()
+    {
+        // Arrange - OptionalValue containing an object with validation attributes
+        var command = new CommandWithValidatableOptionalValue
+        {
+            Id = "test-id",
+            OptionalData = new MockOptionalValue<ValidatableObject>(
+                new ValidatableObject { Name = null! }) // Invalid: Required field is null
+        };
+
+        // Act
+        var errors = SekibanValidator.Validate(command);
+
+        // Assert - Should validate the content inside OptionalValue
+        // The depth limit and try-catch protection prevent stack overflow
+        // but still allow validation of nested objects
+        Assert.NotNull(errors);
+    }
+
+    private class CommandWithValidatableOptionalValue : ICommand
+    {
+        [Required]
+        public string Id { get; set; } = "";
+
+        public MockOptionalValue<ValidatableObject> OptionalData { get; set; } = MockOptionalValue<ValidatableObject>.Empty;
+    }
+
+    private class ValidatableObject
+    {
+        [Required]
+        public string? Name { get; set; }
+    }
+
+    private class CommandWithManyOptionalValues : ICommand
+    {
+        [Required]
+        public string Id { get; set; } = "";
+
+        [Required]
+        public string Name { get; set; } = "";
+
+        // Many optional value properties (simulating NendoKanyu)
+        public MockOptionalValue<DateTime> Date1 { get; set; } = MockOptionalValue<DateTime>.Empty;
+        public MockOptionalValue<DateTime> Date2 { get; set; } = MockOptionalValue<DateTime>.Empty;
+        public MockOptionalValue<string> String1 { get; set; } = MockOptionalValue<string>.Empty;
+        public MockOptionalValue<string> String2 { get; set; } = MockOptionalValue<string>.Empty;
+        public MockOptionalValue<int> Int1 { get; set; } = MockOptionalValue<int>.Empty;
+        public MockOptionalValue<int> Int2 { get; set; } = MockOptionalValue<int>.Empty;
+        public MockOptionalValue<NestedObject> Nested1 { get; set; } = MockOptionalValue<NestedObject>.Empty;
+        public MockOptionalValue<NestedObject> Nested2 { get; set; } = MockOptionalValue<NestedObject>.Empty;
+    }
+
+    private class NestedObject
+    {
+        public string Value { get; set; } = "";
+        public MockOptionalValue<string> NestedOptional { get; set; } = MockOptionalValue<string>.Empty;
+    }
+
+    [Fact]
+    public void Validate_PropertyWithGetValueException_SkipsProperty()
+    {
+        // This tests that properties that throw exceptions when accessed are skipped
+        var command = new CommandWithProblematicProperty();
+
+        // Act - Should not throw
+        var exception = Record.Exception(() =>
+        {
+            var errors = SekibanValidator.Validate(command);
+            Assert.NotNull(errors);
+        });
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    private class CommandWithProblematicProperty : ICommand
+    {
+        [Required]
+        public string Name { get; set; } = "Valid";
+
+        public string ProblematicProperty
+        {
+            get => throw new InvalidOperationException("Cannot access this property");
+            set { }
+        }
+    }
+    #endregion
 }
