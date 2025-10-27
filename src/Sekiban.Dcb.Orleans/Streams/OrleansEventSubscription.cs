@@ -39,8 +39,6 @@ public class OrleansEventSubscription : IEventSubscription
 
         // Get the stream once during initialization
         _stream = _streamProvider.GetStream<SerializableEvent>(StreamId.Create(_streamNamespace, _streamId));
-
-        Console.WriteLine($"[OrleansEventSubscription] Created for stream {_streamNamespace}/{_streamId}");
     }
 
     /// <summary>
@@ -55,25 +53,11 @@ public class OrleansEventSubscription : IEventSubscription
 
         subscriptionId ??= Guid.NewGuid().ToString();
 
-        Console.WriteLine($"[OrleansEventSubscription] SubscribeAsync called for subscription {subscriptionId}");
-
         // Create an observer for the Orleans stream
         var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes);
 
         // Subscribe to the Orleans stream
-        StreamSubscriptionHandle<SerializableEvent>? orleansHandle = null;
-        try
-        {
-            Console.WriteLine(
-                $"[OrleansEventSubscription] Subscribing to Orleans stream {_streamNamespace}/{_streamId}");
-            orleansHandle = await _stream.SubscribeAsync(observer, null);
-            Console.WriteLine("[OrleansEventSubscription] Successfully subscribed to Orleans stream");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[OrleansEventSubscription] Failed to subscribe to Orleans stream: {ex.Message}");
-            throw;
-        }
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
 
         // Create our handle wrapper
         var handle = new OrleansEventSubscriptionHandleSimple(
@@ -83,8 +67,6 @@ public class OrleansEventSubscription : IEventSubscription
 
         // Track the subscription
         _subscriptions[subscriptionId] = handle;
-
-        Console.WriteLine($"[OrleansEventSubscription] Subscription {subscriptionId} created successfully");
 
         return handle;
     }
@@ -102,28 +84,13 @@ public class OrleansEventSubscription : IEventSubscription
 
         subscriptionId ??= Guid.NewGuid().ToString();
 
-        Console.WriteLine(
-            $"[OrleansEventSubscription] SubscribeFromAsync called for subscription {subscriptionId} from position {fromPosition}");
-
         // Create an observer for the Orleans stream
         var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes);
 
         // Note: Orleans streams don't support replaying from a specific position by default
         // This would require custom implementation with persistent checkpoints
         // For now, subscribe from current position
-        StreamSubscriptionHandle<SerializableEvent>? orleansHandle = null;
-        try
-        {
-            Console.WriteLine(
-                $"[OrleansEventSubscription] Subscribing to Orleans stream {_streamNamespace}/{_streamId} (from current)");
-            orleansHandle = await _stream.SubscribeAsync(observer, null);
-            Console.WriteLine("[OrleansEventSubscription] Successfully subscribed to Orleans stream");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[OrleansEventSubscription] Failed to subscribe to Orleans stream: {ex.Message}");
-            throw;
-        }
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
 
         // Create our handle wrapper
         var handle = new OrleansEventSubscriptionHandleSimple(
@@ -135,9 +102,6 @@ public class OrleansEventSubscription : IEventSubscription
 
         // Track the subscription
         _subscriptions[subscriptionId] = handle;
-
-        Console.WriteLine(
-            $"[OrleansEventSubscription] Subscription {subscriptionId} created (from current, requested: {fromPosition})");
 
         return handle;
     }
@@ -158,26 +122,11 @@ public class OrleansEventSubscription : IEventSubscription
 
         subscriptionId ??= Guid.NewGuid().ToString();
 
-        Console.WriteLine(
-            $"[OrleansEventSubscription] SubscribeWithFilterAsync called for subscription {subscriptionId}");
-
         // Create an observer for the Orleans stream with filter
         var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes, filter);
 
         // Subscribe to the Orleans stream
-        StreamSubscriptionHandle<SerializableEvent>? orleansHandle = null;
-        try
-        {
-            Console.WriteLine(
-                $"[OrleansEventSubscription] Subscribing to Orleans stream {_streamNamespace}/{_streamId} with filter");
-            orleansHandle = await _stream.SubscribeAsync(observer, null);
-            Console.WriteLine("[OrleansEventSubscription] Successfully subscribed to Orleans stream with filter");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[OrleansEventSubscription] Failed to subscribe to Orleans stream: {ex.Message}");
-            throw;
-        }
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
 
         // Create our handle wrapper
         var handle = new OrleansEventSubscriptionHandleSimple(
@@ -187,8 +136,6 @@ public class OrleansEventSubscription : IEventSubscription
 
         // Track the subscription
         _subscriptions[subscriptionId] = handle;
-
-        Console.WriteLine($"[OrleansEventSubscription] Subscription {subscriptionId} created with filter");
 
         return handle;
     }

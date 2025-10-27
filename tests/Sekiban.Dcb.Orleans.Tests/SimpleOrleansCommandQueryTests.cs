@@ -187,15 +187,20 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var streamNamespace = "TestEvents";
         var streamId = Guid.NewGuid();
 
-        // Subscribe directly to the stream for Event objects (matching what publisher sends)
-        var stream = streamProvider.GetStream<Event>(StreamId.Create(streamNamespace, streamId));
+        // Subscribe directly to the stream for SerializableEvent objects (matching what publisher sends)
+        var stream = streamProvider.GetStream<SerializableEvent>(StreamId.Create(streamNamespace, streamId));
         var receivedPayloads = new List<IEventPayload>();
 
-        var subscriptionHandle = await stream.SubscribeAsync(async (evt, token) =>
+        var subscriptionHandle = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            if (evt?.Payload is IEventPayload eventPayload)
+            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            if (evtResult.IsSuccess)
             {
-                receivedPayloads.Add(eventPayload);
+                var evt = evtResult.GetValue();
+                if (evt?.Payload is IEventPayload eventPayload)
+                {
+                    receivedPayloads.Add(eventPayload);
+                }
             }
             await Task.CompletedTask;
         });
@@ -206,18 +211,20 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var publisher = new OrleansEventPublisher(_cluster.Client, resolver, _domainTypes, logger);
 
         // Act - Publish events through Orleans publisher
+        var payload1 = new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "Event1" };
         var testEvent1 = new Event(
-            new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "Event1" },
-            "TestAggregate",
-            $"TestAggregate:{Guid.NewGuid()}",
+            payload1,
+            SortableUniqueId.GenerateNew(),
+            payload1.GetType().Name,  // Correct: use the payload type name
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             new List<string>());
 
+        var payload2 = new TestEntityUpdatedEvent { AggregateId = Guid.NewGuid(), Name = "Event2" };
         var testEvent2 = new Event(
-            new TestEntityUpdatedEvent { AggregateId = Guid.NewGuid(), Name = "Event2" },
-            "TestAggregate",
-            $"TestAggregate:{Guid.NewGuid()}",
+            payload2,
+            SortableUniqueId.GenerateNew(),
+            payload2.GetType().Name,  // Correct: use the payload type name
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             new List<string>());
@@ -253,25 +260,35 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var streamId = Guid.NewGuid();
 
         // Create multiple direct stream subscriptions
-        var stream = streamProvider.GetStream<Event>(StreamId.Create(streamNamespace, streamId));
+        var stream = streamProvider.GetStream<SerializableEvent>(StreamId.Create(streamNamespace, streamId));
 
         var receivedPayloads1 = new List<IEventPayload>();
         var receivedPayloads2 = new List<IEventPayload>();
 
-        var handle1 = await stream.SubscribeAsync(async (evt, token) =>
+        var handle1 = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            if (evt?.Payload is IEventPayload eventPayload)
+            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            if (evtResult.IsSuccess)
             {
-                receivedPayloads1.Add(eventPayload);
+                var evt = evtResult.GetValue();
+                if (evt?.Payload is IEventPayload eventPayload)
+                {
+                    receivedPayloads1.Add(eventPayload);
+                }
             }
             await Task.CompletedTask;
         });
 
-        var handle2 = await stream.SubscribeAsync(async (evt, token) =>
+        var handle2 = await stream.SubscribeAsync(async (serializableEvt, token) =>
         {
-            if (evt?.Payload is IEventPayload eventPayload)
+            var evtResult = serializableEvt.ToEvent(_domainTypes.EventTypes);
+            if (evtResult.IsSuccess)
             {
-                receivedPayloads2.Add(eventPayload);
+                var evt = evtResult.GetValue();
+                if (evt?.Payload is IEventPayload eventPayload)
+                {
+                    receivedPayloads2.Add(eventPayload);
+                }
             }
             await Task.CompletedTask;
         });
@@ -282,10 +299,11 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         var publisher = new OrleansEventPublisher(_cluster.Client, resolver, _domainTypes, logger);
 
         // Act - Publish an event
+        var payload = new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "SharedEvent" };
         var testEvent = new Event(
-            new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "SharedEvent" },
-            "TestAggregate",
-            $"TestAggregate:{Guid.NewGuid()}",
+            payload,
+            SortableUniqueId.GenerateNew(),
+            payload.GetType().Name,  // Correct: use the payload type name
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             new List<string>());

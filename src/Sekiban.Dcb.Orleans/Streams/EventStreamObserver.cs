@@ -27,13 +27,10 @@ public class EventStreamObserver : IAsyncObserver<SerializableEvent>
 
     public async Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
     {
-        Console.WriteLine($"[EventStreamObserver] Received event {item.EventPayloadName} for subscription {_subscriptionId}");
-
         // Deserialize SerializableEvent to Event
         var eventResult = item.ToEvent(_domainTypes.EventTypes);
         if (!eventResult.IsSuccess)
         {
-            Console.WriteLine($"[EventStreamObserver] Failed to deserialize event: {eventResult.GetException().Message}");
             return;
         }
 
@@ -42,30 +39,19 @@ public class EventStreamObserver : IAsyncObserver<SerializableEvent>
         // Apply filter if configured
         if (_filter != null && !_filter.ShouldInclude(evt))
         {
-            Console.WriteLine($"[EventStreamObserver] Event filtered out for subscription {_subscriptionId}");
             return;
         }
 
-        try
-        {
-            await _onEvent(evt);
-            Console.WriteLine($"[EventStreamObserver] Event processed successfully for subscription {_subscriptionId}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[EventStreamObserver] Error processing event: {ex.Message}");
-        }
+        await _onEvent(evt);
     }
 
     public Task OnCompletedAsync()
     {
-        Console.WriteLine($"[EventStreamObserver] Stream completed for subscription {_subscriptionId}");
         return Task.CompletedTask;
     }
 
     public Task OnErrorAsync(Exception ex)
     {
-        Console.WriteLine($"[EventStreamObserver] Stream error for subscription {_subscriptionId}: {ex.Message}");
         return Task.CompletedTask;
     }
 }
