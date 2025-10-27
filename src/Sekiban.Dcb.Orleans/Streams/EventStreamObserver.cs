@@ -6,25 +6,41 @@ namespace Sekiban.Dcb.Orleans.Streams;
 /// <summary>
 ///     Observer for Orleans event streams
 /// </summary>
-public class EventStreamObserver : IAsyncObserver<Event>
+public class EventStreamObserver : IAsyncObserver<SerializableEvent>
 {
     private readonly IEventFilter? _filter;
     private readonly Func<Event, Task> _onEvent;
     private readonly string _subscriptionId;
+    private readonly DcbDomainTypes _domainTypes;
 
-    public EventStreamObserver(string subscriptionId, Func<Event, Task> onEvent, IEventFilter? filter = null)
+    public EventStreamObserver(
+        string subscriptionId,
+        Func<Event, Task> onEvent,
+        DcbDomainTypes domainTypes,
+        IEventFilter? filter = null)
     {
         _subscriptionId = subscriptionId;
         _onEvent = onEvent;
+        _domainTypes = domainTypes;
         _filter = filter;
     }
 
-    public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
+    public async Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
     {
-        Console.WriteLine($"[EventStreamObserver] Received event {item.EventType} for subscription {_subscriptionId}");
+        Console.WriteLine($"[EventStreamObserver] Received event {item.EventPayloadName} for subscription {_subscriptionId}");
+
+        // Deserialize SerializableEvent to Event
+        var eventResult = item.ToEvent(_domainTypes.EventTypes);
+        if (!eventResult.IsSuccess)
+        {
+            Console.WriteLine($"[EventStreamObserver] Failed to deserialize event: {eventResult.GetException().Message}");
+            return;
+        }
+
+        var evt = eventResult.GetValue();
 
         // Apply filter if configured
-        if (_filter != null && !_filter.ShouldInclude(item))
+        if (_filter != null && !_filter.ShouldInclude(evt))
         {
             Console.WriteLine($"[EventStreamObserver] Event filtered out for subscription {_subscriptionId}");
             return;
@@ -32,7 +48,7 @@ public class EventStreamObserver : IAsyncObserver<Event>
 
         try
         {
-            await _onEvent(item);
+            await _onEvent(evt);
             Console.WriteLine($"[EventStreamObserver] Event processed successfully for subscription {_subscriptionId}");
         }
         catch (Exception ex)
