@@ -15,18 +15,21 @@ public class OrleansEventPublisher : IEventPublisher
     private readonly IClusterClient _clusterClient;
     private readonly ILogger<OrleansEventPublisher> _logger;
     private readonly IStreamDestinationResolver _resolver;
+    private readonly DcbDomainTypes _domainTypes;
     private readonly Channel<PublishItem> _channel;
     private readonly Task _processor;
 
-    private record PublishItem(string Provider, string Namespace, Guid StreamId, Event Event, int Attempt);
+    private record PublishItem(string Provider, string Namespace, Guid StreamId, SerializableEvent Event, int Attempt);
 
     public OrleansEventPublisher(
         IClusterClient clusterClient,
         IStreamDestinationResolver resolver,
+        DcbDomainTypes domainTypes,
         ILogger<OrleansEventPublisher> logger)
     {
         _clusterClient = clusterClient;
         _resolver = resolver;
+        _domainTypes = domainTypes;
         _logger = logger;
         // Unbounded channel for simplicity; projection side is idempotent
         _channel = Channel.CreateUnbounded<PublishItem>(new UnboundedChannelOptions
@@ -51,12 +54,15 @@ public class OrleansEventPublisher : IEventPublisher
         {
             try
             {
+                // Convert Event to SerializableEvent for Orleans stream
+                var serializableEvent = evt.ToSerializableEvent(_domainTypes.EventTypes);
+
                 var streams = _resolver.Resolve(evt, tags);
                 foreach (var s in streams)
                 {
                     if (s is OrleansSekibanStream os)
                     {
-                        var item = new PublishItem(os.ProviderName, os.StreamNamespace, os.StreamId, evt, 0);
+                        var item = new PublishItem(os.ProviderName, os.StreamNamespace, os.StreamId, serializableEvent, 0);
                         _channel.Writer.TryWrite(item);
                     }
                 }
@@ -83,7 +89,7 @@ public class OrleansEventPublisher : IEventPublisher
             try
             {
                 var provider = _clusterClient.GetStreamProvider(item.Provider);
-                var stream = provider.GetStream<Event>(StreamId.Create(item.Namespace, item.StreamId));
+                var stream = provider.GetStream<SerializableEvent>(StreamId.Create(item.Namespace, item.StreamId));
                 await stream.OnNextAsync(item.Event);
                 if (_logger.IsEnabled(LogLevel.Trace))
                 {

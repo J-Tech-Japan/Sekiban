@@ -9,12 +9,12 @@ namespace Sekiban.Dcb.Orleans.Streams;
 public class OrleansEventSubscriptionHandleSimple : IEventSubscriptionHandle
 {
     private readonly Action? _onDispose;
-    private readonly StreamSubscriptionHandle<Event> _orleansHandle;
+    private readonly StreamSubscriptionHandle<SerializableEvent> _orleansHandle;
     private bool _disposed;
 
     public OrleansEventSubscriptionHandleSimple(
         string subscriptionId,
-        StreamSubscriptionHandle<Event> orleansHandle,
+        StreamSubscriptionHandle<SerializableEvent> orleansHandle,
         Action? onDispose = null)
     {
         SubscriptionId = subscriptionId ?? throw new ArgumentNullException(nameof(subscriptionId));

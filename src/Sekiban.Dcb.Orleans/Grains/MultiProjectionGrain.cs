@@ -26,8 +26,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     
     // Orleans infrastructure
-    private IAsyncStream<Event>? _orleansStream;
-    private StreamSubscriptionHandle<Event>? _orleansStreamHandle;
+    private IAsyncStream<SerializableEvent>? _orleansStream;
+    private StreamSubscriptionHandle<SerializableEvent>? _orleansStreamHandle;
     private IDisposable? _persistTimer;
     private IDisposable? _fallbackTimer;
     
@@ -431,7 +431,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (streamInfo is OrleansSekibanStream orleansStream)
             {
                 var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
-                _orleansStream = streamProvider.GetStream<Event>(
+                _orleansStream = streamProvider.GetStream<SerializableEvent>(
                     StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
             }
         }
@@ -1541,36 +1541,51 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     // Orleans stream batch observer - processes events in batches for efficiency
-    private class StreamBatchObserver : IAsyncBatchObserver<Event>
+    private class StreamBatchObserver : IAsyncBatchObserver<SerializableEvent>
     {
         private readonly MultiProjectionGrain _grain;
 
         public StreamBatchObserver(MultiProjectionGrain grain) => _grain = grain;
 
         // Batch processing method - Orleans v9.0+ uses IList<SequentialItem<T>>
-        public Task OnNextAsync(IList<SequentialItem<Event>> batch)
+        public Task OnNextAsync(IList<SequentialItem<SerializableEvent>> batch)
         {
-            var events = batch.Select(item => item.Item).ToList();
+            var events = batch.Select(item => DeserializeEvent(item.Item)).Where(e => e != null).Cast<Event>().ToList();
             Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received batch of {events.Count} events");
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
         }
 
         // Legacy batch method for compatibility
-        public Task OnNextBatchAsync(IEnumerable<Event> batch, StreamSequenceToken? token = null)
+        public Task OnNextBatchAsync(IEnumerable<SerializableEvent> batch, StreamSequenceToken? token = null)
         {
-            var events = batch.ToList();
+            var events = batch.Select(DeserializeEvent).Where(e => e != null).Cast<Event>().ToList();
             Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received legacy batch of {events.Count} events");
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
         }
 
-        public Task OnNextAsync(Event item, StreamSequenceToken? token = null)
+        public Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
         {
             // Single event fallback - enqueue as batch of 1
-            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {item.EventType}, ID: {item.Id}");
-            _grain.EnqueueStreamEvents(new[] { item });
+            var evt = DeserializeEvent(item);
+            if (evt != null)
+            {
+                Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {evt.EventType}, ID: {evt.Id}");
+                _grain.EnqueueStreamEvents(new[] { evt });
+            }
             return Task.CompletedTask;
+        }
+
+        private Event? DeserializeEvent(SerializableEvent serializableEvent)
+        {
+            var result = serializableEvent.ToEvent(_grain._domainTypes.EventTypes);
+            if (!result.IsSuccess)
+            {
+                Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Failed to deserialize event: {result.GetException().Message}");
+                return null;
+            }
+            return result.GetValue();
         }
 
         public Task OnCompletedAsync() 
@@ -1659,7 +1674,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
-        _orleansStream = streamProvider.GetStream<Event>(
+        _orleansStream = streamProvider.GetStream<SerializableEvent>(
             StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
         // Do NOT subscribe here. Subscription will start lazily on first query/state access.
         Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream prepared (lazy subscription)");

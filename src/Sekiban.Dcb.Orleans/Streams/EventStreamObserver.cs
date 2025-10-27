@@ -6,50 +6,52 @@ namespace Sekiban.Dcb.Orleans.Streams;
 /// <summary>
 ///     Observer for Orleans event streams
 /// </summary>
-public class EventStreamObserver : IAsyncObserver<Event>
+public class EventStreamObserver : IAsyncObserver<SerializableEvent>
 {
     private readonly IEventFilter? _filter;
     private readonly Func<Event, Task> _onEvent;
     private readonly string _subscriptionId;
+    private readonly DcbDomainTypes _domainTypes;
 
-    public EventStreamObserver(string subscriptionId, Func<Event, Task> onEvent, IEventFilter? filter = null)
+    public EventStreamObserver(
+        string subscriptionId,
+        Func<Event, Task> onEvent,
+        DcbDomainTypes domainTypes,
+        IEventFilter? filter = null)
     {
         _subscriptionId = subscriptionId;
         _onEvent = onEvent;
+        _domainTypes = domainTypes;
         _filter = filter;
     }
 
-    public async Task OnNextAsync(Event item, StreamSequenceToken? token = null)
+    public async Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
     {
-        Console.WriteLine($"[EventStreamObserver] Received event {item.EventType} for subscription {_subscriptionId}");
-
-        // Apply filter if configured
-        if (_filter != null && !_filter.ShouldInclude(item))
+        // Deserialize SerializableEvent to Event
+        var eventResult = item.ToEvent(_domainTypes.EventTypes);
+        if (!eventResult.IsSuccess)
         {
-            Console.WriteLine($"[EventStreamObserver] Event filtered out for subscription {_subscriptionId}");
             return;
         }
 
-        try
+        var evt = eventResult.GetValue();
+
+        // Apply filter if configured
+        if (_filter != null && !_filter.ShouldInclude(evt))
         {
-            await _onEvent(item);
-            Console.WriteLine($"[EventStreamObserver] Event processed successfully for subscription {_subscriptionId}");
+            return;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[EventStreamObserver] Error processing event: {ex.Message}");
-        }
+
+        await _onEvent(evt);
     }
 
     public Task OnCompletedAsync()
     {
-        Console.WriteLine($"[EventStreamObserver] Stream completed for subscription {_subscriptionId}");
         return Task.CompletedTask;
     }
 
     public Task OnErrorAsync(Exception ex)
     {
-        Console.WriteLine($"[EventStreamObserver] Stream error for subscription {_subscriptionId}: {ex.Message}");
         return Task.CompletedTask;
     }
 }
