@@ -35,7 +35,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor
     /// <summary>
     ///     Creates executor with built-in lightweight in-memory event store (no external dependencies)
     /// </summary>
-    public InMemoryDcbExecutor(DcbDomainTypes domainTypes) : this(domainTypes, new InternalInMemoryEventStore()) { }
+    public InMemoryDcbExecutor(DcbDomainTypes domainTypes) : this(domainTypes, new InternalInMemoryEventStore(domainTypes)) { }
 
     Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteAsync<TCommand>(
         TCommand command,
@@ -60,11 +60,30 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
     /// <summary>
     ///     Minimal internal in-memory event store (single process, test support)
+    ///     This implementation serializes/deserializes events to simulate real storage behavior
+    ///     and validate that event types are properly registered.
     /// </summary>
     private sealed class InternalInMemoryEventStore : IEventStore
     {
-        private readonly List<Event> _events = new();
+        private readonly List<SerializedEventData> _events = new();
         private readonly object _lock = new();
+        private readonly DcbDomainTypes _domainTypes;
+
+        public InternalInMemoryEventStore(DcbDomainTypes domainTypes)
+        {
+            _domainTypes = domainTypes;
+        }
+
+        /// <summary>
+        ///     Stored event data with serialized payload
+        /// </summary>
+        private sealed record SerializedEventData(
+            Guid Id,
+            string SortableUniqueIdValue,
+            string EventType,
+            string SerializedPayload,
+            EventMetadata EventMetadata,
+            IReadOnlyList<string> Tags);
 
         public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
         {
@@ -76,11 +95,24 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                     events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
                 }
                 events = events.OrderBy(e => e.SortableUniqueIdValue);
-                return Task.FromResult(ResultBox.FromValue(events));
+
+                // Deserialize events
+                var result = new List<Event>();
+                foreach (var serializedEvent in events)
+                {
+                    var deserializeResult = DeserializeEvent(serializedEvent);
+                    if (!deserializeResult.IsSuccess)
+                    {
+                        return Task.FromResult(ResultBox.Error<IEnumerable<Event>>(deserializeResult.GetException()));
+                    }
+                    result.Add(deserializeResult.GetValue());
+                }
+
+                return Task.FromResult(ResultBox.FromValue<IEnumerable<Event>>(result));
             }
         }
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {
             lock (_lock)
             {
@@ -91,7 +123,20 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                     events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
                 }
                 events = events.OrderBy(e => e.SortableUniqueIdValue);
-                return Task.FromResult(ResultBox.FromValue(events.AsEnumerable()));
+
+                // Deserialize events
+                var result = new List<Event>();
+                foreach (var serializedEvent in events)
+                {
+                    var deserializeResult = DeserializeEvent(serializedEvent);
+                    if (!deserializeResult.IsSuccess)
+                    {
+                        return Task.FromResult(ResultBox.Error<IEnumerable<Event>>(deserializeResult.GetException()));
+                    }
+                    result.Add(deserializeResult.GetValue());
+                }
+
+                return Task.FromResult(ResultBox.FromValue<IEnumerable<Event>>(result));
             }
         }
 
@@ -99,10 +144,19 @@ public class InMemoryDcbExecutor : ISekibanExecutor
         {
             lock (_lock)
             {
-                var evt = _events.FirstOrDefault(e => e.Id == eventId);
-                return evt != null
-                    ? Task.FromResult(ResultBox.FromValue(evt))
-                    : Task.FromResult(ResultBox.Error<Event>(new KeyNotFoundException($"Event {eventId} not found")));
+                var serializedEvent = _events.FirstOrDefault(e => e.Id == eventId);
+                if (serializedEvent == null)
+                {
+                    return Task.FromResult(ResultBox.Error<Event>(new KeyNotFoundException($"Event {eventId} not found")));
+                }
+
+                var deserializeResult = DeserializeEvent(serializedEvent);
+                if (!deserializeResult.IsSuccess)
+                {
+                    return Task.FromResult(ResultBox.Error<Event>(deserializeResult.GetException()));
+                }
+
+                return Task.FromResult(ResultBox.FromValue(deserializeResult.GetValue()));
             }
         }
 
@@ -111,7 +165,38 @@ public class InMemoryDcbExecutor : ISekibanExecutor
             lock (_lock)
             {
                 var list = events.ToList();
-                _events.AddRange(list);
+                var serializedEvents = new List<SerializedEventData>();
+                var deserializedEvents = new List<Event>();
+
+                // Serialize and immediately deserialize to validate event types
+                foreach (var ev in list)
+                {
+                    // Serialize the event payload
+                    var serializedPayload = SerializeEvent(ev);
+
+                    // Store the serialized version
+                    var serializedEvent = new SerializedEventData(
+                        ev.Id,
+                        ev.SortableUniqueIdValue,
+                        ev.EventType,
+                        serializedPayload,
+                        ev.EventMetadata,
+                        ev.Tags);
+
+                    serializedEvents.Add(serializedEvent);
+
+                    // Deserialize immediately to validate (like real storage would do when reading)
+                    var deserializeResult = DeserializeEvent(serializedEvent);
+                    if (!deserializeResult.IsSuccess)
+                    {
+                        return Task.FromResult(
+                            ResultBox.Error<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
+                                deserializeResult.GetException()));
+                    }
+                    deserializedEvents.Add(deserializeResult.GetValue());
+                }
+
+                _events.AddRange(serializedEvents);
                 var tagWrites = new List<TagWriteResult>();
                 var uniqueTags = list.SelectMany(e => e.Tags).Distinct();
                 foreach (var tagString in uniqueTags)
@@ -123,7 +208,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                         tagWrites.Add(new TagWriteResult(tagString, tagEventCount, DateTimeOffset.UtcNow));
                     }
                 }
-                return Task.FromResult(ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>((list, tagWrites)));
+                return Task.FromResult(ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>((deserializedEvents, tagWrites)));
             }
         }
 
@@ -160,6 +245,42 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                 var tagString = tag.GetTag();
                 var exists = _events.Any(e => e.Tags.Contains(tagString));
                 return Task.FromResult(ResultBox.FromValue(exists));
+            }
+        }
+
+        private string SerializeEvent(Event ev)
+        {
+            return _domainTypes.EventTypes.SerializeEventPayload(ev.Payload);
+        }
+
+        private ResultBox<Event> DeserializeEvent(SerializedEventData serializedEvent)
+        {
+            try
+            {
+                var payload = _domainTypes.EventTypes.DeserializeEventPayload(
+                    serializedEvent.EventType,
+                    serializedEvent.SerializedPayload);
+
+                if (payload == null)
+                {
+                    return ResultBox.Error<Event>(
+                        new InvalidOperationException(
+                            $"Failed to deserialize event payload of type {serializedEvent.EventType}. Make sure the event type is registered."));
+                }
+
+                var ev = new Event(
+                    payload,
+                    serializedEvent.SortableUniqueIdValue,
+                    serializedEvent.EventType,
+                    serializedEvent.Id,
+                    serializedEvent.EventMetadata,
+                    serializedEvent.Tags.ToList());
+
+                return ResultBox.FromValue(ev);
+            }
+            catch (Exception ex)
+            {
+                return ResultBox.Error<Event>(ex);
             }
         }
     }
