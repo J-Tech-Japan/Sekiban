@@ -6,6 +6,8 @@ using Sekiban.Dcb.InMemory; // InMemoryDcbExecutor
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Domains;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
@@ -67,5 +69,40 @@ public class InMemoryDcbExecutorIntegrationTests
 		Assert.Equal(name, studentState.Name);
 		Assert.Equal(maxClassCount, studentState.MaxClassCount);
 		Assert.Empty(studentState.EnrolledClassRoomIds);
+	}
+
+	/// <summary>
+	///     Test that InMemoryDcbExecutor should fail when trying to use an unregistered event type.
+	///     This test verifies that InMemoryDcbExecutor properly validates event types.
+	/// </summary>
+	[Fact]
+	public async Task UnregisteredEvent_Should_Fail_During_Command_Execution()
+	{
+		// Create a domain with StudentCreated NOT registered
+		var domainTypes = DcbDomainTypes.Simple(types =>
+		{
+			// Intentionally NOT registering StudentCreated event
+			// types.EventTypes.RegisterEventType<StudentCreated>();
+
+			// Register other required types
+			types.TagProjectorTypes.RegisterProjector<StudentProjector>();
+			types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
+			types.TagTypes.RegisterTagGroupType<StudentTag>();
+		});
+
+		ISekibanExecutor executor = new InMemoryDcbExecutor(domainTypes);
+
+		var studentId = Guid.NewGuid();
+		var command = new CreateStudent(studentId, "Test Student", 5);
+
+		// Execute command - this should fail because StudentCreated is not registered
+		var commandResult = await executor.ExecuteAsync(command);
+
+		// After fixing InMemoryDcbExecutor, the command should fail
+		Assert.False(commandResult.IsSuccess, "Command should fail when event type is not registered");
+
+		// Verify the error message mentions the event type
+		var exception = commandResult.GetException();
+		Assert.Contains("StudentCreated", exception.Message);
 	}
 }
