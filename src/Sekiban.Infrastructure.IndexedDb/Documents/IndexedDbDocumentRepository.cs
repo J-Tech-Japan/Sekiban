@@ -57,8 +57,8 @@ public class IndexedDbDocumentRepository(
             var dbEventChunk = await dbFactory.DbActionAsync(async (dbContext) =>
                 eventRetrievalInfo.GetAggregateContainerGroup() switch
                 {
-                    AggregateContainerGroup.Default => await dbContext.GetEventsAsyncChunk(chunkQuery, currentChunkSize, 0),
-                    AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsyncChunk(chunkQuery, currentChunkSize, 0),
+                    AggregateContainerGroup.Default => await dbContext.GetEventsAsync(chunkQuery),
+                    AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsync(chunkQuery),
                     _ => throw new NotImplementedException(),
                 });
 

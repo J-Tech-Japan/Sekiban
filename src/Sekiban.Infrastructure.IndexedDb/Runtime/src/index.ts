@@ -50,68 +50,76 @@ const filterEvents = async (
 	store: "events" | "dissolvable-events",
 	query: DbEventQuery,
 ): Promise<DbEvent[]> => {
-	const shard: DbEvent[] = await (() => {
+	const tx = idb.transaction(store, "readonly");
+
+	let cursor = await (() => {
 		if (query.SortableIdStart !== null && query.SortableIdEnd !== null) {
-			const key = IDBKeyRange.bound(
+			const range = IDBKeyRange.bound(
 				query.SortableIdStart,
 				query.SortableIdEnd,
 				true,
 				true,
 			);
-			return idb.getAllFromIndex(store, "SortableUniqueId", key);
+			return tx.store.index("SortableUniqueId").openCursor(range);
 		}
 
 		if (query.SortableIdStart !== null) {
-			const key = IDBKeyRange.lowerBound(query.SortableIdStart, true);
-			return idb.getAllFromIndex(store, "SortableUniqueId", key);
+			const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
+			return tx.store.index("SortableUniqueId").openCursor(range);
 		}
 
 		if (query.SortableIdEnd !== null) {
-			const key = IDBKeyRange.upperBound(query.SortableIdEnd, true);
-			return idb.getAllFromIndex(store, "SortableUniqueId", key);
+			const range = IDBKeyRange.upperBound(query.SortableIdEnd, true);
+			return tx.store.index("SortableUniqueId").openCursor(range);
 		}
 
 		if (query.PartitionKey !== null) {
-			const key = IDBKeyRange.only(query.PartitionKey);
-			return idb.getAllFromIndex(store, "PartitionKey", key);
+			const range = IDBKeyRange.only(query.PartitionKey);
+			return tx.store.index("PartitionKey").openCursor(range);
 		}
 
 		if (query.RootPartitionKey !== null) {
-			const key = IDBKeyRange.only(query.RootPartitionKey);
-			return idb.getAllFromIndex(store, "RootPartitionKey", key);
+			const range = IDBKeyRange.only(query.RootPartitionKey);
+			return tx.store.index("RootPartitionKey").openCursor(range);
 		}
 
-		return idb.getAll(store);
+		return tx.store.openCursor();
 	})();
 
-	const items = shard
-		.filter(
-			(x) =>
-				query.RootPartitionKey === null ||
-				x.RootPartitionKey === query.RootPartitionKey,
-		)
-		.filter(
-			(x) =>
-				query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
-		)
-		.filter(
-			(x) =>
-				query.AggregateTypes === null ||
-				query.AggregateTypes.includes(x.AggregateType),
-		)
-		.filter(
-			(x) =>
-				query.SortableIdStart === null ||
-				query.SortableIdStart < x.SortableUniqueId,
-		)
-		.filter(
-			(x) =>
-				query.SortableIdEnd === null ||
-				x.SortableUniqueId < query.SortableIdEnd,
-		)
-		.toSorted(asc((x) => x.SortableUniqueId));
+	if (cursor === null) {
+		return [];
+	}
 
-	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
+	const isMatchQuery = (x: DbEvent): boolean =>
+		(query.SortableIdStart === null ||
+			query.SortableIdStart < x.SortableUniqueId) &&
+		//
+		(query.SortableIdEnd === null ||
+			x.SortableUniqueId < query.SortableIdEnd) &&
+		//
+		(query.PartitionKey === null || x.PartitionKey === query.PartitionKey) &&
+		//
+		(query.AggregateTypes === null ||
+			query.AggregateTypes.includes(x.AggregateType)) &&
+		//
+		(query.RootPartitionKey === null ||
+			x.RootPartitionKey === query.RootPartitionKey) &&
+		//
+		true;
+
+	const events: DbEvent[] = [];
+	const maxCount = query.MaxCount ?? Number.MAX_SAFE_INTEGER;
+
+	while (cursor !== null && events.length < maxCount) {
+		if (isMatchQuery(cursor.value)) {
+			events.push(cursor.value);
+		}
+		cursor = await cursor.continue();
+	}
+
+	await tx.done;
+
+	return events.toSorted(asc((x) => x.SortableUniqueId));
 };
 
 const filterBlobs = async (
