@@ -7,7 +7,7 @@ import type {
 	DbSingleProjectionSnapshot,
 } from "./models";
 
-interface SekibanDbSchema extends DBSchema {
+export interface SekibanDbSchema extends DBSchema {
 	events: {
 		key: string;
 		value: DbEvent;

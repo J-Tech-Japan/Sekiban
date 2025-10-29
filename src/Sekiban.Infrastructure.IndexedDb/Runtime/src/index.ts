@@ -1,4 +1,10 @@
 import type {
+	IDBPCursorWithValue,
+	IDBPTransaction,
+	StoreNames,
+	StoreValue,
+} from "idb";
+import type {
 	DbBlob,
 	DbBlobQuery,
 	DbCommand,
@@ -10,7 +16,7 @@ import type {
 	DbSingleProjectionSnapshot,
 	DbSingleProjectionSnapshotQuery,
 } from "./models";
-import { connect, type SekibanDb } from "./sekiban-db";
+import { connect, type SekibanDb, type SekibanDbSchema } from "./sekiban-db";
 
 // biome-ignore lint/suspicious/noExplicitAny: ignore param/return types for deserialize/serialize
 const wrapio = <T extends Record<string, (args: any) => Promise<any>>>(
@@ -45,83 +51,117 @@ const desc =
 	(x: T, y: T): number =>
 		id(y).localeCompare(id(x));
 
-const filterEvents = async (
-	idb: SekibanDb,
-	store: "events" | "dissolvable-events",
-	query: DbEventQuery,
-): Promise<DbEvent[]> => {
+const filterStore = async <StoreName extends StoreNames<SekibanDbSchema>>({
+	idb,
+	store,
+	openCursor,
+	maxCount,
+	filter,
+	orderBy,
+}: {
+	idb: SekibanDb;
+	store: StoreName;
+	openCursor: (
+		tx: IDBPTransaction<SekibanDbSchema, [StoreName], "readonly">,
+	) => Promise<IDBPCursorWithValue<
+		SekibanDbSchema,
+		[StoreName],
+		StoreName,
+		unknown,
+		"readonly"
+	> | null>;
+	maxCount: number | null;
+	filter: (x: StoreValue<SekibanDbSchema, StoreName>) => boolean;
+	orderBy: (
+		x: StoreValue<SekibanDbSchema, StoreName>,
+		y: StoreValue<SekibanDbSchema, StoreName>,
+	) => number;
+}): Promise<StoreValue<SekibanDbSchema, StoreName>[]> => {
 	const tx = idb.transaction(store, "readonly");
-
-	let cursor = await (() => {
-		if (query.SortableIdStart !== null && query.SortableIdEnd !== null) {
-			const range = IDBKeyRange.bound(
-				query.SortableIdStart,
-				query.SortableIdEnd,
-				true,
-				true,
-			);
-			return tx.store.index("SortableUniqueId").openCursor(range);
-		}
-
-		if (query.SortableIdStart !== null) {
-			const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
-			return tx.store.index("SortableUniqueId").openCursor(range);
-		}
-
-		if (query.SortableIdEnd !== null) {
-			const range = IDBKeyRange.upperBound(query.SortableIdEnd, true);
-			return tx.store.index("SortableUniqueId").openCursor(range);
-		}
-
-		if (query.PartitionKey !== null) {
-			const range = IDBKeyRange.only(query.PartitionKey);
-			return tx.store.index("PartitionKey").openCursor(range);
-		}
-
-		if (query.RootPartitionKey !== null) {
-			const range = IDBKeyRange.only(query.RootPartitionKey);
-			return tx.store.index("RootPartitionKey").openCursor(range);
-		}
-
-		return tx.store.openCursor();
-	})();
-
+	let cursor = await openCursor(tx);
 	if (cursor === null) {
 		return [];
 	}
 
-	const isMatchQuery = (x: DbEvent): boolean =>
-		(query.SortableIdStart === null ||
-			query.SortableIdStart < x.SortableUniqueId) &&
-		//
-		(query.SortableIdEnd === null ||
-			x.SortableUniqueId < query.SortableIdEnd) &&
-		//
-		(query.PartitionKey === null || x.PartitionKey === query.PartitionKey) &&
-		//
-		(query.AggregateTypes === null ||
-			query.AggregateTypes.includes(x.AggregateType)) &&
-		//
-		(query.RootPartitionKey === null ||
-			x.RootPartitionKey === query.RootPartitionKey) &&
-		//
-		true;
+	const items: StoreValue<SekibanDbSchema, StoreName>[] = [];
+	maxCount ??= Number.MAX_SAFE_INTEGER;
 
-	const events: DbEvent[] = [];
-	const maxCount = query.MaxCount ?? Number.MAX_SAFE_INTEGER;
-
-	while (cursor !== null && events.length < maxCount) {
-		if (isMatchQuery(cursor.value)) {
-			events.push(cursor.value);
+	while (cursor !== null && items.length < maxCount) {
+		if (filter(cursor.value)) {
+			items.push(cursor.value);
 		}
+
 		cursor = await cursor.continue();
 	}
 
-	await tx.done;
-
-	events.sort(asc((x) => x.SortableUniqueId));
-	return events;
+	items.sort(orderBy);
+	return items;
 };
+
+const filterEvents = async (
+	idb: SekibanDb,
+	store: "events" | "dissolvable-events",
+	query: DbEventQuery,
+): Promise<DbEvent[]> =>
+	await filterStore({
+		idb,
+		store,
+
+		openCursor: (tx) => {
+			if (query.SortableIdStart !== null && query.SortableIdEnd !== null) {
+				const range = IDBKeyRange.bound(
+					query.SortableIdStart,
+					query.SortableIdEnd,
+					true,
+					true,
+				);
+				return tx.store.index("SortableUniqueId").openCursor(range);
+			}
+
+			if (query.SortableIdStart !== null) {
+				const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
+				return tx.store.index("SortableUniqueId").openCursor(range);
+			}
+
+			if (query.SortableIdEnd !== null) {
+				const range = IDBKeyRange.upperBound(query.SortableIdEnd, true);
+				return tx.store.index("SortableUniqueId").openCursor(range);
+			}
+
+			if (query.PartitionKey !== null) {
+				const range = IDBKeyRange.only(query.PartitionKey);
+				return tx.store.index("PartitionKey").openCursor(range);
+			}
+
+			if (query.RootPartitionKey !== null) {
+				const range = IDBKeyRange.only(query.RootPartitionKey);
+				return tx.store.index("RootPartitionKey").openCursor(range);
+			}
+
+			return tx.store.openCursor();
+		},
+
+		maxCount: query.MaxCount,
+
+		filter: (x) =>
+			(query.SortableIdStart === null ||
+				query.SortableIdStart < x.SortableUniqueId) &&
+			//
+			(query.SortableIdEnd === null ||
+				x.SortableUniqueId < query.SortableIdEnd) &&
+			//
+			(query.PartitionKey === null || x.PartitionKey === query.PartitionKey) &&
+			//
+			(query.AggregateTypes === null ||
+				query.AggregateTypes.includes(x.AggregateType)) &&
+			//
+			(query.RootPartitionKey === null ||
+				x.RootPartitionKey === query.RootPartitionKey) &&
+			//
+			true,
+
+		orderBy: asc((x) => x.SortableUniqueId),
+	});
 
 const filterBlobs = async (
 	idb: SekibanDb,
@@ -130,35 +170,26 @@ const filterBlobs = async (
 		| "multi-projection-state-blobs"
 		| "multi-projection-events-blobs",
 	query: DbBlobQuery,
-): Promise<DbBlob[]> => {
-	const tx = idb.transaction(store, "readonly");
+): Promise<DbBlob[]> =>
+	await filterStore({
+		idb,
+		store,
 
-	let cursor = await (() => {
-		if (query.Name !== null) {
-			const range = IDBKeyRange.only(query.Name);
-			return tx.store.index("Name").openCursor(range);
-		}
+		openCursor: (tx) => {
+			if (query.Name !== null) {
+				const range = IDBKeyRange.only(query.Name);
+				return tx.store.index("Name").openCursor(range);
+			}
 
-		return tx.store.openCursor();
-	})();
+			return tx.store.openCursor();
+		},
 
-	if (cursor === null) {
-		return [];
-	}
+		maxCount: query.MaxCount,
 
-	const blobs: DbBlob[] = [];
-	const maxCount = query.MaxCount ?? Number.MAX_SAFE_INTEGER;
+		filter: (x) => query.Name === null || x.Name === query.Name,
 
-	while (cursor !== null && blobs.length < maxCount) {
-		blobs.push(cursor.value);
-		cursor = await cursor.continue();
-	}
-
-	await tx.done;
-
-	blobs.sort(asc((x) => x.Id));
-	return blobs;
-};
+		orderBy: asc((x) => x.Id),
+	});
 
 const operations = (idb: SekibanDb) => {
 	const writeEventAsync = async (event: DbEvent): Promise<void> => {
@@ -190,57 +221,46 @@ const operations = (idb: SekibanDb) => {
 
 	const getCommandsAsync = async (
 		query: DbCommandQuery,
-	): Promise<DbCommand[]> => {
-		const tx = idb.transaction("commands", "readonly");
+	): Promise<DbCommand[]> =>
+		await filterStore({
+			idb,
+			store: "commands",
 
-		let cursor = await (() => {
-			if (query.SortableIdStart != null) {
-				const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
-				return tx.store.index("SortableUniqueId").openCursor(range);
-			}
+			openCursor: (tx) => {
+				if (query.SortableIdStart != null) {
+					const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
+					return tx.store.index("SortableUniqueId").openCursor(range);
+				}
 
-			if (query.PartitionKey !== null) {
-				const range = IDBKeyRange.only(query.PartitionKey);
-				return tx.store.index("PartitionKey").openCursor(range);
-			}
+				if (query.PartitionKey !== null) {
+					const range = IDBKeyRange.only(query.PartitionKey);
+					return tx.store.index("PartitionKey").openCursor(range);
+				}
 
-			if (query.AggregateContainerGroup !== null) {
-				const range = IDBKeyRange.lowerBound(
-					query.AggregateContainerGroup,
-					true,
-				);
-				return tx.store.index("AggregateContainerGroup").openCursor(range);
-			}
+				if (query.AggregateContainerGroup !== null) {
+					const range = IDBKeyRange.lowerBound(
+						query.AggregateContainerGroup,
+						true,
+					);
+					return tx.store.index("AggregateContainerGroup").openCursor(range);
+				}
 
-			return tx.store.openCursor();
-		})();
+				return tx.store.openCursor();
+			},
 
-		if (cursor === null) {
-			return [];
-		}
+			maxCount: null,
 
-		const isMatchQuery = (x: DbCommand): boolean =>
-			(query.AggregateContainerGroup === null ||
-				x.AggregateContainerGroup === query.AggregateContainerGroup) &&
-			//
-			(query.SortableIdStart === null ||
-				query.SortableIdStart < x.SortableUniqueId) &&
-			//
-			true;
+			filter: (x) =>
+				(query.AggregateContainerGroup === null ||
+					x.AggregateContainerGroup === query.AggregateContainerGroup) &&
+				//
+				(query.SortableIdStart === null ||
+					query.SortableIdStart < x.SortableUniqueId) &&
+				//
+				true,
 
-		const commands: DbCommand[] = [];
-		while (cursor !== null) {
-			if (isMatchQuery(cursor.value)) {
-				commands.push(cursor.value);
-			}
-			cursor = await cursor.continue();
-		}
-
-		await tx.done;
-
-		commands.sort(asc((x) => x.SortableUniqueId));
-		return commands;
-	};
+			orderBy: asc((x) => x.SortableUniqueId),
+		});
 
 	const removeAllCommandsAsync = async (): Promise<void> => {
 		await idb.clear("commands");
@@ -264,105 +284,73 @@ const operations = (idb: SekibanDb) => {
 			return item !== undefined ? [item] : [];
 		}
 
-		const shard: DbSingleProjectionSnapshot[] = await (() => {
-			if (query.AggregateId !== null) {
-				const key = IDBKeyRange.only(query.AggregateId);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"AggregateId",
-					key,
-				);
-			}
+		return await filterStore({
+			idb,
+			store: "single-projection-snapshots",
 
-			if (query.AggregateContainerGroup !== null) {
-				const key = IDBKeyRange.only(query.AggregateContainerGroup);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"AggregateContainerGroup",
-					key,
-				);
-			}
+			openCursor: (tx) => {
+				if (query.AggregateId !== null) {
+					const key = IDBKeyRange.only(query.AggregateId);
+					return tx.store.index("AggregateId").openCursor(key);
+				}
 
-			if (query.PartitionKey !== null) {
-				const key = IDBKeyRange.only(query.PartitionKey);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"PartitionKey",
-					key,
-				);
-			}
+				if (query.AggregateContainerGroup !== null) {
+					const key = IDBKeyRange.only(query.AggregateContainerGroup);
+					return tx.store.index("AggregateContainerGroup").openCursor(key);
+				}
 
-			if (query.RootPartitionKey !== null) {
-				const key = IDBKeyRange.only(query.RootPartitionKey);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"RootPartitionKey",
-					key,
-				);
-			}
+				if (query.PartitionKey !== null) {
+					const key = IDBKeyRange.only(query.PartitionKey);
+					return tx.store.index("PartitionKey").openCursor(key);
+				}
 
-			if (query.AggregateType !== null) {
-				const key = IDBKeyRange.only(query.AggregateType);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"AggregateType",
-					key,
-				);
-			}
+				if (query.RootPartitionKey !== null) {
+					const key = IDBKeyRange.only(query.RootPartitionKey);
+					return tx.store.index("RootPartitionKey").openCursor(key);
+				}
 
-			if (query.PayloadVersionIdentifier !== null) {
-				const key = IDBKeyRange.only(query.PayloadVersionIdentifier);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"PayloadVersionIdentifier",
-					key,
-				);
-			}
+				if (query.AggregateType !== null) {
+					const key = IDBKeyRange.only(query.AggregateType);
+					return tx.store.index("AggregateType").openCursor(key);
+				}
 
-			if (query.SavedVersion !== null) {
-				const key = IDBKeyRange.only(query.SavedVersion);
-				return idb.getAllFromIndex(
-					"single-projection-snapshots",
-					"SavedVersion",
-					key,
-				);
-			}
+				if (query.PayloadVersionIdentifier !== null) {
+					const key = IDBKeyRange.only(query.PayloadVersionIdentifier);
+					return tx.store.index("PayloadVersionIdentifier").openCursor(key);
+				}
 
-			return idb.getAll("single-projection-snapshots");
-		})();
+				if (query.SavedVersion !== null) {
+					const key = IDBKeyRange.only(query.SavedVersion);
+					return tx.store.index("SavedVersion").openCursor(key);
+				}
 
-		const items = shard
-			.filter(
-				(x) =>
-					query.AggregateContainerGroup === null ||
-					x.AggregateContainerGroup === query.AggregateContainerGroup,
-			)
-			.filter(
-				(x) =>
-					query.AggregateId === null || x.AggregateId === query.AggregateId,
-			)
-			.filter(
-				(x) =>
-					query.RootPartitionKey === null ||
-					x.RootPartitionKey === query.RootPartitionKey,
-			)
-			.filter(
-				(x) =>
-					query.AggregateType === null ||
-					x.AggregateType === query.AggregateType,
-			)
-			.filter(
-				(x) =>
-					query.PayloadVersionIdentifier === null ||
-					x.PayloadVersionIdentifier === query.PayloadVersionIdentifier,
-			)
-			.filter(
-				(x) =>
-					query.SavedVersion === null || x.SavedVersion === query.SavedVersion,
-			)
-			.toSorted(desc((x) => x.LastSortableUniqueId));
+				return tx.store.openCursor();
+			},
 
-		return query.IsLatestOnly ? items.slice(0, 1) : items;
+			maxCount: query.IsLatestOnly ? 1 : null,
+
+			filter: (x) =>
+				(query.AggregateContainerGroup === null ||
+					x.AggregateContainerGroup === query.AggregateContainerGroup) &&
+				//
+				(query.AggregateId === null || x.AggregateId === query.AggregateId) &&
+				//
+				(query.RootPartitionKey === null ||
+					x.RootPartitionKey === query.RootPartitionKey) &&
+				//
+				(query.AggregateType === null ||
+					x.AggregateType === query.AggregateType) &&
+				//
+				(query.PayloadVersionIdentifier === null ||
+					x.PayloadVersionIdentifier === query.PayloadVersionIdentifier) &&
+				//
+				(query.SavedVersion === null ||
+					x.SavedVersion === query.SavedVersion) &&
+				//
+				true,
+
+			orderBy: desc((x) => x.LastSortableUniqueId),
+		});
 	};
 
 	const removeAllSingleProjectionSnapshotsAsync = async (): Promise<void> => {
@@ -377,53 +365,41 @@ const operations = (idb: SekibanDb) => {
 
 	const getMultiProjectionSnapshotsAsync = async (
 		query: DbMultiProjectionSnapshotQuery,
-	): Promise<DbMultiProjectionSnapshot[]> => {
-		const shard: DbMultiProjectionSnapshot[] = await (() => {
-			if (query.PartitionKey !== null) {
-				const key = IDBKeyRange.only(query.PartitionKey);
-				return idb.getAllFromIndex(
-					"multi-projection-snapshots",
-					"PartitionKey",
-					key,
-				);
-			}
+	): Promise<DbMultiProjectionSnapshot[]> =>
+		await filterStore({
+			idb,
+			store: "multi-projection-snapshots",
 
-			if (query.AggregateContainerGroup !== null) {
-				const key = IDBKeyRange.only(query.AggregateContainerGroup);
-				return idb.getAllFromIndex(
-					"multi-projection-snapshots",
-					"AggregateContainerGroup",
-					key,
-				);
-			}
+			openCursor: (tx) => {
+				if (query.PartitionKey !== null) {
+					const key = IDBKeyRange.only(query.PartitionKey);
+					return tx.store.index("PartitionKey").openCursor(key);
+				}
 
-			if (query.PayloadVersionIdentifier !== null) {
-				const key = IDBKeyRange.only(query.PayloadVersionIdentifier);
-				return idb.getAllFromIndex(
-					"multi-projection-snapshots",
-					"PayloadVersionIdentifier",
-					key,
-				);
-			}
+				if (query.AggregateContainerGroup !== null) {
+					const key = IDBKeyRange.only(query.AggregateContainerGroup);
+					return tx.store.index("AggregateContainerGroup").openCursor(key);
+				}
 
-			return idb.getAll("multi-projection-snapshots");
-		})();
+				if (query.PayloadVersionIdentifier !== null) {
+					const key = IDBKeyRange.only(query.PayloadVersionIdentifier);
+					return tx.store.index("PayloadVersionIdentifier").openCursor(key);
+				}
 
-		const items = shard
-			.filter(
-				(x) =>
-					query.AggregateContainerGroup === null ||
-					x.AggregateContainerGroup === query.AggregateContainerGroup,
-			)
-			.filter(
-				(x) =>
-					query.PayloadVersionIdentifier === null ||
-					x.PayloadVersionIdentifier === query.PayloadVersionIdentifier,
-			)
-			.toSorted(desc((x) => x.LastSortableUniqueId));
+				return tx.store.openCursor();
+			},
 
-		return query.IsLatestOnly ? items.slice(0, 1) : items;
-	};
+			maxCount: query.IsLatestOnly ? 1 : null,
+
+			filter: (x) =>
+				(query.AggregateContainerGroup === null ||
+					x.AggregateContainerGroup === query.AggregateContainerGroup) &&
+				(query.PayloadVersionIdentifier === null ||
+					x.PayloadVersionIdentifier === query.PayloadVersionIdentifier) &&
+				true,
+
+			orderBy: desc((x) => x.LastSortableUniqueId),
+		});
 
 	const removeAllMultiProjectionSnapshotsAsync = async (): Promise<void> => {
 		await idb.clear("multi-projection-snapshots");
