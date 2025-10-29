@@ -119,7 +119,8 @@ const filterEvents = async (
 
 	await tx.done;
 
-	return events.toSorted(asc((x) => x.SortableUniqueId));
+	events.sort(asc((x) => x.SortableUniqueId));
+	return events;
 };
 
 const filterBlobs = async (
@@ -130,18 +131,33 @@ const filterBlobs = async (
 		| "multi-projection-events-blobs",
 	query: DbBlobQuery,
 ): Promise<DbBlob[]> => {
-	const shard: DbBlob[] = await (() => {
+	const tx = idb.transaction(store, "readonly");
+
+	let cursor = await (() => {
 		if (query.Name !== null) {
-			const key = IDBKeyRange.only(query.Name);
-			return idb.getAllFromIndex(store, "Name", key);
+			const range = IDBKeyRange.only(query.Name);
+			return tx.store.index("Name").openCursor(range);
 		}
 
-		return idb.getAll(store);
+		return tx.store.openCursor();
 	})();
 
-	const items = shard.toSorted(asc((x) => x.Id));
+	if (cursor === null) {
+		return [];
+	}
 
-	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
+	const blobs: DbBlob[] = [];
+	const maxCount = query.MaxCount ?? Number.MAX_SAFE_INTEGER;
+
+	while (cursor !== null && blobs.length < maxCount) {
+		blobs.push(cursor.value);
+		cursor = await cursor.continue();
+	}
+
+	await tx.done;
+
+	blobs.sort(asc((x) => x.Id));
+	return blobs;
 };
 
 const operations = (idb: SekibanDb) => {
@@ -175,39 +191,55 @@ const operations = (idb: SekibanDb) => {
 	const getCommandsAsync = async (
 		query: DbCommandQuery,
 	): Promise<DbCommand[]> => {
-		const shard: DbCommand[] = await (() => {
+		const tx = idb.transaction("commands", "readonly");
+
+		let cursor = await (() => {
 			if (query.SortableIdStart != null) {
-				const key = IDBKeyRange.lowerBound(query.SortableIdStart, true);
-				return idb.getAllFromIndex("commands", "SortableUniqueId", key);
+				const range = IDBKeyRange.lowerBound(query.SortableIdStart, true);
+				return tx.store.index("SortableUniqueId").openCursor(range);
 			}
 
 			if (query.PartitionKey !== null) {
-				const key = IDBKeyRange.only(query.PartitionKey);
-				return idb.getAllFromIndex("commands", "PartitionKey", key);
+				const range = IDBKeyRange.only(query.PartitionKey);
+				return tx.store.index("PartitionKey").openCursor(range);
 			}
 
 			if (query.AggregateContainerGroup !== null) {
-				const key = IDBKeyRange.lowerBound(query.AggregateContainerGroup, true);
-				return idb.getAllFromIndex("commands", "AggregateContainerGroup", key);
+				const range = IDBKeyRange.lowerBound(
+					query.AggregateContainerGroup,
+					true,
+				);
+				return tx.store.index("AggregateContainerGroup").openCursor(range);
 			}
 
-			return idb.getAll("commands");
+			return tx.store.openCursor();
 		})();
 
-		const items = shard
-			.filter(
-				(x) =>
-					query.AggregateContainerGroup === null ||
-					x.AggregateContainerGroup === query.AggregateContainerGroup,
-			)
-			.filter(
-				(x) =>
-					query.SortableIdStart === null ||
-					query.SortableIdStart < x.SortableUniqueId,
-			)
-			.toSorted(asc((x) => x.SortableUniqueId));
+		if (cursor === null) {
+			return [];
+		}
 
-		return items;
+		const isMatchQuery = (x: DbCommand): boolean =>
+			(query.AggregateContainerGroup === null ||
+				x.AggregateContainerGroup === query.AggregateContainerGroup) &&
+			//
+			(query.SortableIdStart === null ||
+				query.SortableIdStart < x.SortableUniqueId) &&
+			//
+			true;
+
+		const commands: DbCommand[] = [];
+		while (cursor !== null) {
+			if (isMatchQuery(cursor.value)) {
+				commands.push(cursor.value);
+			}
+			cursor = await cursor.continue();
+		}
+
+		await tx.done;
+
+		commands.sort(asc((x) => x.SortableUniqueId));
+		return commands;
 	};
 
 	const removeAllCommandsAsync = async (): Promise<void> => {
