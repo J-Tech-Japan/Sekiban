@@ -29,7 +29,8 @@ public class InMemoryDcbExecutor : ISekibanExecutor
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        _inner = new GeneralSekibanExecutor(_eventStore, _accessor, _domainTypes, null);
+        var eventPublisher = new InMemoryMultiProjectionEventPublisher(_accessor);
+        _inner = new GeneralSekibanExecutor(_eventStore, _accessor, _domainTypes, eventPublisher);
     }
 
     /// <summary>

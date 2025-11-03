@@ -3,6 +3,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using System.Collections.Concurrent;
+using System.Linq;
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
@@ -172,4 +173,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
     ///     Removes a specific actor from the cache
     /// </summary>
     public bool RemoveActor(string actorId) => _actors.TryRemove(actorId, out _);
+
+    internal IReadOnlyList<GeneralMultiProjectionActor> GetMultiProjectionActorsSnapshot() =>
+        _actors.Values.OfType<GeneralMultiProjectionActor>().ToList();
 }

@@ -8,14 +8,14 @@
         <AssemblyName>Sekiban.Dcb.CosmosDb</AssemblyName>
         <RootNamespace>Sekiban.Dcb.CosmosDb</RootNamespace>
         <PackageId>Sekiban.Dcb.CosmosDb</PackageId>
-        <Version>9.1.8</Version>
+        <Version>9.1.9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>9.1.8</PackageVersion>
+        <PackageVersion>9.1.9</PackageVersion>
         <Description>CosmosDB event store and persistence layer for Sekiban DCB</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;cosmosdb;azure</PackageTags>
         <AnalysisLevel>latest-All</AnalysisLevel>
