@@ -105,4 +105,30 @@ public class InMemoryDcbExecutorIntegrationTests
 		var exception = commandResult.GetException();
 		Assert.Contains("StudentCreated", exception.Message);
 	}
+
+	[Fact]
+	public async Task MultiProjection_Should_Include_AllStudents_AfterMultipleCommands()
+	{
+		var domain = DomainType.GetDomainTypes();
+		ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+
+		var studentId1 = Guid.NewGuid();
+		var studentId2 = Guid.NewGuid();
+
+		await executor.ExecuteAsync(new CreateStudent(studentId1, "Student One", 3));
+
+		// Prime the multi-projection actor
+		var initialQuery = await executor.QueryAsync(new GetStudentListQuery { PageNumber = 1, PageSize = 10 });
+		Assert.True(initialQuery.IsSuccess);
+		Assert.Contains(initialQuery.GetValue().Items, s => s.StudentId == studentId1);
+
+		await executor.ExecuteAsync(new CreateStudent(studentId2, "Student Two", 4));
+
+		var secondQuery = await executor.QueryAsync(new GetStudentListQuery { PageNumber = 1, PageSize = 10 });
+		Assert.True(secondQuery.IsSuccess);
+
+		var students = secondQuery.GetValue().Items.ToList();
+		Assert.Contains(students, s => s.StudentId == studentId1);
+		Assert.Contains(students, s => s.StudentId == studentId2);
+	}
 }
