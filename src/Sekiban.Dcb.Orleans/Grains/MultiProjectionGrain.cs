@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using Orleans.Streams;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -6,6 +8,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using System.Text;
@@ -496,13 +499,27 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Do not auto-catch-up here; catch-up will be triggered by state/query access
     }
 
-    public async Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query)
+    public async Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter)
     {
         await EnsureInitializedAsync();
 
+        var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
+        if (!queryBox.IsSuccess)
+        {
+            throw queryBox.GetException();
+        }
+
+        if (queryBox.GetValue() is not IQueryCommon query)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized query does not implement {nameof(IQueryCommon)}: {queryBox.GetValue().GetType().FullName}");
+        }
+
         if (_projectionActor == null)
         {
-            return new QueryResultGeneral(null!, string.Empty, query);
+            return await SerializableQueryResult.CreateFromAsync(
+                new QueryResultGeneral(null!, string.Empty, query),
+                _domainTypes.JsonSerializerOptions);
         }
 
         try
@@ -513,16 +530,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 safeStateResultBox = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
             }
-            // Avoid forcing catch-up on every query. Subscription will advance state.
-            // Only catch up here if subscription is not active.
             if (_orleansStreamHandle == null)
             {
                 await CatchUpFromEventStoreAsync();
             }
+
             var stateResult = await _projectionActor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                return new QueryResultGeneral(null!, string.Empty, query);
+                return await SerializableQueryResult.CreateFromAsync(
+                    new QueryResultGeneral(null!, string.Empty, query),
+                    _domainTypes.JsonSerializerOptions);
             }
 
             var state = stateResult.GetValue();
@@ -531,6 +549,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             string? safeThreshold = null;
             DateTime? safeThresholdTime = null;
             int? unsafeVersion = null;
+
             try
             {
                 if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
@@ -546,42 +565,76 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
                     }
                 }
+
                 if (_projectionActor != null)
                 {
                     var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
                     safeThreshold = actorSafeThreshold.Value;
                     try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
                 }
+
                 unsafeVersion = state.Version;
             }
             catch { }
+
             var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
-                query, 
-                projectorProvider, 
+                query,
+                projectorProvider,
                 ServiceProvider,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
                 unsafeVersion);
 
+            object? value = null;
+            string resultType = string.Empty;
+
             if (result.IsSuccess)
             {
-                var value = result.GetValue();
-                return new QueryResultGeneral(value, value?.GetType().FullName ?? string.Empty, query);
+                value = result.GetValue();
+                resultType = value?.GetType().FullName ?? string.Empty;
             }
 
-            return new QueryResultGeneral(null!, string.Empty, query);
+            return await SerializableQueryResult.CreateFromAsync(
+                new QueryResultGeneral(value ?? null!, resultType, query),
+                _domainTypes.JsonSerializerOptions);
         }
         catch (Exception ex)
         {
             _lastError = $"Query failed: {ex.Message}";
-            return new QueryResultGeneral(null!, string.Empty, query);
+            return await SerializableQueryResult.CreateFromAsync(
+                new QueryResultGeneral(null!, string.Empty, query),
+                _domainTypes.JsonSerializerOptions);
         }
     }
 
-    public async Task<ListQueryResultGeneral> ExecuteListQueryAsync(IListQueryCommon query)
+    public async Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter)
     {
         await EnsureInitializedAsync();
+
+        var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
+        if (!queryBox.IsSuccess)
+        {
+            throw queryBox.GetException();
+        }
+
+        if (queryBox.GetValue() is not IListQueryCommon listQuery)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized query does not implement IListQueryCommon: {queryBox.GetValue().GetType().FullName}");
+        }
+
+        Task<SerializableListQueryResult> CreateEmptyAsync() =>
+            SerializableListQueryResult.CreateFromAsync(
+                new ListQueryResultGeneral(
+                    0,
+                    0,
+                    0,
+                    0,
+                    Array.Empty<object>(),
+                    string.Empty,
+                    listQuery),
+                _domainTypes.JsonSerializerOptions);
 
         await StartSubscriptionAsync();
         ResultBox<MultiProjectionState>? safeStateResultBox = null;
@@ -596,7 +649,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (_projectionActor == null)
         {
-            return ListQueryResultGeneral.Empty;
+            return await CreateEmptyAsync();
         }
 
         try
@@ -604,7 +657,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var stateResult = await _projectionActor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                return ListQueryResultGeneral.Empty;
+                return await CreateEmptyAsync();
             }
 
             var state = stateResult.GetValue();
@@ -638,7 +691,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
             var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
-                query,
+                listQuery,
                 projectorProvider,
                 ServiceProvider,
                 safeVersion,
@@ -646,12 +699,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 safeThresholdTime,
                 unsafeVersion);
 
-            return result.IsSuccess ? result.GetValue() : ListQueryResultGeneral.Empty;
+            var general = result.IsSuccess
+                ? result.GetValue()
+                : new ListQueryResultGeneral(
+                    0,
+                    0,
+                    0,
+                    0,
+                    Array.Empty<object>(),
+                    string.Empty,
+                    listQuery);
+
+            return await SerializableListQueryResult.CreateFromAsync(
+                general,
+                _domainTypes.JsonSerializerOptions);
         }
         catch (Exception ex)
         {
             _lastError = $"List query failed: {ex.Message}";
-            return ListQueryResultGeneral.Empty;
+            return await CreateEmptyAsync();
         }
     }
 
