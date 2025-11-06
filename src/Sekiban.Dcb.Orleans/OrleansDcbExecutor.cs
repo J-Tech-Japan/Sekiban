@@ -8,6 +8,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Diagnostics;
+using Sekiban.Dcb.Orleans.Serialization;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
@@ -97,11 +98,13 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Wait for sortable unique ID if needed
             await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
 
-            // Execute the query on the grain
-            var result = await grain.ExecuteQueryAsync(queryCommon);
+            var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
 
-            // Convert QueryResultGeneral back to typed result
-            return result.ToTypedResult<TResult>();
+            var result = await grain.ExecuteQueryAsync(serializableQuery);
+
+            return await DeserializeQueryResultAsync<TResult>(result);
         }
         catch (Exception ex)
         {
@@ -149,11 +152,13 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Wait for sortable unique ID if needed
             await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
 
-            // Execute the list query on the grain
-            var result = await grain.ExecuteListQueryAsync(queryCommon);
+            var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
+                queryCommon,
+                _domainTypes.JsonSerializerOptions);
 
-            // Convert ListQueryResultGeneral back to typed result
-            return result.ToTypedResult<TResult>();
+            var result = await grain.ExecuteListQueryAsync(serializableQuery);
+
+            return await DeserializeListQueryResultAsync<TResult>(result);
         }
         catch (Exception ex)
         {
@@ -191,5 +196,31 @@ public class OrleansDcbExecutor : ISekibanExecutor
             // Timeout reached - we proceed with the query anyway
             // The query might return stale data, but that's better than failing completely
         }
+    }
+
+    private async Task<ResultBox<TResult>> DeserializeQueryResultAsync<TResult>(
+        SerializableQueryResult result)
+        where TResult : notnull
+    {
+        var generalBox = await result.ToQueryResultAsync(_domainTypes);
+        if (!generalBox.IsSuccess)
+        {
+            return ResultBox.Error<TResult>(generalBox.GetException());
+        }
+
+        return generalBox.GetValue().ToTypedResult<TResult>();
+    }
+
+    private async Task<ResultBox<ListQueryResult<TResult>>> DeserializeListQueryResultAsync<TResult>(
+        SerializableListQueryResult result)
+        where TResult : notnull
+    {
+        var listGeneralBox = await result.ToListQueryResultAsync(_domainTypes);
+        if (!listGeneralBox.IsSuccess)
+        {
+            return ResultBox.Error<ListQueryResult<TResult>>(listGeneralBox.GetException());
+        }
+
+        return listGeneralBox.GetValue().ToTypedResult<TResult>();
     }
 }

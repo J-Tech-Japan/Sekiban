@@ -4,6 +4,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Orleans.Serialization;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -58,14 +59,14 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// </summary>
     /// <param name="query">The query to execute</param>
     /// <returns>The query result wrapped in QueryResultGeneral for serialization</returns>
-    Task<QueryResultGeneral> ExecuteQueryAsync(IQueryCommon query);
+    Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter query);
 
     /// <summary>
     ///     Execute a list query against the projection
     /// </summary>
     /// <param name="query">The list query to execute</param>
     /// <returns>The paginated query result wrapped in ListQueryResultGeneral for serialization</returns>
-    Task<ListQueryResultGeneral> ExecuteListQueryAsync(IListQueryCommon query);
+    Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter query);
 
     /// <summary>
     ///     Check if a specific sortable unique ID has been received and processed.
