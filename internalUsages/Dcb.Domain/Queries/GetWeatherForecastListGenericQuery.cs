@@ -1,24 +1,20 @@
 using Dcb.Domain.Projections;
 using Dcb.Domain.Weather;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 
 namespace Dcb.Domain.Queries;
 
-[GenerateSerializer]
 public record GetWeatherForecastListGenericQuery :
     IMultiProjectionListQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    [Id(0)]
     public bool IncludeDeleted { get; init; } = false;
 
-    // Paging parameters
-    [Id(1)] public int? PageNumber { get; init; }
-    [Id(2)] public int? PageSize { get; init; }
+    public int? PageNumber { get; init; }
+    public int? PageSize { get; init; }
 
     public static ResultBox<IEnumerable<WeatherForecastItem>> HandleFilter(
         GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag> projector,
@@ -49,8 +45,6 @@ public record GetWeatherForecastListGenericQuery :
         return ResultBox.FromValue(filteredList.OrderByDescending(f => f.Date).AsEnumerable());
     }
 
-    // Wait for sortable unique ID
-    [Id(3)]
     public string? WaitForSortableUniqueId { get; init; }
 }
 
