@@ -1,5 +1,4 @@
 using Dcb.Domain.Weather;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
@@ -13,13 +12,11 @@ namespace Dcb.Domain.Projections;
 /// <summary>
 ///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
-[GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
     /// <summary>
     ///     Dictionary of weather forecasts by ID
     /// </summary>
-    [Id(0)]
     public Dictionary<Guid, WeatherForecastItem> Forecasts { get; init; } = new();
 
     public static string MultiProjectorName => "WeatherForecastProjection";

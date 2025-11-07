@@ -1,20 +1,15 @@
 using Dcb.Domain.Student;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
-[GenerateSerializer]
 public record GetStudentListQuery :
     IMultiProjectionListQuery<GenericTagMultiProjector<StudentProjector, StudentTag>, GetStudentListQuery, StudentState>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    // Paging parameters (from IQueryPagingParameter)
-    [Id(0)]
     public int? PageNumber { get; init; }
-    [Id(1)]
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
@@ -39,7 +34,5 @@ public record GetStudentListQuery :
         return ResultBox.FromValue(filteredList.OrderBy(s => s.Name).AsEnumerable());
     }
 
-    // Wait for sortable unique ID (from IWaitForSortableUniqueId)
-    [Id(2)]
     public string? WaitForSortableUniqueId { get; init; }
 }

@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="SekibanDcbOrleans.ApiService/SekibanDcbOrleans.ApiService.csproj" />
+  <Project Path="SekibanDcbOrleans.AppHost/SekibanDcbOrleans.AppHost.csproj" />
+  <Project Path="SekibanDcbOrleans.Domain/SekibanDcbOrleans.Domain.csproj" />
+  <Project Path="SekibanDcbOrleans.ServiceDefaults/SekibanDcbOrleans.ServiceDefaults.csproj" />
+  <Project Path="SekibanDcbOrleans.Unit/SekibanDcbOrleans.Unit.csproj" />
+  <Project Path="SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj" />
+</Solution>

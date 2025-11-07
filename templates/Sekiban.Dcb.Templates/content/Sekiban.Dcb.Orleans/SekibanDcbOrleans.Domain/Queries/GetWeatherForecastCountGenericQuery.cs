@@ -1,6 +1,5 @@
 using Dcb.Domain.Queries;
 using Dcb.Domain.Weather;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
@@ -10,12 +9,10 @@ namespace Dcb.Domain.Queries;
 /// <summary>
 /// Count query for GenericTagMultiProjector-based Weather
 /// </summary>
-[GenerateSerializer]
 public record GetWeatherForecastCountGenericQuery :
     IMultiProjectionQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {
-    [Id(0)]
     public string? WaitForSortableUniqueId { get; init; }
 
     public static ResultBox<WeatherForecastCountResult> HandleQuery(

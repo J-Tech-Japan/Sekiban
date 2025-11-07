@@ -1,20 +1,15 @@
 using Dcb.Domain.ClassRoom;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
-[GenerateSerializer]
 public record GetClassRoomListQuery :
     IMultiProjectionListQuery<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>, GetClassRoomListQuery, ClassRoomItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    // Paging parameters (from IQueryPagingParameter)
-    [Id(0)]
     public int? PageNumber { get; init; }
-    [Id(1)]
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
@@ -62,7 +57,5 @@ public record GetClassRoomListQuery :
         return ResultBox.FromValue(filteredList.OrderBy(c => c.Name).AsEnumerable());
     }
 
-    // Wait for sortable unique ID (from IWaitForSortableUniqueId)
-    [Id(2)]
     public string? WaitForSortableUniqueId { get; init; }
 }

@@ -1,22 +1,16 @@
 using Dcb.Domain.Projections;
-using Orleans;
 using ResultBoxes;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.Queries;
 
-[GenerateSerializer]
 public record GetWeatherForecastListQuery :
     IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
-    [Id(0)]
     public bool IncludeDeleted { get; init; } = false;
 
-    // Paging parameters (from IQueryPagingParameter)
-    [Id(1)]
     public int? PageNumber { get; init; }
-    [Id(2)]
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
@@ -40,7 +34,5 @@ public record GetWeatherForecastListQuery :
         return ResultBox.FromValue(filteredList.OrderByDescending(f => f.Date).AsEnumerable());
     }
 
-    // Wait for sortable unique ID (from IWaitForSortableUniqueId)
-    [Id(3)]
     public string? WaitForSortableUniqueId { get; init; }
 }
