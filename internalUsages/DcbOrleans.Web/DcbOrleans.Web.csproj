@@ -7,9 +7,10 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
     </PropertyGroup>
 
 </Project>

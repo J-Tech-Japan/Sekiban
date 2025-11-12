@@ -22,6 +22,11 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Detect version from tag
         run: |
           TAG="${GITHUB_REF_NAME}"
