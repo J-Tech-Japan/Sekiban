@@ -20,10 +20,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dcbTests:
+  dcbTestsNet9:
     runs-on: ubuntu-latest
     concurrency:
-      group: dcb-tests-${{ github.ref }}
+      group: dcb-tests-net9-${{ github.ref }}
       cancel-in-progress: false
 
     steps:
@@ -34,11 +34,34 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
-      - name: dotnet build
+      - name: dotnet build (net9.0)
         run: |
-          dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+          dotnet build -c Release -p:GeneratePackageOnBuild=false -p:TargetFramework=net9.0 --verbosity minimal -m:1
 
-      - name: dotnet test DCB projects sequentially
+      - name: dotnet test DCB projects sequentially (net9.0)
         run: |
-          dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+
+  dcbTestsNet10:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: dcb-tests-net10-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: dotnet build (net10.0)
+        run: |
+          dotnet build -c Release -p:GeneratePackageOnBuild=false -p:TargetFramework=net10.0 --verbosity minimal -m:1
+
+      - name: dotnet test DCB projects sequentially (net10.0)
+        run: |
+          dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
