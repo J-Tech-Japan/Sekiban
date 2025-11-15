@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.Orleans</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Orleans</RootNamespace>
         <PackageId>Sekiban.Dcb.Orleans</PackageId>
-        <Version>10.0.0-preview01</Version>
+        <Version>10.0.1-preview01</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary Orleans Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.0-preview01</PackageVersion>
+        <PackageVersion>10.0.1-preview01</PackageVersion>
         <Description>Orleans integration for Sekiban DCB with Multi-Projection Grains and Event Streaming</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;orleans;actor-model</PackageTags>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

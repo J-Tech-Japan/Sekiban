@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
@@ -21,12 +20,14 @@ public record CreateWeatherForecast : ICommandWithHandlerWithoutResult<CreateWea
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public static async Task<EventOrNone> HandleAsync(CreateWeatherForecast command, ICommandContext context)
+    public static async Task<EventOrNone> HandleAsync(
+        CreateWeatherForecast command,
+        ICommandContextWithoutResult context)
     {
         var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
         var tag = new WeatherForecastTag(forecastId);
 
-        var exists = (await context.TagExistsAsync(tag)).UnwrapBox();
+        var exists = await context.TagExistsAsync(tag);
         if (exists)
         {
             throw new ApplicationException($"Weather forecast {forecastId} already exists");

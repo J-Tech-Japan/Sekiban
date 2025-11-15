@@ -99,7 +99,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
                     if (!rb.IsSuccess) continue;
                     payload = rb.GetValue();
 
-                    var tag = new Dcb.Domain.WithoutResult.Weather.WeatherForecastTag(id);
+                    var tag = new WeatherForecastTag(id);
                     var tagStateId = new TagStateId(tag, tagProjectorName);
                     var ts = TagState.GetEmpty(tagStateId) with
                     {

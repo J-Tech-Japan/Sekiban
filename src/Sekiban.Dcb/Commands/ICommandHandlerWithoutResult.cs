@@ -9,5 +9,5 @@ namespace Sekiban.Dcb.Commands;
 /// <typeparam name="TCommand">The command type this handler processes.</typeparam>
 public interface ICommandHandlerWithoutResult<in TCommand> where TCommand : ICommand
 {
-    static abstract Task<EventOrNone> HandleAsync(TCommand command, ICommandContext context);
+    static abstract Task<EventOrNone> HandleAsync(TCommand command, ICommandContextWithoutResult context);
 }
