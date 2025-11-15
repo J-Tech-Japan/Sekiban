@@ -369,7 +369,7 @@ builder.UseOrleans(config =>
 
         // GeneralMultiProjectionActor options: enable dynamic safe window when not using in-memory streams
         // Default baseline uses 20s safe window, dynamic adds observed stream lag up to 30s.
-        var dynamicOptions = new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions
+        var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = 20000,
             EnableDynamicSafeWindow = !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
@@ -378,13 +378,13 @@ builder.UseOrleans(config =>
             LagDecayPerSecond = 0.98
         };
         // Per-activation scope is appropriate; Orleans constructs grains per activation
-        services.AddTransient<Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
+        services.AddTransient<GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
     });
 
     // Orleans will automatically discover and use the EventSurrogate
 });
 
-var domainTypes = Dcb.Domain.WithoutResult.DomainType.GetDomainTypes();
+var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 // Configure database storage based on configuration

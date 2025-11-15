@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb.Commands;
@@ -7,10 +6,12 @@ namespace Dcb.Domain.WithoutResult.Enrollment;
 
 public class DropStudentFromClassRoomHandler : ICommandHandlerWithoutResult<DropStudentFromClassRoom>
 {
-    public static async Task<EventOrNone> HandleAsync(DropStudentFromClassRoom command, ICommandContext context)
+    public static async Task<EventOrNone> HandleAsync(
+        DropStudentFromClassRoom command,
+        ICommandContextWithoutResult context)
     {
         var studentTag = new StudentTag(command.StudentId);
-        var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag).UnwrapBox();
+        var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
 
         if (!studentState.Payload.EnrolledClassRoomIds.Contains(command.ClassRoomId))
         {
@@ -18,7 +19,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandlerWithoutResult<Drop
         }
 
         var classRoomTag = new ClassRoomTag(command.ClassRoomId);
-        var classRoomState = await context.GetStateAsync<ClassRoomProjector>(classRoomTag).UnwrapBox();
+        var classRoomState = await context.GetStateAsync<ClassRoomProjector>(classRoomTag);
 
         var isEnrolled = classRoomState.Payload switch
         {

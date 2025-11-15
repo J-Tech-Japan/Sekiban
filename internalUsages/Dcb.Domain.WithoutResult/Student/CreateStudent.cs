@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
@@ -24,10 +23,12 @@ public record CreateStudent : ICommandWithHandlerWithoutResult<CreateStudent>
         MaxClassCount = maxClassCount;
     }
 
-    public static async Task<EventOrNone> HandleAsync(CreateStudent command, ICommandContext context)
+    public static async Task<EventOrNone> HandleAsync(
+        CreateStudent command,
+        ICommandContextWithoutResult context)
     {
         var tag = new StudentTag(command.StudentId);
-        var exists = (await context.TagExistsAsync(tag)).UnwrapBox();
+        var exists = await context.TagExistsAsync(tag);
         if (exists)
         {
             throw new ApplicationException("Student Already Exists");

@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
@@ -22,16 +21,18 @@ public record UpdateWeatherForecast : ICommandWithHandlerWithoutResult<UpdateWea
     [StringLength(200)]
     public string? Summary { get; init; }
 
-    public static async Task<EventOrNone> HandleAsync(UpdateWeatherForecast command, ICommandContext context)
+    public static async Task<EventOrNone> HandleAsync(
+        UpdateWeatherForecast command,
+        ICommandContextWithoutResult context)
     {
         var tag = new WeatherForecastTag(command.ForecastId);
-        var exists = (await context.TagExistsAsync(tag)).UnwrapBox();
+        var exists = await context.TagExistsAsync(tag);
         if (!exists)
         {
             throw new ApplicationException($"Weather forecast {command.ForecastId} does not exist");
         }
 
-        var state = (await context.GetStateAsync<WeatherForecastProjector>(tag)).UnwrapBox();
+        var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
         if (state.Payload is WeatherForecastState payload && payload.IsDeleted)
         {
             throw new ApplicationException($"Weather forecast {command.ForecastId} has been deleted");

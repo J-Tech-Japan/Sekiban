@@ -13,7 +13,7 @@ public interface ISekibanExecutorWithoutResult
 {
     Task<ExecutionResult> ExecuteAsync<TCommand>(
         TCommand command,
-        Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
+        Func<TCommand, ICommandContextWithoutResult, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand;
 
     Task<ExecutionResult> ExecuteAsync<TCommand>(

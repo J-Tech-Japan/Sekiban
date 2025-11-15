@@ -1,5 +1,4 @@
 using Dcb.Domain.Student;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -70,7 +69,7 @@ public class InMemoryDcbExecutorWithoutResultTests
                 async (cmd, context) =>
                 {
                     var tag = new StudentTag(cmd.StudentId);
-                    var exists = await context.TagExistsAsync(tag).UnwrapBox();
+                    var exists = await context.TagExistsAsync(tag);
                     if (exists)
                     {
                         throw new ApplicationException("Student Already Exists");
@@ -117,10 +116,10 @@ public class InMemoryDcbExecutorWithoutResultTests
     {
         public static async Task<EventOrNone> HandleAsync(
             CreateStudentWithoutResult command,
-            ICommandContext context)
+            ICommandContextWithoutResult context)
         {
             var tag = new StudentTag(command.StudentId);
-            var exists = await context.TagExistsAsync(tag).UnwrapBox();
+            var exists = await context.TagExistsAsync(tag);
             if (exists)
             {
                 throw new ApplicationException("Student Already Exists");
