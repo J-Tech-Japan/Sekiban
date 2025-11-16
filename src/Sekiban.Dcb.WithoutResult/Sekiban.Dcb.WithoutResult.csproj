@@ -29,6 +29,10 @@
         <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup Condition="'$(Configuration)' == 'Release'">
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="ResultBoxes" Version="0.3.31" PrivateAssets="All" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">

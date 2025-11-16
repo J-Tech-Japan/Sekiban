@@ -37,4 +37,9 @@
         <ProjectReference Include="..\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
     </ItemGroup>
 
+    <ItemGroup Condition="'$(Configuration)' == 'Release'">
+        <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="$(PackageVersion)" />
+        <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="$(PackageVersion)" />
+    </ItemGroup>
+
 </Project>
