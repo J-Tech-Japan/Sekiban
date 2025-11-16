@@ -26,7 +26,7 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithResult\Sekiban.Dcb.Orleans.WithResult.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
-        <ProjectReference Include="..\Sekiban.Dcb.Tests\Sekiban.Dcb.Tests.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.WithResult.Tests\Sekiban.Dcb.WithResult.Tests.csproj"/>
     </ItemGroup>
 
 </Project>
