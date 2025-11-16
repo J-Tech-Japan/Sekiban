@@ -77,7 +77,8 @@
       "Bash(dotnet run:*)",
       "Bash(dotnet run:*)",
       "Bash(open https://localhost:17195)",
-      "mcp__microsoft_docs_mcp__microsoft_docs_fetch"
+      "mcp__microsoft_docs_mcp__microsoft_docs_fetch",
+      "Read(//Users/tomohisa/Downloads/**)"
     ],
     "deny": []
   },

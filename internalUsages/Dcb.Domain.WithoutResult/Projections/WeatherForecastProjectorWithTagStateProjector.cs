@@ -13,7 +13,7 @@ namespace Dcb.Domain.WithoutResult.Projections;
 ///     Implements custom serialization to properly handle SafeUnsafeProjectionState
 /// </summary>
 public record WeatherForecastProjectorWithTagStateProjector :
-    IMultiProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>,
+    IMultiProjectorWithCustomSerializationWithoutResult<WeatherForecastProjectorWithTagStateProjector>,
     ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 
@@ -119,7 +119,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
     /// <summary>
     ///     Project with tag filtering - only processes events with WeatherForecastTag
     /// </summary>
-    public static ResultBox<WeatherForecastProjectorWithTagStateProjector> Project(
+    public static WeatherForecastProjectorWithTagStateProjector Project(
         WeatherForecastProjectorWithTagStateProjector payload,
         Event ev,
         List<ITag> tags,
@@ -132,7 +132,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
         if (weatherForecastTags.Count == 0)
         {
             // No WeatherForecastTag, skip this event
-            return ResultBox.FromValue(payload);
+            return payload;
         }
 
         // Use the weather forecast tags from the parameter, not from the event
@@ -161,7 +161,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
         // Process event with threshold (pass as string value)
         var updatedState = payload.State.ProcessEvent(ev, getAffectedItemIds, projectItem, safeWindowThreshold.Value);
 
-        return ResultBox.FromValue(payload with { State = updatedState });
+        return payload with { State = updatedState };
     }
     /// <summary>
     ///     Project a single tag state
@@ -302,13 +302,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
         // Use the static Project method with provided domainTypes
         var result = Project(this, evt, tags, domainTypes, safeWindowThreshold);
-        if (!result.IsSuccess)
-        {
-            throw new InvalidOperationException($"Failed to project event: {result.GetException()}");
-        }
 
-        var projected = result.GetValue();
-        return projected with
+        return result with
         {
             LastEventId = evt.Id,
             LastSortableUniqueId = evt.SortableUniqueIdValue,

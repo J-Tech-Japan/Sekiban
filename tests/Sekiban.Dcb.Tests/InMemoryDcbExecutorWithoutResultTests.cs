@@ -26,8 +26,8 @@ public class InMemoryDcbExecutorWithoutResultTests
             types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
 
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<
-                    GenericTagMultiProjector<StudentProjector, StudentTag>>();
+                .RegisterProjectorWithCustomSerializationWithoutResult<
+                    GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag>>();
 
             types.QueryTypes.RegisterQuery<StudentCountWithoutResultQuery>();
             types.QueryTypes.RegisterListQuery<StudentListWithoutResultQuery>();
@@ -134,19 +134,19 @@ public class InMemoryDcbExecutorWithoutResultTests
     private sealed record RegisterStudent(Guid StudentId, string Name, int MaxClassCount) : ICommand;
 
     private sealed record StudentCountWithoutResultQuery : IMultiProjectionQueryWithoutResult<
-        GenericTagMultiProjector<StudentProjector, StudentTag>,
+        GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag>,
         StudentCountWithoutResultQuery,
         int>
     {
         public static int HandleQuery(
-            GenericTagMultiProjector<StudentProjector, StudentTag> projector,
+            GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag> projector,
             StudentCountWithoutResultQuery query,
             IQueryContext context) =>
             projector.GetStatePayloads().OfType<StudentState>().Count();
     }
 
     private sealed record StudentListWithoutResultQuery : IMultiProjectionListQueryWithoutResult<
-        GenericTagMultiProjector<StudentProjector, StudentTag>,
+        GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag>,
         StudentListWithoutResultQuery,
         StudentState>
     {
@@ -154,7 +154,7 @@ public class InMemoryDcbExecutorWithoutResultTests
         public int? PageSize { get; init; }
 
         public static IEnumerable<StudentState> HandleFilter(
-            GenericTagMultiProjector<StudentProjector, StudentTag> projector,
+            GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag> projector,
             StudentListWithoutResultQuery query,
             IQueryContext context) =>
             projector.GetStatePayloads().OfType<StudentState>();
