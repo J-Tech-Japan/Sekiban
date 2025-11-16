@@ -33,7 +33,7 @@ public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
             throw new ApplicationException($"Weather forecast {forecastId} already exists");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new WeatherForecastCreated(forecastId, command.Location, command.Date, command.TemperatureC, command.Summary),
             tag);
     }

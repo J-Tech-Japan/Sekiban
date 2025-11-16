@@ -33,7 +33,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromCl
             throw new ApplicationException("Student is not enrolled in this classroom");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new StudentDroppedFromClassRoom(command.StudentId, command.ClassRoomId),
             studentTag,
             classRoomTag);

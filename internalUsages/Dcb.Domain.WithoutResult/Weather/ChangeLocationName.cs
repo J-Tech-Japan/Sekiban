@@ -36,7 +36,7 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
                 return EventOrNone.Empty;
             }
 
-            return EventOrNone.FromValue(
+            return EventOrNone.From(
                 new LocationNameChanged(
                     command.ForecastId,
                     command.NewLocationName,

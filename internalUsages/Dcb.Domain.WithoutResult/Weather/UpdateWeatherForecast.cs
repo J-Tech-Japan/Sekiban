@@ -38,7 +38,7 @@ public record UpdateWeatherForecast : ICommandWithHandler<UpdateWeatherForecast>
             throw new ApplicationException($"Weather forecast {command.ForecastId} has been deleted");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new WeatherForecastUpdated(
                 command.ForecastId,
                 command.Location,

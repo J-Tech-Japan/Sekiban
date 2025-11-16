@@ -34,6 +34,6 @@ public record CreateStudent : ICommandWithHandler<CreateStudent>
             throw new ApplicationException("Student Already Exists");
         }
 
-        return EventOrNone.FromValue(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag);
+        return EventOrNone.From(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag);
     }
 }

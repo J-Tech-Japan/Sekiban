@@ -25,7 +25,7 @@ public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
             throw new ApplicationException($"Weather forecast {command.ForecastId} has already been deleted");
         }
 
-        return EventOrNone.FromValue(new WeatherForecastDeleted(command.ForecastId), tag);
+        return EventOrNone.From(new WeatherForecastDeleted(command.ForecastId), tag);
     }
 
 }

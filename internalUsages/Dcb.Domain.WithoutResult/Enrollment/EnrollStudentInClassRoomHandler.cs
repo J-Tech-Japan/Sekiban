@@ -37,7 +37,7 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
                 throw new ApplicationException("ClassRoom is full");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new StudentEnrolledInClassRoom(command.StudentId, command.ClassRoomId),
             studentTag,
             classRoomTag);

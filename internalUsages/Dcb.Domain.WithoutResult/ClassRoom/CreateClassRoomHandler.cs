@@ -15,8 +15,11 @@ public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
             throw new ApplicationException("ClassRoom Already Exists");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new ClassRoomCreated(command.ClassRoomId, command.Name, command.MaxStudents),
             tag);
+        // return new EventPayloadWithTags(
+        //     new ClassRoomCreated(command.ClassRoomId, command.Name, command.MaxStudents),
+        //     tag);
     }
 }

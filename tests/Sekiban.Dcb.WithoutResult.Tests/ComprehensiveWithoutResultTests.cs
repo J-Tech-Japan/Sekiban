@@ -288,7 +288,7 @@ public class ComprehensiveWithoutResultTests
                 throw new ApplicationException("Student has reached max class count");
             }
 
-            return EventOrNone.FromValue(
+            return EventOrNone.From(
                 new StudentEnrolledInClassRoom(
                     command.StudentId,
                     command.ClassRoomId),

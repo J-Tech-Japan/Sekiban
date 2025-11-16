@@ -14,11 +14,6 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
     public static EventOrNone Empty => new(default, false);
 
     /// <summary>
-    ///     ResultBox containing no event
-    /// </summary>
-    public static ResultBox<EventOrNone> None => Empty;
-
-    /// <summary>
     ///     Creates an EventOrNone from an EventPayloadWithTags
     /// </summary>
     public static EventOrNone FromValue(EventPayloadWithTags eventWithTags) =>
@@ -27,7 +22,7 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
     /// <summary>
     ///     Creates an EventOrNone from an event payload and tags
     /// </summary>
-    public static EventOrNone FromValue(IEventPayload eventPayload, params ITag[] tags) =>
+    public static EventOrNone From(IEventPayload eventPayload, params ITag[] tags) =>
         new(new EventPayloadWithTags(eventPayload, tags.ToList()), true);
 
     /// <summary>
@@ -37,36 +32,52 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
         new(new EventPayloadWithTags(eventPayload, tags), true);
 
     /// <summary>
-    ///     Creates a ResultBox containing an event with tags
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventWithTags) =>
-        ResultBox.FromValue(FromValue(eventWithTags));
-    public static Task<ResultBox<EventOrNone>> EventAsync(EventPayloadWithTags eventWithTags) =>
-        ResultBox.FromValue(FromValue(eventWithTags)).ToTask();
-    public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params IEnumerable<ITag> tags) =>
-        ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList())));
-    public static Task<ResultBox<EventOrNone>> EventWithTagsAsync(IEventPayload eventPayload, params IEnumerable<ITag> tags) =>
-        ResultBox.FromValue(FromValue(new EventPayloadWithTags(eventPayload, tags.ToList()))).ToTask();
-
-    /// <summary>
-    ///     Creates a ResultBox containing an event with tags
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, params ITag[] tags) =>
-        ResultBox.FromValue(FromValue(eventPayload, tags));
-    public static Task<ResultBox<EventOrNone>> EventAsync(IEventPayload eventPayload, params ITag[] tags) =>
-        ResultBox.FromValue(FromValue(eventPayload, tags)).ToTask();
-    
-    /// <summary>
     ///     Gets the EventPayloadWithTags value
     /// </summary>
-    /// <exception cref="ResultsInvalidOperationException">Thrown when there is no event</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is no event</exception>
     public EventPayloadWithTags GetValue() =>
         HasEvent && EventPayloadWithTags is not null
             ? EventPayloadWithTags
-            : throw new ResultsInvalidOperationException("No value");
+            : throw new InvalidOperationException("No value");
 
     /// <summary>
-    ///     Implicit conversion from UnitValue to represent no event
+    ///     Represents no event (alias for Empty) - Returns ResultBox for WithResult compatibility
     /// </summary>
-    public static implicit operator EventOrNone(UnitValue value) => Empty;
+    public static ResultBox<EventOrNone> None => ResultBox.FromValue(Empty);
+
+    /// <summary>
+    ///     Creates an EventOrNone from an event payload and tags (alias for From) - Returns ResultBox for WithResult compatibility
+    /// </summary>
+    public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params ITag[] tags) =>
+        ResultBox.FromValue(From(eventPayload, tags));
+
+    /// <summary>
+    ///     Creates an EventOrNone from EventPayloadWithTags - Returns ResultBox for WithResult compatibility
+    /// </summary>
+    public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventPayloadWithTags) =>
+        ResultBox.FromValue(FromValue(eventPayloadWithTags));
+
+    /// <summary>
+    ///     Creates an EventOrNone from an event payload and a single tag - Returns ResultBox for WithResult compatibility
+    /// </summary>
+    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag) =>
+        ResultBox.FromValue(From(eventPayload, tag));
+
+    /// <summary>
+    ///     Creates an EventOrNone from an event payload and two tags - Returns ResultBox for WithResult compatibility
+    /// </summary>
+    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag1, ITag tag2) =>
+        ResultBox.FromValue(From(eventPayload, tag1, tag2));
+
+    /// <summary>
+    ///     Creates an EventOrNone from an event payload and three tags - Returns ResultBox for WithResult compatibility
+    /// </summary>
+    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag1, ITag tag2, ITag tag3) =>
+        ResultBox.FromValue(From(eventPayload, tag1, tag2, tag3));
+
+    /// <summary>
+    ///     Implicit conversion from EventPayloadWithTags to EventOrNone
+    /// </summary>
+    public static implicit operator EventOrNone(EventPayloadWithTags eventPayloadWithTags) =>
+        FromValue(eventPayloadWithTags);
 }

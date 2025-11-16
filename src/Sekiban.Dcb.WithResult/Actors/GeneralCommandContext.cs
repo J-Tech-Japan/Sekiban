@@ -289,7 +289,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             // Store the event for later processing by CommandExecutor
             _appendedEvents.Add(ev);
 
-            return EventOrNone.EventAsync(ev);
+            return EventOrNone.FromValue(ev).ToResultBox().ToTask();
         }
         catch (Exception ex)
         {
