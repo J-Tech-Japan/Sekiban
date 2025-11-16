@@ -17,7 +17,10 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static ResultBox<StudentSummaries> Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
+    /// <summary>
+    ///     Internal ResultBox-based implementation
+    /// </summary>
+    private static ResultBox<StudentSummaries> ProjectInternal(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
     {
         var next = new Dictionary<Guid, Item>(payload.Students);
         switch (ev.Payload)
@@ -51,6 +54,15 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
                 break;
         }
         return ResultBox.FromValue(new StudentSummaries(next));
+    }
+
+    /// <summary>
+    ///     Public exception-based API for WithoutResult package
+    /// </summary>
+    public static StudentSummaries Project(StudentSummaries payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
+    {
+        var result = ProjectInternal(payload, ev, tags, domainTypes, safeWindowThreshold);
+        return result.UnwrapBox();
     }
 
     public static StudentSummaries GenerateInitialPayload() => new(new Dictionary<Guid, Item>());

@@ -18,7 +18,7 @@ public static class DomainType
     /// </summary>
     public static DcbDomainTypes GetDomainTypes()
     {
-        return DcbDomainTypes.Simple(types =>
+        return DcbDomainTypesExtensions.Simple(types =>
         {
             // Register event types
             types.EventTypes.RegisterEventType<StudentCreated>();

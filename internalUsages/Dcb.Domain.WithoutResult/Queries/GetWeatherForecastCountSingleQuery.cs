@@ -9,7 +9,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 /// </summary>
 [GenerateSerializer]
 public record GetWeatherForecastCountSingleQuery :
-    IMultiProjectionQueryWithoutResult<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastCountSingleQuery, WeatherForecastCountResult>,
+    IMultiProjectionQuery<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastCountSingleQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {
     [Id(0)]

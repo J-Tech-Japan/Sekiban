@@ -81,7 +81,7 @@ public class SerializableQuerySerializationTests
     }
 
     private static DcbDomainTypes CreateDomainTypes() =>
-        DcbDomainTypes.Simple(builder =>
+        DcbDomainTypesExtensions.Simple(builder =>
         {
             builder.MultiProjectorTypes.RegisterProjector<TestProjector>();
             builder.QueryTypes.RegisterQuery<TestProjector, TestQuery, TestResult>();

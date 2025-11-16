@@ -13,7 +13,7 @@ namespace Dcb.Domain.WithoutResult.Projections;
 ///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
 [GenerateSerializer]
-public record WeatherForecastProjection : IMultiProjectorWithoutResult<WeatherForecastProjection>
+public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
     /// <summary>
     ///     Dictionary of weather forecasts by ID

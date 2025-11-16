@@ -9,7 +9,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 
 [GenerateSerializer]
 public record GetWeatherForecastListSingleQuery :
-    IMultiProjectionListQueryWithoutResult<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastListSingleQuery, WeatherForecastItem>,
+    IMultiProjectionListQuery<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastListSingleQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -22,7 +22,7 @@ public record GetWeatherForecastListSingleQuery :
     [Id(2)]
     public int? PageSize { get; init; }
 
-    // Required static methods for IMultiProjectionListQueryWithoutResult
+    // Required static methods for IMultiProjectionListQuery
     public static IEnumerable<WeatherForecastItem> HandleFilter(
         WeatherForecastProjectorWithTagStateProjector projector,
         GetWeatherForecastListSingleQuery query,

@@ -4,11 +4,11 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 namespace Dcb.Domain.WithoutResult.Enrollment;
 
-public class DropStudentFromClassRoomHandler : ICommandHandlerWithoutResult<DropStudentFromClassRoom>
+public class DropStudentFromClassRoomHandler : ICommandHandler<DropStudentFromClassRoom>
 {
     public static async Task<EventOrNone> HandleAsync(
         DropStudentFromClassRoom command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var studentTag = new StudentTag(command.StudentId);
         var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
@@ -33,7 +33,7 @@ public class DropStudentFromClassRoomHandler : ICommandHandlerWithoutResult<Drop
             throw new ApplicationException("Student is not enrolled in this classroom");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new StudentDroppedFromClassRoom(command.StudentId, command.ClassRoomId),
             studentTag,
             classRoomTag);

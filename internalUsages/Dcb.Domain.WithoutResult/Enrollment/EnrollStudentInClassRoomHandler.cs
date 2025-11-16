@@ -5,11 +5,11 @@ using Sekiban.Dcb.Events;
 namespace Dcb.Domain.WithoutResult.Enrollment;
 
 
-public class EnrollStudentInClassRoomHandler : ICommandHandlerWithoutResult<EnrollStudentInClassRoom>
+public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInClassRoom>
 {
     public static async Task<EventOrNone> HandleAsync(
         EnrollStudentInClassRoom command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var studentTag = new StudentTag(command.StudentId);
         var studentState = await context.GetStateAsync<StudentState, StudentProjector>(studentTag);
@@ -37,7 +37,7 @@ public class EnrollStudentInClassRoomHandler : ICommandHandlerWithoutResult<Enro
                 throw new ApplicationException("ClassRoom is full");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new StudentEnrolledInClassRoom(command.StudentId, command.ClassRoomId),
             studentTag,
             classRoomTag);

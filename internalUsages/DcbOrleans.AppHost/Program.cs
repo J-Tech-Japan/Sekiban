@@ -31,13 +31,34 @@ var orleans = builder
     .WithGrainStorage("DcbOrleansGrainTable", grainTable)
     .WithStreaming(queue);
 
-// // Add the API Service
-// var apiService = builder
-//     .AddProject<DcbOrleans_ApiService>("apiservice")
-//     .WithReference(postgres)
-//     .WithReference(orleans)
-//     .WithReference(multiProjectionOffload)
-//     .WaitFor(postgres);
+#if false
+
+// Add the API Service
+var apiService = builder
+    .AddProject<DcbOrleans_ApiService>("apiservice")
+    .WithReference(postgres)
+    .WithReference(orleans)
+    .WithReference(multiProjectionOffload)
+    .WaitFor(postgres);
+
+// Add the Web frontend
+builder
+    .AddProject<DcbOrleans_Web>("webfrontend")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiService, "apiservice")
+    .WaitFor(apiService);
+
+// Add benchmark project (load generator)
+var bench = builder
+    .AddProject<DcbOrleans_Benchmark>("bench")
+    .WithReference(apiService, "apiservice")
+    .WaitFor(apiService)
+    .WithEnvironment("ApiBaseUrl", apiService.GetEndpoint("http"))
+    .WithEnvironment("BENCH_TOTAL", "10000")
+    .WithEnvironment("BENCH_CONCURRENCY", "32")
+    .WithHttpEndpoint();
+
+#else
 
 // Add the WithoutResult API Service
 var withoutResultApiService = builder
@@ -63,5 +84,8 @@ var bench = builder
     .WithEnvironment("BENCH_TOTAL", "10000")
     .WithEnvironment("BENCH_CONCURRENCY", "32")
     .WithHttpEndpoint();
+
+#endif
+
 
 builder.Build().Run();

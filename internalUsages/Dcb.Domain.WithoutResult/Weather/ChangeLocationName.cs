@@ -3,7 +3,7 @@ using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.WithoutResult.Weather;
 
-public record ChangeLocationName : ICommandWithHandlerWithoutResult<ChangeLocationName>
+public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
 {
     [Required]
     public Guid ForecastId { get; init; }
@@ -14,7 +14,7 @@ public record ChangeLocationName : ICommandWithHandlerWithoutResult<ChangeLocati
 
     public static async Task<EventOrNone> HandleAsync(
         ChangeLocationName command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var tag = new WeatherForecastTag(command.ForecastId);
         var exists = await context.TagExistsAsync(tag);
@@ -36,7 +36,7 @@ public record ChangeLocationName : ICommandWithHandlerWithoutResult<ChangeLocati
                 return EventOrNone.Empty;
             }
 
-            return EventOrNone.FromValue(
+            return EventOrNone.From(
                 new LocationNameChanged(
                     command.ForecastId,
                     command.NewLocationName,
