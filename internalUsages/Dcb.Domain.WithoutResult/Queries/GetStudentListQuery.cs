@@ -6,7 +6,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 
 [GenerateSerializer]
 public record GetStudentListQuery :
-    IMultiProjectionListQueryWithoutResult<GenericTagMultiProjector<StudentProjector, StudentTag>, GetStudentListQuery, StudentState>,
+    IMultiProjectionListQueryWithoutResult<GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag>, GetStudentListQuery, StudentState>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -18,7 +18,7 @@ public record GetStudentListQuery :
 
     // Required static methods for IMultiProjectionListQueryWithoutResult
     public static IEnumerable<StudentState> HandleFilter(
-        GenericTagMultiProjector<StudentProjector, StudentTag> projector,
+        GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag> projector,
         GetStudentListQuery query,
         IQueryContext context)
     {

@@ -13,7 +13,7 @@ namespace Dcb.Domain.WithoutResult.Projections;
 ///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
 [GenerateSerializer]
-public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
+public record WeatherForecastProjection : IMultiProjectorWithoutResult<WeatherForecastProjection>
 {
     /// <summary>
     ///     Dictionary of weather forecasts by ID
@@ -61,7 +61,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
     /// <summary>
     ///     Project with tag filtering - only processes events with WeatherForecastTag
     /// </summary>
-    public static ResultBox<WeatherForecastProjection> Project(
+    public static WeatherForecastProjection Project(
         WeatherForecastProjection payload,
         Event ev,
         List<ITag> tags,
@@ -74,7 +74,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
         if (weatherForecastTags.Count == 0)
         {
             // No WeatherForecastTag, skip this event
-            return ResultBox.FromValue(payload);
+            return payload;
         }
 
         // Get the forecast IDs from the tags
@@ -137,7 +137,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             }
         }
 
-    return ResultBox.FromValue(payload with { Forecasts = updatedForecasts });
+        return payload with { Forecasts = updatedForecasts };
     }
 
 

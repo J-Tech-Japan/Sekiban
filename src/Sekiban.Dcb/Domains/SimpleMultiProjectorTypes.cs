@@ -165,7 +165,63 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
     }
-    
+
+        /// <summary>
+    ///     Register a multi projector type using its static GetMultiProjectorName
+    /// </summary>
+    public void RegisterProjectorWithoutResult<TProjector>() where TProjector : IMultiProjectorWithoutResult<TProjector>, new()
+    {
+        var projectorName = TProjector.MultiProjectorName;
+
+        // Register the projector function
+        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
+            = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
+            {
+                if (payload is TProjector typedPayload)
+                {
+                    try
+                    {
+                        var projected = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
+                        Console.WriteLine($"[RegisterProjectorWithoutResult] projectorName={projectorName}, projected type={projected?.GetType().FullName ?? "null"}");
+                        return ResultBox.FromValue((IMultiProjectionPayload)projected);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[RegisterProjectorWithoutResult] Error: {ex.Message}");
+                        return ResultBox.Error<IMultiProjectionPayload>(ex);
+                    }
+                }
+                return ResultBox.Error<IMultiProjectionPayload>(
+                    new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
+            };
+
+        if (!_projectorFunctions.TryAdd(projectorName, projectFunc))
+        {
+            // Check if it's the same type being registered again
+            if (_projectorTypes.TryGetValue(projectorName, out var existingType))
+            {
+                if (existingType != typeof(TProjector))
+                {
+                    var existingTypeName = existingType.FullName ?? existingType.Name;
+                    var newTypeName = typeof(TProjector).FullName ?? typeof(TProjector).Name;
+                    throw new InvalidOperationException(
+                        $"Multi projector name '{projectorName}' is already registered with type '{existingTypeName}', cannot register with type '{newTypeName}'.");
+                }
+            }
+        } else
+        {
+            // Only register if function was successfully added
+            _projectorTypes[projectorName] = typeof(TProjector);
+            _typeToNameMap[typeof(TProjector)] = projectorName;
+        }
+
+        // Register the version
+        _projectorVersions[projectorName] = TProjector.MultiProjectorVersion;
+
+        // Register the initial payload generator
+        _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+    }
+
     /// <summary>
     ///     Serializes a multi-projection payload to JSON string.
     ///     Uses custom serialization if registered, otherwise falls back to standard JSON serialization.
@@ -264,6 +320,34 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             // Since IMultiProjectorWithCustomSerialization<T> inherits from IMultiProjector<T>,
             // we can directly call RegisterProjector
             RegisterProjector<T>();
+            
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+    /// <summary>
+    ///     Registers a projector with custom serialization support.
+    ///     The projector must implement IMultiProjectorWithCustomSerialization interface.
+    /// </summary>
+    public ResultBox<bool> RegisterProjectorWithCustomSerializationWithoutResult<T>()
+        where T : IMultiProjectorWithCustomSerializationWithoutResult<T>, new()
+    {
+        try
+        {
+            var projectorName = T.MultiProjectorName;
+            // Store custom serialization delegates
+            _customSerializers[projectorName] = (
+                serialize: (domain, safeWindowThreshold, payload) => T.Serialize(domain, safeWindowThreshold, (T)payload),
+                deserialize: (domain, safeWindowThreshold, data) => T.Deserialize(domain, data)
+            );
+            
+            // Register the projector using the base RegisterProjector method
+            // Since IMultiProjectorWithCustomSerialization<T> inherits from IMultiProjector<T>,
+            // we can directly call RegisterProjector
+            RegisterProjectorWithoutResult<T>();
             
             return ResultBox.FromValue(true);
         }

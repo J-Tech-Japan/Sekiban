@@ -11,8 +11,25 @@ namespace Sekiban.Dcb.Queries;
 public interface IMultiProjectionListQueryWithoutResult<TMultiProjector, TQuery, TOutput> :
     IListQueryCommon<TQuery, TOutput>,
     IQueryPagingParameter
-    where TMultiProjector : IMultiProjector<TMultiProjector>
+    where TMultiProjector : IMultiProjectorWithoutResult<TMultiProjector>
     where TQuery : IMultiProjectionListQueryWithoutResult<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
+    where TOutput : notnull
+{
+    static abstract IEnumerable<TOutput> HandleFilter(
+        TMultiProjector projector,
+        TQuery query,
+        IQueryContext context);
+
+    static abstract IEnumerable<TOutput> HandleSort(
+        IEnumerable<TOutput> filteredList,
+        TQuery query,
+        IQueryContext context);
+}
+public interface IMultiProjectionListQueryWithoutResult2<TMultiProjector, TQuery, TOutput> :
+    IListQueryCommon<TQuery, TOutput>,
+    IQueryPagingParameter
+    where TMultiProjector : IMultiProjector<TMultiProjector>
+    where TQuery : IMultiProjectionListQueryWithoutResult2<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
     where TOutput : notnull
 {
     static abstract IEnumerable<TOutput> HandleFilter(

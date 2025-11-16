@@ -10,7 +10,7 @@ namespace Sekiban.Dcb.Queries;
 /// <typeparam name="TOutput">The output type</typeparam>
 public interface IMultiProjectionQueryWithoutResult<TMultiProjector, TQuery, TOutput> :
     IQueryCommon<TQuery, TOutput>
-    where TMultiProjector : IMultiProjector<TMultiProjector>
+    where TMultiProjector : IMultiProjectorWithoutResult<TMultiProjector>
     where TQuery : IMultiProjectionQueryWithoutResult<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
     where TOutput : notnull
 {

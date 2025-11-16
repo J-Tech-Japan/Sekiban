@@ -119,7 +119,7 @@ public class SimpleQueryTypes : IQueryTypes
         }
 
         var projector = projectorResult.GetValue();
-    var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
+        var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
 
         // Get HandleFilter method
         var handleFilterMethod = queryType.GetMethod("HandleFilter", BindingFlags.Public | BindingFlags.Static);
@@ -501,7 +501,8 @@ public class SimpleQueryTypes : IQueryTypes
             .GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType &&
                 (i.GetGenericTypeDefinition() == typeof(IMultiProjectionQuery<,,>) ||
-                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionQueryWithoutResult<,,>)));
+                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionQueryWithoutResult<,,>) 
+                ));
 
         if (queryInterface == null)
         {
@@ -519,7 +520,9 @@ public class SimpleQueryTypes : IQueryTypes
             .GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType &&
                 (i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQuery<,,>) ||
-                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQueryWithoutResult<,,>)));
+                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQueryWithoutResult<,,>) ||
+                 i.GetGenericTypeDefinition() == typeof(IMultiProjectionListQueryWithoutResult2<,,>)
+                 ));
 
         if (queryInterface == null)
         {

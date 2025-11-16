@@ -1,14 +1,9 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
-using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
 
-/// <summary>
-///     Generic interface for multi projectors with static members
-/// </summary>
-public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiProjector<T>
+public interface IMultiProjectorWithoutResult<T> : IMultiProjectionPayload where T : IMultiProjectorWithoutResult<T>
 {
     static abstract string MultiProjectorName { get; }
     static abstract string MultiProjectorVersion { get; }
@@ -20,7 +15,7 @@ public interface IMultiProjector<T> : IMultiProjectionPayload where T : IMultiPr
     /// <param name="tags">Parsed tags for the event</param>
     /// <param name="domainTypes">Domain type registry</param>
     /// <param name="safeWindowThreshold">Externally supplied safe window threshold</param>
-    static abstract ResultBox<T> Project(
+    static abstract T Project(
         T payload,
         Event ev,
         List<ITag> tags,

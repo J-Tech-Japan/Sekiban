@@ -28,7 +28,7 @@ public class InMemoryDcbExecutorWithoutResult : ISekibanExecutorWithoutResult
 
     public Task<ExecutionResult> ExecuteAsync<TCommand>(
         TCommand command,
-        Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
+        Func<TCommand, ICommandContextWithoutResult, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand =>
         _executor.ExecuteAsync(command, WrapHandler(handlerFunc), cancellationToken).UnwrapBox();
 
@@ -51,7 +51,7 @@ public class InMemoryDcbExecutorWithoutResult : ISekibanExecutorWithoutResult
         _executor.QueryAsync(queryCommon).UnwrapBox();
 
     private static Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> WrapHandler<TCommand>(
-        Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc)
+        Func<TCommand, ICommandContextWithoutResult, Task<EventOrNone>> handlerFunc)
         where TCommand : ICommand
     {
         if (handlerFunc is null)
@@ -63,7 +63,8 @@ public class InMemoryDcbExecutorWithoutResult : ISekibanExecutorWithoutResult
         {
             try
             {
-                var result = await handlerFunc(command, context).ConfigureAwait(false);
+                var withoutResultContext = new CommandContextWithoutResultAdapter(context);
+                var result = await handlerFunc(command, withoutResultContext).ConfigureAwait(false);
                 return ResultBox.FromValue(result);
             }
             catch (Exception ex)

@@ -8,7 +8,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 
 [GenerateSerializer]
 public record GetWeatherForecastListGenericQuery :
-    IMultiProjectionListQueryWithoutResult<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
+    IMultiProjectionListQueryWithoutResult2<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
