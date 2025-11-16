@@ -3,7 +3,7 @@ using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.WithoutResult.Weather;
 
-public record UpdateWeatherForecast : ICommandWithHandlerWithoutResult<UpdateWeatherForecast>
+public record UpdateWeatherForecast : ICommandWithHandler<UpdateWeatherForecast>
 {
     [Required]
     public Guid ForecastId { get; init; }
@@ -23,7 +23,7 @@ public record UpdateWeatherForecast : ICommandWithHandlerWithoutResult<UpdateWea
 
     public static async Task<EventOrNone> HandleAsync(
         UpdateWeatherForecast command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var tag = new WeatherForecastTag(command.ForecastId);
         var exists = await context.TagExistsAsync(tag);

@@ -110,7 +110,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
     }
 
     private static DcbDomainTypes CreateDomainTypes() =>
-        DcbDomainTypes.Simple(types =>
+        DcbDomainTypesExtensions.Simple(types =>
         {
             types.MultiProjectorTypes.RegisterProjector<TestOptionalDateMultiProjector>();
             types.QueryTypes.RegisterListQuery<OptionalDateListQuery>();

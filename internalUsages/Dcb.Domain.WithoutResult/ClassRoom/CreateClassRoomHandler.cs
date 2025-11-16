@@ -2,11 +2,11 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 namespace Dcb.Domain.WithoutResult.ClassRoom;
 
-public class CreateClassRoomHandler : ICommandHandlerWithoutResult<CreateClassRoom>
+public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
 {
     public static async Task<EventOrNone> HandleAsync(
         CreateClassRoom command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var tag = new ClassRoomTag(command.ClassRoomId);
         var exists = await context.TagExistsAsync(tag);

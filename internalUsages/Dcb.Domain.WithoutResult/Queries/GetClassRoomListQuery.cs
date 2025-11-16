@@ -6,7 +6,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 
 [GenerateSerializer]
 public record GetClassRoomListQuery :
-    IMultiProjectionListQueryWithoutResult<GenericTagMultiProjectorWithoutResult<ClassRoomProjector, ClassRoomTag>, GetClassRoomListQuery, ClassRoomItem>,
+    IMultiProjectionListQuery<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>, GetClassRoomListQuery, ClassRoomItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -16,9 +16,9 @@ public record GetClassRoomListQuery :
     [Id(1)]
     public int? PageSize { get; init; }
 
-    // Required static methods for IMultiProjectionListQueryWithoutResult
+    // Required static methods for IMultiProjectionListQuery
     public static IEnumerable<ClassRoomItem> HandleFilter(
-        GenericTagMultiProjectorWithoutResult<ClassRoomProjector, ClassRoomTag> projector,
+        GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag> projector,
         GetClassRoomListQuery query,
         IQueryContext context)
     {

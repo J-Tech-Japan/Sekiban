@@ -28,7 +28,7 @@
     <Project Path="internalUsages/OrleansSekiban.Web/OrleansSekiban.Web.csproj" />
     <Project Path="internalUsages/Pure.Domain/Pure.Domain.csproj" />
     <Project Path="internalUsages/SharedDomain/SharedDomain.csproj" />
-    <Project Path="internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj" Type="C#">
+    <Project Path="internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
@@ -38,11 +38,15 @@
   <Folder Name="/src/">
     <Project Path="src/MemStat.Net/MemStat.Net.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+    <Project Path="src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
-    <Project Path="src/Sekiban.Dcb.Orleans/Sekiban.Dcb.Orleans.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
     <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
     <Project Path="src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />
-    <Project Path="src/Sekiban.Dcb/Sekiban.Dcb.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj" />
     <Project Path="src/Sekiban.Pure.AspNetCore/Sekiban.Pure.AspNetCore.csproj" />
     <Project Path="src/Sekiban.Pure.CosmosDb/Sekiban.Pure.CosmosDb.csproj" />
     <Project Path="src/Sekiban.Pure.Dapr/Sekiban.Pure.Dapr.csproj" />
@@ -65,6 +69,8 @@
     <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Tests/Sekiban.Dcb.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj" />
     <Project Path="tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">

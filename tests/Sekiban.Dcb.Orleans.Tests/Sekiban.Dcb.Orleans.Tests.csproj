@@ -23,8 +23,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans\Sekiban.Dcb.Orleans.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithResult\Sekiban.Dcb.Orleans.WithResult.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
         <ProjectReference Include="..\Sekiban.Dcb.Tests\Sekiban.Dcb.Tests.csproj"/>
     </ItemGroup>

@@ -43,7 +43,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
     </ItemGroup>
 
 </Project>

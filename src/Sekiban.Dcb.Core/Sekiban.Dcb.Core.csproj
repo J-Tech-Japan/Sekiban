@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Sekiban.Dcb.Core</AssemblyName>
+        <RootNamespace>Sekiban.Dcb</RootNamespace>
+        <PackageId>Sekiban.Dcb.Core</PackageId>
+        <Version>10.0.1-preview01</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
+        <PackageDescription>Sekiban DCB Core - Common types and interfaces for Dynamic Consistency Boundary</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+        <PackageVersion>10.0.1-preview01</PackageVersion>
+        <Description>Core types and interfaces for Sekiban Dynamic Consistency Boundary - shared between ResultBox and exception-based implementations</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;core</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+</Project>

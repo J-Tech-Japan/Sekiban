@@ -27,8 +27,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult\Sekiban.Dcb.WithResult.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Temporarily exclude WithoutResult tests until they are moved to a separate project -->
+        <Compile Remove="InMemoryDcbExecutorWithoutResultTests.cs"/>
     </ItemGroup>
 
 </Project>

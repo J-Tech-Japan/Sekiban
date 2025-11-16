@@ -3,14 +3,14 @@ using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.WithoutResult.Weather;
 
-public record DeleteWeatherForecast : ICommandWithHandlerWithoutResult<DeleteWeatherForecast>
+public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
 {
     [Required]
     public Guid ForecastId { get; init; }
 
     public static async Task<EventOrNone> HandleAsync(
         DeleteWeatherForecast command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var tag = new WeatherForecastTag(command.ForecastId);
         var exists = await context.TagExistsAsync(tag);
