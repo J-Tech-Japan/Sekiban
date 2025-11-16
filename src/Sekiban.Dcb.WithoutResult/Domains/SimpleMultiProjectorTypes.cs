@@ -2,7 +2,6 @@ using Sekiban.Dcb.MultiProjections;
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
-using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
 using System.Text;
@@ -246,17 +245,14 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     }
     
     /// <summary>
-    ///     Registers a projector with custom serialization support.
-    ///     The projector must implement IMultiProjectorWithCustomSerialization interface.
+    ///     Explicit implementation of ICoreMultiProjectorTypes.RegisterProjectorWithCustomSerialization.
+    ///     This satisfies the interface requirement with the ICoreMultiProjectorWithCustomSerialization constraint.
     /// </summary>
-    public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
-        where T : ICoreMultiProjectorWithCustomSerialization<T>, new()
+    ResultBox<bool> ICoreMultiProjectorTypes.RegisterProjectorWithCustomSerialization<T>()
     {
         try
         {
             var projectorName = T.MultiProjectorName;
-            var type = typeof(T);
-
             // Store custom serialization delegates
             _customSerializers[projectorName] = (
                 serialize: (domain, safeWindowThreshold, payload) => T.Serialize(domain, safeWindowThreshold, (T)payload),
@@ -269,15 +265,12 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 {
                     if (payload is T typedPayload)
                     {
-                        try
+                        var result = T.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
+                        if (result.IsSuccess)
                         {
-                            var projected = T.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
-                            return ResultBox.FromValue((IMultiProjectionPayload)projected);
+                            return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());
                         }
-                        catch (Exception ex)
-                        {
-                            return ResultBox.Error<IMultiProjectionPayload>(ex);
-                        }
+                        return ResultBox.Error<IMultiProjectionPayload>(result.GetException());
                     }
                     return ResultBox.Error<IMultiProjectionPayload>(
                         new InvalidCastException($"Payload is not of type {typeof(T).Name}"));
@@ -297,10 +290,10 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     }
 
     /// <summary>
-    ///     Registers a projector with custom serialization support (WithoutResult version).
+    ///     Registers a projector with custom serialization support (exception-based version).
     ///     The projector must implement IMultiProjectorWithCustomSerialization interface.
     /// </summary>
-    public ResultBox<bool> RegisterProjectorWithCustomSerializationWithoutResult<T>()
+    public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
         where T : IMultiProjectorWithCustomSerialization<T>, new()
     {
         try

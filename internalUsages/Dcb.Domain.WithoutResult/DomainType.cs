@@ -50,13 +50,13 @@ public static class DomainType
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
 
             // Register projectors with custom serialization (for SafeUnsafeProjectionState)
-            types.MultiProjectorTypes.RegisterProjectorWithCustomSerializationWithoutResult<WeatherForecastProjectorWithTagStateProjector>();
+            types.MultiProjectorTypes.RegisterProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerializationWithoutResult<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerializationWithoutResult<GenericTagMultiProjector<StudentProjector, StudentTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<StudentProjector, StudentTag>>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerializationWithoutResult<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>>();
 
             // Register list queries
             types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();
