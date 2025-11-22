@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- .NET ツールとしてパッケージングする設定 -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>create-sekiban-dcb-template</ToolCommandName>
+
+    <!-- NuGet パッケージ メタデータ -->
+    <PackageId>CreateSekibanDcbTemplate</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>J-Tech Japan</Authors>
+    <Company>J-Tech Japan</Company>
+    <Description>Installs Sekiban DCB templates and generates an Orleans + API + Blazor project.</Description>
+    <PackageTags>dotnet-tool;sekiban;dcb;orleans</PackageTags>
+    <Title>Create Sekiban DCB Template Tool</Title>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+  </PropertyGroup>
+
+</Project>
