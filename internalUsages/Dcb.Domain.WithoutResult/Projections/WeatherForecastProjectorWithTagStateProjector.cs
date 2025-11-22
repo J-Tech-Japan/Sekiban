@@ -13,7 +13,7 @@ namespace Dcb.Domain.WithoutResult.Projections;
 ///     Implements custom serialization to properly handle SafeUnsafeProjectionState
 /// </summary>
 public record WeatherForecastProjectorWithTagStateProjector :
-    IMultiProjectorWithCustomSerializationWithoutResult<WeatherForecastProjectorWithTagStateProjector>,
+    IMultiProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>,
     ISafeAndUnsafeStateAccessor<WeatherForecastProjectorWithTagStateProjector>
 {
 

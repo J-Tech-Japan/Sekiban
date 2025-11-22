@@ -6,7 +6,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.Tests;
+using Sekiban.Dcb.InMemory;
 using Xunit;
 using Xunit.Sdk;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -110,7 +110,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
     }
 
     private static DcbDomainTypes CreateDomainTypes() =>
-        DcbDomainTypes.Simple(types =>
+        DcbDomainTypesExtensions.Simple(types =>
         {
             types.MultiProjectorTypes.RegisterProjector<TestOptionalDateMultiProjector>();
             types.QueryTypes.RegisterListQuery<OptionalDateListQuery>();

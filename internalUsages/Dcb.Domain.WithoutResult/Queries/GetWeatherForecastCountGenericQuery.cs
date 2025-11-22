@@ -11,14 +11,14 @@ namespace Dcb.Domain.WithoutResult.Queries;
 /// </summary>
 [GenerateSerializer]
 public record GetWeatherForecastCountGenericQuery :
-    IMultiProjectionQueryWithoutResult<GenericTagMultiProjectorWithoutResult<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
+    IMultiProjectionQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {
     [Id(0)]
     public string? WaitForSortableUniqueId { get; init; }
 
     public static WeatherForecastCountResult HandleQuery(
-        GenericTagMultiProjectorWithoutResult<WeatherForecastProjector, WeatherForecastTag> projector,
+        GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag> projector,
         GetWeatherForecastCountGenericQuery query,
         IQueryContext context)
     {

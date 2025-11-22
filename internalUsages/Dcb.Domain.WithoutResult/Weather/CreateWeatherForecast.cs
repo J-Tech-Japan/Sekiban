@@ -3,7 +3,7 @@ using Sekiban.Dcb.Events;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.WithoutResult.Weather;
 
-public record CreateWeatherForecast : ICommandWithHandlerWithoutResult<CreateWeatherForecast>
+public record CreateWeatherForecast : ICommandWithHandler<CreateWeatherForecast>
 {
     public Guid ForecastId { get; init; }
 
@@ -22,7 +22,7 @@ public record CreateWeatherForecast : ICommandWithHandlerWithoutResult<CreateWea
 
     public static async Task<EventOrNone> HandleAsync(
         CreateWeatherForecast command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var forecastId = command.ForecastId != Guid.Empty ? command.ForecastId : Guid.CreateVersion7();
         var tag = new WeatherForecastTag(forecastId);
@@ -33,7 +33,7 @@ public record CreateWeatherForecast : ICommandWithHandlerWithoutResult<CreateWea
             throw new ApplicationException($"Weather forecast {forecastId} already exists");
         }
 
-        return EventOrNone.FromValue(
+        return EventOrNone.From(
             new WeatherForecastCreated(forecastId, command.Location, command.Date, command.TemperatureC, command.Summary),
             tag);
     }

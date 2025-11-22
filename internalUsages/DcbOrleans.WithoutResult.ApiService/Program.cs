@@ -416,7 +416,7 @@ builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 });
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
-builder.Services.AddTransient<ISekibanExecutorWithoutResult, OrleansDcbExecutorWithoutResult>();
+builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
 // Note: TagStatePersistent is not needed when using Orleans as Orleans grains have their own persistence
@@ -457,7 +457,7 @@ app.UseCors();
 apiRoute
     .MapPost(
         "/students",
-        async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] CreateStudent command, [FromServices] ISekibanExecutor executor) =>
         {
             var execution = await executor.ExecuteAsync(command);
             return Results.Ok(
@@ -476,7 +476,7 @@ apiRoute
     .MapGet(
         "/students",
         async (
-            [FromServices] ISekibanExecutorWithoutResult executor,
+            [FromServices] ISekibanExecutor executor,
             [FromQuery] int? pageNumber,
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
@@ -496,7 +496,7 @@ apiRoute
 apiRoute
     .MapGet(
         "/students/{studentId:guid}",
-        async (Guid studentId, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async (Guid studentId, [FromServices] ISekibanExecutor executor) =>
         {
             var tag = new StudentTag(studentId);
             var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(StudentProjector)));
@@ -516,7 +516,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/classrooms",
-        async ([FromBody] CreateClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] CreateClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, CreateClassRoomHandler.HandleAsync);
             return Results.Ok(
@@ -535,7 +535,7 @@ apiRoute
     .MapGet(
         "/classrooms",
         async (
-            [FromServices] ISekibanExecutorWithoutResult executor,
+            [FromServices] ISekibanExecutor executor,
             [FromQuery] int? pageNumber,
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
@@ -555,7 +555,7 @@ apiRoute
 apiRoute
     .MapGet(
         "/classrooms/{classRoomId:guid}",
-        async (Guid classRoomId, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async (Guid classRoomId, [FromServices] ISekibanExecutor executor) =>
         {
             var tag = new ClassRoomTag(classRoomId);
             var state = await executor.GetTagStateAsync(new TagStateId(tag, nameof(ClassRoomProjector)));
@@ -575,7 +575,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/enrollments/add",
-        async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] EnrollStudentInClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, EnrollStudentInClassRoomHandler.HandleAsync);
             return Results.Ok(
@@ -594,7 +594,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/enrollments/drop",
-        async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] DropStudentFromClassRoom command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command, DropStudentFromClassRoomHandler.HandleAsync);
             return Results.Ok(
@@ -643,7 +643,7 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromQuery] int? pageNumber,
             [FromQuery] int? pageSize,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             pageNumber ??= 1;
             pageSize ??= 100;
@@ -667,7 +667,7 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromQuery] int? pageNumber,
             [FromQuery] int? pageSize,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             pageNumber ??= 1;
             pageSize ??= 100;
@@ -691,7 +691,7 @@ apiRoute
             [FromQuery] string? waitForSortableUniqueId,
             [FromQuery] int? pageNumber,
             [FromQuery] int? pageSize,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             pageNumber ??= 1;
             pageSize ??= 100;
@@ -710,7 +710,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/inputweatherforecast",
-        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] CreateWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command);
             var createdEvent = result.Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>();
@@ -730,7 +730,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/updateweatherforecastlocation",
-        async ([FromBody] ChangeLocationName command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] ChangeLocationName command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command);
             return Results.Ok(
@@ -752,7 +752,7 @@ apiRoute
         "/weatherforecast/count",
         async (
             [FromQuery] string? waitForSortableUniqueId,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             var query = new GetWeatherForecastCountQuery
             {
@@ -775,7 +775,7 @@ apiRoute
         "/weatherforecastgeneric/count",
         async (
             [FromQuery] string? waitForSortableUniqueId,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             var query = new GetWeatherForecastCountGenericQuery
             {
@@ -799,7 +799,7 @@ apiRoute
         "/weatherforecastsingle/count",
         async (
             [FromQuery] string? waitForSortableUniqueId,
-            [FromServices] ISekibanExecutorWithoutResult executor) =>
+            [FromServices] ISekibanExecutor executor) =>
         {
             var query = new GetWeatherForecastCountSingleQuery
             {
@@ -969,7 +969,7 @@ apiRoute
 apiRoute
     .MapPost(
         "/removeweatherforecast",
-        async ([FromBody] DeleteWeatherForecast command, [FromServices] ISekibanExecutorWithoutResult executor) =>
+        async ([FromBody] DeleteWeatherForecast command, [FromServices] ISekibanExecutor executor) =>
         {
             var result = await executor.ExecuteAsync(command);
             return Results.Ok(
@@ -991,7 +991,7 @@ apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("
 apiRoute
     .MapGet(
         "/orleans/test",
-        async ([FromServices] ISekibanExecutorWithoutResult executor, [FromServices] ILogger<Program> logger) =>
+        async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
         {
             logger.LogInformation("Testing Orleans connectivity...");
 

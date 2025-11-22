@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Dcb.Domain.WithoutResult.Student;
 
 // Commands
-public record CreateStudent : ICommandWithHandlerWithoutResult<CreateStudent>
+public record CreateStudent : ICommandWithHandler<CreateStudent>
 {
     [Required(ErrorMessage = "StudentId is required")]
     public Guid StudentId { get; init; }
@@ -25,7 +25,7 @@ public record CreateStudent : ICommandWithHandlerWithoutResult<CreateStudent>
 
     public static async Task<EventOrNone> HandleAsync(
         CreateStudent command,
-        ICommandContextWithoutResult context)
+        ICommandContext context)
     {
         var tag = new StudentTag(command.StudentId);
         var exists = await context.TagExistsAsync(tag);
@@ -34,6 +34,6 @@ public record CreateStudent : ICommandWithHandlerWithoutResult<CreateStudent>
             throw new ApplicationException("Student Already Exists");
         }
 
-        return EventOrNone.FromValue(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag);
+        return EventOrNone.From(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag);
     }
 }

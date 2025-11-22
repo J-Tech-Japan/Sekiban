@@ -18,7 +18,7 @@ public static class DomainType
     /// </summary>
     public static DcbDomainTypes GetDomainTypes()
     {
-        return DcbDomainTypes.Simple(types =>
+        return DcbDomainTypesExtensions.Simple(types =>
         {
             // Register event types
             types.EventTypes.RegisterEventType<StudentCreated>();
@@ -47,16 +47,16 @@ public static class DomainType
             types.TagTypes.RegisterTagGroupType<WeatherForecastTag>();
 
             // Register multi-projectors
-            types.MultiProjectorTypes.RegisterProjectorWithoutResult<WeatherForecastProjection>();
+            types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
 
             // Register projectors with custom serialization (for SafeUnsafeProjectionState)
-            types.MultiProjectorTypes.RegisterProjectorWithCustomSerializationWithoutResult<WeatherForecastProjectorWithTagStateProjector>();
+            types.MultiProjectorTypes.RegisterProjectorWithCustomSerialization<WeatherForecastProjectorWithTagStateProjector>();
             types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerializationWithoutResult<GenericTagMultiProjectorWithoutResult<StudentProjector, StudentTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<StudentProjector, StudentTag>>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerializationWithoutResult<GenericTagMultiProjectorWithoutResult<ClassRoomProjector, ClassRoomTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>>();
 
             // Register list queries
             types.QueryTypes.RegisterListQuery<GetWeatherForecastListQuery>();

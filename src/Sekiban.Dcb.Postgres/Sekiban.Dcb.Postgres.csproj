@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.Postgres</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Postgres</RootNamespace>
         <PackageId>Sekiban.Dcb.Postgres</PackageId>
-        <Version>10.0.1-preview01</Version>
+        <Version>10.0.1-preview02</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary PostgreSQL Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview01</PackageVersion>
+        <PackageVersion>10.0.1-preview02</PackageVersion>
         <Description>PostgreSQL event store and persistence layer for Sekiban DCB</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;postgresql;postgres</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -59,7 +59,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Dcb\Sekiban.Dcb.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
     </ItemGroup>
 
 </Project>
