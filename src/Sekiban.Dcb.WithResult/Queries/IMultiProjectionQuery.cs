@@ -7,7 +7,7 @@ namespace Sekiban.Dcb.Queries;
 ///     Interface for multi-projection queries that return a single result (ResultBox-based error handling).
 /// </summary>
 public interface IMultiProjectionQuery<TMultiProjector, TQuery, TOutput> : ICoreMultiProjectionQuery<TMultiProjector, TQuery, TOutput>
-    where TMultiProjector : IMultiProjector<TMultiProjector>
+    where TMultiProjector : ICoreMultiProjector<TMultiProjector>
     where TQuery : IMultiProjectionQuery<TMultiProjector, TQuery, TOutput>, IEquatable<TQuery>
     where TOutput : notnull
 {
