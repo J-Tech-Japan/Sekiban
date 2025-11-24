@@ -11,13 +11,13 @@
     <ToolCommandName>create-sekiban-dcb-template</ToolCommandName>
 
     <!-- NuGet パッケージ メタデータ -->
-    <PackageId>CreateSekibanDcbTemplate</PackageId>
+    <PackageId>CreateSekibanTemplate</PackageId>
     <Version>1.0.0</Version>
     <Authors>J-Tech Japan</Authors>
     <Company>J-Tech Japan</Company>
-    <Description>Installs Sekiban DCB templates and generates an Orleans + API + Blazor project.</Description>
-    <PackageTags>dotnet-tool;sekiban;dcb;orleans</PackageTags>
-    <Title>Create Sekiban DCB Template Tool</Title>
+    <Description>Installs Sekiban Pure/DCB templates and generates an Orleans + API + Blazor project.</Description>
+    <PackageTags>dotnet-tool;sekiban;pure;dcb;orleans</PackageTags>
+    <Title>Create Sekiban Template Tool</Title>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
   </PropertyGroup>
