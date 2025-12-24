@@ -1,4 +1,4 @@
-# Sekiban - Event Sourcing and CQRS Framework using C#
+# Sekiban - Event Sourcing and CQRS Framework using C #
 
 Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or PostgreSQL
 
@@ -84,9 +84,9 @@ Sekiban provides MCP (Model Context Protocol) support to enhance your developmen
 The Sekiban MCP server offers direct access to Sekiban documentation and examples through Server-Sent Events (SSE).
 
 **MCP Server URL:**
-https://sekiban-doc-mcp.azurewebsites.net/
+<https://sekiban-doc-mcp.azurewebsites.net/>
 if this does not work in your case, try below.
-https://sekiban-doc-mcp.azurewebsites.net/sse
+<https://sekiban-doc-mcp.azurewebsites.net/sse>
 
 ### Adding Sekiban MCP to Claude Desktop
 
@@ -108,7 +108,7 @@ relevant to a decision. Instead of maintaining multiple streams and coordinating
 and compensating events, DCB allows a single event stream per bounded context where each event can carry multiple tags
 representing the entities or concepts it affects. Querying becomes a matter of filtering by event types and/or tags,
 enabling you to enforce strong consistency only where it truly matters while preserving scalability and simplicity.
-Learn more at https://dcb.events
+Learn more at <https://dcb.events>
 
 Current status in Sekiban:
 
@@ -223,7 +223,7 @@ project and determines its future direction.
 We are planning to deploy documentation on [Sekiban.dev](https://www.sekiban.dev), we have not done yet. eventually
 please see
 
-https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/intro.md
+<https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/intro.md>
 
 ## Support and Training
 

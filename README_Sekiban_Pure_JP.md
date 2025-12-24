@@ -15,6 +15,7 @@ dotnet new sekiban-orleans-aspire -n MyProject
 ```
 
 このテンプレートには以下が含まれています：
+
 - Orleansのための.NET Aspireホスト
 - クラスターストレージ
 - グレイン永続ストレージ
@@ -23,6 +24,7 @@ dotnet new sekiban-orleans-aspire -n MyProject
 ## イベントソーシングとは？
 
 イベントソーシングは以下の特徴を持つ設計パターンです：
+
 - アプリケーションの状態変更はすべてイベントのシーケンスとして保存される
 - これらのイベントが真実の源泉となる
 - 現在の状態はイベントを再生することで導き出される
@@ -31,6 +33,7 @@ dotnet new sekiban-orleans-aspire -n MyProject
 ## Sekibanイベントソーシングフレームワーク
 
 Sekibanは.NETイベントソーシングフレームワークであり：
+
 - C#アプリケーションでのイベントソーシングの実装を簡素化
 - 分散システム用のOrleansとの統合を提供
 - 様々なストレージバックエンドをサポート
@@ -68,6 +71,7 @@ public record WeatherForecast(
 ```
 
 ポイント：
+
 - 不変性のためにC#レコードを使用
 - アグリゲートペイロードとドメインペイロードを組み合わせるために`IAggregatePayload`インターフェースを実装
 - Orleansシリアル化のための`[GenerateSerializer]`属性を含める
@@ -96,6 +100,7 @@ public record InputWeatherForecastCommand(
 ```
 
 ポイント：
+
 - 不変性のためにC#レコードを使用
 - `ICommandWithHandler<TCommand, TProjector>`インターフェースを実装、または状態ベースの制約を強制する必要がある場合は`ICommandWithHandler<TCommand, TProjector, TPayloadType>`インターフェースを実装
 - `[GenerateSerializer]`属性を含める
@@ -122,6 +127,7 @@ public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProj
 ```
 
 ポイント：
+
 - 第3ジェネリックパラメータ`ConfirmedUser`は、現在のアグリゲートペイロードが`ConfirmedUser`型である場合にのみこのコマンドを実行できることを指定します
 - コマンドコンテキストは`ICommandContext<IAggregatePayload>`ではなく`ICommandContext<ConfirmedUser>`に強く型付けされています
 - これにより、状態依存の操作にコンパイル時の安全性が提供されます
@@ -133,6 +139,7 @@ public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProj
 コマンドハンドラーでアグリゲートペイロードにアクセスする方法は、2つまたは3つのジェネリックパラメータバージョンを使用するかによって2つあります：
 
 1. **型制約あり（3つのジェネリックパラメータ）**：
+
    ```csharp
    // ICommandWithHandler<TCommand, TProjector, TAggregatePayload>を使用
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<ConfirmedUser> context)
@@ -149,6 +156,7 @@ public record RevokeUser(Guid UserId) : ICommandWithHandler<RevokeUser, UserProj
    ```
 
 2. **型制約なし（2つのジェネリックパラメータ）**：
+
    ```csharp
    // ICommandWithHandler<TCommand, TProjector>を使用
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
@@ -189,6 +197,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 ```
 
 ポイント：
+
 - `context.AppendEvent(eventPayload)`を使用してイベントストリームにイベントを追加する
 - 複数のイベントを順番に追加できる
 - すべてのイベントが`AppendEvent`を使用して追加された場合は`EventOrNone.None`を返す
@@ -221,6 +230,7 @@ public record WeatherForecastInputted(
 ```
 
 ポイント：
+
 - 不変性のためにC#レコードを使用
 - ドメイン固有のイベントデータのために`IEventPayload`インターフェースを実装
 - `[GenerateSerializer]`属性を含める
@@ -245,6 +255,7 @@ public record WeatherForecastInputted(
    - グループ内の特定のアグリゲートを特定するために使用
 
 コマンドを実装する際、これらのパーティションキーは2つの方法で使用されます：
+
 - 新しいアグリゲートの場合：`PartitionKeys.Generate<YourProjector>()`で新しいパーティションキーを生成
 - 既存のアグリゲートの場合：`PartitionKeys.Existing<YourProjector>(aggregateId)`で既存のキーを使用
 
@@ -276,6 +287,7 @@ public class UserProjector : IAggregateProjector
 ```
 
 ポイント：
+
 - `IAggregateProjector`インターフェースを実装
 - パターンマッチングを使用して異なるイベントタイプを処理
 - 状態遷移に基づいて異なるアグリゲートペイロードの型を返す：
@@ -321,6 +333,7 @@ public record WeatherForecastQuery(string LocationContains)
 ```
 
 ポイント：
+
 - 適切なクエリインターフェース（例：`IMultiProjectionListQuery`）を実装
 - フィルタとソートのメソッドを定義
 - クエリ結果用のネストされたレコードを作成
@@ -347,6 +360,7 @@ public partial class OrleansSekibanDomainEventsJsonContext : JsonSerializerConte
 ```
 
 ポイント：
+
 - シリアル化が必要なすべてのイベントタイプを含める
 - `[JsonSourceGenerationOptions]`を使用してシリアル化を設定
 - 部分クラスとして定義
@@ -450,6 +464,7 @@ public class YourTests : SekibanInMemoryTestBase
 ```
 
 ベースクラスはGiven-When-Thenパターンに従うメソッドを提供します：
+
 - `GivenCommand` - コマンドを実行して初期状態を設定
 - `WhenCommand` - テスト対象のコマンドを実行
 - `ThenGetAggregate` - アグリゲートを取得して状態を検証
@@ -475,6 +490,7 @@ public void ChainedTest()
 ```
 
 ポイント：
+
 - `Conveyor`は一つの操作の結果を次の入力に変換
 - `Do`はアサーションやサイドエフェクトを実行し、結果を変更しない
 - `UnwrapBox`は最終的なResultBoxをアンラップし、いずれかのステップが失敗した場合は例外をスロー
@@ -566,6 +582,7 @@ public async Task ManualExecutorTest()
 ### 1. プロジェクトセットアップ
 
 テンプレートから始めます：
+
 ```bash
 dotnet new install Sekiban.Pure.Templates
 dotnet new sekiban-orleans-aspire -n MyProject
@@ -664,6 +681,7 @@ var forecasts = await weatherApiClient.GetWeatherAsync(
 このパターンを使用することで、UIが常に最新の状態変更を反映し、より一貫性のあるユーザー体験を提供できます。
 
 ポイント：
+
 - コマンドとクエリの処理には`SekibanOrleansExecutor`を使用
 - コマンドはPOSTエンドポイントにマッピング
 - クエリは通常GETエンドポイントにマッピング
@@ -685,6 +703,7 @@ var forecasts = await weatherApiClient.GetWeatherAsync(
 ### 5. 設定オプション
 
 テンプレートは2つのデータベースオプションをサポートしています：
+
 ```json
 {
   "Sekiban": {
@@ -698,6 +717,7 @@ var forecasts = await weatherApiClient.GetWeatherAsync(
 ドメイン用のWebフロントエンドを実装するには：
 
 1. WebプロジェクトでAPIクライアントを作成します：
+
 ```csharp
 public class YourApiClient(HttpClient httpClient)
 {
@@ -729,7 +749,8 @@ public class YourApiClient(HttpClient httpClient)
 }
 ```
 
-2. Program.csでAPIクライアントを登録します：
+1. Program.csでAPIクライアントを登録します：
+
 ```csharp
 builder.Services.AddHttpClient<YourApiClient>(client =>
 {
@@ -737,7 +758,7 @@ builder.Services.AddHttpClient<YourApiClient>(client =>
 });
 ```
 
-3. ドメインとやり取りするためのRazorページを作成します
+1. ドメインとやり取りするためのRazorページを作成します
 
 ## SekibanDomainTypesとソース生成
 
@@ -772,6 +793,7 @@ public static class YourProjectDomainDomainTypes
    - 例えば、`SchoolManagement.Domain.Generated`
 
 3. **アプリケーションでの使用法**：
+
    ```csharp
    // Program.csで
    builder.Services.AddSingleton(
@@ -780,6 +802,7 @@ public static class YourProjectDomainDomainTypes
    ```
 
 4. **テストでの使用法**：
+
    ```csharp
    // テストクラスで
    protected override SekibanDomainTypes GetDomainTypes() => 
@@ -788,6 +811,7 @@ public static class YourProjectDomainDomainTypes
    ```
 
 5. **テストに必要なインポート**：
+
    ```csharp
    using YourProject.Domain;
    using YourProject.Domain.Generated; // 生成された型を含む
@@ -874,6 +898,7 @@ public static class DuplicateCheckWorkflows
 ```
 
 **ポイント**:
+
 - ワークフローは静的クラスと静的メソッド、またはインスタンスベースのクラスと依存性注入のいずれでも実装できます 🏗️
 - `Workflows`フォルダーまたは名前空間に配置する必要があります 📁
 - より良いテスト可能性のために`ISekibanExecutor`インターフェースを使用する必要があります 🧪
@@ -954,6 +979,7 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
 ```
 
 **ポイント**:
+
 - ワークフローのテストには`SekibanInMemoryTestBase`を使用
 - ベースクラスは`ISekibanExecutor`を実装する`Executor`プロパティを提供
 - テスト状態を設定するには`GivenCommand`を使用
@@ -964,6 +990,7 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
 1. **名前空間エラー**: `Sekiban.Core.*`ではなく`Sekiban.Pure.*`名前空間を使用していることを確認してください。
 
 2. **コマンドコンテキスト**: コマンドコンテキストはアグリゲートペイロードを直接公開しません。アグリゲート状態をチェックする必要がある場合は、コマンドハンドラーでパターンマッチングを使用してください：
+
    ```csharp
    if (context.AggregatePayload is YourAggregate aggregate)
    {
@@ -985,9 +1012,9 @@ dotnet run --project MyProject.AppHost --launch-profile https
 
 これにより、アプリケーションがHTTPSを使用して安全に通信することが保証されます。これは特に本番環境で重要です。
 
-4. **Webフロントエンドへのアクセス**: WebフロントエンドはAspireダッシュボードに表示されるURLで利用可能で、通常は`https://localhost:XXXXX`のようなURLです。
+1. **Webフロントエンドへのアクセス**: WebフロントエンドはAspireダッシュボードに表示されるURLで利用可能で、通常は`https://localhost:XXXXX`のようなURLです。
 
-5. **ISekibanExecutor vs. SekibanOrleansExecutor**: ドメインサービスやワークフローを実装する場合、より良いテスト可能性のために具体的な`SekibanOrleansExecutor`クラスではなく`ISekibanExecutor`インターフェースを使用してください。`ISekibanExecutor`インターフェースは`Sekiban.Pure.Executors`名前空間にあります。
+2. **ISekibanExecutor vs. SekibanOrleansExecutor**: ドメインサービスやワークフローを実装する場合、より良いテスト可能性のために具体的な`SekibanOrleansExecutor`クラスではなく`ISekibanExecutor`インターフェースを使用してください。`ISekibanExecutor`インターフェースは`Sekiban.Pure.Executors`名前空間にあります。
 
 ## 高度なクエリ機能
 
