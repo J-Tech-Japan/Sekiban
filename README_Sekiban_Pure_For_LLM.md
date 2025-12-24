@@ -15,6 +15,7 @@ This template includes Aspire host for Orleans, Cluster Storage, Grain Persisten
 ## Important Notes
 
 ### Correct Namespaces
+
 The template uses the `Sekiban.Pure.*` namespace hierarchy, not `Sekiban.Core.*`. Always use the following namespaces:
 
 - `Sekiban.Pure.Aggregates` for aggregates and payload interfaces
@@ -27,7 +28,9 @@ The template uses the `Sekiban.Pure.*` namespace hierarchy, not `Sekiban.Core.*`
 - `ResultBoxes` for result handling
 
 ### Project Structure
+
 The template creates a solution with multiple projects:
+
 - `MyProject.Domain` - Contains domain models, events, commands, and queries
 - `MyProject.ApiService` - API endpoints for commands and queries
 - `MyProject.Web` - Web frontend with Blazor
@@ -35,6 +38,7 @@ The template creates a solution with multiple projects:
 - `MyProject.ServiceDefaults` - Common service configurations
 
 ### Running the Application
+
 When running the application with the Aspire host, use the following command:
 
 ```bash
@@ -58,6 +62,7 @@ public record YourAggregate(...properties...) : IAggregatePayload
 ```
 
 **Required**:
+
 - Implement `IAggregatePayload` interface
 - Use C# record for immutability
 - Add `[GenerateSerializer]` attribute for Orleans
@@ -84,6 +89,7 @@ public record YourCommand(...parameters...)
 ```
 
 **Required**:
+
 - Implement `ICommandWithHandler<TCommand, TProjector>` interface or `ICommandWithHandler<TCommand, TProjector, TPayloadType>` when you need to enforce state-based constraints
 - Implement `SpecifyPartitionKeys` method:
   - For new aggregates: `PartitionKeys.Generate<YourProjector>()`
@@ -111,6 +117,7 @@ public record RevokeUser(Guid UserId)
 ```
 
 **Benefits**:
+
 - The third generic parameter (`ConfirmedUser` in the example) specifies that this command can only be executed when the current aggregate payload is of that specific type
 - The command context becomes strongly typed to `ICommandContext<ConfirmedUser>` instead of `ICommandContext<IAggregatePayload>`
 - Provides compile-time safety for state-dependent operations
@@ -122,6 +129,7 @@ public record RevokeUser(Guid UserId)
 There are two ways to access the aggregate payload in command handlers, depending on whether you use the two or three generic parameter version:
 
 1. **With Type Constraint (Three Generic Parameters)**:
+
    ```csharp
    // Using ICommandWithHandler<TCommand, TProjector, TAggregatePayload>
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<ConfirmedUser> context)
@@ -138,6 +146,7 @@ There are two ways to access the aggregate payload in command handlers, dependin
    ```
 
 2. **Without Type Constraint (Two Generic Parameters)**:
+
    ```csharp
    // Using ICommandWithHandler<TCommand, TProjector>
    public ResultBox<EventOrNone> Handle(YourCommand command, ICommandContext<IAggregatePayload> context)
@@ -178,6 +187,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 ```
 
 **Key points**:
+
 - Use `context.AppendEvent(eventPayload)` to add events to the event stream
 - You can append multiple events in sequence
 - Return `EventOrNone.None` if all events have been appended using `AppendEvent`
@@ -189,6 +199,7 @@ public ResultBox<EventOrNone> Handle(ComplexCommand command, ICommandContext<TAg
 Events contain two parts:
 
 1. **Event Metadata** (handled by Sekiban):
+
    ```csharp
    // These are managed by the system
    PartitionKeys partitionKeys;
@@ -199,12 +210,14 @@ Events contain two parts:
    ```
 
 2. **Event Payload** (defined by developers):
+
    ```csharp
    [GenerateSerializer]
    public record YourEvent(...parameters...) : IEventPayload;
    ```
 
 **Required**:
+
 - Implement `IEventPayload` interface for domain-specific data only
 - Use past tense naming (Created, Updated, Deleted)
 - Add `[GenerateSerializer]` attribute
@@ -222,6 +235,7 @@ public class PartitionKeys
 ```
 
 **Usage in Commands**:
+
 ```csharp
 // For new aggregates:
 public PartitionKeys SpecifyPartitionKeys(YourCommand command) => 
@@ -255,6 +269,7 @@ public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 ```
 
 **Required**:
+
 - Implement `IAggregateProjector` interface
 - Use pattern matching to manage state transitions
 - Return different payload types to enforce business rules
@@ -300,6 +315,7 @@ public record YourListQuery(string FilterParameter = null)
 ```
 
 **Required for List Queries**:
+
 - Implement `IMultiProjectionListQuery<TProjection, TQuery, TResult>` interface
 - Implement static `HandleFilter` method to filter data based on query parameters
 - Implement static `HandleSort` method to sort the filtered results
@@ -333,6 +349,7 @@ public record YourNonListQuery(string Parameter)
 ```
 
 **Required for Non-List Queries**:
+
 - Implement `IMultiProjectionQuery<TProjection, TQuery, TResult>` interface
 - Implement static `HandleQuery` method that returns a single result
 - The result type can be any serializable type (bool, string, int, custom record, etc.)
@@ -352,6 +369,7 @@ public partial class YourDomainEventsJsonContext : JsonSerializerContext
 ```
 
 **Required**:
+
 - Include all event types
 - Add `[JsonSourceGenerationOptions]` attribute
 - Define as partial class
@@ -461,6 +479,7 @@ This pattern ensures your UI always reflects the most recent state changes, prov
 To implement a web frontend for your domain:
 
 1. Create an API client in the Web project:
+
 ```csharp
 public class YourApiClient(HttpClient httpClient)
 {
@@ -492,7 +511,8 @@ public class YourApiClient(HttpClient httpClient)
 }
 ```
 
-2. Register the API client in Program.cs:
+1. Register the API client in Program.cs:
+
 ```csharp
 builder.Services.AddHttpClient<YourApiClient>(client =>
 {
@@ -500,7 +520,7 @@ builder.Services.AddHttpClient<YourApiClient>(client =>
 });
 ```
 
-3. Create Razor pages to interact with your domain
+1. Create Razor pages to interact with your domain
 
 ## Naming Conventions
 
@@ -605,6 +625,7 @@ public class YourTests : SekibanInMemoryTestBase
 ```
 
 Key points:
+
 - `Conveyor` is used to chain operations, transforming the result of one operation into the input for the next
 - `Do` is used to perform assertions or side effects without changing the result
 - `UnwrapBox` at the end unwraps the final ResultBox, throwing an exception if any step failed
@@ -713,6 +734,7 @@ public static class YourProjectDomainDomainTypes
    - For example, `SchoolManagement.Domain.Generated`
 
 3. **Usage in Application**:
+
    ```csharp
    // In Program.cs
    builder.Services.AddSingleton(
@@ -721,6 +743,7 @@ public static class YourProjectDomainDomainTypes
    ```
 
 4. **Usage in Tests**:
+
    ```csharp
    // In test classes
    protected override SekibanDomainTypes GetDomainTypes() => 
@@ -729,6 +752,7 @@ public static class YourProjectDomainDomainTypes
    ```
 
 5. **Required Imports for Tests**:
+
    ```csharp
    using YourProject.Domain;
    using YourProject.Domain.Generated; // Contains the generated types
@@ -824,6 +848,7 @@ public static class DuplicateCheckWorkflows
 ```
 
 **Key Points**:
+
 - Workflows can be implemented as either static classes with static methods or instance-based classes with dependency injection 🏗️
 - They should be placed in a `Workflows` folder or namespace 📁
 - They should use `ISekibanExecutor` interface for better testability 🧪
@@ -904,6 +929,7 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
 ```
 
 **Key Points**:
+
 - Use `SekibanInMemoryTestBase` for testing workflows
 - The base class provides an `Executor` property that implements `ISekibanExecutor`
 - Use `GivenCommand` to set up the test state
@@ -914,6 +940,7 @@ public class DuplicateCheckWorkflowsTests : SekibanInMemoryTestBase
 1. **Namespace Errors**: Make sure to use `Sekiban.Pure.*` namespaces, not `Sekiban.Core.*`.
 
 2. **Command Context**: The command context doesn't directly expose the aggregate payload. Use pattern matching in your command handlers if you need to check the aggregate state:
+
    ```csharp
    if (context.AggregatePayload is YourAggregate aggregate)
    {
@@ -935,9 +962,9 @@ dotnet run --project MyProject.AppHost --launch-profile https
 
 This ensures that your application uses HTTPS for secure communication, which is especially important for production environments.
 
-4. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
+1. **Accessing the Web Frontend**: The web frontend is available at the URL shown in the Aspire dashboard, typically at a URL like `https://localhost:XXXXX`.
 
-5. **ISekibanExecutor vs. SekibanOrleansExecutor**: When implementing domain services or workflows, use `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
+2. **ISekibanExecutor vs. SekibanOrleansExecutor**: When implementing domain services or workflows, use `ISekibanExecutor` interface instead of the concrete `SekibanOrleansExecutor` class for better testability. The `ISekibanExecutor` interface is in the `Sekiban.Pure.Executors` namespace.
 
 ## Testing
 
@@ -971,6 +998,7 @@ public record YourQuery(string QueryParam) :
 ```
 
 **Required for Wait-Enabled Queries**:
+
 - Implement the `IWaitForSortableUniqueId` interface
 - Add a public property `WaitForSortableUniqueId` with getter and setter
 - The property should be nullable string type
@@ -1009,6 +1037,7 @@ var updatedResult = await client.GetResultAsync(commandResult.LastSortableUnique
 ```
 
 **Key Points**:
+
 - The `LastSortableUniqueId` is available in command execution results
 - Pass this ID to subsequent queries to ensure they see the updated state
 - This provides immediate consistency in your application UI
