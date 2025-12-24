@@ -46,6 +46,7 @@ jobs:
 
       - name: Pack NuGet packages
         run: |
+          dotnet pack src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build

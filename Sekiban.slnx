@@ -39,6 +39,7 @@
     <Project Path="src/MemStat.Net/MemStat.Net.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
     <Project Path="src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />

@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.CosmosDb</AssemblyName>
         <RootNamespace>Sekiban.Dcb.CosmosDb</RootNamespace>
         <PackageId>Sekiban.Dcb.CosmosDb</PackageId>
-        <Version>10.0.1-preview03</Version>
+        <Version>10.0.1-preview04</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview03</PackageVersion>
+        <PackageVersion>10.0.1-preview04</PackageVersion>
         <Description>CosmosDB event store and persistence layer for Sekiban DCB</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;cosmosdb;azure</PackageTags>
         <AnalysisLevel>latest-All</AnalysisLevel>
@@ -29,6 +29,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.54.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>

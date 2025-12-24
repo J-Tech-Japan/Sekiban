@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.Orleans.Core</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Orleans</RootNamespace>
         <PackageId>Sekiban.Dcb.Orleans.Core</PackageId>
-        <Version>10.0.1-preview03</Version>
+        <Version>10.0.1-preview04</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB Orleans Core - Shared Orleans infrastructure for Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview03</PackageVersion>
+        <PackageVersion>10.0.1-preview04</PackageVersion>
         <Description>Core Orleans integration for Sekiban DCB with Grains, Streams, and Serialization</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;orleans;actor-model</PackageTags>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -26,6 +26,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
         <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1"/>
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />

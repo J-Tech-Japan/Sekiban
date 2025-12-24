@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.WithResult</AssemblyName>
         <RootNamespace>Sekiban.Dcb</RootNamespace>
         <PackageId>Sekiban.Dcb.WithResult</PackageId>
-        <Version>10.0.1-preview03</Version>
+        <Version>10.0.1-preview04</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB WithResult - ResultBox-based API for Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview03</PackageVersion>
+        <PackageVersion>10.0.1-preview04</PackageVersion>
         <Description>ResultBox-based API for Sekiban Dynamic Consistency Boundary - safe error handling without exceptions</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;resultbox</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -29,11 +29,8 @@
         <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(Configuration)' == 'Release'">
-        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
-    </ItemGroup>
-
     <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
         <PackageReference Include="ResultBoxes" Version="0.3.31"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>

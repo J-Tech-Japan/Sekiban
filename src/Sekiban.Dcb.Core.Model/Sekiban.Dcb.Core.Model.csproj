@@ -4,39 +4,33 @@
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyName>Sekiban.Dcb.Orleans.WithoutResult</AssemblyName>
-        <RootNamespace>Sekiban.Dcb.Orleans</RootNamespace>
-        <PackageId>Sekiban.Dcb.Orleans.WithoutResult</PackageId>
+        <AssemblyName>Sekiban.Dcb.Core.Model</AssemblyName>
+        <RootNamespace>Sekiban.Dcb</RootNamespace>
+        <PackageId>Sekiban.Dcb.Core.Model</PackageId>
         <Version>10.0.1-preview04</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
-        <PackageDescription>Sekiban DCB Orleans WithoutResult - Orleans integration with exception-based error handling</PackageDescription>
+        <PackageDescription>Sekiban DCB Core Model - Core interfaces and types for defining domain models with Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
         <PackageVersion>10.0.1-preview04</PackageVersion>
-        <Description>Orleans integration for Sekiban DCB with exception-based error handling</Description>
-        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;orleans;actor-model;exceptions</PackageTags>
+        <Description>Core interfaces and types for defining domain models in Sekiban Dynamic Consistency Boundary - IEventPayload, ITagStatePayload, ITag, ITagGroup, ITagProjector, and related types</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;model;core</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
-        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="$(PackageVersion)" />
-        <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="$(PackageVersion)" />
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.3">
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Dcb.Orleans.Core\Sekiban.Dcb.Orleans.Core.csproj"/>
-        <ProjectReference Include="..\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
     </ItemGroup>
 
 </Project>
