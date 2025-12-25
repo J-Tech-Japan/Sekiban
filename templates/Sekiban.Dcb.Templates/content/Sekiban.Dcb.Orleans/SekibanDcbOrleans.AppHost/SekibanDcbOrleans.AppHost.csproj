@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0"/>
+    <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsAspireHost>true</IsAspireHost>
@@ -12,16 +12,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Hosting" Version="9.5.2" />
-        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.5.2" />
-        <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="9.5.2" />
-        <PackageReference Include="Aspire.Hosting.Orleans" Version="9.5.2" />
-        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.5.2" />
+        <PackageReference Include="Aspire.Hosting" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.Orleans" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\SekibanDcbOrleans.ApiService\SekibanDcbOrleans.ApiService.csproj"/>
-        <ProjectReference Include="..\SekibanDcbOrleans.Web\SekibanDcbOrleans.Web.csproj"/>
+        <ProjectReference Include="..\SekibanDcbOrleans.ApiService\SekibanDcbOrleans.ApiService.csproj" />
+        <ProjectReference Include="..\SekibanDcbOrleans.Web\SekibanDcbOrleans.Web.csproj" />
     </ItemGroup>
 
 </Project>

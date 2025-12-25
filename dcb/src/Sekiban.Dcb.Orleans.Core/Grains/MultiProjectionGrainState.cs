@@ -20,4 +20,6 @@ public class MultiProjectionGrainState
     public long StateSize { get; set; }
     [Id(6)]
     public string? SafeLastPosition { get; set; }
+    [Id(7)]
+    public string? ProjectorVersion { get; set; }
 }
