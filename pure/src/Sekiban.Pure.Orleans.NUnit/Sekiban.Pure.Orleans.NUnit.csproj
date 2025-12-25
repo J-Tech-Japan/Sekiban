@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>Sekiban.Pure.Orleans.NUnit</PackageId>
+        <Version>9.0.0</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Pure Event Sourcing Framework Orleans NUnit Integration</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>9.0.0</PackageVersion>
+        <Description>Multi Blob saving and reading issue resolved</Description>
+        <AssemblyName>Sekiban.Pure.Orleans.NUnit</AssemblyName>
+        <RootNamespace>Sekiban.Pure.Orleans.NUnit</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <TargetFramework>net9.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Pure.Orleans\Sekiban.Pure.Orleans.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
+        <PackageReference Include="Microsoft.Orleans.Serialization.SystemTextJson" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.2.1"/>
+        <PackageReference Include="NUnit" Version="4.4.0"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Sekiban.Pure.Orleans" Version="9.0.0"/>
+    </ItemGroup>
+
+</Project>

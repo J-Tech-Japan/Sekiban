@@ -1,0 +1,42 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" />
+    <Project Path="src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />
+    <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
+    <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
+    <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+  </Folder>
+  <Folder Name="/internalUsages/">
+    <Project Path="internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
+    <Project Path="internalUsages/Dcb.Domain.WithoutResult/Dcb.Domain.WithoutResult.csproj">
+      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
+      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
+      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
+      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
+    </Project>
+    <Project Path="internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
+    <Project Path="internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
+    <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
+    <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />
+    <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj" />
+  </Folder>
+</Solution>

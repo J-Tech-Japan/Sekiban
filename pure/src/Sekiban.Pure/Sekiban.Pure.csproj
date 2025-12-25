@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>Sekiban.Pure</PackageId>
+        <Version>9.0.0</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Pure Event Sourcing Framework</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>9.0.0</PackageVersion>
+        <Description>Multi Blob saving and reading issue resolved</Description>
+        <AssemblyName>Sekiban.Pure</AssemblyName>
+        <RootNamespace>Sekiban.Pure</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <TargetFramework>net9.0</TargetFramework>
+        <UserSecretsId>d1e5185f-fa78-4690-9093-521ed6432bbd</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.2.1"/>
+        <PackageReference Include="ResultBoxes" Version="0.3.31"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>
