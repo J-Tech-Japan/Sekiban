@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.Orleans.WithoutResult</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Orleans</RootNamespace>
         <PackageId>Sekiban.Dcb.Orleans.WithoutResult</PackageId>
-        <Version>10.0.1-preview05</Version>
+        <Version>10.0.1-preview06</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB Orleans WithoutResult - Orleans integration with exception-based error handling</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview05</PackageVersion>
+        <PackageVersion>10.0.1-preview06</PackageVersion>
         <Description>Orleans integration for Sekiban DCB with exception-based error handling</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;orleans;actor-model;exceptions</PackageTags>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

@@ -8,12 +8,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.2" />
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.2" />
-        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="9.4.2" />
-        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="9.4.2" />
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.0" />
         <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.2" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.8"/>
         <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="9.2.1"/>
         <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="9.2.1" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="9.2.1"/>
@@ -26,10 +25,12 @@
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.11"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0"/>
     </ItemGroup>
 
