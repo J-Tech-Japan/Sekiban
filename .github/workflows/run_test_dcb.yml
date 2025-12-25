@@ -5,21 +5,22 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'src/Sekiban.Dcb.Core/**'
-      - 'src/Sekiban.Dcb.WithResult/**'
-      - 'src/Sekiban.Dcb.WithoutResult/**'
-      - 'src/Sekiban.Dcb.Orleans.Core/**'
-      - 'src/Sekiban.Dcb.Orleans.WithResult/**'
-      - 'src/Sekiban.Dcb.Orleans.WithoutResult/**'
-      - 'src/Sekiban.Dcb.BlobStorage.AzureStorage/**'
-      - 'src/Sekiban.Dcb.CosmosDb/**'
-      - 'src/Sekiban.Dcb.Postgres/**'
-      - 'src/Sekiban.Dcb.Postgres.MigrationHost/**'
-      - 'tests/Sekiban.Dcb.Orleans.Tests/**'
-      - 'tests/Sekiban.Dcb.Postgres.Tests/**'
-      - 'tests/Sekiban.Dcb.WithResult.Tests/**'
-      - 'tests/Sekiban.Dcb.WithoutResult.Tests/**'
-      - 'tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
+      - 'dcb/src/Sekiban.Dcb.Core/**'
+      - 'dcb/src/Sekiban.Dcb.Core.Model/**'
+      - 'dcb/src/Sekiban.Dcb.WithResult/**'
+      - 'dcb/src/Sekiban.Dcb.WithoutResult/**'
+      - 'dcb/src/Sekiban.Dcb.Orleans.Core/**'
+      - 'dcb/src/Sekiban.Dcb.Orleans.WithResult/**'
+      - 'dcb/src/Sekiban.Dcb.Orleans.WithoutResult/**'
+      - 'dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/**'
+      - 'dcb/src/Sekiban.Dcb.CosmosDb/**'
+      - 'dcb/src/Sekiban.Dcb.Postgres/**'
+      - 'dcb/src/Sekiban.Dcb.Postgres.MigrationHost/**'
+      - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
 
 concurrency:
   group: DcbTestWorkflow
@@ -56,11 +57,11 @@ jobs:
 
       - name: dotnet test DCB projects sequentially (net9.0)
         run: |
-          dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
 
   dcbTestsNet10:
     runs-on: ubuntu-latest
@@ -92,8 +93,8 @@ jobs:
 
       - name: dotnet test DCB projects sequentially (net10.0)
         run: |
-          dotnet test tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1

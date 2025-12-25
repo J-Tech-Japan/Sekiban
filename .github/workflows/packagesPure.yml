@@ -41,18 +41,18 @@ jobs:
 
       - name: Pack NuGet packages
         run: |
-          dotnet pack src/Sekiban.Pure/Sekiban.Pure.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.AspNetCore/Sekiban.Pure.AspNetCore.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.CosmosDb/Sekiban.Pure.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.NUnit/Sekiban.Pure.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.Orleans/Sekiban.Pure.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.Orleans.NUnit/Sekiban.Pure.Orleans.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.Orleans.xUnit/Sekiban.Pure.Orleans.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.Dapr/Sekiban.Pure.Dapr.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.Postgres/Sekiban.Pure.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
-          dotnet pack src/Sekiban.Pure.ReadModel/Sekiban.Pure.ReadModel.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure/Sekiban.Pure.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.AspNetCore/Sekiban.Pure.AspNetCore.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.CosmosDb/Sekiban.Pure.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.NUnit/Sekiban.Pure.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.Orleans/Sekiban.Pure.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.Orleans.NUnit/Sekiban.Pure.Orleans.NUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.Orleans.xUnit/Sekiban.Pure.Orleans.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.Dapr/Sekiban.Pure.Dapr.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.Postgres/Sekiban.Pure.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack pure/src/Sekiban.Pure.ReadModel/Sekiban.Pure.ReadModel.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
       - name: Push to NuGet.org
         run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json

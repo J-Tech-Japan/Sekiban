@@ -5,22 +5,22 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'src/Sekiban.Pure/**'
-      - 'src/Sekiban.Pure.AspNetCore/**'
-      - 'src/Sekiban.Pure.CosmosDb/**'
-      - 'src/Sekiban.Pure.Dapr/**'
-      - 'src/Sekiban.Pure.NUnit/**'
-      - 'src/Sekiban.Pure.Orleans/**'
-      - 'src/Sekiban.Pure.Orleans.NUnit/**'
-      - 'src/Sekiban.Pure.Orleans.xUnit/**'
-      - 'src/Sekiban.Pure.Postgres/**'
-      - 'src/Sekiban.Pure.Postgres.MigrationHost/**'
-      - 'src/Sekiban.Pure.ReadModel/**'
-      - 'src/Sekiban.Pure.SourceGenerator/**'
-      - 'src/Sekiban.Pure.xUnit/**'
-      - 'tests/MemStat.Net.Test/**'
-      - 'tests/Pure.Domain.Test/**'
-      - 'tests/Pure.Domain.xUnit/**'
+      - 'pure/src/Sekiban.Pure/**'
+      - 'pure/src/Sekiban.Pure.AspNetCore/**'
+      - 'pure/src/Sekiban.Pure.CosmosDb/**'
+      - 'pure/src/Sekiban.Pure.Dapr/**'
+      - 'pure/src/Sekiban.Pure.NUnit/**'
+      - 'pure/src/Sekiban.Pure.Orleans/**'
+      - 'pure/src/Sekiban.Pure.Orleans.NUnit/**'
+      - 'pure/src/Sekiban.Pure.Orleans.xUnit/**'
+      - 'pure/src/Sekiban.Pure.Postgres/**'
+      - 'pure/src/Sekiban.Pure.Postgres.MigrationHost/**'
+      - 'pure/src/Sekiban.Pure.ReadModel/**'
+      - 'pure/src/Sekiban.Pure.SourceGenerator/**'
+      - 'pure/src/Sekiban.Pure.xUnit/**'
+      - 'pure/tests/MemStat.Net.Test/**'
+      - 'pure/tests/Pure.Domain.Test/**'
+      - 'pure/tests/Pure.Domain.xUnit/**'
 concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
@@ -53,7 +53,7 @@ jobs:
         dotnet-version: 9.0.x
     - name: Secret Settings
       run: |
-        pushd ./tests/Pure.Domain.xUnit
+        pushd ./pure/tests/Pure.Domain.xUnit
         dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure"
         dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{ secrets.COSMOSDB_CONNECTION_STRING }}"
         dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=127.0.0.1;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
@@ -62,7 +62,7 @@ jobs:
         dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
     - name: dotnet test all projects sequentially
       run: |
-        dotnet test tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        dotnet test tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        dotnet test tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-  
+        dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+
