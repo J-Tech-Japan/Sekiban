@@ -85,6 +85,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
+    private int _maxPendingStreamEvents = 50000;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -140,6 +141,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         };
 
         return Task.FromResult(stats);
+    }
+
+    public Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync()
+    {
+        var status = new MultiProjectionCatchUpStatus(
+            _catchUpProgress.IsActive,
+            _catchUpProgress.CurrentPosition?.Value,
+            _catchUpProgress.TargetPosition?.Value,
+            _catchUpProgress.BatchesProcessed,
+            _catchUpProgress.ConsecutiveEmptyBatches,
+            _catchUpProgress.StartTime,
+            _catchUpProgress.LastAttempt,
+            _pendingStreamEvents.Count);
+        return Task.FromResult(status);
     }
 
     public async Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true)
@@ -377,6 +392,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Update grain state
             _state.State.ProjectorName = this.GetPrimaryKeyString();
+            var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_state.State.ProjectorName);
+            if (versionResult.IsSuccess)
+            {
+                _state.State.ProjectorVersion = versionResult.GetValue();
+            }
             _state.State.SerializedState = data.Json;
             _state.State.LastPosition = data.SafeLastSortableUniqueId;
             _state.State.SafeLastPosition = data.SafeLastSortableUniqueId;
@@ -754,11 +774,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 SnapshotAccessor = _snapshotAccessor ?? baseOptions.SnapshotAccessor,
                 SnapshotOffloadThresholdBytes = baseOptions.SnapshotOffloadThresholdBytes,
                 MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
+                MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
                 LagDecayPerSecond = baseOptions.LagDecayPerSecond
             };
+            _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
 
             _projectionActor = new GeneralMultiProjectionActor(
                 _domainTypes,
@@ -777,62 +799,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     if (deserializedState != null)
                     {
-                        await _projectionActor.SetSnapshotAsync(deserializedState);
-                        _eventsProcessed = _state.State.EventsProcessed;
-                        // Clear processed event IDs to prevent double counting after snapshot restore
-                        _processedEventIds.Clear();
-                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restored successfully - Position: {deserializedState.InlineState?.LastSortableUniqueId ?? "(empty)"}, Events: {_eventsProcessed}");
-                        // Avoid overlap on the first catch-up after snapshot restore
-                        _avoidOverlapOnce = true;
+                        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+                        var snapshotVersion = deserializedState.InlineState?.ProjectorVersion ??
+                                              deserializedState.OffloadedState?.ProjectorVersion;
+                        if (versionResult.IsSuccess &&
+                            !string.Equals(versionResult.GetValue(), snapshotVersion, StringComparison.Ordinal))
+                        {
+                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot projector version mismatch. Current='{versionResult.GetValue()}', Snapshot='{snapshotVersion}'. Discarding snapshot and forcing full rebuild.");
+                            await ResetPersistedStateForFullRebuildAsync(versionResult.GetValue());
+                            forceFullCatchUp = true;
+                        }
+                        else
+                        {
+                            await _projectionActor.SetSnapshotAsync(deserializedState);
+                            _eventsProcessed = _state.State.EventsProcessed;
+                            // Clear processed event IDs to prevent double counting after snapshot restore
+                            _processedEventIds.Clear();
+                            var restoredPosition = deserializedState.InlineState?.LastSortableUniqueId ??
+                                                   deserializedState.OffloadedState?.LastSortableUniqueId ??
+                                                   "(empty)";
+                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restored successfully - Position: {restoredPosition}, Events: {_eventsProcessed}");
+                            // Avoid overlap on the first catch-up after snapshot restore
+                            _avoidOverlapOnce = true;
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restore version mismatch or error: {ex.Message}. Restoring payload in compatibility mode and catching up from store.");
-                    // Try compatibility restore: ignore version and use snapshot payload to ensure current values are available
-                    try
-                    {
-                        var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                            _state.State!.SerializedState!,
-                            _domainTypes.JsonSerializerOptions);
-                        if (deserializedState != null)
-                        {
-                            SerializableMultiProjectionState reconstructed = deserializedState.IsOffloaded
-                                ? new SerializableMultiProjectionState(
-                                    await _snapshotAccessor!.ReadAsync(deserializedState.OffloadedState!.OffloadKey, default),
-                                    deserializedState.OffloadedState!.MultiProjectionPayloadType,
-                                    deserializedState.OffloadedState!.ProjectorName,
-                                    deserializedState.OffloadedState!.ProjectorVersion,
-                                    deserializedState.OffloadedState!.LastSortableUniqueId,
-                                    deserializedState.OffloadedState!.LastEventId,
-                                    deserializedState.OffloadedState!.Version,
-                                    deserializedState.OffloadedState!.IsCatchedUp,
-                                    deserializedState.OffloadedState!.IsSafeState)
-                                : deserializedState.InlineState!;
-
-                            await _projectionActor.SetCurrentStateIgnoringVersion(reconstructed);
-                            // Avoid overlap on the first catch-up after snapshot compatibility restore
-                            _avoidOverlapOnce = true;
-                        }
-                        // Keep persisted positions; no full replay
-                        forceFullCatchUp = false;
-                    }
-                    catch (Exception clearEx)
-                    {
-                        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Compatibility restore failed: {clearEx.Message}");
-                        // As a last resort, clear snapshot and do incremental catch-up
-                        try
-                        {
-                            _state.State!.SerializedState = null;
-                            _state.State.EventsProcessed = 0;
-                            await _state.WriteStateAsync();
-                            forceFullCatchUp = false;
-                        }
-                        catch
-                        {
-                            forceFullCatchUp = false;
-                        }
-                    }
+                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restore failed: {ex.Message}. Discarding snapshot and forcing full rebuild.");
+                    await ResetPersistedStateForFullRebuildAsync(null);
+                    forceFullCatchUp = true;
                 }
             }
             else
@@ -881,6 +877,38 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
+    }
+
+    private async Task ResetPersistedStateForFullRebuildAsync(string? currentVersion)
+    {
+        try
+        {
+            if (_state.State != null)
+            {
+                _state.State.ProjectorName = this.GetPrimaryKeyString();
+                _state.State.SerializedState = null;
+                _state.State.LastPosition = null;
+                _state.State.SafeLastPosition = null;
+                _state.State.EventsProcessed = 0;
+                _state.State.StateSize = 0;
+                _state.State.LastPersistTime = DateTime.UtcNow;
+                if (!string.IsNullOrEmpty(currentVersion))
+                {
+                    _state.State.ProjectorVersion = currentVersion;
+                }
+                await _state.WriteStateAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Failed to clear persisted state: {ex.Message}";
+        }
+
+        _eventsProcessed = 0;
+        _processedEventIds.Clear();
+        _unsafeEventIds.Clear();
+        _eventBuffer.Clear();
+        _pendingStreamEvents.Clear();
     }
 
     private async Task EnsureInitializedAsync()
@@ -1017,7 +1045,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = this.GetPrimaryKeyString();
         
         // Get current position
-        SortableUniqueId? currentPosition = await GetCurrentPositionAsync();
+        SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
         
         // Get latest position in event store
         var latestResult = await _eventStore.ReadAllEventsAsync(since: null);
@@ -1036,13 +1064,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var targetPosition = new SortableUniqueId(latestEvent.SortableUniqueIdValue);
         
         // Check if catch-up is needed
-        if (currentPosition != null && currentPosition.Value == targetPosition.Value)
+        if (!forceFull && currentPosition != null && currentPosition.Value == targetPosition.Value)
         {
             Console.WriteLine($"[{projectorName}] Already at latest position, no catch-up needed");
             return;
         }
-        
-        // Initialize catch-up progress
+
+        // Initialize catch-up progress early to route incoming stream events to pending.
         _catchUpProgress = new CatchUpProgress
         {
             CurrentPosition = currentPosition,
@@ -1053,6 +1081,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             StartTime = DateTime.UtcNow,
             LastAttempt = DateTime.MinValue
         };
+
+        MoveBufferedStreamEventsToPending(currentPosition);
         
         Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} to {targetPosition.Value}");
         
@@ -1317,9 +1347,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         
         while (_pendingStreamEvents.Count > 0)
         {
-            events.Add(_pendingStreamEvents.Dequeue());
+            var ev = _pendingStreamEvents.Dequeue();
+            if (_processedEventIds.Contains(ev.Id.ToString()))
+            {
+                continue;
+            }
+            events.Add(ev);
         }
         
+        if (events.Count == 0)
+        {
+            return;
+        }
+
         Console.WriteLine($"[{projectorName}] Processing {events.Count} pending stream events");
         
         // Determine safe/unsafe status for each event
@@ -1346,6 +1386,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (allEvents.Count > 0)
         {
             await _projectionActor!.AddEventsAsync(allEvents, true, EventSource.Stream);
+            _eventsProcessed += allEvents.Count;
+            foreach (var ev in allEvents)
+            {
+                _processedEventIds.Add(ev.Id.ToString());
+            }
+            _lastEventTime = DateTime.UtcNow;
+            if (_state.State != null)
+            {
+                _state.State.LastPosition = allEvents.Last().SortableUniqueIdValue;
+            }
         }
     }
     
@@ -1385,6 +1435,51 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var safeWindowMs = _injectedActorOptions?.SafeWindowMs ?? 20000;
         var threshold = now.AddMilliseconds(-safeWindowMs);
         return SortableUniqueId.Generate(threshold, Guid.Empty);
+    }
+
+    private void EnqueuePendingStreamEvents(IEnumerable<Event> events, SortableUniqueId? currentPosition)
+    {
+        var buffered = 0;
+        foreach (var ev in events)
+        {
+            if (currentPosition != null)
+            {
+                var eventPos = new SortableUniqueId(ev.SortableUniqueIdValue);
+                if (!eventPos.IsLaterThan(currentPosition))
+                {
+                    continue;
+                }
+            }
+            _pendingStreamEvents.Enqueue(ev);
+            buffered++;
+        }
+
+        if (buffered > 0)
+        {
+            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Buffered {buffered} stream events during catch-up (queue size: {_pendingStreamEvents.Count})");
+        }
+
+        if (_maxPendingStreamEvents > 0)
+        {
+            while (_pendingStreamEvents.Count > _maxPendingStreamEvents)
+            {
+                _pendingStreamEvents.Dequeue();
+            }
+        }
+    }
+
+    private void MoveBufferedStreamEventsToPending(SortableUniqueId? currentPosition)
+    {
+        List<Event> buffered;
+        lock (_eventBuffer)
+        {
+            if (_eventBuffer.Count == 0) return;
+            buffered = new List<Event>(_eventBuffer);
+            _eventBuffer.Clear();
+            _unsafeEventIds.Clear();
+        }
+
+        EnqueuePendingStreamEvents(buffered, currentPosition);
     }
 
     /// <summary>
@@ -1585,6 +1680,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             Console.WriteLine($"[{projectorName}] Processing {events.Count} buffered events");
             await _projectionActor.AddEventsAsync(events, true, EventSource.Stream);
             _eventsProcessed += events.Count;
+
+            foreach (var ev in events)
+            {
+                _processedEventIds.Add(ev.Id.ToString());
+            }
             
             // Update position
             var maxSortableId = events
@@ -1674,6 +1774,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var list = events as IList<Event> ?? events.ToList();
         if (list.Count == 0) return;
+
+        if (_catchUpProgress.IsActive)
+        {
+            EnqueuePendingStreamEvents(list, _catchUpProgress.CurrentPosition);
+            _lastEventTime = DateTime.UtcNow;
+            return;
+        }
+
+        var newEvents = list.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
+        if (newEvents.Count == 0) return;
+        list = newEvents;
         
         // Evaluate each event's safe/unsafe status at the time of enqueuing
         var safeThreshold = GetSafeWindowThreshold();

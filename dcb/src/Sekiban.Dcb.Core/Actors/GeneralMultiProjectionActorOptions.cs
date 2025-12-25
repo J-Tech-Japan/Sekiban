@@ -31,6 +31,12 @@ public class GeneralMultiProjectionActorOptions
     /// </summary>
     public int MaxSnapshotSerializedSizeBytes { get; set; } = 2 * 1024 * 1024;
 
+    /// <summary>
+    ///     Maximum number of stream events to buffer while catch-up is active.
+    ///     Set to 0 or negative to disable trimming (use with care).
+    /// </summary>
+    public int MaxPendingStreamEvents { get; set; } = 50000;
+
     // Dynamic SafeWindow controls (optional; default OFF)
     public bool EnableDynamicSafeWindow { get; set; } = false;
 
