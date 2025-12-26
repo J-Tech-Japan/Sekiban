@@ -54,6 +54,14 @@ public class OrleansDcbExecutor : ISekibanExecutor
         _generalExecutor.ExecuteAsync(command, handlerFunc, cancellationToken);
 
     /// <summary>
+    ///     Execute a handler function without an explicit command
+    /// </summary>
+    public Task<ExecutionResult> ExecuteCommandAsync(
+        Func<ICommandContext, Task<EventOrNone>> handlerFunc,
+        CancellationToken cancellationToken = default) =>
+        _generalExecutor.ExecuteCommandAsync(handlerFunc, cancellationToken);
+
+    /// <summary>
     ///     Get the current state for a specific tag state
     /// </summary>
     public Task<TagState> GetTagStateAsync(TagStateId tagStateId) =>

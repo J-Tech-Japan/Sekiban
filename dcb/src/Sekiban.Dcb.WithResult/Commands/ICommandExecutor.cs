@@ -23,6 +23,16 @@ public interface ICommandExecutor
         CancellationToken cancellationToken = default) where TCommand : ICommand;
 
     /// <summary>
+    ///     Executes a handler function without an explicit command instance
+    /// </summary>
+    /// <param name="handlerFunc">The handler function to process the command context</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>ResultBox containing the execution result or error</returns>
+    Task<ResultBox<ExecutionResult>> ExecuteCommandAsync(
+        Func<ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Executes a command that includes its own handler logic
     /// </summary>
     /// <typeparam name="TCommand">The type of command to execute</typeparam>

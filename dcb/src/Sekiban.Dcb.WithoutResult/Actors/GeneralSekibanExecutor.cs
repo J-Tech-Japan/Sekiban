@@ -15,6 +15,7 @@ namespace Sekiban.Dcb.Actors;
 public class GeneralSekibanExecutor : ISekibanExecutor
 {
     private readonly CoreGeneralSekibanExecutor _core;
+    private static readonly AnonymousCommand NoCommandInstance = new();
 
     public GeneralSekibanExecutor(
         IEventStore eventStore,
@@ -79,6 +80,31 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     }
 
     /// <summary>
+    ///     Execute a handler function without an explicit command
+    /// </summary>
+    public async Task<ExecutionResult> ExecuteCommandAsync(
+        Func<ICommandContext, Task<EventOrNone>> handlerFunc,
+        CancellationToken cancellationToken = default)
+    {
+        Func<AnonymousCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (_, coreCtx) =>
+        {
+            try
+            {
+                var contextAdapter = new CommandContextAdapter(coreCtx);
+                var result = await handlerFunc(contextAdapter);
+                return ResultBox.FromValue(result);
+            }
+            catch (Exception ex)
+            {
+                return ResultBox<EventOrNone>.Error(ex);
+            }
+        };
+
+        var result = await _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken);
+        return result.UnwrapBox();
+    }
+
+    /// <summary>
     ///     Get the current state for a specific tag state
     /// </summary>
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId)
@@ -105,4 +131,6 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         var result = await _core.QueryAsync(queryCommon);
         return result.UnwrapBox();
     }
+
+    private sealed record AnonymousCommand : ICommand;
 }

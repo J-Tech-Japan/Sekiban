@@ -44,6 +44,11 @@ public class InMemoryDcbExecutor : ISekibanExecutor
         CancellationToken cancellationToken) =>
         _inner.ExecuteAsync(command, handlerFunc, cancellationToken);
 
+    Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteCommandAsync(
+        Func<ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        CancellationToken cancellationToken) =>
+        _inner.ExecuteCommandAsync(handlerFunc, cancellationToken);
+
     Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteAsync<TCommand>(
         TCommand command,
         CancellationToken cancellationToken) =>
