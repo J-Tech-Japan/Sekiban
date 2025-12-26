@@ -4,8 +4,17 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.CosmosDb;
 
+/// <summary>
+///     Service collection extensions for CosmosDB-backed DCB.
+/// </summary>
 public static class SekibanDcbCosmosDbExtensions
 {
+    private static readonly Action<ILogger, string, Exception?> LogUsingAspireClient =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, nameof(LogUsingAspireClient)), "Using Aspire-provided CosmosClient for database {DatabaseName}");
+
+    private static readonly Action<ILogger, string, Exception?> LogUsingConnectionString =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, nameof(LogUsingConnectionString)), "Using connection string for CosmosDB database {DatabaseName}");
+
     /// <summary>
     ///     Add Sekiban DCB with CosmosDB storage
     /// </summary>
@@ -82,7 +91,10 @@ public static class SekibanDcbCosmosDbExtensions
             if (cosmosClient != null)
             {
                 // Use Aspire-provided CosmosClient
-                logger?.LogInformation("Using Aspire-provided CosmosClient for database {DatabaseName}", databaseName);
+                if (logger != null)
+                {
+                    LogUsingAspireClient(logger, databaseName, null);
+                }
                 return new CosmosDbContext(cosmosClient, databaseName, logger);
             }
 
@@ -95,7 +107,10 @@ public static class SekibanDcbCosmosDbExtensions
 
             if (!string.IsNullOrEmpty(connectionString))
             {
-                logger?.LogInformation("Using connection string for CosmosDB database {DatabaseName}", databaseName);
+                if (logger != null)
+                {
+                    LogUsingConnectionString(logger, databaseName, null);
+                }
                 return new CosmosDbContext(connectionString, databaseName, logger);
             }
 

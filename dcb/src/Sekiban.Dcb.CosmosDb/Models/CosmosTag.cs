@@ -7,30 +7,57 @@ namespace Sekiban.Dcb.CosmosDb.Models;
 /// </summary>
 public class CosmosTag
 {
+    /// <summary>
+    ///     CosmosDB document ID.
+    /// </summary>
     [JsonProperty("id")]
     public string Id { get; set; } = string.Empty; // Unique ID for the document
 
+    /// <summary>
+    ///     Tag string (partition key).
+    /// </summary>
     [JsonProperty("tag")]
     public string Tag { get; set; } = string.Empty; // Partition key
 
+    /// <summary>
+    ///     Tag group name.
+    /// </summary>
     [JsonProperty("tagGroup")]
     public string TagGroup { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Event type name.
+    /// </summary>
     [JsonProperty("eventType")]
     public string EventType { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Sortable unique ID for ordering.
+    /// </summary>
     [JsonProperty("sortableUniqueId")]
     public string SortableUniqueId { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Associated event ID.
+    /// </summary>
     [JsonProperty("eventId")]
     public string EventId { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Document creation timestamp (UTC).
+    /// </summary>
     [JsonProperty("createdAt")]
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    ///     CosmosDB entity tag.
+    /// </summary>
     [JsonProperty("_etag")]
     public string? ETag { get; set; }
 
+    /// <summary>
+    ///     Creates a tag document from event metadata.
+    /// </summary>
     public static CosmosTag FromEventTag(string tag, string tagGroup, string sortableUniqueId, Guid eventId, string eventType) =>
         new()
         {

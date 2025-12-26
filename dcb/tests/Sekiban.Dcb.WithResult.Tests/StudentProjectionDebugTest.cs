@@ -65,7 +65,7 @@ public class StudentProjectionDebugTest
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             EventType: studentCreated.GetType().Name,
             Id: Guid.NewGuid(),
-            EventMetadata: new EventMetadata(null, null, "test"),
+            EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
             Tags: new List<string> { studentTag.GetTag() }
         );
 
@@ -149,7 +149,7 @@ public class StudentProjectionDebugTest
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             EventType: studentCreated.GetType().Name,
             Id: Guid.NewGuid(),
-            EventMetadata: new EventMetadata(null, null, "test"),
+            EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
             Tags: new List<string> { studentTag.GetTag() }
         );
 

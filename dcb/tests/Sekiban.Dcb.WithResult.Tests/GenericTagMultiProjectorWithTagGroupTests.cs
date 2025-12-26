@@ -61,7 +61,7 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var classRoomId = Guid.NewGuid();
 
         // Create event with ClassRoomTag
-        var classRoomEvent = CreateEvent(new ClassRoomCreated(classRoomId, "Room 101", 30), null);
+        var classRoomEvent = CreateEvent(new ClassRoomCreated(classRoomId, "Room 101", 30));
 
         // Act - Process event with ClassRoomTag
         var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
@@ -105,9 +105,9 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var studentId2 = Guid.NewGuid();
 
         // Create events with mixed tags
-        var mixedEvent = CreateEvent(new StudentCreated(studentId1, "Alice"), null);
+        var mixedEvent = CreateEvent(new StudentCreated(studentId1, "Alice"));
 
-        var studentOnlyEvent = CreateEvent(new StudentCreated(studentId2, "Bob"), null);
+        var studentOnlyEvent = CreateEvent(new StudentCreated(studentId2, "Bob"));
 
         // Act
         var safeThreshold2 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
@@ -151,7 +151,7 @@ public class GenericTagMultiProjectorWithTagGroupTests
         var forecastId = Guid.NewGuid();
 
         // Create event with WeatherForecastTag
-        var weatherEvent = CreateEvent(new WeatherForecastCreated(forecastId, DateTime.Now, 20, "Cloudy"), null);
+        var weatherEvent = CreateEvent(new WeatherForecastCreated(forecastId, DateTime.Now, 20, "Cloudy"));
 
         // Act
         var safeThreshold3 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
@@ -175,7 +175,7 @@ public class GenericTagMultiProjectorWithTagGroupTests
         Assert.Equal("Cloudy", weatherState.Summary);
     }
 
-    private Event CreateEvent(IEventPayload payload, List<ITag> _)
+    private Event CreateEvent(IEventPayload payload)
     {
         var sortableId = SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid());
         return new Event(

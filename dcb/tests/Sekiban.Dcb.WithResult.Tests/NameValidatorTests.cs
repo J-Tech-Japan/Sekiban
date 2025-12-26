@@ -36,7 +36,7 @@ public class NameValidatorTests
     public void IsValidProjectorName_InvalidNames_ReturnsFalse(string? name)
     {
         // Act
-        var result = NameValidator.IsValidProjectorName(name);
+        var result = NameValidator.IsValidProjectorName(name!);
 
         // Assert
         Assert.False(result);

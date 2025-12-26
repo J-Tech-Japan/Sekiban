@@ -6,10 +6,11 @@
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
         <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <NoWarn>$(NoWarn);MSB3277</NoWarn>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

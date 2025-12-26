@@ -49,7 +49,7 @@ public class StudentActorSimpleTest
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             EventType: "StudentCreated",
             Id: Guid.NewGuid(),
-            EventMetadata: new EventMetadata(null, null, "test"),
+            EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
             Tags: new List<string> { ((ITag)studentTag).GetTag() }
         );
 
@@ -119,7 +119,7 @@ public class StudentActorSimpleTest
                 SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-10), Guid.NewGuid()),
                 EventType: "StudentCreated",
                 Id: Guid.NewGuid(),
-                EventMetadata: new EventMetadata(null, null, "test"),
+                EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
                 Tags: new List<string> { ((ITag)new StudentTag(student1Id)).GetTag() }
             ),
             new Event(
@@ -127,7 +127,7 @@ public class StudentActorSimpleTest
                 SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-5), Guid.NewGuid()),
                 EventType: "StudentCreated",
                 Id: Guid.NewGuid(),
-                EventMetadata: new EventMetadata(null, null, "test"),
+                EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
                 Tags: new List<string> { ((ITag)new StudentTag(student2Id)).GetTag() }
             )
         };
@@ -185,7 +185,7 @@ public class StudentActorSimpleTest
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             EventType: "StudentCreated",
             Id: Guid.NewGuid(),
-            EventMetadata: new EventMetadata(null, null, "test"),
+            EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
             Tags: new List<string> { new StudentTag(student1Id).GetTag() }
         );
 
@@ -211,7 +211,7 @@ public class StudentActorSimpleTest
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
             EventType: "StudentCreated",
             Id: Guid.NewGuid(),
-            EventMetadata: new EventMetadata(null, null, "test"),
+            EventMetadata: new EventMetadata(string.Empty, string.Empty, "test"),
             Tags: new List<string> { new StudentTag(student2Id).GetTag() }
         );
 

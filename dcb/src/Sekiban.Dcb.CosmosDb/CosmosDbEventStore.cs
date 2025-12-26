@@ -6,20 +6,31 @@ using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using System.Collections.Generic;
 using System.Net;
+using System.Text.Json;
 namespace Sekiban.Dcb.CosmosDb;
 
+/// <summary>
+///     CosmosDB-backed event store implementation.
+/// </summary>
 public class CosmosDbEventStore : IEventStore
 {
     private readonly CosmosDbContext _context;
     private readonly DcbDomainTypes _domainTypes;
 
+    /// <summary>
+    ///     Creates a new CosmosDB event store.
+    /// </summary>
     public CosmosDbEventStore(CosmosDbContext context, DcbDomainTypes domainTypes)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
+    /// <summary>
+    ///     Reads all events, optionally after a given sortable unique ID.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
         try
@@ -31,7 +42,7 @@ public class CosmosDbEventStore : IEventStore
 
             if (since != null)
             {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0)
+                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value, StringComparison.Ordinal) > 0)
                     .OrderBy(e => e.SortableUniqueId);
             }
 
@@ -55,12 +66,27 @@ public class CosmosDbEventStore : IEventStore
 
             return ResultBox.FromValue<IEnumerable<Event>>(events);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEnumerable<Event>>(ex);
         }
     }
 
+    /// <summary>
+    ///     Reads events by tag, optionally after a given sortable unique ID.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try
@@ -74,7 +100,7 @@ public class CosmosDbEventStore : IEventStore
 
             if (since != null)
             {
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, since.Value) > 0);
+                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, since.Value, StringComparison.Ordinal) > 0);
             }
 
             var eventIds = new List<string>();
@@ -87,7 +113,7 @@ public class CosmosDbEventStore : IEventStore
                 }
             }
 
-            if (!eventIds.Any())
+            if (eventIds.Count == 0)
             {
                 return ResultBox.FromValue<IEnumerable<Event>>(new List<Event>());
             }
@@ -132,12 +158,27 @@ public class CosmosDbEventStore : IEventStore
 
             return ResultBox.FromValue<IEnumerable<Event>>(events);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEnumerable<Event>>(ex);
         }
     }
 
+    /// <summary>
+    ///     Reads a single event by ID.
+    /// </summary>
     public async Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
     {
         try
@@ -161,14 +202,33 @@ public class CosmosDbEventStore : IEventStore
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            return ResultBox.Error<Event>(new Exception($"Event with ID {eventId} not found"));
+            return ResultBox.Error<Event>(new KeyNotFoundException($"Event with ID {eventId} not found"));
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<Event>(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<Event>(ex);
+        }
+        catch (FormatException ex)
+        {
+            return ResultBox.Error<Event>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<Event>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<Event>(ex);
         }
     }
 
+    /// <summary>
+    ///     Writes events and associated tags.
+    /// </summary>
     public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
         WriteEventsAsync(IEnumerable<Event> events)
     {
@@ -203,7 +263,7 @@ public class CosmosDbEventStore : IEventStore
                 foreach (var tagString in ev.Tags)
                 {
                     // Extract tag group from tag string (format: "group:content")
-                    var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+                    var tagGroup = tagString.Contains(':', StringComparison.Ordinal) ? tagString.Split(':')[0] : tagString;
 
                     // Create a tag entry for this event
                     var cosmosTag = CosmosTag.FromEventTag(
@@ -229,7 +289,27 @@ public class CosmosDbEventStore : IEventStore
                 (Events: (IReadOnlyList<Event>)writtenEvents,
                     TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+            }
+            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+            }
+            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+        catch (ArgumentException ex)
         {
             Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
@@ -241,6 +321,9 @@ public class CosmosDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads tag stream entries for a tag.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
         try
@@ -269,19 +352,35 @@ public class CosmosDbEventStore : IEventStore
 
             return ResultBox.FromValue<IEnumerable<TagStream>>(tagStreams);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagStream>>(ex);
+        }
+        catch (FormatException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagStream>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagStream>>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEnumerable<TagStream>>(ex);
         }
     }
 
+    /// <summary>
+    ///     Gets the latest tag state placeholder for a tag.
+    /// </summary>
     public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
     {
         try
         {
+            ArgumentNullException.ThrowIfNull(tag);
             var tagString = tag.GetTag();
             var tagGroup = tag.GetTagGroup();
-            var tagContent = tagString.Substring(tagGroup.Length + 1);
+            var tagContent = tag.GetTagContent();
 
             var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
@@ -326,12 +425,23 @@ public class CosmosDbEventStore : IEventStore
                     string.Empty,
                     string.Empty));
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<TagState>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<TagState>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<TagState>(ex);
         }
     }
 
+    /// <summary>
+    ///     Checks whether any entries exist for a tag.
+    /// </summary>
     public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
         try
@@ -348,12 +458,20 @@ public class CosmosDbEventStore : IEventStore
             if (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                return ResultBox.FromValue(response.Any());
+                return ResultBox.FromValue(response.Count > 0);
             }
 
             return ResultBox.FromValue(false);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<bool>(ex);
         }
@@ -370,13 +488,21 @@ public class CosmosDbEventStore : IEventStore
             if (payload == null)
             {
                 return ResultBox.Error<IEventPayload>(
-                    new Exception(
+                    new InvalidOperationException(
                         $"Failed to deserialize event payload of type {eventType}. Make sure the event type is registered."));
             }
 
             return ResultBox.FromValue(payload);
         }
-        catch (Exception ex)
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<IEventPayload>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEventPayload>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEventPayload>(ex);
         }
