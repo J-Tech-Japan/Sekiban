@@ -52,4 +52,10 @@ public interface ICoreCommandContext
     /// <param name="tags"></param>
     /// <returns>ResultBox containing EventOrNone representing the appended event</returns>
     Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags);
+    /// <summary>
+    ///     Appends an event with tags to the context
+    /// </summary>
+    /// <param name="eventPayloadWithTags"></param>
+    /// <returns></returns>
+    Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags eventPayloadWithTags);
 }

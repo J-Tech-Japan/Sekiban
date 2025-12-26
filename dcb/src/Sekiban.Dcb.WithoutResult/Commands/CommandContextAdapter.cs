@@ -48,4 +48,9 @@ internal class CommandContextAdapter : ICommandContext
         var result = await _core.AppendEvent(ev, tags);
         return result.UnwrapBox();
     }
+
+    public async Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags)
+    {
+        return await _core.AppendEvent(eventPayloadWithTags).UnwrapBox();
+    }
 }
