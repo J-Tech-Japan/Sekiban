@@ -271,7 +271,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
         return AppendEvent(new EventPayloadWithTags(ev, tags?.ToList() ?? new List<ITag>()));
     }
 
-    private Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
+    public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags ev)
     {
         try
         {

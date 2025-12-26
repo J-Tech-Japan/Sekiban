@@ -33,4 +33,7 @@ internal class CommandContextAdapter : ICommandContext
 
     public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags) =>
         _core.AppendEvent(ev, tags);
+
+    public Task<ResultBox<EventOrNone>> AppendEvent(EventPayloadWithTags eventPayloadWithTags)
+     => _core.AppendEvent(eventPayloadWithTags);
 }
