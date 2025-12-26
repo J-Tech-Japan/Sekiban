@@ -67,19 +67,19 @@ public class GenericTagMultiProjectorUnsafeDataTests
             new WeatherForecastCreated(forecastId1, "Tokyo", DateOnly.FromDateTime(_baseTime), 20, "Sunny"),
             _baseTime.AddSeconds(-30), // 30 seconds ago - safe
             forecastId1);
-        
+
         Console.WriteLine($"[Test] Created old event - Type: {oldEvent.EventType}, Payload type: {oldEvent.Payload?.GetType().Name}, Tags: {string.Join(", ", oldEvent.Tags)}");
 
         var recentEvent = CreateEvent(
             new WeatherForecastCreated(forecastId2, "Osaka", DateOnly.FromDateTime(_baseTime), 25, "Cloudy"),
             _baseTime.AddSeconds(-5), // 5 seconds ago - unsafe
             forecastId2);
-            
+
         Console.WriteLine($"[Test] Created recent event - Type: {recentEvent.EventType}, Payload type: {recentEvent.Payload?.GetType().Name}, Tags: {string.Join(", ", recentEvent.Tags)}");
 
         // Act - Test GenericTagMultiProjector
         var genericProjector = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload();
-        
+
         // Process old event
         var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var result1 = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
@@ -101,7 +101,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
 
         // Act - Test Manual Implementation (WeatherForecastProjection)
         var manualProjector = WeatherForecastProjection.GenerateInitialPayload();
-        
+
         Console.WriteLine($"[Test] Initial manual projector state count: {manualProjector.GetCurrentForecasts().Count}");
 
         // Process old event
@@ -127,10 +127,10 @@ public class GenericTagMultiProjectorUnsafeDataTests
         Console.WriteLine($"[Test] After recent event, manual projector state count: {manualProjector.GetCurrentForecasts().Count}");
 
         // Assert - Both should handle unsafe data the same way
-        
+
         // Check manual implementation (WeatherForecastProjection)
         var manualCurrentForecasts = manualProjector.GetCurrentForecasts();
-        
+
         // Prepare parameters for GetSafeForecasts
         var threshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         Func<Event, IEnumerable<Guid>> getAffectedIds = evt =>
@@ -155,15 +155,15 @@ public class GenericTagMultiProjectorUnsafeDataTests
                 WeatherForecastDeleted => null,
                 _ => current
             };
-        
+
         // SafeUnsafeProjectionState now manages safe/unsafe internally
         // We can only check current state and whether items are unsafe
-        
-    Assert.Equal(2, manualCurrentForecasts.Count);
+
+        Assert.Equal(2, manualCurrentForecasts.Count);
 
         // Check generic implementation (GenericTagMultiProjector)
         var genericCurrentStates = genericProjector.GetCurrentTagStates();
-        
+
         // For generic projector, need to provide projection functions for TagState
         Func<Event, IEnumerable<Guid>> getTagAffectedIds = evt =>
         {
@@ -173,7 +173,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
             if (evt.Payload is LocationNameChanged changed) return new[] { changed.ForecastId };
             return Enumerable.Empty<Guid>();
         };
-        
+
         Func<Guid, TagState?, Event, TagState?> projectTagState = (id, current, evt) =>
         {
             // This is a simplified projection for testing
@@ -190,12 +190,12 @@ public class GenericTagMultiProjectorUnsafeDataTests
                 LastSortedUniqueId = evt.SortableUniqueIdValue
             };
         };
-        
+
         var genericSafeStates = genericProjector.GetSafeTagStates(threshold, getTagAffectedIds, projectTagState);
 
         // This is where the test might fail if GenericTagMultiProjector doesn't handle unsafe data correctly
-    Assert.Equal(2, genericCurrentStates.Count);
-    Assert.Single(genericSafeStates);
+        Assert.Equal(2, genericCurrentStates.Count);
+        Assert.Single(genericSafeStates);
 
         // Verify the actual state content
         Assert.Contains(forecastId1, genericCurrentStates.Keys);
@@ -206,7 +206,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
         // Verify state payloads
         var state1 = genericCurrentStates[forecastId1].Payload as WeatherForecastState;
         var state2 = genericCurrentStates[forecastId2].Payload as WeatherForecastState;
-        
+
         Assert.NotNull(state1);
         Assert.NotNull(state2);
         Assert.Equal(20, state1.TemperatureC);
@@ -238,9 +238,9 @@ public class GenericTagMultiProjectorUnsafeDataTests
             safeThreshold2);
         genericProjector = result.GetValue();
 
-    // Assert - initial state recorded
+        // Assert - initial state recorded
         var currentStates = genericProjector.GetCurrentTagStates();
-        
+
         // Prepare projection functions for safe state
         var threshold2 = SortableUniqueId.Generate(testTime.AddSeconds(-20), Guid.Empty);
         Func<Event, IEnumerable<Guid>> getIds2 = evt =>
@@ -266,7 +266,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
                 LastSortedUniqueId = evt.SortableUniqueIdValue
             };
         };
-        
+
         var safeStates = genericProjector.GetSafeTagStates(threshold2, getIds2, projectTagState2);
         Assert.Single(currentStates);
         Assert.Single(safeStates); // Should be in safe
@@ -286,17 +286,17 @@ public class GenericTagMultiProjectorUnsafeDataTests
             safeThreshold2);
         genericProjector = result.GetValue();
 
-    // Assert - updated state reflects latest event
+        // Assert - updated state reflects latest event
         currentStates = genericProjector.GetCurrentTagStates();
         safeStates = genericProjector.GetSafeTagStates(threshold2, getIds2, projectTagState2);
         Assert.Single(currentStates);
         Assert.Single(safeStates); // Safe state should still exist
-        
+
         // Verify current state has the update
         var currentState = currentStates[forecastId].Payload as WeatherForecastState;
         Assert.NotNull(currentState);
         Assert.Equal(22, currentState.TemperatureC);
-        
+
         // Verify safe state has the original
         var safeState = safeStates[forecastId].Payload as WeatherForecastState;
         Assert.NotNull(safeState);
@@ -308,7 +308,7 @@ public class GenericTagMultiProjectorUnsafeDataTests
         var eventId = Guid.NewGuid();
         var sortableId = SortableUniqueId.Generate(timestamp, eventId);
         var metadata = new EventMetadata(eventId.ToString(), Guid.NewGuid().ToString(), "TestUser");
-        
+
         // Add tag to event - using the correct format
         var tags = new List<string> { $"WeatherForecast:{forecastId}" };
 
@@ -322,19 +322,19 @@ public class GenericTagMultiProjectorUnsafeDataTests
     }
 
     // Remove duplicate definitions and use the actual domain events from Dcb.Domain.Weather namespace
-    
+
     /// <summary>
     /// Test time provider for controlling time in tests
     /// </summary>
     private class TestTimeProvider : TimeProvider
     {
         private readonly DateTime _currentTime;
-        
+
         public TestTimeProvider(DateTime currentTime)
         {
             _currentTime = currentTime;
         }
-        
+
         public override DateTimeOffset GetUtcNow() => new DateTimeOffset(_currentTime, TimeSpan.Zero);
     }
 }

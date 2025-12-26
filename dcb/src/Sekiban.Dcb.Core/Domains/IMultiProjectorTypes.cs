@@ -31,7 +31,7 @@ public interface ICoreMultiProjectorTypes
         byte[] data,
         string multiProjectorName,
         JsonSerializerOptions jsonOptions);
-    
+
     /// <summary>
     ///     Serializes a multi-projection payload to JSON string.
     ///     Uses custom serialization if registered, otherwise falls back to standard JSON serialization.
@@ -47,7 +47,7 @@ public interface ICoreMultiProjectorTypes
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
         IMultiProjectionPayload payload);
-    
+
     /// <summary>
     ///     Deserializes a JSON string to a multi-projection payload.
     ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
@@ -63,7 +63,7 @@ public interface ICoreMultiProjectorTypes
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
         byte[] data);
-    
+
     /// <summary>
     ///     Registers a projector with custom serialization support.
     ///     The projector must implement IMultiProjectorWithCustomSerialization interface.

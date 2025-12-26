@@ -95,7 +95,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Testing aid: seed events into the backing event store to support catch-up tests.
     /// </summary>
     Task SeedEventsAsync(IReadOnlyList<Event> events);
-    
+
     /// <summary>
     ///     Get event delivery statistics for debugging duplicate/missing events
     /// </summary>

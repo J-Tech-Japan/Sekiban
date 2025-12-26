@@ -8,6 +8,18 @@ namespace Sekiban.Dcb.CosmosDb;
 /// </summary>
 public class CosmosDbContext : IDisposable
 {
+    private static readonly Action<ILogger, Exception?> LogInitializingConnection =
+        LoggerMessage.Define(LogLevel.Information, new EventId(1, nameof(LogInitializingConnection)), "Initializing CosmosDB connection");
+
+    private static readonly Action<ILogger, string, Exception?> LogUsingDatabase =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, nameof(LogUsingDatabase)), "Using CosmosDB database: {DatabaseName}");
+
+    private static readonly Action<ILogger, Exception?> LogEventsContainerInitialized =
+        LoggerMessage.Define(LogLevel.Information, new EventId(3, nameof(LogEventsContainerInitialized)), "Events container initialized");
+
+    private static readonly Action<ILogger, Exception?> LogTagsContainerInitialized =
+        LoggerMessage.Define(LogLevel.Information, new EventId(4, nameof(LogTagsContainerInitialized)), "Tags container initialized");
+
     private readonly string? _connectionString;
     private readonly string _databaseName;
     private readonly ILogger<CosmosDbContext>? _logger;
@@ -24,6 +36,7 @@ public class CosmosDbContext : IDisposable
     [Obsolete("Use SekibanDcbCosmosDbExtensions.AddSekibanDcbCosmosDb instead")]
     public CosmosDbContext(IConfiguration configuration, ILogger<CosmosDbContext>? logger = null)
     {
+        ArgumentNullException.ThrowIfNull(configuration);
         _logger = logger;
         // Try multiple connection string keys for backward compatibility
         _connectionString = configuration.GetConnectionString("SekibanDcbCosmos")
@@ -38,6 +51,9 @@ public class CosmosDbContext : IDisposable
         _ownsCosmosClient = true;
     }
 
+    /// <summary>
+    ///     Constructor with connection string and database name.
+    /// </summary>
     public CosmosDbContext(string connectionString, string databaseName = "SekibanDcb", ILogger<CosmosDbContext>? logger = null)
     {
         _logger = logger;
@@ -57,21 +73,27 @@ public class CosmosDbContext : IDisposable
         _ownsCosmosClient = false;
     }
 
+    /// <summary>
+    ///     Gets the events container, initializing if needed.
+    /// </summary>
     public async Task<Container> GetEventsContainerAsync()
     {
         if (_eventsContainer != null)
             return _eventsContainer;
 
-        await InitializeAsync();
+        await InitializeAsync().ConfigureAwait(false);
         return _eventsContainer!;
     }
 
+    /// <summary>
+    ///     Gets the tags container, initializing if needed.
+    /// </summary>
     public async Task<Container> GetTagsContainerAsync()
     {
         if (_tagsContainer != null)
             return _tagsContainer;
 
-        await InitializeAsync();
+        await InitializeAsync().ConfigureAwait(false);
         return _tagsContainer!;
     }
 
@@ -80,7 +102,10 @@ public class CosmosDbContext : IDisposable
         if (_database != null)
             return;
 
-        _logger?.LogInformation("Initializing CosmosDB connection");
+        if (_logger != null)
+        {
+            LogInitializingConnection(_logger, null);
+        }
 
         if (_cosmosClient == null)
         {
@@ -100,10 +125,13 @@ public class CosmosDbContext : IDisposable
         }
 
         // Create database if it doesn't exist
-        var databaseResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+        var databaseResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName).ConfigureAwait(false);
         _database = databaseResponse.Database;
 
-        _logger?.LogInformation($"Using CosmosDB database: {_databaseName}");
+        if (_logger != null)
+        {
+            LogUsingDatabase(_logger, _databaseName, null);
+        }
 
         // Create events container with partition key on id
         var eventsContainerProperties = new ContainerProperties
@@ -113,10 +141,13 @@ public class CosmosDbContext : IDisposable
         };
 
         var eventsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            eventsContainerProperties);
+            eventsContainerProperties).ConfigureAwait(false);
         _eventsContainer = eventsContainerResponse.Container;
 
-        _logger?.LogInformation("Events container initialized");
+        if (_logger != null)
+        {
+            LogEventsContainerInitialized(_logger, null);
+        }
 
         // Create tags container with partition key on tag
         var tagsContainerProperties = new ContainerProperties
@@ -126,21 +157,39 @@ public class CosmosDbContext : IDisposable
         };
 
         var tagsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            tagsContainerProperties);
+            tagsContainerProperties).ConfigureAwait(false);
         _tagsContainer = tagsContainerResponse.Container;
 
-        _logger?.LogInformation("Tags container initialized");
+        if (_logger != null)
+        {
+            LogTagsContainerInitialized(_logger, null);
+        }
     }
 
+    /// <summary>
+    ///     Disposes owned CosmosDB resources.
+    /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-            return;
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
-        if (_ownsCosmosClient)
+    /// <summary>
+    ///     Protected dispose pattern hook.
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing && _ownsCosmosClient)
         {
             _cosmosClient?.Dispose();
         }
+
         _disposed = true;
     }
 }

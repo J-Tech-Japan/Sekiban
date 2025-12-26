@@ -20,7 +20,7 @@ public record GetWeatherForecastCountSingleQuery :
     {
         var safeVersion = context.SafeVersion ?? 0;
         var unsafeVersion = context.UnsafeVersion ?? safeVersion;
-    var total = projector.GetCurrentTagStates().Count;
+        var total = projector.GetCurrentTagStates().Count;
         return ResultBox.FromValue(new WeatherForecastCountResult(
             SafeVersion: safeVersion,
             UnsafeVersion: unsafeVersion,

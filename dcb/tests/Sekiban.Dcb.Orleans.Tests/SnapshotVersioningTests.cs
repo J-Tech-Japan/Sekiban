@@ -62,7 +62,8 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
         Assert.True(serStateAfter.IsSuccess);
         var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
-        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.NotNull(env);
+        var version = env!.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
         Assert.Equal(5, version);
     }
 
@@ -94,7 +95,8 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
         Assert.True(serStateAfter.IsSuccess);
         var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
-        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.NotNull(env);
+        var version = env!.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
         // With unsafe state, should have all 7 events
         Assert.Equal(7, version);
     }
@@ -198,7 +200,8 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var snap = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
         Assert.True(snap.IsSuccess);
         var env = System.Text.Json.JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(snap.GetValue());
-        var version = env.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
+        Assert.NotNull(env);
+        var version = env!.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
         Assert.Equal(3, version);
     }
 }

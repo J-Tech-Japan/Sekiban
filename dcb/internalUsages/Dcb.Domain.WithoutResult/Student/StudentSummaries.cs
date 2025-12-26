@@ -37,7 +37,8 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
                     {
                         EnrolledCount = existingEnrolled.EnrolledCount + 1
                     };
-                } else
+                }
+                else
                 {
                     next[enrolled.StudentId] = new Item("", 1);
                 }
@@ -47,7 +48,8 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
                 {
                     var dec = Math.Max(0, existingDropped.EnrolledCount - 1);
                     next[dropped.StudentId] = existingDropped with { EnrolledCount = dec };
-                } else
+                }
+                else
                 {
                     next[dropped.StudentId] = new Item("", 0);
                 }
@@ -95,7 +97,7 @@ public record StudentSummaries(Dictionary<Guid, StudentSummaries.Item> Students)
             }
             return new StudentSummaries(dict);
         }
-    return new StudentSummaries(new Dictionary<Guid, Item>());
+        return new StudentSummaries(new Dictionary<Guid, Item>());
     }
     /// <summary>
     ///     学生ごとのサマリです。

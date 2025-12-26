@@ -82,10 +82,10 @@ builder.UseOrleans(config =>
             });
         }
     }
-    
+
     // Check if we should use in-memory streams (for development/testing)
     var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
-    
+
     if (useInMemoryStreams)
     {
         // Use in-memory streams for development/testing with enhanced configuration
@@ -93,7 +93,7 @@ builder.UseOrleans(config =>
         {
             // Increase partitions for better parallelism
             configurator.ConfigurePartitioning(8);
-            
+
             // Configure pulling agent for better batch processing
             configurator.ConfigurePullingAgent(options =>
             {
@@ -106,7 +106,7 @@ builder.UseOrleans(config =>
                 });
             });
         });
-        
+
         config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
             configurator.ConfigurePartitioning(8);
@@ -119,7 +119,7 @@ builder.UseOrleans(config =>
                 });
             });
         });
-        
+
         // Add memory storage for PubSubStore when using in-memory streams
         config.AddMemoryGrainStorage("PubSubStore");
     }
@@ -480,9 +480,9 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
         {
-            var query = new GetStudentListQuery 
-            { 
-                PageNumber = pageNumber ?? 1, 
+            var query = new GetStudentListQuery
+            {
+                PageNumber = pageNumber ?? 1,
                 PageSize = pageSize ?? 20,
                 WaitForSortableUniqueId = waitForSortableUniqueId
             };
@@ -553,9 +553,9 @@ apiRoute
             [FromQuery] int? pageSize,
             [FromQuery] string? waitForSortableUniqueId) =>
         {
-            var query = new GetClassRoomListQuery 
-            { 
-                PageNumber = pageNumber ?? 1, 
+            var query = new GetClassRoomListQuery
+            {
+                PageNumber = pageNumber ?? 1,
                 PageSize = pageSize ?? 20,
                 WaitForSortableUniqueId = waitForSortableUniqueId
             };
@@ -845,12 +845,12 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                    return Results.Ok(new
-                    {
-                        safeVersion = countResult.SafeVersion,
-                        unsafeVersion = countResult.UnsafeVersion,
-                        totalCount = countResult.TotalCount
-                    });
+                return Results.Ok(new
+                {
+                    safeVersion = countResult.SafeVersion,
+                    unsafeVersion = countResult.UnsafeVersion,
+                    totalCount = countResult.TotalCount
+                });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
@@ -875,13 +875,13 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                    return Results.Ok(new
-                    {
-                        safeVersion = countResult.SafeVersion,
-                        unsafeVersion = countResult.UnsafeVersion,
-                        totalCount = countResult.TotalCount,
-                        isGeneric = true
-                    });
+                return Results.Ok(new
+                {
+                    safeVersion = countResult.SafeVersion,
+                    unsafeVersion = countResult.UnsafeVersion,
+                    totalCount = countResult.TotalCount,
+                    isGeneric = true
+                });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
@@ -906,13 +906,13 @@ apiRoute
             if (result.IsSuccess)
             {
                 var countResult = (WeatherForecastCountResult)result.GetValue();
-                    return Results.Ok(new
-                    {
-                        safeVersion = countResult.SafeVersion,
-                        unsafeVersion = countResult.UnsafeVersion,
-                        totalCount = countResult.TotalCount,
-                        isSingle = true
-                    });
+                return Results.Ok(new
+                {
+                    safeVersion = countResult.SafeVersion,
+                    unsafeVersion = countResult.UnsafeVersion,
+                    totalCount = countResult.TotalCount,
+                    isSingle = true
+                });
             }
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
@@ -1018,12 +1018,12 @@ apiRoute
                 var end = DateTime.UtcNow;
                 if (rb.IsSuccess)
                 {
-                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end-start).TotalMilliseconds:F1}ms");
-                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end-start).TotalMilliseconds });
+                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
+                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
                 }
                 var err = rb.GetException()?.Message;
-                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end-start).TotalMilliseconds:F1}ms error={err}");
-                return Results.BadRequest(new { error = err, elapsedMs = (end-start).TotalMilliseconds });
+                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
+                return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
             }
             catch (Exception ex)
             {

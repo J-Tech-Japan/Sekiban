@@ -5,6 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>34e8262c-ed2c-453b-b399-8d2662dc3d88</UserSecretsId>
         <TargetFrameworks>net10.0;net9.0</TargetFrameworks>
+        <NoWarn>$(NoWarn);CS0618;ASPDEPR002</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -31,7 +32,7 @@
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1"/>
     </ItemGroup>
 
     <ItemGroup>

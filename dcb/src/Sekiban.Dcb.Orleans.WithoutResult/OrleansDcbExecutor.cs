@@ -104,7 +104,7 @@ public class OrleansDcbExecutor : ISekibanExecutor
 
             return await DeserializeQueryResultAsync<TResult>(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             throw;
         }
@@ -156,7 +156,7 @@ public class OrleansDcbExecutor : ISekibanExecutor
 
             return await DeserializeListQueryResultAsync<TResult>(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             throw;
         }

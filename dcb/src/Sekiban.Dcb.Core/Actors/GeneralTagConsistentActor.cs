@@ -132,7 +132,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                     // After confirming reservation, force a re-catch up to get the latest state
                     _catchUpCompleted = false;
                     return true;
-                } else
+                }
+                else
                 {
                     // Put it back if it doesn't match
                     _activeReservations[reservation.ReservationCode] = existingReservation;

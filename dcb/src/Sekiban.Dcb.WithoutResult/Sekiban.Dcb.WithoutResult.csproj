@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.WithoutResult</AssemblyName>
         <RootNamespace>Sekiban.Dcb</RootNamespace>
         <PackageId>Sekiban.Dcb.WithoutResult</PackageId>
-        <Version>10.0.1-preview06</Version>
+        <Version>10.0.1-preview07</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB WithoutResult - Exception-based API for Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview06</PackageVersion>
+        <PackageVersion>10.0.1-preview07</PackageVersion>
         <Description>Exception-based API for Sekiban Dynamic Consistency Boundary - traditional error handling with exceptions</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;exceptions</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

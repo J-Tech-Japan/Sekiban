@@ -248,13 +248,13 @@ public class GeneralCommandContextTest
     }
 
     [Fact]
-    public void ClearAppendedEvents_RemovesAllEvents()
+    public async Task ClearAppendedEvents_RemovesAllEvents()
     {
         // Arrange
         var tag = new TestTag();
         var eventPayload = new TestEvent("Test");
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
-        _commandContext.AppendEvent(eventPayload, tag).GetAwaiter().GetResult();
+        await _commandContext.AppendEvent(eventPayload, tag);
 
         // Act
 #pragma warning disable CS0618 // Testing deprecated method
@@ -314,7 +314,7 @@ public class GeneralCommandContextTest
         // Append an event
         var eventPayload = new TestEvent("Test2");
         var eventWithTags = new EventPayloadWithTags(eventPayload, new List<ITag> { tag });
-        _commandContext.AppendEvent(eventPayload, tag).GetAwaiter().GetResult();
+        await _commandContext.AppendEvent(eventPayload, tag);
 
         // Act
         _commandContext.ClearResults();

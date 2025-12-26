@@ -6,6 +6,7 @@
         <UserSecretsId>34e8262c-ed2c-453b-b399-8d2662dc3d88</UserSecretsId>
         <LangVersion>default</LangVersion>
         <TargetFrameworks>net10.0;net9.0</TargetFrameworks>
+        <NoWarn>$(NoWarn);CS0618;ASPDEPR002</NoWarn>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">

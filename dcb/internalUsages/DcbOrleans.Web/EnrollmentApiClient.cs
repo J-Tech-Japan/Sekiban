@@ -13,7 +13,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
         public string? sortableUniqueId { get; set; }
         public string? message { get; set; }
     }
-    
+
     private class ErrorResponse
     {
         public string? error { get; set; }
@@ -54,17 +54,17 @@ public class EnrollmentApiClient(HttpClient httpClient)
         try
         {
             var response = await httpClient.PostAsJsonAsync("/api/enrollments/add", command, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(cancellationToken);
                 if (result != null)
                 {
                     return new CommandResponse(
-                        true, 
-                        result.eventId, 
-                        result.studentId, 
-                        null, 
+                        true,
+                        result.eventId,
+                        result.studentId,
+                        null,
                         result.sortableUniqueId);
                 }
             }
@@ -78,7 +78,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
         {
             return new CommandResponse(false, null, null, ex.Message, null);
         }
-        
+
         return new CommandResponse(false, null, null, "Failed to enroll student", null);
     }
 
@@ -89,17 +89,17 @@ public class EnrollmentApiClient(HttpClient httpClient)
         try
         {
             var response = await httpClient.PostAsJsonAsync("/api/enrollments/drop", command, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<EnrollmentResponse>(cancellationToken);
                 if (result != null)
                 {
                     return new CommandResponse(
-                        true, 
-                        result.eventId, 
-                        result.studentId, 
-                        null, 
+                        true,
+                        result.eventId,
+                        result.studentId,
+                        null,
                         result.sortableUniqueId);
                 }
             }
@@ -113,7 +113,7 @@ public class EnrollmentApiClient(HttpClient httpClient)
         {
             return new CommandResponse(false, null, null, ex.Message, null);
         }
-        
+
         return new CommandResponse(false, null, null, "Failed to drop student", null);
     }
 }

@@ -84,7 +84,8 @@ public class CoreGeneralSekibanExecutor
                         collectedEvents.Add(returned);
                     }
                 }
-            } else if (eventOrNone.HasEvent)
+            }
+            else if (eventOrNone.HasEvent)
             {
                 collectedEvents.Add(eventOrNone.GetValue());
             }
@@ -93,7 +94,7 @@ public class CoreGeneralSekibanExecutor
             if (collectedEvents.Count == 0)
             {
                 return ResultBox.FromValue(
-                    new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed,[]));
+                    new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed, []));
             }
 
             // Step 3: Collect tags across all events
@@ -123,7 +124,8 @@ public class CoreGeneralSekibanExecutor
                 if (tag is ConsistencyTag ctWithVersion && ctWithVersion.SortableUniqueId.HasValue)
                 {
                     lastSortableUniqueId = ctWithVersion.SortableUniqueId.GetValue().Value;
-                } else
+                }
+                else
                 {
                     var lookupTag = tag is ConsistencyTag ct ? ct.InnerTag : tag;
                     if (accessedStates.TryGetValue(lookupTag, out var state))
@@ -146,7 +148,8 @@ public class CoreGeneralSekibanExecutor
                 if (result.IsSuccess)
                 {
                     reservations[tag] = result.GetValue();
-                } else
+                }
+                else
                 {
                     failedReservations.Add((tag, result.GetException()));
                 }

@@ -53,7 +53,7 @@ public class TagPatternMatchingTests
                     goto End;
             }
         }
-        End:
+    End:
         Assert.Equal(sid, found);
     }
 

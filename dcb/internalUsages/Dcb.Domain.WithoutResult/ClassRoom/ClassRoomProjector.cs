@@ -19,10 +19,10 @@ public class ClassRoomProjector : ITagProjector<ClassRoomProjector>
 
             (AvailableClassRoomState state, StudentEnrolledInClassRoom enrolled) when state.GetRemaining() > 1 => state
                 with
-                {
-                    EnrolledStudentIds
+            {
+                EnrolledStudentIds
                     = state.EnrolledStudentIds.Concat(new[] { enrolled.StudentId }).Distinct().ToList()
-                },
+            },
 
             (AvailableClassRoomState state, StudentEnrolledInClassRoom enrolled) when state.GetRemaining() == 1 => new
                 FilledClassRoomState(

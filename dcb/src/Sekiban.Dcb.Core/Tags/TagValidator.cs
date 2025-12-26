@@ -47,7 +47,8 @@ public static class TagValidator
                     tagString,
                     $"Tag '{tagString}' has an empty group",
                     TagValidationErrorType.EmptyGroup));
-        } else
+        }
+        else
         {
             if (!ValidCharactersPattern.IsMatch(group))
             {
@@ -76,7 +77,8 @@ public static class TagValidator
                     tagString,
                     $"Tag '{tagString}' has empty content",
                     TagValidationErrorType.EmptyContent));
-        } else
+        }
+        else
         {
             if (!ValidCharactersPattern.IsMatch(content))
             {

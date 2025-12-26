@@ -20,7 +20,7 @@ public interface ICoreMultiProjectorWithCustomSerialization<TSelf> : ICoreMultiP
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used to build safe view; callers MUST supply</param>
     /// <returns>Binary serialized representation of the payload</returns>
     static abstract byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
-    
+
     /// <summary>
     ///     Deserializes a JSON string back to the projector payload.
     ///     This method must be implemented as a static method in the implementing class.

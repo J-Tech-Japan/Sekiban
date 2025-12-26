@@ -63,7 +63,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
         }
 
         var projector = projectorResult.GetValue();
-    var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
+        var context = new QueryContext(serviceProvider, safeVersion, safeWindowThreshold, safeWindowThresholdTime, unsafeVersion);
 
         // Invoke the static method
         try
@@ -173,7 +173,8 @@ public class SimpleQueryTypes : ICoreQueryTypes
 
                 var result = createPaginatedMethod?.Invoke(null, new[] { pagingParam, list });
                 return ResultBox.FromValue<object>(result!);
-            } else
+            }
+            else
             {
                 var items = sortedItems?.ToList() ?? new List<object>();
                 var resultType = typeof(ListQueryResult<>).MakeGenericType(outputType);

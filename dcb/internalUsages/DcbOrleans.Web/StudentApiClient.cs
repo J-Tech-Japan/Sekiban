@@ -12,7 +12,7 @@ public class StudentApiClient(HttpClient httpClient)
         public string? sortableUniqueId { get; set; }
         public string? message { get; set; }
     }
-    
+
     private class ErrorResponse
     {
         public string? error { get; set; }
@@ -64,17 +64,17 @@ public class StudentApiClient(HttpClient httpClient)
         try
         {
             var response = await httpClient.PostAsJsonAsync("/api/students", command, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<StudentCreateResponse>(cancellationToken);
                 if (result != null)
                 {
                     return new CommandResponse(
-                        true, 
-                        result.eventId, 
-                        result.studentId, 
-                        null, 
+                        true,
+                        result.eventId,
+                        result.studentId,
+                        null,
                         result.sortableUniqueId);
                 }
             }
@@ -88,7 +88,7 @@ public class StudentApiClient(HttpClient httpClient)
         {
             return new CommandResponse(false, null, null, ex.Message, null);
         }
-        
+
         return new CommandResponse(false, null, null, "Failed to create student", null);
     }
 }

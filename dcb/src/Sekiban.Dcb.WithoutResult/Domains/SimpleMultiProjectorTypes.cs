@@ -19,7 +19,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
     private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
-    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, string, object, byte[]> serialize, 
+    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, string, object, byte[]> serialize,
                                                     Func<DcbDomainTypes, string, ReadOnlySpan<byte>, object> deserialize)> _customSerializers = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
@@ -122,24 +122,24 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         var projectorName = TProjector.MultiProjectorName;
 
         // Register the projector function
-    Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
-        = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
-            {
-                if (payload is TProjector typedPayload)
+        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
+            = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
                 {
-                    try
+                    if (payload is TProjector typedPayload)
                     {
-                        var projected = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
-                        return ResultBox.FromValue((IMultiProjectionPayload)projected);
+                        try
+                        {
+                            var projected = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
+                            return ResultBox.FromValue((IMultiProjectionPayload)projected);
+                        }
+                        catch (Exception ex)
+                        {
+                            return ResultBox.Error<IMultiProjectionPayload>(ex);
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        return ResultBox.Error<IMultiProjectionPayload>(ex);
-                    }
-                }
-                return ResultBox.Error<IMultiProjectionPayload>(
-                    new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
-            };
+                    return ResultBox.Error<IMultiProjectionPayload>(
+                        new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
+                };
 
         if (!_projectorFunctions.TryAdd(projectorName, projectFunc))
         {
@@ -154,7 +154,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                         $"Multi projector name '{projectorName}' is already registered with type '{existingTypeName}', cannot register with type '{newTypeName}'.");
                 }
             }
-        } else
+        }
+        else
         {
             // Only register if function was successfully added
             _projectorTypes[projectorName] = typeof(TProjector);
@@ -188,7 +189,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             {
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
-            
+
             // Fallback: JSON serialize then gzip compress (Fastest)
             var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
             var utf8 = Encoding.UTF8.GetBytes(json);
@@ -200,7 +201,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             return ResultBox.Error<byte[]>(ex);
         }
     }
-    
+
     /// <summary>
     ///     Deserializes a JSON string to a multi-projection payload.
     ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
@@ -221,7 +222,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             {
                 return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, safeWindowThreshold, data));
             }
-            
+
             // Fallback: assume gzip-compressed JSON
             var jsonBytes = GzipCompression.Decompress(data);
             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -234,7 +235,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 }
                 return ResultBox.Error<IMultiProjectionPayload>(new InvalidOperationException($"Failed to deserialize to {type.Name}"));
             }
-            
+
             return ResultBox.Error<IMultiProjectionPayload>(
                 new KeyNotFoundException($"Projector '{projectorName}' not found"));
         }
@@ -243,7 +244,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             return ResultBox.Error<IMultiProjectionPayload>(ex);
         }
     }
-    
+
     /// <summary>
     ///     Explicit implementation of ICoreMultiProjectorTypes.RegisterProjectorWithCustomSerialization.
     ///     This satisfies the interface requirement with the ICoreMultiProjectorWithCustomSerialization constraint.

@@ -19,7 +19,7 @@ public record GetWeatherForecastListQuery :
     public int? PageSize { get; init; }
 
     // Required static methods for IMultiProjectionListQuery
-    public static IEnumerable<WeatherForecastItem> HandleFilter( 
+    public static IEnumerable<WeatherForecastItem> HandleFilter(
         WeatherForecastProjection projector,
         GetWeatherForecastListQuery query,
         IQueryContext context)

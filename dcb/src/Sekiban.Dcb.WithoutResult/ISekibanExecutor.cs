@@ -18,9 +18,9 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <returns>The tag state</returns>
     /// <exception cref="Exception">Thrown when tag state cannot be retrieved</exception>
     Task<TagState> GetTagStateAsync(TagStateId tagStateId);
-    
-    Task<TagState> GetTagStateAsync<TProjector>(ITag tag) 
-        where TProjector : ITagProjector<TProjector> => 
+
+    Task<TagState> GetTagStateAsync<TProjector>(ITag tag)
+        where TProjector : ITagProjector<TProjector> =>
         GetTagStateAsync(TagStateId.FromProjector<TProjector>(tag));
 
     /// <summary>
@@ -30,7 +30,7 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <param name="queryCommon">The query to execute</param>
     /// <returns>The query result</returns>
     /// <exception cref="Exception">Thrown when query execution fails</exception>
-    Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) 
+    Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon)
         where TResult : notnull;
 
     /// <summary>

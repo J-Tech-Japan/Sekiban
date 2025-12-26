@@ -112,8 +112,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
                 }
             }
         }
-    var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
-    return new WeatherForecastProjectorWithTagStateProjector { State = state };
+        var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+        return new WeatherForecastProjectorWithTagStateProjector { State = state };
     }
 
     /// <summary>
@@ -149,7 +149,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
                 .OfType<WeatherForecastTag>()
                 .Select(t => t.ForecastId)
                 .ToList();
-            
+
             // If no tags in event, use the affected IDs from the passed tags
             return eventTags.Count > 0 ? eventTags : affectedForecastIds;
         };
@@ -269,7 +269,9 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) => ProjectTagState(forecastId, current, evt);
         var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
-        var safeLast = safeDict.Count > 0 ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var safeLast = safeDict.Count > 0
+            ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
+            : string.Empty;
         var version = safeDict.Values.Sum(ts => ts.Version);
         return new SafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, safeLast, version);
     }
@@ -280,7 +282,9 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public UnsafeProjection<WeatherForecastProjectorWithTagStateProjector> GetUnsafeProjection(DcbDomainTypes domainTypes)
     {
         var current = State.GetCurrentState();
-        var last = current.Count > 0 ? current.Values.Max(ts => ts.LastSortedUniqueId) : string.Empty;
+        var last = current.Count > 0
+            ? current.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
+            : string.Empty;
         var version = current.Values.Sum(ts => ts.Version);
         return new UnsafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, last, Guid.Empty, version);
     }

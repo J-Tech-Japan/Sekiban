@@ -17,7 +17,7 @@ public class OrleansTagStatePersistentTests
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
         });
-        
+
         // Register test payload types
         simpleTypes.RegisterPayloadType<TestStatePayload>();
         _payloadTypes = simpleTypes;
@@ -46,7 +46,7 @@ public class OrleansTagStatePersistentTests
         // Create in-memory cache state for testing
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
-        
+
         var persistent = new OrleansTagStatePersistent(persistentState, _payloadTypes);
 
         // Act - Save
@@ -68,7 +68,7 @@ public class OrleansTagStatePersistentTests
         Assert.Equal(originalState.Version, loadedState.Version);
         Assert.Equal(originalState.TagGroup, loadedState.TagGroup);
         Assert.Equal(originalState.TagContent, loadedState.TagContent);
-        
+
         var loadedPayload = loadedState.Payload as TestStatePayload;
         Assert.NotNull(loadedPayload);
         Assert.Equal(testPayload.Id, loadedPayload.Id);
@@ -97,7 +97,7 @@ public class OrleansTagStatePersistentTests
         // Arrange
         var testPayload = new TestStatePayload { Id = Guid.NewGuid(), Name = "Test" };
         var state = new TagState(testPayload, 1, "id", "group", "content", "projector", "1.0");
-        
+
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
         var persistent = new OrleansTagStatePersistent(persistentState, _payloadTypes);

@@ -17,7 +17,7 @@ public class WeatherForecastProjectorWithTagStateProjectorTests
     public WeatherForecastProjectorWithTagStateProjectorTests()
     {
         _projector = WeatherForecastProjectorWithTagStateProjector.GenerateInitialPayload();
-        
+
         // Create a minimal DomainTypes for testing
         _domainTypes = new DcbDomainTypes(
             new SimpleEventTypes(),

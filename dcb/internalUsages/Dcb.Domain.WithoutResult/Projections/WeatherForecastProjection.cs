@@ -30,8 +30,8 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
     public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjection safePayload)
     {
-    if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
-    var dto = new { forecasts = safePayload.Forecasts };
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
+        var dto = new { forecasts = safePayload.Forecasts };
         var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
         return GzipCompression.CompressString(json);
     }
@@ -55,7 +55,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             }
             result = result with { Forecasts = dict };
         }
-    return result;
+        return result;
     }
 
     /// <summary>
@@ -79,19 +79,19 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
 
         // Get the forecast IDs from the tags
         var forecastIds = weatherForecastTags.Select(tag => tag.ForecastId).ToList();
-        
+
         // Create a copy of the forecasts dictionary for immutability
         var updatedForecasts = new Dictionary<Guid, WeatherForecastItem>(payload.Forecasts);
 
         // Check if event is within safe window
         var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-    var isEventUnsafe = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold); // retained placeholder; UnsafeForecasts removed
+        var isEventUnsafe = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold); // retained placeholder; UnsafeForecasts removed
 
         // Process each affected forecast
         foreach (var forecastId in forecastIds)
         {
             var current = updatedForecasts.TryGetValue(forecastId, out var existing) ? existing : null;
-            
+
             // Process based on event type
             var result = ev.Payload switch
             {
@@ -126,7 +126,7 @@ public record WeatherForecastProjection : IMultiProjector<WeatherForecastProject
             if (result != null)
             {
                 updatedForecasts[forecastId] = result;
-                
+
                 // Mark as unsafe if event is within safe window
                 // Unsafe tracking removed
             }

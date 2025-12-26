@@ -560,7 +560,7 @@ public class GeneralSekibanExecutorDomainTests
                 .Conveyor((tag, _) => EventOrNone.EventWithTags(
                     new TeacherCreated(command.TeacherId, command.Name, command.Subject),
                     tag));
-        
+
     }
 
     // Supporting types for the test

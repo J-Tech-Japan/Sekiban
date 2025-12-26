@@ -373,7 +373,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                 Console.WriteLine(
                     $"[WaitForTagVersion] Attempt {attempts}: Version={state.Version}, Expected={minVersion}, LastSortedUniqueId={state.LastSortedUniqueId}");
                 if (state.Version >= minVersion) return last;
-            } else
+            }
+            else
             {
                 Console.WriteLine(
                     $"[WaitForTagVersion] Attempt {attempts}: Failed to get state - {last.GetException()?.Message}");
@@ -422,7 +423,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                     new TestEntityCreatedEvent { AggregateId = command.AggregateId, Name = command.Name },
                     tag))
                 .ToTask();
-        
+
     }
 
     private record UpdateTestEntityCommand : ICommandWithHandler<UpdateTestEntityCommand>
@@ -577,8 +578,8 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "TestProjector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-    public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
-            ResultBox.FromValue(payload);
+        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
+                ResultBox.FromValue(payload);
     }
 
     private record SerializationTestMulti : IMultiProjector<SerializationTestMulti>

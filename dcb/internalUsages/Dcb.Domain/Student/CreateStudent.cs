@@ -33,5 +33,5 @@ public record CreateStudent : ICommandWithHandler<CreateStudent>
                 ? ExceptionOrNone.FromException(new ApplicationException("Student Already Exists"))
                 : ExceptionOrNone.None)
         .Conveyor((tag, _) => EventOrNone.EventWithTags(new StudentCreated(command.StudentId, command.Name, command.MaxClassCount), tag));
-    
+
 }

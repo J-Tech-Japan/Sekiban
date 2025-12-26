@@ -301,13 +301,16 @@ public class GeneralTagStateActorIncrementalTests
                     if (actorId == "TestTag:123")
                     {
                         mockActor.SetLastSortableUniqueId("004");
-                    } else if (actorId == "TestTag:456")
+                    }
+                    else if (actorId == "TestTag:456")
                     {
                         mockActor.SetLastSortableUniqueId("011");
-                    } else if (actorId == "TestTag:789")
+                    }
+                    else if (actorId == "TestTag:789")
                     {
                         mockActor.SetLastSortableUniqueId("020");
-                    } else if (actorId == "TestTag:999")
+                    }
+                    else if (actorId == "TestTag:999")
                     {
                         mockActor.SetLastSortableUniqueId("");
                     }

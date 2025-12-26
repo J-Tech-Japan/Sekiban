@@ -232,7 +232,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 version++;
                 lastSortedUniqueId = evt.SortableUniqueIdValue;
             }
-        } else
+        }
+        else
         {
             // Full rebuild: projector version changed or no valid cache
             var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
