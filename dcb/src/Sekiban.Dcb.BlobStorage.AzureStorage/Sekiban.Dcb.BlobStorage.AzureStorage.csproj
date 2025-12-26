@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.BlobStorage.AzureStorage</AssemblyName>
         <RootNamespace>Sekiban.Dcb.BlobStorage.AzureStorage</RootNamespace>
         <PackageId>Sekiban.Dcb.BlobStorage.AzureStorage</PackageId>
-        <Version>10.0.1-preview10</Version>
+        <Version>10.0.1-preview11</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban - Dynamic Consistency Boundary Azure Blob Storage Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview10</PackageVersion>
+        <PackageVersion>10.0.1-preview11</PackageVersion>
         <Description>Azure Blob Storage snapshot offloading for Sekiban DCB MultiProjection. Provides efficient binary snapshot storage for large projection states.</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;azure;blob-storage;snapshots</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
