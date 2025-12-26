@@ -43,7 +43,8 @@ public class OptimisticLockingTest
         if (stateResult.IsSuccess)
         {
             currentVersion = new SortableUniqueId(stateResult.GetValue().LastSortedUniqueId);
-        } else
+        }
+        else
         {
             // If state doesn't exist, use the event ID from creation
             currentVersion = new SortableUniqueId(SortableUniqueId.GenerateNew());
@@ -183,7 +184,8 @@ public class OptimisticLockingTest
         if (stateResult.IsSuccess)
         {
             currentVersion = new SortableUniqueId(stateResult.GetValue().LastSortedUniqueId);
-        } else
+        }
+        else
         {
             // If state doesn't exist, use the event ID from creation
             currentVersion = new SortableUniqueId(SortableUniqueId.GenerateNew());

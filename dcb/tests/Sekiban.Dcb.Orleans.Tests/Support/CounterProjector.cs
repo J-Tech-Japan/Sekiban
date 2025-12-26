@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 [GenerateSerializer]
 public record CounterProjector([property: Id(0)] int Count) : IMultiProjectorWithCustomSerialization<CounterProjector>
 {
-    public CounterProjector() : this(0) {}
+    public CounterProjector() : this(0) { }
     public static string MultiProjectorVersion => "1.0";
     public static string MultiProjectorName => "snap-proj";
     public static CounterProjector GenerateInitialPayload() => new(0);

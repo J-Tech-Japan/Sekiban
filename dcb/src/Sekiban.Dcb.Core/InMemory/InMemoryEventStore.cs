@@ -87,7 +87,8 @@ public class InMemoryEventStore : IEventStore
                 if (_tagStreams.TryGetValue(tagString, out var streams))
                 {
                     tagVersions[tagString] = streams.Count;
-                } else
+                }
+                else
                 {
                     tagVersions[tagString] = 0;
                 }

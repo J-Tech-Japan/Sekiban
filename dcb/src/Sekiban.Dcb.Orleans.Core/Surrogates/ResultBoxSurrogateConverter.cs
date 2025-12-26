@@ -31,7 +31,8 @@ public sealed class ResultBoxSurrogateConverter<T> : IConverter<ResultBox<T>, Re
         if (value.IsSuccess)
         {
             surrogate.Value = value.GetValue();
-        } else
+        }
+        else
         {
             var exception = value.GetException();
             surrogate.ErrorMessage = exception.Message;

@@ -21,7 +21,7 @@ public class GeneralQueryExecutorTestsV2
         services.AddSingleton<GeneralQueryExecutor>();
         _serviceProvider = services.BuildServiceProvider();
         _queryExecutor = new GeneralQueryExecutor(_serviceProvider);
-        
+
         // Create a minimal DomainTypes for testing
         _domainTypes = new DcbDomainTypes(
             new SimpleEventTypes(),

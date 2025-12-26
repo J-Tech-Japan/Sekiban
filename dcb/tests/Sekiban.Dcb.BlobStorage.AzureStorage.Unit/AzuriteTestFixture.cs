@@ -65,7 +65,7 @@ public class AzuriteTestFixture : IAsyncLifetime
     {
         var maxRetries = 120;
         var delay = TimeSpan.FromMilliseconds(500);
-        
+
         for (int i = 0; i < maxRetries; i++)
         {
             try
@@ -88,7 +88,7 @@ public class AzuriteTestFixture : IAsyncLifetime
             catch (Exception ex)
             {
                 Console.WriteLine($"Waiting for Azurite... Attempt {i + 1}/{maxRetries}");
-                if (i == maxRetries - 1) 
+                if (i == maxRetries - 1)
                 {
                     Console.WriteLine($"Failed to connect to Azurite: {ex.Message}");
                     throw;

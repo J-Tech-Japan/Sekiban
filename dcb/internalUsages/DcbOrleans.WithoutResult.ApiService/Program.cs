@@ -86,10 +86,10 @@ builder.UseOrleans(config =>
             });
         }
     }
-    
+
     // Check if we should use in-memory streams (for development/testing)
     var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
-    
+
     if (useInMemoryStreams)
     {
         // Use in-memory streams for development/testing with enhanced configuration
@@ -97,7 +97,7 @@ builder.UseOrleans(config =>
         {
             // Increase partitions for better parallelism
             configurator.ConfigurePartitioning(8);
-            
+
             // Configure pulling agent for better batch processing
             configurator.ConfigurePullingAgent(options =>
             {
@@ -110,7 +110,7 @@ builder.UseOrleans(config =>
                 });
             });
         });
-        
+
         config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
             configurator.ConfigurePartitioning(8);
@@ -123,7 +123,7 @@ builder.UseOrleans(config =>
                 });
             });
         });
-        
+
         // Add memory storage for PubSubStore when using in-memory streams
         config.AddMemoryGrainStorage("PubSubStore");
     }
@@ -906,12 +906,12 @@ apiRoute
             var end = DateTime.UtcNow;
             if (rb.IsSuccess)
             {
-                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end-start).TotalMilliseconds:F1}ms");
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end-start).TotalMilliseconds });
+                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
+                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
             }
             var err = rb.GetException()?.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end-start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end-start).TotalMilliseconds });
+            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
+            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
         })
     .WithOpenApi()
     .WithName("PersistProjectionState");

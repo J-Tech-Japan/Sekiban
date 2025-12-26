@@ -12,7 +12,7 @@ public class ClassRoomApiClient(HttpClient httpClient)
         public string? sortableUniqueId { get; set; }
         public string? message { get; set; }
     }
-    
+
     private class ErrorResponse
     {
         public string? error { get; set; }
@@ -58,17 +58,17 @@ public class ClassRoomApiClient(HttpClient httpClient)
         try
         {
             var response = await httpClient.PostAsJsonAsync("/api/classrooms", command, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<ClassRoomCreateResponse>(cancellationToken);
                 if (result != null)
                 {
                     return new CommandResponse(
-                        true, 
-                        result.eventId, 
-                        result.classRoomId, 
-                        null, 
+                        true,
+                        result.eventId,
+                        result.classRoomId,
+                        null,
                         result.sortableUniqueId);
                 }
             }
@@ -82,7 +82,7 @@ public class ClassRoomApiClient(HttpClient httpClient)
         {
             return new CommandResponse(false, null, null, ex.Message, null);
         }
-        
+
         return new CommandResponse(false, null, null, "Failed to create classroom", null);
     }
 }

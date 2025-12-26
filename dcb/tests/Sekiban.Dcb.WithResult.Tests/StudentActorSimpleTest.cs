@@ -36,14 +36,14 @@ public class StudentActorSimpleTest
 
         var projectorName = GenericTagMultiProjector<StudentProjector, StudentTag>.MultiProjectorName;
         _output.WriteLine($"Using projector: {projectorName}");
-        
+
         var actor = new GeneralMultiProjectionActor(domain, projectorName);
 
         // Create a single student event
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
         var studentCreated = new StudentCreated(studentId, "Alice", 5);
-        
+
         var ev = new Event(
             Payload: studentCreated,
             SortableUniqueIdValue: SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid()),
@@ -65,33 +65,33 @@ public class StudentActorSimpleTest
         // Assert - Check if the student is in the state
         Assert.NotNull(state);
         Assert.NotNull(state.Payload);
-        
+
         if (state.Payload is GenericTagMultiProjector<StudentProjector, StudentTag> projector)
         {
             var currentStates = projector.GetCurrentTagStates();
             var payloads = projector.GetStatePayloads().ToList();
-            
+
             _output.WriteLine($"✅ State contains: {currentStates.Count} tag states, {payloads.Count} payloads");
-            
+
             // Should have exactly 1 student
             Assert.Single(currentStates);
             Assert.Single(payloads);
-            
+
             var studentState = payloads[0] as StudentState;
             Assert.NotNull(studentState);
             Assert.Equal(studentId, studentState.StudentId);
             Assert.Equal("Alice", studentState.Name);
             Assert.Equal(5, studentState.MaxClassCount);
-            
+
             _output.WriteLine($"✅ Student found in state: {studentState.Name} (ID: {studentState.StudentId})");
         }
         else
         {
             _output.WriteLine($"❌ State payload type: {state.Payload?.GetType().Name ?? "null"}");
-            Assert.True(false, "State payload is not the expected GenericTagMultiProjector type");
+            Assert.Fail("State payload is not the expected GenericTagMultiProjector type");
         }
     }
-    
+
     [Fact]
     public async Task Two_Students_Should_Both_Be_Visible_In_Actor_State()
     {
@@ -111,7 +111,7 @@ public class StudentActorSimpleTest
         // Create two student events
         var student1Id = Guid.NewGuid();
         var student2Id = Guid.NewGuid();
-        
+
         var events = new[]
         {
             new Event(
@@ -145,23 +145,23 @@ public class StudentActorSimpleTest
         if (state.Payload is GenericTagMultiProjector<StudentProjector, StudentTag> projector)
         {
             var payloads = projector.GetStatePayloads().ToList();
-            
+
             _output.WriteLine($"State contains {payloads.Count} students");
-            
+
             Assert.Equal(2, payloads.Count);
-            
+
             var students = payloads.Cast<StudentState>().OrderBy(s => s.Name).ToList();
             Assert.Equal("Alice", students[0].Name);
             Assert.Equal("Bob", students[1].Name);
-            
+
             _output.WriteLine($"✅ Both students found: {students[0].Name} and {students[1].Name}");
         }
         else
         {
-            Assert.True(false, "State payload is not the expected type");
+            Assert.Fail("State payload is not the expected type");
         }
     }
-    
+
     [Fact]
     public async Task Adding_Students_One_By_One_Should_Show_Each_Immediately()
     {
@@ -191,11 +191,11 @@ public class StudentActorSimpleTest
 
         _output.WriteLine("Adding first student (Alice)...");
         await actor.AddEventsAsync(new[] { event1 });
-        
+
         // Check state after first student
         var state1 = await actor.GetStateAsync();
         Assert.True(state1.IsSuccess);
-        
+
         if (state1.GetValue().Payload is GenericTagMultiProjector<StudentProjector, StudentTag> proj1)
         {
             var payloads1 = proj1.GetStatePayloads().ToList();
@@ -217,21 +217,21 @@ public class StudentActorSimpleTest
 
         _output.WriteLine("Adding second student (Bob)...");
         await actor.AddEventsAsync(new[] { event2 });
-        
+
         // Check state after second student
         var state2 = await actor.GetStateAsync();
         Assert.True(state2.IsSuccess);
-        
+
         if (state2.GetValue().Payload is GenericTagMultiProjector<StudentProjector, StudentTag> proj2)
         {
             var payloads2 = proj2.GetStatePayloads().ToList();
             _output.WriteLine($"After 2nd student: {payloads2.Count} students in state");
             Assert.Equal(2, payloads2.Count);
-            
+
             var students = payloads2.Cast<StudentState>().OrderBy(s => s.Name).ToList();
             Assert.Equal("Alice", students[0].Name);
             Assert.Equal("Bob", students[1].Name);
-            
+
             _output.WriteLine($"✅ Both students now in state: {students[0].Name} and {students[1].Name}");
         }
     }

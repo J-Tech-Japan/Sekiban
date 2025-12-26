@@ -123,15 +123,15 @@ public class GeneralMultiProjectionActor
         }
 
         // Use projector-defined deserializer if available
-    var payloadBytes = state.Payload;
+        var payloadBytes = state.Payload;
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from ICoreMultiProjectorTypes
-    var safeThreshold = GetSafeWindowThreshold();
-    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+        var safeThreshold = GetSafeWindowThreshold();
+        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
-        
+
         var loadedPayload = deserializeResult.GetValue();
         Console.WriteLine($"[{_projectorName}] Deserialize: via ICoreMultiProjectorTypes");
 
@@ -183,15 +183,15 @@ public class GeneralMultiProjectionActor
     // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
     public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
     {
-    var payloadBytes = state.Payload;
+        var payloadBytes = state.Payload;
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
         // Use the new Deserialize method from ICoreMultiProjectorTypes
-    var safeThreshold = GetSafeWindowThreshold();
-    var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+        var safeThreshold = GetSafeWindowThreshold();
+        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
-        
+
         var loadedPayload = deserializeResult.GetValue();
         Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): via ICoreMultiProjectorTypes");
 
@@ -252,7 +252,7 @@ public class GeneralMultiProjectionActor
             {
                 return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
             }
-            
+
             var bytes = serializeResult.GetValue();
             Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={bytes.Length}");
             var payloadType = payload.GetType();
@@ -371,8 +371,8 @@ public class GeneralMultiProjectionActor
         }
 
         // Safe position for hosts to persist
-    var safePosition = await GetSafeLastSortableUniqueIdAsync();
-    return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
+        var safePosition = await GetSafeLastSortableUniqueIdAsync();
+        return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
     }
 
     /// <summary>
@@ -452,14 +452,14 @@ public class GeneralMultiProjectionActor
     public async Task<string> GetSafeLastSortableUniqueIdAsync()
     {
         InitializeProjectorsIfNeeded();
-        
+
         // Get safe state to retrieve its last sortable unique ID
         var stateResult = await GetStateAsync(canGetUnsafeState: false);
         if (stateResult.IsSuccess)
         {
             return stateResult.GetValue().LastSortableUniqueId;
         }
-        
+
         return string.Empty;
     }
 
@@ -472,14 +472,14 @@ public class GeneralMultiProjectionActor
         {
             throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
         }
-        
+
         // Process events through the single state accessor
         foreach (var ev in events)
         {
             try
             {
                 var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
-                    
+
                 // ProcessEvent returns ISafeAndUnsafeStateAccessor<T> where T implements IMultiProjectionPayload
                 // For DualStateProjectionWrapper, it returns 'this' which implements both interfaces
                 if (result != null)
@@ -603,7 +603,7 @@ public class GeneralMultiProjectionActor
             lastSortableId = (string)(projection?.GetType().GetProperty("LastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
             lastEventId = (Guid)(projection?.GetType().GetProperty("LastEventId")?.GetValue(projection) ?? _unsafeLastEventId);
             stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
-            
+
             // Check if the unsafe state is actually safe (no events within safe window)
             // This happens when all events are outside the safe window
             if (!string.IsNullOrEmpty(lastSortableId))
@@ -680,7 +680,7 @@ public class GeneralMultiProjectionActor
             {
                 // The payload already implements ISafeAndUnsafeStateAccessor, use it directly
                 _singleStateAccessor = initialPayload;
-            } 
+            }
             else
             {
                 // Wrap traditional projections in DualStateProjectionWrapper
@@ -696,7 +696,7 @@ public class GeneralMultiProjectionActor
                     Guid.Empty,  // initialLastEventId
                     string.Empty  // initialLastSortableUniqueId
                 ) as IMultiProjectionPayload;
-                
+
                 if (_singleStateAccessor == null)
                 {
                     throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");

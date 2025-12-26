@@ -1,4 +1,3 @@
-using Sekiban.Dcb.MultiProjections;
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
@@ -123,21 +122,21 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         var projectorName = TProjector.MultiProjectorName;
 
         // Register the projector function
-    Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
-        = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
-            {
-                if (payload is TProjector typedPayload)
+        Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> projectFunc
+            = (payload, ev, tags, domainTypes, safeWindowThreshold) =>
                 {
-            var result = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
-                    if (result.IsSuccess)
+                    if (payload is TProjector typedPayload)
                     {
-                        return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());
+                        var result = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
+                        if (result.IsSuccess)
+                        {
+                            return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());
+                        }
+                        return ResultBox.Error<IMultiProjectionPayload>(result.GetException());
                     }
-                    return ResultBox.Error<IMultiProjectionPayload>(result.GetException());
-                }
-                return ResultBox.Error<IMultiProjectionPayload>(
-                    new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
-            };
+                    return ResultBox.Error<IMultiProjectionPayload>(
+                        new InvalidCastException($"Payload is not of type {typeof(TProjector).Name}"));
+                };
 
         if (!_projectorFunctions.TryAdd(projectorName, projectFunc))
         {
@@ -152,7 +151,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                         $"Multi projector name '{projectorName}' is already registered with type '{existingTypeName}', cannot register with type '{newTypeName}'.");
                 }
             }
-        } else
+        }
+        else
         {
             // Only register if function was successfully added
             _projectorTypes[projectorName] = typeof(TProjector);
@@ -166,7 +166,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
     }
 
-        /// <summary>
+    /// <summary>
     ///     Register a multi projector type using its static GetMultiProjectorName
     /// </summary>
     public void RegisterProjectorWithoutResult<TProjector>() where TProjector : IMultiProjector<TProjector>, new()
@@ -181,9 +181,12 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 {
                     try
                     {
-                        var projected = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
-                        Console.WriteLine($"[RegisterProjectorWithoutResult] projectorName={projectorName}, projected type={projected?.GetType().FullName ?? "null"}");
-                        return ResultBox.FromValue((IMultiProjectionPayload)projected);
+                        var result = TProjector.Project(typedPayload, ev, tags, domainTypes, safeWindowThreshold);
+                        if (result.IsSuccess)
+                        {
+                            return ResultBox.FromValue((IMultiProjectionPayload)result.GetValue());
+                        }
+                        return ResultBox.Error<IMultiProjectionPayload>(result.GetException());
                     }
                     catch (Exception ex)
                     {
@@ -208,7 +211,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                         $"Multi projector name '{projectorName}' is already registered with type '{existingTypeName}', cannot register with type '{newTypeName}'.");
                 }
             }
-        } else
+        }
+        else
         {
             // Only register if function was successfully added
             _projectorTypes[projectorName] = typeof(TProjector);
@@ -242,7 +246,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             {
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
-            
+
             // Fallback: JSON serialize then gzip compress (Fastest)
             var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
             var utf8 = Encoding.UTF8.GetBytes(json);
@@ -254,7 +258,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             return ResultBox.Error<byte[]>(ex);
         }
     }
-    
+
     /// <summary>
     ///     Deserializes a JSON string to a multi-projection payload.
     ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
@@ -275,7 +279,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             {
                 return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, safeWindowThreshold, data));
             }
-            
+
             // Fallback: assume gzip-compressed JSON
             var jsonBytes = GzipCompression.Decompress(data);
             var json = Encoding.UTF8.GetString(jsonBytes);
@@ -288,7 +292,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 }
                 return ResultBox.Error<IMultiProjectionPayload>(new InvalidOperationException($"Failed to deserialize to {type.Name}"));
             }
-            
+
             return ResultBox.Error<IMultiProjectionPayload>(
                 new KeyNotFoundException($"Projector '{projectorName}' not found"));
         }
@@ -297,7 +301,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             return ResultBox.Error<IMultiProjectionPayload>(ex);
         }
     }
-    
+
     /// <summary>
     ///     Registers a projector with custom serialization support.
     ///     The projector must implement IMultiProjectorWithCustomSerialization interface.

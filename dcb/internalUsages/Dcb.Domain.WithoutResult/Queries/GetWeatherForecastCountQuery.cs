@@ -8,7 +8,7 @@ namespace Dcb.Domain.WithoutResult.Queries;
 /// Query to get the total count of weather forecasts
 /// </summary>
 [GenerateSerializer]
-public record GetWeatherForecastCountQuery : 
+public record GetWeatherForecastCountQuery :
     IMultiProjectionQuery<WeatherForecastProjection, GetWeatherForecastCountQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {

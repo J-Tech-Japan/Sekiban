@@ -74,7 +74,7 @@ public class WeatherForecastVersionQueryTests
     {
         var projector = WeatherForecastProjection.GenerateInitialPayload();
         var id = Guid.NewGuid();
-    var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
         var ev = CreateEvent(new WeatherForecastCreated(id, "Loc", DateOnly.FromDateTime(DateTime.UtcNow.AddSeconds(-30)), 10, "Old"), DateTime.UtcNow.AddSeconds(-30), id);
         var tags = new List<ITag> { new WeatherForecastTag(id) };
         var result = WeatherForecastProjection.Project(projector, ev, tags, _domainTypes, safeThreshold).GetValue();
@@ -97,7 +97,7 @@ public class WeatherForecastVersionQueryTests
         var projector = WeatherForecastProjection.GenerateInitialPayload();
         var id = Guid.NewGuid();
         var now = DateTime.UtcNow;
-    var safeThreshold = SortableUniqueId.Generate(now.AddSeconds(-20), Guid.Empty);
+        var safeThreshold = SortableUniqueId.Generate(now.AddSeconds(-20), Guid.Empty);
 
         // Safe event
         var ev1 = CreateEvent(new WeatherForecastCreated(id, "Loc", DateOnly.FromDateTime(now.AddSeconds(-40)), 10, "Old"), now.AddSeconds(-40), id);

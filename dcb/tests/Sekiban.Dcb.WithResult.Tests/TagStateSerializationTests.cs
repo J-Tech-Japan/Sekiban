@@ -17,11 +17,11 @@ public class TagStateSerializationTests
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
         });
-        
+
         // Register test payload types
         simpleTypes.RegisterPayloadType<TestPayload>();
         simpleTypes.RegisterPayloadType<ComplexTestPayload>();
-        
+
         _payloadTypes = simpleTypes;
     }
 

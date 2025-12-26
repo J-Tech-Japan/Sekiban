@@ -24,18 +24,18 @@ public class OrleansTagStatePersistent : ITagStatePersistent
         if (_cache.State?.CachedState != null)
         {
             var serializable = _cache.State.CachedState;
-            
+
             // Deserialize payload from SerializableTagState
             var deserializeResult = _payloadTypes.DeserializePayload(
                 serializable.TagPayloadName,
                 serializable.Payload);
-            
+
             if (!deserializeResult.IsSuccess)
             {
                 throw new InvalidOperationException(
                     $"Failed to deserialize payload: {deserializeResult.GetException().Message}");
             }
-            
+
             var tagState = new TagState(
                 deserializeResult.GetValue(),
                 serializable.Version,
@@ -44,7 +44,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
                 serializable.TagContent,
                 serializable.TagProjector,
                 serializable.ProjectorVersion);
-            
+
             return Task.FromResult<TagState?>(tagState);
         }
         return Task.FromResult<TagState?>(null);
@@ -59,7 +59,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
             throw new InvalidOperationException(
                 $"Failed to serialize payload: {serializeResult.GetException().Message}");
         }
-        
+
         var serializable = new SerializableTagState(
             serializeResult.GetValue(),
             state.Version,
@@ -69,7 +69,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
             state.TagProjector,
             state.Payload.GetType().Name,
             state.ProjectorVersion);
-        
+
         _cache.State = new TagStateCacheState { CachedState = serializable };
         await _cache.WriteStateAsync();
     }

@@ -224,7 +224,8 @@ public static class SekibanDcbPostgresExtensions
                             pendingMigrations.Count());
                         await dbContext.Database.MigrateAsync();
                         logger.LogInformation("Sekiban DCB database migration completed successfully.");
-                    } else
+                    }
+                    else
                     {
                         logger.LogInformation("No pending migrations found. Sekiban DCB database is up to date.");
                     }
@@ -243,7 +244,8 @@ public static class SekibanDcbPostgresExtensions
                         {
                             logger.LogDebug(
                                 "Migration history table might not exist yet. Creating database structure...");
-                        } else
+                        }
+                        else
                         {
                             logger.LogDebug(
                                 "Migration check attempt {RetryCount}/{MaxRetries} failed. Retrying in {DelaySeconds} seconds...",
@@ -253,7 +255,8 @@ public static class SekibanDcbPostgresExtensions
                         }
                         await Task.Delay(delay);
                         retryCount++;
-                    } else
+                    }
+                    else
                     {
                         // Not a transient error, rethrow
                         throw;
@@ -279,7 +282,8 @@ public static class SekibanDcbPostgresExtensions
                         if (!pendingMigrations.Any())
                         {
                             logger.LogInformation("Database is already up to date.");
-                        } else
+                        }
+                        else
                         {
                             logger.LogError(migEx, "Migration failed with pending migrations.");
                             throw;
@@ -348,11 +352,13 @@ public static class SekibanDcbPostgresExtensions
                         if (created)
                         {
                             _logger.LogInformation("Sekiban DCB database tables created successfully.");
-                        } else
+                        }
+                        else
                         {
                             _logger.LogDebug("Sekiban DCB database tables already exist.");
                         }
-                    } else
+                    }
+                    else
                     {
                         _logger.LogWarning(
                             "Cannot connect to database. Tables will be created when connection is available.");

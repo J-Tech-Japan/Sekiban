@@ -8,7 +8,6 @@ sealed class BenchState
     public int Errors;
     public int QueryPageCount;
     public bool StopOnError;
-    public bool UseSingle;
     public string? Mode;
     public bool HasRun;
     public bool Canceled => _cts?.IsCancellationRequested == true;

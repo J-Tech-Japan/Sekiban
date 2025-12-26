@@ -23,8 +23,8 @@ public class CosmosDbInitializer : IHostedService
             _logger?.LogInformation("Initializing CosmosDB containers...");
 
             // This will trigger the initialization of containers if they don't exist
-            await _context.GetEventsContainerAsync();
-            await _context.GetTagsContainerAsync();
+            await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             _logger?.LogInformation("CosmosDB containers initialized successfully");
         }

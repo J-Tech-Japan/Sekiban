@@ -62,7 +62,7 @@ public class CosmosDbContext : IDisposable
         if (_eventsContainer != null)
             return _eventsContainer;
 
-        await InitializeAsync();
+        await InitializeAsync().ConfigureAwait(false);
         return _eventsContainer!;
     }
 
@@ -71,7 +71,7 @@ public class CosmosDbContext : IDisposable
         if (_tagsContainer != null)
             return _tagsContainer;
 
-        await InitializeAsync();
+        await InitializeAsync().ConfigureAwait(false);
         return _tagsContainer!;
     }
 
@@ -100,7 +100,7 @@ public class CosmosDbContext : IDisposable
         }
 
         // Create database if it doesn't exist
-        var databaseResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName);
+        var databaseResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName).ConfigureAwait(false);
         _database = databaseResponse.Database;
 
         _logger?.LogInformation($"Using CosmosDB database: {_databaseName}");
@@ -113,7 +113,7 @@ public class CosmosDbContext : IDisposable
         };
 
         var eventsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            eventsContainerProperties);
+            eventsContainerProperties).ConfigureAwait(false);
         _eventsContainer = eventsContainerResponse.Container;
 
         _logger?.LogInformation("Events container initialized");
@@ -126,7 +126,7 @@ public class CosmosDbContext : IDisposable
         };
 
         var tagsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            tagsContainerProperties);
+            tagsContainerProperties).ConfigureAwait(false);
         _tagsContainer = tagsContainerResponse.Container;
 
         _logger?.LogInformation("Tags container initialized");

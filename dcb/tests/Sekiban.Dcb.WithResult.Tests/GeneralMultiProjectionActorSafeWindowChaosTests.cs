@@ -124,7 +124,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
         Assert.Equal(2, safePayload!.Items.Count);
         Assert.Equal("Trigger", safePayload.Items[0]);
         Assert.Equal("Item 1", safePayload.Items[1]);
-        Assert.Single(safePayload.Items.Where(i => i == "Item 1"));
+        Assert.Single(safePayload.Items, i => i == "Item 1");
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public class GeneralMultiProjectionActorSafeWindowChaosTests
 
         public static string MultiProjectorVersion => "1.0.0";
 
-    public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
+        public static ResultBox<TestMultiProjector> Project(TestMultiProjector payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold)
         {
             var result = ev.Payload switch
             {

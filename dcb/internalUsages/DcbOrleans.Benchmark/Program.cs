@@ -290,7 +290,7 @@ app.MapGet("/status", async () =>
             using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
 
             // Get event delivery statistics only (does not execute projection)
-            var mode = state.Mode ?? (state.UseSingle ? "single" : "standard");
+            var mode = state.Mode ?? "standard";
             var statsPath = mode == "single"
                 ? "/api/weatherforecastsingle/event-statistics"
                 : mode == "generic" ? "/api/weatherforecastgeneric/event-statistics" : "/api/weatherforecast/event-statistics";
@@ -305,7 +305,7 @@ app.MapGet("/status", async () =>
             var now = DateTime.UtcNow;
             var cache = state.GetOrCreateCountCache(mode);
             var minInterval = state.IsRunning ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(10);
-      if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
+            if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
             {
                 var countPath = mode == "single"
                     ? "/api/weatherforecastsingle/count"
@@ -315,7 +315,7 @@ app.MapGet("/status", async () =>
                 {
                     var json = await countResponse.Content.ReadAsStringAsync();
                     var count = JsonSerializer.Deserialize<WeatherCountResponse>(json);
-        cache.Value = count?.totalCount;
+                    cache.Value = count?.totalCount;
                     cache.LastFetchedUtc = now;
                 }
                 // On failure, keep previous cached value
@@ -339,7 +339,7 @@ app.MapGet("/status", async () =>
         state.LastError,
         WeatherCount = weatherCount, // null means "not fetched"; use Projection 状況の Count(fetch) で取得
         EventStats = eventStats,
-        EndpointMode = state.Mode ?? (state.UseSingle ? "single" : "standard")
+        EndpointMode = state.Mode ?? "standard"
     });
 });
 
@@ -352,7 +352,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
         return Results.BadRequest(new { message = "ApiBaseUrl env is not set" });
 
     state.Reset(total ?? GetEnvInt("BENCH_TOTAL", 10000), concurrency ?? GetEnvInt("BENCH_CONCURRENCY", 32));
-    state.Mode = (mode ?? (state.UseSingle ? "single" : "standard")).ToLowerInvariant();
+    state.Mode = (mode ?? "standard").ToLowerInvariant();
     state.StopOnError = stopOnError ?? false;
     state.HasRun = true;
 
@@ -381,14 +381,17 @@ app.MapGet("/projection/count", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    var path = m=="single"? "/api/weatherforecastsingle/count" : m=="generic"? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
-    try{
-        using var http = new HttpClient{ BaseAddress = new Uri(apiBase!) };
+    var path = m == "single" ? "/api/weatherforecastsingle/count" : m == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
         var res = await http.GetAsync(path);
-        if(!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
         var json = await res.Content.ReadAsStringAsync();
         return Results.Text(json, "application/json");
-    } catch(Exception ex){
+    }
+    catch (Exception ex)
+    {
         return Results.BadRequest(new { error = ex.Message });
     }
 });
@@ -399,14 +402,17 @@ app.MapGet("/projection/status", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    var path = m=="single"? "/api/weatherforecastsingle/status" : m=="generic"? "/api/weatherforecastgeneric/status" : "/api/weatherforecast/status";
-    try{
-        using var http = new HttpClient{ BaseAddress = new Uri(apiBase!) };
+    var path = m == "single" ? "/api/weatherforecastsingle/status" : m == "generic" ? "/api/weatherforecastgeneric/status" : "/api/weatherforecast/status";
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
         var res = await http.GetAsync(path);
-        if(!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
         var json = await res.Content.ReadAsStringAsync();
         return Results.Text(json, "application/json");
-    } catch(Exception ex){
+    }
+    catch (Exception ex)
+    {
         return Results.BadRequest(new { error = ex.Message });
     }
 });
@@ -592,7 +598,7 @@ static async Task RunAsync(string apiBase, BenchState state)
         state.Stop();
 
         // verify query
-        var mode2 = state.Mode ?? (state.UseSingle ? "single" : "standard");
+        var mode2 = state.Mode ?? "standard";
         var listPath = mode2 == "single"
             ? "/api/weatherforecastsingle"
             : mode2 == "generic" ? "/api/weatherforecastgeneric" : "/api/weatherforecast";

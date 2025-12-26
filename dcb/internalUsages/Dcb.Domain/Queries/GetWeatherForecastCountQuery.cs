@@ -7,7 +7,7 @@ namespace Dcb.Domain.Queries;
 /// <summary>
 /// Query to get the total count of weather forecasts
 /// </summary>
-public record GetWeatherForecastCountQuery : 
+public record GetWeatherForecastCountQuery :
     IMultiProjectionQuery<WeatherForecastProjection, GetWeatherForecastCountQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {

@@ -17,7 +17,7 @@ public class WeatherForecastProjectorTests
     public WeatherForecastProjectorTests()
     {
         _projector = WeatherForecastProjection.GenerateInitialPayload();
-        
+
         // Create a minimal DomainTypes for testing
         _domainTypes = new DcbDomainTypes(
             new SimpleEventTypes(),
@@ -53,8 +53,8 @@ public class WeatherForecastProjectorTests
         );
 
         // Act
-    var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-    var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag }, _domainTypes, safeThreshold);
+        var safeThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        var result1 = WeatherForecastProjection.Project(_projector, eventWithWeatherTag, new List<ITag> { weatherTag }, _domainTypes, safeThreshold);
         var projectorAfterTag = result1.GetValue();
 
         var result2 = WeatherForecastProjection.Project(
@@ -107,11 +107,11 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-5));
 
         // Act
-    var safeThreshold2 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-    var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag }, _domainTypes, safeThreshold2);
+        var safeThreshold2 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        var result1 = WeatherForecastProjection.Project(_projector, safeEvent, new List<ITag> { tag }, _domainTypes, safeThreshold2);
         var afterSafe = result1.GetValue();
 
-    var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag }, _domainTypes, safeThreshold2);
+        var result2 = WeatherForecastProjection.Project(afterSafe, unsafeEvent, new List<ITag> { tag }, _domainTypes, safeThreshold2);
         var afterUnsafe = result2.GetValue();
 
         // Assert
@@ -145,8 +145,8 @@ public class WeatherForecastProjectorTests
             DateTime.UtcNow.AddSeconds(-30));
 
         // Act - Process event with multiple tags
-    var safeThreshold3 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-    var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 }, _domainTypes, safeThreshold3);
+        var safeThreshold3 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        var result = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag1, tag2 }, _domainTypes, safeThreshold3);
         var afterMultipleTags = result.GetValue();
 
         // Assert
@@ -183,11 +183,11 @@ public class WeatherForecastProjectorTests
         var deleteEvent = CreateEvent(new WeatherForecastDeleted(forecastId), DateTime.UtcNow.AddSeconds(-25));
 
         // Act
-    var safeThreshold4 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
-    var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag }, _domainTypes, safeThreshold4);
+        var safeThreshold4 = SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-20), Guid.Empty);
+        var result1 = WeatherForecastProjection.Project(_projector, createEvent, new List<ITag> { tag }, _domainTypes, safeThreshold4);
         var afterCreate = result1.GetValue();
 
-    var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag }, _domainTypes, safeThreshold4);
+        var result2 = WeatherForecastProjection.Project(afterCreate, deleteEvent, new List<ITag> { tag }, _domainTypes, safeThreshold4);
         var afterDelete = result2.GetValue();
 
         // Assert

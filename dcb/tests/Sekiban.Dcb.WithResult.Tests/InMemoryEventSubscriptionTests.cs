@@ -278,8 +278,8 @@ public class InMemoryEventSubscriptionTests
         // Create inline composite filter
         var allowedTypes = new HashSet<string> { "TypeA", "TypeB" };
         var requiredTags = new HashSet<string> { "important" };
-        IEventFilter compositeFilter = new InlineEventFilter(evt => 
-            allowedTypes.Contains(evt.EventType) && 
+        IEventFilter compositeFilter = new InlineEventFilter(evt =>
+            allowedTypes.Contains(evt.EventType) &&
             evt.Tags.Any(tag => requiredTags.Contains(tag)));
 
         var receivedEvents = new List<Event>();

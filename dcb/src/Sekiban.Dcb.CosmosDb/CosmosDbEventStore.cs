@@ -24,7 +24,7 @@ public class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var container = await _context.GetEventsContainerAsync();
+            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
 
             var query = container.GetItemLinqQueryable<CosmosEvent>()
                 .OrderBy(e => e.SortableUniqueId);
@@ -40,7 +40,7 @@ public class CosmosDbEventStore : IEventStore
 
             while (iterator.HasMoreResults)
             {
-                var response = await iterator.ReadNextAsync();
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
                 foreach (var cosmosEvent in response)
                 {
                     var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
@@ -68,7 +68,7 @@ public class CosmosDbEventStore : IEventStore
             var tagString = tag.GetTag();
 
             // First, get all event IDs for this tag from the tags container
-            var tagsContainer = await _context.GetTagsContainerAsync();
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
             var tagQuery = tagsContainer.GetItemLinqQueryable<CosmosTag>()
                 .Where(t => t.Tag == tagString);
 
@@ -82,7 +82,7 @@ public class CosmosDbEventStore : IEventStore
             {
                 while (tagIterator.HasMoreResults)
                 {
-                    var response = await tagIterator.ReadNextAsync();
+                    var response = await tagIterator.ReadNextAsync().ConfigureAwait(false);
                     eventIds.AddRange(response.Select(t => t.EventId));
                 }
             }
@@ -93,7 +93,7 @@ public class CosmosDbEventStore : IEventStore
             }
 
             // Now fetch the events by their IDs
-            var eventsContainer = await _context.GetEventsContainerAsync();
+            var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
             var events = new List<Event>();
 
             // Batch read events for better performance
@@ -103,7 +103,7 @@ public class CosmosDbEventStore : IEventStore
                 {
                     var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
                         eventId,
-                        new PartitionKey(eventId));
+                        new PartitionKey(eventId)).ConfigureAwait(false);
 
                     return response.Resource;
                 }
@@ -114,7 +114,7 @@ public class CosmosDbEventStore : IEventStore
                 }
             });
 
-            var cosmosEvents = await Task.WhenAll(tasks);
+            var cosmosEvents = await Task.WhenAll(tasks).ConfigureAwait(false);
 
             foreach (var cosmosEvent in cosmosEvents.Where(e => e != null))
             {
@@ -142,12 +142,12 @@ public class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var container = await _context.GetEventsContainerAsync();
             var eventIdStr = eventId.ToString();
+            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
 
             var response = await container.ReadItemAsync<CosmosEvent>(
                 eventIdStr,
-                new PartitionKey(eventIdStr));
+                new PartitionKey(eventIdStr)).ConfigureAwait(false);
 
             var cosmosEvent = response.Resource;
 
@@ -174,8 +174,8 @@ public class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var eventsContainer = await _context.GetEventsContainerAsync();
-            var tagsContainer = await _context.GetTagsContainerAsync();
+            var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             var eventsList = events.ToList();
             var writtenEvents = new List<Event>();
@@ -192,10 +192,10 @@ public class CosmosDbEventStore : IEventStore
 
                 // Create and write the CosmosDB event
                 var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload);
-                
+
                 await eventsContainer.CreateItemAsync(
                     cosmosEvent,
-                    new PartitionKey(cosmosEvent.Id));
+                    new PartitionKey(cosmosEvent.Id)).ConfigureAwait(false);
 
                 writtenEvents.Add(ev);
 
@@ -215,7 +215,7 @@ public class CosmosDbEventStore : IEventStore
 
                     await tagsContainer.CreateItemAsync(
                         cosmosTag,
-                        new PartitionKey(cosmosTag.Tag));
+                        new PartitionKey(cosmosTag.Tag)).ConfigureAwait(false);
 
                     tagWriteResults.Add(
                         new TagWriteResult(
@@ -246,7 +246,7 @@ public class CosmosDbEventStore : IEventStore
         try
         {
             var tagString = tag.GetTag();
-            var tagsContainer = await _context.GetTagsContainerAsync();
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
                 .Where(t => t.Tag == tagString)
@@ -257,7 +257,7 @@ public class CosmosDbEventStore : IEventStore
 
             while (iterator.HasMoreResults)
             {
-                var response = await iterator.ReadNextAsync();
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
                 foreach (var cosmosTag in response)
                 {
                     tagStreams.Add(new TagStream(
@@ -283,7 +283,7 @@ public class CosmosDbEventStore : IEventStore
             var tagGroup = tag.GetTagGroup();
             var tagContent = tagString.Substring(tagGroup.Length + 1);
 
-            var tagsContainer = await _context.GetTagsContainerAsync();
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             // Get the latest tag entry
             var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
@@ -296,7 +296,7 @@ public class CosmosDbEventStore : IEventStore
 
             if (iterator.HasMoreResults)
             {
-                var response = await iterator.ReadNextAsync();
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
                 latestTag = response.FirstOrDefault();
             }
 
@@ -337,7 +337,7 @@ public class CosmosDbEventStore : IEventStore
         try
         {
             var tagString = tag.GetTag();
-            var tagsContainer = await _context.GetTagsContainerAsync();
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
                 .Where(t => t.Tag == tagString)
@@ -347,7 +347,7 @@ public class CosmosDbEventStore : IEventStore
 
             if (iterator.HasMoreResults)
             {
-                var response = await iterator.ReadNextAsync();
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
                 return ResultBox.FromValue(response.Any());
             }
 

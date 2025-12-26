@@ -62,7 +62,8 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
                         $"Tag projector name '{projectorName}' is already registered with type '{existingTypeName}', cannot register with type '{newTypeName}'.");
                 }
             }
-        } else
+        }
+        else
         {
             // Only register type if function was successfully added
             _projectorTypes[projectorName] = typeof(TProjector);

@@ -33,7 +33,7 @@ public class NameValidatorTests
     [InlineData("Invalid#Name")]
     [InlineData("Invalid$Name")]
     [InlineData("ProjectorNameThatIsWayTooLongAndExceedsTheLimit")] // More than 40 chars
-    public void IsValidProjectorName_InvalidNames_ReturnsFalse(string name)
+    public void IsValidProjectorName_InvalidNames_ReturnsFalse(string? name)
     {
         // Act
         var result = NameValidator.IsValidProjectorName(name);

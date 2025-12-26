@@ -119,7 +119,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         // Act
         var stateResult = await grain.GetSnapshotJsonAsync();
-        
+
         // Assert
         Assert.NotNull(stateResult);
         Assert.True(stateResult.IsSuccess);
@@ -221,8 +221,8 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "test-projector";
         public static TestProjectorMulti GenerateInitialPayload() => new();
-    public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
-            ResultBox.FromValue(payload);
+        public static ResultBox<TestProjectorMulti> Project(TestProjectorMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
+                ResultBox.FromValue(payload);
     }
 
     private record Projector1Multi : IMultiProjector<Projector1Multi>
@@ -230,8 +230,8 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-1";
         public static Projector1Multi GenerateInitialPayload() => new();
-    public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
-            ResultBox.FromValue(payload);
+        public static ResultBox<Projector1Multi> Project(Projector1Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
+                ResultBox.FromValue(payload);
     }
 
     private record Projector2Multi : IMultiProjector<Projector2Multi>
@@ -239,8 +239,8 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "projector-2";
         public static Projector2Multi GenerateInitialPayload() => new();
-    public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
-            ResultBox.FromValue(payload);
+        public static ResultBox<Projector2Multi> Project(Projector2Multi payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
+                ResultBox.FromValue(payload);
     }
 
     private record SubscriptionTestMulti : IMultiProjector<SubscriptionTestMulti>
