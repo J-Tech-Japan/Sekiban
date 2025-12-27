@@ -42,13 +42,12 @@ public class WeatherApiClient(HttpClient httpClient)
         CreateWeatherForecast command,
         CancellationToken cancellationToken = default)
     {
-        // Post in external-compatible shape (no ForecastId, TemperatureC as object { value })
         var payload = new
         {
             Location = command.Location,
             Date = command.Date.ToString("yyyy-MM-dd"),
             Summary = command.Summary,
-            TemperatureC = new { value = (double)command.TemperatureC }
+            TemperatureC = command.TemperatureC
         };
         var response = await httpClient.PostAsJsonAsync("/api/inputweatherforecast", payload, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
