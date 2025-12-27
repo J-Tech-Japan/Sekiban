@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Sekiban.Dcb.Templates</PackageId>
-    <PackageVersion>10.0.1-preview03</PackageVersion>
-    <Version>10.0.1-preview03</Version>
+    <PackageVersion>10.0.1-preview04</PackageVersion>
+    <Version>10.0.1-preview04</Version>
     <Title>Sekiban Dcb Templates</Title>
     <Authors>J-Tech Japan</Authors>
     <Description>Templates for starting Sekiban Dcb (Distributed Consistent Bus) projects with Orleans and .NET Aspire</Description>

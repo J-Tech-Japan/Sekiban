@@ -10,7 +10,7 @@ dotnet new install Sekiban.Dcb.Templates
 
 ## 利用可能なテンプレート
 
-### 1. Dcb Orleans Aspire テンプレート
+### 1. Dcb Orleans Aspire テンプレート (WithResult)
 
 ```bash
 dotnet new sekiban-dcb-orleans -n YourProjectName
@@ -18,10 +18,25 @@ dotnet new sekiban-dcb-orleans -n YourProjectName
 
 含まれるもの:
 
-- .NET 9.0 + Aspire 9.4 AppHost
+- .NET 10.0 + Aspire 9.4 AppHost
 - Orleans クラスタ (Azure Storage / Queue / Tables / Blobs)
 - PostgreSQL (PgAdmin 付き) + マイグレーション基本形
-- Sekiban Dcb Orleans/Postgres 連携
+- Sekiban Dcb Orleans/Postgres 連携 (WithResult)
+- Web フロント (Blazor Server) + API Service
+- ServiceDefaults (共通設定) / Unit Test プロジェクト
+
+### 2. Dcb Orleans Aspire テンプレート (WithoutResult)
+
+```bash
+dotnet new sekiban-dcb-orleans-withoutresult -n YourProjectName
+```
+
+含まれるもの:
+
+- .NET 10.0 + Aspire 9.4 AppHost
+- Orleans クラスタ (Azure Storage / Queue / Tables / Blobs)
+- PostgreSQL (PgAdmin 付き) + マイグレーション基本形
+- Sekiban Dcb Orleans/Postgres 連携 (WithoutResult)
 - Web フロント (Blazor Server) + API Service
 - ServiceDefaults (共通設定) / Unit Test プロジェクト
 
