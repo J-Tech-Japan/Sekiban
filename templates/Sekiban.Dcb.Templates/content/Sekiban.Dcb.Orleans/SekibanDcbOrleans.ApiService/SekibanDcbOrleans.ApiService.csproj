@@ -10,7 +10,7 @@
     <ProjectReference Include="..\SekibanDcbOrleans.ServiceDefaults\SekibanDcbOrleans.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
-  <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.0" />
+  <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.1" />
   <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
   <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
   <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
@@ -27,10 +27,10 @@
   <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
   <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
-  <PackageReference Include="Scalar.AspNetCore" Version="2.10.1" />
+  <PackageReference Include="Scalar.AspNetCore" Version="2.11.10" />
   <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.1-preview01" />
   <PackageReference Include="Sekiban.Dcb.Orleans.WithResult" Version="10.0.1-preview05" />
-  <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+  <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
   <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.1-preview05" />
   <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.1-preview01" />
   <!-- Sekiban.Dcb.BlobStorage.AzureStorage package not yet published to NuGet; remove for now -->

@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "J-Tech Japan",
+  "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing"],
+  "name": "Sekiban Dcb Orleans Aspire Template (WithoutResult)",
+  "description": "SekibanDcbOrleansAspireWithoutResult",
+  "precedence": "0",
+  "identity": "Sekiban.Dcb.Orleans.Aspire.WithoutResult",
+  "shortName": "sekiban-dcb-orleans-withoutresult",
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sourceName": "SekibanDcbOrleans",
+  "preferNameDirectory": true,
+  "symbols": {
+    "IncludeTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Include unit test project"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**/*",
+        ".idea",
+        "**/bin/**",
+        "**/obj/**"
+      ],
+      "modifiers": [
+        {
+          "condition": "(!IncludeTests)",
+          "exclude": [
+            "SekibanDcbOrleans.Unit/**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "SekibanDcbOrleans.sln" }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "manualInstructions": [
+        { "text": "Run 'dotnet restore'" }
+      ],
+      "continueOnError": true
+    }
+  ]
+}
