@@ -178,7 +178,7 @@ public class CoreGeneralSekibanExecutor
                 var events = new List<Event>();
                 foreach (var e in collectedEvents)
                 {
-                    var eId = Guid.NewGuid();
+                    var eId = Guid.CreateVersion7();
                     var sortable = SortableUniqueId.GenerateNew();
                     var meta = new EventMetadata(eId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
                     events.Add(
