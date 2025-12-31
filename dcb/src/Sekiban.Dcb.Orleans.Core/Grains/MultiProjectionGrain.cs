@@ -626,9 +626,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Query failed: {ex.Message}";
-            return await SerializableQueryResult.CreateFromAsync(
-                new QueryResultGeneral(null!, string.Empty, query),
-                _domainTypes.JsonSerializerOptions);
+            throw;
         }
     }
 
@@ -741,7 +739,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"List query failed: {ex.Message}";
-            return await CreateEmptyAsync();
+            throw;
         }
     }
 
