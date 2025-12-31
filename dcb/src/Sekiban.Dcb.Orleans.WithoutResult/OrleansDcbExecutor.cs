@@ -72,50 +72,43 @@ public class OrleansDcbExecutor : ISekibanExecutor
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
-        try
+        // Get the multi-projector type for this query
+        var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+        if (!projectorTypeResult.IsSuccess)
         {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
-            {
-                throw projectorTypeResult.GetException();
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                throw new InvalidOperationException(
-                    $"Projector type {projectorType.Name} does not have MultiProjectorName property");
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                throw new InvalidOperationException(
-                    $"Projector type {projectorType.Name} has invalid MultiProjectorName");
-            }
-
-            // Get the multi-projection grain directly
-            var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
-
-            // Wait for sortable unique ID if needed
-            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
-
-            var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
-                queryCommon,
-                _domainTypes.JsonSerializerOptions);
-
-            var result = await grain.ExecuteQueryAsync(serializableQuery);
-
-            return await DeserializeQueryResultAsync<TResult>(result);
+            throw projectorTypeResult.GetException();
         }
-        catch (Exception)
+
+        var projectorType = projectorTypeResult.GetValue();
+
+        // Get the multi-projector name
+        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+        if (projectorNameProperty == null)
         {
-            throw;
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
         }
+
+        var projectorName = projectorNameProperty.GetValue(null) as string;
+        if (string.IsNullOrEmpty(projectorName))
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
+        }
+
+        // Get the multi-projection grain directly
+        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
+
+        // Wait for sortable unique ID if needed
+        await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+
+        var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
+            queryCommon,
+            _domainTypes.JsonSerializerOptions);
+
+        var result = await grain.ExecuteQueryAsync(serializableQuery);
+
+        return await DeserializeQueryResultAsync<TResult>(result);
     }
 
     /// <summary>
@@ -124,50 +117,43 @@ public class OrleansDcbExecutor : ISekibanExecutor
     public async Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
-        try
+        // Get the multi-projector type for this query
+        var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+        if (!projectorTypeResult.IsSuccess)
         {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
-            {
-                throw projectorTypeResult.GetException();
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                throw new InvalidOperationException(
-                    $"Projector type {projectorType.Name} does not have MultiProjectorName property");
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                throw new InvalidOperationException(
-                    $"Projector type {projectorType.Name} has invalid MultiProjectorName");
-            }
-
-            // Get the multi-projection grain directly
-            var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
-
-            // Wait for sortable unique ID if needed
-            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
-
-            var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
-                queryCommon,
-                _domainTypes.JsonSerializerOptions);
-
-            var result = await grain.ExecuteListQueryAsync(serializableQuery);
-
-            return await DeserializeListQueryResultAsync<TResult>(result);
+            throw projectorTypeResult.GetException();
         }
-        catch (Exception)
+
+        var projectorType = projectorTypeResult.GetValue();
+
+        // Get the multi-projector name
+        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
+        if (projectorNameProperty == null)
         {
-            throw;
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
         }
+
+        var projectorName = projectorNameProperty.GetValue(null) as string;
+        if (string.IsNullOrEmpty(projectorName))
+        {
+            throw new InvalidOperationException(
+                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
+        }
+
+        // Get the multi-projection grain directly
+        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
+
+        // Wait for sortable unique ID if needed
+        await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+
+        var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
+            queryCommon,
+            _domainTypes.JsonSerializerOptions);
+
+        var result = await grain.ExecuteListQueryAsync(serializableQuery);
+
+        return await DeserializeListQueryResultAsync<TResult>(result);
     }
 
     /// <summary>
