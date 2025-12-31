@@ -79,7 +79,8 @@
       "Bash(open https://localhost:17195)",
       "mcp__microsoft_docs_mcp__microsoft_docs_fetch",
       "Read(//Users/tomohisa/Downloads/**)",
-      "Bash(dotnet clean:*)"
+      "Bash(dotnet clean:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   },
