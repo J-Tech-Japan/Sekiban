@@ -42,7 +42,8 @@ public class CosmosDbEventStore : IEventStore
 
             if (since != null)
             {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value, StringComparison.Ordinal) > 0)
+                // Use CompareTo instead of string.Compare for Cosmos DB LINQ compatibility
+                query = query.Where(e => e.SortableUniqueId.CompareTo(since.Value) > 0)
                     .OrderBy(e => e.SortableUniqueId);
             }
 
@@ -100,7 +101,8 @@ public class CosmosDbEventStore : IEventStore
 
             if (since != null)
             {
-                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, since.Value, StringComparison.Ordinal) > 0);
+                // Use CompareTo instead of string.Compare for Cosmos DB LINQ compatibility
+                tagQuery = tagQuery.Where(t => t.SortableUniqueId.CompareTo(since.Value) > 0);
             }
 
             var eventIds = new List<string>();
