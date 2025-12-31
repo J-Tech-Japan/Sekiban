@@ -7,14 +7,14 @@
         <AssemblyName>Sekiban.Dcb.Core.Model</AssemblyName>
         <RootNamespace>Sekiban.Dcb</RootNamespace>
         <PackageId>Sekiban.Dcb.Core.Model</PackageId>
-        <Version>10.0.1-preview13</Version>
+        <Version>10.0.1-preview14</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB Core Model - Core interfaces and types for defining domain models with Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.1-preview13</PackageVersion>
+        <PackageVersion>10.0.1-preview14</PackageVersion>
         <Description>Core interfaces and types for defining domain models in Sekiban Dynamic Consistency Boundary - IEventPayload, ITagStatePayload, ITag, ITagGroup, ITagProjector, and related types</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;model;core</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
