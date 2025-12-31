@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <!-- Repository Information -->
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+
+    <!-- SourceLink Configuration -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <!-- Enable deterministic builds in CI environments -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SourceLink for GitHub -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+</Project>
