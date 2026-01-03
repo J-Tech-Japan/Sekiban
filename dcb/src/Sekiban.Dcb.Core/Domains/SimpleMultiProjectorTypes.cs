@@ -49,6 +49,11 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
         return ResultBox.Error<string>(new Exception($"Multi projector '{multiProjectorName}' not found"));
     }
 
+    public IReadOnlyList<string> GetAllProjectorNames()
+    {
+        return _projectorTypes.Keys.ToList();
+    }
+
 
     public ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName)
     {
@@ -247,10 +252,10 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
 
-            // Fallback: JSON serialize then gzip compress (Fastest)
+            // Fallback: JSON serialize + auto Gzip compression
+            // Custom serializers control their own compression; non-custom gets auto Gzip
             var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
-            var utf8 = Encoding.UTF8.GetBytes(json);
-            var compressed = GzipCompression.Compress(utf8);
+            var compressed = GzipCompression.CompressString(json);
             return ResultBox.FromValue(compressed);
         }
         catch (Exception ex)
@@ -280,8 +285,18 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
                 return ResultBox.FromValue((IMultiProjectionPayload)serializers.deserialize(domainTypes, safeWindowThreshold, data));
             }
 
-            // Fallback: assume gzip-compressed JSON
-            var jsonBytes = GzipCompression.Decompress(data);
+            // Fallback: check if data is gzip-compressed (magic bytes 0x1f 0x8b) for backward compatibility
+            byte[] jsonBytes;
+            if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
+            {
+                // Legacy format: gzip-compressed JSON
+                jsonBytes = GzipCompression.Decompress(data);
+            }
+            else
+            {
+                // New format: raw UTF-8 JSON
+                jsonBytes = data;
+            }
             var json = Encoding.UTF8.GetString(jsonBytes);
             if (_projectorTypes.TryGetValue(projectorName, out var type))
             {

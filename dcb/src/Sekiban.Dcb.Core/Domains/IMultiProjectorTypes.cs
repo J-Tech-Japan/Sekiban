@@ -21,6 +21,11 @@ public interface ICoreMultiProjectorTypes
 
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
 
+    /// <summary>
+    ///     Gets all registered projector names.
+    /// </summary>
+    IReadOnlyList<string> GetAllProjectorNames();
+
     ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName);
 
     ResultBox<Type> GetProjectorType(string multiProjectorName);

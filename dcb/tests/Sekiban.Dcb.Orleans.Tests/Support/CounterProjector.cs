@@ -1,9 +1,9 @@
 using ResultBoxes;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Orleans.Tests;

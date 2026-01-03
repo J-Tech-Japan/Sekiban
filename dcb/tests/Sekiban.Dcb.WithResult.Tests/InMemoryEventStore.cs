@@ -165,4 +165,22 @@ public class InMemoryEventStore : IEventStore
         }
         return Task.CompletedTask;
     }
+
+    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    {
+        lock (_lock)
+        {
+            var events = _events.AsEnumerable();
+
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                    e.SortableUniqueIdValue,
+                    since.Value,
+                    StringComparison.Ordinal) > 0);
+            }
+
+            return Task.FromResult(ResultBox.FromValue((long)events.Count()));
+        }
+    }
 }

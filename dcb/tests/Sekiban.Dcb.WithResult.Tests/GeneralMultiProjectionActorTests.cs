@@ -54,7 +54,7 @@ public class GeneralMultiProjectionActorTests
             state.ProjectorName,
             domain,
             state.LastSortableUniqueId ?? string.Empty,
-            state.Payload);
+            state.GetPayloadBytes());
         Assert.True(projectorRb.IsSuccess);
         var projector = Assert.IsType<StudentSummaries>(projectorRb.GetValue());
         Assert.True(projector.Students.TryGetValue(s1, out var s1Item));
@@ -96,7 +96,7 @@ public class GeneralMultiProjectionActorTests
             state2.ProjectorName,
             domain,
             state2.LastSortableUniqueId ?? string.Empty,
-            state2.Payload);
+            state2.GetPayloadBytes());
         Assert.True(projectorRb2.IsSuccess);
         var projector2 = Assert.IsType<StudentSummaries>(projectorRb2.GetValue());
         Assert.True(projector2.Students.TryGetValue(s1, out var s1Item2));

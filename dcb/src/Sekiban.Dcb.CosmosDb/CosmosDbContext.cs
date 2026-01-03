@@ -25,6 +25,7 @@ public class CosmosDbContext : IDisposable
     private readonly ILogger<CosmosDbContext>? _logger;
     private Container? _eventsContainer;
     private Container? _tagsContainer;
+    private Container? _multiProjectionStatesContainer;
     private CosmosClient? _cosmosClient;
     private Database? _database;
     private bool _disposed;
@@ -97,6 +98,18 @@ public class CosmosDbContext : IDisposable
         return _tagsContainer!;
     }
 
+    /// <summary>
+    ///     Gets the multi projection states container, initializing if needed.
+    /// </summary>
+    public async Task<Container> GetMultiProjectionStatesContainerAsync()
+    {
+        if (_multiProjectionStatesContainer != null)
+            return _multiProjectionStatesContainer;
+
+        await InitializeAsync().ConfigureAwait(false);
+        return _multiProjectionStatesContainer!;
+    }
+
     private async Task InitializeAsync()
     {
         if (_database != null)
@@ -164,6 +177,17 @@ public class CosmosDbContext : IDisposable
         {
             LogTagsContainerInitialized(_logger, null);
         }
+
+        // Create multi projection states container with partition key on partitionKey
+        var statesContainerProperties = new ContainerProperties
+        {
+            Id = "multiProjectionStates",
+            PartitionKeyPath = "/partitionKey"
+        };
+
+        var statesContainerResponse = await _database.CreateContainerIfNotExistsAsync(
+            statesContainerProperties).ConfigureAwait(false);
+        _multiProjectionStatesContainer = statesContainerResponse.Container;
     }
 
     /// <summary>

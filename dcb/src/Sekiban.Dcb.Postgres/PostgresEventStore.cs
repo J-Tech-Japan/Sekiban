@@ -282,6 +282,27 @@ public class PostgresEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var query = context.Events.AsQueryable();
+            if (since != null)
+            {
+                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+            }
+
+            var count = await query.LongCountAsync();
+            return ResultBox.FromValue(count);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<long>(ex);
+        }
+    }
+
     // Note: Tag state is not stored in the database
     // Tags table only tracks tag-to-event relationships
     // Tag state should be computed by projectors when needed
