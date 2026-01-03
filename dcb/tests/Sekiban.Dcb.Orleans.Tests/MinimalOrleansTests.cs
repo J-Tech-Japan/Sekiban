@@ -181,6 +181,7 @@ public class MinimalOrleansTests : IAsyncLifetime
 
                     // Add storage
                     services.AddSingleton<IEventStore, InMemoryEventStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     // Add mock IBlobStorageSnapshotAccessor for tests

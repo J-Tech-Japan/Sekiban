@@ -258,6 +258,24 @@ public class InMemoryDcbExecutor : ISekibanExecutor
             }
         }
 
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+        {
+            lock (_lock)
+            {
+                if (since == null)
+                {
+                    return Task.FromResult(ResultBox.FromValue((long)_events.Count));
+                }
+
+                var count = _events.Count(e => string.Compare(
+                    e.SortableUniqueIdValue,
+                    since.Value,
+                    StringComparison.Ordinal) > 0);
+
+                return Task.FromResult(ResultBox.FromValue((long)count));
+            }
+        }
+
         private string SerializeEvent(Event ev)
         {
             return _domainTypes.EventTypes.SerializeEventPayload(ev.Payload);

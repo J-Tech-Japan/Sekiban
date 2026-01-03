@@ -124,6 +124,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<IEventStore>(_ => SharedEventStore);
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<DcbDomainTypes>(_ => CreateDomainTypes());
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));

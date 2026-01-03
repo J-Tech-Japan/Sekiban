@@ -6,6 +6,7 @@ public class SekibanDcbDbContext : DbContext
 {
     public DbSet<DbEvent> Events { get; set; } = default!;
     public DbSet<DbTag> Tags { get; set; } = default!;
+    public DbSet<DbMultiProjectionState> MultiProjectionStates { get; set; } = default!;
 
     public SekibanDcbDbContext(DbContextOptions<SekibanDcbDbContext> options) : base(options)
     {
@@ -56,6 +57,29 @@ public class SekibanDcbDbContext : DbContext
 
             // Ensure proper ordering
             entity.Property(t => t.SortableUniqueId).IsRequired().HasMaxLength(100);
+        });
+
+        // Configure MultiProjectionStates table
+        modelBuilder.Entity<DbMultiProjectionState>(entity =>
+        {
+            entity.ToTable("dcb_multi_projection_states");
+
+            // Composite primary key
+            entity.HasKey(s => new { s.ProjectorName, s.ProjectorVersion });
+
+            // Index for projector name queries
+            entity.HasIndex(s => s.ProjectorName).HasDatabaseName("IX_MultiProjectionStates_ProjectorName");
+
+            // Index for updated timestamp
+            entity.HasIndex(s => s.UpdatedAt).HasDatabaseName("IX_MultiProjectionStates_UpdatedAt");
+
+            // StateData is stored as bytea
+            entity.Property(s => s.StateData).HasColumnType("bytea");
+
+            // Check constraint for offload consistency
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_MultiProjectionStates_OffloadConsistency",
+                "(\"IsOffloaded\" = false AND \"StateData\" IS NOT NULL) OR (\"IsOffloaded\" = true AND \"OffloadKey\" IS NOT NULL)"));
         });
     }
 }

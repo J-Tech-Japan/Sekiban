@@ -1,11 +1,12 @@
 using Projects;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
     .AddAzureStorage("azurestorage")
-    // .RunAsEmulator(opt => opt.WithDataVolume());
-    .RunAsEmulator();
+    .RunAsEmulator(opt => opt.WithDataVolume());
+    // .RunAsEmulator();
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");
@@ -18,7 +19,8 @@ var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
-    // .WithDataVolume()
+    .WithDbGate()
+    .WithDataVolume()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans
@@ -87,5 +89,34 @@ var bench = builder
 
 #endif
 
+// Multi Projection State CLI Tools (manual execution only)
+// Use Aspire dashboard "Start" button to run these tools
+builder
+    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-status")
+    .WithReference(postgres)
+    .WaitFor(postgres)
+    .WithArgs("status")
+    .WithEnvironment("VERBOSE", "true")
+    .WithExplicitStart();
+
+builder
+    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-list")
+    .WithArgs("list")
+    .WithExplicitStart();
+
+builder
+    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-build")
+    .WithReference(postgres)
+    .WaitFor(postgres)
+    .WithArgs("build", "--verbose")
+    .WithEnvironment("MIN_EVENTS", "1000")
+    .WithExplicitStart();
+
+builder
+    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-build-force")
+    .WithReference(postgres)
+    .WaitFor(postgres)
+    .WithArgs("build", "--force", "--verbose")
+    .WithExplicitStart();
 
 builder.Build().Run();

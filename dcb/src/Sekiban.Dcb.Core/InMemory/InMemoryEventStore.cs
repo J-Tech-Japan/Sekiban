@@ -17,6 +17,19 @@ public class InMemoryEventStore : IEventStore
     private readonly ConcurrentDictionary<Guid, Event> _events = new();
     private readonly ConcurrentDictionary<string, List<TagStream>> _tagStreams = new();
 
+    /// <summary>
+    ///     Clear all events and tag streams. Used for test isolation.
+    /// </summary>
+    public void Clear()
+    {
+        lock (_eventLock)
+        {
+            _eventOrder.Clear();
+            _events.Clear();
+            _tagStreams.Clear();
+        }
+    }
+
     public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
         lock (_eventLock)
@@ -183,6 +196,24 @@ public class InMemoryEventStore : IEventStore
         lock (_eventLock)
         {
             return Task.FromResult(ResultBox.FromValue(_tagStreams.ContainsKey(tagString)));
+        }
+    }
+
+    public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    {
+        lock (_eventLock)
+        {
+            if (since == null)
+            {
+                return Task.FromResult(ResultBox.FromValue((long)_eventOrder.Count));
+            }
+
+            var count = _eventOrder.Count(e => string.Compare(
+                e.SortableUniqueIdValue,
+                since.Value,
+                StringComparison.Ordinal) > 0);
+
+            return Task.FromResult(ResultBox.FromValue((long)count));
         }
     }
 }

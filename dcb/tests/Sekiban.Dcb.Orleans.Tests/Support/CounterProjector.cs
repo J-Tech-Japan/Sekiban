@@ -1,9 +1,9 @@
 using ResultBoxes;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
-using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -25,14 +25,18 @@ public record CounterProjector([property: Id(0)] int Count) : IMultiProjectorWit
     // Instrumentation for serializer path verification
     public static int SerializeCalls;
     public static int DeserializeCalls;
-    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, CounterProjector safePayload)
+    public static SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, CounterProjector safePayload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
         SerializeCalls++;
         var json = System.Text.Json.JsonSerializer.Serialize(new { v = 1, count = safePayload.Count }, domainTypes.JsonSerializerOptions);
-        return GzipCompression.CompressString(json);
+        var rawBytes = System.Text.Encoding.UTF8.GetBytes(json);
+        var originalSize = rawBytes.LongLength;
+        var compressed = GzipCompression.Compress(rawBytes);
+        var compressedSize = compressed.LongLength;
+        return new SerializationResult(compressed, originalSize, compressedSize);
     }
-    public static CounterProjector Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
+    public static CounterProjector Deserialize(DcbDomainTypes domainTypes, string safeWindowThreshold, ReadOnlySpan<byte> data)
     {
         DeserializeCalls++;
         var json = GzipCompression.DecompressToString(data);

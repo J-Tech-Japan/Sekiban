@@ -53,4 +53,9 @@ public interface IEventStore
     ///     Checks if a tag exists
     /// </summary>
     Task<ResultBox<bool>> TagExistsAsync(ITag tag);
+
+    /// <summary>
+    ///     Gets total event count, optionally after a position.
+    /// </summary>
+    Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null);
 }

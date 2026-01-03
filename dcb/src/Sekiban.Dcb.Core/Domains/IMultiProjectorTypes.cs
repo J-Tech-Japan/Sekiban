@@ -21,6 +21,11 @@ public interface ICoreMultiProjectorTypes
 
     ResultBox<string> GetProjectorVersion(string multiProjectorName);
 
+    /// <summary>
+    ///     Gets all registered projector names.
+    /// </summary>
+    IReadOnlyList<string> GetAllProjectorNames();
+
     ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName);
 
     ResultBox<Type> GetProjectorType(string multiProjectorName);
@@ -33,16 +38,16 @@ public interface ICoreMultiProjectorTypes
         JsonSerializerOptions jsonOptions);
 
     /// <summary>
-    ///     Serializes a multi-projection payload to JSON string.
-    ///     Uses custom serialization if registered, otherwise falls back to standard JSON serialization.
+    ///     Serializes a multi-projection payload to bytes with size information.
+    ///     Uses custom serialization if registered, otherwise falls back to JSON + Gzip.
     ///     Caller MUST always supply safeWindowThreshold; passing empty or null is treated as error.
     /// </summary>
     /// <param name="projectorName">Name of the projector</param>
     /// <param name="domainTypes">Domain types containing serialization options</param>
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used when projector needs safe-only construction</param>
     /// <param name="payload">The payload to serialize</param>
-    /// <returns>Serialized JSON string</returns>
-    ResultBox<byte[]> Serialize(
+    /// <returns>SerializationResult containing serialized data and size information</returns>
+    ResultBox<SerializationResult> Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,

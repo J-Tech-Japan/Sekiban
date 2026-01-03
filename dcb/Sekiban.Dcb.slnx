@@ -20,8 +20,10 @@
   <Folder Name="/internalUsages/">
     <Project Path="internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
     <Project Path="internalUsages/Dcb.Domain.WithoutResult/Dcb.Domain.WithoutResult.csproj">
+      <Configuration Solution="Debug|Any CPU" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
+      <Configuration Solution="Release|Any CPU" Project="Release|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
@@ -31,6 +33,7 @@
     <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
+    <Project Path="internalUsages/DcbOrleans.MakeMultiProjectionState/DcbOrleans.MakeMultiProjectionState.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />

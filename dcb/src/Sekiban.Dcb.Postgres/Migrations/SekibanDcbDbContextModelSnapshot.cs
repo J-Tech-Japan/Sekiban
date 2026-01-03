@@ -17,7 +17,7 @@ namespace Sekiban.Dcb.Postgres.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "9.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -67,6 +67,83 @@ namespace Sekiban.Dcb.Postgres.Migrations
                     b.HasIndex("Timestamp");
 
                     b.ToTable("dcb_events", (string)null);
+                });
+
+            modelBuilder.Entity("Sekiban.Dcb.Postgres.DbModels.DbMultiProjectionState", b =>
+                {
+                    b.Property<string>("ProjectorName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ProjectorVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("BuildHost")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("BuildSource")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<long>("CompressedSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("EventsProcessed")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsOffloaded")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastSortableUniqueId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OffloadKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("OffloadProvider")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("OriginalSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PayloadType")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SafeWindowThreshold")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("StateData")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProjectorName", "ProjectorVersion");
+
+                    b.HasIndex("ProjectorName")
+                        .HasDatabaseName("IX_MultiProjectionStates_ProjectorName");
+
+                    b.HasIndex("UpdatedAt")
+                        .HasDatabaseName("IX_MultiProjectionStates_UpdatedAt");
+
+                    b.ToTable("dcb_multi_projection_states", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MultiProjectionStates_OffloadConsistency", "(\"IsOffloaded\" = false AND \"StateData\" IS NOT NULL) OR (\"IsOffloaded\" = true AND \"OffloadKey\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Sekiban.Dcb.Postgres.DbModels.DbTag", b =>

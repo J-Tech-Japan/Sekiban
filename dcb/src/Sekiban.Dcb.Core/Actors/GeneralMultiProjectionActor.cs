@@ -123,7 +123,7 @@ public class GeneralMultiProjectionActor
         }
 
         // Use projector-defined deserializer if available
-        var payloadBytes = state.Payload;
+        var payloadBytes = state.GetPayloadBytes();
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
@@ -183,7 +183,7 @@ public class GeneralMultiProjectionActor
     // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
     public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
     {
-        var payloadBytes = state.Payload;
+        var payloadBytes = state.GetPayloadBytes();
         var projTypeRb = _types.GetProjectorType(state.ProjectorName);
         if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
         var projType = projTypeRb.GetValue();
@@ -253,11 +253,11 @@ public class GeneralMultiProjectionActor
                 return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
             }
 
-            var bytes = serializeResult.GetValue();
-            Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={bytes.Length}");
+            var result = serializeResult.GetValue();
+            Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={result.CompressedSizeBytes} (original={result.OriginalSizeBytes}, ratio={result.CompressionRatio:P1})");
             var payloadType = payload.GetType();
-            var state = new SerializableMultiProjectionState(
-                bytes,
+            var state = SerializableMultiProjectionState.FromBytes(
+                result.Data,
                 payloadType.FullName ?? payloadType.Name,
                 _projectorName,
                 projectorVersion,
@@ -265,7 +265,9 @@ public class GeneralMultiProjectionActor
                 multiProjectionState.LastEventId,
                 multiProjectionState.Version,
                 _isCatchedUp,
-                multiProjectionState.IsSafeState);
+                multiProjectionState.IsSafeState,
+                result.OriginalSizeBytes,
+                result.CompressedSizeBytes);
             return ResultBox.FromValue(state);
         }
         catch (Exception ex)
@@ -321,7 +323,7 @@ public class GeneralMultiProjectionActor
 
         var bytes = await _options.SnapshotAccessor.ReadAsync(envelope.OffloadedState.OffloadKey, cancellationToken);
 
-        var reconstructed = new SerializableMultiProjectionState(
+        var reconstructed = SerializableMultiProjectionState.FromBytes(
             bytes,
             envelope.OffloadedState.MultiProjectionPayloadType,
             envelope.OffloadedState.ProjectorName,
@@ -406,7 +408,8 @@ public class GeneralMultiProjectionActor
         }
 
         // Offload only the payload bytes to minimize storage
-        var key = await blobAccessor.WriteAsync(inline.Payload, _projectorName, cancellationToken);
+        var payloadBytes = inline.GetPayloadBytes();
+        var key = await blobAccessor.WriteAsync(payloadBytes, _projectorName, cancellationToken);
         var offloaded = new SerializableMultiProjectionStateOffloaded(
             key,
             blobAccessor.ProviderName,
@@ -418,7 +421,7 @@ public class GeneralMultiProjectionActor
             inline.Version,
             inline.IsCatchedUp,
             inline.IsSafeState,
-            inline.Payload.LongLength);
+            payloadBytes.LongLength);
 
         return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
             IsOffloaded: true,
@@ -625,7 +628,10 @@ public class GeneralMultiProjectionActor
             var projection = getSafeMethod?.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain });
             // projection has properties: State, SafeLastSortableUniqueId, Version
             statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
-            lastSortableId = (string)(projection?.GetType().GetProperty("SafeLastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
+            // Use _unsafeLastSortableUniqueId as fallback when SafeLastSortableUniqueId is null or empty
+            // This happens for projectors that don't match any events (e.g., ClassRoom projector when only WeatherForecast events exist)
+            var safeSortableId = projection?.GetType().GetProperty("SafeLastSortableUniqueId")?.GetValue(projection) as string;
+            lastSortableId = string.IsNullOrEmpty(safeSortableId) ? _unsafeLastSortableUniqueId : safeSortableId;
             lastEventId = Guid.Empty;
             stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
             isSafeState = true;

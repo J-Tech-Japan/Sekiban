@@ -479,6 +479,43 @@ public class CosmosDbEventStore : IEventStore
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+
+            IQueryable<CosmosEvent> query = container.GetItemLinqQueryable<CosmosEvent>();
+            if (since != null)
+            {
+                query = query.Where(e => e.SortableUniqueId.CompareTo(since.Value) > 0);
+            }
+
+            long count = 0;
+            using var iterator = query.ToFeedIterator();
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                count += response.Count;
+            }
+
+            return ResultBox.FromValue(count);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<long>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<long>(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return ResultBox.Error<long>(ex);
+        }
+    }
+
     private string SerializeEventPayload(IEventPayload payload) =>
         _domainTypes.EventTypes.SerializeEventPayload(payload);
 

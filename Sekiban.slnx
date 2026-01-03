@@ -20,6 +20,7 @@
     <Project Path="pure/src/Sekiban.Pure.SourceGenerator/Sekiban.Pure.SourceGenerator.csproj" />
     <Project Path="pure/src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj" />
   </Folder>
+  <Folder Name="/pure/" />
   <Folder Name="/pure/internalUsages/">
     <Project Path="pure/internalUsages/DaprSample/DaprSample.Api/DaprSample.Api.csproj" />
     <Project Path="pure/internalUsages/DaprSample/DaprSample.AppHost/DaprSample.AppHost.csproj" />
@@ -57,6 +58,7 @@
     <Project Path="dcb/src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
   </Folder>
+  <Folder Name="/dcb/" />
   <Folder Name="/dcb/internalUsages/">
     <Project Path="dcb/internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
     <Project Path="dcb/internalUsages/Dcb.Domain.WithoutResult/Dcb.Domain.WithoutResult.csproj">
@@ -68,6 +70,7 @@
     <Project Path="dcb/internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
+    <Project Path="dcb/internalUsages/DcbOrleans.MakeMultiProjectionState/DcbOrleans.MakeMultiProjectionState.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />

@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.MultiProjections;
@@ -55,7 +56,7 @@ public record
 
     public static GenericStringTagMultiProjector<TTagProjector, TTagGroup> GenerateInitialPayload() => new();
 
-    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericStringTagMultiProjector<TTagProjector, TTagGroup> payload)
+    public static SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericStringTagMultiProjector<TTagProjector, TTagGroup> payload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
         Func<Event, IEnumerable<string>> getAffectedIds = _ => Enumerable.Empty<string>();
@@ -78,10 +79,14 @@ public record
         }
         var dto = new { v = 1, items };
         var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
-        return GzipCompression.CompressString(json);
+        var rawBytes = System.Text.Encoding.UTF8.GetBytes(json);
+        var originalSize = rawBytes.LongLength;
+        var compressed = GzipCompression.Compress(rawBytes);
+        var compressedSize = compressed.LongLength;
+        return new SerializationResult(compressed, originalSize, compressedSize);
     }
 
-    public static GenericStringTagMultiProjector<TTagProjector, TTagGroup> Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
+    public static GenericStringTagMultiProjector<TTagProjector, TTagGroup> Deserialize(DcbDomainTypes domainTypes, string safeWindowThreshold, ReadOnlySpan<byte> data)
     {
         var json = GzipCompression.DecompressToString(data);
         var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);

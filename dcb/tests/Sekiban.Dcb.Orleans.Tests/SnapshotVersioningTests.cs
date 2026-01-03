@@ -55,9 +55,14 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var persist = await grain.PersistStateAsync();
         Assert.True(persist.IsSuccess);
 
-        // Deactivate and reactivate (to trigger restore path)
+        // Deactivate and wait for full deactivation
         await grain.RequestDeactivationAsync();
+        await Task.Delay(1000); // Allow time for grain to fully deactivate
+
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        // Wait for restoration to complete
+        await Task.Delay(500);
 
         var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
         Assert.True(serStateAfter.IsSuccess);
@@ -86,9 +91,14 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var overwritten = await grain.OverwritePersistedStateVersionAsync("9.9.9");
         Assert.True(overwritten);
 
-        // Deactivate and reactivate
+        // Deactivate and wait for full deactivation
         await grain.RequestDeactivationAsync();
+        await Task.Delay(1000); // Allow time for grain to fully deactivate
+
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        // Wait for catch-up to complete
+        await Task.Delay(500);
 
         // Should not throw; should rebuild from event store
         // Check unsafe state to get all 7 events
@@ -142,6 +152,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
                     });
 
                     services.AddSingleton<IEventStore, InMemoryEventStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     // Add mock IBlobStorageSnapshotAccessor for tests

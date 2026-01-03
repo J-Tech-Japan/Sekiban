@@ -266,8 +266,8 @@ public class GeneralMultiProjectionActorCatchingUpTests
         // Make projector version intentionally mismatch
         // Modify inline state's ProjectorVersion
         var inline = snapshot.InlineState!;
-        var mismatchedInline = new Sekiban.Dcb.MultiProjections.SerializableMultiProjectionState(
-            inline.Payload,
+        var mismatchedInline = Sekiban.Dcb.MultiProjections.SerializableMultiProjectionState.FromBytes(
+            inline.GetPayloadBytes(),
             inline.MultiProjectionPayloadType,
             inline.ProjectorName,
             "9.9.9",

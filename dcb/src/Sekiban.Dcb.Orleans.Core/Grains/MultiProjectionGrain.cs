@@ -25,7 +25,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
-    private readonly IBlobStorageSnapshotAccessor? _snapshotAccessor;
+    private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
 
     // Orleans infrastructure
@@ -89,7 +89,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
         IEventSubscriptionResolver? subscriptionResolver,
-        IBlobStorageSnapshotAccessor? snapshotAccessor,
+        IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
         GeneralMultiProjectionActorOptions? actorOptions)
     {
@@ -97,7 +97,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
-        _snapshotAccessor = snapshotAccessor;
+        _multiProjectionStateStore = multiProjectionStateStore;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
     }
@@ -348,11 +348,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             var startUtc = DateTime.UtcNow;
+            var projectorName = this.GetPrimaryKeyString();
+
             if (_projectionActor == null)
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Starting persistence at {startUtc:yyyy-MM-dd HH:mm:ss.fff} UTC");
+            Console.WriteLine($"[{projectorName}] Starting persistence at {startUtc:yyyy-MM-dd HH:mm:ss.fff} UTC");
 
             // Phase1: force promotion of buffered events before snapshot
             try
@@ -362,16 +364,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
 
-            // Ask actor to build a persistable snapshot (with size validation + offload included)
-            var persistable = await _projectionActor.BuildSnapshotForPersistenceAsync(false);
-            if (!persistable.IsSuccess)
+            // v9: Get Envelope (SafeState) from actor
+            var snapshotResult = await _projectionActor.GetSnapshotAsync(canGetUnsafeState: false);
+            if (!snapshotResult.IsSuccess)
             {
-                _lastError = persistable.GetException().Message;
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] WARNING: {_lastError}");
+                _lastError = snapshotResult.GetException().Message;
+                Console.WriteLine($"[{projectorName}] WARNING: {_lastError}");
                 return ResultBox.FromValue(false);
             }
 
-            var data = persistable.GetValue();
+            var envelope = snapshotResult.GetValue();
+
             try
             {
                 var unsafeStateInfo = await _projectionActor.GetStateAsync(true);
@@ -380,30 +383,112 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     var unsafeSt = unsafeStateInfo.GetValue();
                     var safeSt = safeStateInfo.GetValue();
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Snapshot state - Safe: {safeSt.Version} events @ {(safeSt.LastSortableUniqueId?.Length >= 20 ? safeSt.LastSortableUniqueId.Substring(0, 20) : safeSt.LastSortableUniqueId) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {(unsafeSt.LastSortableUniqueId?.Length >= 20 ? unsafeSt.LastSortableUniqueId.Substring(0, 20) : unsafeSt.LastSortableUniqueId) ?? "empty"}");
+                    Console.WriteLine($"[{projectorName}] Snapshot state - Safe: {safeSt.Version} events @ {(safeSt.LastSortableUniqueId?.Length >= 20 ? safeSt.LastSortableUniqueId.Substring(0, 20) : safeSt.LastSortableUniqueId) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {(unsafeSt.LastSortableUniqueId?.Length >= 20 ? unsafeSt.LastSortableUniqueId.Substring(0, 20) : unsafeSt.LastSortableUniqueId) ?? "empty"}");
                 }
             }
             catch { }
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Writing snapshot: {data.Size:N0} bytes, {_eventsProcessed:N0} events, checkpoint: {(data.SafeLastSortableUniqueId?.Length >= 20 ? data.SafeLastSortableUniqueId.Substring(0, 20) : data.SafeLastSortableUniqueId) ?? "empty"}...");
 
-            // Update grain state
-            _state.State.ProjectorName = this.GetPrimaryKeyString();
-            var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_state.State.ProjectorName);
-            if (versionResult.IsSuccess)
+            // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
+            var envelopeJson = JsonSerializer.Serialize(envelope, _domainTypes.JsonSerializerOptions);
+            var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
+            var envelopeSize = envelopeBytes.LongLength;
+
+            // Extract original/compressed sizes from the internal state
+            long originalSizeBytes = envelopeSize;
+            long compressedSizeBytes = envelopeSize;
+            if (envelope.InlineState != null)
             {
-                _state.State.ProjectorVersion = versionResult.GetValue();
+                originalSizeBytes = envelope.InlineState.OriginalSizeBytes;
+                compressedSizeBytes = envelope.InlineState.CompressedSizeBytes;
             }
-            _state.State.SerializedState = data.Json;
-            _state.State.LastPosition = data.SafeLastSortableUniqueId;
-            _state.State.SafeLastPosition = data.SafeLastSortableUniqueId;
-            _state.State.EventsProcessed = _eventsProcessed;
-            _state.State.StateSize = data.Size;
-            _state.State.LastPersistTime = DateTime.UtcNow;
 
-            await _state.WriteStateAsync();
+            // Get metadata
+            var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+            var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+            var safePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
+            var lastEventId = envelope.InlineState?.LastEventId
+                           ?? envelope.OffloadedState?.LastEventId
+                           ?? Guid.Empty;
+
+            Console.WriteLine($"[{projectorName}] v10: Writing snapshot: {envelopeSize:N0} bytes (payload: original={originalSizeBytes} compressed={compressedSizeBytes}), {_eventsProcessed:N0} events, checkpoint: {(safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty"}...");
+
+            // v10: Save to external store (Postgres/Cosmos) if available
+            if (_multiProjectionStateStore != null)
+            {
+                var record = new MultiProjectionStateRecord(
+                    ProjectorName: projectorName,
+                    ProjectorVersion: projectorVersion,
+                    PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+                    LastSortableUniqueId: safePosition ?? string.Empty,
+                    EventsProcessed: _eventsProcessed,
+                    StateData: envelopeBytes,  // v10: No outer compression
+                    IsOffloaded: false,
+                    OffloadKey: null,
+                    OffloadProvider: null,
+                    OriginalSizeBytes: originalSizeBytes,
+                    CompressedSizeBytes: compressedSizeBytes,
+                    SafeWindowThreshold: _projectionActor.PeekCurrentSafeWindowThreshold().Value,
+                    CreatedAt: _state.State.LastPersistTime == default
+                        ? DateTime.UtcNow
+                        : _state.State.LastPersistTime,
+                    UpdatedAt: DateTime.UtcNow,
+                    BuildSource: "GRAIN",
+                    BuildHost: Environment.MachineName);
+
+                var saveResult = await _multiProjectionStateStore.UpsertAsync(record);
+                if (!saveResult.IsSuccess)
+                {
+                    _lastError = $"External store save failed: {saveResult.GetException().Message}";
+                    Console.WriteLine($"[{projectorName}] WARNING: {_lastError}");
+                    // Continue to save Orleans state as fallback info
+                }
+                else
+                {
+                    Console.WriteLine($"[{projectorName}] External store save succeeded");
+                }
+            }
+
+            // v9: Update Orleans state with key info only (auxiliary/monitoring)
+            _state.State.ProjectorName = projectorName;
+            _state.State.ProjectorVersion = projectorVersion;
+            _state.State.LastSortableUniqueId = safePosition;
+            _state.State.EventsProcessed = _eventsProcessed;
+            _state.State.LastPersistTime = DateTime.UtcNow;
+            // Clear legacy fields
+            _state.State.SerializedState = null;
+            _state.State.StateSize = 0;
+            _state.State.SafeLastPosition = null;
+            _state.State.LastPosition = null;
+
+            // Retry Orleans state write on ETag conflicts (optimistic concurrency)
+            const int maxRetries = 3;
+            for (var retry = 0; retry < maxRetries; retry++)
+            {
+                try
+                {
+                    await _state.WriteStateAsync();
+                    break; // Success
+                }
+                catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
+                {
+                    Console.WriteLine($"[{projectorName}] ETag conflict on Orleans state write (attempt {retry + 1}/{maxRetries}), re-reading state...");
+                    // Re-read state to get fresh ETag, then re-apply our changes
+                    await _state.ReadStateAsync();
+                    _state.State.ProjectorName = projectorName;
+                    _state.State.ProjectorVersion = projectorVersion;
+                    _state.State.LastSortableUniqueId = safePosition;
+                    _state.State.EventsProcessed = _eventsProcessed;
+                    _state.State.LastPersistTime = DateTime.UtcNow;
+                    _state.State.SerializedState = null;
+                    _state.State.StateSize = 0;
+                    _state.State.SafeLastPosition = null;
+                    _state.State.LastPosition = null;
+                    await Task.Delay(50 * (retry + 1)); // Brief backoff
+                }
+            }
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Persistence completed in {(finishUtc - startUtc).TotalMilliseconds:F0}ms - {data.Size:N0} bytes, {_eventsProcessed:N0} events saved");
+            Console.WriteLine($"[{projectorName}] ✓ Persistence completed in {(finishUtc - startUtc).TotalMilliseconds:F0}ms - {envelopeSize:N0} bytes, {_eventsProcessed:N0} events saved");
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -763,18 +848,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = this.GetPrimaryKeyString();
         Console.WriteLine($"[SimplifiedPureGrain] OnActivateAsync for {projectorName}");
 
+        // v9: Get projector version from DomainTypes
+        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+
         // Create projection actor
         bool forceFullCatchUp = false;
         if (_projectionActor == null)
         {
             Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Creating new projection actor");
-            // Merge injected options with grain-specific snapshot accessor
+            // Merge injected options - Grain does NOT use SnapshotAccessor (offloading is handled by IMultiProjectionStateStore)
             var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
             var mergedOptions = new GeneralMultiProjectionActorOptions
             {
                 SafeWindowMs = baseOptions.SafeWindowMs,
-                SnapshotAccessor = _snapshotAccessor ?? baseOptions.SnapshotAccessor,
-                SnapshotOffloadThresholdBytes = baseOptions.SnapshotOffloadThresholdBytes,
+                SnapshotAccessor = null,  // Offloading is handled by IMultiProjectionStateStore, not Actor
+                SnapshotOffloadThresholdBytes = 0,  // Disabled - handled by Store
                 MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
                 MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
@@ -789,55 +878,64 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName,
                 mergedOptions);
 
-            // Restore persisted state if available
-            if (_state.State != null && !string.IsNullOrEmpty(_state.State.SerializedState))
+            bool restoredFromExternalStore = false;
+
+            // Restore from external store (Postgres/Cosmos) - only v9 format supported
+            if (_multiProjectionStateStore != null && versionResult.IsSuccess)
             {
                 try
                 {
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Restoring persisted state from storage");
-                    var deserializedState = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                        _state.State.SerializedState,
-                        _domainTypes.JsonSerializerOptions);
+                    Console.WriteLine($"[Grain-{projectorName}] Restoring from external store");
+                    var stateStoreResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
+                        projectorName, projectorVersion, cancellationToken);
 
-                    if (deserializedState != null)
+                    if (stateStoreResult.IsSuccess && stateStoreResult.GetValue().HasValue)
                     {
-                        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-                        var snapshotVersion = deserializedState.InlineState?.ProjectorVersion ??
-                                              deserializedState.OffloadedState?.ProjectorVersion;
-                        if (versionResult.IsSuccess &&
-                            !string.Equals(versionResult.GetValue(), snapshotVersion, StringComparison.Ordinal))
+                        var record = stateStoreResult.GetValue().GetValue();
+                        byte[]? compressedData = record.StateData;
+
+                        if (compressedData == null)
                         {
-                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot projector version mismatch. Current='{versionResult.GetValue()}', Snapshot='{snapshotVersion}'. Discarding snapshot and forcing full rebuild.");
-                            await ResetPersistedStateForFullRebuildAsync(versionResult.GetValue());
-                            forceFullCatchUp = true;
+                            throw new InvalidOperationException("StateData is null");
+                        }
+
+                        // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
+                        string envelopeJson;
+                        if (compressedData.Length >= 2 && compressedData[0] == 0x1f && compressedData[1] == 0x8b)
+                        {
+                            // v9 format: Gzip compressed
+                            envelopeJson = GzipCompression.DecompressToString(compressedData);
                         }
                         else
                         {
-                            await _projectionActor.SetSnapshotAsync(deserializedState);
-                            _eventsProcessed = _state.State.EventsProcessed;
-                            // Clear processed event IDs to prevent double counting after snapshot restore
-                            _processedEventIds.Clear();
-                            var restoredPosition = deserializedState.InlineState?.LastSortableUniqueId ??
-                                                   deserializedState.OffloadedState?.LastSortableUniqueId ??
-                                                   "(empty)";
-                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restored successfully - Position: {restoredPosition}, Events: {_eventsProcessed}");
-                            // Avoid overlap on the first catch-up after snapshot restore
+                            // v10 format: Plain UTF-8 JSON
+                            envelopeJson = Encoding.UTF8.GetString(compressedData);
                         }
+                        var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                            envelopeJson, _domainTypes.JsonSerializerOptions)!;
+
+                        await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
+                        _eventsProcessed = record.EventsProcessed;
+                        _processedEventIds.Clear();
+
+                        Console.WriteLine($"[Grain-{projectorName}] Restored - Position: {record.LastSortableUniqueId}, Events: {record.EventsProcessed}");
+                        restoredFromExternalStore = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Grain-{projectorName}] No state found for version {projectorVersion}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Snapshot restore failed: {ex.Message}. Discarding snapshot and forcing full rebuild.");
-                    await ResetPersistedStateForFullRebuildAsync(null);
-                    forceFullCatchUp = true;
+                    Console.WriteLine($"[Grain-{projectorName}] Restore failed: {ex.Message}");
                 }
             }
-            else
+
+            if (!restoredFromExternalStore)
             {
-                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] No persisted state to restore");
-                // If positions exist in persisted grain state, resume from there; otherwise full catch-up
-                var hasPersistedPos = !string.IsNullOrEmpty(_state.State?.SafeLastPosition) || !string.IsNullOrEmpty(_state.State?.LastPosition);
-                forceFullCatchUp = !hasPersistedPos;
+                Console.WriteLine($"[Grain-{projectorName}] No persisted state, will perform full catch-up");
+                forceFullCatchUp = true;
             }
         }
 
@@ -959,45 +1057,110 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         try
         {
-            if (string.IsNullOrEmpty(_state.State?.SerializedState))
+            var projectorName = this.GetPrimaryKeyString();
+            var currentVersion = _state.State?.ProjectorVersion;
+            bool updated = false;
+
+            // Update external store (Postgres/Cosmos)
+            if (_multiProjectionStateStore != null && !string.IsNullOrEmpty(currentVersion))
             {
-                return false;
+                var stateResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
+                    projectorName, currentVersion);
+
+                if (stateResult.IsSuccess && stateResult.GetValue().HasValue)
+                {
+                    var record = stateResult.GetValue().GetValue();
+
+                    // Only v9 format supported
+                    if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
+                    {
+                        throw new InvalidOperationException(
+                            $"Legacy format not supported. PayloadType: {record.PayloadType}. Please delete old snapshots and rebuild.");
+                    }
+
+                    // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
+                    var stateData = record.StateData!;
+                    string envelopeJson;
+                    if (stateData.Length >= 2 && stateData[0] == 0x1f && stateData[1] == 0x8b)
+                    {
+                        // v9 format: Gzip compressed
+                        envelopeJson = GzipCompression.DecompressToString(stateData);
+                    }
+                    else
+                    {
+                        // v10 format: Plain UTF-8 JSON
+                        envelopeJson = Encoding.UTF8.GetString(stateData);
+                    }
+                    var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                        envelopeJson, _domainTypes.JsonSerializerOptions)!;
+
+                    // Modify version
+                    SerializableMultiProjectionStateEnvelope modified;
+                    if (!envelope.IsOffloaded && envelope.InlineState != null)
+                    {
+                        var s = envelope.InlineState;
+                        modified = new SerializableMultiProjectionStateEnvelope(
+                            false,
+                            SerializableMultiProjectionState.FromBytes(
+                                s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
+                                s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
+                                s.OriginalSizeBytes, s.CompressedSizeBytes),
+                            null);
+                    }
+                    else if (envelope.OffloadedState != null)
+                    {
+                        var o = envelope.OffloadedState;
+                        modified = new SerializableMultiProjectionStateEnvelope(
+                            true,
+                            null,
+                            new SerializableMultiProjectionStateOffloaded(
+                                o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
+                                newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
+                                o.PayloadLength));
+                    }
+                    else
+                    {
+                        return false;
+                    }
+
+                    // v10: Save modified envelope to external store (no outer Gzip)
+                    var modifiedJson = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
+                    var modifiedBytes = Encoding.UTF8.GetBytes(modifiedJson);
+
+                    var modifiedRecord = new MultiProjectionStateRecord(
+                        record.ProjectorName,
+                        newVersion,
+                        typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+                        record.LastSortableUniqueId,
+                        record.EventsProcessed,
+                        modifiedBytes,  // v10: No outer compression
+                        record.IsOffloaded,
+                        record.OffloadKey,
+                        record.OffloadProvider,
+                        record.OriginalSizeBytes,  // Preserve original payload sizes
+                        record.CompressedSizeBytes,
+                        record.SafeWindowThreshold,
+                        record.CreatedAt,
+                        DateTime.UtcNow,
+                        record.BuildSource,
+                        record.BuildHost);
+
+                    var saveResult = await _multiProjectionStateStore.UpsertAsync(modifiedRecord);
+                    if (saveResult.IsSuccess)
+                    {
+                        updated = true;
+                    }
+                }
             }
 
-            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                _state.State!.SerializedState!, _domainTypes.JsonSerializerOptions);
-            if (envelope == null) return false;
-
-            SerializableMultiProjectionStateEnvelope modified;
-            if (!envelope.IsOffloaded && envelope.InlineState != null)
+            // Update Orleans ProjectorVersion field
+            if (updated && _state.State != null)
             {
-                var s = envelope.InlineState;
-                modified = new SerializableMultiProjectionStateEnvelope(
-                    false,
-                    new SerializableMultiProjectionState(
-                        s.Payload, s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
-                        s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState),
-                    null);
-            }
-            else if (envelope.OffloadedState != null)
-            {
-                var o = envelope.OffloadedState;
-                modified = new SerializableMultiProjectionStateEnvelope(
-                    true,
-                    null,
-                    new SerializableMultiProjectionStateOffloaded(
-                        o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
-                        newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
-                        o.PayloadLength));
-            }
-            else
-            {
-                return false;
+                _state.State.ProjectorVersion = newVersion;
+                await _state.WriteStateAsync();
             }
 
-            _state.State.SerializedState = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
-            await _state.WriteStateAsync();
-            return true;
+            return updated;
         }
         catch (Exception ex)
         {
@@ -1249,7 +1412,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
 
-        // Buffer unsafe events for later
+        // Buffer unsafe events for later - DO NOT count here, will be counted when flushed
         if (unsafeEvents.Count > 0)
         {
             Console.WriteLine($"[{projectorName}] Catch-up: Buffering {unsafeEvents.Count} unsafe events");
@@ -1259,7 +1422,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _unsafeEventIds.Add(ev.Id.ToString()); // Mark as unsafe
                 _processedEventIds.Add(ev.Id.ToString());
             }
-            _eventsProcessed += unsafeEvents.Count;
+            // Note: _eventsProcessed is NOT incremented here - events will be counted when buffer is flushed
         }
 
         // Update position

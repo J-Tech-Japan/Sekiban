@@ -175,12 +175,13 @@ public class GenericIntTagMultiProjectorTests
             projector2);
 
         Assert.NotNull(serialized);
-        Assert.NotEmpty(serialized);
+        Assert.NotEmpty(serialized.Data);
 
         // Act - Deserialize
         var deserialized = GenericIntTagMultiProjector<StudentProjector, YearlyStudentsTag>.Deserialize(
             _domainTypes,
-            serialized);
+            safeThreshold,
+            serialized.Data);
 
         // Assert
         var originalStates = projector2.GetCurrentTagStates();
