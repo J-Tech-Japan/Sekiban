@@ -30,6 +30,16 @@ public record SerializableMultiProjectionState
     public bool IsSafeState { get; init; } = true;
 
     /// <summary>
+    ///     Original (uncompressed) payload size in bytes.
+    /// </summary>
+    public long OriginalSizeBytes { get; init; }
+
+    /// <summary>
+    ///     Compressed payload size in bytes.
+    /// </summary>
+    public long CompressedSizeBytes { get; init; }
+
+    /// <summary>
     ///     JSON deserialization constructor - parameter names must match property names.
     /// </summary>
     [JsonConstructor]
@@ -43,7 +53,9 @@ public record SerializableMultiProjectionState
         Guid lastEventId,
         int version,
         bool isCatchedUp = true,
-        bool isSafeState = true)
+        bool isSafeState = true,
+        long originalSizeBytes = 0,
+        long compressedSizeBytes = 0)
     {
         PayloadJson = payloadJson;
         PayloadBase64 = payloadBase64;
@@ -55,6 +67,8 @@ public record SerializableMultiProjectionState
         Version = version;
         IsCatchedUp = isCatchedUp;
         IsSafeState = isSafeState;
+        OriginalSizeBytes = originalSizeBytes;
+        CompressedSizeBytes = compressedSizeBytes;
     }
 
     /// <summary>
@@ -70,8 +84,14 @@ public record SerializableMultiProjectionState
         Guid lastEventId,
         int version,
         bool isCatchedUp = true,
-        bool isSafeState = true)
+        bool isSafeState = true,
+        long originalSizeBytes = 0,
+        long compressedSizeBytes = 0)
     {
+        // If sizes not provided, use payload length for both
+        if (originalSizeBytes == 0) originalSizeBytes = payload.LongLength;
+        if (compressedSizeBytes == 0) compressedSizeBytes = payload.LongLength;
+
         return new SerializableMultiProjectionState(
             payloadJson: null,  // v10: Use PayloadBase64 instead
             payloadBase64: Convert.ToBase64String(payload),
@@ -82,7 +102,9 @@ public record SerializableMultiProjectionState
             lastEventId,
             version,
             isCatchedUp,
-            isSafeState);
+            isSafeState,
+            originalSizeBytes,
+            compressedSizeBytes);
     }
 
     /// <summary>

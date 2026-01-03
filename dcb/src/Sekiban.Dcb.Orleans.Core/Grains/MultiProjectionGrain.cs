@@ -393,6 +393,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
             var envelopeSize = envelopeBytes.LongLength;
 
+            // Extract original/compressed sizes from the internal state
+            long originalSizeBytes = envelopeSize;
+            long compressedSizeBytes = envelopeSize;
+            if (envelope.InlineState != null)
+            {
+                originalSizeBytes = envelope.InlineState.OriginalSizeBytes;
+                compressedSizeBytes = envelope.InlineState.CompressedSizeBytes;
+            }
+
             // Get metadata
             var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
             var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
@@ -401,7 +410,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                            ?? envelope.OffloadedState?.LastEventId
                            ?? Guid.Empty;
 
-            Console.WriteLine($"[{projectorName}] v10: Writing snapshot: {envelopeSize:N0} bytes (payload compressed internally), {_eventsProcessed:N0} events, checkpoint: {(safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty"}...");
+            Console.WriteLine($"[{projectorName}] v10: Writing snapshot: {envelopeSize:N0} bytes (payload: original={originalSizeBytes} compressed={compressedSizeBytes}), {_eventsProcessed:N0} events, checkpoint: {(safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty"}...");
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null)
@@ -416,8 +425,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     IsOffloaded: false,
                     OffloadKey: null,
                     OffloadProvider: null,
-                    OriginalSizeBytes: envelopeSize,
-                    CompressedSizeBytes: envelopeSize,  // Same size (no outer compression)
+                    OriginalSizeBytes: originalSizeBytes,
+                    CompressedSizeBytes: compressedSizeBytes,
                     SafeWindowThreshold: _projectionActor.PeekCurrentSafeWindowThreshold().Value,
                     CreatedAt: _state.State.LastPersistTime == default
                         ? DateTime.UtcNow
@@ -1094,7 +1103,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             false,
                             SerializableMultiProjectionState.FromBytes(
                                 s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
-                                s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState),
+                                s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
+                                s.OriginalSizeBytes, s.CompressedSizeBytes),
                             null);
                     }
                     else if (envelope.OffloadedState != null)
@@ -1127,8 +1137,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         record.IsOffloaded,
                         record.OffloadKey,
                         record.OffloadProvider,
-                        modifiedBytes.LongLength,
-                        modifiedBytes.LongLength,  // Same size (no outer compression)
+                        record.OriginalSizeBytes,  // Preserve original payload sizes
+                        record.CompressedSizeBytes,
                         record.SafeWindowThreshold,
                         record.CreatedAt,
                         DateTime.UtcNow,

@@ -265,7 +265,9 @@ public class GeneralMultiProjectionActor
                 multiProjectionState.LastEventId,
                 multiProjectionState.Version,
                 _isCatchedUp,
-                multiProjectionState.IsSafeState);
+                multiProjectionState.IsSafeState,
+                result.OriginalSizeBytes,
+                result.CompressedSizeBytes);
             return ResultBox.FromValue(state);
         }
         catch (Exception ex)

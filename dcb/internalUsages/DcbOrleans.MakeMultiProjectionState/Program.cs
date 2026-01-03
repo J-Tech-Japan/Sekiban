@@ -1,89 +1,137 @@
 using System.CommandLine;
+using System.Reflection;
 using Dcb.Domain;
+using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Sekiban.Dcb;
+using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Storage;
 
+// Build configuration from environment variables and user secrets
+var configuration = new ConfigurationBuilder()
+    .AddEnvironmentVariables()
+    .AddUserSecrets(Assembly.GetExecutingAssembly(), optional: true)
+    .Build();
+
 // Create the root command
 var rootCommand = new RootCommand("Multi Projection State Builder CLI - Pre-build projection states for faster startup");
 
-// Connection string option (optional - can be read from environment variable)
+// Database type option (shared across commands)
+// Default from: --database option > Sekiban:Database config > DATABASE_TYPE env > "postgres"
+var databaseOption = new Option<string?>(
+    name: "--database",
+    description: "Database type: postgres or cosmos (defaults to Sekiban:Database config or DATABASE_TYPE env var)");
+databaseOption.AddAlias("-d");
+
+// Connection string option for Postgres
 var connectionStringOption = new Option<string?>(
     name: "--connection-string",
-    description: "PostgreSQL connection string (defaults to ConnectionStrings__DcbPostgres env var)");
+    description: "PostgreSQL connection string (defaults to ConnectionStrings:DcbPostgres config)");
 connectionStringOption.AddAlias("-c");
+
+// Connection string option for Cosmos
+var cosmosConnectionStringOption = new Option<string?>(
+    name: "--cosmos-connection-string",
+    description: "Cosmos DB connection string (defaults to ConnectionStrings:SekibanDcbCosmos config)");
+
+// Cosmos database name option
+var cosmosDatabaseNameOption = new Option<string?>(
+    name: "--cosmos-database",
+    description: "Cosmos DB database name (defaults to CosmosDb:DatabaseName config or 'SekibanDcb')");
 
 // Min events option
 var minEventsOption = new Option<int>(
     name: "--min-events",
-    getDefaultValue: () => int.TryParse(Environment.GetEnvironmentVariable("MIN_EVENTS"), out var val) ? val : 3000,
+    getDefaultValue: () => int.TryParse(configuration["MIN_EVENTS"], out var val) ? val : 3000,
     description: "Minimum events required before building state");
 minEventsOption.AddAlias("-m");
 
 // Projector name option (optional - if not specified, build all)
 var projectorNameOption = new Option<string?>(
     name: "--projector",
-    getDefaultValue: () => Environment.GetEnvironmentVariable("PROJECTOR_NAME"),
+    getDefaultValue: () => configuration["PROJECTOR_NAME"],
     description: "Specific projector name to build (if not specified, builds all)");
 projectorNameOption.AddAlias("-p");
 
 // Force rebuild option
 var forceRebuildOption = new Option<bool>(
     name: "--force",
-    getDefaultValue: () => Environment.GetEnvironmentVariable("FORCE_REBUILD")?.ToLowerInvariant() == "true",
+    getDefaultValue: () => configuration["FORCE_REBUILD"]?.ToLowerInvariant() == "true",
     description: "Force rebuild even if state exists");
 forceRebuildOption.AddAlias("-f");
 
 // Verbose option
 var verboseOption = new Option<bool>(
     name: "--verbose",
-    getDefaultValue: () => Environment.GetEnvironmentVariable("VERBOSE")?.ToLowerInvariant() == "true",
+    getDefaultValue: () => configuration["VERBOSE"]?.ToLowerInvariant() == "true",
     description: "Show verbose output");
 verboseOption.AddAlias("-v");
 
 // Build command
 var buildCommand = new Command("build", "Build multi projection states")
 {
+    databaseOption,
     connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
     minEventsOption,
     projectorNameOption,
     forceRebuildOption,
     verboseOption
 };
 
-buildCommand.SetHandler(async (connectionString, minEvents, projectorName, forceRebuild, verbose) =>
+buildCommand.SetHandler(async (context) =>
 {
-    var resolvedConnectionString = ResolveConnectionString(connectionString);
-    await BuildProjectionStatesAsync(resolvedConnectionString, minEvents, projectorName, forceRebuild, verbose);
-}, connectionStringOption, minEventsOption, projectorNameOption, forceRebuildOption, verboseOption);
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var minEvents = context.ParseResult.GetValueForOption(minEventsOption);
+    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+    var forceRebuild = context.ParseResult.GetValueForOption(forceRebuildOption);
+    var verbose = context.ParseResult.GetValueForOption(verboseOption);
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await BuildProjectionStatesAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, minEvents, projectorName, forceRebuild, verbose);
+});
 
 // List command
-var listCommand = new Command("list", "List all registered projectors")
-{
-    connectionStringOption
-};
+var listCommand = new Command("list", "List all registered projectors");
 
-listCommand.SetHandler(async (connectionString) =>
+listCommand.SetHandler(async () =>
 {
     await ListProjectorsAsync();
-}, connectionStringOption);
+});
 
 // Status command
 var statusCommand = new Command("status", "Show status of all projection states")
 {
-    connectionStringOption
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption
 };
 
-statusCommand.SetHandler(async (connectionString) =>
+statusCommand.SetHandler(async (context) =>
 {
-    var resolvedConnectionString = ResolveConnectionString(connectionString);
-    await ShowStatusAsync(resolvedConnectionString);
-}, connectionStringOption);
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await ShowStatusAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName);
+});
 
 rootCommand.AddCommand(buildCommand);
 rootCommand.AddCommand(listCommand);
@@ -91,36 +139,111 @@ rootCommand.AddCommand(statusCommand);
 
 return await rootCommand.InvokeAsync(args);
 
-// Helper to resolve connection string from argument or environment
-static string ResolveConnectionString(string? connectionString)
+// Helper to resolve database type
+static string ResolveDatabaseType(IConfiguration config, string? cliOption)
 {
-    if (!string.IsNullOrEmpty(connectionString))
-        return connectionString;
+    // Priority: CLI option > Sekiban:Database > DATABASE_TYPE env > "postgres"
+    if (!string.IsNullOrEmpty(cliOption))
+        return cliOption;
 
-    // Try Aspire-style connection string
-    var aspireConnStr = Environment.GetEnvironmentVariable("ConnectionStrings__DcbPostgres");
-    if (!string.IsNullOrEmpty(aspireConnStr))
-        return aspireConnStr;
+    var sekibanDatabase = config["Sekiban:Database"];
+    if (!string.IsNullOrEmpty(sekibanDatabase))
+        return sekibanDatabase;
 
-    // Try standard connection string environment variable
-    var standardConnStr = Environment.GetEnvironmentVariable("CONNECTION_STRING");
-    if (!string.IsNullOrEmpty(standardConnStr))
-        return standardConnStr;
+    var envDatabaseType = config["DATABASE_TYPE"];
+    if (!string.IsNullOrEmpty(envDatabaseType))
+        return envDatabaseType;
 
-    throw new InvalidOperationException(
-        "Connection string not provided. Use --connection-string option or set ConnectionStrings__DcbPostgres environment variable.");
+    return "postgres";
+}
+
+// Helper to resolve Cosmos database name
+static string ResolveCosmosDatabaseName(IConfiguration config, string? cliOption)
+{
+    // Priority: CLI option > CosmosDb:DatabaseName > COSMOS_DATABASE_NAME env > "SekibanDcb"
+    if (!string.IsNullOrEmpty(cliOption))
+        return cliOption;
+
+    var cosmosDbName = config["CosmosDb:DatabaseName"];
+    if (!string.IsNullOrEmpty(cosmosDbName))
+        return cosmosDbName;
+
+    var envDbName = config["COSMOS_DATABASE_NAME"];
+    if (!string.IsNullOrEmpty(envDbName))
+        return envDbName;
+
+    return "SekibanDcb";
+}
+
+// Helper to resolve connection string from argument, config, or environment
+static string ResolveConnectionString(IConfiguration config, string databaseType, string? connectionString, string? cosmosConnectionString)
+{
+    if (databaseType.ToLowerInvariant() == "cosmos")
+    {
+        // Priority: CLI option > ConnectionStrings:SekibanDcbCosmos > COSMOS_CONNECTION_STRING env
+        if (!string.IsNullOrEmpty(cosmosConnectionString))
+            return cosmosConnectionString;
+
+        var configConnStr = config["ConnectionStrings:SekibanDcbCosmos"];
+        if (!string.IsNullOrEmpty(configConnStr))
+            return configConnStr;
+
+        var envConnStr = config["COSMOS_CONNECTION_STRING"];
+        if (!string.IsNullOrEmpty(envConnStr))
+            return envConnStr;
+
+        throw new InvalidOperationException(
+            "Cosmos DB connection string not provided.\n" +
+            "Options:\n" +
+            "  1. Use --cosmos-connection-string option\n" +
+            "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:SekibanDcbCosmos\" \"your-connection-string\"\n" +
+            "  3. Set environment variable: COSMOS_CONNECTION_STRING");
+    }
+    else
+    {
+        // Priority: CLI option > ConnectionStrings:DcbPostgres > CONNECTION_STRING env
+        if (!string.IsNullOrEmpty(connectionString))
+            return connectionString;
+
+        var configConnStr = config["ConnectionStrings:DcbPostgres"];
+        if (!string.IsNullOrEmpty(configConnStr))
+            return configConnStr;
+
+        var envConnStr = config["CONNECTION_STRING"];
+        if (!string.IsNullOrEmpty(envConnStr))
+            return envConnStr;
+
+        throw new InvalidOperationException(
+            "PostgreSQL connection string not provided.\n" +
+            "Options:\n" +
+            "  1. Use --connection-string option\n" +
+            "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:DcbPostgres\" \"your-connection-string\"\n" +
+            "  3. Set environment variable: CONNECTION_STRING");
+    }
 }
 
 // Implementation methods
-static async Task BuildProjectionStatesAsync(string connectionString, int minEvents, string? projectorName, bool forceRebuild, bool verbose)
+static async Task BuildProjectionStatesAsync(
+    string connectionString,
+    string databaseType,
+    string cosmosDatabaseName,
+    int minEvents,
+    string? projectorName,
+    bool forceRebuild,
+    bool verbose)
 {
     Console.WriteLine("=== Multi Projection State Builder ===");
+    Console.WriteLine($"Database: {databaseType}");
     Console.WriteLine($"Connection: {connectionString[..Math.Min(50, connectionString.Length)]}...");
+    if (databaseType.ToLowerInvariant() == "cosmos")
+    {
+        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
+    }
     Console.WriteLine($"Min Events: {minEvents}");
     Console.WriteLine($"Force Rebuild: {forceRebuild}");
     Console.WriteLine();
 
-    var services = BuildServices(connectionString);
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
     var builder = services.GetRequiredService<MultiProjectionStateBuilder>();
 
     var options = new MultiProjectionBuildOptions
@@ -177,11 +300,17 @@ static async Task ListProjectorsAsync()
     await Task.CompletedTask;
 }
 
-static async Task ShowStatusAsync(string connectionString)
+static async Task ShowStatusAsync(string connectionString, string databaseType, string cosmosDatabaseName)
 {
     Console.WriteLine("=== Projection State Status ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    if (databaseType.ToLowerInvariant() == "cosmos")
+    {
+        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
+    }
+    Console.WriteLine();
 
-    var services = BuildServices(connectionString);
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
@@ -278,7 +407,7 @@ static string FormatBytes(long bytes)
     return $"{len:0.##} {sizes[order]}";
 }
 
-static ServiceProvider BuildServices(string connectionString)
+static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName)
 {
     var services = new ServiceCollection();
 
@@ -286,17 +415,29 @@ static ServiceProvider BuildServices(string connectionString)
     var domainTypes = DomainType.GetDomainTypes();
     services.AddSingleton(domainTypes);
 
-    // Register Postgres DbContext factory
-    services.AddPooledDbContextFactory<SekibanDcbDbContext>(options =>
+    if (databaseType.ToLowerInvariant() == "cosmos")
     {
-        options.UseNpgsql(connectionString);
-    });
+        // Register Cosmos DB services
+        var cosmosClient = new CosmosClient(connectionString);
+        var cosmosContext = new CosmosDbContext(cosmosClient, cosmosDatabaseName);
+        services.AddSingleton(cosmosContext);
+        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
+    }
+    else
+    {
+        // Register Postgres DbContext factory
+        services.AddPooledDbContextFactory<SekibanDcbDbContext>(options =>
+        {
+            options.UseNpgsql(connectionString);
+        });
 
-    // Register event store
-    services.AddSingleton<IEventStore, PostgresEventStore>();
+        // Register event store
+        services.AddSingleton<IEventStore, PostgresEventStore>();
 
-    // Register multi projection state store
-    services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        // Register multi projection state store
+        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+    }
 
     // Register the builder
     services.AddSingleton<MultiProjectionStateBuilder>();

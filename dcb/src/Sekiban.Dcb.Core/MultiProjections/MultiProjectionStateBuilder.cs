@@ -143,6 +143,15 @@ public class MultiProjectionStateBuilder
             var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
             var envelopeSize = envelopeBytes.LongLength;
 
+            // Extract original/compressed sizes from the internal state
+            long originalSizeBytes = envelopeSize;
+            long compressedSizeBytes = envelopeSize;
+            if (snapshotEnvelope.InlineState != null)
+            {
+                originalSizeBytes = snapshotEnvelope.InlineState.OriginalSizeBytes;
+                compressedSizeBytes = snapshotEnvelope.InlineState.CompressedSizeBytes;
+            }
+
             // Create record with v10 format
             var totalEventsProcessed = currentEventsProcessed + eventsProcessed;
 
@@ -156,15 +165,15 @@ public class MultiProjectionStateBuilder
                 IsOffloaded: false,
                 OffloadKey: null,
                 OffloadProvider: null,
-                OriginalSizeBytes: envelopeSize,
-                CompressedSizeBytes: envelopeSize,  // Same size (no outer compression)
+                OriginalSizeBytes: originalSizeBytes,
+                CompressedSizeBytes: compressedSizeBytes,
                 SafeWindowThreshold: safeThreshold.Value,
                 CreatedAt: currentState?.CreatedAt ?? DateTime.UtcNow,
                 UpdatedAt: DateTime.UtcNow,
                 BuildSource: "CLI",
                 BuildHost: Environment.MachineName);
 
-            Console.WriteLine($"  v10: Envelope JSON size: {envelopeSize} bytes (payload compressed internally)");
+            Console.WriteLine($"  v10: Envelope JSON size: {envelopeSize} bytes, payload: original={originalSizeBytes} compressed={compressedSizeBytes}");
 
             // Save
             var saveResult = await _stateStore.UpsertAsync(record, options.OffloadThresholdBytes, ct);
