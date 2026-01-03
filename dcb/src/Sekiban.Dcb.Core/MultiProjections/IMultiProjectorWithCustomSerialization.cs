@@ -12,21 +12,24 @@ public interface ICoreMultiProjectorWithCustomSerialization<TSelf> : ICoreMultiP
     where TSelf : ICoreMultiProjectorWithCustomSerialization<TSelf>
 {
     /// <summary>
-    ///     Serializes the projector payload to a JSON string.
+    ///     Serializes the projector payload to bytes with size information.
     ///     This method must be implemented as a static method in the implementing class.
+    ///     Custom serializers control their own compression.
     /// </summary>
     /// <param name="domainTypes">Domain types containing serialization options</param>
-    /// <param name="payload">The payload instance to serialize</param>
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used to build safe view; callers MUST supply</param>
-    /// <returns>Binary serialized representation of the payload</returns>
-    static abstract byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
+    /// <param name="payload">The payload instance to serialize</param>
+    /// <returns>SerializationResult containing serialized data and size information</returns>
+    static abstract SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, TSelf payload);
 
     /// <summary>
-    ///     Deserializes a JSON string back to the projector payload.
+    ///     Deserializes bytes back to the projector payload.
     ///     This method must be implemented as a static method in the implementing class.
+    ///     Custom serializers control their own decompression.
     /// </summary>
     /// <param name="domainTypes">Domain types containing serialization options</param>
+    /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used to build safe view; callers MUST supply</param>
     /// <param name="data">Binary serialized bytes</param>
     /// <returns>Deserialized payload instance</returns>
-    static abstract TSelf Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data);
+    static abstract TSelf Deserialize(DcbDomainTypes domainTypes, string safeWindowThreshold, ReadOnlySpan<byte> data);
 }

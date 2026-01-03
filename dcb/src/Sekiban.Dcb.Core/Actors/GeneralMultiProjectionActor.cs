@@ -253,11 +253,11 @@ public class GeneralMultiProjectionActor
                 return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
             }
 
-            var bytes = serializeResult.GetValue();
-            Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={bytes.Length}");
+            var result = serializeResult.GetValue();
+            Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={result.CompressedSizeBytes} (original={result.OriginalSizeBytes}, ratio={result.CompressionRatio:P1})");
             var payloadType = payload.GetType();
             var state = SerializableMultiProjectionState.FromBytes(
-                bytes,
+                result.Data,
                 payloadType.FullName ?? payloadType.Name,
                 _projectorName,
                 projectorVersion,

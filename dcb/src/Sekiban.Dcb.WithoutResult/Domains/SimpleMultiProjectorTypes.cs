@@ -19,8 +19,9 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     private readonly ConcurrentDictionary<string, Type> _projectorTypes = new();
     private readonly ConcurrentDictionary<string, string> _projectorVersions = new();
     private readonly ConcurrentDictionary<Type, string> _typeToNameMap = new();
-    private readonly ConcurrentDictionary<string, (Func<DcbDomainTypes, string, object, byte[]> serialize,
-                                                    Func<DcbDomainTypes, string, ReadOnlySpan<byte>, object> deserialize)> _customSerializers = new();
+    private readonly ConcurrentDictionary<string, (
+        Func<DcbDomainTypes, string, object, SerializationResult> serialize,
+        Func<DcbDomainTypes, string, ReadOnlySpan<byte>, object> deserialize)> _customSerializers = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
         string multiProjectorName,
@@ -175,10 +176,10 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
     }
 
     /// <summary>
-    ///     Serializes a multi-projection payload to JSON string.
-    ///     Uses custom serialization if registered, otherwise falls back to standard JSON serialization.
+    ///     Serializes a multi-projection payload to bytes with size information.
+    ///     Uses custom serialization if registered, otherwise falls back to JSON + Gzip.
     /// </summary>
-    public ResultBox<byte[]> Serialize(
+    public ResultBox<SerializationResult> Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
@@ -188,21 +189,30 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         {
             if (string.IsNullOrWhiteSpace(safeWindowThreshold))
             {
-                return ResultBox.Error<byte[]>(new ArgumentException("safeWindowThreshold must be supplied"));
+                return ResultBox.Error<SerializationResult>(new ArgumentException("safeWindowThreshold must be supplied"));
             }
             if (_customSerializers.TryGetValue(projectorName, out var serializers))
             {
+                // Custom serializers return SerializationResult directly
+                // They control their own compression
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
 
-            // Fallback: JSON serialize to UTF-8 bytes (no compression here - compressed at final storage layer)
+            // Fallback: JSON serialize + Gzip compression
             var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
-            var utf8 = Encoding.UTF8.GetBytes(json);
-            return ResultBox.FromValue(utf8);
+            var rawBytes = Encoding.UTF8.GetBytes(json);
+            var originalSize = rawBytes.LongLength;
+            var compressed = GzipCompression.Compress(rawBytes);
+            var compressedSize = compressed.LongLength;
+
+            return ResultBox.FromValue(new SerializationResult(
+                compressed,
+                originalSize,
+                compressedSize));
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<byte[]>(ex);
+            return ResultBox.Error<SerializationResult>(ex);
         }
     }
 
@@ -271,7 +281,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             // Store custom serialization delegates
             _customSerializers[projectorName] = (
                 serialize: (domain, safeWindowThreshold, payload) => T.Serialize(domain, safeWindowThreshold, (T)payload),
-                deserialize: (domain, safeWindowThreshold, data) => T.Deserialize(domain, data)
+                deserialize: (domain, safeWindowThreshold, data) => T.Deserialize(domain, safeWindowThreshold, data)
             );
 
             // Register the projector by directly adding to dictionaries
@@ -317,7 +327,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             // Store custom serialization delegates
             _customSerializers[projectorName] = (
                 serialize: (domain, safeWindowThreshold, payload) => T.Serialize(domain, safeWindowThreshold, (T)payload),
-                deserialize: (domain, safeWindowThreshold, data) => T.Deserialize(domain, data)
+                deserialize: (domain, safeWindowThreshold, data) => T.Deserialize(domain, safeWindowThreshold, data)
             );
 
             // Register the projector by directly adding to dictionaries
