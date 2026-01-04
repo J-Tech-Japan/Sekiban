@@ -848,6 +848,27 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = this.GetPrimaryKeyString();
         Console.WriteLine($"[SimplifiedPureGrain] OnActivateAsync for {projectorName}");
 
+        // Validate Orleans state - if corrupted or incompatible, reset it
+        try
+        {
+            if (_state.State == null)
+            {
+                Console.WriteLine($"[Grain-{projectorName}] Orleans state is null, will initialize fresh");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Grain-{projectorName}] Orleans state access failed, clearing: {ex.Message}");
+            try
+            {
+                await _state.ClearStateAsync();
+            }
+            catch
+            {
+                // Ignore clear errors - we'll proceed with fresh state
+            }
+        }
+
         // v9: Get projector version from DomainTypes
         var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";

@@ -201,4 +201,87 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             return ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(ex);
         }
     }
+
+    /// <inheritdoc />
+    public async Task<ResultBox<bool>> DeleteAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var container = await _context.GetMultiProjectionStatesContainerAsync().ConfigureAwait(false);
+            var partitionKey = $"MultiProjectionState_{projectorName}";
+
+            // Note: Offloaded blob cleanup should be handled separately
+            // (IBlobStorageSnapshotAccessor does not currently support deletion)
+
+            // Delete the document
+            await container.DeleteItemAsync<CosmosMultiProjectionState>(
+                projectorVersion,
+                new PartitionKey(partitionKey),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            return ResultBox.FromValue(true);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return ResultBox.FromValue(false);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ResultBox<int>> DeleteAllAsync(
+        string? projectorName = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var container = await _context.GetMultiProjectionStatesContainerAsync().ConfigureAwait(false);
+
+            // Build query
+            QueryDefinition query;
+            if (!string.IsNullOrEmpty(projectorName))
+            {
+                var partitionKey = $"MultiProjectionState_{projectorName}";
+                query = new QueryDefinition("SELECT * FROM c WHERE c.partitionKey = @pk")
+                    .WithParameter("@pk", partitionKey);
+            }
+            else
+            {
+                query = new QueryDefinition("SELECT * FROM c");
+            }
+
+            var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(query);
+            var deletedCount = 0;
+
+            // Note: Offloaded blob cleanup should be handled separately
+            // (IBlobStorageSnapshotAccessor does not currently support deletion)
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var doc in response)
+                {
+                    // Delete the document
+                    await container.DeleteItemAsync<CosmosMultiProjectionState>(
+                        doc.Id,
+                        new PartitionKey(doc.PartitionKey),
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                    deletedCount++;
+                }
+            }
+
+            return ResultBox.FromValue(deletedCount);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<int>(ex);
+        }
+    }
 }
