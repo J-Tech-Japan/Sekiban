@@ -181,4 +181,62 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             return ResultBox.Error<IReadOnlyList<ProjectorStateInfo>>(ex);
         }
     }
+
+    public async Task<ResultBox<bool>> DeleteAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var entity = await ctx.MultiProjectionStates
+                .FirstOrDefaultAsync(s =>
+                    s.ProjectorName == projectorName &&
+                    s.ProjectorVersion == projectorVersion, cancellationToken);
+
+            if (entity == null)
+                return ResultBox.FromValue(false);
+
+            // Note: Offloaded blob cleanup should be handled separately
+            // (IBlobStorageSnapshotAccessor does not currently support deletion)
+
+            ctx.MultiProjectionStates.Remove(entity);
+            await ctx.SaveChangesAsync(cancellationToken);
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    public async Task<ResultBox<int>> DeleteAllAsync(
+        string? projectorName = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            IQueryable<DbMultiProjectionState> query = ctx.MultiProjectionStates;
+            if (!string.IsNullOrEmpty(projectorName))
+            {
+                query = query.Where(s => s.ProjectorName == projectorName);
+            }
+
+            var entities = await query.ToListAsync(cancellationToken);
+
+            // Note: Offloaded blob cleanup should be handled separately
+            // (IBlobStorageSnapshotAccessor does not currently support deletion)
+
+            ctx.MultiProjectionStates.RemoveRange(entities);
+            await ctx.SaveChangesAsync(cancellationToken);
+            return ResultBox.FromValue(entities.Count);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<int>(ex);
+        }
+    }
 }

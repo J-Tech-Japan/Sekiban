@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres;
@@ -133,9 +134,69 @@ statusCommand.SetHandler(async (context) =>
     await ShowStatusAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName);
 });
 
+// Save command - export state JSON to file for debugging
+var outputDirOption = new Option<string?>(
+    name: "--output-dir",
+    getDefaultValue: () => configuration["OUTPUT_DIR"] ?? "./output",
+    description: "Output directory for saved state files");
+outputDirOption.AddAlias("-o");
+
+var saveCommand = new Command("save", "Save projection state JSON to files for debugging")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    projectorNameOption,
+    outputDirOption
+};
+
+saveCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await SaveStateJsonAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName, outputDir);
+});
+
+// Delete command - delete projection states
+var deleteCommand = new Command("delete", "Delete projection states")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    projectorNameOption
+};
+
+deleteCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await DeleteStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName);
+});
+
 rootCommand.AddCommand(buildCommand);
 rootCommand.AddCommand(listCommand);
 rootCommand.AddCommand(statusCommand);
+rootCommand.AddCommand(saveCommand);
+rootCommand.AddCommand(deleteCommand);
 
 return await rootCommand.InvokeAsync(args);
 
@@ -405,6 +466,194 @@ static string FormatBytes(long bytes)
         len /= 1024;
     }
     return $"{len:0.##} {sizes[order]}";
+}
+
+static async Task SaveStateJsonAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName, string outputDir)
+{
+    Console.WriteLine("=== Save Projection State JSON ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    Console.WriteLine($"Output Directory: {outputDir}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+
+    // Create output directory
+    Directory.CreateDirectory(outputDir);
+
+    // Get list of states (summary info)
+    var listResult = await stateStore.ListAllAsync();
+    if (!listResult.IsSuccess)
+    {
+        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        return;
+    }
+
+    var stateInfos = listResult.GetValue();
+    if (!string.IsNullOrEmpty(projectorName))
+    {
+        stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
+    }
+
+    if (stateInfos.Count == 0)
+    {
+        Console.WriteLine("No projection states found.");
+        return;
+    }
+
+    var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+    var savedCount = 0;
+
+    foreach (var info in stateInfos)
+    {
+        Console.WriteLine($"Saving: {info.ProjectorName} (v{info.ProjectorVersion})");
+
+        // Fetch the full record with state data
+        var recordResult = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
+        if (!recordResult.IsSuccess || !recordResult.GetValue().HasValue)
+        {
+            Console.WriteLine($"  Error: Could not fetch full record");
+            continue;
+        }
+
+        var state = recordResult.GetValue().GetValue();
+
+        // Save metadata
+        var metadataFileName = $"{state.ProjectorName}_{timestamp}_metadata.json";
+        var metadataPath = Path.Combine(outputDir, metadataFileName);
+        var metadata = new
+        {
+            state.ProjectorName,
+            state.ProjectorVersion,
+            state.PayloadType,
+            state.LastSortableUniqueId,
+            state.EventsProcessed,
+            state.IsOffloaded,
+            state.OffloadKey,
+            state.OriginalSizeBytes,
+            state.CompressedSizeBytes,
+            state.SafeWindowThreshold,
+            state.CreatedAt,
+            state.UpdatedAt,
+            state.BuildSource,
+            state.BuildHost
+        };
+        await File.WriteAllTextAsync(metadataPath, System.Text.Json.JsonSerializer.Serialize(metadata, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"  Metadata: {metadataFileName}");
+
+        // Save decompressed state data
+        if (state.StateData != null)
+        {
+            var stateFileName = $"{state.ProjectorName}_{timestamp}_state.json";
+            var statePath = Path.Combine(outputDir, stateFileName);
+
+            try
+            {
+                // v10 format: StateData is plain JSON (UTF-8), not Gzip compressed at outer level
+                // The inner payload may be compressed via custom serializer
+                string jsonContent;
+
+                // Auto-detect: Gzip (v9) or plain JSON (v10)
+                if (state.StateData.Length >= 2 && state.StateData[0] == 0x1f && state.StateData[1] == 0x8b)
+                {
+                    // v9 format: Gzip compressed
+                    jsonContent = GzipCompression.DecompressToString(state.StateData);
+                }
+                else
+                {
+                    // v10 format: Plain UTF-8 JSON
+                    jsonContent = System.Text.Encoding.UTF8.GetString(state.StateData);
+                }
+
+                // Pretty print the JSON
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
+                var prettyJson = System.Text.Json.JsonSerializer.Serialize(jsonDoc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                await File.WriteAllTextAsync(statePath, prettyJson);
+                Console.WriteLine($"  State: {stateFileName} ({FormatBytes(state.StateData.LongLength)})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Error decompressing state: {ex.Message}");
+                // Save raw bytes as fallback
+                var rawFileName = $"{state.ProjectorName}_{timestamp}_state.bin";
+                var rawPath = Path.Combine(outputDir, rawFileName);
+                await File.WriteAllBytesAsync(rawPath, state.StateData);
+                Console.WriteLine($"  Raw state saved: {rawFileName}");
+            }
+        }
+        else if (state.IsOffloaded)
+        {
+            Console.WriteLine($"  State is offloaded to: {state.OffloadKey}");
+        }
+
+        Console.WriteLine();
+        savedCount++;
+    }
+
+    Console.WriteLine($"Saved {savedCount} projection state(s) to {outputDir}");
+}
+
+static async Task DeleteStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName)
+{
+    Console.WriteLine("=== Delete Projection States ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+
+    // Get states to delete
+    var listResult = await stateStore.ListAllAsync();
+    if (!listResult.IsSuccess)
+    {
+        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        return;
+    }
+
+    var states = listResult.GetValue();
+    if (!string.IsNullOrEmpty(projectorName))
+    {
+        states = states.Where(s => s.ProjectorName == projectorName).ToList();
+    }
+
+    if (states.Count == 0)
+    {
+        Console.WriteLine("No projection states found to delete.");
+        return;
+    }
+
+    Console.WriteLine($"Found {states.Count} state(s) to delete:");
+    foreach (var state in states)
+    {
+        Console.WriteLine($"  - {state.ProjectorName} (v{state.ProjectorVersion})");
+    }
+    Console.WriteLine();
+
+    Console.Write("Are you sure you want to delete these states? (y/N): ");
+    var response = Console.ReadLine();
+    if (response?.ToLowerInvariant() != "y")
+    {
+        Console.WriteLine("Cancelled.");
+        return;
+    }
+
+    var deleted = 0;
+    foreach (var state in states)
+    {
+        var deleteResult = await stateStore.DeleteAsync(state.ProjectorName, state.ProjectorVersion);
+        if (deleteResult.IsSuccess)
+        {
+            Console.WriteLine($"  Deleted: {state.ProjectorName} (v{state.ProjectorVersion})");
+            deleted++;
+        }
+        else
+        {
+            Console.WriteLine($"  Failed to delete {state.ProjectorName}: {deleteResult.GetException().Message}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"Deleted {deleted} of {states.Count} state(s)");
 }
 
 static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName)

@@ -24,4 +24,13 @@ public interface IMultiProjectionStateStore
 
     Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
         CancellationToken cancellationToken = default);
+
+    Task<ResultBox<bool>> DeleteAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default);
+
+    Task<ResultBox<int>> DeleteAllAsync(
+        string? projectorName = null,
+        CancellationToken cancellationToken = default);
 }

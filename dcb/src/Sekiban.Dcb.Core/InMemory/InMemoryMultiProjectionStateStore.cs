@@ -70,4 +70,38 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
 
         return Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectorStateInfo>>(list));
     }
+
+    public Task<ResultBox<bool>> DeleteAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var removed = _states.TryRemove((projectorName, projectorVersion), out _);
+        return Task.FromResult(ResultBox.FromValue(removed));
+    }
+
+    public Task<ResultBox<int>> DeleteAllAsync(
+        string? projectorName = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(projectorName))
+        {
+            var count = _states.Count;
+            _states.Clear();
+            return Task.FromResult(ResultBox.FromValue(count));
+        }
+        else
+        {
+            var keysToRemove = _states.Keys
+                .Where(k => k.ProjectorName == projectorName)
+                .ToList();
+
+            foreach (var key in keysToRemove)
+            {
+                _states.TryRemove(key, out _);
+            }
+
+            return Task.FromResult(ResultBox.FromValue(keysToRemove.Count));
+        }
+    }
 }
