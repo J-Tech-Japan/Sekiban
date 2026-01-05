@@ -1,5 +1,7 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Orleans.Streams;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -27,6 +29,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
+    private readonly ILogger<MultiProjectionGrain> _logger;
+
+    // State restoration tracking
+    private DateTime? _stateRestoredAt;
+    private StateRestoreSource _stateRestoreSource = StateRestoreSource.None;
+    private bool _activationHealthy = true;  // Default to healthy for backward compatibility
+    private string? _activationFailureReason;
 
     // Orleans infrastructure
     private IAsyncStream<SerializableEvent>? _orleansStream;
@@ -91,7 +100,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IEventSubscriptionResolver? subscriptionResolver,
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
-        GeneralMultiProjectionActorOptions? actorOptions)
+        GeneralMultiProjectionActorOptions? actorOptions,
+        ILogger<MultiProjectionGrain>? logger = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
@@ -100,6 +110,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _multiProjectionStateStore = multiProjectionStateStore;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
+        _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
     }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
@@ -152,6 +163,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpProgress.LastAttempt,
             _pendingStreamEvents.Count);
         return Task.FromResult(status);
+    }
+
+    /// <summary>
+    ///     Get health status for monitoring and diagnostics.
+    ///     This method is safe to call even before initialization completes.
+    /// </summary>
+    public Task<MultiProjectionHealthStatus> GetHealthStatusAsync()
+    {
+        // Safe access - return defaults if not initialized
+        var lastPersistTime = _state?.State?.LastPersistTime;
+        var lastSortableUniqueId = _state?.State?.LastSortableUniqueId;
+        var pendingCount = _pendingStreamEvents?.Count ?? 0;
+        var isCatchUpActive = _catchUpProgress?.IsActive ?? false;
+
+        return Task.FromResult(new MultiProjectionHealthStatus(
+            IsInitialized: _isInitialized,
+            HasProjectionActor: _projectionActor != null,
+            EventsProcessed: _eventsProcessed,
+            LastError: _lastError,
+            IsCatchUpActive: isCatchUpActive,
+            LastPersistTime: lastPersistTime == default ? null : lastPersistTime,
+            LastSortableUniqueId: lastSortableUniqueId,
+            PendingStreamEvents: pendingCount,
+            StateRestoredAt: _stateRestoredAt,
+            StateRestoreSource: _stateRestoreSource,
+            IsHealthy: _activationHealthy
+        ));
     }
 
     public async Task<ResultBox<string>> GetSnapshotJsonAsync(bool canGetUnsafeState = true)
@@ -602,6 +640,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter)
     {
+        // Check health if FailOnUnhealthyActivation is enabled
+        if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
+        {
+            _logger.LogWarning(
+                MultiProjectionLogEvents.QueryRejected,
+                "Query rejected due to unhealthy activation: {ProjectorName}",
+                this.GetPrimaryKeyString());
+            throw new InvalidOperationException($"Projection not healthy: {_activationFailureReason}");
+        }
+
         await EnsureInitializedAsync();
 
         var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
@@ -717,6 +765,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter)
     {
+        // Check health if FailOnUnhealthyActivation is enabled
+        if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
+        {
+            _logger.LogWarning(
+                MultiProjectionLogEvents.QueryRejected,
+                "List query rejected due to unhealthy activation: {ProjectorName}",
+                this.GetPrimaryKeyString());
+            throw new InvalidOperationException($"Projection not healthy: {_activationFailureReason}");
+        }
+
         await EnsureInitializedAsync();
 
         var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
@@ -846,19 +904,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         var projectorName = this.GetPrimaryKeyString();
-        Console.WriteLine($"[SimplifiedPureGrain] OnActivateAsync for {projectorName}");
+        _logger.LogInformation(
+            MultiProjectionLogEvents.ActivationStarted,
+            "Grain activation started: {ProjectorName}",
+            projectorName);
 
         // Validate Orleans state - if corrupted or incompatible, reset it
         try
         {
             if (_state.State == null)
             {
-                Console.WriteLine($"[Grain-{projectorName}] Orleans state is null, will initialize fresh");
+                _logger.LogDebug("Orleans state is null, will initialize fresh: {ProjectorName}", projectorName);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Grain-{projectorName}] Orleans state access failed, clearing: {ex.Message}");
+            _logger.LogWarning(ex, "Orleans state access failed, clearing: {ProjectorName}", projectorName);
             try
             {
                 await _state.ClearStateAsync();
@@ -877,7 +938,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         bool forceFullCatchUp = false;
         if (_projectionActor == null)
         {
-            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Creating new projection actor");
+            _logger.LogDebug("Creating new projection actor: {ProjectorName}", projectorName);
             // Merge injected options - Grain does NOT use SnapshotAccessor (offloading is handled by IMultiProjectionStateStore)
             var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
             var mergedOptions = new GeneralMultiProjectionActorOptions
@@ -890,7 +951,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
-                LagDecayPerSecond = baseOptions.LagDecayPerSecond
+                LagDecayPerSecond = baseOptions.LagDecayPerSecond,
+                FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
 
@@ -906,56 +968,100 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 try
                 {
-                    Console.WriteLine($"[Grain-{projectorName}] Restoring from external store");
+                    _logger.LogInformation("Restoring from external store: {ProjectorName}, Version: {Version}",
+                        projectorName, projectorVersion);
                     var stateStoreResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
                         projectorName, projectorVersion, cancellationToken);
 
-                    if (stateStoreResult.IsSuccess && stateStoreResult.GetValue().HasValue)
+                    if (!stateStoreResult.IsSuccess)
+                    {
+                        // Explicit error from state store (e.g., blob read failure)
+                        var errorMsg = stateStoreResult.GetException().Message;
+                        _logger.LogError(
+                            MultiProjectionLogEvents.StateRestoreFailed,
+                            stateStoreResult.GetException(),
+                            "External store query failed: {ProjectorName}, Error: {Error}",
+                            projectorName, errorMsg);
+                        _stateRestoreSource = StateRestoreSource.Failed;
+                        _activationFailureReason = errorMsg;
+                    }
+                    else if (stateStoreResult.GetValue().HasValue)
                     {
                         var record = stateStoreResult.GetValue().GetValue();
                         byte[]? compressedData = record.StateData;
 
                         if (compressedData == null)
                         {
-                            throw new InvalidOperationException("StateData is null");
-                        }
-
-                        // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
-                        string envelopeJson;
-                        if (compressedData.Length >= 2 && compressedData[0] == 0x1f && compressedData[1] == 0x8b)
-                        {
-                            // v9 format: Gzip compressed
-                            envelopeJson = GzipCompression.DecompressToString(compressedData);
+                            var errorMsg = record.IsOffloaded
+                                ? $"Blob read returned null for key: {record.OffloadKey}"
+                                : "StateData is null but not marked as offloaded";
+                            _logger.LogError(
+                                MultiProjectionLogEvents.BlobReadFailed,
+                                "State data is null: {ProjectorName}, IsOffloaded: {IsOffloaded}, OffloadKey: {OffloadKey}",
+                                projectorName, record.IsOffloaded, record.OffloadKey);
+                            _stateRestoreSource = StateRestoreSource.Failed;
+                            _activationFailureReason = errorMsg;
                         }
                         else
                         {
-                            // v10 format: Plain UTF-8 JSON
-                            envelopeJson = Encoding.UTF8.GetString(compressedData);
+                            // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
+                            string envelopeJson;
+                            if (compressedData.Length >= 2 && compressedData[0] == 0x1f && compressedData[1] == 0x8b)
+                            {
+                                // v9 format: Gzip compressed
+                                envelopeJson = GzipCompression.DecompressToString(compressedData);
+                            }
+                            else
+                            {
+                                // v10 format: Plain UTF-8 JSON
+                                envelopeJson = Encoding.UTF8.GetString(compressedData);
+                            }
+                            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
+                                envelopeJson, _domainTypes.JsonSerializerOptions)!;
+
+                            await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
+                            _eventsProcessed = record.EventsProcessed;
+                            _processedEventIds.Clear();
+
+                            _logger.LogInformation(
+                                MultiProjectionLogEvents.StateRestoreSuccess,
+                                "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
+                                projectorName, record.LastSortableUniqueId, record.EventsProcessed);
+                            restoredFromExternalStore = true;
+                            _stateRestoredAt = DateTime.UtcNow;
+                            _stateRestoreSource = StateRestoreSource.ExternalStore;
                         }
-                        var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                            envelopeJson, _domainTypes.JsonSerializerOptions)!;
-
-                        await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
-                        _eventsProcessed = record.EventsProcessed;
-                        _processedEventIds.Clear();
-
-                        Console.WriteLine($"[Grain-{projectorName}] Restored - Position: {record.LastSortableUniqueId}, Events: {record.EventsProcessed}");
-                        restoredFromExternalStore = true;
                     }
                     else
                     {
-                        Console.WriteLine($"[Grain-{projectorName}] No state found for version {projectorVersion}");
+                        _logger.LogInformation(
+                            MultiProjectionLogEvents.StateNotFound,
+                            "No state found for version: {ProjectorName}, Version: {Version}",
+                            projectorName, projectorVersion);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Grain-{projectorName}] Restore failed: {ex.Message}");
+                    _logger.LogError(
+                        MultiProjectionLogEvents.StateRestoreFailed,
+                        ex,
+                        "State restoration exception: {ProjectorName}",
+                        projectorName);
+                    _stateRestoreSource = StateRestoreSource.Failed;
+                    _activationFailureReason = ex.Message;
                 }
+            }
+            else if (_multiProjectionStateStore == null)
+            {
+                _logger.LogDebug(
+                    MultiProjectionLogEvents.NoExternalStore,
+                    "No external state store configured: {ProjectorName}",
+                    projectorName);
             }
 
             if (!restoredFromExternalStore)
             {
-                Console.WriteLine($"[Grain-{projectorName}] No persisted state, will perform full catch-up");
+                _logger.LogInformation("No persisted state, will perform full catch-up: {ProjectorName}", projectorName);
                 forceFullCatchUp = true;
             }
         }
@@ -965,11 +1071,31 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // After activation, catch up from the event store.
         // If snapshot restore failed or there was no snapshot, perform a full catch-up to rebuild current state immediately.
         await CatchUpFromEventStoreAsync(forceFullCatchUp);
+
+        // Check if activation was successful
+        if (_stateRestoreSource == StateRestoreSource.Failed && !_catchUpProgress.IsActive && _eventsProcessed == 0)
+        {
+            // Both external store restore and catch-up failed
+            _activationHealthy = false;
+            _logger.LogCritical(
+                MultiProjectionLogEvents.UnhealthyActivation,
+                "Grain activated without state - queries may fail: {ProjectorName}, Reason: {Reason}",
+                projectorName, _activationFailureReason);
+        }
+        else if (forceFullCatchUp && _stateRestoreSource != StateRestoreSource.Failed)
+        {
+            _stateRestoreSource = StateRestoreSource.FullCatchUp;
+            _stateRestoredAt = DateTime.UtcNow;
+        }
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[SimplifiedPureGrain-{this.GetPrimaryKeyString()}] Deactivating - Reason: {reason}");
+        var projectorName = this.GetPrimaryKeyString();
+        _logger.LogInformation(
+            MultiProjectionLogEvents.DeactivationStarted,
+            "Grain deactivation started: {ProjectorName}, Reason: {Reason}",
+            projectorName, reason);
 
         // Stop catch-up if active
         if (_catchUpProgress.IsActive)
