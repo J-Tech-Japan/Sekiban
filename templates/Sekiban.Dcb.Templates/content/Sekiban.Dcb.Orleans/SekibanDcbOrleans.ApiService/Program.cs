@@ -420,11 +420,13 @@ var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>(
 if (databaseType == "cosmos")
 {
     builder.Services.AddSekibanDcbCosmosDbWithAspire();
+    builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
 }
 else
 {
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
+    builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
 }
 
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
@@ -475,8 +477,7 @@ apiRoute
                     });
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("CreateStudent");
+        .WithName("CreateStudent");
 apiRoute
     .MapGet(
         "/students",
@@ -501,8 +502,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("GetStudentList");
+        .WithName("GetStudentList");
 apiRoute
     .MapGet(
         "/students/{studentId:guid}",
@@ -525,8 +525,7 @@ apiRoute
 
             return Results.NotFound(new { error = $"Student {studentId} not found" });
         })
-    .WithOpenApi()
-    .WithName("GetStudent");
+        .WithName("GetStudent");
 apiRoute
     .MapPost(
         "/classrooms",
@@ -544,8 +543,7 @@ apiRoute
                     });
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("CreateClassRoom");
+        .WithName("CreateClassRoom");
 apiRoute
     .MapGet(
         "/classrooms",
@@ -570,8 +568,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("GetClassRoomList");
+        .WithName("GetClassRoomList");
 apiRoute
     .MapGet(
         "/classrooms/{classRoomId:guid}",
@@ -594,8 +591,7 @@ apiRoute
 
             return Results.NotFound(new { error = $"ClassRoom {classRoomId} not found" });
         })
-    .WithOpenApi()
-    .WithName("GetClassRoom");
+        .WithName("GetClassRoom");
 apiRoute
     .MapPost(
         "/enrollments/add",
@@ -614,8 +610,7 @@ apiRoute
                     });
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("EnrollStudent");
+        .WithName("EnrollStudent");
 apiRoute
     .MapPost(
         "/enrollments/drop",
@@ -634,8 +629,7 @@ apiRoute
                     });
             return Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("DropStudent");
+        .WithName("DropStudent");
 apiRoute
     .MapGet(
         "/debug/events",
@@ -668,8 +662,7 @@ apiRoute
                 return Results.Problem(ex.Message);
             }
         })
-    .WithOpenApi()
-    .WithName("DebugGetEvents");
+        .WithName("DebugGetEvents");
 apiRoute
     .MapGet(
         "/weatherforecast",
@@ -696,8 +689,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecast");
+        .WithName("GetWeatherForecast");
 apiRoute
     .MapGet(
         "/weatherforecastgeneric",
@@ -724,8 +716,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastGeneric");
+        .WithName("GetWeatherForecastGeneric");
 apiRoute
     .MapGet(
         "/weatherforecastsingle",
@@ -752,8 +743,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastSingle");
+        .WithName("GetWeatherForecastSingle");
 apiRoute
     .MapPost(
         "/inputweatherforecast",
@@ -776,8 +766,8 @@ apiRoute
                     error = result.GetException()?.Message
                 });
         })
-    .WithName("InputWeatherForecast")
-    .WithOpenApi();
+    .WithName("InputWeatherForecast");
+
 apiRoute
     .MapPost(
         "/updateweatherforecastlocation",
@@ -800,8 +790,8 @@ apiRoute
                     error = result.GetException()?.Message
                 });
         })
-    .WithName("UpdateWeatherForecastLocation")
-    .WithOpenApi();
+    .WithName("UpdateWeatherForecastLocation");
+
 apiRoute
     .MapGet(
         "/weatherforecast/count",
@@ -827,8 +817,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastCount");
+        .WithName("GetWeatherForecastCount");
 apiRoute
     .MapGet(
         "/weatherforecastgeneric/count",
@@ -855,8 +844,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastCountGeneric");
+        .WithName("GetWeatherForecastCountGeneric");
 apiRoute
     .MapGet(
         "/weatherforecastsingle/count",
@@ -883,8 +871,7 @@ apiRoute
 
             return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastCountSingle");
+        .WithName("GetWeatherForecastCountSingle");
 apiRoute
     .MapGet(
         "/weatherforecast/event-statistics",
@@ -894,8 +881,7 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
-    .WithName("GetEventDeliveryStatistics");
+        .WithName("GetEventDeliveryStatistics");
 apiRoute
     .MapGet(
         "/weatherforecastgeneric/event-statistics",
@@ -906,8 +892,7 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
-    .WithName("GetEventDeliveryStatisticsGeneric");
+        .WithName("GetEventDeliveryStatisticsGeneric");
 apiRoute
     .MapGet(
         "/weatherforecastsingle/event-statistics",
@@ -917,8 +902,7 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
-    .WithName("GetEventDeliveryStatisticsSingle");
+        .WithName("GetEventDeliveryStatisticsSingle");
 apiRoute
     .MapGet(
         "/weatherforecast/status",
@@ -935,8 +919,7 @@ apiRoute
                 return Results.BadRequest(new { projector = "WeatherForecastProjection", error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastStatus");
+        .WithName("GetWeatherForecastStatus");
 apiRoute
     .MapGet(
         "/weatherforecastgeneric/status",
@@ -947,8 +930,7 @@ apiRoute
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastGenericStatus");
+        .WithName("GetWeatherForecastGenericStatus");
 apiRoute
     .MapGet(
         "/weatherforecastsingle/status",
@@ -958,8 +940,7 @@ apiRoute
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
-    .WithName("GetWeatherForecastSingleStatus");
+        .WithName("GetWeatherForecastSingleStatus");
 apiRoute
     .MapPost(
         "/projections/persist",
@@ -981,8 +962,7 @@ apiRoute
                 return Results.BadRequest(new { error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("PersistProjectionState");
+        .WithName("PersistProjectionState");
 apiRoute
     .MapPost(
         "/projections/deactivate",
@@ -999,8 +979,7 @@ apiRoute
                 return Results.BadRequest(new { error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("DeactivateProjection");
+        .WithName("DeactivateProjection");
 apiRoute
     .MapPost(
         "/projections/refresh",
@@ -1017,8 +996,7 @@ apiRoute
                 return Results.BadRequest(new { error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("RefreshProjection");
+        .WithName("RefreshProjection");
 apiRoute
     .MapGet(
         "/projections/snapshot",
@@ -1036,8 +1014,7 @@ apiRoute
                 return Results.BadRequest(new { error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+        .WithName("GetProjectionSnapshot");
 apiRoute
     .MapPost(
         "/projections/overwrite-version",
@@ -1056,8 +1033,7 @@ apiRoute
                 return Results.BadRequest(new { error = ex.Message });
             }
         })
-    .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+        .WithName("OverwriteProjectionPersistedVersion");
 apiRoute
     .MapPost(
         "/removeweatherforecast",
@@ -1080,9 +1056,9 @@ apiRoute
                     error = result.GetException()?.Message
                 });
         })
-    .WithName("RemoveWeatherForecast")
-    .WithOpenApi();
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("HealthCheck");
+    .WithName("RemoveWeatherForecast");
+
+apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
 apiRoute
     .MapGet(
         "/orleans/test",
@@ -1119,7 +1095,6 @@ apiRoute
                     });
             }
         })
-    .WithOpenApi()
-    .WithName("TestOrleans");
+        .WithName("TestOrleans");
 app.MapDefaultEndpoints();
 app.Run();

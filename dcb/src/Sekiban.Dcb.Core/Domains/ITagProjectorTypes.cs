@@ -17,4 +17,9 @@ public interface ITagProjectorTypes
     ///     Gets the version of a projector by its name
     /// </summary>
     ResultBox<string> GetProjectorVersion(string tagProjectorName);
+
+    /// <summary>
+    ///     Gets all registered tag projector names
+    /// </summary>
+    IReadOnlyList<string> GetAllProjectorNames();
 }

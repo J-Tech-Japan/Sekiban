@@ -89,10 +89,10 @@ var bench = builder
 
 #endif
 
-// Multi Projection State CLI Tools (manual execution only)
+// Sekiban DCB CLI Tools (manual execution only)
 // Use Aspire dashboard "Start" button to run these tools
 builder
-    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-status")
+    .AddProject<DcbOrleans_Cli>("projection-status")
     .WithReference(postgres)
     .WaitFor(postgres)
     .WithArgs("status")
@@ -100,12 +100,12 @@ builder
     .WithExplicitStart();
 
 builder
-    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-list")
+    .AddProject<DcbOrleans_Cli>("projection-list")
     .WithArgs("list")
     .WithExplicitStart();
 
 builder
-    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-build")
+    .AddProject<DcbOrleans_Cli>("projection-build")
     .WithReference(postgres)
     .WaitFor(postgres)
     .WithArgs("build", "--verbose")
@@ -113,7 +113,7 @@ builder
     .WithExplicitStart();
 
 builder
-    .AddProject<DcbOrleans_MakeMultiProjectionState>("projection-build-force")
+    .AddProject<DcbOrleans_Cli>("projection-build-force")
     .WithReference(postgres)
     .WaitFor(postgres)
     .WithArgs("build", "--force", "--verbose")
