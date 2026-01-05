@@ -13,4 +13,9 @@ public interface ITagTypes
     /// <param name="tag">group:content 形式の文字列。</param>
     /// <returns>復元されたタグ、またはフォールバックタグ。</returns>
     ITag GetTag(string tag);
+
+    /// <summary>
+    ///     Gets all registered tag group names
+    /// </summary>
+    IReadOnlyList<string> GetAllTagGroupNames();
 }

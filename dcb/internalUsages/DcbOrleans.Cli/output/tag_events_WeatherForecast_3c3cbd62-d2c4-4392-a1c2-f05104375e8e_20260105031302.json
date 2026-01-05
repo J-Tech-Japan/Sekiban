@@ -1,0 +1,27 @@
+{
+  "Tag": "WeatherForecast:3c3cbd62-d2c4-4392-a1c2-f05104375e8e",
+  "EventCount": 2,
+  "FetchedAt": "2026-01-05T03:13:02.306449Z",
+  "Events": [
+    {
+      "Id": "019b8c1d-434d-7b16-aa7a-edc48ab99ce9",
+      "SortableUniqueId": "063903179086669068000690435981",
+      "EventType": "WeatherForecastCreated",
+      "Tags": [
+        "WeatherForecast:3c3cbd62-d2c4-4392-a1c2-f05104375e8e"
+      ],
+      "PayloadJson": "{\u0022forecastId\u0022:\u00223c3cbd62-d2c4-4392-a1c2-f05104375e8e\u0022,\u0022location\u0022:\u0022Loc-b5c140b15c24446688ba24c62d88514f\u0022,\u0022date\u0022:\u00222026-02-03\u0022,\u0022temperatureC\u0022:12,\u0022summary\u0022:\u0022bench\u0022}",
+      "Payload": {}
+    },
+    {
+      "Id": "019b8c1d-449d-7676-8f9d-c4e39013d64b",
+      "SortableUniqueId": "063903179087005670001088628266",
+      "EventType": "LocationNameChanged",
+      "Tags": [
+        "WeatherForecast:3c3cbd62-d2c4-4392-a1c2-f05104375e8e"
+      ],
+      "PayloadJson": "{\u0022forecastId\u0022:\u00223c3cbd62-d2c4-4392-a1c2-f05104375e8e\u0022,\u0022newLocationName\u0022:\u0022Loc-b5c140b15c24446688ba24c62d88514f-U\u0022,\u0022oldLocationName\u0022:\u0022Loc-b5c140b15c24446688ba24c62d88514f\u0022}",
+      "Payload": {}
+    }
+  ]
+}

@@ -33,7 +33,7 @@
     <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
-    <Project Path="internalUsages/DcbOrleans.MakeMultiProjectionState/DcbOrleans.MakeMultiProjectionState.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Cli/DcbOrleans.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />

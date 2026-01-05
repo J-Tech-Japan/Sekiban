@@ -26,7 +26,7 @@
         <ProjectReference Include="..\DcbOrleans.WithoutResult.ApiService\DcbOrleans.WithoutResult.ApiService.csproj"/>
         <ProjectReference Include="..\DcbOrleans.Web\DcbOrleans.Web.csproj"/>
         <ProjectReference Include="..\DcbOrleans.Benchmark\DcbOrleans.Benchmark.csproj"/>
-        <ProjectReference Include="..\DcbOrleans.MakeMultiProjectionState\DcbOrleans.MakeMultiProjectionState.csproj"/>
+        <ProjectReference Include="..\DcbOrleans.Cli\DcbOrleans.Cli.csproj"/>
     </ItemGroup>
 
 </Project>

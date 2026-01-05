@@ -31,11 +31,11 @@
         <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="9.2.1" />
         <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="9.2.1" />
         <PackageReference Include="Scalar.AspNetCore" Version="2.11.10" />
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.1-preview12" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.1-preview12" />
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.2-preview01" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.2-preview01" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.1-preview12" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.1-preview12" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.2-preview01" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.2-preview01" />
     </ItemGroup>
 
 </Project>

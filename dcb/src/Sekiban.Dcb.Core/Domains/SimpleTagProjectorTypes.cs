@@ -36,6 +36,8 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
         return ResultBox.Error<string>(new Exception($"Tag projector '{tagProjectorName}' not found"));
     }
 
+    public IReadOnlyList<string> GetAllProjectorNames() => _projectorFunctions.Keys.ToList();
+
     /// <summary>
     ///     Register a tag projector type using its static ProjectorName
     /// </summary>

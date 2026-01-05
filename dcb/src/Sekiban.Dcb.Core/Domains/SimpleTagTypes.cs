@@ -29,6 +29,11 @@ public class SimpleTagTypes : ITagTypes
     }
 
     /// <summary>
+    ///     Gets all registered tag group names
+    /// </summary>
+    public IReadOnlyList<string> GetAllTagGroupNames() => _tagGroupFactories.Keys.ToList();
+
+    /// <summary>
     ///     ITagGroup 実装型を登録します。
     /// </summary>
     public void RegisterTagGroupType<TTagGroup>() where TTagGroup : ITagGroup<TTagGroup>

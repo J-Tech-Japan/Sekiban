@@ -38,7 +38,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
     public static string MultiProjectorVersion => "1.0.0";
 
-    public static byte[] Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
+    public static SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, WeatherForecastProjectorWithTagStateProjector payload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold))
         {
@@ -72,10 +72,14 @@ public record WeatherForecastProjectorWithTagStateProjector :
         }
         var dto = new { v = 1, items };
         var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
-        return GzipCompression.CompressString(json);
+        var rawBytes = System.Text.Encoding.UTF8.GetBytes(json);
+        var originalSize = rawBytes.LongLength;
+        var compressed = GzipCompression.Compress(rawBytes);
+        var compressedSize = compressed.LongLength;
+        return new SerializationResult(compressed, originalSize, compressedSize);
     }
 
-    public static WeatherForecastProjectorWithTagStateProjector Deserialize(DcbDomainTypes domainTypes, ReadOnlySpan<byte> data)
+    public static WeatherForecastProjectorWithTagStateProjector Deserialize(DcbDomainTypes domainTypes, string safeWindowThreshold, ReadOnlySpan<byte> data)
     {
         var json = GzipCompression.DecompressToString(data);
         var obj = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(json, domainTypes.JsonSerializerOptions);
@@ -112,8 +116,8 @@ public record WeatherForecastProjectorWithTagStateProjector :
                 }
             }
         }
-    var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
-    return new WeatherForecastProjectorWithTagStateProjector { State = state };
+        var state = SafeUnsafeProjectionState<Guid, TagState>.FromCurrentData(map);
+        return new WeatherForecastProjectorWithTagStateProjector { State = state };
     }
 
     /// <summary>
@@ -149,7 +153,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
                 .OfType<WeatherForecastTag>()
                 .Select(t => t.ForecastId)
                 .ToList();
-            
+
             // If no tags in event, use the affected IDs from the passed tags
             return eventTags.Count > 0 ? eventTags : affectedForecastIds;
         };
@@ -269,16 +273,9 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
         Func<Guid, TagState?, Event, TagState?> projectItem = (forecastId, current, evt) => ProjectTagState(forecastId, current, evt);
         var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
-        var safeLast = string.Empty;
-        if (safeDict.Count > 0)
-        {
-            var candidate = safeDict.Values
-                .Select(ts => ts.LastSortedUniqueId)
-                .Where(id => !string.IsNullOrEmpty(id))
-                .OrderBy(id => id)
-                .LastOrDefault();
-            safeLast = candidate ?? string.Empty;
-        }
+        var safeLast = safeDict.Count > 0
+            ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
+            : string.Empty;
         var version = safeDict.Values.Sum(ts => ts.Version);
         return new SafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, safeLast, version);
     }
@@ -289,16 +286,9 @@ public record WeatherForecastProjectorWithTagStateProjector :
     public UnsafeProjection<WeatherForecastProjectorWithTagStateProjector> GetUnsafeProjection(DcbDomainTypes domainTypes)
     {
         var current = State.GetCurrentState();
-        var last = string.Empty;
-        if (current.Count > 0)
-        {
-            var candidate = current.Values
-                .Select(ts => ts.LastSortedUniqueId)
-                .Where(id => !string.IsNullOrEmpty(id))
-                .OrderBy(id => id)
-                .LastOrDefault();
-            last = candidate ?? string.Empty;
-        }
+        var last = current.Count > 0
+            ? current.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
+            : string.Empty;
         var version = current.Values.Sum(ts => ts.Version);
         return new UnsafeProjection<WeatherForecastProjectorWithTagStateProjector>(this, last, Guid.Empty, version);
     }
