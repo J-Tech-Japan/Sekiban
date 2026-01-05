@@ -23,6 +23,7 @@ public class CosmosDbContext : IDisposable
     private readonly string? _connectionString;
     private readonly string _databaseName;
     private readonly ILogger<CosmosDbContext>? _logger;
+    private readonly CosmosDbEventStoreOptions _options;
     private Container? _eventsContainer;
     private Container? _tagsContainer;
     private Container? _multiProjectionStatesContainer;
@@ -35,10 +36,11 @@ public class CosmosDbContext : IDisposable
     ///     Constructor from configuration (deprecated - use extension methods instead)
     /// </summary>
     [Obsolete("Use SekibanDcbCosmosDbExtensions.AddSekibanDcbCosmosDb instead")]
-    public CosmosDbContext(IConfiguration configuration, ILogger<CosmosDbContext>? logger = null)
+    public CosmosDbContext(IConfiguration configuration, ILogger<CosmosDbContext>? logger = null, CosmosDbEventStoreOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         _logger = logger;
+        _options = options ?? new CosmosDbEventStoreOptions();
         // Try multiple connection string keys for backward compatibility
         _connectionString = configuration.GetConnectionString("SekibanDcbCosmos")
             ?? configuration.GetConnectionString("SekibanDcbCosmosDb")
@@ -55,9 +57,14 @@ public class CosmosDbContext : IDisposable
     /// <summary>
     ///     Constructor with connection string and database name.
     /// </summary>
-    public CosmosDbContext(string connectionString, string databaseName = "SekibanDcb", ILogger<CosmosDbContext>? logger = null)
+    public CosmosDbContext(
+        string connectionString,
+        string databaseName = "SekibanDcb",
+        ILogger<CosmosDbContext>? logger = null,
+        CosmosDbEventStoreOptions? options = null)
     {
         _logger = logger;
+        _options = options ?? new CosmosDbEventStoreOptions();
         _connectionString = connectionString;
         _databaseName = databaseName;
         _ownsCosmosClient = true;
@@ -66,13 +73,23 @@ public class CosmosDbContext : IDisposable
     /// <summary>
     ///     Constructor that accepts an existing CosmosClient (for Aspire)
     /// </summary>
-    public CosmosDbContext(CosmosClient cosmosClient, string databaseName = "SekibanDcb", ILogger<CosmosDbContext>? logger = null)
+    public CosmosDbContext(
+        CosmosClient cosmosClient,
+        string databaseName = "SekibanDcb",
+        ILogger<CosmosDbContext>? logger = null,
+        CosmosDbEventStoreOptions? options = null)
     {
         _logger = logger;
+        _options = options ?? new CosmosDbEventStoreOptions();
         _cosmosClient = cosmosClient ?? throw new ArgumentNullException(nameof(cosmosClient));
         _databaseName = databaseName;
         _ownsCosmosClient = false;
     }
+
+    /// <summary>
+    ///     Gets the event store options.
+    /// </summary>
+    public CosmosDbEventStoreOptions Options => _options;
 
     /// <summary>
     ///     Gets the events container, initializing if needed.
@@ -131,7 +148,10 @@ public class CosmosDbContext : IDisposable
                 {
                     PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
                 },
-                AllowBulkExecution = true
+                AllowBulkExecution = true,
+                // Retry settings for Serverless mode (increased from defaults)
+                MaxRetryAttemptsOnRateLimitedRequests = _options.MaxRetryAttemptsOnRateLimited,
+                MaxRetryWaitTimeOnRateLimitedRequests = _options.MaxRetryWaitTime
             };
 
             _cosmosClient = new CosmosClient(_connectionString, cosmosClientOptions);
