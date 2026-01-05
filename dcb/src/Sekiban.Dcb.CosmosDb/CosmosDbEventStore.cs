@@ -516,6 +516,59 @@ public class CosmosDbEventStore : IEventStore
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    {
+        try
+        {
+            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+
+            // Query all tags and group in memory (Cosmos DB doesn't support complex GROUP BY with aggregations)
+            IQueryable<CosmosTag> query = tagsContainer.GetItemLinqQueryable<CosmosTag>();
+            if (!string.IsNullOrEmpty(tagGroup))
+            {
+                query = query.Where(t => t.TagGroup == tagGroup);
+            }
+
+            var allTags = new List<CosmosTag>();
+            using var iterator = query.ToFeedIterator();
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                allTags.AddRange(response);
+            }
+
+            // Group in memory
+            var tagInfos = allTags
+                .GroupBy(t => new { t.Tag, t.TagGroup })
+                .Select(g => new TagInfo(
+                    g.Key.Tag,
+                    g.Key.TagGroup,
+                    g.Count(),
+                    g.Min(t => t.SortableUniqueId),
+                    g.Max(t => t.SortableUniqueId),
+                    g.Min(t => t.CreatedAt),
+                    g.Max(t => t.CreatedAt)))
+                .OrderBy(t => t.TagGroup)
+                .ThenBy(t => t.Tag)
+                .ToList();
+
+            return ResultBox.FromValue(tagInfos.AsEnumerable());
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+        }
+    }
+
     private string SerializeEventPayload(IEventPayload payload) =>
         _domainTypes.EventTypes.SerializeEventPayload(payload);
 

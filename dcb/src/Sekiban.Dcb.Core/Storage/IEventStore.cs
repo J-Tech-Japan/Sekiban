@@ -58,4 +58,23 @@ public interface IEventStore
     ///     Gets total event count, optionally after a position.
     /// </summary>
     Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null);
+
+    /// <summary>
+    ///     Gets all unique tags in the event store
+    /// </summary>
+    /// <param name="tagGroup">Optional: Filter by tag group name</param>
+    /// <returns>List of unique tag information</returns>
+    Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null);
 }
+
+/// <summary>
+///     Information about a tag in the event store
+/// </summary>
+public record TagInfo(
+    string Tag,
+    string TagGroup,
+    int EventCount,
+    string? FirstSortableUniqueId,
+    string? LastSortableUniqueId,
+    DateTime? FirstEventAt,
+    DateTime? LastEventAt);

@@ -12,6 +12,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.Services;
 using Sekiban.Dcb.Storage;
+using System.Text.Encodings.Web;
 
 // Build configuration from environment variables and user secrets
 var configuration = new ConfigurationBuilder()
@@ -288,6 +289,38 @@ tagStateCommand.SetHandler(async (context) =>
     await ShowTagStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, tagProjector);
 });
 
+// Tag-list command - list all tags in the event store
+var tagGroupOption = new Option<string?>(
+    name: "--tag-group",
+    description: "Filter by tag group name (e.g., 'WeatherForecast')");
+tagGroupOption.AddAlias("-g");
+
+var tagListCommand = new Command("tag-list", "List all tags in the event store and export to JSON")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    tagGroupOption,
+    outputDirOption
+};
+
+tagListCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var tagGroup = context.ParseResult.GetValueForOption(tagGroupOption);
+    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await ListTagsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tagGroup, outputDir);
+});
+
 rootCommand.AddCommand(buildCommand);
 rootCommand.AddCommand(listCommand);
 rootCommand.AddCommand(statusCommand);
@@ -296,6 +329,7 @@ rootCommand.AddCommand(deleteCommand);
 rootCommand.AddCommand(tagEventsCommand);
 rootCommand.AddCommand(projectionCommand);
 rootCommand.AddCommand(tagStateCommand);
+rootCommand.AddCommand(tagListCommand);
 
 return await rootCommand.InvokeAsync(args);
 
@@ -793,6 +827,13 @@ static async Task FetchTagEventsAsync(string connectionString, string databaseTy
     // Create output directory
     Directory.CreateDirectory(outputDir);
 
+    // JSON options with proper UTF-8 encoding
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     // Prepare events for JSON serialization
     var eventsForJson = events.Select(e => new
     {
@@ -800,7 +841,7 @@ static async Task FetchTagEventsAsync(string connectionString, string databaseTy
         SortableUniqueId = e.SortableUniqueIdValue,
         e.EventType,
         e.Tags,
-        PayloadJson = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), domainTypes.JsonSerializerOptions),
+        PayloadJson = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), jsonOptions),
         e.Payload
     }).ToList();
 
@@ -809,11 +850,6 @@ static async Task FetchTagEventsAsync(string connectionString, string databaseTy
     var safeTagName = tagString.Replace(":", "_").Replace("/", "_");
     var fileName = $"tag_events_{safeTagName}_{timestamp}.json";
     var filePath = Path.Combine(outputDir, fileName);
-
-    var jsonOptions = new System.Text.Json.JsonSerializerOptions
-    {
-        WriteIndented = true
-    };
 
     var output = new
     {
@@ -1089,6 +1125,65 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
     // Register CLI services
     services.AddSingleton<TagEventService>();
     services.AddSingleton<TagStateService>();
+    services.AddSingleton<TagListService>();
 
     return services.BuildServiceProvider();
+}
+
+static async Task ListTagsAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? tagGroup, string outputDir)
+{
+    Console.WriteLine("=== Tag List ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    if (!string.IsNullOrEmpty(tagGroup))
+    {
+        Console.WriteLine($"Filter: {tagGroup}");
+    }
+    Console.WriteLine($"Output Directory: {outputDir}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var tagListService = services.GetRequiredService<TagListService>();
+
+    // Export tag list
+    var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+    var fileName = string.IsNullOrEmpty(tagGroup)
+        ? $"tag_list_{timestamp}.json"
+        : $"tag_list_{tagGroup}_{timestamp}.json";
+    var filePath = Path.Combine(outputDir, fileName);
+
+    var result = await tagListService.ExportTagListAsync(filePath, tagGroup);
+    if (!result.IsSuccess)
+    {
+        Console.WriteLine($"Error: {result.GetException().Message}");
+        return;
+    }
+
+    var exportResult = result.GetValue();
+
+    Console.WriteLine($"Total Tag Groups: {exportResult.TotalTagGroups}");
+    Console.WriteLine($"Total Tags: {exportResult.TotalTags}");
+    Console.WriteLine($"Total Events: {exportResult.TotalEvents:N0}");
+    Console.WriteLine();
+
+    // Display tag groups
+    foreach (var group in exportResult.TagGroups)
+    {
+        Console.WriteLine($"[{group.TagGroup}] ({group.TagCount} tags, {group.TotalEvents:N0} events)");
+
+        // Show first 10 tags
+        var tagsToShow = group.Tags.Take(10).ToList();
+        foreach (var tag in tagsToShow)
+        {
+            Console.WriteLine($"  - {tag.Tag}");
+            Console.WriteLine($"      Events: {tag.EventCount}, First: {tag.FirstEventAt:yyyy-MM-dd HH:mm:ss}, Last: {tag.LastEventAt:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        if (group.Tags.Count > 10)
+        {
+            Console.WriteLine($"  ... and {group.Tags.Count - 10} more tags");
+        }
+        Console.WriteLine();
+    }
+
+    Console.WriteLine($"Tag list saved to: {filePath}");
 }

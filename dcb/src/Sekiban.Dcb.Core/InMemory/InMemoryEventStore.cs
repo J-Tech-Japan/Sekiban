@@ -216,4 +216,33 @@ public class InMemoryEventStore : IEventStore
             return Task.FromResult(ResultBox.FromValue((long)count));
         }
     }
+
+    public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    {
+        lock (_eventLock)
+        {
+            var tagInfos = _tagStreams
+                .Where(kvp => string.IsNullOrEmpty(tagGroup) || kvp.Key.StartsWith(tagGroup + ":"))
+                .Select(kvp =>
+                {
+                    var tagString = kvp.Key;
+                    var streams = kvp.Value;
+                    var group = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+
+                    return new TagInfo(
+                        tagString,
+                        group,
+                        streams.Count,
+                        streams.Min(s => s.SortableUniqueId),
+                        streams.Max(s => s.SortableUniqueId),
+                        null, // InMemory doesn't track timestamps
+                        null);
+                })
+                .OrderBy(t => t.TagGroup)
+                .ThenBy(t => t.Tag)
+                .ToList();
+
+            return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
+        }
+    }
 }

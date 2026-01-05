@@ -10,6 +10,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Services;
 using Sekiban.Dcb.Storage;
 
 // Build configuration from environment variables and user secrets
@@ -19,7 +20,36 @@ var configuration = new ConfigurationBuilder()
     .Build();
 
 // Create the root command
-var rootCommand = new RootCommand("Multi Projection State Builder CLI - Pre-build projection states for faster startup");
+var rootCommand = new RootCommand(
+@"Sekiban DCB CLI - Manage projections, tags, and events
+
+Examples:
+  # List all registered projectors and tag groups
+  dotnet run -- list
+
+  # Show status of all projection states
+  dotnet run -- status -c ""Host=localhost;Database=mydb;Username=user;Password=pass""
+
+  # Build all projection states
+  dotnet run -- build -c ""Host=localhost;Database=mydb;Username=user;Password=pass""
+
+  # Fetch events for a specific tag
+  dotnet run -- tag-events -t ""WeatherForecast:00000000-0000-0000-0000-000000000001"" -c ""...""
+
+  # Project tag state using a specific projector
+  dotnet run -- tag-state -t ""WeatherForecast:guid-here"" -P ""WeatherForecastProjector"" -c ""...""
+
+  # Save projection state to JSON files
+  dotnet run -- save -o ./output -c ""...""
+
+  # List all tags in the event store
+  dotnet run -- tag-list -c ""..."" -o ./output
+
+  # List tags filtered by group
+  dotnet run -- tag-list -g ""WeatherForecast"" -c ""...""
+
+  # Use Cosmos DB instead of PostgreSQL
+  dotnet run -- status -d cosmos --cosmos-connection-string ""AccountEndpoint=...""");
 
 // Database type option (shared across commands)
 var databaseOption = new Option<string?>(
@@ -70,6 +100,31 @@ var verboseOption = new Option<bool>(
     getDefaultValue: () => configuration["VERBOSE"]?.ToLowerInvariant() == "true",
     description: "Show verbose output");
 verboseOption.AddAlias("-v");
+
+// Output directory option
+var outputDirOption = new Option<string?>(
+    name: "--output-dir",
+    getDefaultValue: () => configuration["OUTPUT_DIR"] ?? "./output",
+    description: "Output directory for saved files");
+outputDirOption.AddAlias("-o");
+
+// Tag option
+var tagOption = new Option<string>(
+    name: "--tag",
+    description: "Tag string in format 'group:content' (e.g., 'WeatherForecast:00000000-0000-0000-0000-000000000001')")
+{
+    IsRequired = true
+};
+tagOption.AddAlias("-t");
+
+// Tag projector option
+var tagProjectorOption = new Option<string>(
+    name: "--tag-projector",
+    description: "Tag projector name to use for projection (e.g., 'WeatherForecastProjector')")
+{
+    IsRequired = true
+};
+tagProjectorOption.AddAlias("-P");
 
 // Build command
 var buildCommand = new Command("build", "Build multi projection states")
@@ -130,12 +185,6 @@ statusCommand.SetHandler(async (context) =>
 });
 
 // Save command
-var outputDirOption = new Option<string?>(
-    name: "--output-dir",
-    getDefaultValue: () => configuration["OUTPUT_DIR"] ?? "./output",
-    description: "Output directory for saved state files");
-outputDirOption.AddAlias("-o");
-
 var saveCommand = new Command("save", "Save projection state JSON to files for debugging")
 {
     databaseOption,
@@ -162,10 +211,151 @@ saveCommand.SetHandler(async (context) =>
     await SaveStateJsonAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName, outputDir);
 });
 
+// Delete command
+var deleteCommand = new Command("delete", "Delete projection states")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    projectorNameOption
+};
+
+deleteCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await DeleteStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName);
+});
+
+// Tag-events command
+var tagEventsCommand = new Command("tag-events", "Fetch and save all events for a specific tag")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    tagOption,
+    outputDirOption
+};
+
+tagEventsCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var tag = context.ParseResult.GetValueForOption(tagOption) ?? "";
+    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await FetchTagEventsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, outputDir);
+});
+
+// Projection command
+var projectionCommand = new Command("projection", "Display the current state of a projection")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    projectorNameOption
+};
+
+projectionCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await ShowProjectionAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, projectorName);
+});
+
+// Tag-state command
+var tagStateCommand = new Command("tag-state", "Project and display the current state for a specific tag")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    tagOption,
+    tagProjectorOption
+};
+
+tagStateCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var tag = context.ParseResult.GetValueForOption(tagOption) ?? "";
+    var tagProjector = context.ParseResult.GetValueForOption(tagProjectorOption) ?? "";
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await ShowTagStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, tagProjector);
+});
+
+// Tag-list command
+var tagGroupOption = new Option<string?>(
+    name: "--tag-group",
+    description: "Filter by tag group name (e.g., 'WeatherForecast')");
+tagGroupOption.AddAlias("-g");
+
+var tagListCommand = new Command("tag-list", "List all tags in the event store and export to JSON")
+{
+    databaseOption,
+    connectionStringOption,
+    cosmosConnectionStringOption,
+    cosmosDatabaseNameOption,
+    tagGroupOption,
+    outputDirOption
+};
+
+tagListCommand.SetHandler(async (context) =>
+{
+    var database = context.ParseResult.GetValueForOption(databaseOption);
+    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
+    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
+    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var tagGroup = context.ParseResult.GetValueForOption(tagGroupOption);
+    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+
+    var resolvedDatabase = ResolveDatabaseType(configuration, database);
+    var resolvedConnectionString = ResolveConnectionString(configuration, resolvedDatabase, connectionString, cosmosConnectionString);
+    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(configuration, cosmosDatabaseName);
+
+    await ListTagsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tagGroup, outputDir);
+});
+
 rootCommand.AddCommand(buildCommand);
 rootCommand.AddCommand(listCommand);
 rootCommand.AddCommand(statusCommand);
 rootCommand.AddCommand(saveCommand);
+rootCommand.AddCommand(deleteCommand);
+rootCommand.AddCommand(tagEventsCommand);
+rootCommand.AddCommand(projectionCommand);
+rootCommand.AddCommand(tagStateCommand);
+rootCommand.AddCommand(tagListCommand);
 
 return await rootCommand.InvokeAsync(args);
 
@@ -321,6 +511,26 @@ static async Task ListProjectorsAsync()
         var versionResult = domainTypes.MultiProjectorTypes.GetProjectorVersion(name);
         var version = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
         Console.WriteLine($"  - {name} (version: {version})");
+    }
+
+    Console.WriteLine("\n=== Registered Tag Projectors ===\n");
+    var tagProjectorNames = domainTypes.TagProjectorTypes.GetAllProjectorNames();
+    Console.WriteLine($"Total: {tagProjectorNames.Count} tag projector(s)\n");
+
+    foreach (var name in tagProjectorNames)
+    {
+        var versionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(name);
+        var version = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        Console.WriteLine($"  - {name} (version: {version})");
+    }
+
+    Console.WriteLine("\n=== Registered Tag Groups ===\n");
+    var tagGroupNames = domainTypes.TagTypes.GetAllTagGroupNames();
+    Console.WriteLine($"Total: {tagGroupNames.Count} tag group(s)\n");
+
+    foreach (var name in tagGroupNames)
+    {
+        Console.WriteLine($"  - {name}");
     }
 
     await Task.CompletedTask;
@@ -531,6 +741,337 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
     Console.WriteLine($"Saved {savedCount} projection state(s) to {outputDir}");
 }
 
+static async Task DeleteStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName)
+{
+    Console.WriteLine("=== Delete Projection States ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+
+    var listResult = await stateStore.ListAllAsync();
+    if (!listResult.IsSuccess)
+    {
+        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        return;
+    }
+
+    var states = listResult.GetValue();
+    if (!string.IsNullOrEmpty(projectorName))
+    {
+        states = states.Where(s => s.ProjectorName == projectorName).ToList();
+    }
+
+    if (states.Count == 0)
+    {
+        Console.WriteLine("No projection states found to delete.");
+        return;
+    }
+
+    Console.WriteLine($"Found {states.Count} state(s) to delete:");
+    foreach (var state in states)
+    {
+        Console.WriteLine($"  - {state.ProjectorName} (v{state.ProjectorVersion})");
+    }
+    Console.WriteLine();
+
+    Console.Write("Are you sure you want to delete these states? (y/N): ");
+    var response = Console.ReadLine();
+    if (response?.ToLowerInvariant() != "y")
+    {
+        Console.WriteLine("Cancelled.");
+        return;
+    }
+
+    var deleted = 0;
+    foreach (var state in states)
+    {
+        var deleteResult = await stateStore.DeleteAsync(state.ProjectorName, state.ProjectorVersion);
+        if (deleteResult.IsSuccess)
+        {
+            Console.WriteLine($"  Deleted: {state.ProjectorName} (v{state.ProjectorVersion})");
+            deleted++;
+        }
+        else
+        {
+            Console.WriteLine($"  Failed to delete {state.ProjectorName}: {deleteResult.GetException().Message}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"Deleted {deleted} of {states.Count} state(s)");
+}
+
+static async Task FetchTagEventsAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string outputDir)
+{
+    Console.WriteLine("=== Fetch Tag Events ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    Console.WriteLine($"Tag: {tagString}");
+    Console.WriteLine($"Output Directory: {outputDir}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var tagEventService = services.GetRequiredService<TagEventService>();
+
+    var tag = tagEventService.ParseTag(tagString);
+    Console.WriteLine($"Parsed Tag: {tag.GetType().Name} = {tag}");
+    Console.WriteLine();
+
+    Console.WriteLine("Fetching events...");
+    var eventsResult = await tagEventService.GetEventsByTagAsync(tag);
+    if (!eventsResult.IsSuccess)
+    {
+        Console.WriteLine($"Error fetching events: {eventsResult.GetException().Message}");
+        return;
+    }
+
+    var events = eventsResult.GetValue().ToList();
+    Console.WriteLine($"Found {events.Count} event(s)\n");
+
+    if (events.Count == 0)
+    {
+        Console.WriteLine("No events to save.");
+        return;
+    }
+
+    Directory.CreateDirectory(outputDir);
+
+    var eventsForJson = events.Select(e => new
+    {
+        e.Id,
+        SortableUniqueId = e.SortableUniqueIdValue,
+        e.EventType,
+        e.Tags,
+        PayloadJson = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), tagEventService.JsonSerializerOptions),
+        e.Payload
+    }).ToList();
+
+    var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+    var safeTagName = tagString.Replace(":", "_").Replace("/", "_");
+    var fileName = $"tag_events_{safeTagName}_{timestamp}.json";
+    var filePath = Path.Combine(outputDir, fileName);
+
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+    var output = new
+    {
+        Tag = tagString,
+        EventCount = events.Count,
+        FetchedAt = DateTime.UtcNow,
+        Events = eventsForJson
+    };
+
+    await File.WriteAllTextAsync(filePath, System.Text.Json.JsonSerializer.Serialize(output, jsonOptions));
+
+    Console.WriteLine($"Events saved to: {filePath}");
+
+    Console.WriteLine("\nEvent Summary:");
+    Console.WriteLine($"{"#",-4} {"SortableUniqueId",-40} {"EventType",-40}");
+    Console.WriteLine(new string('-', 90));
+
+    var index = 1;
+    foreach (var evt in events.Take(20))
+    {
+        Console.WriteLine($"{index,-4} {evt.SortableUniqueIdValue,-40} {evt.EventType,-40}");
+        index++;
+    }
+
+    if (events.Count > 20)
+    {
+        Console.WriteLine($"... and {events.Count - 20} more events");
+    }
+}
+
+static async Task ShowProjectionAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName)
+{
+    Console.WriteLine("=== Projection State ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    if (databaseType.ToLowerInvariant() == "cosmos")
+    {
+        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
+    }
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
+    var domainTypes = services.GetRequiredService<DcbDomainTypes>();
+
+    var listResult = await stateStore.ListAllAsync();
+    if (!listResult.IsSuccess)
+    {
+        Console.WriteLine($"Error listing states: {listResult.GetException().Message}");
+        return;
+    }
+
+    var stateInfos = listResult.GetValue();
+    if (!string.IsNullOrEmpty(projectorName))
+    {
+        stateInfos = stateInfos.Where(s => s.ProjectorName == projectorName).ToList();
+    }
+
+    if (stateInfos.Count == 0)
+    {
+        Console.WriteLine("No projection states found.");
+
+        var projectorNames = domainTypes.MultiProjectorTypes.GetAllProjectorNames();
+        if (projectorNames.Count > 0)
+        {
+            Console.WriteLine("\nAvailable projectors:");
+            foreach (var name in projectorNames)
+            {
+                Console.WriteLine($"  - {name}");
+            }
+        }
+        return;
+    }
+
+    foreach (var info in stateInfos)
+    {
+        Console.WriteLine($"Projector: {info.ProjectorName}");
+        Console.WriteLine($"  Version: {info.ProjectorVersion}");
+        Console.WriteLine($"  Events Processed: {info.EventsProcessed:N0}");
+        Console.WriteLine($"  Size: {FormatBytes(info.CompressedSizeBytes)}");
+        Console.WriteLine($"  Updated: {info.UpdatedAt:yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine();
+
+        var recordResult = await stateStore.GetLatestForVersionAsync(info.ProjectorName, info.ProjectorVersion);
+        if (!recordResult.IsSuccess || !recordResult.GetValue().HasValue)
+        {
+            Console.WriteLine("  Could not fetch full state record.");
+            continue;
+        }
+
+        var state = recordResult.GetValue().GetValue();
+
+        Console.WriteLine($"  Last SortableUniqueId: {state.LastSortableUniqueId}");
+        Console.WriteLine($"  Safe Window Threshold: {state.SafeWindowThreshold}");
+        Console.WriteLine($"  Build Source: {state.BuildSource}");
+        Console.WriteLine($"  Build Host: {state.BuildHost}");
+        Console.WriteLine($"  Is Offloaded: {state.IsOffloaded}");
+
+        if (state.StateData != null)
+        {
+            try
+            {
+                string jsonContent;
+
+                if (state.StateData.Length >= 2 && state.StateData[0] == 0x1f && state.StateData[1] == 0x8b)
+                {
+                    jsonContent = GzipCompression.DecompressToString(state.StateData);
+                }
+                else
+                {
+                    jsonContent = System.Text.Encoding.UTF8.GetString(state.StateData);
+                }
+
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
+
+                Console.WriteLine("\n  State Preview:");
+
+                if (jsonDoc.RootElement.TryGetProperty("items", out var items) && items.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var itemCount = items.GetArrayLength();
+                    Console.WriteLine($"    Items Count: {itemCount}");
+
+                    var shown = 0;
+                    foreach (var item in items.EnumerateArray())
+                    {
+                        if (shown >= 5) break;
+                        if (item.TryGetProperty("id", out var id))
+                        {
+                            var idStr = id.GetGuid().ToString();
+                            Console.WriteLine($"    - {idStr}");
+                        }
+                        shown++;
+                    }
+                    if (itemCount > 5)
+                    {
+                        Console.WriteLine($"    ... and {itemCount - 5} more items");
+                    }
+                }
+                else if (jsonDoc.RootElement.TryGetProperty("State", out var stateElement))
+                {
+                    Console.WriteLine($"    State Type: {stateElement.ValueKind}");
+                }
+                else
+                {
+                    Console.WriteLine("    Root Properties:");
+                    foreach (var prop in jsonDoc.RootElement.EnumerateObject().Take(5))
+                    {
+                        Console.WriteLine($"    - {prop.Name}: {prop.Value.ValueKind}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Could not parse state data: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine();
+    }
+}
+
+static async Task ShowTagStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string projectorName)
+{
+    Console.WriteLine("=== Tag State Projection ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    Console.WriteLine($"Tag: {tagString}");
+    Console.WriteLine($"Projector: {projectorName}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var tagStateService = services.GetRequiredService<TagStateService>();
+
+    if (string.IsNullOrEmpty(projectorName))
+    {
+        Console.WriteLine("Available Tag Projectors:");
+        foreach (var name in tagStateService.GetAllTagProjectorNames())
+        {
+            Console.WriteLine($"  - {name}");
+        }
+        Console.WriteLine("\nAvailable Tag Groups:");
+        foreach (var name in tagStateService.GetAllTagGroupNames())
+        {
+            Console.WriteLine($"  - {name}");
+        }
+        return;
+    }
+
+    Console.WriteLine("Projecting events...\n");
+    var result = await tagStateService.ProjectTagStateAsync(tagString, projectorName);
+
+    if (!result.IsSuccess)
+    {
+        Console.WriteLine($"Error: {result.GetException().Message}");
+
+        Console.WriteLine("\nAvailable Tag Projectors:");
+        foreach (var name in tagStateService.GetAllTagProjectorNames())
+        {
+            Console.WriteLine($"  - {name}");
+        }
+        return;
+    }
+
+    var projectionResult = result.GetValue();
+
+    Console.WriteLine($"Tag: {projectionResult.Tag}");
+    Console.WriteLine($"Projector: {projectionResult.ProjectorName} (v{projectionResult.ProjectorVersion})");
+    Console.WriteLine($"Events Processed: {projectionResult.EventCount}");
+    Console.WriteLine($"Last SortableUniqueId: {projectionResult.LastSortableUniqueId ?? "(none)"}");
+    Console.WriteLine();
+
+    Console.WriteLine("Projected State:");
+    Console.WriteLine(new string('-', 60));
+
+    var stateType = projectionResult.State.GetType();
+    Console.WriteLine($"Type: {stateType.Name}");
+
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+    var stateJson = System.Text.Json.JsonSerializer.Serialize(projectionResult.State, stateType, jsonOptions);
+    Console.WriteLine(stateJson);
+}
+
 static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName)
 {
     var services = new ServiceCollection();
@@ -558,6 +1099,64 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
     }
 
     services.AddSingleton<MultiProjectionStateBuilder>();
+    services.AddSingleton<TagEventService>();
+    services.AddSingleton<TagStateService>();
+    services.AddSingleton<TagListService>();
 
     return services.BuildServiceProvider();
+}
+
+static async Task ListTagsAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? tagGroup, string outputDir)
+{
+    Console.WriteLine("=== Tag List ===\n");
+    Console.WriteLine($"Database: {databaseType}");
+    if (!string.IsNullOrEmpty(tagGroup))
+    {
+        Console.WriteLine($"Filter: {tagGroup}");
+    }
+    Console.WriteLine($"Output Directory: {outputDir}");
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    var tagListService = services.GetRequiredService<TagListService>();
+
+    var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+    var fileName = string.IsNullOrEmpty(tagGroup)
+        ? $"tag_list_{timestamp}.json"
+        : $"tag_list_{tagGroup}_{timestamp}.json";
+    var filePath = Path.Combine(outputDir, fileName);
+
+    var result = await tagListService.ExportTagListAsync(filePath, tagGroup);
+    if (!result.IsSuccess)
+    {
+        Console.WriteLine($"Error: {result.GetException().Message}");
+        return;
+    }
+
+    var exportResult = result.GetValue();
+
+    Console.WriteLine($"Total Tag Groups: {exportResult.TotalTagGroups}");
+    Console.WriteLine($"Total Tags: {exportResult.TotalTags}");
+    Console.WriteLine($"Total Events: {exportResult.TotalEvents:N0}");
+    Console.WriteLine();
+
+    foreach (var group in exportResult.TagGroups)
+    {
+        Console.WriteLine($"[{group.TagGroup}] ({group.TagCount} tags, {group.TotalEvents:N0} events)");
+
+        var tagsToShow = group.Tags.Take(10).ToList();
+        foreach (var tag in tagsToShow)
+        {
+            Console.WriteLine($"  - {tag.Tag}");
+            Console.WriteLine($"      Events: {tag.EventCount}, First: {tag.FirstEventAt:yyyy-MM-dd HH:mm:ss}, Last: {tag.LastEventAt:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        if (group.Tags.Count > 10)
+        {
+            Console.WriteLine($"  ... and {group.Tags.Count - 10} more tags");
+        }
+        Console.WriteLine();
+    }
+
+    Console.WriteLine($"Tag list saved to: {filePath}");
 }
