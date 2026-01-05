@@ -106,4 +106,11 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Get catch-up progress/status for operational checks.
     /// </summary>
     Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync();
+
+    /// <summary>
+    ///     Get health status for monitoring and diagnostics.
+    ///     This method is safe to call even before initialization completes.
+    /// </summary>
+    [AlwaysInterleave]
+    Task<MultiProjectionHealthStatus> GetHealthStatusAsync();
 }

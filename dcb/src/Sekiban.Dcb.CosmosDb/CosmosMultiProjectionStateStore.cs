@@ -48,14 +48,27 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             if (doc == null)
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
 
-            // Load from blob if offloaded
-            byte[]? stateData = null;
+            // Load from blob if offloaded - explicit error on failure
+            byte[]? blobData = null;
             if (doc.IsOffloaded && _blobAccessor != null && doc.OffloadKey != null)
             {
-                stateData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception blobEx)
+                {
+                    // Return explicit error instead of null stateData
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Failed to read offloaded state from blob storage. " +
+                            $"Projector: {projectorName}, Version: {projectorVersion}, " +
+                            $"BlobKey: {doc.OffloadKey}",
+                            blobEx));
+                }
             }
 
-            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(stateData)));
+            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -92,14 +105,27 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                 if (doc == null)
                     return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
 
-                // Load from blob if offloaded
-                byte[]? stateData = null;
+                // Load from blob if offloaded - explicit error on failure
+                byte[]? blobData = null;
                 if (doc.IsOffloaded && _blobAccessor != null && doc.OffloadKey != null)
                 {
-                    stateData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception blobEx)
+                    {
+                        // Return explicit error instead of null stateData
+                        return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                            new InvalidOperationException(
+                                $"Failed to read offloaded state from blob storage. " +
+                                $"Projector: {projectorName}, " +
+                                $"BlobKey: {doc.OffloadKey}",
+                                blobEx));
+                    }
                 }
 
-                return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(stateData)));
+                return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
             }
 
             return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);

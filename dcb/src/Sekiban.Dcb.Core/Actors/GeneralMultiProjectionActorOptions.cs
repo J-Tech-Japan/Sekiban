@@ -54,4 +54,11 @@ public class GeneralMultiProjectionActorOptions
     /// Per-second decay factor applied to observed lag when no updates (0..1]. Closer to 1 decays slower.
     /// </summary>
     public double LagDecayPerSecond { get; set; } = 0.98;
+
+    /// <summary>
+    ///     When true, queries return explicit errors if state restoration failed during activation.
+    ///     When false (default), queries return empty results for backward compatibility.
+    ///     Enable this for stricter error handling in production environments.
+    /// </summary>
+    public bool FailOnUnhealthyActivation { get; set; } = false;
 }
