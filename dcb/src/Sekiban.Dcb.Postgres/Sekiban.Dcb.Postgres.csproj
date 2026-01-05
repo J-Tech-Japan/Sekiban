@@ -7,7 +7,6 @@
         <AssemblyName>Sekiban.Dcb.Postgres</AssemblyName>
         <RootNamespace>Sekiban.Dcb.Postgres</RootNamespace>
         <PackageId>Sekiban.Dcb.Postgres</PackageId>
-        <Version>10.0.2-preview03</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>

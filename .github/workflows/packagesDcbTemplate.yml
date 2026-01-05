@@ -1,27 +1,46 @@
 name: nuget package DCB Template release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'dcbTemplates-v*'
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.x
-    - name: pack Template
-      run: |
-        pushd ./templates/Sekiban.Dcb.Templates
-        dotnet pack
-    - name: Push Template
-      run: |
-        dotnet nuget push "templates/Sekiban.Dcb.Templates/bin/Release/Sekiban.Dcb.Templates.10.0.1-preview04.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
-        
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Detect version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" != dcbTemplates-v* ]]; then
+            echo "Unexpected tag format: $TAG"
+            exit 1
+          fi
+          echo "VERSION=${TAG#dcbTemplates-v}" >> $GITHUB_ENV
+
+      - name: Pack Template
+        run: |
+          dotnet pack templates/Sekiban.Dcb.Templates/Sekiban.Dcb.Templates.csproj -c Release -o out -p:PackageVersion=$VERSION
+
+      - name: Push Template
+        run: |
+          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.nupkg

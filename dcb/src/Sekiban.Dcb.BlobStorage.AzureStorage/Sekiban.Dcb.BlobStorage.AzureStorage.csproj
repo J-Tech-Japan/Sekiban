@@ -7,7 +7,6 @@
         <AssemblyName>Sekiban.Dcb.BlobStorage.AzureStorage</AssemblyName>
         <RootNamespace>Sekiban.Dcb.BlobStorage.AzureStorage</RootNamespace>
         <PackageId>Sekiban.Dcb.BlobStorage.AzureStorage</PackageId>
-        <Version>10.0.2-preview03</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
