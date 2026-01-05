@@ -1,12 +1,12 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using System.Collections.Generic;
 using System.Net;
 using System.Text.Json;
 namespace Sekiban.Dcb.CosmosDb;
@@ -18,14 +18,16 @@ public class CosmosDbEventStore : IEventStore
 {
     private readonly CosmosDbContext _context;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly ILogger<CosmosDbEventStore>? _logger;
 
     /// <summary>
     ///     Creates a new CosmosDB event store.
     /// </summary>
-    public CosmosDbEventStore(CosmosDbContext context, DcbDomainTypes domainTypes)
+    public CosmosDbEventStore(CosmosDbContext context, DcbDomainTypes domainTypes, ILogger<CosmosDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _logger = logger;
     }
 
     /// <summary>
@@ -230,61 +232,55 @@ public class CosmosDbEventStore : IEventStore
 
     /// <summary>
     ///     Writes events and associated tags.
+    ///     Events are written in parallel (distributed partition keys).
+    ///     Tags are written using TransactionalBatch (same partition key per tag).
     /// </summary>
     public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
         WriteEventsAsync(IEnumerable<Event> events)
     {
+        var options = _context.Options;
+
         try
         {
             var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
             var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
 
             var eventsList = events.ToList();
-            var writtenEvents = new List<Event>();
-            var tagWriteResults = new List<TagWriteResult>();
-
-            // Use transaction batch for atomicity within partition
-            // Note: CosmosDB transactions are limited to single partition
-            // For cross-partition, we'll use individual operations
-
-            foreach (var ev in eventsList)
+            if (eventsList.Count == 0)
             {
-                // Serialize the event payload
-                var serializedPayload = SerializeEventPayload(ev.Payload);
+                return ResultBox.FromValue(
+                    (Events: (IReadOnlyList<Event>)Array.Empty<Event>(),
+                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
+            }
 
-                // Create and write the CosmosDB event
-                var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload);
+            // Step 1: Write events in parallel with concurrency control
+            // Events have distributed partition keys (PK = eventId), so parallel writes are efficient
+            var writtenEvents = await WriteEventsInParallelAsync(
+                eventsList,
+                eventsContainer,
+                options).ConfigureAwait(false);
 
-                await eventsContainer.CreateItemAsync(
-                    cosmosEvent,
-                    new PartitionKey(cosmosEvent.Id)).ConfigureAwait(false);
-
-                writtenEvents.Add(ev);
-
-                // Process tags associated with this event
-                foreach (var tagString in ev.Tags)
+            // Step 2: Write tags using TransactionalBatch (grouped by tag = same partition key)
+            List<TagWriteResult> tagWriteResults;
+            try
+            {
+                tagWriteResults = await WriteTagsWithBatchAsync(
+                    writtenEvents,
+                    tagsContainer,
+                    options).ConfigureAwait(false);
+            }
+            catch (Exception tagEx)
+            {
+                // Tag write failed - attempt to rollback written events
+                if (options.TryRollbackOnFailure)
                 {
-                    // Extract tag group from tag string (format: "group:content")
-                    var tagGroup = tagString.Contains(':', StringComparison.Ordinal) ? tagString.Split(':')[0] : tagString;
-
-                    // Create a tag entry for this event
-                    var cosmosTag = CosmosTag.FromEventTag(
-                        tagString,
-                        tagGroup,
-                        ev.SortableUniqueIdValue,
-                        ev.Id,
-                        ev.EventType);
-
-                    await tagsContainer.CreateItemAsync(
-                        cosmosTag,
-                        new PartitionKey(cosmosTag.Tag)).ConfigureAwait(false);
-
-                    tagWriteResults.Add(
-                        new TagWriteResult(
-                            tagString,
-                            1, // Version placeholder
-                            DateTimeOffset.UtcNow));
+                    await TryRollbackEventsAsync(writtenEvents, eventsContainer).ConfigureAwait(false);
                 }
+
+                throw new InvalidOperationException(
+                    $"Tag write failed after {writtenEvents.Count} events were written. " +
+                    $"Rollback attempted: {options.TryRollbackOnFailure}",
+                    tagEx);
             }
 
             return ResultBox.FromValue(
@@ -293,33 +289,203 @@ public class CosmosDbEventStore : IEventStore
         }
         catch (CosmosException ex)
         {
-            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-            }
+            _logger?.LogError(ex, "WriteEventsAsync failed with CosmosException: {Message}", ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-            }
+            _logger?.LogError(ex, "WriteEventsAsync failed: {Message}", ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
         catch (ArgumentException ex)
         {
-            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-            }
+            _logger?.LogError(ex, "WriteEventsAsync failed: {Message}", ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Writes events in parallel with concurrency control.
+    /// </summary>
+    private async Task<List<Event>> WriteEventsInParallelAsync(
+        List<Event> eventsList,
+        Container eventsContainer,
+        CosmosDbEventStoreOptions options)
+    {
+        using var semaphore = new SemaphoreSlim(options.MaxConcurrentEventWrites);
+        var itemRequestOptions = new ItemRequestOptions
+        {
+            EnableContentResponseOnWrite = options.EnableContentResponseOnWrite
+        };
+
+        var eventTasks = eventsList.Select(async ev =>
+        {
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var serializedPayload = SerializeEventPayload(ev.Payload);
+                var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload);
+
+                await eventsContainer.CreateItemAsync(
+                    cosmosEvent,
+                    new PartitionKey(cosmosEvent.Id),
+                    itemRequestOptions).ConfigureAwait(false);
+
+                return ev;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var results = await Task.WhenAll(eventTasks).ConfigureAwait(false);
+        return results.ToList();
+    }
+
+    /// <summary>
+    ///     Writes tags using TransactionalBatch for efficiency.
+    ///     Tags with the same partition key (tag string) are batched together.
+    /// </summary>
+    private async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
+        List<Event> writtenEvents,
+        Container tagsContainer,
+        CosmosDbEventStoreOptions options)
+    {
+        var tagWriteResults = new List<TagWriteResult>();
+
+        // Group all tag entries by tag string (partition key)
+        var tagEntries = writtenEvents
+            .SelectMany(ev => ev.Tags.Select(tagString => (TagString: tagString, Event: ev)))
+            .GroupBy(x => x.TagString);
+
+        foreach (var group in tagEntries)
+        {
+            var tagString = group.Key;
+            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
+                ? tagString.Split(':')[0]
+                : tagString;
+            var items = group.ToList();
+
+            if (options.UseTransactionalBatchForTags && items.Count <= options.MaxBatchOperations)
+            {
+                // Use TransactionalBatch for same-partition writes
+                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagString));
+
+                foreach (var item in items)
+                {
+                    var cosmosTag = CosmosTag.FromEventTag(
+                        tagString,
+                        tagGroup,
+                        item.Event.SortableUniqueIdValue,
+                        item.Event.Id,
+                        item.Event.EventType);
+
+                    batch.CreateItem(cosmosTag);
+                }
+
+                var response = await batch.ExecuteAsync().ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new CosmosException(
+                        $"TransactionalBatch failed for tag '{tagString}' with status {response.StatusCode}",
+                        response.StatusCode,
+                        (int)response.StatusCode,
+                        response.ActivityId,
+                        response.RequestCharge);
+                }
+
+                // Add results for all items in batch
+                foreach (var item in items)
+                {
+                    tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                }
+            }
+            else
+            {
+                // Fallback: Split into multiple batches if exceeding limit
+                for (var i = 0; i < items.Count; i += options.MaxBatchOperations)
+                {
+                    var batchItems = items.Skip(i).Take(options.MaxBatchOperations).ToList();
+                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagString));
+
+                    foreach (var item in batchItems)
+                    {
+                        var cosmosTag = CosmosTag.FromEventTag(
+                            tagString,
+                            tagGroup,
+                            item.Event.SortableUniqueIdValue,
+                            item.Event.Id,
+                            item.Event.EventType);
+
+                        batch.CreateItem(cosmosTag);
+                    }
+
+                    var response = await batch.ExecuteAsync().ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new CosmosException(
+                            $"TransactionalBatch failed for tag '{tagString}' (batch {i / options.MaxBatchOperations + 1}) with status {response.StatusCode}",
+                            response.StatusCode,
+                            (int)response.StatusCode,
+                            response.ActivityId,
+                            response.RequestCharge);
+                    }
+
+                    foreach (var item in batchItems)
+                    {
+                        tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                    }
+                }
+            }
+        }
+
+        return tagWriteResults;
+    }
+
+    /// <summary>
+    ///     Attempts to rollback (delete) written events after a failure.
+    /// </summary>
+    private async Task TryRollbackEventsAsync(List<Event> writtenEvents, Container eventsContainer)
+    {
+        var deleteTasks = writtenEvents.Select(async ev =>
+        {
+            try
+            {
+                await eventsContainer.DeleteItemAsync<CosmosEvent>(
+                    ev.Id.ToString(),
+                    new PartitionKey(ev.Id.ToString())).ConfigureAwait(false);
+                return (ev.Id, Success: true, Error: (Exception?)null);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Already deleted or never written - consider success
+                return (ev.Id, Success: true, Error: null);
+            }
+            catch (Exception ex)
+            {
+                return (ev.Id, Success: false, Error: ex);
+            }
+        });
+
+        var results = await Task.WhenAll(deleteTasks).ConfigureAwait(false);
+        var failedDeletes = results.Where(r => !r.Success).ToList();
+
+        if (failedDeletes.Count > 0)
+        {
+            var orphanedIds = string.Join(", ", failedDeletes.Select(f => f.Id));
+            _logger?.LogError(
+                "Failed to rollback {FailedCount} events after tag write failure. Orphaned event IDs: {OrphanedIds}",
+                failedDeletes.Count,
+                orphanedIds);
+        }
+        else
+        {
+            _logger?.LogInformation(
+                "Successfully rolled back {Count} events after tag write failure",
+                writtenEvents.Count);
         }
     }
 
