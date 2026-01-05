@@ -7,14 +7,13 @@
         <AssemblyName>Sekiban.Dcb.Core</AssemblyName>
         <RootNamespace>Sekiban.Dcb</RootNamespace>
         <PackageId>Sekiban.Dcb.Core</PackageId>
-        <Version>10.0.2-preview02</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
         <PackageDescription>Sekiban DCB Core - Common types and interfaces for Dynamic Consistency Boundary</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
-        <PackageVersion>10.0.2-preview02</PackageVersion>
+        <PackageVersion>10.0.2-preview03</PackageVersion>
         <Description>Core types and interfaces for Sekiban Dynamic Consistency Boundary - shared between ResultBox and exception-based implementations</Description>
         <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;core</PackageTags>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
