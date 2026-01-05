@@ -303,6 +303,52 @@ public class PostgresEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var query = context.Tags.AsQueryable();
+            if (!string.IsNullOrEmpty(tagGroup))
+            {
+                query = query.Where(t => t.TagGroup == tagGroup);
+            }
+
+            // Group by tag and get aggregated info
+            var tagInfos = await query
+                .GroupBy(t => new { t.Tag, t.TagGroup })
+                .Select(g => new
+                {
+                    g.Key.Tag,
+                    g.Key.TagGroup,
+                    EventCount = g.Count(),
+                    FirstSortableUniqueId = g.Min(t => t.SortableUniqueId),
+                    LastSortableUniqueId = g.Max(t => t.SortableUniqueId),
+                    FirstEventAt = g.Min(t => t.CreatedAt),
+                    LastEventAt = g.Max(t => t.CreatedAt)
+                })
+                .OrderBy(t => t.TagGroup)
+                .ThenBy(t => t.Tag)
+                .ToListAsync();
+
+            var result = tagInfos.Select(t => new TagInfo(
+                t.Tag,
+                t.TagGroup,
+                t.EventCount,
+                t.FirstSortableUniqueId,
+                t.LastSortableUniqueId,
+                t.FirstEventAt,
+                t.LastEventAt));
+
+            return ResultBox.FromValue(result.AsEnumerable());
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IEnumerable<TagInfo>>(ex);
+        }
+    }
+
     // Note: Tag state is not stored in the database
     // Tags table only tracks tag-to-event relationships
     // Tag state should be computed by projectors when needed
