@@ -35,4 +35,17 @@ public class MultiProjectionGrainState
 
     [Id(8)]
     public string? LastPosition { get; set; }
+
+    // Integrity guard fields - tracks last known good state for detecting corruption
+    [Id(9)]
+    public int LastGoodSafeVersion { get; set; }
+
+    [Id(10)]
+    public long LastGoodPayloadBytes { get; set; }
+
+    [Id(11)]
+    public long LastGoodOriginalSizeBytes { get; set; }
+
+    [Id(12)]
+    public int LastGoodEventsProcessed { get; set; }
 }

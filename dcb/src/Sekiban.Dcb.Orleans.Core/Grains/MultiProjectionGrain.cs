@@ -504,6 +504,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     payloadBytesLength);
             }
 
+            // Integrity guard: Block persist if safeVersion regressed (indicates data corruption)
+            var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
+            if (safeVersion.HasValue && lastGoodSafeVersion > 0 && safeVersion.Value < lastGoodSafeVersion)
+            {
+                _lastError = $"Integrity guard blocked persist: safeVersion {safeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
+                _logger.LogError(
+                    MultiProjectionLogEvents.IntegrityGuardBlockedPersist,
+                    "BLOCKED persist: {ProjectorName} - safeVersion regression detected. Current={CurrentSafeVersion}, LastGood={LastGoodSafeVersion}. State will NOT be saved.",
+                    projectorName,
+                    safeVersion.Value,
+                    lastGoodSafeVersion);
+                _stateRestoreSource = StateRestoreSource.Failed;
+                return ResultBox.FromValue(false);
+            }
+
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null)
             {
@@ -546,6 +561,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.LastSortableUniqueId = safePosition;
             _state.State.EventsProcessed = _eventsProcessed;
             _state.State.LastPersistTime = DateTime.UtcNow;
+
+            // Update LastGood fields on successful persist (integrity guard tracking)
+            if (safeVersion.HasValue && safeVersion.Value > 0)
+            {
+                _state.State.LastGoodSafeVersion = safeVersion.Value;
+            }
+            if (payloadBytesLength > 0)
+            {
+                _state.State.LastGoodPayloadBytes = payloadBytesLength;
+            }
+            if (originalSizeBytes > 0)
+            {
+                _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
+            }
+            _state.State.LastGoodEventsProcessed = (int)_eventsProcessed;
+
             // Clear legacy fields
             _state.State.SerializedState = null;
             _state.State.StateSize = 0;
@@ -571,6 +602,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _state.State.LastSortableUniqueId = safePosition;
                     _state.State.EventsProcessed = _eventsProcessed;
                     _state.State.LastPersistTime = DateTime.UtcNow;
+                    // Re-apply LastGood fields
+                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                    {
+                        _state.State.LastGoodSafeVersion = safeVersion.Value;
+                    }
+                    if (payloadBytesLength > 0)
+                    {
+                        _state.State.LastGoodPayloadBytes = payloadBytesLength;
+                    }
+                    if (originalSizeBytes > 0)
+                    {
+                        _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
+                    }
+                    _state.State.LastGoodEventsProcessed = (int)_eventsProcessed;
                     _state.State.SerializedState = null;
                     _state.State.StateSize = 0;
                     _state.State.SafeLastPosition = null;
@@ -1140,13 +1185,31 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                         record.EventsProcessed);
                                 }
 
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.StateRestoreSuccess,
-                                    "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
-                                    projectorName, record.LastSortableUniqueId, record.EventsProcessed);
-                                restoredFromExternalStore = true;
-                                _stateRestoredAt = DateTime.UtcNow;
-                                _stateRestoreSource = StateRestoreSource.ExternalStore;
+                                // Integrity guard: Check for safeVersion regression on restore
+                                var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
+                                if (postSafeVersion.HasValue && lastGoodSafeVersion > 0 && postSafeVersion.Value < lastGoodSafeVersion)
+                                {
+                                    _logger.LogError(
+                                        MultiProjectionLogEvents.IntegrityGuardBlockedRestore,
+                                        "BLOCKED restore: {ProjectorName} - safeVersion regression detected. Restored={RestoredSafeVersion}, LastGood={LastGoodSafeVersion}. Forcing full catch-up.",
+                                        projectorName,
+                                        postSafeVersion.Value,
+                                        lastGoodSafeVersion);
+                                    _stateRestoreSource = StateRestoreSource.Failed;
+                                    _activationFailureReason = $"Integrity guard blocked restore: safeVersion {postSafeVersion.Value} < LastGood {lastGoodSafeVersion}";
+                                    forceFullCatchUp = true;
+                                    // Continue to full catch-up instead of using corrupted state
+                                }
+                                else
+                                {
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.StateRestoreSuccess,
+                                        "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
+                                        projectorName, record.LastSortableUniqueId, record.EventsProcessed);
+                                    restoredFromExternalStore = true;
+                                    _stateRestoredAt = DateTime.UtcNow;
+                                    _stateRestoreSource = StateRestoreSource.ExternalStore;
+                                }
                             }
                         }
                     }
