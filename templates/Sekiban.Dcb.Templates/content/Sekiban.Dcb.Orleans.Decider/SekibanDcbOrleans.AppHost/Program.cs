@@ -47,4 +47,12 @@ builder
     .WithReference(apiService)
     .WaitFor(apiService);
 
+// Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbOrleans.WebNext")
+    .WithHttpEndpoint(port: 3000, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
+    .WaitFor(apiService);
+
 builder.Build().Run();
