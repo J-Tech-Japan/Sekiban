@@ -204,6 +204,40 @@ public class GeneralMultiProjectionActorSafeWindowTests
         Assert.Contains("Recent Item", unsafePayload.Items);
     }
 
+    [Fact]
+    public async Task SafeWindow_StateReload_PromotionPreservesRestoredSafeState()
+    {
+        // Arrange
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 200 };
+        var actor1 = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, options);
+
+        var oldEvent = CreateEvent(new TestEventCreated("Old Item"), DateTime.UtcNow.AddSeconds(-10));
+        await actor1.AddEventsAsync(new[] { oldEvent });
+        var snapshot = await actor1.GetSnapshotAsync();
+
+        var actor2 = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, options);
+        await actor2.SetSnapshotAsync(snapshot.GetValue());
+
+        var recentEvent = CreateEvent(new TestEventCreated("Recent Item"), DateTime.UtcNow);
+        await actor2.AddEventsAsync(new[] { recentEvent });
+
+        var safeBeforePromotion = await actor2.GetStateAsync(canGetUnsafeState: false);
+        var safeBeforePayload = safeBeforePromotion.GetValue().Payload as TestMultiProjector;
+        Assert.Single(safeBeforePayload!.Items);
+        Assert.Equal("Old Item", safeBeforePayload.Items[0]);
+
+        await Task.Delay(300);
+
+        // Act
+        var safeAfterPromotion = await actor2.GetStateAsync(canGetUnsafeState: false);
+
+        // Assert
+        var safeAfterPayload = safeAfterPromotion.GetValue().Payload as TestMultiProjector;
+        Assert.Equal(2, safeAfterPayload!.Items.Count);
+        Assert.Contains("Old Item", safeAfterPayload.Items);
+        Assert.Contains("Recent Item", safeAfterPayload.Items);
+    }
+
     private Event CreateEvent(IEventPayload payload, DateTime timestamp)
     {
         var sortableId = SortableUniqueId.Generate(timestamp, Guid.NewGuid());

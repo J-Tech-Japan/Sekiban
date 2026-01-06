@@ -161,7 +161,8 @@ public class GeneralMultiProjectionActor
                 _jsonOptions,
                 state.Version,
                 state.LastEventId,
-                state.LastSortableUniqueId) as IMultiProjectionPayload;
+                state.LastSortableUniqueId,
+                true) as IMultiProjectionPayload;
 
             if (_singleStateAccessor == null)
             {
@@ -216,7 +217,8 @@ public class GeneralMultiProjectionActor
                 _jsonOptions,
                 state.Version,
                 state.LastEventId,
-                state.LastSortableUniqueId) as IMultiProjectionPayload;
+                state.LastSortableUniqueId,
+                true) as IMultiProjectionPayload;
             if (_singleStateAccessor == null)
             {
                 throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");
