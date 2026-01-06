@@ -26,7 +26,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.Core" Version="10.0.2-preview05" />
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
         <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1"/>

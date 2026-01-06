@@ -67,4 +67,13 @@ public static class MultiProjectionLogEvents
 
     /// <summary>Safe version is zero after restore.</summary>
     public static readonly EventId SafeVersionZero = new(1020, "SafeVersionZero");
+
+    /// <summary>Integrity guard blocked persist due to safeVersion regression.</summary>
+    public static readonly EventId IntegrityGuardBlockedPersist = new(1021, "IntegrityGuardBlockedPersist");
+
+    /// <summary>Integrity guard blocked restore due to safeVersion regression.</summary>
+    public static readonly EventId IntegrityGuardBlockedRestore = new(1022, "IntegrityGuardBlockedRestore");
+
+    /// <summary>Full catch-up initiated due to integrity violation.</summary>
+    public static readonly EventId FullCatchUpInitiated = new(1023, "FullCatchUpInitiated");
 }

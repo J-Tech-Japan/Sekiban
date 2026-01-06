@@ -46,7 +46,7 @@
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="Sekiban.Dcb.Core" Version="10.0.2-preview05" />
+        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1"/>
