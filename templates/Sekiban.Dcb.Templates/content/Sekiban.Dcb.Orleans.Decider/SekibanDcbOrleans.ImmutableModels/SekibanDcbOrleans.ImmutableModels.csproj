@@ -7,6 +7,6 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.0.2-preview05" />
+    <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.0.2-preview07" />
   </ItemGroup>
 </Project>
