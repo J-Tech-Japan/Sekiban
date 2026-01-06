@@ -43,7 +43,23 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             byte[]? stateData = entity.StateData;
             if (entity.IsOffloaded && _blobAccessor != null && entity.OffloadKey != null)
             {
-                stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                try
+                {
+                    stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Failed to read offloaded state from blob: {entity.OffloadKey}", ex));
+                }
+
+                if (stateData == null)
+                {
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Offloaded state read returned null for key: {entity.OffloadKey}"));
+                }
             }
 
             return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord(stateData)));
@@ -73,7 +89,23 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             byte[]? stateData = entity.StateData;
             if (entity.IsOffloaded && _blobAccessor != null && entity.OffloadKey != null)
             {
-                stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                try
+                {
+                    stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Failed to read offloaded state from blob: {entity.OffloadKey}", ex));
+                }
+
+                if (stateData == null)
+                {
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Offloaded state read returned null for key: {entity.OffloadKey}"));
+                }
             }
 
             return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord(stateData)));

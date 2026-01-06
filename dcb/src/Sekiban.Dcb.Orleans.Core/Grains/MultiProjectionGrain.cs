@@ -412,6 +412,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var envelope = snapshotResult.GetValue();
+            if (ShouldBlockPersist(envelope))
+            {
+                var envelopeVersion = GetEnvelopeVersion(envelope);
+                _lastError = $"Persistence blocked due to invalid envelope state: {projectorName}";
+                _logger.LogError(
+                    MultiProjectionLogEvents.EmptyStatePersistBlocked,
+                    "Blocked attempt to persist invalid envelope: {ProjectorName}, Events: {EventsProcessed}, Version: {EnvelopeVersion}",
+                    projectorName,
+                    _eventsProcessed,
+                    envelopeVersion);
+                return ResultBox.FromValue(false);
+            }
 
             try
             {
@@ -984,6 +996,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             projectorName, errorMsg);
                         _stateRestoreSource = StateRestoreSource.Failed;
                         _activationFailureReason = errorMsg;
+                        forceFullCatchUp = true;
                     }
                     else if (stateStoreResult.GetValue().HasValue)
                     {
@@ -1001,6 +1014,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                 projectorName, record.IsOffloaded, record.OffloadKey);
                             _stateRestoreSource = StateRestoreSource.Failed;
                             _activationFailureReason = errorMsg;
+                            forceFullCatchUp = true;
                         }
                         else
                         {
@@ -1019,17 +1033,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
                                 envelopeJson, _domainTypes.JsonSerializerOptions)!;
 
-                            await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
-                            _eventsProcessed = record.EventsProcessed;
-                            _processedEventIds.Clear();
+                            if (IsRestoredStateInvalid(record, envelope))
+                            {
+                                var envelopeVersion = GetEnvelopeVersion(envelope);
+                                _logger.LogError(
+                                    MultiProjectionLogEvents.StateValidationFailed,
+                                    "Restored state is invalid; forcing full catch-up: {ProjectorName}, Events: {EventsProcessed}, Version: {EnvelopeVersion}",
+                                    projectorName,
+                                    record.EventsProcessed,
+                                    envelopeVersion);
+                                _stateRestoreSource = StateRestoreSource.Failed;
+                                _activationFailureReason = "Restored state failed validation";
+                                forceFullCatchUp = true;
+                            }
+                            else
+                            {
+                                await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
+                                _eventsProcessed = record.EventsProcessed;
+                                _processedEventIds.Clear();
 
-                            _logger.LogInformation(
-                                MultiProjectionLogEvents.StateRestoreSuccess,
-                                "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
-                                projectorName, record.LastSortableUniqueId, record.EventsProcessed);
-                            restoredFromExternalStore = true;
-                            _stateRestoredAt = DateTime.UtcNow;
-                            _stateRestoreSource = StateRestoreSource.ExternalStore;
+                                _logger.LogInformation(
+                                    MultiProjectionLogEvents.StateRestoreSuccess,
+                                    "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
+                                    projectorName, record.LastSortableUniqueId, record.EventsProcessed);
+                                restoredFromExternalStore = true;
+                                _stateRestoredAt = DateTime.UtcNow;
+                                _stateRestoreSource = StateRestoreSource.ExternalStore;
+                            }
                         }
                     }
                     else
@@ -1049,6 +1079,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         projectorName);
                     _stateRestoreSource = StateRestoreSource.Failed;
                     _activationFailureReason = ex.Message;
+                    forceFullCatchUp = true;
                 }
             }
             else if (_multiProjectionStateStore == null)
@@ -1106,16 +1137,67 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         // Persist state before deactivation
-        await PersistStateAsync();
+        try
+        {
+            var persistResult = await PersistStateAsync();
+            if (!persistResult.IsSuccess)
+            {
+                _logger.LogError(
+                    MultiProjectionLogEvents.DeactivationPersistFailed,
+                    persistResult.GetException(),
+                    "PersistStateAsync failed during deactivation: {ProjectorName}",
+                    projectorName);
+            }
+            else if (!persistResult.GetValue())
+            {
+                _logger.LogWarning(
+                    MultiProjectionLogEvents.DeactivationPersistFailed,
+                    "PersistStateAsync returned false during deactivation: {ProjectorName}",
+                    projectorName);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                MultiProjectionLogEvents.DeactivationPersistCancelled,
+                "State persistence cancelled during shutdown: {ProjectorName}",
+                projectorName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                MultiProjectionLogEvents.DeactivationPersistFailed,
+                ex,
+                "Failed to persist state during deactivation: {ProjectorName}",
+                projectorName);
+        }
 
         // Clean up Orleans resources
-        if (_orleansStreamHandle != null)
+        try
         {
-            await _orleansStreamHandle.UnsubscribeAsync();
+            if (_orleansStreamHandle != null)
+            {
+                await _orleansStreamHandle.UnsubscribeAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Stream unsubscription cancelled: {ProjectorName}", projectorName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to unsubscribe from stream: {ProjectorName}", projectorName);
         }
 
         // Flush any remaining events
-        await FlushEventBufferAsync();
+        try
+        {
+            await FlushEventBufferAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to flush event buffer: {ProjectorName}", projectorName);
+        }
 
         _persistTimer?.Dispose();
         _fallbackTimer?.Dispose();
@@ -1123,6 +1205,51 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
+    }
+
+    private static int GetEnvelopeVersion(SerializableMultiProjectionStateEnvelope envelope) =>
+        envelope.InlineState?.Version ?? envelope.OffloadedState?.Version ?? 0;
+
+    private bool ShouldBlockPersist(SerializableMultiProjectionStateEnvelope envelope)
+    {
+        if (_eventsProcessed <= 100)
+        {
+            return false;
+        }
+
+        if (GetEnvelopeVersion(envelope) == 0)
+        {
+            return true;
+        }
+
+        if (envelope.InlineState == null && envelope.OffloadedState == null)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsRestoredStateInvalid(
+        MultiProjectionStateRecord record,
+        SerializableMultiProjectionStateEnvelope envelope)
+    {
+        if (record.EventsProcessed <= 100)
+        {
+            return false;
+        }
+
+        if (GetEnvelopeVersion(envelope) == 0)
+        {
+            return true;
+        }
+
+        if (envelope.InlineState == null && envelope.OffloadedState == null)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private async Task ResetPersistedStateForFullRebuildAsync(string? currentVersion)
