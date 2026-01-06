@@ -28,7 +28,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Core" Version="10.0.2-preview05" />
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.56.0" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1"/>
