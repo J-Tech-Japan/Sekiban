@@ -519,6 +519,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.FromValue(false);
             }
 
+            var externalStoreSaved = _multiProjectionStateStore == null;
+
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null)
             {
@@ -551,6 +553,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
                 else
                 {
+                    externalStoreSaved = true;
                     Console.WriteLine($"[{projectorName}] External store save succeeded");
                 }
             }
@@ -562,20 +565,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.EventsProcessed = _eventsProcessed;
             _state.State.LastPersistTime = DateTime.UtcNow;
 
-            // Update LastGood fields on successful persist (integrity guard tracking)
-            if (safeVersion.HasValue && safeVersion.Value > 0)
+            // Update LastGood fields only when the external store save succeeded.
+            if (externalStoreSaved)
             {
-                _state.State.LastGoodSafeVersion = safeVersion.Value;
+                if (safeVersion.HasValue && safeVersion.Value > 0)
+                {
+                    _state.State.LastGoodSafeVersion = safeVersion.Value;
+                }
+                if (payloadBytesLength > 0)
+                {
+                    _state.State.LastGoodPayloadBytes = payloadBytesLength;
+                }
+                if (originalSizeBytes > 0)
+                {
+                    _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
+                }
+                _state.State.LastGoodEventsProcessed = _eventsProcessed;
             }
-            if (payloadBytesLength > 0)
-            {
-                _state.State.LastGoodPayloadBytes = payloadBytesLength;
-            }
-            if (originalSizeBytes > 0)
-            {
-                _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
-            }
-            _state.State.LastGoodEventsProcessed = (int)_eventsProcessed;
 
             // Clear legacy fields
             _state.State.SerializedState = null;
@@ -602,20 +608,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _state.State.LastSortableUniqueId = safePosition;
                     _state.State.EventsProcessed = _eventsProcessed;
                     _state.State.LastPersistTime = DateTime.UtcNow;
-                    // Re-apply LastGood fields
-                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                    // Re-apply LastGood fields when the external store save succeeded.
+                    if (externalStoreSaved)
                     {
-                        _state.State.LastGoodSafeVersion = safeVersion.Value;
+                        if (safeVersion.HasValue && safeVersion.Value > 0)
+                        {
+                            _state.State.LastGoodSafeVersion = safeVersion.Value;
+                        }
+                        if (payloadBytesLength > 0)
+                        {
+                            _state.State.LastGoodPayloadBytes = payloadBytesLength;
+                        }
+                        if (originalSizeBytes > 0)
+                        {
+                            _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
+                        }
+                        _state.State.LastGoodEventsProcessed = _eventsProcessed;
                     }
-                    if (payloadBytesLength > 0)
-                    {
-                        _state.State.LastGoodPayloadBytes = payloadBytesLength;
-                    }
-                    if (originalSizeBytes > 0)
-                    {
-                        _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
-                    }
-                    _state.State.LastGoodEventsProcessed = (int)_eventsProcessed;
                     _state.State.SerializedState = null;
                     _state.State.StateSize = 0;
                     _state.State.SafeLastPosition = null;
@@ -1135,73 +1144,73 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             }
                             else
                             {
-                                await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
-                                _eventsProcessed = record.EventsProcessed;
-                                _processedEventIds.Clear();
-
-                                int? postSafeVersion = null;
-                                int? postUnsafeVersion = null;
-                                try
-                                {
-                                    var unsafeState = await _projectionActor.GetStateAsync(true);
-                                    var safeState = await _projectionActor.GetStateAsync(false);
-                                    if (unsafeState.IsSuccess)
-                                    {
-                                        postUnsafeVersion = unsafeState.GetValue().Version;
-                                    }
-                                    if (safeState.IsSuccess)
-                                    {
-                                        postSafeVersion = safeState.GetValue().Version;
-                                    }
-                                }
-                                catch { }
-
-                                long restoredPayloadBytes = 0;
-                                try
-                                {
-                                    restoredPayloadBytes = envelope.InlineState?.GetPayloadBytes().LongLength ?? 0;
-                                }
-                                catch { }
-
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.RestoreDetails,
-                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, EnvelopeVer={EnvelopeVersion}, PayloadBytes={PayloadBytes}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
-                                    projectorName,
-                                    record.EventsProcessed,
-                                    record.StateData?.Length ?? 0,
-                                    record.OriginalSizeBytes,
-                                    record.CompressedSizeBytes,
-                                    GetEnvelopeVersion(envelope),
-                                    restoredPayloadBytes,
-                                    postSafeVersion,
-                                    postUnsafeVersion);
-
-                                if (record.EventsProcessed > 1000 && postSafeVersion == 0)
-                                {
-                                    _logger.LogWarning(
-                                        MultiProjectionLogEvents.SafeVersionZero,
-                                        "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
-                                        projectorName,
-                                        record.EventsProcessed);
-                                }
-
-                                // Integrity guard: Check for safeVersion regression on restore
+                                // Integrity guard: block restore before applying snapshot if safeVersion regressed.
                                 var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
-                                if (postSafeVersion.HasValue && lastGoodSafeVersion > 0 && postSafeVersion.Value < lastGoodSafeVersion)
+                                var envelopeVersion = GetEnvelopeVersion(envelope);
+                                if (lastGoodSafeVersion > 0 && envelopeVersion < lastGoodSafeVersion)
                                 {
                                     _logger.LogError(
                                         MultiProjectionLogEvents.IntegrityGuardBlockedRestore,
                                         "BLOCKED restore: {ProjectorName} - safeVersion regression detected. Restored={RestoredSafeVersion}, LastGood={LastGoodSafeVersion}. Forcing full catch-up.",
                                         projectorName,
-                                        postSafeVersion.Value,
+                                        envelopeVersion,
                                         lastGoodSafeVersion);
                                     _stateRestoreSource = StateRestoreSource.Failed;
-                                    _activationFailureReason = $"Integrity guard blocked restore: safeVersion {postSafeVersion.Value} < LastGood {lastGoodSafeVersion}";
+                                    _activationFailureReason = $"Integrity guard blocked restore: safeVersion {envelopeVersion} < LastGood {lastGoodSafeVersion}";
                                     forceFullCatchUp = true;
-                                    // Continue to full catch-up instead of using corrupted state
                                 }
                                 else
                                 {
+                                    await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
+                                    _eventsProcessed = record.EventsProcessed;
+                                    _processedEventIds.Clear();
+
+                                    int? postSafeVersion = null;
+                                    int? postUnsafeVersion = null;
+                                    try
+                                    {
+                                        var unsafeState = await _projectionActor.GetStateAsync(true);
+                                        var safeState = await _projectionActor.GetStateAsync(false);
+                                        if (unsafeState.IsSuccess)
+                                        {
+                                            postUnsafeVersion = unsafeState.GetValue().Version;
+                                        }
+                                        if (safeState.IsSuccess)
+                                        {
+                                            postSafeVersion = safeState.GetValue().Version;
+                                        }
+                                    }
+                                    catch { }
+
+                                    long restoredPayloadBytes = 0;
+                                    try
+                                    {
+                                        restoredPayloadBytes = envelope.InlineState?.GetPayloadBytes().LongLength ?? 0;
+                                    }
+                                    catch { }
+
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.RestoreDetails,
+                                        "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, EnvelopeVer={EnvelopeVersion}, PayloadBytes={PayloadBytes}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
+                                        projectorName,
+                                        record.EventsProcessed,
+                                        record.StateData?.Length ?? 0,
+                                        record.OriginalSizeBytes,
+                                        record.CompressedSizeBytes,
+                                        GetEnvelopeVersion(envelope),
+                                        restoredPayloadBytes,
+                                        postSafeVersion,
+                                        postUnsafeVersion);
+
+                                    if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                    {
+                                        _logger.LogWarning(
+                                            MultiProjectionLogEvents.SafeVersionZero,
+                                            "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
+                                            projectorName,
+                                            record.EventsProcessed);
+                                    }
+
                                     _logger.LogInformation(
                                         MultiProjectionLogEvents.StateRestoreSuccess,
                                         "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
@@ -1385,6 +1394,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         MultiProjectionStateRecord record,
         SerializableMultiProjectionStateEnvelope envelope)
     {
+        if (record.EventsProcessed > 0 && string.IsNullOrEmpty(record.LastSortableUniqueId))
+        {
+            return true;
+        }
+
         if (record.EventsProcessed <= 100)
         {
             return false;

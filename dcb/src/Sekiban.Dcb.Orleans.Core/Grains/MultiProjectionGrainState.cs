@@ -47,5 +47,5 @@ public class MultiProjectionGrainState
     public long LastGoodOriginalSizeBytes { get; set; }
 
     [Id(12)]
-    public int LastGoodEventsProcessed { get; set; }
+    public long LastGoodEventsProcessed { get; set; }
 }
