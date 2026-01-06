@@ -17,8 +17,9 @@ var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
-    .WithPgAdmin()
+    // .WithPgAdmin()
     // .WithDataVolume()
+    .WithDbGate()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans
@@ -44,6 +45,14 @@ builder
     .AddProject<SekibanDcbOrleans_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
+    .WaitFor(apiService);
+
+// Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbOrleans.WebNext")
+    .WithHttpEndpoint(port: 3000, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
     .WaitFor(apiService);
 
 builder.Build().Run();
