@@ -43,4 +43,16 @@ public static class MultiProjectionLogEvents
 
     /// <summary>No state found for projector version.</summary>
     public static readonly EventId StateNotFound = new(1012, "StateNotFound");
+
+    /// <summary>Restored state failed validation.</summary>
+    public static readonly EventId StateValidationFailed = new(1013, "StateValidationFailed");
+
+    /// <summary>Blocked attempt to persist invalid/empty state.</summary>
+    public static readonly EventId EmptyStatePersistBlocked = new(1014, "EmptyStatePersistBlocked");
+
+    /// <summary>State persistence failed during deactivation.</summary>
+    public static readonly EventId DeactivationPersistFailed = new(1015, "DeactivationPersistFailed");
+
+    /// <summary>State persistence cancelled during deactivation.</summary>
+    public static readonly EventId DeactivationPersistCancelled = new(1016, "DeactivationPersistCancelled");
 }

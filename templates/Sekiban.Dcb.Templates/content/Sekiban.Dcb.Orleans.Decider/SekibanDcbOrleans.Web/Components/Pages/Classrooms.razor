@@ -1,0 +1,272 @@
+@page "/classrooms"
+@using Dcb.Domain.Decider.ClassRoom
+@using System.ComponentModel.DataAnnotations
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+@inject ClassRoomApiClient ClassRoomApiClient
+@inject IJSRuntime JsRuntime
+@inject ILogger<Classrooms> Logger
+
+<PageTitle>Classrooms</PageTitle>
+
+<h1>Classroom Management</h1>
+
+<div>
+    <button class="btn btn-primary mb-3" @onclick="OpenAddClassroomModal">Add New Classroom</button>
+</div>
+
+<h3>Classroom List</h3>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="col-form-label">Page Size:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" @onchange="OnPageSizeChanged">
+            <option value="5" selected="@(pageSize == 5)">5</option>
+            <option value="10" selected="@(pageSize == 10)">10</option>
+            <option value="20" selected="@(pageSize == 20)">20</option>
+            <option value="50" selected="@(pageSize == 50)">50</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <span class="col-form-label text-muted">
+            @if (classrooms != null)
+            {
+                @:Showing @classrooms.Count items
+            }
+        </span>
+    </div>
+</div>
+
+@if (classrooms == null)
+{
+    <p><em>Loading...</em></p>
+} else if (classrooms.Count == 0)
+{
+    <p>No classrooms available. Click "Add New Classroom" to create one.</p>
+} else
+{
+    <table class="table">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Max Students</th>
+            <th>Enrolled</th>
+            <th>Available</th>
+            <th>Status</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var classroom in classrooms)
+        {
+            <tr>
+                <td>@classroom.Name</td>
+                <td>@classroom.MaxStudents</td>
+                <td>@classroom.EnrolledCount</td>
+                <td>@classroom.RemainingCapacity</td>
+                <td>
+                    @if (classroom.IsFull)
+                    {
+                        <span class="badge bg-danger">Full</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success">Available</span>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+            <nav aria-label="Classroom list pagination">
+                <ul class="pagination">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)"
+                                disabled="@(currentPage == 1)">
+                            Previous
+                        </button>
+                    </li>
+                    @for (var i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                    {
+                        var pageNumber = i;
+                        <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(pageNumber)">
+                                @pageNumber
+                            </button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages || totalPages == 0 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)"
+                                disabled="@(currentPage == totalPages || totalPages == 0)">
+                            Next
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div class="text-muted">
+            Page @currentPage of @(totalPages > 0 ? totalPages : 1)
+        </div>
+    </div>
+}
+
+<!-- Add Classroom Modal -->
+<div class="modal fade" id="addClassroomModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Classroom</h5>
+                <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="className" class="form-label">Classroom Name</label>
+                    <input id="className" class="form-control" @bind="classroomModel.ClassName"/>
+                </div>
+                <div class="mb-3">
+                    <label for="maxCapacity" class="form-label">Maximum Capacity</label>
+                    <input type="number" id="maxCapacity" class="form-control" @bind="classroomModel.MaxCapacity"
+                           min="1" max="100"/>
+                </div>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @errorMessage
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="HandleAddClassroomSubmit">Add Classroom</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private List<ClassRoomItem>? classrooms;
+    private ClassroomModel classroomModel = new();
+    private string errorMessage = string.Empty;
+    private string? lastSortableUniqueId;
+
+    // Pagination fields
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages = 1;
+    private int totalItems;
+
+
+    public class ClassroomModel
+    {
+        public string ClassName { get; set; } = string.Empty;
+        public int MaxCapacity { get; set; } = 20;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClassrooms();
+    }
+
+    private async Task LoadClassrooms(string? waitForSortableUniqueId = null)
+    {
+        try
+        {
+            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            classrooms = result?.ToList() ?? new List<ClassRoomItem>();
+
+            // For now, estimate total pages based on if we got a full page
+            if (classrooms.Count < pageSize && currentPage == 1)
+            {
+                totalPages = 1;
+                totalItems = classrooms.Count;
+            } else if (classrooms.Count == pageSize)
+            {
+                // Assume there might be more pages
+                totalPages = Math.Max(totalPages, currentPage + 1);
+                totalItems = classrooms.Count * currentPage;
+            } else
+            {
+                totalPages = currentPage;
+                totalItems = (currentPage - 1) * pageSize + classrooms.Count;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading classrooms");
+            classrooms = new List<ClassRoomItem>();
+            totalPages = 1;
+            totalItems = 0;
+        }
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage < 1 || newPage > totalPages && totalPages > 0)
+            return;
+
+        currentPage = newPage;
+        await LoadClassrooms(lastSortableUniqueId);
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize))
+        {
+            pageSize = newSize;
+            currentPage = 1; // Reset to first page when changing page size
+            await LoadClassrooms(lastSortableUniqueId);
+        }
+    }
+
+    // Note: Delete and enrollment management would be implemented separately
+
+    private async Task CloseAddModal()
+    {
+        classroomModel = new ClassroomModel();
+        errorMessage = string.Empty;
+        await JsRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addClassroomModal'))?.hide()");
+    }
+
+
+    private async Task OpenAddClassroomModal()
+    {
+        classroomModel = new ClassroomModel { MaxCapacity = 20 };
+        errorMessage = string.Empty;
+        await JsRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addClassroomModal')).show()");
+    }
+
+
+    private async Task HandleAddClassroomSubmit()
+    {
+        try
+        {
+            var command = new CreateClassRoom(
+                Guid.NewGuid(),
+                classroomModel.ClassName,
+                classroomModel.MaxCapacity);
+
+            var response = await ClassRoomApiClient.CreateClassRoomAsync(command);
+
+            if (response?.Success == true)
+            {
+                lastSortableUniqueId = response.SortableUniqueId;
+                currentPage = 1; // Go to first page to see the new item
+                await LoadClassrooms(lastSortableUniqueId);
+                await CloseAddModal();
+            } else
+            {
+                errorMessage = response?.Error ?? "Failed to add classroom. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to add classroom: {ex.Message}";
+        }
+    }
+}
