@@ -23,6 +23,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     private readonly string _projectorName;
     private readonly ICoreMultiProjectorTypes _types;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly bool _isRestoredFromSnapshot;
 
     // Safe state - events older than SafeWindow
     private T _safeProjector;
@@ -46,12 +47,34 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
+        : this(
+            initialProjector,
+            projectorName,
+            types,
+            jsonOptions,
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId,
+            false)
+    {
+    }
+
+    public DualStateProjectionWrapper(
+        T initialProjector,
+        string projectorName,
+        ICoreMultiProjectorTypes types,
+        JsonSerializerOptions jsonOptions,
+        int initialVersion,
+        Guid initialLastEventId,
+        string? initialLastSortableUniqueId,
+        bool isRestoredFromSnapshot)
     {
         _safeProjector = initialProjector;
         _unsafeProjector = CloneProjector(initialProjector);
         _projectorName = projectorName;
         _types = types;
         _jsonOptions = jsonOptions;
+        _isRestoredFromSnapshot = isRestoredFromSnapshot;
 
         // Initialize version tracking
         _safeVersion = initialVersion;
@@ -205,7 +228,14 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
                 _allSafeEvents[ev.Id] = ev;
             }
 
-            RebuildSafeState(domainTypes);
+            if (_isRestoredFromSnapshot)
+            {
+                ApplyEventsIncrementally(eventsToProcess, domainTypes);
+            }
+            else
+            {
+                RebuildSafeState(domainTypes);
+            }
 
             // After rebuild, increment the safe version by the number of promoted events
             _safeVersion += promotedCount;
@@ -214,6 +244,16 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
     private void RebuildSafeState(DcbDomainTypes domainTypes)
     {
+        // Guard: Skip rebuild if _allSafeEvents is empty.
+        // This is critical after snapshot restore where _allSafeEvents is not serialized
+        // and remains empty. Without this guard, RebuildSafeState would overwrite the
+        // restored _safeProjector with an empty initial state, causing data loss.
+        if (_allSafeEvents.Count == 0)
+        {
+            Console.WriteLine($"[RebuildSafeState] Skipped for {_projectorName}: no safe events to rebuild from (preserving existing safe state)");
+            return;
+        }
+
         // Get all safe events and sort them by SortableUniqueId
         var allEvents = _allSafeEvents.Values.ToList();
         allEvents.Sort((a, b) => string.Compare(
@@ -264,6 +304,35 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         _safeLastEventId = newSafeLastEventId;
         _safeLastSortableUniqueId = newSafeLastSortableId;
         // Don't update _safeVersion here - it's updated in ProcessBufferedEvents
+    }
+
+    private void ApplyEventsIncrementally(List<Event> events, DcbDomainTypes domainTypes)
+    {
+        events.Sort((a, b) => string.Compare(
+            a.SortableUniqueIdValue,
+            b.SortableUniqueIdValue,
+            StringComparison.Ordinal));
+
+        foreach (var ev in events)
+        {
+            var tags = ev.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+            var projected = _types.Project(
+                _projectorName,
+                _safeProjector,
+                ev,
+                tags,
+                domainTypes,
+                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
+
+            if (!projected.IsSuccess)
+            {
+                throw projected.GetException();
+            }
+
+            _safeProjector = (T)projected.GetValue();
+            _safeLastEventId = ev.Id;
+            _safeLastSortableUniqueId = ev.SortableUniqueIdValue;
+        }
     }
 
     private T CloneProjector(T source)
