@@ -17,8 +17,9 @@ var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
-    .WithPgAdmin()
+    // .WithPgAdmin()
     // .WithDataVolume()
+    .WithDbGate()
     .AddDatabase("DcbPostgres");
 
 // Configure Orleans
