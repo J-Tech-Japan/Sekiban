@@ -14,9 +14,9 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.1" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
         <PackageReference Include="System.CommandLine" Version="2.0.1" />
-        <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.0.2-preview03" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.2-preview03" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.2-preview03" />
+        <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.0.2-preview07" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.2-preview07" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.2-preview07" />
     </ItemGroup>
 
     <ItemGroup>
