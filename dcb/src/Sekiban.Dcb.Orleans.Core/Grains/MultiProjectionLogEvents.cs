@@ -55,4 +55,16 @@ public static class MultiProjectionLogEvents
 
     /// <summary>State persistence cancelled during deactivation.</summary>
     public static readonly EventId DeactivationPersistCancelled = new(1016, "DeactivationPersistCancelled");
+
+    /// <summary>Persist details for debugging.</summary>
+    public static readonly EventId PersistDetails = new(1017, "PersistDetails");
+
+    /// <summary>Restore details for debugging.</summary>
+    public static readonly EventId RestoreDetails = new(1018, "RestoreDetails");
+
+    /// <summary>Suspiciously small payload detected.</summary>
+    public static readonly EventId SuspiciousPayload = new(1019, "SuspiciousPayload");
+
+    /// <summary>Safe version is zero after restore.</summary>
+    public static readonly EventId SafeVersionZero = new(1020, "SafeVersionZero");
 }

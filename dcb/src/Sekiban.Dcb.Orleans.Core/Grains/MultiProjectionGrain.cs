@@ -425,6 +425,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.FromValue(false);
             }
 
+            int? safeVersion = null;
+            int? unsafeVersion = null;
             try
             {
                 var unsafeStateInfo = await _projectionActor.GetStateAsync(true);
@@ -433,6 +435,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     var unsafeSt = unsafeStateInfo.GetValue();
                     var safeSt = safeStateInfo.GetValue();
+                    safeVersion = safeSt.Version;
+                    unsafeVersion = unsafeSt.Version;
                     Console.WriteLine($"[{projectorName}] Snapshot state - Safe: {safeSt.Version} events @ {(safeSt.LastSortableUniqueId?.Length >= 20 ? safeSt.LastSortableUniqueId.Substring(0, 20) : safeSt.LastSortableUniqueId) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {(unsafeSt.LastSortableUniqueId?.Length >= 20 ? unsafeSt.LastSortableUniqueId.Substring(0, 20) : unsafeSt.LastSortableUniqueId) ?? "empty"}");
                 }
             }
@@ -446,10 +450,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Extract original/compressed sizes from the internal state
             long originalSizeBytes = envelopeSize;
             long compressedSizeBytes = envelopeSize;
+            long payloadBytesLength = 0;
             if (envelope.InlineState != null)
             {
                 originalSizeBytes = envelope.InlineState.OriginalSizeBytes;
                 compressedSizeBytes = envelope.InlineState.CompressedSizeBytes;
+                try
+                {
+                    payloadBytesLength = envelope.InlineState.GetPayloadBytes().LongLength;
+                }
+                catch { }
             }
 
             // Get metadata
@@ -459,8 +469,40 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var lastEventId = envelope.InlineState?.LastEventId
                            ?? envelope.OffloadedState?.LastEventId
                            ?? Guid.Empty;
+            SortableUniqueId? safeThreshold = null;
+            DateTime? safeThresholdTime = null;
+            try
+            {
+                safeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
+                safeThresholdTime = safeThreshold.GetDateTime();
+            }
+            catch { }
 
             Console.WriteLine($"[{projectorName}] v10: Writing snapshot: {envelopeSize:N0} bytes (payload: original={originalSizeBytes} compressed={compressedSizeBytes}), {_eventsProcessed:N0} events, checkpoint: {(safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty"}...");
+            _logger.LogInformation(
+                MultiProjectionLogEvents.PersistDetails,
+                "Persist: {ProjectorName}, Events={EventsProcessed}, SafeVer={SafeVersion}, UnsafeVer={UnsafeVersion}, PayloadBytes={PayloadBytes}, EnvelopeSize={EnvelopeSize}, Original={OriginalSize}, Compressed={CompressedSize}, SafeThreshold={SafeThreshold}, IsOffloaded={IsOffloaded}, OffloadKey={OffloadKey}",
+                projectorName,
+                _eventsProcessed,
+                safeVersion,
+                unsafeVersion,
+                payloadBytesLength,
+                envelopeSize,
+                originalSizeBytes,
+                compressedSizeBytes,
+                safeThresholdTime,
+                envelope.IsOffloaded,
+                envelope.OffloadedState?.OffloadKey);
+
+            if (_eventsProcessed > 1000 && payloadBytesLength > 0 && payloadBytesLength < 1000)
+            {
+                _logger.LogWarning(
+                    MultiProjectionLogEvents.SuspiciousPayload,
+                    "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but payload only {PayloadBytes} bytes",
+                    projectorName,
+                    _eventsProcessed,
+                    payloadBytesLength);
+            }
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null)
@@ -1051,6 +1093,52 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                 await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
                                 _eventsProcessed = record.EventsProcessed;
                                 _processedEventIds.Clear();
+
+                                int? postSafeVersion = null;
+                                int? postUnsafeVersion = null;
+                                try
+                                {
+                                    var unsafeState = await _projectionActor.GetStateAsync(true);
+                                    var safeState = await _projectionActor.GetStateAsync(false);
+                                    if (unsafeState.IsSuccess)
+                                    {
+                                        postUnsafeVersion = unsafeState.GetValue().Version;
+                                    }
+                                    if (safeState.IsSuccess)
+                                    {
+                                        postSafeVersion = safeState.GetValue().Version;
+                                    }
+                                }
+                                catch { }
+
+                                long restoredPayloadBytes = 0;
+                                try
+                                {
+                                    restoredPayloadBytes = envelope.InlineState?.GetPayloadBytes().LongLength ?? 0;
+                                }
+                                catch { }
+
+                                _logger.LogInformation(
+                                    MultiProjectionLogEvents.RestoreDetails,
+                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, EnvelopeVer={EnvelopeVersion}, PayloadBytes={PayloadBytes}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
+                                    projectorName,
+                                    record.EventsProcessed,
+                                    record.StateData?.Length ?? 0,
+                                    record.OriginalSizeBytes,
+                                    record.CompressedSizeBytes,
+                                    GetEnvelopeVersion(envelope),
+                                    restoredPayloadBytes,
+                                    postSafeVersion,
+                                    postUnsafeVersion);
+
+                                if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                {
+                                    _logger.LogWarning(
+                                        MultiProjectionLogEvents.SafeVersionZero,
+                                        "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
+                                        projectorName,
+                                        record.EventsProcessed);
+                                }
 
                                 _logger.LogInformation(
                                     MultiProjectionLogEvents.StateRestoreSuccess,
