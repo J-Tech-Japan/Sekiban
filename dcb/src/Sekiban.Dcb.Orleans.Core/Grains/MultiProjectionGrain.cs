@@ -465,7 +465,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Get metadata
             var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
             var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
-            var safePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
+
+            // Use envelope's LastSortableUniqueId (time point A) for consistency with StateData
+            var envelopeLastSortableUniqueId = envelope.InlineState?.LastSortableUniqueId
+                                             ?? envelope.OffloadedState?.LastSortableUniqueId
+                                             ?? string.Empty;
+
+            // Get current safe position (time point B) for comparison/logging only
+            var currentSafePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
+
+            // Warn if positions diverged between snapshot creation and now (normal but worth observing)
+            if (!string.IsNullOrEmpty(envelopeLastSortableUniqueId) &&
+                !string.IsNullOrEmpty(currentSafePosition) &&
+                envelopeLastSortableUniqueId != currentSafePosition)
+            {
+                _logger.LogWarning(
+                    "SafePosition diverged during persist: {ProjectorName} - Envelope={EnvelopePosition}, Current={CurrentPosition}. Using envelope position for consistency.",
+                    projectorName,
+                    envelopeLastSortableUniqueId.Length >= 20 ? envelopeLastSortableUniqueId.Substring(0, 20) : envelopeLastSortableUniqueId,
+                    currentSafePosition.Length >= 20 ? currentSafePosition.Substring(0, 20) : currentSafePosition);
+            }
+
+            // Use envelope's position for record (ensures record.LastSortableUniqueId matches StateData)
+            var safePosition = envelopeLastSortableUniqueId;
+
             var lastEventId = envelope.InlineState?.LastEventId
                            ?? envelope.OffloadedState?.LastEventId
                            ?? Guid.Empty;
@@ -1410,6 +1433,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         if (envelope.InlineState == null && envelope.OffloadedState == null)
+        {
+            return true;
+        }
+
+        // Check envelope's LastSortableUniqueId: if Version > 0, it should not be empty
+        var envelopeLastSortableUniqueId = envelope.InlineState?.LastSortableUniqueId
+                                         ?? envelope.OffloadedState?.LastSortableUniqueId;
+        if (string.IsNullOrEmpty(envelopeLastSortableUniqueId) && GetEnvelopeVersion(envelope) > 0)
         {
             return true;
         }
