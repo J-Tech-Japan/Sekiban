@@ -82,12 +82,12 @@ public static class TestDataEndpoints
 
         var roomDefinitions = new[]
         {
-            new { Name = "Conference Room A", Capacity = 20, Location = "Building 1, Floor 2", Equipment = new List<string> { "Projector", "Whiteboard", "Video Conference" } },
-            new { Name = "Meeting Room B", Capacity = 8, Location = "Building 1, Floor 3", Equipment = new List<string> { "TV Screen", "Whiteboard" } },
-            new { Name = "Executive Boardroom", Capacity = 16, Location = "Building 2, Floor 5", Equipment = new List<string> { "Projector", "Video Conference", "Sound System", "Recording" } },
-            new { Name = "Huddle Space 1", Capacity = 4, Location = "Building 1, Floor 1", Equipment = new List<string> { "TV Screen" } },
-            new { Name = "Training Room", Capacity = 30, Location = "Building 3, Floor 1", Equipment = new List<string> { "Projector", "Multiple Screens", "Recording", "Microphones" } },
-            new { Name = "Small Meeting Room C", Capacity = 6, Location = "Building 1, Floor 2", Equipment = new List<string> { "Whiteboard" } },
+            new { Name = "Conference Room A", Capacity = 20, Location = "Building 1, Floor 2", Equipment = new List<string> { "Projector", "Whiteboard", "Video Conference" }, RequiresApproval = false },
+            new { Name = "Meeting Room B", Capacity = 8, Location = "Building 1, Floor 3", Equipment = new List<string> { "TV Screen", "Whiteboard" }, RequiresApproval = false },
+            new { Name = "Executive Boardroom", Capacity = 16, Location = "Building 2, Floor 5", Equipment = new List<string> { "Projector", "Video Conference", "Sound System", "Recording" }, RequiresApproval = true },
+            new { Name = "Huddle Space 1", Capacity = 4, Location = "Building 1, Floor 1", Equipment = new List<string> { "TV Screen" }, RequiresApproval = false },
+            new { Name = "Training Room", Capacity = 30, Location = "Building 3, Floor 1", Equipment = new List<string> { "Projector", "Multiple Screens", "Recording", "Microphones" }, RequiresApproval = true },
+            new { Name = "Small Meeting Room C", Capacity = 6, Location = "Building 1, Floor 2", Equipment = new List<string> { "Whiteboard" }, RequiresApproval = false },
         };
 
         foreach (var roomDef in roomDefinitions)
@@ -99,7 +99,8 @@ public static class TestDataEndpoints
                 Name = roomDef.Name,
                 Capacity = roomDef.Capacity,
                 Location = roomDef.Location,
-                Equipment = roomDef.Equipment
+                Equipment = roomDef.Equipment,
+                RequiresApproval = roomDef.RequiresApproval
             };
 
             var result = await executor.ExecuteAsync(command);
@@ -115,6 +116,7 @@ public static class TestDataEndpoints
     {
         var reservationIds = new List<Guid>();
         var organizerId = Guid.CreateVersion7();
+        var organizerName = "Sample User";
         var baseDate = DateTime.UtcNow.Date.AddDays(1); // Start from tomorrow
 
         var reservationDefinitions = new[]
@@ -146,6 +148,7 @@ public static class TestDataEndpoints
                 var result = await workflow.ExecuteAsync(
                     roomId,
                     organizerId,
+                    organizerName,
                     startTime,
                     endTime,
                     resDef.Purpose);

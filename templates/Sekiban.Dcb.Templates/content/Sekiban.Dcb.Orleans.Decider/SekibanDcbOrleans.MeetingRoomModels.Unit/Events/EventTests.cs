@@ -11,7 +11,7 @@ public class EventTests
     public void RoomCreated_Should_Have_RoomTag()
     {
         var roomId = Guid.NewGuid();
-        var ev = new RoomCreated(roomId, "Conference Room A", 10, "Building 1", ["Projector", "Whiteboard"]);
+        var ev = new RoomCreated(roomId, "Conference Room A", 10, "Building 1", ["Projector", "Whiteboard"], false);
 
         var eventWithTags = ev.GetEventWithTags();
 
@@ -24,7 +24,7 @@ public class EventTests
     public void RoomUpdated_Should_Have_RoomTag()
     {
         var roomId = Guid.NewGuid();
-        var ev = new RoomUpdated(roomId, "Updated Room", 15, "Building 2", ["Projector"]);
+        var ev = new RoomUpdated(roomId, "Updated Room", 15, "Building 2", ["Projector"], false);
 
         var eventWithTags = ev.GetEventWithTags();
 
@@ -43,6 +43,7 @@ public class EventTests
             reservationId,
             roomId,
             organizerId,
+            "User One",
             DateTime.UtcNow.AddHours(1),
             DateTime.UtcNow.AddHours(2),
             "Team Meeting");
@@ -59,7 +60,16 @@ public class EventTests
     {
         var reservationId = Guid.NewGuid();
         var roomId = Guid.NewGuid();
-        var ev = new ReservationHoldCommitted(reservationId, roomId, false, null);
+        var ev = new ReservationHoldCommitted(
+            reservationId,
+            roomId,
+            Guid.NewGuid(),
+            "User One",
+            DateTime.UtcNow.AddHours(1),
+            DateTime.UtcNow.AddHours(2),
+            "Team Meeting",
+            false,
+            null);
 
         var eventWithTags = ev.GetEventWithTags();
 

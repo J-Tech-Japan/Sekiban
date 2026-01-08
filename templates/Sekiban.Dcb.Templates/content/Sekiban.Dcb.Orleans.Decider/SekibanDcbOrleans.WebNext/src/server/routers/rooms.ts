@@ -9,6 +9,7 @@ const roomSchema = z.object({
   capacity: z.number(),
   location: z.string(),
   equipment: z.array(z.string()),
+  requiresApproval: z.boolean().optional().default(false),
   isActive: z.boolean().optional().default(true),
 });
 
@@ -18,6 +19,7 @@ const createRoomSchema = z.object({
   capacity: z.number().min(1, "Capacity must be at least 1"),
   location: z.string().min(1, "Location is required"),
   equipment: z.array(z.string()).default([]),
+  requiresApproval: z.boolean().optional().default(false),
 });
 
 const updateRoomSchema = z.object({
@@ -26,6 +28,7 @@ const updateRoomSchema = z.object({
   capacity: z.number().min(1, "Capacity must be at least 1"),
   location: z.string().min(1, "Location is required"),
   equipment: z.array(z.string()).default([]),
+  requiresApproval: z.boolean().optional().default(false),
 });
 
 export const roomsRouter = router({
@@ -73,6 +76,7 @@ export const roomsRouter = router({
           capacity: input.capacity,
           location: input.location,
           equipment: input.equipment,
+          requiresApproval: input.requiresApproval,
         }),
       });
       if (!res.ok) {
@@ -99,6 +103,7 @@ export const roomsRouter = router({
             capacity: input.capacity,
             location: input.location,
             equipment: input.equipment,
+            requiresApproval: input.requiresApproval,
           }),
         }
       );

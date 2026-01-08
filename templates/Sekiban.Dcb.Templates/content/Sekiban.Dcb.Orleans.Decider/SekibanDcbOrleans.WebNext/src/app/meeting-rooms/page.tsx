@@ -45,6 +45,7 @@ function MeetingRoomsContent() {
     capacity: 10,
     location: "",
     equipment: [] as string[],
+    requiresApproval: false,
   });
   const [equipmentInput, setEquipmentInput] = useState("");
   const [formError, setFormError] = useState("");
@@ -84,6 +85,7 @@ function MeetingRoomsContent() {
       capacity: 10,
       location: "",
       equipment: [],
+      requiresApproval: false,
     });
     setEquipmentInput("");
     setFormError("");
@@ -100,6 +102,7 @@ function MeetingRoomsContent() {
       capacity: formData.capacity,
       location: formData.location,
       equipment: formData.equipment,
+      requiresApproval: formData.requiresApproval,
     });
   };
 
@@ -115,6 +118,7 @@ function MeetingRoomsContent() {
       capacity: formData.capacity,
       location: formData.location,
       equipment: formData.equipment,
+      requiresApproval: formData.requiresApproval,
     });
   };
 
@@ -126,6 +130,7 @@ function MeetingRoomsContent() {
       capacity: room.capacity,
       location: room.location,
       equipment: room.equipment,
+      requiresApproval: room.requiresApproval ?? false,
     });
     setFormError("");
     setIsEditModalOpen(true);
@@ -247,6 +252,7 @@ function MeetingRoomsContent() {
                     <TableHead>Location</TableHead>
                     <TableHead className="text-center">Capacity</TableHead>
                     <TableHead>Equipment</TableHead>
+                    <TableHead className="text-center">Approval</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -290,6 +296,11 @@ function MeetingRoomsContent() {
                             </Badge>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={room.requiresApproval ? "warning" : "secondary"}>
+                          {room.requiresApproval ? "Required" : "Auto"}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant={room.isActive ? "success" : "secondary"}>
@@ -357,6 +368,18 @@ function MeetingRoomsContent() {
                     min={1}
                     max={500}
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="requires-approval"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-muted-foreground"
+                    checked={formData.requiresApproval}
+                    onChange={(e) => setFormData({ ...formData, requiresApproval: e.target.checked })}
+                  />
+                  <label htmlFor="requires-approval" className="text-sm font-medium">
+                    Requires approval
+                  </label>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Equipment</label>
@@ -444,6 +467,18 @@ function MeetingRoomsContent() {
                     min={1}
                     max={500}
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="requires-approval-edit"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-muted-foreground"
+                    checked={formData.requiresApproval}
+                    onChange={(e) => setFormData({ ...formData, requiresApproval: e.target.checked })}
+                  />
+                  <label htmlFor="requires-approval-edit" className="text-sm font-medium">
+                    Requires approval
+                  </label>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Equipment</label>

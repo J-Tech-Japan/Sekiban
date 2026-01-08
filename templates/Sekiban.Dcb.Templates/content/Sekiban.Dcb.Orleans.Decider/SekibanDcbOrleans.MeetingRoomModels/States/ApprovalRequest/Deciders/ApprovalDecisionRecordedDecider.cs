@@ -11,7 +11,7 @@ public static class ApprovalDecisionRecordedDecider
     /// </summary>
     public static void Validate(this ApprovalRequestState.ApprovalRequestPending state, Guid approverId)
     {
-        if (!state.ApproverIds.Contains(approverId))
+        if (state.ApproverIds.Count > 0 && !state.ApproverIds.Contains(approverId))
         {
             throw new InvalidOperationException($"User {approverId} is not an authorized approver");
         }

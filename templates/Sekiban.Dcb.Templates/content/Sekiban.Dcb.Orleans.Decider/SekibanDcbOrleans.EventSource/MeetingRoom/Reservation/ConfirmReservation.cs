@@ -1,5 +1,7 @@
 using Dcb.EventSource.MeetingRoom.Room;
+using Dcb.EventSource.MeetingRoom.ApprovalRequest;
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.ApprovalRequest;
 using Dcb.MeetingRoomModels.States.Reservation;
 using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
@@ -31,12 +33,31 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         }
 
         // 2. Extract reservation details
-        var (startTime, endTime, purpose, organizerId) = reservationStateTyped.Payload switch
+        if (reservationStateTyped.Payload is not ReservationState.ReservationHeld held)
         {
-            ReservationState.ReservationHeld held => (held.StartTime, held.EndTime, held.Purpose, held.OrganizerId),
-            ReservationState.ReservationDraft draft => (draft.StartTime, draft.EndTime, draft.Purpose, draft.OrganizerId),
-            _ => throw new ApplicationException($"Reservation {command.ReservationId} is in invalid state for confirmation: {reservationStateTyped.Payload.GetType().Name}")
-        };
+            throw new ApplicationException(
+                $"Reservation {command.ReservationId} is in invalid state for confirmation: {reservationStateTyped.Payload.GetType().Name}");
+        }
+
+        var startTime = held.StartTime;
+        var endTime = held.EndTime;
+        var purpose = held.Purpose;
+        var organizerId = held.OrganizerId;
+
+        if (held.RequiresApproval)
+        {
+            if (held.ApprovalRequestId == null)
+            {
+                throw new ApplicationException("Approval request is required before confirmation");
+            }
+
+            var approvalTag = new ApprovalRequestTag(held.ApprovalRequestId.Value);
+            var approvalStateTyped = await context.GetStateAsync<ApprovalRequestProjector>(approvalTag);
+            if (approvalStateTyped.Payload is not ApprovalRequestState.ApprovalRequestApproved)
+            {
+                throw new ApplicationException("Reservation approval has not been granted");
+            }
+        }
 
         // 3. Get room name for user-friendly error messages
         var roomTag = new RoomTag(command.RoomId);

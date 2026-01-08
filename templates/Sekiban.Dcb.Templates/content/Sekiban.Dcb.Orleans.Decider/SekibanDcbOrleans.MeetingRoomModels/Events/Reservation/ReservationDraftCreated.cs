@@ -6,6 +6,7 @@ public record ReservationDraftCreated(
     Guid ReservationId,
     Guid RoomId,
     Guid OrganizerId,
+    string OrganizerName,
     DateTime StartTime,
     DateTime EndTime,
     string Purpose) : IEventPayload

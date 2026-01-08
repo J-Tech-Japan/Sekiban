@@ -17,12 +17,13 @@ const reservationSchema = z.object({
   reservationId: z.string().uuid(),
   roomId: z.string().uuid(),
   organizerId: z.string().uuid(),
+  organizerName: z.string().optional(),
   startTime: z.string(),
   endTime: z.string(),
   purpose: z.string(),
   status: reservationStatusSchema,
-  requiresApproval: z.boolean().optional(),
-  approvalRequestId: z.string().uuid().optional().nullable(),
+  requiresApproval: z.boolean().optional().default(false),
+  approvalRequestId: z.string().uuid().optional().nullable().default(null),
   confirmedAt: z.string().optional().nullable(),
   cancelledAt: z.string().optional().nullable(),
   reason: z.string().optional().nullable(),
@@ -187,6 +188,9 @@ export const reservationsRouter = router({
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Authentication required");
+        }
+        if (res.status === 403) {
+          throw new Error("Admin access required");
         }
         const error = await extractErrorMessage(res, "Failed to confirm reservation");
         throw new Error(error);

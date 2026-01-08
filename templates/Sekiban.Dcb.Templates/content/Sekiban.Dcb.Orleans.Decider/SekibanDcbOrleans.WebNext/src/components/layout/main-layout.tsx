@@ -12,6 +12,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   // Show loading while fetching if not yet authenticated (prevents flash of "Please Login")
   const showLoading = authLoading || (isFetching && !authStatus?.isAuthenticated);
   const isAuthenticated = authStatus?.isAuthenticated ?? false;
+  const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
@@ -32,7 +33,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Navigation */}
           <div className="flex-1 overflow-y-auto py-4 scrollbar-thin">
-            <NavMenu />
+            <NavMenu isAdmin={isAdmin} />
           </div>
 
           {/* Footer */}

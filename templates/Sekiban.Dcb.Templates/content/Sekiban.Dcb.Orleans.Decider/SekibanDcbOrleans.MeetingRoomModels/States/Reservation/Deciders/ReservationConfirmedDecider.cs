@@ -27,6 +27,7 @@ public static class ReservationConfirmedDecider
                 held.ReservationId,
                 held.RoomId,
                 held.OrganizerId,
+                held.OrganizerName,
                 held.StartTime,
                 held.EndTime,
                 held.Purpose,

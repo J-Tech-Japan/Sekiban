@@ -10,10 +10,13 @@ public record ReservationListItem(
     Guid ReservationId,
     Guid RoomId,
     Guid OrganizerId,
+    string OrganizerName,
     DateTime StartTime,
     DateTime EndTime,
     string Purpose,
-    string Status);
+    string Status,
+    bool RequiresApproval,
+    Guid? ApprovalRequestId);
 
 [GenerateSerializer]
 public record GetReservationListQuery :
@@ -44,15 +47,60 @@ public record GetReservationListQuery :
             .Select(s => s switch
             {
                 ReservationState.ReservationDraft d => new ReservationListItem(
-                    d.ReservationId, d.RoomId, d.OrganizerId, d.StartTime, d.EndTime, d.Purpose, "Draft"),
+                    d.ReservationId,
+                    d.RoomId,
+                    d.OrganizerId,
+                    d.OrganizerName,
+                    d.StartTime,
+                    d.EndTime,
+                    d.Purpose,
+                    "Draft",
+                    false,
+                    null),
                 ReservationState.ReservationHeld h => new ReservationListItem(
-                    h.ReservationId, h.RoomId, h.OrganizerId, h.StartTime, h.EndTime, h.Purpose, "Held"),
+                    h.ReservationId,
+                    h.RoomId,
+                    h.OrganizerId,
+                    h.OrganizerName,
+                    h.StartTime,
+                    h.EndTime,
+                    h.Purpose,
+                    "Held",
+                    h.RequiresApproval,
+                    h.ApprovalRequestId),
                 ReservationState.ReservationConfirmed c => new ReservationListItem(
-                    c.ReservationId, c.RoomId, c.OrganizerId, c.StartTime, c.EndTime, c.Purpose, "Confirmed"),
+                    c.ReservationId,
+                    c.RoomId,
+                    c.OrganizerId,
+                    c.OrganizerName,
+                    c.StartTime,
+                    c.EndTime,
+                    c.Purpose,
+                    "Confirmed",
+                    false,
+                    null),
                 ReservationState.ReservationCancelled cancelled => new ReservationListItem(
-                    cancelled.ReservationId, cancelled.RoomId, Guid.Empty, DateTime.MinValue, DateTime.MinValue, "", "Cancelled"),
+                    cancelled.ReservationId,
+                    cancelled.RoomId,
+                    Guid.Empty,
+                    "",
+                    DateTime.MinValue,
+                    DateTime.MinValue,
+                    "",
+                    "Cancelled",
+                    false,
+                    null),
                 ReservationState.ReservationRejected rejected => new ReservationListItem(
-                    rejected.ReservationId, rejected.RoomId, Guid.Empty, DateTime.MinValue, DateTime.MinValue, "", "Rejected"),
+                    rejected.ReservationId,
+                    rejected.RoomId,
+                    Guid.Empty,
+                    "",
+                    DateTime.MinValue,
+                    DateTime.MinValue,
+                    "",
+                    "Rejected",
+                    false,
+                    null),
                 _ => null!
             })
             .Where(item => item != null && item.ReservationId != Guid.Empty);

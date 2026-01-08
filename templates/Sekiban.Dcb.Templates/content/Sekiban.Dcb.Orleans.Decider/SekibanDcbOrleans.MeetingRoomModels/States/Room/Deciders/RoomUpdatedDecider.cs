@@ -15,6 +15,7 @@ public static class RoomUpdatedDecider
             Name = updated.Name,
             Capacity = updated.Capacity,
             Location = updated.Location,
-            Equipment = updated.Equipment
+            Equipment = updated.Equipment,
+            RequiresApproval = updated.RequiresApproval
         };
 }

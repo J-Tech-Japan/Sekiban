@@ -23,6 +23,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
     public async Task<Guid> ExecuteAsync(
         Guid roomId,
         Guid organizerId,
+        string organizerName,
         DateTime startTime,
         DateTime endTime,
         string purpose,
@@ -36,6 +37,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             ReservationId = reservationId,
             RoomId = roomId,
             OrganizerId = organizerId,
+            OrganizerName = organizerName,
             StartTime = startTime,
             EndTime = endTime,
             Purpose = purpose

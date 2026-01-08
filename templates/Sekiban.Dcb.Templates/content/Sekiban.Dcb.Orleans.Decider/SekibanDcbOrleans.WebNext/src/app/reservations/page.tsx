@@ -27,6 +27,7 @@ const statusConfig: Record<ReservationStatus, { variant: "default" | "secondary"
   Rejected: { variant: "destructive", label: "Rejected" },
   Expired: { variant: "default", label: "Expired" },
 };
+const SLOT_HEIGHT_PX = 60;
 
 // Helper to generate week days
 const getWeekDays = (date: Date) => {
@@ -70,6 +71,30 @@ const formatDateTime = (dateStr: string) => {
   });
 };
 
+const getSlotBounds = (dayStr: string, timeSlot: string) => {
+  const slotStart = new Date(`${dayStr}T${timeSlot}:00`);
+  const slotEnd = new Date(slotStart);
+  slotEnd.setHours(slotEnd.getHours() + 1);
+  return { slotStart, slotEnd };
+};
+
+const isReservationStartInSlot = (reservation: { startTime: string }, slotStart: Date, slotEnd: Date) => {
+  const startDate = new Date(reservation.startTime);
+  return startDate >= slotStart && startDate < slotEnd;
+};
+
+const getReservationBlockStyle = (reservation: { startTime: string; endTime: string }) => {
+  const startDate = new Date(reservation.startTime);
+  const endDate = new Date(reservation.endTime);
+  const durationMinutes = Math.max(0, (endDate.getTime() - startDate.getTime()) / 60000);
+  const startOffset = (startDate.getMinutes() / 60) * SLOT_HEIGHT_PX;
+  const height = Math.max(32, (durationMinutes / 60) * SLOT_HEIGHT_PX - 4);
+  return {
+    top: `${startOffset}px`,
+    height: `${height}px`,
+  };
+};
+
 export default function ReservationsPage() {
   return (
     <RequireAuth>
@@ -90,10 +115,14 @@ function ReservationsContent() {
   const [selectedReservation, setSelectedReservation] = useState<{
     reservationId: string;
     roomId: string;
+    organizerId: string;
+    organizerName?: string;
     purpose: string;
     startTime: string;
     endTime: string;
     status: ReservationStatus;
+    requiresApproval?: boolean;
+    approvalRequestId?: string | null;
   } | null>(null);
 
   // Form state
@@ -117,6 +146,9 @@ function ReservationsContent() {
     waitForSortableUniqueId: lastSortableUniqueId,
   });
 
+  const { data: authStatus } = trpc.auth.status.useQuery();
+  const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
+
   const quickReserveMutation = trpc.reservations.quickReserve.useMutation({
     onSuccess: (data) => {
       setLastSortableUniqueId(data.sortableUniqueId);
@@ -135,6 +167,32 @@ function ReservationsContent() {
       refetch();
       setIsCancelModalOpen(false);
       setCancelReason("");
+      setSelectedReservation(null);
+    },
+    onError: (error) => {
+      setFormError(error.message);
+    },
+  });
+
+  const confirmMutation = trpc.reservations.confirm.useMutation({
+    onSuccess: (data) => {
+      setLastSortableUniqueId(data.sortableUniqueId);
+      refetch();
+      setIsDetailsModalOpen(false);
+      setSelectedReservation(null);
+    },
+    onError: (error) => {
+      setFormError(error.message);
+    },
+  });
+
+  const approveMutation = trpc.approvals.decide.useMutation({
+    onSuccess: (data) => {
+      if (data.sortableUniqueId) {
+        setLastSortableUniqueId(data.sortableUniqueId);
+      }
+      refetch();
+      setIsDetailsModalOpen(false);
       setSelectedReservation(null);
     },
     onError: (error) => {
@@ -203,6 +261,7 @@ function ReservationsContent() {
 
   const openDetailsModal = (reservation: typeof selectedReservation) => {
     setSelectedReservation(reservation);
+    setFormError("");
     setIsDetailsModalOpen(true);
   };
 
@@ -211,6 +270,29 @@ function ReservationsContent() {
     setIsCancelModalOpen(true);
     setCancelReason("");
     setFormError("");
+  };
+
+  const handleAdminConfirm = () => {
+    if (!selectedReservation) return;
+
+    if (selectedReservation.requiresApproval && selectedReservation.approvalRequestId) {
+      approveMutation.mutate({
+        approvalRequestId: selectedReservation.approvalRequestId,
+        decision: "Approved",
+        comment: "Approved by admin",
+      });
+      return;
+    }
+
+    if (selectedReservation.requiresApproval && !selectedReservation.approvalRequestId) {
+      setFormError("Approval request is missing for this reservation");
+      return;
+    }
+
+    confirmMutation.mutate({
+      reservationId: selectedReservation.reservationId,
+      roomId: selectedReservation.roomId,
+    });
   };
 
   const previousWeek = () => {
@@ -233,7 +315,7 @@ function ReservationsContent() {
   const getReservationsForSlot = (day: Date, timeSlot: string) => {
     if (!reservations) return [];
     const dayStr = formatDate(day);
-    const slotHour = parseInt(timeSlot.split(":")[0]);
+    const { slotStart, slotEnd } = getSlotBounds(dayStr, timeSlot);
 
     return reservations.filter((r) => {
       const startDate = new Date(r.startTime);
@@ -241,11 +323,7 @@ function ReservationsContent() {
       const resDateStr = formatDate(startDate);
 
       if (resDateStr !== dayStr) return false;
-
-      const startHour = startDate.getHours();
-      const endHour = endDate.getHours();
-
-      return slotHour >= startHour && slotHour < endHour;
+      return startDate < slotEnd && endDate > slotStart;
     });
   };
 
@@ -253,6 +331,12 @@ function ReservationsContent() {
   const getRoomName = (roomId: string) => {
     const room = rooms?.find((r) => r.roomId === roomId);
     return room?.name || "Unknown Room";
+  };
+
+  const getOrganizerLabel = (reservation: { organizerId: string; organizerName?: string }) => {
+    const name = reservation.organizerName?.trim();
+    if (name) return name;
+    return `User ${reservation.organizerId.slice(0, 8)}`;
   };
 
   const totalReservations = reservations?.length ?? 0;
@@ -411,12 +495,17 @@ function ReservationsContent() {
                       <td className="p-3 text-sm text-muted-foreground font-medium">{slot}</td>
                       {weekDays.map((day) => {
                         const slotReservations = getReservationsForSlot(day, slot);
+                        const dayStr = formatDate(day);
+                        const { slotStart, slotEnd } = getSlotBounds(dayStr, slot);
+                        const startingReservations = slotReservations.filter((res) =>
+                          isReservationStartInSlot(res, slotStart, slotEnd)
+                        );
                         const isToday = formatDate(day) === formatDate(new Date());
                         return (
                           <td
                             key={`${day.toISOString()}-${slot}`}
                             className={cn(
-                              "p-1 align-top min-h-[60px] relative",
+                              "p-1 align-top min-h-[60px] relative overflow-visible",
                               isToday ? "bg-primary/5" : "",
                               "hover:bg-muted/50 cursor-pointer transition-colors"
                             )}
@@ -426,7 +515,7 @@ function ReservationsContent() {
                               }
                             }}
                           >
-                            {slotReservations.map((res) => (
+                            {startingReservations.map((res) => (
                               <div
                                 key={res.reservationId}
                                 onClick={(e) => {
@@ -434,14 +523,19 @@ function ReservationsContent() {
                                   openDetailsModal({
                                     reservationId: res.reservationId,
                                     roomId: res.roomId,
+                                    organizerId: res.organizerId,
+                                    organizerName: res.organizerName,
                                     purpose: res.purpose,
                                     startTime: res.startTime,
                                     endTime: res.endTime,
                                     status: res.status as ReservationStatus,
+                                    requiresApproval: res.requiresApproval,
+                                    approvalRequestId: res.approvalRequestId,
                                   });
                                 }}
+                                style={getReservationBlockStyle(res)}
                                 className={cn(
-                                  "rounded px-2 py-1 text-xs mb-1 cursor-pointer hover:opacity-80 transition-opacity",
+                                  "rounded px-2 py-1 text-xs cursor-pointer hover:opacity-80 transition-opacity absolute left-1 right-1 z-10",
                                   res.status === "Confirmed"
                                     ? "bg-success/20 text-success border border-success/30"
                                     : res.status === "Held"
@@ -454,6 +548,9 @@ function ReservationsContent() {
                                 <div className="font-medium truncate">{res.purpose}</div>
                                 <div className="text-[10px] opacity-75">
                                   {!selectedRoomId && getRoomName(res.roomId)}
+                                </div>
+                                <div className="text-[10px] opacity-75 truncate">
+                                  {getOrganizerLabel(res)}
                                 </div>
                               </div>
                             ))}
@@ -610,12 +707,26 @@ function ReservationsContent() {
                   </svg>
                   <span>{selectedReservation.purpose}</span>
                 </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A9 9 0 1118.879 6.196 9 9 0 015.12 17.804zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{getOrganizerLabel(selectedReservation)}</span>
+                </div>
               </div>
+              {formError && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{formError}</div>
+              )}
             </CardContent>
             <CardFooter className="flex justify-end gap-2 border-t pt-4">
               <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
                 Close
               </Button>
+              {isAdmin && selectedReservation.status === "Held" && (
+                <Button onClick={handleAdminConfirm} disabled={confirmMutation.isPending || approveMutation.isPending}>
+                  {selectedReservation.requiresApproval ? "Approve & Confirm" : "Confirm"}
+                </Button>
+              )}
               {(selectedReservation.status === "Confirmed" || selectedReservation.status === "Held" || selectedReservation.status === "Draft") && (
                 <Button variant="destructive" onClick={openCancelModal}>
                   Cancel Reservation

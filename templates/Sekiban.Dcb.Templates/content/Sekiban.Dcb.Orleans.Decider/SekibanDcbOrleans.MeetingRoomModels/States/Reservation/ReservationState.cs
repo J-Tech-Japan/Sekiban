@@ -21,6 +21,7 @@ public abstract record ReservationState : ITagStatePayload
         Guid ReservationId,
         Guid RoomId,
         Guid OrganizerId,
+        string OrganizerName,
         DateTime StartTime,
         DateTime EndTime,
         string Purpose) : ReservationState;
@@ -32,6 +33,7 @@ public abstract record ReservationState : ITagStatePayload
         Guid ReservationId,
         Guid RoomId,
         Guid OrganizerId,
+        string OrganizerName,
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
@@ -45,6 +47,7 @@ public abstract record ReservationState : ITagStatePayload
         Guid ReservationId,
         Guid RoomId,
         Guid OrganizerId,
+        string OrganizerName,
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,

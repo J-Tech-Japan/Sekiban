@@ -56,6 +56,39 @@ public record RoomReservationsState : ITagStatePayload
 
         return conflicts;
     }
+
+    /// <summary>
+    ///     Adds or updates an active reservation.
+    /// </summary>
+    public RoomReservationsState AddOrUpdateReservation(
+        Guid reservationId,
+        DateTime startTime,
+        DateTime endTime,
+        string purpose,
+        Guid organizerId,
+        ReservationSlotStatus status)
+    {
+        var updated = new Dictionary<Guid, ReservationSlot>(ActiveReservations)
+        {
+            [reservationId] = new ReservationSlot(startTime, endTime, purpose, organizerId, status)
+        };
+        return this with { ActiveReservations = updated };
+    }
+
+    /// <summary>
+    ///     Removes an active reservation.
+    /// </summary>
+    public RoomReservationsState RemoveReservation(Guid reservationId)
+    {
+        if (!ActiveReservations.ContainsKey(reservationId))
+        {
+            return this;
+        }
+
+        var updated = new Dictionary<Guid, ReservationSlot>(ActiveReservations);
+        updated.Remove(reservationId);
+        return this with { ActiveReservations = updated };
+    }
 }
 
 /// <summary>

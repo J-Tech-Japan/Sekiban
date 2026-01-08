@@ -30,7 +30,8 @@ public static class ReservationEndpoints
             .WithName("CommitReservationHold");
 
         group.MapPost("/{reservationId:guid}/confirm", ConfirmReservationAsync)
-            .WithName("ConfirmReservation");
+            .WithName("ConfirmReservation")
+            .RequireAuthorization("AdminOnly");
 
         group.MapPost("/{reservationId:guid}/cancel", CancelReservationAsync)
             .WithName("CancelReservation");
@@ -83,15 +84,22 @@ public static class ReservationEndpoints
 
     private static async Task<IResult> CreateReservationDraftAsync(
         [FromBody] CreateReservationDraft command,
+        HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var result = await executor.ExecuteAsync(command);
+        var displayName = httpContext.User.FindFirstValue("display_name")
+            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
+            ?? command.OrganizerName
+            ?? "Unknown User";
+        var updatedCommand = command with { OrganizerName = displayName };
+        var result = await executor.ExecuteAsync(updatedCommand);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
         {
             success = true,
             eventId = result.EventId,
-            reservationId = createdEvent?.ReservationId ?? command.ReservationId,
+            reservationId = createdEvent?.ReservationId ?? updatedCommand.ReservationId,
+            organizerName = displayName,
             sortableUniqueId = result.SortableUniqueId
         });
     }
@@ -188,6 +196,9 @@ public static class ReservationEndpoints
     {
         // Get user ID from JWT claims
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var displayName = httpContext.User.FindFirstValue("display_name")
+            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
+            ?? "Unknown User";
         if (userId == null || !Guid.TryParse(userId, out var organizerId))
         {
             // Use a default or generate one for demo purposes
@@ -198,6 +209,7 @@ public static class ReservationEndpoints
         var result = await workflow.ExecuteAsync(
             request.RoomId,
             organizerId,
+            displayName,
             request.StartTime,
             request.EndTime,
             request.Purpose);
@@ -207,7 +219,10 @@ public static class ReservationEndpoints
             success = true,
             reservationId = result.ReservationId,
             organizerId = organizerId,
-            sortableUniqueId = result.SortableUniqueId
+            organizerName = displayName,
+            sortableUniqueId = result.SortableUniqueId,
+            requiresApproval = result.RequiresApproval,
+            approvalRequestId = result.ApprovalRequestId
         });
     }
 }

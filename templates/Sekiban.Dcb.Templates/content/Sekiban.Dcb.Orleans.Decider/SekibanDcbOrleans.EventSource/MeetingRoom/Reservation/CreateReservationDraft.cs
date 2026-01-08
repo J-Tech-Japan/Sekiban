@@ -15,6 +15,8 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
     [Required]
     public Guid OrganizerId { get; init; }
 
+    public string? OrganizerName { get; init; }
+
     [Required]
     public DateTime StartTime { get; init; }
 
@@ -63,6 +65,7 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             reservationId,
             command.RoomId,
             command.OrganizerId,
+            command.OrganizerName ?? string.Empty,
             command.StartTime,
             command.EndTime,
             command.Purpose)

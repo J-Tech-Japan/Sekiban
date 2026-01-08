@@ -7,7 +7,8 @@ public record RoomUpdated(
     string Name,
     int Capacity,
     string Location,
-    List<string> Equipment) : IEventPayload
+    List<string> Equipment,
+    bool RequiresApproval) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
         new(this, new RoomTag(RoomId));

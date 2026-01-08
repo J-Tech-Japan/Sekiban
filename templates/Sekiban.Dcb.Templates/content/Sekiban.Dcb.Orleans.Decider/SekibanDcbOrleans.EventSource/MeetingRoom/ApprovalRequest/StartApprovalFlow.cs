@@ -18,8 +18,6 @@ public record StartApprovalFlow : ICommandWithHandler<StartApprovalFlow>
     [Required]
     public Guid RequesterId { get; init; }
 
-    [Required]
-    [MinLength(1)]
     public List<Guid> ApproverIds { get; init; } = [];
 
     public static async Task<EventOrNone> HandleAsync(

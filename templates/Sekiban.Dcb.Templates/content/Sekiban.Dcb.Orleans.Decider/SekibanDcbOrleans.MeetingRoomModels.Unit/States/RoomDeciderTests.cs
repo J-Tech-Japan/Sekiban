@@ -22,7 +22,7 @@ public class RoomDeciderTests
     public void RoomCreatedDecider_Should_Create_State()
     {
         var roomId = Guid.NewGuid();
-        var ev = new RoomCreated(roomId, "Conference Room A", 10, "Building 1", ["Projector", "Whiteboard"]);
+        var ev = new RoomCreated(roomId, "Conference Room A", 10, "Building 1", ["Projector", "Whiteboard"], true);
 
         var state = RoomCreatedDecider.Create(ev);
 
@@ -33,14 +33,15 @@ public class RoomDeciderTests
         Assert.Equal(2, state.Equipment.Count);
         Assert.Contains("Projector", state.Equipment);
         Assert.Contains("Whiteboard", state.Equipment);
+        Assert.True(state.RequiresApproval);
     }
 
     [Fact]
     public void RoomUpdatedDecider_Should_Update_State()
     {
         var roomId = Guid.NewGuid();
-        var state = new RoomState(roomId, "Old Name", 5, "Old Location", ["Old Equipment"]);
-        var ev = new RoomUpdated(roomId, "New Name", 15, "New Location", ["New Equipment"]);
+        var state = new RoomState(roomId, "Old Name", 5, "Old Location", ["Old Equipment"], false);
+        var ev = new RoomUpdated(roomId, "New Name", 15, "New Location", ["New Equipment"], true);
 
         var newState = state.Evolve(ev);
 
@@ -50,5 +51,6 @@ public class RoomDeciderTests
         Assert.Equal("New Location", newState.Location);
         Assert.Single(newState.Equipment);
         Assert.Contains("New Equipment", newState.Equipment);
+        Assert.True(newState.RequiresApproval);
     }
 }

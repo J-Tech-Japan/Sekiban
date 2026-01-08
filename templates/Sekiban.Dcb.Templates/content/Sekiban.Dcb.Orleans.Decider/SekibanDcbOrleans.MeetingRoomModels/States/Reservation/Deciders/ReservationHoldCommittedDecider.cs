@@ -28,13 +28,14 @@ public static class ReservationHoldCommittedDecider
     public static ReservationState Evolve(this ReservationState state, ReservationHoldCommitted committed) =>
         state switch
         {
-            ReservationState.ReservationDraft draft => new ReservationState.ReservationHeld(
-                draft.ReservationId,
-                draft.RoomId,
-                draft.OrganizerId,
-                draft.StartTime,
-                draft.EndTime,
-                draft.Purpose,
+            ReservationState.ReservationDraft _ => new ReservationState.ReservationHeld(
+                committed.ReservationId,
+                committed.RoomId,
+                committed.OrganizerId,
+                committed.OrganizerName,
+                committed.StartTime,
+                committed.EndTime,
+                committed.Purpose,
                 committed.RequiresApproval,
                 committed.ApprovalRequestId),
             _ => state // Idempotency: ignore if already committed

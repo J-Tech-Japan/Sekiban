@@ -22,6 +22,8 @@ public record CreateRoom : ICommandWithHandler<CreateRoom>
 
     public List<string> Equipment { get; init; } = [];
 
+    public bool RequiresApproval { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CreateRoom command,
         ICommandContext context)
@@ -35,7 +37,13 @@ public record CreateRoom : ICommandWithHandler<CreateRoom>
             throw new ApplicationException($"Room {roomId} already exists");
         }
 
-        return new RoomCreated(roomId, command.Name, command.Capacity, command.Location, command.Equipment)
+        return new RoomCreated(
+            roomId,
+            command.Name,
+            command.Capacity,
+            command.Location,
+            command.Equipment,
+            command.RequiresApproval)
             .GetEventWithTags();
     }
 }

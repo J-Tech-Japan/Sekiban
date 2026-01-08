@@ -14,6 +14,7 @@ public static class ReservationDraftCreatedDecider
             created.ReservationId,
             created.RoomId,
             created.OrganizerId,
+            created.OrganizerName,
             created.StartTime,
             created.EndTime,
             created.Purpose);

@@ -16,5 +16,6 @@ public static class RoomCreatedDecider
             created.Capacity,
             created.Location,
             created.Equipment,
+            created.RequiresApproval,
             true);
 }

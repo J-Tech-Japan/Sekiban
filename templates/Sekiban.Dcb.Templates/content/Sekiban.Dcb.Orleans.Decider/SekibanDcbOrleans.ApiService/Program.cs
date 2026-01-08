@@ -473,6 +473,7 @@ apiRoute.MapDebugEndpoints();
 // MeetingRoom endpoints
 apiRoute.MapRoomEndpoints();
 apiRoute.MapReservationEndpoints();
+apiRoute.MapApprovalEndpoints();
 
 // Test data endpoints
 apiRoute.MapTestDataEndpoints();

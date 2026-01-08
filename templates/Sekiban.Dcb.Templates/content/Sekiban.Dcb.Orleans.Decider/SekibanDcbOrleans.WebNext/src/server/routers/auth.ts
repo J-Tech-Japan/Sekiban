@@ -1,12 +1,10 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
-import { cookies } from "next/headers";
-import { tokenStore, SESSION_COOKIE_NAME } from "../lib/auth-helpers";
-
-// Helper to generate a simple session ID
-function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
+import {
+  clearSessionCookies,
+  getSessionTokens,
+  setSessionCookies,
+} from "../lib/auth-helpers";
 
 // Schema for user info response
 const userInfoSchema = z.object({
@@ -58,22 +56,10 @@ export const authRouter = router({
 
       const tokenData = tokenResponseSchema.parse(await res.json());
 
-      // Generate session ID and store tokens server-side
-      const sessionId = generateSessionId();
-      tokenStore.set(sessionId, {
+      await setSessionCookies({
         accessToken: tokenData.accessToken,
         refreshToken: tokenData.refreshToken,
-        expiresAt: new Date(tokenData.refreshTokenExpires),
-      });
-
-      // Set session cookie (not the JWT itself!)
-      const cookieStore = await cookies();
-      cookieStore.set(SESSION_COOKIE_NAME, sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        path: "/",
+        refreshExpiresAt: new Date(tokenData.refreshTokenExpires),
       });
 
       // Return user info (extracted from token or fetched)
@@ -97,39 +83,15 @@ export const authRouter = router({
 
   // Logout - clear server-side tokens
   logout: publicProcedure.mutation(async () => {
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-    if (sessionId) {
-      // Remove tokens from store
-      tokenStore.delete(sessionId);
-      // Clear session cookie
-      cookieStore.delete(SESSION_COOKIE_NAME);
-    }
+    await clearSessionCookies();
 
     return { success: true };
   }),
 
   // Get current auth status
   status: publicProcedure.query(async () => {
-    const cookieStore = await cookies();
-    const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-    if (!sessionId) {
-      return {
-        id: "",
-        email: "",
-        displayName: null,
-        roles: [] as string[],
-        isAuthenticated: false,
-      };
-    }
-
-    const session = tokenStore.get(sessionId);
-    if (!session || new Date() > session.expiresAt) {
-      // Session expired, clean up
-      if (session) tokenStore.delete(sessionId);
-      cookieStore.delete(SESSION_COOKIE_NAME);
+    const session = await getSessionTokens();
+    if (!session) {
       return {
         id: "",
         email: "",
@@ -161,11 +123,10 @@ export const authRouter = router({
 
       if (refreshRes.ok) {
         const newTokens = tokenResponseSchema.parse(await refreshRes.json());
-        // Update stored tokens
-        tokenStore.set(sessionId, {
+        await setSessionCookies({
           accessToken: newTokens.accessToken,
           refreshToken: newTokens.refreshToken,
-          expiresAt: new Date(newTokens.refreshTokenExpires),
+          refreshExpiresAt: new Date(newTokens.refreshTokenExpires),
         });
 
         // Retry getting user info
@@ -179,8 +140,7 @@ export const authRouter = router({
       }
 
       // Failed to refresh, clean up
-      tokenStore.delete(sessionId);
-      cookieStore.delete(SESSION_COOKIE_NAME);
+      await clearSessionCookies();
       return {
         id: "",
         email: "",

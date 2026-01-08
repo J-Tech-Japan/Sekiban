@@ -24,6 +24,8 @@ public record UpdateRoom : ICommandWithHandler<UpdateRoom>
 
     public List<string> Equipment { get; init; } = [];
 
+    public bool RequiresApproval { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         UpdateRoom command,
         ICommandContext context)
@@ -36,7 +38,13 @@ public record UpdateRoom : ICommandWithHandler<UpdateRoom>
             throw new ApplicationException($"Room {command.RoomId} not found");
         }
 
-        return new RoomUpdated(command.RoomId, command.Name, command.Capacity, command.Location, command.Equipment)
+        return new RoomUpdated(
+            command.RoomId,
+            command.Name,
+            command.Capacity,
+            command.Location,
+            command.Equipment,
+            command.RequiresApproval)
             .GetEventWithTags();
     }
 }

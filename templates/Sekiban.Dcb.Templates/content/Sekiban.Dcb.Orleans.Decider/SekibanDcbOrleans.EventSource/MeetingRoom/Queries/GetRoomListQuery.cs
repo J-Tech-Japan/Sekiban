@@ -12,6 +12,7 @@ public record RoomListItem(
     int Capacity,
     string Location,
     List<string> Equipment,
+    bool RequiresApproval,
     bool IsActive);
 
 [GenerateSerializer]
@@ -37,7 +38,14 @@ public record GetRoomListQuery :
         return projector.GetStatePayloads()
             .OfType<RoomState>()
             .Where(s => s.RoomId != Guid.Empty)
-            .Select(s => new RoomListItem(s.RoomId, s.Name, s.Capacity, s.Location, s.Equipment, s.IsActive));
+            .Select(s => new RoomListItem(
+                s.RoomId,
+                s.Name,
+                s.Capacity,
+                s.Location,
+                s.Equipment,
+                s.RequiresApproval,
+                s.IsActive));
     }
 
     public static IEnumerable<RoomListItem> HandleSort(
