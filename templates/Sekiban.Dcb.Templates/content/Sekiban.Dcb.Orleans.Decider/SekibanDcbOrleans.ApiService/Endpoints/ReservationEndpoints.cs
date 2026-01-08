@@ -114,7 +114,8 @@ public static class ReservationEndpoints
             ReservationId = reservationId,
             RoomId = request.RoomId,
             RequiresApproval = request.RequiresApproval,
-            ApprovalRequestId = request.ApprovalRequestId
+            ApprovalRequestId = request.ApprovalRequestId,
+            ApprovalRequestComment = request.ApprovalRequestComment
         };
         var result = await executor.ExecuteAsync(command);
         return Results.Ok(new
@@ -229,7 +230,11 @@ public static class ReservationEndpoints
 }
 
 // Request DTOs
-public record CommitReservationHoldRequest(Guid RoomId, bool RequiresApproval, Guid? ApprovalRequestId);
+public record CommitReservationHoldRequest(
+    Guid RoomId,
+    bool RequiresApproval,
+    Guid? ApprovalRequestId,
+    string? ApprovalRequestComment);
 public record ConfirmReservationRequest(Guid RoomId);
 public record CancelReservationRequest(Guid RoomId, string Reason);
 public record RejectReservationRequest(Guid RoomId, Guid ApprovalRequestId, string Reason);

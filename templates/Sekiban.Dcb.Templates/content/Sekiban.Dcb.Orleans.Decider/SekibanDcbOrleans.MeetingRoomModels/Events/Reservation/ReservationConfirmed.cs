@@ -10,7 +10,8 @@ public record ReservationConfirmed(
     DateTime StartTime,
     DateTime EndTime,
     string Purpose,
-    DateTime ConfirmedAt) : IEventPayload
+    DateTime ConfirmedAt,
+    string? ApprovalDecisionComment) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags()
     {

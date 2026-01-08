@@ -20,6 +20,8 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
 
     public Guid? ApprovalRequestId { get; init; }
 
+    public string? ApprovalRequestComment { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         CommitReservationHold command,
         ICommandContext context)
@@ -44,6 +46,7 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
 
         var requiresApproval = roomState.RequiresApproval;
         var approvalRequestId = requiresApproval ? command.ApprovalRequestId : null;
+        var approvalRequestComment = requiresApproval ? command.ApprovalRequestComment : null;
 
         if (requiresApproval && approvalRequestId == null)
         {
@@ -68,7 +71,8 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             draft.EndTime,
             draft.Purpose,
             requiresApproval,
-            approvalRequestId)
+            approvalRequestId,
+            approvalRequestComment)
             .GetEventWithTags();
     }
 }

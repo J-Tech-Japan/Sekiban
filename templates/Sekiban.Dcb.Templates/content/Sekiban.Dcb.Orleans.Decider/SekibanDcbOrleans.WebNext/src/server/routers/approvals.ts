@@ -56,7 +56,8 @@ export const approvalsRouter = router({
       }
 
       const data = await res.json();
-      return z.array(approvalInboxItemSchema).parse(data);
+      const items = z.array(approvalInboxItemSchema).parse(data);
+      return input.pendingOnly ? items.filter((item) => item.status === "Pending") : items;
     }),
 
   decide: publicProcedure

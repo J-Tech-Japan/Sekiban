@@ -150,7 +150,8 @@ public static class ApprovalEndpoints
             Comment = request.Comment
         });
 
-        string? sortableUniqueId = recordResult.SortableUniqueId;
+        var approvalSortableUniqueId = recordResult.SortableUniqueId;
+        string? reservationSortableUniqueId = null;
 
         if (request.Decision == ApprovalDecision.Approved)
         {
@@ -159,7 +160,7 @@ public static class ApprovalEndpoints
                 ReservationId = pending.ReservationId,
                 RoomId = pending.RoomId
             });
-            sortableUniqueId = confirmResult.SortableUniqueId ?? sortableUniqueId;
+            reservationSortableUniqueId = confirmResult.SortableUniqueId;
         }
         else if (request.Decision == ApprovalDecision.Rejected)
         {
@@ -170,7 +171,7 @@ public static class ApprovalEndpoints
                 ApprovalRequestId = approvalRequestId,
                 Reason = request.Comment ?? "Rejected"
             });
-            sortableUniqueId = rejectResult.SortableUniqueId ?? sortableUniqueId;
+            reservationSortableUniqueId = rejectResult.SortableUniqueId;
         }
 
         return Results.Ok(new
@@ -179,7 +180,8 @@ public static class ApprovalEndpoints
             approvalRequestId,
             reservationId = pending.ReservationId,
             decision = request.Decision.ToString(),
-            sortableUniqueId
+            sortableUniqueId = approvalSortableUniqueId,
+            reservationSortableUniqueId
         });
     }
 }

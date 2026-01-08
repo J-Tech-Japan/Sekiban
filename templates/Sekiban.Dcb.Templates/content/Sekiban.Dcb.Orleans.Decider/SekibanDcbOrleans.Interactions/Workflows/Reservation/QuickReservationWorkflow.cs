@@ -80,7 +80,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
             ReservationId = reservationId,
             RoomId = roomId,
             RequiresApproval = roomPayload.RequiresApproval,
-            ApprovalRequestId = approvalRequestId
+            ApprovalRequestId = approvalRequestId,
+            ApprovalRequestComment = approvalRequestComment
         });
 
         var sortableUniqueId = holdResult.SortableUniqueId ?? string.Empty;

@@ -13,6 +13,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { RequireAuth } from "@/components/auth/require-auth";
@@ -29,6 +37,8 @@ type ReservationDetails = {
   status: ReservationStatus;
   requiresApproval?: boolean;
   approvalRequestId?: string | null;
+  approvalRequestComment?: string | null;
+  approvalDecisionComment?: string | null;
 };
 type ReservationLayout = {
   column: number;
@@ -69,7 +79,10 @@ const getTimeSlots = () => {
 };
 
 const formatDate = (date: Date) => {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 const formatTime = (dateStr: string) => {
@@ -148,6 +161,10 @@ function ReservationsContent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isMyReservationsOpen, setIsMyReservationsOpen] = useState(false);
+  const [isAdminListOpen, setIsAdminListOpen] = useState(false);
+  const [adminListFilter, setAdminListFilter] = useState<"all" | "confirmed" | "pending">("all");
+  const [adminListTitle, setAdminListTitle] = useState("All Reservations");
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
   const [isOverflowModalOpen, setIsOverflowModalOpen] = useState(false);
   const [overflowReservations, setOverflowReservations] = useState<ReservationDetails[]>([]);
@@ -309,6 +326,12 @@ function ReservationsContent() {
     setOverflowSlotLabel(label);
     setOverflowReservations(reservations);
     setIsOverflowModalOpen(true);
+  };
+
+  const openAdminList = (filter: "all" | "confirmed" | "pending", title: string) => {
+    setAdminListFilter(filter);
+    setAdminListTitle(title);
+    setIsAdminListOpen(true);
   };
 
   const handleAdminConfirm = () => {
@@ -561,6 +584,32 @@ function ReservationsContent() {
     year: "numeric",
   });
 
+  const now = useMemo(() => new Date(), [reservations]);
+  const myReservations = useMemo(() => {
+    if (!reservations || !authStatus?.id) return [];
+    return reservations
+      .filter((res) => res.organizerId === authStatus.id)
+      .filter((res) => new Date(res.endTime) >= now)
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  }, [reservations, authStatus?.id, now]);
+
+  const adminReservations = useMemo(() => {
+    if (!reservations) return [];
+    return reservations
+      .filter((res) => new Date(res.endTime) >= now)
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  }, [reservations, now]);
+
+  const adminFilteredReservations = useMemo(() => {
+    if (adminListFilter === "confirmed") {
+      return adminReservations.filter((res) => res.status === "Confirmed");
+    }
+    if (adminListFilter === "pending") {
+      return adminReservations.filter((res) => res.status === "Held" || res.status === "Draft");
+    }
+    return adminReservations;
+  }, [adminListFilter, adminReservations]);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -580,55 +629,106 @@ function ReservationsContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+      {isAdmin ? (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card
+            className="cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => openAdminList("all", "All Reservations")}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                  <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{totalReservations}</p>
+                  <p className="text-sm text-muted-foreground">Total Reservations</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">{totalReservations}</p>
-                <p className="text-sm text-muted-foreground">Total Reservations</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10">
-                <svg className="h-6 w-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+          <Card
+            className="cursor-pointer hover:border-success/40 transition-colors"
+            onClick={() => openAdminList("confirmed", "Confirmed Reservations")}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10">
+                  <svg className="h-6 w-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{confirmedReservations}</p>
+                  <p className="text-sm text-muted-foreground">Confirmed</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">{confirmedReservations}</p>
-                <p className="text-sm text-muted-foreground">Confirmed</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-warning/10">
-                <svg className="h-6 w-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+          <Card
+            className="cursor-pointer hover:border-warning/40 transition-colors"
+            onClick={() => openAdminList("pending", "Pending Reservations")}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-warning/10">
+                  <svg className="h-6 w-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{pendingReservations}</p>
+                  <p className="text-sm text-muted-foreground">Pending</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">{pendingReservations}</p>
-                <p className="text-sm text-muted-foreground">Pending</p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => setIsMyReservationsOpen(true)}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                  <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{myReservations.length}</p>
+                  <p className="text-sm text-muted-foreground">My Reservations</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-1">
+          <Card
+            className="cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={() => setIsMyReservationsOpen(true)}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                  <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{myReservations.length}</p>
+                  <p className="text-sm text-muted-foreground">My Reservations</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Calendar Section */}
       <Card>
@@ -770,6 +870,8 @@ function ReservationsContent() {
                           status: res.status as ReservationStatus,
                           requiresApproval: res.requiresApproval,
                           approvalRequestId: res.approvalRequestId,
+                          approvalRequestComment: res.approvalRequestComment,
+                          approvalDecisionComment: res.approvalDecisionComment,
                         }));
                         const startingReservations = slotReservationDetails.filter((res) =>
                           isReservationStartInSlot(res, slotStart, slotEnd)
@@ -817,6 +919,8 @@ function ReservationsContent() {
                                     status: res.status,
                                     requiresApproval: res.requiresApproval,
                                     approvalRequestId: res.approvalRequestId,
+                                    approvalRequestComment: res.approvalRequestComment,
+                                    approvalDecisionComment: res.approvalDecisionComment,
                                   });
                                 }}
                                 style={getReservationBlockStyle(res, column, columns)}
@@ -911,6 +1015,8 @@ function ReservationsContent() {
                               status: res.status as ReservationStatus,
                               requiresApproval: res.requiresApproval,
                               approvalRequestId: res.approvalRequestId,
+                              approvalRequestComment: res.approvalRequestComment,
+                              approvalDecisionComment: res.approvalDecisionComment,
                             }));
                             const startingReservations = slotReservationDetails.filter((res) =>
                               isReservationStartInSlot(res, slotStart, slotEnd)
@@ -1076,6 +1182,16 @@ function ReservationsContent() {
                     autoFocus
                   />
                 </div>
+                {selectedRoomRequiresApproval && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Approval Request (optional)</label>
+                    <Input
+                      value={formData.approvalRequestComment}
+                      onChange={(e) => setFormData({ ...formData, approvalRequestComment: e.target.value })}
+                      placeholder="Reason for approval request"
+                    />
+                  </div>
+                )}
                 {formError && (
                   <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{formError}</div>
                 )}
@@ -1249,6 +1365,118 @@ function ReservationsContent() {
             </CardContent>
             <CardFooter className="flex justify-end gap-2 border-t pt-4">
               <Button variant="outline" onClick={() => setIsOverflowModalOpen(false)}>
+                Close
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {/* Admin Reservations List Modal */}
+      {isAdminListOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-5xl animate-in fade-in zoom-in-95 duration-200">
+            <CardHeader>
+              <CardTitle>{adminListTitle}</CardTitle>
+              <CardDescription>Upcoming reservations for administrators</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {adminFilteredReservations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No reservations found.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Room</TableHead>
+                      <TableHead>Organizer</TableHead>
+                      <TableHead>When</TableHead>
+                      <TableHead>Purpose</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Admin Comment</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adminFilteredReservations.map((res) => (
+                      <TableRow key={res.reservationId}>
+                        <TableCell className="font-medium">{getRoomName(res.roomId)}</TableCell>
+                        <TableCell>{getOrganizerLabel(res)}</TableCell>
+                        <TableCell>
+                          <div className="text-sm">{formatDateTime(res.startTime)} - {formatTime(res.endTime)}</div>
+                        </TableCell>
+                        <TableCell>{res.purpose || "—"}</TableCell>
+                        <TableCell>
+                          <Badge variant={statusConfig[res.status as ReservationStatus]?.variant ?? "default"}>
+                            {statusConfig[res.status as ReservationStatus]?.label ?? res.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{res.approvalDecisionComment || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-end gap-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setIsAdminListOpen(false)}>
+                Close
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {/* My Reservations Modal */}
+      {isMyReservationsOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-5xl animate-in fade-in zoom-in-95 duration-200">
+            <CardHeader>
+              <CardTitle>My Reservations</CardTitle>
+              <CardDescription>Upcoming reservations and approval outcomes</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {myReservations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No upcoming reservations.</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Room</TableHead>
+                      <TableHead>When</TableHead>
+                      <TableHead>Purpose</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Approval Request</TableHead>
+                      <TableHead>Admin Comment</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {myReservations.map((res) => (
+                      <TableRow key={res.reservationId}>
+                        <TableCell className="font-medium">{getRoomName(res.roomId)}</TableCell>
+                        <TableCell>
+                          <div className="text-sm">{formatDateTime(res.startTime)} - {formatTime(res.endTime)}</div>
+                        </TableCell>
+                        <TableCell>{res.purpose || "—"}</TableCell>
+                        <TableCell>
+                          {res.status === "Confirmed" && res.approvalRequestId ? (
+                            <Badge variant="success">Approved</Badge>
+                          ) : res.status === "Held" ? (
+                            <Badge variant="warning">Pending</Badge>
+                          ) : (
+                            <Badge variant={statusConfig[res.status as ReservationStatus]?.variant ?? "default"}>
+                              {statusConfig[res.status as ReservationStatus]?.label ?? res.status}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>{res.approvalRequestComment || "—"}</TableCell>
+                        <TableCell>{res.approvalDecisionComment || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-end gap-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setIsMyReservationsOpen(false)}>
                 Close
               </Button>
             </CardFooter>

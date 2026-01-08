@@ -16,7 +16,13 @@ public static class ReservationRejectedDecider
                 new ReservationState.ReservationRejected(
                     held.ReservationId,
                     held.RoomId,
+                    held.OrganizerId,
+                    held.OrganizerName,
+                    held.StartTime,
+                    held.EndTime,
+                    held.Purpose,
                     rejected.ApprovalRequestId,
+                    held.ApprovalRequestComment,
                     rejected.Reason,
                     rejected.RejectedAt),
             _ => state // Idempotency: ignore if not in held state requiring approval

@@ -19,6 +19,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
     /// <param name="endTime">End time of the reservation</param>
     /// <param name="purpose">Purpose of the reservation</param>
     /// <param name="requiresApproval">Whether the reservation requires approval</param>
+    /// <param name="approvalRequestComment">Optional comment for approval request</param>
     /// <returns>The reservation ID</returns>
     public async Task<Guid> ExecuteAsync(
         Guid roomId,
@@ -27,7 +28,8 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
         DateTime startTime,
         DateTime endTime,
         string purpose,
-        bool requiresApproval = false)
+        bool requiresApproval = false,
+        string? approvalRequestComment = null)
     {
         var reservationId = Guid.CreateVersion7();
 
@@ -49,7 +51,8 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             ReservationId = reservationId,
             RoomId = roomId,
             RequiresApproval = requiresApproval,
-            ApprovalRequestId = null
+            ApprovalRequestId = null,
+            ApprovalRequestComment = approvalRequestComment
         });
 
         return reservationId;

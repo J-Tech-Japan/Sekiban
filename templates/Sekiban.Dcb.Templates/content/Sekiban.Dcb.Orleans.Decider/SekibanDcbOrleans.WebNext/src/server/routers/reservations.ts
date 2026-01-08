@@ -24,6 +24,8 @@ const reservationSchema = z.object({
   status: reservationStatusSchema,
   requiresApproval: z.boolean().optional().default(false),
   approvalRequestId: z.string().uuid().optional().nullable().default(null),
+  approvalRequestComment: z.string().optional().nullable(),
+  approvalDecisionComment: z.string().optional().nullable(),
   confirmedAt: z.string().optional().nullable(),
   cancelledAt: z.string().optional().nullable(),
   reason: z.string().optional().nullable(),
@@ -141,6 +143,7 @@ export const reservationsRouter = router({
         roomId: z.string().uuid(),
         requiresApproval: z.boolean().default(false),
         approvalRequestId: z.string().uuid().optional(),
+        approvalRequestComment: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -154,6 +157,7 @@ export const reservationsRouter = router({
             roomId: input.roomId,
             requiresApproval: input.requiresApproval,
             approvalRequestId: input.approvalRequestId,
+            approvalRequestComment: input.approvalRequestComment,
           }),
         }
       );

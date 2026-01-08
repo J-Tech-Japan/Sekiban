@@ -38,7 +38,8 @@ public abstract record ReservationState : ITagStatePayload
         DateTime EndTime,
         string Purpose,
         bool RequiresApproval,
-        Guid? ApprovalRequestId) : ReservationState;
+        Guid? ApprovalRequestId,
+        string? ApprovalRequestComment) : ReservationState;
 
     /// <summary>
     ///     Confirmed state - reservation is final and active
@@ -51,7 +52,10 @@ public abstract record ReservationState : ITagStatePayload
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
-        DateTime ConfirmedAt) : ReservationState;
+        DateTime ConfirmedAt,
+        Guid? ApprovalRequestId,
+        string? ApprovalRequestComment,
+        string? ApprovalDecisionComment) : ReservationState;
 
     /// <summary>
     ///     Cancelled state - reservation was cancelled
@@ -59,6 +63,12 @@ public abstract record ReservationState : ITagStatePayload
     public record ReservationCancelled(
         Guid ReservationId,
         Guid RoomId,
+        Guid OrganizerId,
+        string OrganizerName,
+        DateTime StartTime,
+        DateTime EndTime,
+        string Purpose,
+        string? ApprovalRequestComment,
         string Reason,
         DateTime CancelledAt) : ReservationState;
 
@@ -68,7 +78,13 @@ public abstract record ReservationState : ITagStatePayload
     public record ReservationRejected(
         Guid ReservationId,
         Guid RoomId,
+        Guid OrganizerId,
+        string OrganizerName,
+        DateTime StartTime,
+        DateTime EndTime,
+        string Purpose,
         Guid ApprovalRequestId,
+        string? ApprovalRequestComment,
         string Reason,
         DateTime RejectedAt) : ReservationState;
 

@@ -69,6 +69,7 @@ public class EventTests
             DateTime.UtcNow.AddHours(2),
             "Team Meeting",
             false,
+            null,
             null);
 
         var eventWithTags = ev.GetEventWithTags();
@@ -86,7 +87,7 @@ public class EventTests
         var organizerId = Guid.NewGuid();
         var startTime = DateTime.UtcNow.AddHours(1);
         var endTime = DateTime.UtcNow.AddHours(2);
-        var ev = new ReservationConfirmed(reservationId, roomId, organizerId, startTime, endTime, "Team Meeting", DateTime.UtcNow);
+        var ev = new ReservationConfirmed(reservationId, roomId, organizerId, startTime, endTime, "Team Meeting", DateTime.UtcNow, "Approved");
 
         var eventWithTags = ev.GetEventWithTags();
 
@@ -142,7 +143,8 @@ public class EventTests
             roomId,
             requesterId,
             [approverId],
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            "Please approve");
 
         var eventWithTags = ev.GetEventWithTags();
 

@@ -11,6 +11,7 @@ public class ApprovalRequestDeciderTests
     private readonly Guid _roomId = Guid.NewGuid();
     private readonly Guid _requesterId = Guid.NewGuid();
     private readonly Guid _approverId = Guid.NewGuid();
+    private const string RequestComment = "Need approval";
 
     [Fact]
     public void ApprovalRequestState_Empty_Should_Be_ApprovalRequestEmpty()
@@ -24,7 +25,7 @@ public class ApprovalRequestDeciderTests
     {
         var requestTime = DateTime.UtcNow;
         var ev = new ApprovalFlowStarted(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], requestTime);
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], requestTime, RequestComment);
 
         var state = ApprovalFlowStartedDecider.Create(ev);
 
@@ -35,6 +36,7 @@ public class ApprovalRequestDeciderTests
         Assert.Equal(_requesterId, state.RequesterId);
         Assert.Single(state.ApproverIds);
         Assert.Contains(_approverId, state.ApproverIds);
+        Assert.Equal(RequestComment, state.RequestComment);
     }
 
     [Fact]
@@ -42,7 +44,7 @@ public class ApprovalRequestDeciderTests
     {
         var empty = ApprovalRequestState.Empty;
         var ev = new ApprovalFlowStarted(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow);
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow, RequestComment);
 
         var state = empty.Evolve(ev);
 
@@ -54,7 +56,7 @@ public class ApprovalRequestDeciderTests
     {
         var decisionTime = DateTime.UtcNow;
         var pending = new ApprovalRequestState.ApprovalRequestPending(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow.AddMinutes(-5));
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow.AddMinutes(-5), RequestComment);
         var ev = new ApprovalDecisionRecorded(
             _approvalRequestId, _reservationId, _approverId, ApprovalDecision.Approved, "Looks good", decisionTime);
 
@@ -66,6 +68,7 @@ public class ApprovalRequestDeciderTests
         Assert.Equal(_approverId, approved.ApproverId);
         Assert.Equal("Looks good", approved.Comment);
         Assert.Equal(decisionTime, approved.DecidedAt);
+        Assert.Equal(RequestComment, approved.RequestComment);
     }
 
     [Fact]
@@ -73,7 +76,7 @@ public class ApprovalRequestDeciderTests
     {
         var decisionTime = DateTime.UtcNow;
         var pending = new ApprovalRequestState.ApprovalRequestPending(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow.AddMinutes(-5));
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow.AddMinutes(-5), RequestComment);
         var ev = new ApprovalDecisionRecorded(
             _approvalRequestId, _reservationId, _approverId, ApprovalDecision.Rejected, "Not appropriate", decisionTime);
 
@@ -85,13 +88,14 @@ public class ApprovalRequestDeciderTests
         Assert.Equal(_approverId, rejected.ApproverId);
         Assert.Equal("Not appropriate", rejected.Comment);
         Assert.Equal(decisionTime, rejected.DecidedAt);
+        Assert.Equal(RequestComment, rejected.RequestComment);
     }
 
     [Fact]
     public void ApprovalDecisionRecordedDecider_From_NonPending_Should_Return_Same_State()
     {
         var approved = new ApprovalRequestState.ApprovalRequestApproved(
-            _approvalRequestId, _reservationId, _approverId, "Already approved", DateTime.UtcNow.AddMinutes(-5));
+            _approvalRequestId, _reservationId, _approverId, "Already approved", DateTime.UtcNow.AddMinutes(-5), RequestComment);
         var ev = new ApprovalDecisionRecorded(
             _approvalRequestId, _reservationId, _approverId, ApprovalDecision.Rejected, "Changed mind", DateTime.UtcNow);
 
@@ -105,7 +109,7 @@ public class ApprovalRequestDeciderTests
     {
         var unauthorizedApproverId = Guid.NewGuid();
         var pending = new ApprovalRequestState.ApprovalRequestPending(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow);
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow, RequestComment);
 
         var ex = Assert.Throws<InvalidOperationException>(() => pending.Validate(unauthorizedApproverId));
         Assert.Contains("not an authorized approver", ex.Message);
@@ -115,7 +119,7 @@ public class ApprovalRequestDeciderTests
     public void ApprovalDecisionRecordedDecider_Validate_Should_Pass_For_Authorized_Approver()
     {
         var pending = new ApprovalRequestState.ApprovalRequestPending(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow);
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow, RequestComment);
 
         var exception = Record.Exception(() => pending.Validate(_approverId));
         Assert.Null(exception);
@@ -130,7 +134,7 @@ public class ApprovalRequestDeciderTests
 
         // Start approval flow
         state = state.Evolve(new ApprovalFlowStarted(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow));
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow, RequestComment));
         Assert.IsType<ApprovalRequestState.ApprovalRequestPending>(state);
 
         // Approve
@@ -147,7 +151,7 @@ public class ApprovalRequestDeciderTests
 
         // Start approval flow
         state = state.Evolve(new ApprovalFlowStarted(
-            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow));
+            _approvalRequestId, _reservationId, _roomId, _requesterId, [_approverId], DateTime.UtcNow, RequestComment));
 
         // Reject
         state = state.Evolve(new ApprovalDecisionRecorded(

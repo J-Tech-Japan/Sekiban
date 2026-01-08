@@ -37,7 +37,8 @@ public static class ReservationHoldCommittedDecider
                 committed.EndTime,
                 committed.Purpose,
                 committed.RequiresApproval,
-                committed.ApprovalRequestId),
+                committed.ApprovalRequestId,
+                committed.ApprovalRequestComment),
             _ => state // Idempotency: ignore if already committed
         };
 }

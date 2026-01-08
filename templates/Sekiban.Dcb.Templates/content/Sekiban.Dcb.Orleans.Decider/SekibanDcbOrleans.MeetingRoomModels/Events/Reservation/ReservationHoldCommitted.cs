@@ -11,7 +11,8 @@ public record ReservationHoldCommitted(
     DateTime EndTime,
     string Purpose,
     bool RequiresApproval,
-    Guid? ApprovalRequestId) : IEventPayload
+    Guid? ApprovalRequestId,
+    string? ApprovalRequestComment) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
         new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);

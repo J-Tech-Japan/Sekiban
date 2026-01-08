@@ -44,6 +44,7 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
         var purpose = held.Purpose;
         var organizerId = held.OrganizerId;
 
+        string? approvalDecisionComment = null;
         if (held.RequiresApproval)
         {
             if (held.ApprovalRequestId == null)
@@ -53,10 +54,12 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
 
             var approvalTag = new ApprovalRequestTag(held.ApprovalRequestId.Value);
             var approvalStateTyped = await context.GetStateAsync<ApprovalRequestProjector>(approvalTag);
-            if (approvalStateTyped.Payload is not ApprovalRequestState.ApprovalRequestApproved)
+            if (approvalStateTyped.Payload is not ApprovalRequestState.ApprovalRequestApproved approved)
             {
                 throw new ApplicationException("Reservation approval has not been granted");
             }
+
+            approvalDecisionComment = approved.Comment;
         }
 
         // 3. Get room name for user-friendly error messages
@@ -95,6 +98,7 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
             startTime,
             endTime,
             purpose,
-            DateTime.UtcNow).GetEventWithTags();
+            DateTime.UtcNow,
+            approvalDecisionComment).GetEventWithTags();
     }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,16 +72,21 @@ function ApprovalsContent() {
     onSuccess: (data, variables) => {
       if (data.sortableUniqueId) {
         setLastSortableUniqueId(data.sortableUniqueId);
+      } else {
+        refetch();
       }
       setComments((prev) => ({ ...prev, [variables.approvalRequestId]: "" }));
-      refetch();
     },
   });
 
-  const pendingCount = useMemo(
-    () => approvals?.filter((item) => item.status === "Pending").length ?? 0,
-    [approvals]
-  );
+  const pendingCount = approvals?.length ?? 0;
+
+  useEffect(() => {
+    if (!lastSortableUniqueId) return;
+    refetch().finally(() => {
+      setLastSortableUniqueId(undefined);
+    });
+  }, [lastSortableUniqueId, refetch]);
 
   if (!isAdmin) {
     return (

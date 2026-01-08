@@ -31,7 +31,10 @@ public static class ReservationConfirmedDecider
                 held.StartTime,
                 held.EndTime,
                 held.Purpose,
-                confirmed.ConfirmedAt),
+                confirmed.ConfirmedAt,
+                held.ApprovalRequestId,
+                held.ApprovalRequestComment,
+                confirmed.ApprovalDecisionComment),
             _ => state // Idempotency: ignore if already confirmed
         };
 }
