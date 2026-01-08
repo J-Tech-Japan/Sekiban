@@ -3,12 +3,20 @@ import { weatherRouter } from "./weather";
 import { studentsRouter } from "./students";
 import { classroomsRouter } from "./classrooms";
 import { enrollmentsRouter } from "./enrollments";
+import { authRouter } from "./auth";
+import { roomsRouter } from "./rooms";
+import { reservationsRouter } from "./reservations";
+import { testDataRouter } from "./testData";
 
 export const appRouter = router({
   weather: weatherRouter,
   students: studentsRouter,
   classrooms: classroomsRouter,
   enrollments: enrollmentsRouter,
+  auth: authRouter,
+  rooms: roomsRouter,
+  reservations: reservationsRouter,
+  testData: testDataRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,4 +1,4 @@
-using Dcb.Domain.Decider.Enrollment;
+using Dcb.EventSource.Enrollment;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 

@@ -1,5 +1,5 @@
-using Dcb.Domain.Decider.Queries;
-using Dcb.Domain.Decider.Weather;
+using Dcb.EventSource.Queries;
+using Dcb.EventSource.Weather;
 using Dcb.ImmutableModels.Events.Weather;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;

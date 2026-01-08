@@ -1,5 +1,5 @@
-using Dcb.Domain.Decider.Queries;
-using Dcb.Domain.Decider.Student;
+using Dcb.EventSource.Queries;
+using Dcb.EventSource.Student;
 using Dcb.ImmutableModels.Tags;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;

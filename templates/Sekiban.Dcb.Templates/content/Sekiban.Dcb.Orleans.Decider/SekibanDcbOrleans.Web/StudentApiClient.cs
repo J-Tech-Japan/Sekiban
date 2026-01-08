@@ -1,4 +1,4 @@
-using Dcb.Domain.Decider.Student;
+using Dcb.EventSource.Student;
 using Dcb.ImmutableModels.States.Student;
 using System.Text.Json;
 

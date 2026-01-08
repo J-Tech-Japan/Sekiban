@@ -1,6 +1,6 @@
 using System.CommandLine;
 using System.Reflection;
-using Dcb.Domain.Decider;
+using Dcb.EventSource;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;

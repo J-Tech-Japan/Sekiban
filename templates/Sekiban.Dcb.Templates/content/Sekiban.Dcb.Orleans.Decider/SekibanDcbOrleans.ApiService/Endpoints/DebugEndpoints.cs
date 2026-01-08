@@ -1,4 +1,4 @@
-using Dcb.Domain.Decider.Queries;
+using Dcb.EventSource.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Storage;

@@ -1,8 +1,12 @@
 "use client";
 
 import { NavMenu } from "./nav-menu";
+import { trpc } from "@/lib/trpc";
+import Link from "next/link";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
+  const { data: authStatus, isLoading: authLoading } = trpc.auth.status.useQuery();
+  const isAuthenticated = authStatus?.isAuthenticated ?? false;
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
@@ -28,17 +32,44 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Footer */}
           <div className="border-t border-white/10 p-4">
-            <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent/20 text-sidebar-accent">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+            {authLoading ? (
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+                <div className="h-8 w-8 rounded-full bg-sidebar-accent/20 animate-pulse" />
+                <div className="flex-1 min-w-0">
+                  <div className="h-4 w-20 bg-sidebar-accent/20 rounded animate-pulse" />
+                  <div className="h-3 w-32 bg-sidebar-accent/10 rounded mt-1 animate-pulse" />
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">Admin User</p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">admin@example.com</p>
+            ) : isAuthenticated && authStatus ? (
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent/20 text-sidebar-accent">
+                  <span className="text-sm font-medium">
+                    {(authStatus.displayName || authStatus.email || "U").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-sidebar-foreground truncate">
+                    {authStatus.displayName || authStatus.email?.split("@")[0] || "User"}
+                  </p>
+                  <p className="text-xs text-sidebar-foreground/60 truncate">{authStatus.email}</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-3 rounded-lg bg-sidebar-accent/20 px-3 py-2 hover:bg-sidebar-accent/30 transition-colors"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent/30 text-sidebar-accent">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-sidebar-foreground">Please Login</p>
+                  <p className="text-xs text-sidebar-foreground/60">Click to sign in</p>
+                </div>
+              </Link>
+            )}
           </div>
         </div>
       </aside>

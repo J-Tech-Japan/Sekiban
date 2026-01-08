@@ -1,4 +1,4 @@
-using Dcb.Domain.Decider.Enrollment;
+using Dcb.EventSource.Enrollment;
 using System.Text.Json;
 
 namespace SekibanDcbOrleans.Web;
