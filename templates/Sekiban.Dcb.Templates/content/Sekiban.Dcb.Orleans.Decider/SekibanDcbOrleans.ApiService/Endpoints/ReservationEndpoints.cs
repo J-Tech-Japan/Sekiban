@@ -214,6 +214,7 @@ public static class ReservationEndpoints
             request.StartTime,
             request.EndTime,
             request.Purpose,
+            request.SelectedEquipment,
             request.ApprovalRequestComment);
 
         return Results.Ok(new
@@ -243,4 +244,5 @@ public record QuickReservationRequest(
     DateTime StartTime,
     DateTime EndTime,
     string Purpose,
-    string? ApprovalRequestComment);
+    List<string>? SelectedEquipment = null,
+    string? ApprovalRequestComment = null);

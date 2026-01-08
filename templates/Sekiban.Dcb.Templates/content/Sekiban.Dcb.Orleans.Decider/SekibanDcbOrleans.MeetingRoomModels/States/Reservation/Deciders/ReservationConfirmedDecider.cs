@@ -31,6 +31,7 @@ public static class ReservationConfirmedDecider
                 held.StartTime,
                 held.EndTime,
                 held.Purpose,
+                held.SelectedEquipment,
                 confirmed.ConfirmedAt,
                 held.ApprovalRequestId,
                 held.ApprovalRequestComment,

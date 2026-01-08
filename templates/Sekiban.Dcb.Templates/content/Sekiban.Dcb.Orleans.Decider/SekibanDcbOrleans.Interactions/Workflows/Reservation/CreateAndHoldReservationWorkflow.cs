@@ -1,6 +1,7 @@
 using Dcb.EventSource.MeetingRoom.Reservation;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb;
+using System.Linq;
 namespace Dcb.Interactions.Workflows.Reservation;
 
 /// <summary>
@@ -18,6 +19,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
     /// <param name="startTime">Start time of the reservation</param>
     /// <param name="endTime">End time of the reservation</param>
     /// <param name="purpose">Purpose of the reservation</param>
+    /// <param name="selectedEquipment">Optional list of room equipment to reserve for use</param>
     /// <param name="requiresApproval">Whether the reservation requires approval</param>
     /// <param name="approvalRequestComment">Optional comment for approval request</param>
     /// <returns>The reservation ID</returns>
@@ -28,6 +30,7 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
         DateTime startTime,
         DateTime endTime,
         string purpose,
+        IReadOnlyList<string>? selectedEquipment = null,
         bool requiresApproval = false,
         string? approvalRequestComment = null)
     {
@@ -42,7 +45,8 @@ public class CreateAndHoldReservationWorkflow(ISekibanExecutor executor)
             OrganizerName = organizerName,
             StartTime = startTime,
             EndTime = endTime,
-            Purpose = purpose
+            Purpose = purpose,
+            SelectedEquipment = selectedEquipment?.ToList() ?? []
         });
 
         // 2. Commit to held state

@@ -4,6 +4,7 @@ using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb;
+using System.Linq;
 namespace Dcb.Interactions.Workflows.Reservation;
 
 /// <summary>
@@ -29,6 +30,7 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
     /// <param name="startTime">Start time of the reservation</param>
     /// <param name="endTime">End time of the reservation</param>
     /// <param name="purpose">Purpose of the reservation</param>
+    /// <param name="selectedEquipment">Optional list of room equipment to reserve for use</param>
     /// <param name="approvalRequestComment">Optional comment for approval request</param>
     /// <returns>The reservation result including ID and sortable unique ID</returns>
     public async Task<QuickReservationResult> ExecuteAsync(
@@ -38,6 +40,7 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         DateTime startTime,
         DateTime endTime,
         string purpose,
+        IReadOnlyList<string>? selectedEquipment = null,
         string? approvalRequestComment = null)
     {
         var reservationId = Guid.CreateVersion7();
@@ -54,7 +57,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
             OrganizerName = organizerName,
             StartTime = startTime,
             EndTime = endTime,
-            Purpose = purpose
+            Purpose = purpose,
+            SelectedEquipment = selectedEquipment?.ToList() ?? []
         });
 
         Guid? approvalRequestId = null;

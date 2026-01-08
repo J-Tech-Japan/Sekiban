@@ -151,7 +151,8 @@ public static class TestDataEndpoints
                     organizerName,
                     startTime,
                     endTime,
-                    resDef.Purpose);
+                    resDef.Purpose,
+                    null);
 
                 reservationIds.Add(result.ReservationId);
             }

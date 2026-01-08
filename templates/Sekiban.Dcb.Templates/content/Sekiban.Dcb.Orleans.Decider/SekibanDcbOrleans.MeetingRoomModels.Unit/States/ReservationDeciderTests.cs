@@ -51,7 +51,7 @@ public class ReservationDeciderTests
     public void ReservationDraftCreatedDecider_Evolve_From_NonEmpty_Should_Return_Same_State()
     {
         var existingDraft = new ReservationState.ReservationDraft(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Existing");
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Existing", []);
         var ev = new ReservationDraftCreated(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "New User", _startTime, _endTime, "New");
 
@@ -64,7 +64,7 @@ public class ReservationDeciderTests
     public void ReservationHoldCommittedDecider_Should_Create_Held_Without_Approval()
     {
         var draft = new ReservationState.ReservationDraft(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting");
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", []);
         var ev = new ReservationHoldCommitted(
             _reservationId,
             _roomId,
@@ -90,7 +90,7 @@ public class ReservationDeciderTests
     {
         var approvalId = Guid.NewGuid();
         var draft = new ReservationState.ReservationDraft(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting");
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", []);
         var ev = new ReservationHoldCommitted(
             _reservationId,
             _roomId,
@@ -115,7 +115,7 @@ public class ReservationDeciderTests
     {
         var confirmTime = DateTime.UtcNow;
         var held = new ReservationState.ReservationHeld(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", false, null, null);
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", [], false, null, null);
         var ev = new ReservationConfirmed(_reservationId, _roomId, _organizerId, _startTime, _endTime, "Team Meeting", confirmTime, "Approved");
 
         var state = held.Evolve(ev);
@@ -130,7 +130,7 @@ public class ReservationDeciderTests
     {
         var cancelTime = DateTime.UtcNow;
         var draft = new ReservationState.ReservationDraft(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting");
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", []);
         var ev = new ReservationCancelled(_reservationId, _roomId, _startTime, _endTime, "Changed plans", cancelTime);
 
         var state = draft.Evolve(ev);
@@ -145,7 +145,7 @@ public class ReservationDeciderTests
     {
         var cancelTime = DateTime.UtcNow;
         var held = new ReservationState.ReservationHeld(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", false, null, null);
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", [], false, null, null);
         var ev = new ReservationCancelled(_reservationId, _roomId, _startTime, _endTime, "Changed plans", cancelTime);
 
         var state = held.Evolve(ev);
@@ -158,7 +158,7 @@ public class ReservationDeciderTests
     {
         var cancelTime = DateTime.UtcNow;
         var confirmed = new ReservationState.ReservationConfirmed(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", DateTime.UtcNow.AddMinutes(-5), null, null, null);
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", [], DateTime.UtcNow.AddMinutes(-5), null, null, null);
         var ev = new ReservationCancelled(_reservationId, _roomId, _startTime, _endTime, "Changed plans", cancelTime);
 
         var state = confirmed.Evolve(ev);
@@ -172,7 +172,7 @@ public class ReservationDeciderTests
         var approvalId = Guid.NewGuid();
         var rejectTime = DateTime.UtcNow;
         var held = new ReservationState.ReservationHeld(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", true, approvalId, "Need approval");
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", [], true, approvalId, "Need approval");
         var ev = new ReservationRejected(_reservationId, _roomId, approvalId, "Not approved", rejectTime);
 
         var state = held.Evolve(ev);
@@ -188,7 +188,7 @@ public class ReservationDeciderTests
     {
         var rejectTime = DateTime.UtcNow;
         var held = new ReservationState.ReservationHeld(
-            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", false, null, null);
+            _reservationId, _roomId, _organizerId, _organizerName, _startTime, _endTime, "Team Meeting", [], false, null, null);
         var ev = new ReservationRejected(_reservationId, _roomId, Guid.NewGuid(), "Not approved", rejectTime);
 
         var state = held.Evolve(ev);

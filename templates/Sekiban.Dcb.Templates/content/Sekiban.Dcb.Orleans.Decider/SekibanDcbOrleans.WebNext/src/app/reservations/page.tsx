@@ -39,6 +39,7 @@ type ReservationDetails = {
   approvalRequestId?: string | null;
   approvalRequestComment?: string | null;
   approvalDecisionComment?: string | null;
+  selectedEquipment?: string[];
 };
 type ReservationLayout = {
   column: number;
@@ -178,6 +179,7 @@ function ReservationsContent() {
     endTime: "10:00",
     purpose: "",
     approvalRequestComment: "",
+    selectedEquipment: [] as string[],
   });
   const [cancelReason, setCancelReason] = useState("");
   const [formError, setFormError] = useState("");
@@ -254,8 +256,19 @@ function ReservationsContent() {
       endTime: "10:00",
       purpose: "",
       approvalRequestComment: "",
+      selectedEquipment: [],
     });
     setFormError("");
+  };
+
+  const toggleEquipmentSelection = (equipmentName: string) => {
+    setFormData((prev) => {
+      const exists = prev.selectedEquipment.includes(equipmentName);
+      const next = exists
+        ? prev.selectedEquipment.filter((item) => item !== equipmentName)
+        : [...prev.selectedEquipment, equipmentName];
+      return { ...prev, selectedEquipment: next };
+    });
   };
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -278,6 +291,7 @@ function ReservationsContent() {
       startTime: startDateTime.toISOString(),
       endTime: endDateTime.toISOString(),
       purpose: formData.purpose,
+      selectedEquipment: formData.selectedEquipment,
       approvalRequestComment: formData.approvalRequestComment || undefined,
     });
   };
@@ -303,6 +317,7 @@ function ReservationsContent() {
       endTime: time ? `${(parseInt(time.split(":")[0]) + 1).toString().padStart(2, "0")}:00` : "10:00",
       purpose: "",
       approvalRequestComment: "",
+      selectedEquipment: [],
     });
     setFormError("");
     setIsCreateModalOpen(true);
@@ -441,6 +456,7 @@ function ReservationsContent() {
         status: res.status as ReservationStatus,
         requiresApproval: res.requiresApproval,
         approvalRequestId: res.approvalRequestId,
+        selectedEquipment: res.selectedEquipment ?? [],
       };
       const dayKey = formatDate(new Date(res.startTime));
       const existing = byDay.get(dayKey) ?? [];
@@ -471,6 +487,7 @@ function ReservationsContent() {
         status: res.status as ReservationStatus,
         requiresApproval: res.requiresApproval,
         approvalRequestId: res.approvalRequestId,
+        selectedEquipment: res.selectedEquipment ?? [],
       };
       const dayKey = formatDate(new Date(res.startTime));
       const roomMap = byDayRoom.get(dayKey) ?? new Map<string, ReservationDetails[]>();
@@ -568,9 +585,12 @@ function ReservationsContent() {
   const totalReservations = reservations?.length ?? 0;
   const confirmedReservations = reservations?.filter((r) => r.status === "Confirmed").length ?? 0;
   const pendingReservations = reservations?.filter((r) => r.status === "Held" || r.status === "Draft").length ?? 0;
-  const selectedRoomRequiresApproval = Boolean(
-    formData.roomId && rooms?.find((room) => room.roomId === formData.roomId)?.requiresApproval
+  const selectedRoom = useMemo(
+    () => rooms?.find((room) => room.roomId === formData.roomId) ?? null,
+    [rooms, formData.roomId]
   );
+  const selectedRoomRequiresApproval = Boolean(selectedRoom?.requiresApproval);
+  const selectedRoomEquipment = selectedRoom?.equipment ?? [];
   const dailyRooms = useMemo(() => {
     if (!rooms) return [];
     if (selectedRoomId) {
@@ -872,6 +892,7 @@ function ReservationsContent() {
                           approvalRequestId: res.approvalRequestId,
                           approvalRequestComment: res.approvalRequestComment,
                           approvalDecisionComment: res.approvalDecisionComment,
+                          selectedEquipment: res.selectedEquipment ?? [],
                         }));
                         const startingReservations = slotReservationDetails.filter((res) =>
                           isReservationStartInSlot(res, slotStart, slotEnd)
@@ -921,6 +942,7 @@ function ReservationsContent() {
                                     approvalRequestId: res.approvalRequestId,
                                     approvalRequestComment: res.approvalRequestComment,
                                     approvalDecisionComment: res.approvalDecisionComment,
+                                    selectedEquipment: res.selectedEquipment,
                                   });
                                 }}
                                 style={getReservationBlockStyle(res, column, columns)}
@@ -1017,6 +1039,7 @@ function ReservationsContent() {
                               approvalRequestId: res.approvalRequestId,
                               approvalRequestComment: res.approvalRequestComment,
                               approvalDecisionComment: res.approvalDecisionComment,
+                              selectedEquipment: res.selectedEquipment ?? [],
                             }));
                             const startingReservations = slotReservationDetails.filter((res) =>
                               isReservationStartInSlot(res, slotStart, slotEnd)
@@ -1127,7 +1150,13 @@ function ReservationsContent() {
                   <label className="text-sm font-medium">Room *</label>
                   <Select
                     value={formData.roomId}
-                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        roomId: e.target.value,
+                        selectedEquipment: [],
+                      })
+                    }
                   >
                     <option value="">Select a room...</option>
                     {rooms?.filter((r) => r.isActive).map((room) => (
@@ -1182,6 +1211,33 @@ function ReservationsContent() {
                     autoFocus
                   />
                 </div>
+                {formData.roomId && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Equipment (optional)</label>
+                    {selectedRoomEquipment.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        No equipment registered for this room.
+                      </div>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {selectedRoomEquipment.map((equipment) => (
+                          <label key={equipment} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedEquipment.includes(equipment)}
+                              onChange={() => toggleEquipmentSelection(equipment)}
+                              className="h-4 w-4 rounded border-muted"
+                            />
+                            <span>{equipment}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      Select the equipment you plan to use in this room.
+                    </div>
+                  </div>
+                )}
                 {selectedRoomRequiresApproval && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Approval Request (optional)</label>
@@ -1254,6 +1310,23 @@ function ReservationsContent() {
                   </svg>
                   <span>{getOrganizerLabel(selectedReservation)}</span>
                 </div>
+                {selectedReservation.selectedEquipment && selectedReservation.selectedEquipment.length > 0 && (
+                  <div className="flex items-start gap-3 text-sm">
+                    <svg className="w-4 h-4 text-muted-foreground mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V7a2 2 0 00-2-2h-3.5m-4 0H6a2 2 0 00-2 2v6m16 0v4a2 2 0 01-2 2h-3.5m-4 0H6a2 2 0 01-2-2v-4m16 0H4" />
+                    </svg>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Equipment</div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedReservation.selectedEquipment.map((equipment) => (
+                          <span key={equipment} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {equipment}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {formError && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{formError}</div>
@@ -1443,6 +1516,7 @@ function ReservationsContent() {
                       <TableHead>Room</TableHead>
                       <TableHead>When</TableHead>
                       <TableHead>Purpose</TableHead>
+                      <TableHead>Equipment</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Approval Request</TableHead>
                       <TableHead>Admin Comment</TableHead>
@@ -1456,6 +1530,11 @@ function ReservationsContent() {
                           <div className="text-sm">{formatDateTime(res.startTime)} - {formatTime(res.endTime)}</div>
                         </TableCell>
                         <TableCell>{res.purpose || "—"}</TableCell>
+                        <TableCell>
+                          {res.selectedEquipment && res.selectedEquipment.length > 0
+                            ? res.selectedEquipment.join(", ")
+                            : "—"}
+                        </TableCell>
                         <TableCell>
                           {res.status === "Confirmed" && res.approvalRequestId ? (
                             <Badge variant="success">Approved</Badge>

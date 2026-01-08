@@ -21,6 +21,7 @@ public static class ReservationRejectedDecider
                     held.StartTime,
                     held.EndTime,
                     held.Purpose,
+                    held.SelectedEquipment,
                     rejected.ApprovalRequestId,
                     held.ApprovalRequestComment,
                     rejected.Reason,

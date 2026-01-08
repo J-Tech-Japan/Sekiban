@@ -72,7 +72,8 @@ public record CommitReservationHold : ICommandWithHandler<CommitReservationHold>
             draft.Purpose,
             requiresApproval,
             approvalRequestId,
-            approvalRequestComment)
+            approvalRequestComment,
+            draft.SelectedEquipment)
             .GetEventWithTags();
     }
 }

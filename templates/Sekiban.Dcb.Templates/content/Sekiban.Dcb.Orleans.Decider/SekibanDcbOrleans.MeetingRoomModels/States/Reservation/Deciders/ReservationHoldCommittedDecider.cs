@@ -36,6 +36,7 @@ public static class ReservationHoldCommittedDecider
                 committed.StartTime,
                 committed.EndTime,
                 committed.Purpose,
+                committed.SelectedEquipment ?? [],
                 committed.RequiresApproval,
                 committed.ApprovalRequestId,
                 committed.ApprovalRequestComment),

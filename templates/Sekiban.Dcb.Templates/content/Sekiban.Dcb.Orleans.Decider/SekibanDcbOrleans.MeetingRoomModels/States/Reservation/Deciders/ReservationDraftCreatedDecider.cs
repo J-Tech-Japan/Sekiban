@@ -17,7 +17,8 @@ public static class ReservationDraftCreatedDecider
             created.OrganizerName,
             created.StartTime,
             created.EndTime,
-            created.Purpose);
+            created.Purpose,
+            created.SelectedEquipment ?? []);
 
     /// <summary>
     ///     Apply ReservationDraftCreated event to ReservationState

@@ -9,7 +9,8 @@ public record ReservationDraftCreated(
     string OrganizerName,
     DateTime StartTime,
     DateTime EndTime,
-    string Purpose) : IEventPayload
+    string Purpose,
+    List<string>? SelectedEquipment = null) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
         new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);

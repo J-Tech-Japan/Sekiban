@@ -24,7 +24,8 @@ public abstract record ReservationState : ITagStatePayload
         string OrganizerName,
         DateTime StartTime,
         DateTime EndTime,
-        string Purpose) : ReservationState;
+        string Purpose,
+        List<string> SelectedEquipment) : ReservationState;
 
     /// <summary>
     ///     Held state - reservation is committed but may need approval
@@ -37,6 +38,7 @@ public abstract record ReservationState : ITagStatePayload
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
+        List<string> SelectedEquipment,
         bool RequiresApproval,
         Guid? ApprovalRequestId,
         string? ApprovalRequestComment) : ReservationState;
@@ -52,6 +54,7 @@ public abstract record ReservationState : ITagStatePayload
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
+        List<string> SelectedEquipment,
         DateTime ConfirmedAt,
         Guid? ApprovalRequestId,
         string? ApprovalRequestComment,
@@ -68,6 +71,7 @@ public abstract record ReservationState : ITagStatePayload
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
+        List<string> SelectedEquipment,
         string? ApprovalRequestComment,
         string Reason,
         DateTime CancelledAt) : ReservationState;
@@ -83,6 +87,7 @@ public abstract record ReservationState : ITagStatePayload
         DateTime StartTime,
         DateTime EndTime,
         string Purpose,
+        List<string> SelectedEquipment,
         Guid ApprovalRequestId,
         string? ApprovalRequestComment,
         string Reason,

@@ -12,7 +12,8 @@ public record ReservationHoldCommitted(
     string Purpose,
     bool RequiresApproval,
     Guid? ApprovalRequestId,
-    string? ApprovalRequestComment) : IEventPayload
+    string? ApprovalRequestComment,
+    List<string>? SelectedEquipment = null) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
         new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);

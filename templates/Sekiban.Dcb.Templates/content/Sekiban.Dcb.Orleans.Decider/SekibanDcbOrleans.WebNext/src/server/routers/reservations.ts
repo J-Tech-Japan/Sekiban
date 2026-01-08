@@ -26,6 +26,7 @@ const reservationSchema = z.object({
   approvalRequestId: z.string().uuid().optional().nullable().default(null),
   approvalRequestComment: z.string().optional().nullable(),
   approvalDecisionComment: z.string().optional().nullable(),
+  selectedEquipment: z.array(z.string()).optional().default([]),
   confirmedAt: z.string().optional().nullable(),
   cancelledAt: z.string().optional().nullable(),
   reason: z.string().optional().nullable(),
@@ -38,6 +39,7 @@ const createDraftSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   purpose: z.string().min(1, "Purpose is required"),
+  selectedEquipment: z.array(z.string()).optional().default([]),
 });
 
 const quickReservationSchema = z.object({
@@ -45,6 +47,7 @@ const quickReservationSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   purpose: z.string().min(1, "Purpose is required"),
+  selectedEquipment: z.array(z.string()).optional().default([]),
   approvalRequestComment: z.string().optional(),
 });
 
@@ -95,6 +98,7 @@ export const reservationsRouter = router({
           startTime: input.startTime,
           endTime: input.endTime,
           purpose: input.purpose,
+          selectedEquipment: input.selectedEquipment,
           approvalRequestComment: input.approvalRequestComment,
         }),
       });
@@ -123,6 +127,7 @@ export const reservationsRouter = router({
           startTime: input.startTime,
           endTime: input.endTime,
           purpose: input.purpose,
+          selectedEquipment: input.selectedEquipment,
         }),
       });
       if (!res.ok) {
