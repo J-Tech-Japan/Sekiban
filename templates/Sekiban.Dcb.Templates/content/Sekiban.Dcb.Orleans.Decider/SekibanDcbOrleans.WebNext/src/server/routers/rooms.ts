@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 const roomSchema = z.object({
   roomId: z.string().uuid(),
@@ -78,8 +79,8 @@ export const roomsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to create room");
+        const error = await extractErrorMessage(res, "Failed to create room");
+        throw new Error(error);
       }
       return res.json();
     }),
@@ -105,8 +106,8 @@ export const roomsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to update room");
+        const error = await extractErrorMessage(res, "Failed to update room");
+        throw new Error(error);
       }
       return res.json();
     }),

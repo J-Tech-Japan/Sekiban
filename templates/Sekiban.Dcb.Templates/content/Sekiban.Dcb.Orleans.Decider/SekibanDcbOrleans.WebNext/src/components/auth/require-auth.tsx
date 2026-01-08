@@ -8,9 +8,14 @@ interface RequireAuthProps {
 }
 
 export function RequireAuth({ children }: RequireAuthProps) {
-  const { data: authStatus, isLoading } = trpc.auth.status.useQuery();
+  const { data: authStatus, isLoading, isFetching } = trpc.auth.status.useQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
-  if (isLoading) {
+  // Show loading state during initial load OR during refetch when not yet authenticated
+  // This prevents showing "Authentication Required" briefly while refetching after login
+  if (isLoading || (isFetching && !authStatus?.isAuthenticated)) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">

@@ -15,9 +15,9 @@ export default function LoginPage() {
   const { data: authStatus, isLoading: isStatusLoading } = trpc.auth.status.useQuery();
 
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setError(null);
-      utils.auth.status.invalidate();
+      await utils.auth.status.invalidate();
     },
     onError: (err) => {
       setError(err.message);
@@ -147,28 +147,63 @@ export default function LoginPage() {
               </form>
             )}
           </CardContent>
-          <CardFooter className="flex flex-col">
-            <div className="w-full p-4 bg-muted/50 rounded-lg">
-              <h3 className="text-sm font-medium mb-2">Sample Accounts:</h3>
-              <table className="w-full text-sm">
-                <tbody>
-                  <tr>
-                    <td className="py-1">user1@example.com</td>
-                    <td className="py-1 text-muted-foreground" rowSpan={4}>Sekiban1234%</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1">user2@example.com</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1">user3@example.com</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1 font-medium">admin@example.com</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardFooter>
+          {!isAuthenticated && (
+            <CardFooter className="flex flex-col">
+              <div className="w-full p-4 bg-muted/50 rounded-lg">
+                <h3 className="text-sm font-medium mb-3">Quick Login (Sample Accounts):</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEmail("user1@example.com");
+                      setPassword("Sekiban1234%");
+                    }}
+                  >
+                    User 1
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEmail("user2@example.com");
+                      setPassword("Sekiban1234%");
+                    }}
+                  >
+                    User 2
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEmail("user3@example.com");
+                      setPassword("Sekiban1234%");
+                    }}
+                  >
+                    User 3
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="font-medium"
+                    onClick={() => {
+                      setEmail("admin@example.com");
+                      setPassword("Sekiban1234%");
+                    }}
+                  >
+                    Admin
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Click a button to fill credentials, then press Sign In
+                </p>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       </div>
     </div>

@@ -13,14 +13,17 @@ public record RoomDailyActivityTag(Guid RoomId, DateOnly Date) : ITagGroup<RoomD
 
     public static RoomDailyActivityTag FromContent(string content)
     {
-        // Format: "RoomId|Date"
-        var parts = content.Split('|');
+        // Format: "RoomId_Date" (using underscore as separator since pipe is not allowed)
+        // Find the last underscore that separates the GUID from the date
+        var lastUnderscoreIndex = content.LastIndexOf('_');
+        var roomIdPart = content[..lastUnderscoreIndex];
+        var datePart = content[(lastUnderscoreIndex + 1)..];
         return new RoomDailyActivityTag(
-            Guid.Parse(parts[0]),
-            DateOnly.Parse(parts[1]));
+            Guid.Parse(roomIdPart),
+            DateOnly.Parse(datePart));
     }
 
-    public string GetTagContent() => $"{RoomId}|{Date:yyyy-MM-dd}";
+    public string GetTagContent() => $"{RoomId}_{Date:yyyy-MM-dd}";
 
     /// <summary>
     ///     Creates tags for all days that a reservation spans.

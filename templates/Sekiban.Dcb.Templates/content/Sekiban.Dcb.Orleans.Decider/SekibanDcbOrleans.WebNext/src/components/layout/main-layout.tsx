@@ -5,7 +5,12 @@ import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const { data: authStatus, isLoading: authLoading } = trpc.auth.status.useQuery();
+  const { data: authStatus, isLoading: authLoading, isFetching } = trpc.auth.status.useQuery(undefined, {
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  // Show loading while fetching if not yet authenticated (prevents flash of "Please Login")
+  const showLoading = authLoading || (isFetching && !authStatus?.isAuthenticated);
   const isAuthenticated = authStatus?.isAuthenticated ?? false;
   return (
     <div className="flex min-h-screen bg-background">
@@ -32,7 +37,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Footer */}
           <div className="border-t border-white/10 p-4">
-            {authLoading ? (
+            {showLoading ? (
               <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
                 <div className="h-8 w-8 rounded-full bg-sidebar-accent/20 animate-pulse" />
                 <div className="flex-1 min-w-0">

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
+import { extractErrorMessage } from "../lib/api-error-helpers";
 
 // Reservation status types matching the backend discriminated union
 const reservationStatusSchema = z.enum([
@@ -96,8 +97,8 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to create quick reservation");
+        const error = await extractErrorMessage(res, "Failed to create quick reservation");
+        throw new Error(error);
       }
       return res.json();
     }),
@@ -123,8 +124,8 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to create reservation draft");
+        const error = await extractErrorMessage(res, "Failed to create reservation draft");
+        throw new Error(error);
       }
       return res.json();
     }),
@@ -157,8 +158,8 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to commit hold");
+        const error = await extractErrorMessage(res, "Failed to commit hold");
+        throw new Error(error);
       }
       return res.json();
     }),
@@ -187,8 +188,8 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to confirm reservation");
+        const error = await extractErrorMessage(res, "Failed to confirm reservation");
+        throw new Error(error);
       }
       return res.json();
     }),
@@ -219,8 +220,8 @@ export const reservationsRouter = router({
         if (res.status === 401) {
           throw new Error("Authentication required");
         }
-        const error = await res.text();
-        throw new Error(error || "Failed to cancel reservation");
+        const error = await extractErrorMessage(res, "Failed to cancel reservation");
+        throw new Error(error);
       }
       return res.json();
     }),

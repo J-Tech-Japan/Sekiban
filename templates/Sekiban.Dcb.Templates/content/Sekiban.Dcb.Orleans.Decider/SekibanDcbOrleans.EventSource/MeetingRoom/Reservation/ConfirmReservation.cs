@@ -5,6 +5,7 @@ using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.EventSource.MeetingRoom.Reservation;
 
@@ -37,13 +38,23 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
             _ => throw new ApplicationException($"Reservation {command.ReservationId} is in invalid state for confirmation: {reservationStateTyped.Payload.GetType().Name}")
         };
 
-        // 3. Check for conflicts on each day the reservation spans
+        // 3. Get room name for user-friendly error messages
+        var roomTag = new RoomTag(command.RoomId);
+        var roomStateTyped = await context.GetStateAsync<RoomProjector>(roomTag);
+        var roomState = roomStateTyped.Payload as RoomState ?? RoomState.Empty;
+        var roomName = !string.IsNullOrEmpty(roomState.Name) ? roomState.Name : $"Room {command.RoomId}";
+
+        // 4. Check for conflicts on each day the reservation spans
         var dailyTags = RoomDailyActivityTag.CreateTagsForTimeRange(command.RoomId, startTime, endTime).ToList();
 
         foreach (var dailyTag in dailyTags)
         {
-            var dailyStateTyped = await context.GetStateAsync<RoomDailyActivityState, RoomDailyActivityProjector>(dailyTag);
-            var dailyState = dailyStateTyped.Payload;
+            // Use non-typed version to handle case where no events exist for this tag yet
+            var dailyStateTyped = await context.GetStateAsync<RoomDailyActivityProjector>(dailyTag);
+
+            // If no events exist, payload will be EmptyTagStatePayload - treat as empty state (no conflicts)
+            var dailyState = dailyStateTyped.Payload as RoomDailyActivityState
+                ?? RoomDailyActivityState.Empty;
 
             if (dailyState.HasConflict(startTime, endTime, command.ReservationId))
             {
@@ -51,11 +62,11 @@ public record ConfirmReservation : ICommandWithHandler<ConfirmReservation>
                 var conflictInfo = string.Join(", ", conflicts.Select(c =>
                     $"{c.Slot.StartTime:HH:mm}-{c.Slot.EndTime:HH:mm} ({c.Slot.Purpose})"));
                 throw new ApplicationException(
-                    $"Time slot conflict detected for room {command.RoomId} on {dailyTag.Date}: {conflictInfo}");
+                    $"Time slot conflict detected for '{roomName}' on {dailyTag.Date:yyyy-MM-dd}: {conflictInfo}");
             }
         }
 
-        // 4. Create confirmed event with all details for projectors
+        // 5. Create confirmed event with all details for projectors
         return new ReservationConfirmed(
             command.ReservationId,
             command.RoomId,
