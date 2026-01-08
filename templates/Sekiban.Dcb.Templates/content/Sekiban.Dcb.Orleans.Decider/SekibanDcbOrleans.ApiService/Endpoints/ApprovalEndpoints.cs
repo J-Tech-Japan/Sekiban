@@ -3,8 +3,11 @@ using System.Text.Json.Serialization;
 using Dcb.EventSource.MeetingRoom.ApprovalRequest;
 using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Reservation;
+using Dcb.EventSource.MeetingRoom.Room;
 using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Dcb.MeetingRoomModels.States.ApprovalRequest;
+using Dcb.MeetingRoomModels.States.Reservation;
+using Dcb.MeetingRoomModels.States.Room;
 using Dcb.MeetingRoomModels.Tags;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;
@@ -41,7 +44,82 @@ public static class ApprovalEndpoints
             PendingOnly = pendingOnly ?? true
         };
         var result = await executor.QueryAsync(query);
-        return Results.Ok(result.Items);
+        var items = new List<ApprovalInboxViewItem>();
+
+        foreach (var item in result.Items)
+        {
+            var roomId = item.RoomId;
+            string? roomName = null;
+            Guid? organizerId = null;
+            string? organizerName = null;
+            string? purpose = null;
+            DateTime? startTime = null;
+            DateTime? endTime = null;
+
+            if (item.ReservationId != Guid.Empty)
+            {
+                var reservationTag = new ReservationTag(item.ReservationId);
+                var reservationState = await executor.GetTagStateAsync(
+                    new TagStateId(reservationTag, nameof(ReservationProjector)));
+
+                switch (reservationState.Payload)
+                {
+                    case ReservationState.ReservationDraft draft:
+                        roomId = draft.RoomId;
+                        organizerId = draft.OrganizerId;
+                        organizerName = draft.OrganizerName;
+                        purpose = draft.Purpose;
+                        startTime = draft.StartTime;
+                        endTime = draft.EndTime;
+                        break;
+                    case ReservationState.ReservationHeld held:
+                        roomId = held.RoomId;
+                        organizerId = held.OrganizerId;
+                        organizerName = held.OrganizerName;
+                        purpose = held.Purpose;
+                        startTime = held.StartTime;
+                        endTime = held.EndTime;
+                        break;
+                    case ReservationState.ReservationConfirmed confirmed:
+                        roomId = confirmed.RoomId;
+                        organizerId = confirmed.OrganizerId;
+                        organizerName = confirmed.OrganizerName;
+                        purpose = confirmed.Purpose;
+                        startTime = confirmed.StartTime;
+                        endTime = confirmed.EndTime;
+                        break;
+                }
+            }
+
+            if (roomId != Guid.Empty)
+            {
+                var roomTag = new RoomTag(roomId);
+                var roomState = await executor.GetTagStateAsync(
+                    new TagStateId(roomTag, nameof(RoomProjector)));
+                if (roomState.Payload is RoomState room)
+                {
+                    roomName = room.Name;
+                }
+            }
+
+            items.Add(new ApprovalInboxViewItem(
+                item.ApprovalRequestId,
+                item.ReservationId,
+                roomId,
+                roomName,
+                item.RequesterId,
+                item.RequestComment,
+                organizerId,
+                organizerName,
+                purpose,
+                startTime,
+                endTime,
+                item.ApproverIds,
+                item.RequestedAt,
+                item.Status));
+        }
+
+        return Results.Ok(items);
     }
 
     private static async Task<IResult> RecordApprovalDecisionAsync(
@@ -105,6 +183,22 @@ public static class ApprovalEndpoints
         });
     }
 }
+
+public record ApprovalInboxViewItem(
+    Guid ApprovalRequestId,
+    Guid ReservationId,
+    Guid RoomId,
+    string? RoomName,
+    Guid RequesterId,
+    string? RequestComment,
+    Guid? OrganizerId,
+    string? OrganizerName,
+    string? Purpose,
+    DateTime? StartTime,
+    DateTime? EndTime,
+    List<Guid> ApproverIds,
+    DateTime RequestedAt,
+    string Status);
 
 public record ApprovalDecisionRequest(
     [property: JsonConverter(typeof(JsonStringEnumConverter))] ApprovalDecision Decision,

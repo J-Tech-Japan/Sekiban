@@ -8,7 +8,8 @@ public record ApprovalFlowStarted(
     Guid RoomId,
     Guid RequesterId,
     List<Guid> ApproverIds,
-    DateTime RequestedAt) : IEventPayload
+    DateTime RequestedAt,
+    string? RequestComment) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
         new(this, [new ApprovalRequestTag(ApprovalRequestId), new ReservationTag(ReservationId)]);

@@ -212,7 +212,8 @@ public static class ReservationEndpoints
             displayName,
             request.StartTime,
             request.EndTime,
-            request.Purpose);
+            request.Purpose,
+            request.ApprovalRequestComment);
 
         return Results.Ok(new
         {
@@ -232,4 +233,9 @@ public record CommitReservationHoldRequest(Guid RoomId, bool RequiresApproval, G
 public record ConfirmReservationRequest(Guid RoomId);
 public record CancelReservationRequest(Guid RoomId, string Reason);
 public record RejectReservationRequest(Guid RoomId, Guid ApprovalRequestId, string Reason);
-public record QuickReservationRequest(Guid RoomId, DateTime StartTime, DateTime EndTime, string Purpose);
+public record QuickReservationRequest(
+    Guid RoomId,
+    DateTime StartTime,
+    DateTime EndTime,
+    string Purpose,
+    string? ApprovalRequestComment);

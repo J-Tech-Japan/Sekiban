@@ -20,6 +20,8 @@ public record StartApprovalFlow : ICommandWithHandler<StartApprovalFlow>
 
     public List<Guid> ApproverIds { get; init; } = [];
 
+    public string? RequestComment { get; init; }
+
     public static async Task<EventOrNone> HandleAsync(
         StartApprovalFlow command,
         ICommandContext context)
@@ -50,7 +52,8 @@ public record StartApprovalFlow : ICommandWithHandler<StartApprovalFlow>
             command.RoomId,
             command.RequesterId,
             command.ApproverIds,
-            DateTime.UtcNow)
+            DateTime.UtcNow,
+            command.RequestComment)
             .GetEventWithTags();
     }
 }

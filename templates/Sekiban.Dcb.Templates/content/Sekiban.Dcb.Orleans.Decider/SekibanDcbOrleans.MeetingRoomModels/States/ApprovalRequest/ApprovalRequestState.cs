@@ -23,7 +23,8 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid RoomId,
         Guid RequesterId,
         List<Guid> ApproverIds,
-        DateTime RequestedAt) : ApprovalRequestState;
+        DateTime RequestedAt,
+        string? RequestComment) : ApprovalRequestState;
 
     /// <summary>
     ///     Approved state - approval was granted
@@ -33,7 +34,8 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ReservationId,
         Guid ApproverId,
         string? Comment,
-        DateTime DecidedAt) : ApprovalRequestState;
+        DateTime DecidedAt,
+        string? RequestComment) : ApprovalRequestState;
 
     /// <summary>
     ///     Rejected state - approval was denied
@@ -43,5 +45,6 @@ public abstract record ApprovalRequestState : ITagStatePayload
         Guid ReservationId,
         Guid ApproverId,
         string? Comment,
-        DateTime DecidedAt) : ApprovalRequestState;
+        DateTime DecidedAt,
+        string? RequestComment) : ApprovalRequestState;
 }

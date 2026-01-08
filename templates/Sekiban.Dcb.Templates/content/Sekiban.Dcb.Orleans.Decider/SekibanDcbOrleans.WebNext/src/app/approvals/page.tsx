@@ -30,6 +30,13 @@ const shortId = (id: string) => `${id.slice(0, 8)}...${id.slice(-4)}`;
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
+const formatTimeRange = (start?: string | null, end?: string | null) => {
+  if (!start || !end) return "Time not set";
+  const startLabel = new Date(start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const endLabel = new Date(end).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${startLabel} - ${endLabel}`;
+};
+
 export default function ApprovalsPage() {
   return (
     <RequireAuth>
@@ -140,11 +147,12 @@ function ApprovalsContent() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Request</TableHead>
+                  <TableHead>Room</TableHead>
                   <TableHead>Requester</TableHead>
-                  <TableHead>Requested</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  <TableHead>Approval Request</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Comment</TableHead>
+                  <TableHead>Decision Comment</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -154,24 +162,33 @@ function ApprovalsContent() {
                   const statusStyle = statusStyles[status] ?? statusStyles.Pending;
                   const commentValue = comments[item.approvalRequestId] ?? "";
                   const isPending = status === "Pending";
+                  const organizerName = item.organizerName?.trim()
+                    || (item.organizerId ? `User ${shortId(item.organizerId)}` : `User ${shortId(item.requesterId)}`);
+                  const roomName = item.roomName?.trim()
+                    || (item.roomId ? `Room ${shortId(item.roomId)}` : "Room");
+                  const whenLabel = formatTimeRange(item.startTime, item.endTime);
                   return (
                     <TableRow key={item.approvalRequestId}>
                       <TableCell>
-                        <div className="font-medium">{shortId(item.approvalRequestId)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Reservation {shortId(item.reservationId)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Room {shortId(item.roomId)}
-                        </div>
+                        <div className="font-medium">{roomName}</div>
+                        <div className="text-xs text-muted-foreground">{whenLabel}</div>
+                        <div className="text-[10px] text-muted-foreground">Request {shortId(item.approvalRequestId)}</div>
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">User {shortId(item.requesterId)}</div>
+                        <div className="text-sm">{organizerName}</div>
                         <div className="text-xs text-muted-foreground">
                           {item.approverIds.length > 0 ? `${item.approverIds.length} approvers` : "Any admin"}
                         </div>
                       </TableCell>
-                      <TableCell>{formatDateTime(item.requestedAt)}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">{item.purpose || "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Requested {formatDateTime(item.requestedAt)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">{item.requestComment || "—"}</div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={statusStyle.variant}>{statusStyle.label}</Badge>
                       </TableCell>

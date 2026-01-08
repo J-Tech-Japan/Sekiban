@@ -16,7 +16,8 @@ public static class ApprovalFlowStartedDecider
             started.RoomId,
             started.RequesterId,
             started.ApproverIds,
-            started.RequestedAt);
+            started.RequestedAt,
+            started.RequestComment);
 
     /// <summary>
     ///     Apply ApprovalFlowStarted event to ApprovalRequestState

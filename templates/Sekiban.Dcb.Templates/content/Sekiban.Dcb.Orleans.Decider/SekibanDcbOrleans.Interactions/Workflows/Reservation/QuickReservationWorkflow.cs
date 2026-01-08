@@ -29,6 +29,7 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
     /// <param name="startTime">Start time of the reservation</param>
     /// <param name="endTime">End time of the reservation</param>
     /// <param name="purpose">Purpose of the reservation</param>
+    /// <param name="approvalRequestComment">Optional comment for approval request</param>
     /// <returns>The reservation result including ID and sortable unique ID</returns>
     public async Task<QuickReservationResult> ExecuteAsync(
         Guid roomId,
@@ -36,7 +37,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         string organizerName,
         DateTime startTime,
         DateTime endTime,
-        string purpose)
+        string purpose,
+        string? approvalRequestComment = null)
     {
         var reservationId = Guid.CreateVersion7();
 
@@ -67,7 +69,8 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
                 ReservationId = reservationId,
                 RoomId = roomId,
                 RequesterId = organizerId,
-                ApproverIds = []
+                ApproverIds = [],
+                RequestComment = approvalRequestComment
             });
         }
 

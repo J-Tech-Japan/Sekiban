@@ -43,6 +43,7 @@ const quickReservationSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   purpose: z.string().min(1, "Purpose is required"),
+  approvalRequestComment: z.string().optional(),
 });
 
 export const reservationsRouter = router({
@@ -92,6 +93,7 @@ export const reservationsRouter = router({
           startTime: input.startTime,
           endTime: input.endTime,
           purpose: input.purpose,
+          approvalRequestComment: input.approvalRequestComment,
         }),
       });
       if (!res.ok) {

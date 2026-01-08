@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,22 @@ import { cn } from "@/lib/utils";
 import { RequireAuth } from "@/components/auth/require-auth";
 
 type ReservationStatus = "Draft" | "Held" | "Confirmed" | "Cancelled" | "Rejected" | "Expired";
+type ReservationDetails = {
+  reservationId: string;
+  roomId: string;
+  organizerId: string;
+  organizerName?: string;
+  purpose: string;
+  startTime: string;
+  endTime: string;
+  status: ReservationStatus;
+  requiresApproval?: boolean;
+  approvalRequestId?: string | null;
+};
+type ReservationLayout = {
+  column: number;
+  columns: number;
+};
 
 const statusConfig: Record<ReservationStatus, { variant: "default" | "secondary" | "success" | "warning" | "destructive"; label: string }> = {
   Draft: { variant: "secondary", label: "Draft" },
@@ -28,6 +44,7 @@ const statusConfig: Record<ReservationStatus, { variant: "default" | "secondary"
   Expired: { variant: "default", label: "Expired" },
 };
 const SLOT_HEIGHT_PX = 60;
+const MAX_VISIBLE_RESERVATIONS = 2;
 
 // Helper to generate week days
 const getWeekDays = (date: Date) => {
@@ -83,15 +100,32 @@ const isReservationStartInSlot = (reservation: { startTime: string }, slotStart:
   return startDate >= slotStart && startDate < slotEnd;
 };
 
-const getReservationBlockStyle = (reservation: { startTime: string; endTime: string }) => {
+const getReservationBlockStyle = (
+  reservation: { startTime: string; endTime: string },
+  column = 0,
+  columns = 1
+) => {
   const startDate = new Date(reservation.startTime);
   const endDate = new Date(reservation.endTime);
   const durationMinutes = Math.max(0, (endDate.getTime() - startDate.getTime()) / 60000);
   const startOffset = (startDate.getMinutes() / 60) * SLOT_HEIGHT_PX;
   const height = Math.max(32, (durationMinutes / 60) * SLOT_HEIGHT_PX - 4);
+  const edgePadding = 4;
+  const gap = 6;
+  let left = `${edgePadding}px`;
+  let width = `calc(100% - ${edgePadding * 2}px)`;
+
+  if (columns > 1) {
+    const available = `calc(100% - ${edgePadding * 2 + (columns - 1) * gap}px)`;
+    width = `calc(${available} / ${columns})`;
+    left = `calc(${edgePadding}px + ${column} * (${available} / ${columns} + ${gap}px))`;
+  }
+
   return {
     top: `${startOffset}px`,
     height: `${height}px`,
+    left,
+    width,
   };
 };
 
@@ -107,23 +141,17 @@ function ReservationsContent() {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
   const [lastSortableUniqueId, setLastSortableUniqueId] = useState<string | undefined>();
+  const [viewMode, setViewMode] = useState<"weekly" | "daily">("weekly");
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [selectedReservation, setSelectedReservation] = useState<{
-    reservationId: string;
-    roomId: string;
-    organizerId: string;
-    organizerName?: string;
-    purpose: string;
-    startTime: string;
-    endTime: string;
-    status: ReservationStatus;
-    requiresApproval?: boolean;
-    approvalRequestId?: string | null;
-  } | null>(null);
+  const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
+  const [isOverflowModalOpen, setIsOverflowModalOpen] = useState(false);
+  const [overflowReservations, setOverflowReservations] = useState<ReservationDetails[]>([]);
+  const [overflowSlotLabel, setOverflowSlotLabel] = useState("");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -132,6 +160,7 @@ function ReservationsContent() {
     startTime: "09:00",
     endTime: "10:00",
     purpose: "",
+    approvalRequestComment: "",
   });
   const [cancelReason, setCancelReason] = useState("");
   const [formError, setFormError] = useState("");
@@ -207,6 +236,7 @@ function ReservationsContent() {
       startTime: "09:00",
       endTime: "10:00",
       purpose: "",
+      approvalRequestComment: "",
     });
     setFormError("");
   };
@@ -231,6 +261,7 @@ function ReservationsContent() {
       startTime: startDateTime.toISOString(),
       endTime: endDateTime.toISOString(),
       purpose: formData.purpose,
+      approvalRequestComment: formData.approvalRequestComment || undefined,
     });
   };
 
@@ -247,22 +278,24 @@ function ReservationsContent() {
     });
   };
 
-  const openCreateModal = (date?: Date, time?: string) => {
+  const openCreateModal = (date?: Date, time?: string, roomId?: string) => {
     setFormData({
-      roomId: selectedRoomId || "",
+      roomId: roomId ?? selectedRoomId ?? "",
       date: date ? formatDate(date) : formatDate(new Date()),
       startTime: time || "09:00",
       endTime: time ? `${(parseInt(time.split(":")[0]) + 1).toString().padStart(2, "0")}:00` : "10:00",
       purpose: "",
+      approvalRequestComment: "",
     });
     setFormError("");
     setIsCreateModalOpen(true);
   };
 
-  const openDetailsModal = (reservation: typeof selectedReservation) => {
+  const openDetailsModal = (reservation: ReservationDetails) => {
     setSelectedReservation(reservation);
     setFormError("");
     setIsDetailsModalOpen(true);
+    setIsOverflowModalOpen(false);
   };
 
   const openCancelModal = () => {
@@ -270,6 +303,12 @@ function ReservationsContent() {
     setIsCancelModalOpen(true);
     setCancelReason("");
     setFormError("");
+  };
+
+  const openOverflowModal = (label: string, reservations: ReservationDetails[]) => {
+    setOverflowSlotLabel(label);
+    setOverflowReservations(reservations);
+    setIsOverflowModalOpen(true);
   };
 
   const handleAdminConfirm = () => {
@@ -295,6 +334,140 @@ function ReservationsContent() {
     });
   };
 
+  const buildDayLayout = (items: ReservationDetails[]) => {
+    const layout = new Map<string, ReservationLayout>();
+    if (items.length === 0) return layout;
+
+    const sorted = [...items].sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+
+    let group: ReservationDetails[] = [];
+    let groupEnd = 0;
+
+    const applyGroupLayout = (groupItems: ReservationDetails[]) => {
+      if (groupItems.length === 0) return;
+      const active: { end: number; column: number }[] = [];
+      const assignments = new Map<string, number>();
+      let maxColumns = 0;
+
+      for (const item of groupItems) {
+        const start = new Date(item.startTime).getTime();
+        const end = new Date(item.endTime).getTime();
+
+        for (let i = active.length - 1; i >= 0; i--) {
+          if (active[i].end <= start) {
+            active.splice(i, 1);
+          }
+        }
+
+        const used = new Set(active.map((entry) => entry.column));
+        let column = 0;
+        while (used.has(column)) {
+          column += 1;
+        }
+
+        active.push({ end, column });
+        assignments.set(item.reservationId, column);
+        maxColumns = Math.max(maxColumns, active.length);
+      }
+
+      for (const item of groupItems) {
+        const column = assignments.get(item.reservationId) ?? 0;
+        layout.set(item.reservationId, { column, columns: maxColumns });
+      }
+    };
+
+    for (const item of sorted) {
+      const start = new Date(item.startTime).getTime();
+      const end = new Date(item.endTime).getTime();
+
+      if (group.length === 0) {
+        group = [item];
+        groupEnd = end;
+        continue;
+      }
+
+      if (start < groupEnd) {
+        group.push(item);
+        groupEnd = Math.max(groupEnd, end);
+      } else {
+        applyGroupLayout(group);
+        group = [item];
+        groupEnd = end;
+      }
+    }
+
+    applyGroupLayout(group);
+    return layout;
+  };
+
+  const layoutByDay = useMemo(() => {
+    if (!reservations) return new Map<string, Map<string, ReservationLayout>>();
+    const byDay = new Map<string, ReservationDetails[]>();
+
+    for (const res of reservations) {
+      const details: ReservationDetails = {
+        reservationId: res.reservationId,
+        roomId: res.roomId,
+        organizerId: res.organizerId,
+        organizerName: res.organizerName,
+        purpose: res.purpose,
+        startTime: res.startTime,
+        endTime: res.endTime,
+        status: res.status as ReservationStatus,
+        requiresApproval: res.requiresApproval,
+        approvalRequestId: res.approvalRequestId,
+      };
+      const dayKey = formatDate(new Date(res.startTime));
+      const existing = byDay.get(dayKey) ?? [];
+      existing.push(details);
+      byDay.set(dayKey, existing);
+    }
+
+    const layouts = new Map<string, Map<string, ReservationLayout>>();
+    for (const [dayKey, items] of byDay) {
+      layouts.set(dayKey, buildDayLayout(items));
+    }
+    return layouts;
+  }, [reservations]);
+
+  const layoutByDayRoom = useMemo(() => {
+    if (!reservations) return new Map<string, Map<string, Map<string, ReservationLayout>>>();
+    const byDayRoom = new Map<string, Map<string, ReservationDetails[]>>();
+
+    for (const res of reservations) {
+      const details: ReservationDetails = {
+        reservationId: res.reservationId,
+        roomId: res.roomId,
+        organizerId: res.organizerId,
+        organizerName: res.organizerName,
+        purpose: res.purpose,
+        startTime: res.startTime,
+        endTime: res.endTime,
+        status: res.status as ReservationStatus,
+        requiresApproval: res.requiresApproval,
+        approvalRequestId: res.approvalRequestId,
+      };
+      const dayKey = formatDate(new Date(res.startTime));
+      const roomMap = byDayRoom.get(dayKey) ?? new Map<string, ReservationDetails[]>();
+      const roomItems = roomMap.get(res.roomId) ?? [];
+      roomItems.push(details);
+      roomMap.set(res.roomId, roomItems);
+      byDayRoom.set(dayKey, roomMap);
+    }
+
+    const layouts = new Map<string, Map<string, Map<string, ReservationLayout>>>();
+    for (const [dayKey, roomMap] of byDayRoom) {
+      const roomLayouts = new Map<string, Map<string, ReservationLayout>>();
+      for (const [roomId, items] of roomMap) {
+        roomLayouts.set(roomId, buildDayLayout(items));
+      }
+      layouts.set(dayKey, roomLayouts);
+    }
+    return layouts;
+  }, [reservations]);
+
   const previousWeek = () => {
     const prev = new Date(currentWeek);
     prev.setDate(prev.getDate() - 7);
@@ -308,7 +481,21 @@ function ReservationsContent() {
   };
 
   const goToToday = () => {
-    setCurrentWeek(new Date());
+    const today = new Date();
+    setCurrentWeek(today);
+    setSelectedDate(today);
+  };
+
+  const previousDay = () => {
+    const prev = new Date(selectedDate);
+    prev.setDate(prev.getDate() - 1);
+    setSelectedDate(prev);
+  };
+
+  const nextDay = () => {
+    const next = new Date(selectedDate);
+    next.setDate(next.getDate() + 1);
+    setSelectedDate(next);
   };
 
   // Get reservations for a specific day and time slot
@@ -318,6 +505,22 @@ function ReservationsContent() {
     const { slotStart, slotEnd } = getSlotBounds(dayStr, timeSlot);
 
     return reservations.filter((r) => {
+      const startDate = new Date(r.startTime);
+      const endDate = new Date(r.endTime);
+      const resDateStr = formatDate(startDate);
+
+      if (resDateStr !== dayStr) return false;
+      return startDate < slotEnd && endDate > slotStart;
+    });
+  };
+
+  const getReservationsForSlotByRoom = (day: Date, timeSlot: string, roomId: string) => {
+    if (!reservations) return [];
+    const dayStr = formatDate(day);
+    const { slotStart, slotEnd } = getSlotBounds(dayStr, timeSlot);
+
+    return reservations.filter((r) => {
+      if (r.roomId !== roomId) return false;
       const startDate = new Date(r.startTime);
       const endDate = new Date(r.endTime);
       const resDateStr = formatDate(startDate);
@@ -342,6 +545,21 @@ function ReservationsContent() {
   const totalReservations = reservations?.length ?? 0;
   const confirmedReservations = reservations?.filter((r) => r.status === "Confirmed").length ?? 0;
   const pendingReservations = reservations?.filter((r) => r.status === "Held" || r.status === "Draft").length ?? 0;
+  const selectedRoomRequiresApproval = Boolean(
+    formData.roomId && rooms?.find((room) => room.roomId === formData.roomId)?.requiresApproval
+  );
+  const dailyRooms = useMemo(() => {
+    if (!rooms) return [];
+    if (selectedRoomId) {
+      return rooms.filter((room) => room.roomId === selectedRoomId);
+    }
+    return rooms;
+  }, [rooms, selectedRoomId]);
+  const selectedDateLabel = selectedDate.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <div className="space-y-6">
@@ -415,14 +633,29 @@ function ReservationsContent() {
       {/* Calendar Section */}
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-lg">Weekly Schedule</CardTitle>
+              <CardTitle className="text-lg">
+                {viewMode === "weekly" ? "Weekly Schedule" : "Daily Schedule"}
+              </CardTitle>
               <CardDescription>
-                {weekDays[0].toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                {viewMode === "weekly"
+                  ? weekDays[0].toLocaleDateString(undefined, { month: "long", year: "numeric" })
+                  : selectedDateLabel}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">View:</span>
+                <Select
+                  value={viewMode}
+                  onChange={(e) => setViewMode(e.target.value as "weekly" | "daily")}
+                  className="w-36"
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="daily">Daily</option>
+                </Select>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Room:</span>
                 <Select
@@ -438,21 +671,48 @@ function ReservationsContent() {
                   ))}
                 </Select>
               </div>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" onClick={previousWeek}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToToday}>
-                  Today
-                </Button>
-                <Button variant="outline" size="sm" onClick={nextWeek}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Button>
-              </div>
+              {viewMode === "weekly" ? (
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={previousWeek}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToToday}>
+                    Today
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={nextWeek}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={previousDay}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </Button>
+                  <Input
+                    type="date"
+                    value={formatDate(selectedDate)}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setSelectedDate(new Date(`${e.target.value}T00:00:00`));
+                    }}
+                    className="w-[150px]"
+                  />
+                  <Button variant="outline" size="sm" onClick={goToToday}>
+                    Today
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={nextDay}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -467,7 +727,7 @@ function ReservationsContent() {
                 Loading schedule...
               </div>
             </div>
-          ) : (
+          ) : viewMode === "weekly" ? (
             <div className="border-t">
               <table className="w-full min-w-[800px]">
                 <thead>
@@ -497,9 +757,31 @@ function ReservationsContent() {
                         const slotReservations = getReservationsForSlot(day, slot);
                         const dayStr = formatDate(day);
                         const { slotStart, slotEnd } = getSlotBounds(dayStr, slot);
-                        const startingReservations = slotReservations.filter((res) =>
+                        const dayKey = formatDate(day);
+                        const layoutForDay = layoutByDay.get(dayKey) ?? new Map<string, ReservationLayout>();
+                        const slotReservationDetails = slotReservations.map((res) => ({
+                          reservationId: res.reservationId,
+                          roomId: res.roomId,
+                          organizerId: res.organizerId,
+                          organizerName: res.organizerName,
+                          purpose: res.purpose,
+                          startTime: res.startTime,
+                          endTime: res.endTime,
+                          status: res.status as ReservationStatus,
+                          requiresApproval: res.requiresApproval,
+                          approvalRequestId: res.approvalRequestId,
+                        }));
+                        const startingReservations = slotReservationDetails.filter((res) =>
                           isReservationStartInSlot(res, slotStart, slotEnd)
                         );
+                        const visibleReservations = startingReservations.filter((res) => {
+                          const layout = layoutForDay.get(res.reservationId);
+                          return (layout?.column ?? 0) < MAX_VISIBLE_RESERVATIONS;
+                        });
+                        const overflowCount = slotReservationDetails.filter((res) => {
+                          const layout = layoutForDay.get(res.reservationId);
+                          return (layout?.column ?? 0) >= MAX_VISIBLE_RESERVATIONS;
+                        }).length;
                         const isToday = formatDate(day) === formatDate(new Date());
                         return (
                           <td
@@ -515,7 +797,11 @@ function ReservationsContent() {
                               }
                             }}
                           >
-                            {startingReservations.map((res) => (
+                            {visibleReservations.map((res) => {
+                              const layout = layoutForDay.get(res.reservationId);
+                              const column = layout?.column ?? 0;
+                              const columns = Math.min(layout?.columns ?? 1, MAX_VISIBLE_RESERVATIONS);
+                              return (
                               <div
                                 key={res.reservationId}
                                 onClick={(e) => {
@@ -528,14 +814,14 @@ function ReservationsContent() {
                                     purpose: res.purpose,
                                     startTime: res.startTime,
                                     endTime: res.endTime,
-                                    status: res.status as ReservationStatus,
+                                    status: res.status,
                                     requiresApproval: res.requiresApproval,
                                     approvalRequestId: res.approvalRequestId,
                                   });
                                 }}
-                                style={getReservationBlockStyle(res)}
+                                style={getReservationBlockStyle(res, column, columns)}
                                 className={cn(
-                                  "rounded px-2 py-1 text-xs cursor-pointer hover:opacity-80 transition-opacity absolute left-1 right-1 z-10",
+                                  "rounded px-2 py-1 text-xs cursor-pointer hover:opacity-80 transition-opacity absolute z-10",
                                   res.status === "Confirmed"
                                     ? "bg-success/20 text-success border border-success/30"
                                     : res.status === "Held"
@@ -553,7 +839,23 @@ function ReservationsContent() {
                                   {getOrganizerLabel(res)}
                                 </div>
                               </div>
-                            ))}
+                            );
+                            })}
+                            {overflowCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openOverflowModal(
+                                    `${day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${slot}`,
+                                    slotReservationDetails
+                                  );
+                                }}
+                                className="absolute bottom-1 right-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted/80"
+                              >
+                                +{overflowCount}
+                              </button>
+                            )}
                           </td>
                         );
                       })}
@@ -561,6 +863,129 @@ function ReservationsContent() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="border-t">
+              {dailyRooms.length === 0 ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  No rooms available for this view.
+                </div>
+              ) : (
+                <div className="min-w-[900px]">
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: `80px repeat(${dailyRooms.length}, minmax(180px, 1fr))`,
+                    }}
+                  >
+                    <div className="border-b bg-muted/50 p-3 text-left text-sm font-medium text-muted-foreground">
+                      Time
+                    </div>
+                    {dailyRooms.map((room) => (
+                      <div
+                        key={room.roomId}
+                        className="border-b bg-muted/50 p-3 text-center text-sm font-medium text-muted-foreground"
+                      >
+                        <div className="font-semibold text-foreground">{room.name}</div>
+                        <div className="text-xs text-muted-foreground">Cap {room.capacity}</div>
+                      </div>
+                    ))}
+                    {timeSlots.map((slot) => {
+                      const dayKey = formatDate(selectedDate);
+                      const { slotStart, slotEnd } = getSlotBounds(dayKey, slot);
+                      return (
+                        <Fragment key={slot}>
+                          <div className="border-b p-3 text-sm text-muted-foreground font-medium">{slot}</div>
+                          {dailyRooms.map((room) => {
+                            const slotReservations = getReservationsForSlotByRoom(selectedDate, slot, room.roomId);
+                            const layoutForRoom =
+                              layoutByDayRoom.get(dayKey)?.get(room.roomId) ?? new Map<string, ReservationLayout>();
+                            const slotReservationDetails = slotReservations.map((res) => ({
+                              reservationId: res.reservationId,
+                              roomId: res.roomId,
+                              organizerId: res.organizerId,
+                              organizerName: res.organizerName,
+                              purpose: res.purpose,
+                              startTime: res.startTime,
+                              endTime: res.endTime,
+                              status: res.status as ReservationStatus,
+                              requiresApproval: res.requiresApproval,
+                              approvalRequestId: res.approvalRequestId,
+                            }));
+                            const startingReservations = slotReservationDetails.filter((res) =>
+                              isReservationStartInSlot(res, slotStart, slotEnd)
+                            );
+                            const visibleReservations = startingReservations.filter((res) => {
+                              const layout = layoutForRoom.get(res.reservationId);
+                              return (layout?.column ?? 0) < MAX_VISIBLE_RESERVATIONS;
+                            });
+                            const overflowCount = slotReservationDetails.filter((res) => {
+                              const layout = layoutForRoom.get(res.reservationId);
+                              return (layout?.column ?? 0) >= MAX_VISIBLE_RESERVATIONS;
+                            }).length;
+
+                            return (
+                              <div
+                                key={`${room.roomId}-${slot}`}
+                                className="border-b border-l p-1 align-top min-h-[60px] relative overflow-visible hover:bg-muted/50 cursor-pointer transition-colors"
+                                onClick={() => {
+                                  if (slotReservations.length === 0) {
+                                    openCreateModal(selectedDate, slot, room.roomId);
+                                  }
+                                }}
+                              >
+                                {visibleReservations.map((res) => {
+                                  const layout = layoutForRoom.get(res.reservationId);
+                                  const column = layout?.column ?? 0;
+                                  const columns = Math.min(layout?.columns ?? 1, MAX_VISIBLE_RESERVATIONS);
+                                  return (
+                                    <div
+                                      key={res.reservationId}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openDetailsModal(res);
+                                      }}
+                                      style={getReservationBlockStyle(res, column, columns)}
+                                      className={cn(
+                                        "rounded px-2 py-1 text-xs cursor-pointer hover:opacity-80 transition-opacity absolute z-10",
+                                        res.status === "Confirmed"
+                                          ? "bg-success/20 text-success border border-success/30"
+                                          : res.status === "Held"
+                                          ? "bg-warning/20 text-warning border border-warning/30"
+                                          : res.status === "Draft"
+                                          ? "bg-muted text-muted-foreground border border-muted-foreground/30"
+                                          : "bg-destructive/20 text-destructive border border-destructive/30"
+                                      )}
+                                    >
+                                      <div className="font-medium truncate">{res.purpose}</div>
+                                      <div className="text-[10px] opacity-75 truncate">{getOrganizerLabel(res)}</div>
+                                    </div>
+                                  );
+                                })}
+                                {overflowCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openOverflowModal(
+                                        `${selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${slot}`,
+                                        slotReservationDetails
+                                      );
+                                    }}
+                                    className="absolute bottom-1 right-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted/80"
+                                  >
+                                    +{overflowCount}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -785,6 +1210,48 @@ function ReservationsContent() {
                 </Button>
               </CardFooter>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Overflow Reservations Modal */}
+      {isOverflowModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-lg animate-in fade-in zoom-in-95 duration-200">
+            <CardHeader>
+              <CardTitle>Reservations at {overflowSlotLabel}</CardTitle>
+              <CardDescription>Multiple reservations start at the same time</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {overflowReservations.map((res) => (
+                <button
+                  key={res.reservationId}
+                  type="button"
+                  onClick={() => openDetailsModal(res)}
+                  className="w-full text-left rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{res.purpose}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDateTime(res.startTime)} - {formatTime(res.endTime)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {getRoomName(res.roomId)} · {getOrganizerLabel(res)}
+                      </div>
+                    </div>
+                    <Badge variant={statusConfig[res.status]?.variant ?? "default"}>
+                      {statusConfig[res.status]?.label ?? res.status}
+                    </Badge>
+                  </div>
+                </button>
+              ))}
+            </CardContent>
+            <CardFooter className="flex justify-end gap-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setIsOverflowModalOpen(false)}>
+                Close
+              </Button>
+            </CardFooter>
           </Card>
         </div>
       )}
