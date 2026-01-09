@@ -14,7 +14,7 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     CosmosDB-backed event store implementation.
 /// </summary>
-public class CosmosDbEventStore : IEventStore
+public partial class CosmosDbEventStore : IEventStore
 {
     private readonly CosmosDbContext _context;
     private readonly DcbDomainTypes _domainTypes;
@@ -289,17 +289,20 @@ public class CosmosDbEventStore : IEventStore
         }
         catch (CosmosException ex)
         {
-            _logger?.LogError(ex, "WriteEventsAsync failed with CosmosException: {Message}", ex.Message);
+            if (_logger != null)
+                LogWriteEventsCosmosError(_logger, ex, ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
         catch (InvalidOperationException ex)
         {
-            _logger?.LogError(ex, "WriteEventsAsync failed: {Message}", ex.Message);
+            if (_logger != null)
+                LogWriteEventsFailed(_logger, ex, ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
         catch (ArgumentException ex)
         {
-            _logger?.LogError(ex, "WriteEventsAsync failed: {Message}", ex.Message);
+            if (_logger != null)
+                LogWriteEventsFailed(_logger, ex, ex.Message);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
     }
@@ -347,7 +350,7 @@ public class CosmosDbEventStore : IEventStore
     ///     Writes tags using TransactionalBatch for efficiency.
     ///     Tags with the same partition key (tag string) are batched together.
     /// </summary>
-    private async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
+    private static async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
         List<Event> writtenEvents,
         Container tagsContainer,
         CosmosDbEventStoreOptions options)
@@ -464,9 +467,13 @@ public class CosmosDbEventStore : IEventStore
                 // Already deleted or never written - consider success
                 return (ev.Id, Success: true, Error: null);
             }
-            catch (Exception ex)
+            catch (CosmosException ex)
             {
-                return (ev.Id, Success: false, Error: ex);
+                return (ev.Id, Success: false, Error: (Exception)ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return (ev.Id, Success: false, Error: (Exception)ex);
             }
         });
 
@@ -476,16 +483,13 @@ public class CosmosDbEventStore : IEventStore
         if (failedDeletes.Count > 0)
         {
             var orphanedIds = string.Join(", ", failedDeletes.Select(f => f.Id));
-            _logger?.LogError(
-                "Failed to rollback {FailedCount} events after tag write failure. Orphaned event IDs: {OrphanedIds}",
-                failedDeletes.Count,
-                orphanedIds);
+            if (_logger != null)
+                LogRollbackFailed(_logger, failedDeletes.Count, orphanedIds);
         }
         else
         {
-            _logger?.LogInformation(
-                "Successfully rolled back {Count} events after tag write failure",
-                writtenEvents.Count);
+            if (_logger != null)
+                LogRollbackSucceeded(_logger, writtenEvents.Count);
         }
     }
 
@@ -765,4 +769,17 @@ public class CosmosDbEventStore : IEventStore
             return ResultBox.Error<IEventPayload>(ex);
         }
     }
+
+    // LoggerMessage methods for high-performance logging (CA1848)
+    [LoggerMessage(Level = LogLevel.Error, Message = "WriteEventsAsync failed with CosmosException: {Message}")]
+    private static partial void LogWriteEventsCosmosError(ILogger logger, Exception ex, string message);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "WriteEventsAsync failed: {Message}")]
+    private static partial void LogWriteEventsFailed(ILogger logger, Exception ex, string message);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to rollback {FailedCount} events after tag write failure. Orphaned event IDs: {OrphanedIds}")]
+    private static partial void LogRollbackFailed(ILogger logger, int failedCount, string orphanedIds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Successfully rolled back {Count} events after tag write failure")]
+    private static partial void LogRollbackSucceeded(ILogger logger, int count);
 }
