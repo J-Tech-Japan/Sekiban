@@ -12,6 +12,7 @@ const userDirectoryItemSchema = z.object({
   registeredAt: z.string(),
   monthlyReservationLimit: z.number(),
   externalProviders: z.array(z.string()),
+  roles: z.array(z.string()),
 });
 
 export const usersRouter = router({

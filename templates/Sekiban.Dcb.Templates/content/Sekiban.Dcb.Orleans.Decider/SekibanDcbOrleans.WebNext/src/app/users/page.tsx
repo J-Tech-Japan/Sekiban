@@ -163,6 +163,7 @@ function UsersContent() {
                   <TableHead>Email</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Roles</TableHead>
                   <TableHead className="w-[160px]">Monthly Limit</TableHead>
                   <TableHead>Providers</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -178,6 +179,22 @@ function UsersContent() {
                       <Badge variant={user.isActive ? "success" : "secondary"}>
                         {user.isActive ? "Active" : "Deactivated"}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.roles.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles.map((role) => (
+                            <Badge
+                              key={role}
+                              variant={role === "Admin" ? "destructive" : "outline"}
+                            >
+                              {role}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>
                       <Input

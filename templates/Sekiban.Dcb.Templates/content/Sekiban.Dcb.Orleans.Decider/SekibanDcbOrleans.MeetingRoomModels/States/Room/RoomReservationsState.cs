@@ -99,7 +99,11 @@ public record ReservationSlot(
     DateTime EndTime,
     string Purpose,
     Guid OrganizerId,
-    ReservationSlotStatus Status);
+    ReservationSlotStatus Status)
+{
+    // Parameterless constructor for JSON deserialization
+    public ReservationSlot() : this(DateTime.MinValue, DateTime.MinValue, string.Empty, Guid.Empty, ReservationSlotStatus.Held) { }
+}
 
 /// <summary>
 ///     Status of a reservation slot for conflict detection purposes.

@@ -14,7 +14,15 @@ public record UserDirectoryListItem(
     bool IsActive,
     DateTime RegisteredAt,
     int MonthlyReservationLimit,
-    List<string> ExternalProviders);
+    List<string> ExternalProviders,
+    List<string> Roles)
+{
+    /// <summary>
+    ///     Creates a new instance with roles
+    /// </summary>
+    public UserDirectoryListItem WithRoles(List<string> roles) =>
+        this with { Roles = roles };
+}
 
 [GenerateSerializer]
 public record GetUserDirectoryListQuery :
@@ -51,7 +59,8 @@ public record GetUserDirectoryListQuery :
                 true,
                 active.RegisteredAt,
                 active.MonthlyReservationLimit,
-                active.ExternalIdentities.Select(e => e.Provider).ToList()),
+                active.ExternalIdentities.Select(e => e.Provider).ToList(),
+                []),  // Roles will be populated by endpoint
             UserDirectoryState.UserDirectoryDeactivated deactivated => new UserDirectoryListItem(
                 deactivated.UserId,
                 deactivated.DisplayName,
@@ -60,7 +69,8 @@ public record GetUserDirectoryListQuery :
                 false,
                 deactivated.RegisteredAt,
                 deactivated.MonthlyReservationLimit,
-                deactivated.ExternalIdentities.Select(e => e.Provider).ToList()),
+                deactivated.ExternalIdentities.Select(e => e.Provider).ToList(),
+                []),  // Roles will be populated by endpoint
             _ => null
         })
         .Where(x => x != null)

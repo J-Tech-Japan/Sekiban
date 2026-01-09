@@ -64,7 +64,7 @@ public static class DomainType
             types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserDirectoryProjector, UserTag>>();
             types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserAccessProjector, UserTag>>();
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserAccessProjector, UserAccessTag>>();
             types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<EquipmentTypeProjector, EquipmentTypeTag>>();
         });

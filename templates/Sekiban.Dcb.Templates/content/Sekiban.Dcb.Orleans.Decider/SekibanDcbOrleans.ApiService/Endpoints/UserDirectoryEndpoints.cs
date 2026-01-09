@@ -26,15 +26,36 @@ public static class UserDirectoryEndpoints
         [FromQuery] bool? activeOnly,
         [FromServices] ISekibanExecutor executor)
     {
-        var query = new GetUserDirectoryListQuery
+        // Fetch user directory list
+        var userDirectoryQuery = new GetUserDirectoryListQuery
         {
             WaitForSortableUniqueId = waitForSortableUniqueId,
             PageNumber = pageNumber ?? 1,
             PageSize = pageSize ?? 100,
             ActiveOnly = activeOnly ?? false
         };
-        var result = await executor.QueryAsync(query);
-        return Results.Ok(result.Items);
+        var userDirectoryResult = await executor.QueryAsync(userDirectoryQuery);
+
+        // Fetch user access list to get roles
+        var userAccessQuery = new GetUserAccessListQuery
+        {
+            PageNumber = 1,
+            PageSize = 1000  // Get all user access records
+        };
+        var userAccessResult = await executor.QueryAsync(userAccessQuery);
+
+        // Create a lookup for roles by userId
+        var rolesLookup = userAccessResult.Items
+            .ToDictionary(ua => ua.UserId, ua => ua.Roles);
+
+        // Merge roles into user directory items
+        var enrichedItems = userDirectoryResult.Items
+            .Select(user => rolesLookup.TryGetValue(user.UserId, out var roles)
+                ? user.WithRoles(roles)
+                : user)
+            .ToList();
+
+        return Results.Ok(enrichedItems);
     }
 
     private static async Task<IResult> UpdateUserMonthlyLimitAsync(

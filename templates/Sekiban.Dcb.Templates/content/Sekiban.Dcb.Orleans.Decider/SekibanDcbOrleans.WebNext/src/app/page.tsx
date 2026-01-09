@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const handleGenerateTestData = () => {
     setIsGenerating(true);
     setGenerationResult(null);
-    generateTestData.mutate();
+    generateTestData.mutate({ timeZoneOffsetMinutes: new Date().getTimezoneOffset() });
   };
 
   const totalRooms = rooms?.length ?? 0;

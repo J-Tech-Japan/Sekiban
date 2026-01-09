@@ -1,9 +1,13 @@
+using System.Text.Json.Serialization;
 using Sekiban.Dcb.Tags;
 namespace Dcb.MeetingRoomModels.States.UserDirectory;
 
 /// <summary>
 ///     Represents a user's directory information (profile data)
 /// </summary>
+[JsonDerivedType(typeof(UserDirectoryEmpty), nameof(UserDirectoryEmpty))]
+[JsonDerivedType(typeof(UserDirectoryActive), nameof(UserDirectoryActive))]
+[JsonDerivedType(typeof(UserDirectoryDeactivated), nameof(UserDirectoryDeactivated))]
 public abstract record UserDirectoryState : ITagStatePayload
 {
     public const int DefaultMonthlyReservationLimit = 5;
@@ -27,6 +31,9 @@ public abstract record UserDirectoryState : ITagStatePayload
         int MonthlyReservationLimit,
         List<ExternalIdentity> ExternalIdentities) : UserDirectoryState
     {
+        // Parameterless constructor for JSON deserialization
+        public UserDirectoryActive() : this(Guid.Empty, string.Empty, string.Empty, null, DateTime.MinValue, DefaultMonthlyReservationLimit, []) { }
+
         public UserDirectoryActive(
             Guid UserId,
             string DisplayName,
@@ -50,6 +57,9 @@ public abstract record UserDirectoryState : ITagStatePayload
         string? DeactivationReason,
         DateTime DeactivatedAt) : UserDirectoryState
     {
+        // Parameterless constructor for JSON deserialization
+        public UserDirectoryDeactivated() : this(Guid.Empty, string.Empty, string.Empty, null, DateTime.MinValue, DefaultMonthlyReservationLimit, [], null, DateTime.MinValue) { }
+
         public UserDirectoryDeactivated(
             Guid UserId,
             string DisplayName,
@@ -68,4 +78,8 @@ public abstract record UserDirectoryState : ITagStatePayload
 public record ExternalIdentity(
     string Provider,
     string ExternalId,
-    DateTime LinkedAt);
+    DateTime LinkedAt)
+{
+    // Parameterless constructor for JSON deserialization
+    public ExternalIdentity() : this(string.Empty, string.Empty, DateTime.MinValue) { }
+}

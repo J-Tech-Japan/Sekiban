@@ -8,11 +8,19 @@ const testDataResultSchema = z.object({
   reservationsCreated: z.number(),
   reservationIds: z.array(z.string().uuid()),
 });
+const timeZoneOffsetSchema = z.object({
+  timeZoneOffsetMinutes: z.number().int().optional(),
+});
 
 export const testDataRouter = router({
-  generate: publicProcedure.mutation(async () => {
+  generate: publicProcedure.input(timeZoneOffsetSchema.optional()).mutation(async ({ input }) => {
     const headers = await createAuthHeaders();
-    const res = await fetch(`${process.env.API_BASE_URL}/api/test-data/generate`, {
+    const params = new URLSearchParams();
+    if (input?.timeZoneOffsetMinutes !== undefined) {
+      params.set("timeZoneOffsetMinutes", input.timeZoneOffsetMinutes.toString());
+    }
+    const url = `${process.env.API_BASE_URL}/api/test-data/generate${params.toString() ? `?${params.toString()}` : ""}`;
+    const res = await fetch(url, {
       method: "POST",
       headers,
     });
@@ -43,11 +51,14 @@ export const testDataRouter = router({
   }),
 
   generateReservations: publicProcedure
-    .input(z.object({ roomId: z.string().uuid().optional() }))
+    .input(z.object({ roomId: z.string().uuid().optional(), timeZoneOffsetMinutes: z.number().int().optional() }))
     .mutation(async ({ input }) => {
       const params = new URLSearchParams();
       if (input.roomId) {
         params.set("roomId", input.roomId);
+      }
+      if (input.timeZoneOffsetMinutes !== undefined) {
+        params.set("timeZoneOffsetMinutes", input.timeZoneOffsetMinutes.toString());
       }
       const url = `${process.env.API_BASE_URL}/api/test-data/generate-reservations${params.toString() ? `?${params.toString()}` : ""}`;
       const headers = await createAuthHeaders();

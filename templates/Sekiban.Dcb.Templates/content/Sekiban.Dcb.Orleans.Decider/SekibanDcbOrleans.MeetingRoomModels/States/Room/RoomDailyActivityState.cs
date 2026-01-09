@@ -92,4 +92,8 @@ public record ConfirmedTimeSlot(
     DateTime StartTime,
     DateTime EndTime,
     string Purpose,
-    Guid OrganizerId);
+    Guid OrganizerId)
+{
+    // Parameterless constructor for JSON deserialization
+    public ConfirmedTimeSlot() : this(DateTime.MinValue, DateTime.MinValue, string.Empty, Guid.Empty) { }
+}
