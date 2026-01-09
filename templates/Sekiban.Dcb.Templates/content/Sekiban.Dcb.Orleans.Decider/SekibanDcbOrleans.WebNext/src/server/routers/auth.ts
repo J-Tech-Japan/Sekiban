@@ -24,6 +24,71 @@ const tokenResponseSchema = z.object({
 });
 
 export const authRouter = router({
+  // Register via BFF - creates Identity + EventSource and signs in
+  register: publicProcedure
+    .input(
+      z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        displayName: z.string().min(1).max(200).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const registerRes = await fetch(`${process.env.API_BASE_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: input.email,
+          password: input.password,
+          displayName: input.displayName ?? null,
+        }),
+      });
+
+      if (!registerRes.ok) {
+        const payload = await registerRes.json().catch(() => null);
+        const message =
+          payload?.message || payload?.Message || payload?.errors?.join(", ") || "Registration failed";
+        throw new Error(message);
+      }
+
+      const loginRes = await fetch(`${process.env.API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: input.email,
+          password: input.password,
+          useCookies: false,
+        }),
+      });
+
+      if (!loginRes.ok) {
+        throw new Error("Registration succeeded but auto login failed");
+      }
+
+      const tokenData = tokenResponseSchema.parse(await loginRes.json());
+
+      await setSessionCookies({
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+        refreshExpiresAt: new Date(tokenData.refreshTokenExpires),
+      });
+
+      const userRes = await fetch(`${process.env.API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${tokenData.accessToken}` },
+      });
+
+      if (userRes.ok) {
+        return userInfoSchema.parse(await userRes.json());
+      }
+
+      return {
+        id: "",
+        email: input.email,
+        displayName: input.displayName ?? null,
+        roles: [] as string[],
+        isAuthenticated: true,
+      };
+    }),
   // Login via BFF - stores JWT server-side
   login: publicProcedure
     .input(

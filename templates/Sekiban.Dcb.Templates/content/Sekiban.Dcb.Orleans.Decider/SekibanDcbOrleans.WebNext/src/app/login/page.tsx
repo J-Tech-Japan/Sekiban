@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,6 +150,12 @@ export default function LoginPage() {
           </CardContent>
           {!isAuthenticated && (
             <CardFooter className="flex flex-col">
+              <div className="w-full mb-4 text-center text-sm text-muted-foreground">
+                New here?{" "}
+                <Link href="/register" className="text-primary hover:underline">
+                  Create an account
+                </Link>
+              </div>
               <div className="w-full p-4 bg-muted/50 rounded-lg">
                 <h3 className="text-sm font-medium mb-3">Quick Login (Sample Accounts):</h3>
                 <div className="grid grid-cols-2 gap-2">

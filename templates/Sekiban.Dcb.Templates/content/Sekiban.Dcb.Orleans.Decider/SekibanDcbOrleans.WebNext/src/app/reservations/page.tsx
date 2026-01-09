@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Fragment } from "react";
+import { useEffect, useRef, useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,6 +203,10 @@ function ReservationsContent() {
 
   const { data: authStatus } = trpc.auth.status.useQuery();
   const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
+  const isAuthenticated = authStatus?.isAuthenticated ?? false;
+
+  const sseLastIdRef = useRef<string | null>(null);
+  const sseRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const quickReserveMutation = trpc.reservations.quickReserve.useMutation({
     onSuccess: (data) => {
@@ -325,6 +329,79 @@ function ReservationsContent() {
     isMyReservationsOpen,
     resetForm,
   ]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelayMs = 1000;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data ?? "{}") as { sortableUniqueId?: string };
+        if (!payload.sortableUniqueId) return;
+        if (sseLastIdRef.current === payload.sortableUniqueId) return;
+        sseLastIdRef.current = payload.sortableUniqueId;
+        setLastSortableUniqueId(payload.sortableUniqueId);
+
+        if (!sseRefreshTimerRef.current) {
+          sseRefreshTimerRef.current = setTimeout(() => {
+            refetch();
+            sseRefreshTimerRef.current = null;
+          }, 250);
+        }
+      } catch {
+        // Ignore malformed events.
+      }
+    };
+
+    const connect = () => {
+      if (source) {
+        source.removeEventListener("message", handleMessage);
+        source.close();
+      }
+
+      source = new EventSource("/api/stream/reservations", { withCredentials: true });
+      source.addEventListener("message", handleMessage);
+      source.addEventListener("open", () => {
+        console.info("[SSE][reservations] connected");
+        retryDelayMs = 1000;
+      });
+      source.addEventListener("error", () => {
+        console.warn("[SSE][reservations] connection error");
+        if (source) {
+          source.removeEventListener("message", handleMessage);
+          source.close();
+          source = null;
+        }
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+        }
+        retryTimer = setTimeout(() => {
+          connect();
+        }, retryDelayMs);
+        retryDelayMs = Math.min(retryDelayMs * 2, 15000);
+      });
+    };
+
+    connect();
+
+    return () => {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      if (source) {
+        source.removeEventListener("message", handleMessage);
+        source.close();
+        source = null;
+      }
+      if (sseRefreshTimerRef.current) {
+        clearTimeout(sseRefreshTimerRef.current);
+        sseRefreshTimerRef.current = null;
+      }
+    };
+  }, [isAuthenticated, refetch]);
 
   const toggleEquipmentSelection = (equipmentName: string) => {
     setFormData((prev) => {

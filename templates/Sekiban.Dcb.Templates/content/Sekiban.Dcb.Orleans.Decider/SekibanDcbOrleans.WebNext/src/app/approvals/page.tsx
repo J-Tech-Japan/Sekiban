@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +53,7 @@ function ApprovalsContent() {
 
   const { data: authStatus } = trpc.auth.status.useQuery();
   const isAdmin = authStatus?.roles?.includes("Admin") ?? false;
+  const sseLastIdRef = useRef<string | null>(null);
 
   const {
     data: approvals,
@@ -88,6 +89,68 @@ function ApprovalsContent() {
       setLastSortableUniqueId(undefined);
     });
   }, [lastSortableUniqueId, refetch]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelayMs = 1000;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data ?? "{}") as { sortableUniqueId?: string };
+        if (!payload.sortableUniqueId) return;
+        if (sseLastIdRef.current === payload.sortableUniqueId) return;
+        sseLastIdRef.current = payload.sortableUniqueId;
+        setLastSortableUniqueId(payload.sortableUniqueId);
+      } catch {
+        // Ignore malformed events.
+      }
+    };
+
+    const connect = () => {
+      if (source) {
+        source.removeEventListener("message", handleMessage);
+        source.close();
+      }
+
+      source = new EventSource("/api/stream/approvals", { withCredentials: true });
+      source.addEventListener("message", handleMessage);
+      source.addEventListener("open", () => {
+        console.info("[SSE][approvals] connected");
+        retryDelayMs = 1000;
+      });
+      source.addEventListener("error", () => {
+        console.warn("[SSE][approvals] connection error");
+        if (source) {
+          source.removeEventListener("message", handleMessage);
+          source.close();
+          source = null;
+        }
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+        }
+        retryTimer = setTimeout(() => {
+          connect();
+        }, retryDelayMs);
+        retryDelayMs = Math.min(retryDelayMs * 2, 15000);
+      });
+    };
+
+    connect();
+
+    return () => {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+      if (source) {
+        source.removeEventListener("message", handleMessage);
+        source.close();
+        source = null;
+      }
+    };
+  }, [isAdmin]);
 
   if (!isAdmin) {
     return (

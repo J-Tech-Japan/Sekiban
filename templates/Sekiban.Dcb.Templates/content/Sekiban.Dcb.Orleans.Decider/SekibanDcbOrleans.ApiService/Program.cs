@@ -21,6 +21,7 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using SekibanDcbOrleans.ApiService.Endpoints;
 using SekibanDcbOrleans.ApiService.Auth;
+using SekibanDcbOrleans.ApiService.Realtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -390,6 +391,8 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+builder.Services.AddSingleton<SseTopicHub>();
+builder.Services.AddHostedService<OrleansStreamEventRouter>();
 
 // Configure database storage based on configuration
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
@@ -479,6 +482,7 @@ apiRoute.MapRoomEndpoints();
 apiRoute.MapReservationEndpoints();
 apiRoute.MapApprovalEndpoints();
 apiRoute.MapUserDirectoryEndpoints();
+apiRoute.MapStreamEndpoints();
 
 // Test data endpoints
 apiRoute.MapTestDataEndpoints();
