@@ -1,5 +1,4 @@
-using Dcb.EventSource.Weather;
-using Dcb.ImmutableModels.Tags;
+using Dcb.EventSource.Projections;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
@@ -7,24 +6,24 @@ using Sekiban.Dcb.Queries;
 namespace Dcb.EventSource.Queries;
 
 /// <summary>
-/// Count query for GenericTagMultiProjector-based Weather
+/// Count query for WeatherForecastProjection-based Weather
 /// </summary>
 [GenerateSerializer]
 public record GetWeatherForecastCountGenericQuery :
-    IMultiProjectionQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
+    IMultiProjectionQuery<WeatherForecastProjection, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
 {
     [Id(0)]
     public string? WaitForSortableUniqueId { get; init; }
 
     public static WeatherForecastCountResult HandleQuery(
-        GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag> projector,
+        WeatherForecastProjection projector,
         GetWeatherForecastCountGenericQuery query,
         IQueryContext context)
     {
         var safeVersion = context.SafeVersion ?? 0;
         var unsafeVersion = context.UnsafeVersion ?? safeVersion;
-        var total = projector.GetStatePayloads().Count(); // tag states equal number of forecasts
+        var total = projector.GetCurrentForecasts().Count;
         return new WeatherForecastCountResult(
             SafeVersion: safeVersion,
             UnsafeVersion: unsafeVersion,

@@ -1,15 +1,5 @@
-using Dcb.EventSource.ClassRoom;
-using Dcb.EventSource.MeetingRoom.ApprovalRequest;
-using Dcb.EventSource.MeetingRoom.Equipment;
-using Dcb.EventSource.MeetingRoom.Reservation;
-using Dcb.EventSource.MeetingRoom.Room;
-using Dcb.EventSource.MeetingRoom.User;
-using Dcb.EventSource.Student;
-using Dcb.EventSource.Weather;
 using Dcb.ImmutableModels;
-using Dcb.ImmutableModels.Tags;
 using Dcb.MeetingRoomModels;
-using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb;
 using Sekiban.Dcb.MultiProjections;
 namespace Dcb.EventSource;
@@ -43,30 +33,6 @@ public static class DomainType
             types.AddAllListQueriesFromAssembly<EventSourceTypes>();
             types.AddAllQueriesFromAssembly<EventSourceTypes>();
 
-            // Register GenericTagMultiProjector instances for ImmutableModels
-            // (constructed generic types need manual registration)
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<StudentProjector, StudentTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>>();
-
-            // Register GenericTagMultiProjector instances for MeetingRoomModels
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<RoomProjector, RoomTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ReservationProjector, ReservationTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserMonthlyReservationProjector, UserMonthlyReservationTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ApprovalRequestProjector, ApprovalRequestTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserDirectoryProjector, UserTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserAccessProjector, UserAccessTag>>();
-            types.MultiProjectorTypes
-                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<EquipmentTypeProjector, EquipmentTypeTag>>();
         });
     }
 }

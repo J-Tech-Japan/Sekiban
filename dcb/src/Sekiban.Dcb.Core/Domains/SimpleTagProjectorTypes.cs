@@ -39,6 +39,33 @@ public class SimpleTagProjectorTypes : ITagProjectorTypes
     public IReadOnlyList<string> GetAllProjectorNames() => _projectorFunctions.Keys.ToList();
 
     /// <summary>
+    ///     Tries to find a projector for the given tag group name.
+    ///     Convention: looks for "{tagGroupName}Projector" first.
+    /// </summary>
+    public string? TryGetProjectorForTagGroup(string tagGroupName)
+    {
+        if (string.IsNullOrEmpty(tagGroupName))
+            return null;
+
+        // Try convention: {TagGroupName}Projector
+        var conventionName = $"{tagGroupName}Projector";
+        if (_projectorFunctions.ContainsKey(conventionName))
+            return conventionName;
+
+        // Try case-insensitive match for {TagGroupName}Projector
+        var matchingProjector = _projectorFunctions.Keys
+            .FirstOrDefault(k => k.Equals(conventionName, StringComparison.OrdinalIgnoreCase));
+        if (matchingProjector != null)
+            return matchingProjector;
+
+        // Try to find any projector that starts with the tag group name
+        matchingProjector = _projectorFunctions.Keys
+            .FirstOrDefault(k => k.StartsWith(tagGroupName, StringComparison.OrdinalIgnoreCase));
+
+        return matchingProjector;
+    }
+
+    /// <summary>
     ///     Register a tag projector type using its static ProjectorName
     /// </summary>
     /// <typeparam name="TProjector">The projector type to register</typeparam>

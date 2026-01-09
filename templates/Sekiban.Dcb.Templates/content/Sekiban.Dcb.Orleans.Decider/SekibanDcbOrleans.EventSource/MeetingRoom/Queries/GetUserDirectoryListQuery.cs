@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.UserDirectory;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.User;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -26,7 +26,7 @@ public record UserDirectoryListItem(
 
 [GenerateSerializer]
 public record GetUserDirectoryListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<UserDirectoryProjector, UserTag>, GetUserDirectoryListQuery, UserDirectoryListItem>,
+    IMultiProjectionListQuery<UserDirectoryListProjection, GetUserDirectoryListQuery, UserDirectoryListItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -43,11 +43,13 @@ public record GetUserDirectoryListQuery :
     public bool ActiveOnly { get; init; } = false;
 
     public static IEnumerable<UserDirectoryListItem> HandleFilter(
-        GenericTagMultiProjector<UserDirectoryProjector, UserTag> projector,
+        UserDirectoryListProjection projector,
         GetUserDirectoryListQuery query,
         IQueryContext context)
     {
-        var states = projector.GetStatePayloads().OfType<UserDirectoryState>();
+        var states = query.ActiveOnly
+            ? projector.GetActiveUsers().Cast<UserDirectoryState>()
+            : projector.GetAllUsers().Cast<UserDirectoryState>();
 
         return states.Select(s => s switch
         {
@@ -74,8 +76,7 @@ public record GetUserDirectoryListQuery :
             _ => null
         })
         .Where(x => x != null)
-        .Cast<UserDirectoryListItem>()
-        .Where(x => !query.ActiveOnly || x.IsActive);
+        .Cast<UserDirectoryListItem>();
     }
 
     public static IEnumerable<UserDirectoryListItem> HandleSort(

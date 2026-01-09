@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.ApprovalRequest;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.ApprovalRequest;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -18,7 +18,7 @@ public record ApprovalInboxItem(
 
 [GenerateSerializer]
 public record GetApprovalInboxQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<ApprovalRequestProjector, ApprovalRequestTag>, GetApprovalInboxQuery, ApprovalInboxItem>,
+    IMultiProjectionListQuery<ApprovalRequestListProjection, GetApprovalInboxQuery, ApprovalInboxItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -35,11 +35,13 @@ public record GetApprovalInboxQuery :
     public bool PendingOnly { get; init; } = true;
 
     public static IEnumerable<ApprovalInboxItem> HandleFilter(
-        GenericTagMultiProjector<ApprovalRequestProjector, ApprovalRequestTag> projector,
+        ApprovalRequestListProjection projector,
         GetApprovalInboxQuery query,
         IQueryContext context)
     {
-        var states = projector.GetStatePayloads().OfType<ApprovalRequestState>();
+        var states = query.PendingOnly
+            ? projector.GetPendingApprovalRequests().Cast<ApprovalRequestState>()
+            : projector.GetAllApprovalRequests().Cast<ApprovalRequestState>();
 
         return states.Select(s => s switch
         {
@@ -55,26 +57,25 @@ public record GetApprovalInboxQuery :
             ApprovalRequestState.ApprovalRequestApproved approved => new ApprovalInboxItem(
                 approved.ApprovalRequestId,
                 approved.ReservationId,
-                Guid.Empty,
-                Guid.Empty,
+                approved.RoomId,
+                approved.RequesterId,
                 approved.RequestComment,
-                [],
+                approved.ApproverIds,
                 approved.DecidedAt,
                 "Approved"),
             ApprovalRequestState.ApprovalRequestRejected rejected => new ApprovalInboxItem(
                 rejected.ApprovalRequestId,
                 rejected.ReservationId,
-                Guid.Empty,
-                Guid.Empty,
+                rejected.RoomId,
+                rejected.RequesterId,
                 rejected.RequestComment,
-                [],
+                rejected.ApproverIds,
                 rejected.DecidedAt,
                 "Rejected"),
             _ => null
         })
         .Where(x => x != null)
-        .Cast<ApprovalInboxItem>()
-        .Where(x => !query.PendingOnly || x.Status == "Pending");
+        .Cast<ApprovalInboxItem>();
     }
 
     public static IEnumerable<ApprovalInboxItem> HandleSort(

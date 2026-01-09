@@ -40,12 +40,15 @@ public abstract record ApprovalRequestState : ITagStatePayload
     public record ApprovalRequestApproved(
         Guid ApprovalRequestId,
         Guid ReservationId,
+        Guid RoomId,
+        Guid RequesterId,
+        List<Guid> ApproverIds,
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
         string? RequestComment) : ApprovalRequestState
     {
-        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestApproved() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
     }
 
     /// <summary>
@@ -54,11 +57,14 @@ public abstract record ApprovalRequestState : ITagStatePayload
     public record ApprovalRequestRejected(
         Guid ApprovalRequestId,
         Guid ReservationId,
+        Guid RoomId,
+        Guid RequesterId,
+        List<Guid> ApproverIds,
         Guid ApproverId,
         string? Comment,
         DateTime DecidedAt,
         string? RequestComment) : ApprovalRequestState
     {
-        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, null, DateTime.MinValue, null) { }
+        public ApprovalRequestRejected() : this(Guid.Empty, Guid.Empty, Guid.Empty, Guid.Empty, [], Guid.Empty, null, DateTime.MinValue, null) { }
     }
 }

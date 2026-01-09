@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, Fragment } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -267,6 +267,64 @@ function ReservationsContent() {
     });
     setFormError("");
   };
+
+  useEffect(() => {
+    if (!isCreateModalOpen
+      && !isDetailsModalOpen
+      && !isCancelModalOpen
+      && !isOverflowModalOpen
+      && !isAdminListOpen
+      && !isMyReservationsOpen) {
+      return;
+    }
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      if (isCancelModalOpen) {
+        setIsCancelModalOpen(false);
+        setCancelReason("");
+        setSelectedReservation(null);
+        return;
+      }
+
+      if (isDetailsModalOpen) {
+        setIsDetailsModalOpen(false);
+        return;
+      }
+
+      if (isCreateModalOpen) {
+        setIsCreateModalOpen(false);
+        resetForm();
+        return;
+      }
+
+      if (isOverflowModalOpen) {
+        setIsOverflowModalOpen(false);
+        return;
+      }
+
+      if (isAdminListOpen) {
+        setIsAdminListOpen(false);
+        return;
+      }
+
+      if (isMyReservationsOpen) {
+        setIsMyReservationsOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [
+    isCreateModalOpen,
+    isDetailsModalOpen,
+    isCancelModalOpen,
+    isOverflowModalOpen,
+    isAdminListOpen,
+    isMyReservationsOpen,
+    resetForm,
+  ]);
 
   const toggleEquipmentSelection = (equipmentName: string) => {
     setFormData((prev) => {

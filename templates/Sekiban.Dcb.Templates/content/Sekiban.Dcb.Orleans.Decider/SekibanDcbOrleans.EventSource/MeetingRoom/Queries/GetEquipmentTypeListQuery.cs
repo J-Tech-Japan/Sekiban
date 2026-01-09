@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.EquipmentType;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.Equipment;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -15,7 +15,7 @@ public record EquipmentTypeListItem(
 
 [GenerateSerializer]
 public record GetEquipmentTypeListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<EquipmentTypeProjector, EquipmentTypeTag>, GetEquipmentTypeListQuery, EquipmentTypeListItem>,
+    IMultiProjectionListQuery<EquipmentTypeListProjection, GetEquipmentTypeListQuery, EquipmentTypeListItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -29,12 +29,11 @@ public record GetEquipmentTypeListQuery :
     public string? WaitForSortableUniqueId { get; init; }
 
     public static IEnumerable<EquipmentTypeListItem> HandleFilter(
-        GenericTagMultiProjector<EquipmentTypeProjector, EquipmentTypeTag> projector,
+        EquipmentTypeListProjection projector,
         GetEquipmentTypeListQuery query,
         IQueryContext context)
     {
-        return projector.GetStatePayloads()
-            .OfType<EquipmentTypeState.EquipmentTypeActive>()
+        return projector.GetActiveEquipmentTypes()
             .Select(s => new EquipmentTypeListItem(
                 s.EquipmentTypeId,
                 s.Name,

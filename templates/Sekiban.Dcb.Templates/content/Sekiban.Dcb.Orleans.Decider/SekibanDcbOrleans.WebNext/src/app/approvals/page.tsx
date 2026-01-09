@@ -17,12 +17,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type ApprovalStatus = "Pending" | "Approved" | "Rejected";
+type ApprovalStatus = "Pending" | "Approved" | "Rejected" | "Cancelled";
 
 const statusStyles: Record<ApprovalStatus, { variant: "default" | "success" | "warning" | "destructive"; label: string }> = {
   Pending: { variant: "warning", label: "Pending" },
   Approved: { variant: "success", label: "Approved" },
   Rejected: { variant: "destructive", label: "Rejected" },
+  Cancelled: { variant: "destructive", label: "Cancelled" },
 };
 
 const shortId = (id: string) => `${id.slice(0, 8)}...${id.slice(-4)}`;

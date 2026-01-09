@@ -1,6 +1,5 @@
-using Dcb.EventSource.Student;
 using Dcb.ImmutableModels.States.Student;
-using Dcb.ImmutableModels.Tags;
+using Dcb.EventSource.Projections;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
@@ -8,7 +7,7 @@ namespace Dcb.EventSource.Queries;
 
 [GenerateSerializer]
 public record GetStudentListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<StudentProjector, StudentTag>, GetStudentListQuery, StudentState>,
+    IMultiProjectionListQuery<StudentListProjection, GetStudentListQuery, StudentState>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -20,13 +19,11 @@ public record GetStudentListQuery :
 
     // Required static methods for IMultiProjectionListQuery
     public static IEnumerable<StudentState> HandleFilter(
-        GenericTagMultiProjector<StudentProjector, StudentTag> projector,
+        StudentListProjection projector,
         GetStudentListQuery query,
         IQueryContext context)
     {
-        return projector.GetStatePayloads()
-            .OfType<StudentState>()
-            .AsEnumerable();
+        return projector.GetAllStudents();
     }
 
     public static IEnumerable<StudentState> HandleSort(

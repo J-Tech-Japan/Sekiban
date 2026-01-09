@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.UserAccess;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.User;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -14,7 +14,7 @@ public record UserAccessListItem(
 
 [GenerateSerializer]
 public record GetUserAccessListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<UserAccessProjector, UserAccessTag>, GetUserAccessListQuery, UserAccessListItem>,
+    IMultiProjectionListQuery<UserAccessListProjection, GetUserAccessListQuery, UserAccessListItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -34,11 +34,13 @@ public record GetUserAccessListQuery :
     public string? RoleFilter { get; init; }
 
     public static IEnumerable<UserAccessListItem> HandleFilter(
-        GenericTagMultiProjector<UserAccessProjector, UserAccessTag> projector,
+        UserAccessListProjection projector,
         GetUserAccessListQuery query,
         IQueryContext context)
     {
-        var states = projector.GetStatePayloads().OfType<UserAccessState>();
+        var states = query.ActiveOnly
+            ? projector.GetActiveUserAccesses().Cast<UserAccessState>()
+            : projector.GetAllUserAccesses().Cast<UserAccessState>();
 
         return states.Select(s => s switch
         {
@@ -56,7 +58,6 @@ public record GetUserAccessListQuery :
         })
         .Where(x => x != null)
         .Cast<UserAccessListItem>()
-        .Where(x => !query.ActiveOnly || x.IsActive)
         .Where(x => string.IsNullOrEmpty(query.RoleFilter) || x.Roles.Contains(query.RoleFilter));
     }
 

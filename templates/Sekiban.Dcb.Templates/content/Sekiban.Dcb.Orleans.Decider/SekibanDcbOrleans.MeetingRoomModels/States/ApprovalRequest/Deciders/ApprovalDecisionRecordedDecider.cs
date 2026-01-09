@@ -28,6 +28,9 @@ public static class ApprovalDecisionRecordedDecider
                 ApprovalDecision.Approved => new ApprovalRequestState.ApprovalRequestApproved(
                     pending.ApprovalRequestId,
                     pending.ReservationId,
+                    pending.RoomId,
+                    pending.RequesterId,
+                    new List<Guid>(pending.ApproverIds),
                     recorded.ApproverId,
                     recorded.Comment,
                     recorded.DecidedAt,
@@ -35,6 +38,9 @@ public static class ApprovalDecisionRecordedDecider
                 ApprovalDecision.Rejected => new ApprovalRequestState.ApprovalRequestRejected(
                     pending.ApprovalRequestId,
                     pending.ReservationId,
+                    pending.RoomId,
+                    pending.RequesterId,
+                    new List<Guid>(pending.ApproverIds),
                     recorded.ApproverId,
                     recorded.Comment,
                     recorded.DecidedAt,

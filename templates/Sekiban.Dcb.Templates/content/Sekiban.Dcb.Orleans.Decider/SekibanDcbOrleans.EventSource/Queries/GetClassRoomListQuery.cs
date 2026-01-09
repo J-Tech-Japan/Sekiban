@@ -1,6 +1,6 @@
 using Dcb.EventSource.ClassRoom;
 using Dcb.ImmutableModels.States.ClassRoom;
-using Dcb.ImmutableModels.Tags;
+using Dcb.EventSource.Projections;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
@@ -8,7 +8,7 @@ namespace Dcb.EventSource.Queries;
 
 [GenerateSerializer]
 public record GetClassRoomListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag>, GetClassRoomListQuery, ClassRoomItem>,
+    IMultiProjectionListQuery<ClassRoomListProjection, GetClassRoomListQuery, ClassRoomItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -20,11 +20,11 @@ public record GetClassRoomListQuery :
 
     // Required static methods for IMultiProjectionListQuery
     public static IEnumerable<ClassRoomItem> HandleFilter(
-        GenericTagMultiProjector<ClassRoomProjector, ClassRoomTag> projector,
+        ClassRoomListProjection projector,
         GetClassRoomListQuery query,
         IQueryContext context)
     {
-        return projector.GetStatePayloads()
+        return projector.GetAllClassRooms()
             .Select(payload => payload switch
             {
                 AvailableClassRoomState available => new ClassRoomItem

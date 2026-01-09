@@ -186,7 +186,7 @@ public static class WeatherEndpoints
     private static async Task<IResult> GetWeatherForecastGenericStatusAsync(
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
         var status = await grain.GetStatusAsync();
         return Results.Ok(status);
     }
@@ -210,7 +210,7 @@ public static class WeatherEndpoints
     private static async Task<IResult> GetEventDeliveryStatisticsGenericAsync(
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
         var stats = await grain.GetEventDeliveryStatisticsAsync();
         return Results.Ok(stats);
     }

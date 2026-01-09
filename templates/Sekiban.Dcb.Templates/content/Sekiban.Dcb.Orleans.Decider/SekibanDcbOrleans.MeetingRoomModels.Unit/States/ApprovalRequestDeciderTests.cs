@@ -65,6 +65,10 @@ public class ApprovalRequestDeciderTests
         var approved = Assert.IsType<ApprovalRequestState.ApprovalRequestApproved>(state);
         Assert.Equal(_approvalRequestId, approved.ApprovalRequestId);
         Assert.Equal(_reservationId, approved.ReservationId);
+        Assert.Equal(_roomId, approved.RoomId);
+        Assert.Equal(_requesterId, approved.RequesterId);
+        Assert.Single(approved.ApproverIds);
+        Assert.Contains(_approverId, approved.ApproverIds);
         Assert.Equal(_approverId, approved.ApproverId);
         Assert.Equal("Looks good", approved.Comment);
         Assert.Equal(decisionTime, approved.DecidedAt);
@@ -85,6 +89,10 @@ public class ApprovalRequestDeciderTests
         var rejected = Assert.IsType<ApprovalRequestState.ApprovalRequestRejected>(state);
         Assert.Equal(_approvalRequestId, rejected.ApprovalRequestId);
         Assert.Equal(_reservationId, rejected.ReservationId);
+        Assert.Equal(_roomId, rejected.RoomId);
+        Assert.Equal(_requesterId, rejected.RequesterId);
+        Assert.Single(rejected.ApproverIds);
+        Assert.Contains(_approverId, rejected.ApproverIds);
         Assert.Equal(_approverId, rejected.ApproverId);
         Assert.Equal("Not appropriate", rejected.Comment);
         Assert.Equal(decisionTime, rejected.DecidedAt);
@@ -95,7 +103,15 @@ public class ApprovalRequestDeciderTests
     public void ApprovalDecisionRecordedDecider_From_NonPending_Should_Return_Same_State()
     {
         var approved = new ApprovalRequestState.ApprovalRequestApproved(
-            _approvalRequestId, _reservationId, _approverId, "Already approved", DateTime.UtcNow.AddMinutes(-5), RequestComment);
+            _approvalRequestId,
+            _reservationId,
+            _roomId,
+            _requesterId,
+            [_approverId],
+            _approverId,
+            "Already approved",
+            DateTime.UtcNow.AddMinutes(-5),
+            RequestComment);
         var ev = new ApprovalDecisionRecorded(
             _approvalRequestId, _reservationId, _approverId, ApprovalDecision.Rejected, "Changed mind", DateTime.UtcNow);
 

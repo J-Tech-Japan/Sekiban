@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.Room;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.Room;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -17,7 +17,7 @@ public record RoomListItem(
 
 [GenerateSerializer]
 public record GetRoomListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<RoomProjector, RoomTag>, GetRoomListQuery, RoomListItem>,
+    IMultiProjectionListQuery<RoomListProjection, GetRoomListQuery, RoomListItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -31,13 +31,11 @@ public record GetRoomListQuery :
     public string? WaitForSortableUniqueId { get; init; }
 
     public static IEnumerable<RoomListItem> HandleFilter(
-        GenericTagMultiProjector<RoomProjector, RoomTag> projector,
+        RoomListProjection projector,
         GetRoomListQuery query,
         IQueryContext context)
     {
-        return projector.GetStatePayloads()
-            .OfType<RoomState>()
-            .Where(s => s.RoomId != Guid.Empty)
+        return projector.GetAllRooms()
             .Select(s => new RoomListItem(
                 s.RoomId,
                 s.Name,

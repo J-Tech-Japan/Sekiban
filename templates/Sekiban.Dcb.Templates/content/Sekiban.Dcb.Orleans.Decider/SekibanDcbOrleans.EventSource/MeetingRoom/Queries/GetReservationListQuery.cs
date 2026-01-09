@@ -1,5 +1,5 @@
 using Dcb.MeetingRoomModels.States.Reservation;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.EventSource.MeetingRoom.Projections;
 using Dcb.EventSource.MeetingRoom.Reservation;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
@@ -23,7 +23,7 @@ public record ReservationListItem(
 
 [GenerateSerializer]
 public record GetReservationListQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<ReservationProjector, ReservationTag>, GetReservationListQuery, ReservationListItem>,
+    IMultiProjectionListQuery<ReservationListProjection, GetReservationListQuery, ReservationListItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -40,12 +40,11 @@ public record GetReservationListQuery :
     public Guid? RoomId { get; init; }
 
     public static IEnumerable<ReservationListItem> HandleFilter(
-        GenericTagMultiProjector<ReservationProjector, ReservationTag> projector,
+        ReservationListProjection projector,
         GetReservationListQuery query,
         IQueryContext context)
     {
-        var items = projector.GetStatePayloads()
-            .OfType<ReservationState>()
+        var items = projector.GetAllReservations()
             .Where(s => s is not ReservationState.ReservationEmpty)
             .Select(s => s switch
             {

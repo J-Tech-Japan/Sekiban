@@ -1,7 +1,4 @@
 using Dcb.EventSource.Projections;
-using Dcb.EventSource.Weather;
-using Dcb.ImmutableModels.States.Weather;
-using Dcb.ImmutableModels.Tags;
 using Orleans;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
@@ -10,7 +7,7 @@ namespace Dcb.EventSource.Queries;
 
 [GenerateSerializer]
 public record GetWeatherForecastListGenericQuery :
-    IMultiProjectionListQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
+    IMultiProjectionListQuery<WeatherForecastProjection, GetWeatherForecastListGenericQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,
     IQueryPagingParameter
 {
@@ -22,22 +19,11 @@ public record GetWeatherForecastListGenericQuery :
     [Id(2)] public int? PageSize { get; init; }
 
     public static IEnumerable<WeatherForecastItem> HandleFilter(
-        GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag> projector,
+        WeatherForecastProjection projector,
         GetWeatherForecastListGenericQuery query,
         IQueryContext context)
     {
-        var tagStates = projector.GetCurrentTagStates();
-        return tagStates.Values
-            .Select(ts => ts.Payload as WeatherForecastState)
-            .Where(s => s != null && (!s!.IsDeleted || query.IncludeDeleted))
-            .Select(s => new WeatherForecastItem(
-                s!.ForecastId,
-                s.Location,
-                s.Date.ToDateTime(TimeOnly.MinValue),
-                s.TemperatureC,
-                s.Summary,
-                DateTime.UtcNow)) // LastUpdated はここでは簡易に現在時刻
-            .AsEnumerable();
+        return projector.GetCurrentForecasts().Values;
     }
 
     public static IEnumerable<WeatherForecastItem> HandleSort(

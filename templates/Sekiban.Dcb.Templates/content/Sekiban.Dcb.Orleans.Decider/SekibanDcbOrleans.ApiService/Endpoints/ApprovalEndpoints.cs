@@ -36,12 +36,13 @@ public static class ApprovalEndpoints
         [FromQuery] int? pageSize,
         [FromServices] ISekibanExecutor executor)
     {
+        var pendingOnlyValue = pendingOnly ?? true;
         var query = new GetApprovalInboxQuery
         {
             WaitForSortableUniqueId = waitForSortableUniqueId,
             PageNumber = pageNumber ?? 1,
             PageSize = pageSize ?? 100,
-            PendingOnly = pendingOnly ?? true
+            PendingOnly = pendingOnlyValue
         };
         var result = await executor.QueryAsync(query);
         var items = new List<ApprovalInboxViewItem>();
@@ -55,6 +56,8 @@ public static class ApprovalEndpoints
             string? purpose = null;
             DateTime? startTime = null;
             DateTime? endTime = null;
+            var status = item.Status;
+            var reservationClosed = false;
 
             if (item.ReservationId != Guid.Empty)
             {
@@ -88,7 +91,39 @@ public static class ApprovalEndpoints
                         startTime = confirmed.StartTime;
                         endTime = confirmed.EndTime;
                         break;
+                    case ReservationState.ReservationRejected rejected:
+                        roomId = rejected.RoomId;
+                        organizerId = rejected.OrganizerId;
+                        organizerName = rejected.OrganizerName;
+                        purpose = rejected.Purpose;
+                        startTime = rejected.StartTime;
+                        endTime = rejected.EndTime;
+                        reservationClosed = true;
+                        break;
+                    case ReservationState.ReservationCancelled cancelled:
+                        roomId = cancelled.RoomId;
+                        organizerId = cancelled.OrganizerId;
+                        organizerName = cancelled.OrganizerName;
+                        purpose = cancelled.Purpose;
+                        startTime = cancelled.StartTime;
+                        endTime = cancelled.EndTime;
+                        reservationClosed = true;
+                        break;
+                    case ReservationState.ReservationExpired expired:
+                        roomId = expired.RoomId;
+                        reservationClosed = true;
+                        break;
                 }
+            }
+
+            if (reservationClosed && status == "Pending")
+            {
+                status = "Cancelled";
+            }
+
+            if (pendingOnlyValue && status != "Pending")
+            {
+                continue;
             }
 
             if (roomId != Guid.Empty)
@@ -116,7 +151,7 @@ public static class ApprovalEndpoints
                 endTime,
                 item.ApproverIds,
                 item.RequestedAt,
-                item.Status));
+                status));
         }
 
         return Results.Ok(items);

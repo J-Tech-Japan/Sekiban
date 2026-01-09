@@ -63,6 +63,41 @@ public class TagStateService
     }
 
     /// <summary>
+    ///     Project events for a tag, automatically inferring the projector from the tag group name.
+    ///     Tries "{TagGroupName}Projector" convention.
+    /// </summary>
+    /// <param name="tagString">Tag string in format 'group:content'</param>
+    /// <returns>Projected tag state result</returns>
+    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString)
+    {
+        var tag = ParseTag(tagString);
+        return await ProjectTagStateAsync(tag);
+    }
+
+    /// <summary>
+    ///     Project events for a tag, automatically inferring the projector from the tag group name.
+    ///     Tries "{TagGroupName}Projector" convention.
+    /// </summary>
+    /// <param name="tag">The tag to project</param>
+    /// <returns>Projected tag state result</returns>
+    public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag)
+    {
+        var tagGroup = tag.GetTagGroup();
+        var projectorName = _domainTypes.TagProjectorTypes.TryGetProjectorForTagGroup(tagGroup);
+
+        if (projectorName == null)
+        {
+            return ResultBox.Error<TagStateProjectionResult>(
+                new InvalidOperationException(
+                    $"Could not find a projector for tag group '{tagGroup}'. " +
+                    $"Tried '{tagGroup}Projector'. " +
+                    $"Available projectors: {string.Join(", ", GetAllTagProjectorNames())}"));
+        }
+
+        return await ProjectTagStateAsync(tag, projectorName);
+    }
+
+    /// <summary>
     ///     Project events for a tag using a specified projector
     /// </summary>
     /// <param name="tag">The tag to project</param>
