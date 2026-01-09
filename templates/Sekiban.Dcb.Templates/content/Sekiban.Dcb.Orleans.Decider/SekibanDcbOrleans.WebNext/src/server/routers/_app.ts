@@ -8,6 +8,7 @@ import { roomsRouter } from "./rooms";
 import { reservationsRouter } from "./reservations";
 import { approvalsRouter } from "./approvals";
 import { testDataRouter } from "./testData";
+import { usersRouter } from "./users";
 
 export const appRouter = router({
   weather: weatherRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   reservations: reservationsRouter,
   approvals: approvalsRouter,
   testData: testDataRouter,
+  users: usersRouter,
 });
 
 export type AppRouter = typeof appRouter;

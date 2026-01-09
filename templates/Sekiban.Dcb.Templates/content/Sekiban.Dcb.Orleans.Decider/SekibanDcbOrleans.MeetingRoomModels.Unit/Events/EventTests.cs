@@ -50,9 +50,10 @@ public class EventTests
 
         var eventWithTags = ev.GetEventWithTags();
 
-        Assert.Equal(2, eventWithTags.Tags.Count);
+        Assert.Equal(3, eventWithTags.Tags.Count);
         Assert.Contains(eventWithTags.Tags, t => t is ReservationTag rt && rt.ReservationId == reservationId);
         Assert.Contains(eventWithTags.Tags, t => t is RoomTag rt && rt.RoomId == roomId);
+        Assert.Contains(eventWithTags.Tags, t => t is UserMonthlyReservationTag);
     }
 
     [Fact]

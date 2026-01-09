@@ -1,10 +1,12 @@
 using System.Security.Claims;
+using Dcb.EventSource.MeetingRoom.User;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Sekiban.Dcb;
 
 namespace SekibanDcbOrleans.ApiService.Auth;
 
@@ -56,7 +58,8 @@ public static class AuthEndpoints
 
     private static async Task<IResult> RegisterAsync(
         [FromBody] RegisterRequest request,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ISekibanExecutor executor)
     {
         var user = new ApplicationUser
         {
@@ -78,6 +81,35 @@ public static class AuthEndpoints
 
         // Add default role
         await userManager.AddToRoleAsync(user, "User");
+
+        if (Guid.TryParse(user.Id, out var userId))
+        {
+            try
+            {
+                await executor.ExecuteAsync(new RegisterUser
+                {
+                    UserId = userId,
+                    DisplayName = user.DisplayName ?? request.Email.Split('@')[0],
+                    Email = user.Email!,
+                    Department = null
+                });
+                await executor.ExecuteAsync(new GrantUserAccess
+                {
+                    UserId = userId,
+                    InitialRole = "User"
+                });
+            }
+            catch
+            {
+                await userManager.DeleteAsync(user);
+                return Results.Problem("Registration failed while creating the user directory entry.");
+            }
+        }
+        else
+        {
+            await userManager.DeleteAsync(user);
+            return Results.Problem("Registration failed due to invalid user identity.");
+        }
 
         return Results.Ok(new AuthResult(true, "User registered successfully"));
     }

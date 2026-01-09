@@ -1,5 +1,6 @@
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 namespace Dcb.MeetingRoomModels.Events.Reservation;
 
 public record ReservationDraftCreated(
@@ -12,6 +13,15 @@ public record ReservationDraftCreated(
     string Purpose,
     List<string>? SelectedEquipment = null) : IEventPayload
 {
-    public EventPayloadWithTags GetEventWithTags() =>
-        new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);
+    public EventPayloadWithTags GetEventWithTags()
+    {
+        var tags = new List<ITag>
+        {
+            new ReservationTag(ReservationId),
+            new RoomTag(RoomId),
+            UserMonthlyReservationTag.FromStartTime(OrganizerId, StartTime)
+        };
+
+        return new EventPayloadWithTags(this, tags);
+    }
 }

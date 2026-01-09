@@ -31,6 +31,7 @@ public class UserDirectoryDeciderTests
         Assert.Equal("john@example.com", state.Email);
         Assert.Equal("Engineering", state.Department);
         Assert.Equal(_registeredAt, state.RegisteredAt);
+        Assert.Equal(UserDirectoryState.DefaultMonthlyReservationLimit, state.MonthlyReservationLimit);
     }
 
     [Fact]
@@ -82,6 +83,7 @@ public class UserDirectoryDeciderTests
         Assert.Equal("john.smith@example.com", active.Email);
         Assert.Equal("Sales", active.Department);
         Assert.Equal(_registeredAt, active.RegisteredAt); // Original registration date preserved
+        Assert.Equal(UserDirectoryState.DefaultMonthlyReservationLimit, active.MonthlyReservationLimit);
     }
 
     [Fact]

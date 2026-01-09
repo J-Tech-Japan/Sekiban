@@ -1,6 +1,7 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.EventSource;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
@@ -64,6 +65,23 @@ if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmo
 }
 
 var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
+
+static BlobServiceClient GetBlobServiceClient(IServiceProvider sp, IConfiguration config, string name)
+{
+    var client = sp.GetKeyedService<BlobServiceClient>(name);
+    if (client != null)
+    {
+        return client;
+    }
+
+    var connectionString = config.GetConnectionString(name);
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException($"Blob storage connection string '{name}' is not configured.");
+    }
+
+    return new BlobServiceClient(connectionString);
+}
 
 // Configure Orleans
 builder.UseOrleans(config =>
@@ -208,7 +226,7 @@ builder.UseOrleans(config =>
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.BlobServiceClient = GetBlobServiceClient(sp, builder.Configuration, "DcbOrleansGrainState");
                 opt.ContainerName = "sekiban-grainstate"; // 明示コンテナ
             });
         });
@@ -235,7 +253,7 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = GetBlobServiceClient(sp, builder.Configuration, "DcbOrleansGrainState");
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -262,7 +280,7 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = GetBlobServiceClient(sp, builder.Configuration, "DcbOrleansGrainState");
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -474,6 +492,7 @@ apiRoute.MapDebugEndpoints();
 apiRoute.MapRoomEndpoints();
 apiRoute.MapReservationEndpoints();
 apiRoute.MapApprovalEndpoints();
+apiRoute.MapUserDirectoryEndpoints();
 
 // Test data endpoints
 apiRoute.MapTestDataEndpoints();

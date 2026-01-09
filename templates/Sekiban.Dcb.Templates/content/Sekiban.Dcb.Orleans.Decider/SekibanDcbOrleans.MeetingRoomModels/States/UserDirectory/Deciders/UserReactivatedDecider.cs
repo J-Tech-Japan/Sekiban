@@ -28,7 +28,9 @@ public static class UserReactivatedDecider
                 deactivated.DisplayName,
                 deactivated.Email,
                 deactivated.Department,
-                deactivated.RegisteredAt),
+                deactivated.RegisteredAt,
+                deactivated.MonthlyReservationLimit,
+                deactivated.ExternalIdentities),
             _ => state
         };
 }

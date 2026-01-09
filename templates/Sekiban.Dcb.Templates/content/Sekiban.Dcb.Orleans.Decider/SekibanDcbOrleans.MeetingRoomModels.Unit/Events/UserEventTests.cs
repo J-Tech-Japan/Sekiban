@@ -1,5 +1,6 @@
 using Dcb.MeetingRoomModels.Events.UserAccess;
 using Dcb.MeetingRoomModels.Events.UserDirectory;
+using Dcb.MeetingRoomModels.States.UserDirectory;
 using Dcb.MeetingRoomModels.Tags;
 
 namespace SekibanDcbOrleans.MeetingRoomModels.Unit.Events;
@@ -20,6 +21,7 @@ public class UserEventTests
         Assert.Equal("john@example.com", ev.Email);
         Assert.Equal("Engineering", ev.Department);
         Assert.Equal(registeredAt, ev.RegisteredAt);
+        Assert.Equal(UserDirectoryState.DefaultMonthlyReservationLimit, ev.MonthlyReservationLimit);
     }
 
     [Fact]
@@ -45,6 +47,7 @@ public class UserEventTests
         Assert.Equal("Jane Doe", ev.DisplayName);
         Assert.Equal("jane@example.com", ev.Email);
         Assert.Equal("Sales", ev.Department);
+        Assert.Equal(UserDirectoryState.DefaultMonthlyReservationLimit, ev.MonthlyReservationLimit);
     }
 
     [Fact]

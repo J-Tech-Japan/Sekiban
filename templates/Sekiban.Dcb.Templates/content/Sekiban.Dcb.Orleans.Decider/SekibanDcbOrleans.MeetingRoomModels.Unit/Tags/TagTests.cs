@@ -1,4 +1,5 @@
 using Dcb.MeetingRoomModels.Tags;
+using Sekiban.Dcb.Tags;
 
 namespace SekibanDcbOrleans.MeetingRoomModels.Unit.Tags;
 
@@ -81,5 +82,21 @@ public class TagTests
         var tag2 = new RoomTag(Guid.NewGuid());
 
         Assert.NotEqual(tag1, tag2);
+    }
+
+    [Fact]
+    public void UserMonthlyReservationTag_Should_RoundTrip_Content()
+    {
+        var userId = Guid.NewGuid();
+        var month = new DateOnly(2026, 1, 1);
+        var tag = new UserMonthlyReservationTag(userId, month);
+
+        Assert.Equal("UserMonthlyReservation", UserMonthlyReservationTag.TagGroupName);
+        var otherTag = new UserMonthlyReservationTag(userId, month);
+        Assert.Equal(tag.GetId(), otherTag.GetId());
+
+        var content = ((ITag)tag).GetTagContent();
+        var parsed = UserMonthlyReservationTag.FromContent(content);
+        Assert.Equal(tag.GetId(), parsed.GetId());
     }
 }

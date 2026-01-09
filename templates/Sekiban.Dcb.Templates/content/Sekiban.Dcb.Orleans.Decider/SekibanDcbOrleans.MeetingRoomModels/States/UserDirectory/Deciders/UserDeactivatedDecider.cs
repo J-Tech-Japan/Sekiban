@@ -29,6 +29,8 @@ public static class UserDeactivatedDecider
                 active.Email,
                 active.Department,
                 active.RegisteredAt,
+                active.MonthlyReservationLimit,
+                active.ExternalIdentities,
                 deactivated.Reason,
                 deactivated.DeactivatedAt),
             _ => state

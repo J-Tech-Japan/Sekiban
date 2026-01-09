@@ -13,6 +13,7 @@ public record UserDirectoryListItem(
     string? Department,
     bool IsActive,
     DateTime RegisteredAt,
+    int MonthlyReservationLimit,
     List<string> ExternalProviders);
 
 [GenerateSerializer]
@@ -49,6 +50,7 @@ public record GetUserDirectoryListQuery :
                 active.Department,
                 true,
                 active.RegisteredAt,
+                active.MonthlyReservationLimit,
                 active.ExternalIdentities.Select(e => e.Provider).ToList()),
             UserDirectoryState.UserDirectoryDeactivated deactivated => new UserDirectoryListItem(
                 deactivated.UserId,
@@ -57,6 +59,7 @@ public record GetUserDirectoryListQuery :
                 deactivated.Department,
                 false,
                 deactivated.RegisteredAt,
+                deactivated.MonthlyReservationLimit,
                 deactivated.ExternalIdentities.Select(e => e.Provider).ToList()),
             _ => null
         })

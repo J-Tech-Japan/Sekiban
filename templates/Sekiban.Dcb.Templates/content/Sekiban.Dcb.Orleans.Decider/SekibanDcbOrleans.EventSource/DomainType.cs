@@ -58,6 +58,8 @@ public static class DomainType
             types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ReservationProjector, ReservationTag>>();
             types.MultiProjectorTypes
+                .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserMonthlyReservationProjector, UserMonthlyReservationTag>>();
+            types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<ApprovalRequestProjector, ApprovalRequestTag>>();
             types.MultiProjectorTypes
                 .RegisterProjectorWithCustomSerialization<GenericTagMultiProjector<UserDirectoryProjector, UserTag>>();

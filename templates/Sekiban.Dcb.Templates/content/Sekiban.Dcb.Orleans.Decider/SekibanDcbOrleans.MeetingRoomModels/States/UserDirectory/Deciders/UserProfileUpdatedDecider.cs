@@ -27,7 +27,8 @@ public static class UserProfileUpdatedDecider
             {
                 DisplayName = updated.DisplayName,
                 Email = updated.Email,
-                Department = updated.Department
+                Department = updated.Department,
+                MonthlyReservationLimit = updated.MonthlyReservationLimit
             },
             _ => state
         };

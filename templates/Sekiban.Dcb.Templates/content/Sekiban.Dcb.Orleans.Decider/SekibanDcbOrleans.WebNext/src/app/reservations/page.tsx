@@ -86,6 +86,13 @@ const formatDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const isWithinAllowedReservationMonth = (startDate: Date, now: Date) => {
+  const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return startMonth.getTime() === currentMonth.getTime() || startMonth.getTime() === nextMonth.getTime();
+};
+
 const formatTime = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -283,6 +290,11 @@ function ReservationsContent() {
 
     if (endDateTime <= startDateTime) {
       setFormError("End time must be after start time");
+      return;
+    }
+
+    if (!isAdmin && !isWithinAllowedReservationMonth(startDateTime, new Date())) {
+      setFormError("Reservations can only be made for this month or next month.");
       return;
     }
 

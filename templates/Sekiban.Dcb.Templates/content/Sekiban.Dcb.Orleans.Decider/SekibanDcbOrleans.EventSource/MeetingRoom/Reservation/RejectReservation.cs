@@ -1,7 +1,9 @@
 using Dcb.MeetingRoomModels.Events.Reservation;
+using Dcb.MeetingRoomModels.States.Reservation;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Tags;
 using System.ComponentModel.DataAnnotations;
 namespace Dcb.EventSource.MeetingRoom.Reservation;
 
@@ -32,12 +34,36 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
             throw new ApplicationException($"Reservation {command.ReservationId} not found");
         }
 
-        return new ReservationRejected(
+        var reservationState = await context.GetStateAsync<ReservationProjector>(tag);
+        var payloadState = reservationState.Payload as ReservationState ?? ReservationState.Empty;
+        var (organizerId, startTime) = GetOrganizerAndStartTime(payloadState);
+        var monthlyTag = UserMonthlyReservationTag.FromStartTime(organizerId, startTime);
+
+        var payload = new ReservationRejected(
             command.ReservationId,
             command.RoomId,
             command.ApprovalRequestId,
             command.Reason,
-            DateTime.UtcNow)
-            .GetEventWithTags();
+            DateTime.UtcNow);
+
+        var tags = new List<ITag>
+        {
+            new ReservationTag(command.ReservationId),
+            new RoomTag(command.RoomId),
+            monthlyTag
+        };
+
+        return new EventPayloadWithTags(payload, tags);
     }
+
+    private static (Guid OrganizerId, DateTime StartTime) GetOrganizerAndStartTime(ReservationState state) =>
+        state switch
+        {
+            ReservationState.ReservationDraft draft => (draft.OrganizerId, draft.StartTime),
+            ReservationState.ReservationHeld held => (held.OrganizerId, held.StartTime),
+            ReservationState.ReservationConfirmed confirmed => (confirmed.OrganizerId, confirmed.StartTime),
+            ReservationState.ReservationCancelled cancelled => (cancelled.OrganizerId, cancelled.StartTime),
+            ReservationState.ReservationRejected rejected => (rejected.OrganizerId, rejected.StartTime),
+            _ => throw new ApplicationException("Reservation does not include organizer details.")
+        };
 }

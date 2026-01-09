@@ -1,7 +1,12 @@
+using Dcb.EventSource.MeetingRoom.User;
+using Dcb.MeetingRoomModels.States.UserAccess;
+using Dcb.MeetingRoomModels.States.UserDirectory;
+using Dcb.MeetingRoomModels.Tags;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Sekiban.Dcb;
 
 namespace SekibanDcbOrleans.ApiService.Auth;
 
@@ -27,6 +32,7 @@ public class AuthDbInitializer : IHostedService
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var executor = scope.ServiceProvider.GetRequiredService<ISekibanExecutor>();
 
         // Wait for database to be ready with retries
         for (var i = 0; i < MaxRetries; i++)
@@ -48,7 +54,7 @@ public class AuthDbInitializer : IHostedService
 
                 // Seed roles and users
                 await SeedRolesAsync(roleManager);
-                await SeedUsersAsync(userManager);
+                await SeedUsersAsync(userManager, executor);
 
                 _logger.LogInformation("Authentication database initialization completed successfully");
                 return;
@@ -137,7 +143,7 @@ public class AuthDbInitializer : IHostedService
         }
     }
 
-    private async Task SeedUsersAsync(UserManager<ApplicationUser> userManager)
+    private async Task SeedUsersAsync(UserManager<ApplicationUser> userManager, ISekibanExecutor executor)
     {
         // Sample users for demonstration
         var sampleUsers = new[]
@@ -175,6 +181,7 @@ public class AuthDbInitializer : IHostedService
                         await userManager.AddToRoleAsync(user, "User");
                     }
                     _logger.LogInformation("Sample user created: {Email}", userData.Email);
+                    existingUser = user;
                 }
                 else
                 {
@@ -187,6 +194,98 @@ public class AuthDbInitializer : IHostedService
             {
                 _logger.LogInformation("Sample user already exists: {Email}", userData.Email);
             }
+
+            if (existingUser != null)
+            {
+                await EnsureUserDirectoryAsync(executor, existingUser);
+                var roles = await userManager.GetRolesAsync(existingUser);
+                await EnsureUserAccessAsync(executor, existingUser, roles);
+            }
+        }
+    }
+
+    private async Task EnsureUserDirectoryAsync(ISekibanExecutor executor, ApplicationUser user)
+    {
+        if (!Guid.TryParse(user.Id, out var userId))
+        {
+            _logger.LogWarning("Skipping user directory registration for {Email}: invalid user ID.", user.Email);
+            return;
+        }
+
+        try
+        {
+            var state = await executor.GetTagStateAsync<UserDirectoryProjector>(new UserTag(userId));
+            if (state.Payload is UserDirectoryState.UserDirectoryEmpty)
+            {
+                await executor.ExecuteAsync(new RegisterUser
+                {
+                    UserId = userId,
+                    DisplayName = user.DisplayName ?? user.Email?.Split('@')[0] ?? "User",
+                    Email = user.Email ?? string.Empty,
+                    Department = null
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register user directory entry for {Email}", user.Email);
+        }
+    }
+
+    private async Task EnsureUserAccessAsync(
+        ISekibanExecutor executor,
+        ApplicationUser user,
+        IList<string> roles)
+    {
+        if (!Guid.TryParse(user.Id, out var userId))
+        {
+            _logger.LogWarning("Skipping user access registration for {Email}: invalid user ID.", user.Email);
+            return;
+        }
+
+        if (roles.Count == 0)
+        {
+            _logger.LogWarning("Skipping user access registration for {Email}: no roles found.", user.Email);
+            return;
+        }
+
+        try
+        {
+            var state = await executor.GetTagStateAsync<UserAccessProjector>(new UserAccessTag(userId));
+            if (state.Payload is UserAccessState.UserAccessEmpty)
+            {
+                await executor.ExecuteAsync(new GrantUserAccess
+                {
+                    UserId = userId,
+                    InitialRole = roles[0]
+                });
+
+                foreach (var role in roles.Skip(1))
+                {
+                    await executor.ExecuteAsync(new GrantUserRole
+                    {
+                        UserId = userId,
+                        Role = role
+                    });
+                }
+                return;
+            }
+
+            if (state.Payload is UserAccessState.UserAccessActive active)
+            {
+                foreach (var role in roles.Where(role => !active.HasRole(role)))
+                {
+                    await executor.ExecuteAsync(new GrantUserRole
+                    {
+                        UserId = userId,
+                        Role = role
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register user access entry for {Email}", user.Email);
         }
     }
 }

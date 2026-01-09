@@ -26,7 +26,9 @@ public static class UserRegisteredDecider
             registered.DisplayName,
             registered.Email,
             registered.Department,
-            registered.RegisteredAt);
+            registered.RegisteredAt,
+            registered.MonthlyReservationLimit,
+            []);
 
     /// <summary>
     ///     Apply UserRegistered event to UserDirectoryState

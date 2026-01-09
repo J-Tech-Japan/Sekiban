@@ -6,6 +6,8 @@ namespace Dcb.MeetingRoomModels.States.UserDirectory;
 /// </summary>
 public abstract record UserDirectoryState : ITagStatePayload
 {
+    public const int DefaultMonthlyReservationLimit = 5;
+
     public static UserDirectoryState Empty => new UserDirectoryEmpty();
 
     /// <summary>
@@ -22,6 +24,7 @@ public abstract record UserDirectoryState : ITagStatePayload
         string Email,
         string? Department,
         DateTime RegisteredAt,
+        int MonthlyReservationLimit,
         List<ExternalIdentity> ExternalIdentities) : UserDirectoryState
     {
         public UserDirectoryActive(
@@ -30,7 +33,7 @@ public abstract record UserDirectoryState : ITagStatePayload
             string Email,
             string? Department,
             DateTime RegisteredAt)
-            : this(UserId, DisplayName, Email, Department, RegisteredAt, []) { }
+            : this(UserId, DisplayName, Email, Department, RegisteredAt, DefaultMonthlyReservationLimit, []) { }
     }
 
     /// <summary>
@@ -42,6 +45,7 @@ public abstract record UserDirectoryState : ITagStatePayload
         string Email,
         string? Department,
         DateTime RegisteredAt,
+        int MonthlyReservationLimit,
         List<ExternalIdentity> ExternalIdentities,
         string? DeactivationReason,
         DateTime DeactivatedAt) : UserDirectoryState
@@ -54,7 +58,7 @@ public abstract record UserDirectoryState : ITagStatePayload
             DateTime RegisteredAt,
             string? DeactivationReason,
             DateTime DeactivatedAt)
-            : this(UserId, DisplayName, Email, Department, RegisteredAt, [], DeactivationReason, DeactivatedAt) { }
+            : this(UserId, DisplayName, Email, Department, RegisteredAt, DefaultMonthlyReservationLimit, [], DeactivationReason, DeactivatedAt) { }
     }
 }
 
