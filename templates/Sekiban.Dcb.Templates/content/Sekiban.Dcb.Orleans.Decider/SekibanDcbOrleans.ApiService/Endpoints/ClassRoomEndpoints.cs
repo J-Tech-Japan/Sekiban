@@ -1,5 +1,5 @@
-using Dcb.Domain.Decider.ClassRoom;
-using Dcb.Domain.Decider.Queries;
+using Dcb.EventSource.ClassRoom;
+using Dcb.EventSource.Queries;
 using Dcb.ImmutableModels.Tags;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb;

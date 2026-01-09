@@ -1,4 +1,4 @@
-using Dcb.Domain.Decider.ClassRoom;
+using Dcb.EventSource.ClassRoom;
 using System.Text.Json;
 
 namespace SekibanDcbOrleans.Web;

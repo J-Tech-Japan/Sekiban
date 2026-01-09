@@ -8,11 +8,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\SekibanDcbOrleans.Domain\SekibanDcbOrleans.Domain.csproj" />
+        <ProjectReference Include="..\SekibanDcbOrleans.Interactions\SekibanDcbOrleans.Interactions.csproj" />
         <ProjectReference Include="..\SekibanDcbOrleans.ServiceDefaults\SekibanDcbOrleans.ServiceDefaults.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Authentication / Identity -->
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.1" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.1" />
+
         <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.1" />
         <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
         <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />

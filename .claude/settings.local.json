@@ -80,7 +80,12 @@
       "mcp__microsoft_docs_mcp__microsoft_docs_fetch",
       "Read(//Users/tomohisa/Downloads/**)",
       "Bash(dotnet clean:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(xargs sed:*)",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_navigate"
     ],
     "deny": []
   },

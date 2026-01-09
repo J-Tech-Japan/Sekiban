@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,6 +105,28 @@ export default function WeatherPage() {
     setNewSummary("");
     setFormError("");
   };
+
+  useEffect(() => {
+    if (!isAddModalOpen && !isEditModalOpen) return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      if (isEditModalOpen) {
+        setIsEditModalOpen(false);
+        setFormError("");
+        return;
+      }
+
+      if (isAddModalOpen) {
+        setIsAddModalOpen(false);
+        resetForm();
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isAddModalOpen, isEditModalOpen, resetForm]);
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();

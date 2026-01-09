@@ -2,7 +2,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\SekibanDcbOrleans.ServiceDefaults\SekibanDcbOrleans.ServiceDefaults.csproj"/>
-        <ProjectReference Include="..\SekibanDcbOrleans.Domain\SekibanDcbOrleans.Domain.csproj"/>
+        <ProjectReference Include="..\SekibanDcbOrleans.Interactions\SekibanDcbOrleans.Interactions.csproj"/>
     </ItemGroup>
 
     <PropertyGroup>

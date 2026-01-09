@@ -2,11 +2,12 @@ using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Microsoft.Extensions.DependencyInjection;
-using Dcb.Domain.Decider;
+using Dcb.EventSource;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
+using Orleans.Runtime;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
@@ -19,6 +20,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using SekibanDcbOrleans.ApiService.Endpoints;
+using SekibanDcbOrleans.ApiService.Auth;
+using SekibanDcbOrleans.ApiService.Realtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,7 +42,14 @@ builder.Services.AddProblemDetails();
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+// Add Authentication & Identity
+// Get the PostgreSQL connection string from Aspire configuration (separate database for Identity)
+var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres")
+    ?? throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
+builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
 
+// Add background service to initialize auth database and seed users
+builder.Services.AddHostedService<AuthDbInitializer>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -209,7 +219,7 @@ builder.UseOrleans(config =>
         });
     }
 
-    // OrleansStorage provider for MultiProjectionGrain
+    // OrleansStorage provider for MultiProjectionGrain and TagStateGrain
     if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorage(
@@ -381,6 +391,8 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+builder.Services.AddSingleton<SseTopicHub>();
+builder.Services.AddHostedService<OrleansStreamEventRouter>();
 
 // Configure database storage based on configuration
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
@@ -450,6 +462,13 @@ if (app.Environment.IsDevelopment())
 // Use CORS middleware
 app.UseCors();
 
+// Use authentication & authorization middleware
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Map auth endpoints (outside of /api group for clarity)
+app.MapAuthEndpoints();
+
 // Map all endpoints
 apiRoute.MapStudentEndpoints();
 apiRoute.MapClassRoomEndpoints();
@@ -457,6 +476,16 @@ apiRoute.MapEnrollmentEndpoints();
 apiRoute.MapWeatherEndpoints();
 apiRoute.MapProjectionEndpoints();
 apiRoute.MapDebugEndpoints();
+
+// MeetingRoom endpoints
+apiRoute.MapRoomEndpoints();
+apiRoute.MapReservationEndpoints();
+apiRoute.MapApprovalEndpoints();
+apiRoute.MapUserDirectoryEndpoints();
+apiRoute.MapStreamEndpoints();
+
+// Test data endpoints
+apiRoute.MapTestDataEndpoints();
 
 app.MapDefaultEndpoints();
 

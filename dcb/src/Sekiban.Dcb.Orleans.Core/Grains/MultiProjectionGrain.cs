@@ -560,7 +560,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
                     SafeWindowThreshold: _projectionActor.PeekCurrentSafeWindowThreshold().Value,
-                    CreatedAt: _state.State.LastPersistTime == default
+                    CreatedAt: _state.State!.LastPersistTime == default
                         ? DateTime.UtcNow
                         : _state.State.LastPersistTime,
                     UpdatedAt: DateTime.UtcNow,
@@ -582,7 +582,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // v9: Update Orleans state with key info only (auxiliary/monitoring)
-            _state.State.ProjectorName = projectorName;
+            _state.State!.ProjectorName = projectorName;
             _state.State.ProjectorVersion = projectorVersion;
             _state.State.LastSortableUniqueId = safePosition;
             _state.State.EventsProcessed = _eventsProcessed;

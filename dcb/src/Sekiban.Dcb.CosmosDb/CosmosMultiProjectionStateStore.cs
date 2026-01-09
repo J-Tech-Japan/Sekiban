@@ -56,12 +56,22 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                 {
                     blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception blobEx)
+                catch (InvalidOperationException blobEx)
                 {
                     // Return explicit error instead of null stateData
                     return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
                         new InvalidOperationException(
                             $"Failed to read offloaded state from blob storage. " +
+                            $"Projector: {projectorName}, Version: {projectorVersion}, " +
+                            $"BlobKey: {doc.OffloadKey}",
+                            blobEx));
+                }
+                catch (System.IO.IOException blobEx)
+                {
+                    // Return explicit error instead of null stateData
+                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                        new InvalidOperationException(
+                            $"Failed to read offloaded state from blob storage (IO error). " +
                             $"Projector: {projectorName}, Version: {projectorVersion}, " +
                             $"BlobKey: {doc.OffloadKey}",
                             blobEx));
@@ -113,12 +123,22 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                     {
                         blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
                     }
-                    catch (Exception blobEx)
+                    catch (InvalidOperationException blobEx)
                     {
                         // Return explicit error instead of null stateData
                         return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
                             new InvalidOperationException(
                                 $"Failed to read offloaded state from blob storage. " +
+                                $"Projector: {projectorName}, " +
+                                $"BlobKey: {doc.OffloadKey}",
+                                blobEx));
+                    }
+                    catch (System.IO.IOException blobEx)
+                    {
+                        // Return explicit error instead of null stateData
+                        return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                            new InvalidOperationException(
+                                $"Failed to read offloaded state from blob storage (IO error). " +
                                 $"Projector: {projectorName}, " +
                                 $"BlobKey: {doc.OffloadKey}",
                                 blobEx));

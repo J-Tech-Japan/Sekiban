@@ -1,6 +1,6 @@
 using System.CommandLine;
 using System.Reflection;
-using Dcb.Domain.Decider;
+using Dcb.EventSource;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,33 +23,59 @@ var configuration = new ConfigurationBuilder()
 var rootCommand = new RootCommand(
 @"Sekiban DCB CLI - Manage projections, tags, and events
 
+Configuration:
+  Connection strings can be configured via:
+
+  1. Command line options:
+     -c, --connection-string ""Host=localhost;Database=mydb;...""
+
+  2. Environment variables:
+     export CONNECTION_STRING=""Host=localhost;Database=mydb;...""
+     export DATABASE_TYPE=""postgres""  # or ""cosmos""
+     export COSMOS_CONNECTION_STRING=""AccountEndpoint=...""
+     export COSMOS_DATABASE_NAME=""SekibanDcb""
+     export OUTPUT_DIR=""./output""
+
+  3. User Secrets (recommended for development):
+     dotnet user-secrets init  # if not already initialized
+     dotnet user-secrets set ""ConnectionStrings:DcbPostgres"" ""Host=localhost;Database=mydb;...""
+     dotnet user-secrets set ""ConnectionStrings:SekibanDcbCosmos"" ""AccountEndpoint=...""
+     dotnet user-secrets set ""Sekiban:Database"" ""postgres""
+     dotnet user-secrets set ""CosmosDb:DatabaseName"" ""SekibanDcb""
+
 Examples:
   # List all registered projectors and tag groups
   dotnet run -- list
 
-  # Show status of all projection states
+  # Show status (with connection string configured via env/secrets)
+  dotnet run -- status
+
+  # Show status with explicit connection string
   dotnet run -- status -c ""Host=localhost;Database=mydb;Username=user;Password=pass""
 
   # Build all projection states
-  dotnet run -- build -c ""Host=localhost;Database=mydb;Username=user;Password=pass""
+  dotnet run -- build
 
   # Fetch events for a specific tag
-  dotnet run -- tag-events -t ""WeatherForecast:00000000-0000-0000-0000-000000000001"" -c ""...""
+  dotnet run -- tag-events -t ""WeatherForecast:00000000-0000-0000-0000-000000000001""
 
-  # Project tag state using a specific projector
-  dotnet run -- tag-state -t ""WeatherForecast:guid-here"" -P ""WeatherForecastProjector"" -c ""...""
+  # Project tag state (auto-detects projector from tag group: WeatherForecast -> WeatherForecastProjector)
+  dotnet run -- tag-state -t ""WeatherForecast:guid-here""
 
-  # Save projection state to JSON files
-  dotnet run -- save -o ./output -c ""...""
+  # Project tag state with explicit projector
+  dotnet run -- tag-state -t ""WeatherForecast:guid-here"" -P ""WeatherForecastProjector""
 
-  # List all tags in the event store
-  dotnet run -- tag-list -c ""..."" -o ./output
+  # Save projection state to JSON files (defaults to ./output)
+  dotnet run -- save
+
+  # List all tags in the event store (saves to ./output/tag_list_{timestamp}.json)
+  dotnet run -- tag-list
 
   # List tags filtered by group
-  dotnet run -- tag-list -g ""WeatherForecast"" -c ""...""
+  dotnet run -- tag-list -g ""WeatherForecast""
 
   # Use Cosmos DB instead of PostgreSQL
-  dotnet run -- status -d cosmos --cosmos-connection-string ""AccountEndpoint=...""");
+  dotnet run -- status -d cosmos");
 
 // Database type option (shared across commands)
 var databaseOption = new Option<string?>("--database", "-d")
@@ -118,10 +144,9 @@ var tagOption = new Option<string>("--tag", "-t")
 };
 
 // Tag projector option
-var tagProjectorOption = new Option<string>("--tag-projector", "-P")
+var tagProjectorOption = new Option<string?>("--tag-projector", "-P")
 {
-    Description = "Tag projector name to use for projection (e.g., 'WeatherForecastProjector')",
-    Required = true
+    Description = "Tag projector name to use for projection. If not specified, tries '{TagGroupName}Projector' convention."
 };
 
 // Build command
@@ -1010,34 +1035,68 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
     }
 }
 
-static async Task ShowTagStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string projectorName)
+static async Task ShowTagStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string? projectorName)
 {
     Console.WriteLine("=== Tag State Projection ===\n");
     Console.WriteLine($"Database: {databaseType}");
     Console.WriteLine($"Tag: {tagString}");
-    Console.WriteLine($"Projector: {projectorName}");
-    Console.WriteLine();
 
     var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
     var tagStateService = services.GetRequiredService<TagStateService>();
 
-    if (string.IsNullOrEmpty(projectorName))
+    // Use auto-inference if projector name is not specified
+    var effectiveProjectorName = projectorName;
+    if (string.IsNullOrEmpty(effectiveProjectorName))
     {
-        Console.WriteLine("Available Tag Projectors:");
-        foreach (var name in tagStateService.GetAllTagProjectorNames())
+        // Extract tag group from tag string (format: "group:content")
+        var colonIndex = tagString.IndexOf(':');
+        if (colonIndex > 0)
         {
-            Console.WriteLine($"  - {name}");
+            var tagGroup = tagString[..colonIndex];
+            var conventionName = $"{tagGroup}Projector";
+
+            // Check if this projector exists
+            var availableProjectors = tagStateService.GetAllTagProjectorNames();
+            effectiveProjectorName = availableProjectors.FirstOrDefault(p =>
+                p.Equals(conventionName, StringComparison.OrdinalIgnoreCase));
+
+            if (effectiveProjectorName == null)
+            {
+                // Try to find any projector starting with the tag group name
+                effectiveProjectorName = availableProjectors.FirstOrDefault(p =>
+                    p.StartsWith(tagGroup, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (effectiveProjectorName != null)
+            {
+                Console.WriteLine($"Projector: {effectiveProjectorName} (auto-detected from tag group '{tagGroup}')");
+            }
+            else
+            {
+                Console.WriteLine($"Error: Could not find a projector for tag group '{tagGroup}'.");
+                Console.WriteLine($"Tried: '{conventionName}'");
+                Console.WriteLine("\nAvailable Tag Projectors:");
+                foreach (var name in availableProjectors)
+                {
+                    Console.WriteLine($"  - {name}");
+                }
+                return;
+            }
         }
-        Console.WriteLine("\nAvailable Tag Groups:");
-        foreach (var name in tagStateService.GetAllTagGroupNames())
+        else
         {
-            Console.WriteLine($"  - {name}");
+            Console.WriteLine("Error: Invalid tag format. Expected 'group:content'.");
+            return;
         }
-        return;
     }
+    else
+    {
+        Console.WriteLine($"Projector: {effectiveProjectorName}");
+    }
+    Console.WriteLine();
 
     Console.WriteLine("Projecting events...\n");
-    var result = await tagStateService.ProjectTagStateAsync(tagString, projectorName);
+    var result = await tagStateService.ProjectTagStateAsync(tagString, effectiveProjectorName);
 
     if (!result.IsSuccess)
     {

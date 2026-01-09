@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,19 @@ export default function StudentsPage() {
     setNewMaxClassCount(5);
     setFormError("");
   };
+
+  useEffect(() => {
+    if (!isAddModalOpen) return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsAddModalOpen(false);
+      resetForm();
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isAddModalOpen, resetForm]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

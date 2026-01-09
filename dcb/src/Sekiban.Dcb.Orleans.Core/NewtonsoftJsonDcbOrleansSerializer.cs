@@ -30,11 +30,40 @@ public class NewtonsoftJsonDcbOrleansSerializer : IGrainStorageSerializer
     public T Deserialize<T>(BinaryData input)
     {
         var json = input.ToString();
+
+        // Handle empty or null JSON as default state
+        if (string.IsNullOrWhiteSpace(json) || json == "null" || json == "{}")
+        {
+            // Return default instance for value types or create new instance for reference types
+            if (typeof(T).IsValueType)
+            {
+                return default!;
+            }
+
+            // Try to create default instance
+            try
+            {
+                return Activator.CreateInstance<T>();
+            }
+            catch
+            {
+                return default!;
+            }
+        }
+
         var result = JsonConvert.DeserializeObject<T>(json, _settings);
 
         if (result is null)
         {
-            throw new InvalidOperationException($"Failed to deserialize {typeof(T).Name} from JSON: {json}");
+            // Return default instead of throwing for grain state deserialization
+            try
+            {
+                return Activator.CreateInstance<T>();
+            }
+            catch
+            {
+                return default!;
+            }
         }
 
         return result;

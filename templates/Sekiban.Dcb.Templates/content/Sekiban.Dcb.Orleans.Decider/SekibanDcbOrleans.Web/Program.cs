@@ -46,6 +46,13 @@ builder.Services.AddHttpClient<EnrollmentApiClient>(client =>
     client.BaseAddress = new Uri("https+http://apiservice");
 });
 
+// Add AuthApiClient
+builder.Services.AddHttpClient<AuthApiClient>(client =>
+{
+    // Use explicit http endpoint for apiservice
+    client.BaseAddress = new Uri("https+http://apiservice");
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

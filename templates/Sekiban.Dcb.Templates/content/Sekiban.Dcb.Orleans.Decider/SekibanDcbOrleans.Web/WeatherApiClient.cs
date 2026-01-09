@@ -1,5 +1,5 @@
-using Dcb.Domain.Decider.Projections;
-using Dcb.Domain.Decider.Weather;
+using Dcb.EventSource.Projections;
+using Dcb.EventSource.Weather;
 namespace SekibanDcbOrleans.Web;
 
 public class WeatherApiClient(HttpClient httpClient)
