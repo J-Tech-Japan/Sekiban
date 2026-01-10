@@ -1,0 +1,55 @@
+{
+  "ExportedAt": "2026-01-09T23:22:21.183065Z",
+  "TotalTags": 5,
+  "TotalTagGroups": 1,
+  "TotalEvents": 15,
+  "TagGroups": [
+    {
+      "TagGroup": "Reservation",
+      "TagCount": 5,
+      "TotalEvents": 15,
+      "Tags": [
+        {
+          "Tag": "Reservation:019ba50f-3371-7172-9ba6-a41b46658550",
+          "EventCount": 3,
+          "FirstSortableUniqueId": "063903597595551305001565534721",
+          "LastSortableUniqueId": "063903597595613537000160313831",
+          "FirstEventAt": "2026-01-09T23:19:55.55229Z",
+          "LastEventAt": "2026-01-09T23:19:55.614441Z"
+        },
+        {
+          "Tag": "Reservation:019ba50f-33e1-7cff-bc38-a368a7a78de4",
+          "EventCount": 3,
+          "FirstSortableUniqueId": "063903597595636428000911631620",
+          "LastSortableUniqueId": "063903597595694960000337698283",
+          "FirstEventAt": "2026-01-09T23:19:55.63672Z",
+          "LastEventAt": "2026-01-09T23:19:55.695364Z"
+        },
+        {
+          "Tag": "Reservation:019ba50f-3433-75e6-a308-82e60efe78f5",
+          "EventCount": 3,
+          "FirstSortableUniqueId": "063903597595712628002051515455",
+          "LastSortableUniqueId": "063903597595753802001999304018",
+          "FirstEventAt": "2026-01-09T23:19:55.712878Z",
+          "LastEventAt": "2026-01-09T23:19:55.75412Z"
+        },
+        {
+          "Tag": "Reservation:019ba50f-346c-7194-b7b9-1e0837c0e36f",
+          "EventCount": 3,
+          "FirstSortableUniqueId": "063903597595769945000885527005",
+          "LastSortableUniqueId": "063903597595795255001552094705",
+          "FirstEventAt": "2026-01-09T23:19:55.770161Z",
+          "LastEventAt": "2026-01-09T23:19:55.795767Z"
+        },
+        {
+          "Tag": "Reservation:019ba50f-3496-7458-9def-d09195287b0e",
+          "EventCount": 3,
+          "FirstSortableUniqueId": "063903597595811898000296689823",
+          "LastSortableUniqueId": "063903597595834941000136054814",
+          "FirstEventAt": "2026-01-09T23:19:55.812143Z",
+          "LastEventAt": "2026-01-09T23:19:55.835239Z"
+        }
+      ]
+    }
+  ]
+}

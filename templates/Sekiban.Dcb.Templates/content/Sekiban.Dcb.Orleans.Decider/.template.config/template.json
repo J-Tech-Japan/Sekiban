@@ -2,16 +2,16 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "J-Tech Japan",
   "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing", "Decider"],
-  "name": "Sekiban Dcb Orleans Aspire Template (Decider)",
-  "description": "SekibanDcbOrleansAspireDecider - Template with ImmutableModels project for Decider pattern",
+  "name": "Sekiban Dcb Decider Aspire Template (Decider)",
+  "description": "SekibanDcbDeciderAspireDecider - Template with ImmutableModels project for Decider pattern",
   "precedence": "0",
   "identity": "Sekiban.Dcb.Orleans.Aspire.Decider",
-  "shortName": "sekiban-dcb-orleans-decider",
+  "shortName": "sekiban-dcb-decider",
   "tags": {
     "language": "C#",
     "type": "solution"
   },
-  "sourceName": "SekibanDcbOrleans",
+  "sourceName": "SekibanDcbDecider",
   "preferNameDirectory": true,
   "symbols": {
     "IncludeTests": {
@@ -35,14 +35,14 @@
         {
           "condition": "(!IncludeTests)",
           "exclude": [
-            "SekibanDcbOrleans.Unit/**/*"
+            "SekibanDcbDecider.Unit/**/*"
           ]
         }
       ]
     }
   ],
   "primaryOutputs": [
-    { "path": "SekibanDcbOrleans.sln" }
+    { "path": "SekibanDcbDecider.slnx" }
   ],
   "postActions": [
     {

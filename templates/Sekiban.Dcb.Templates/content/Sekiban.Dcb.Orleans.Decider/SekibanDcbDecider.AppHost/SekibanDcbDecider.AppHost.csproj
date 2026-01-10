@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Sdk Name="Aspire.AppHost.Sdk" Version="13.1.0" />
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsAspireHost>true</IsAspireHost>
+        <UserSecretsId>64845cd6-595d-452c-825b-063d4df00509</UserSecretsId>
+        <RootNamespace>SekibanDcbOrleans.AppHost</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.Orleans" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
+        <PackageReference Include="CommunityToolkit.Aspire.Hosting.PostgreSQL.Extensions" Version="13.0.1-beta.468" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
+        <ProjectReference Include="..\SekibanDcbDecider.Web\SekibanDcbDecider.Web.csproj" />
+    </ItemGroup>
+
+</Project>

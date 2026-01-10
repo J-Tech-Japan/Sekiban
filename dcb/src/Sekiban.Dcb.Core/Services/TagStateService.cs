@@ -1,5 +1,4 @@
 using ResultBoxes;
-using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -164,8 +163,3 @@ public class TagStateService
     /// </summary>
     public System.Text.Json.JsonSerializerOptions JsonSerializerOptions => _domainTypes.JsonSerializerOptions;
 }
-
-/// <summary>
-///     Empty tag state payload used as initial state
-/// </summary>
-public record EmptyTagStatePayload : ITagStatePayload;
