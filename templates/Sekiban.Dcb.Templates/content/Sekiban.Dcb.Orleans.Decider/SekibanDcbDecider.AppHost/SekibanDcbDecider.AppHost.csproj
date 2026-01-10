@@ -8,7 +8,6 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsAspireHost>true</IsAspireHost>
-        <UserSecretsId>64845cd6-595d-452c-825b-063d4df00509</UserSecretsId>
         <RootNamespace>SekibanDcbOrleans.AppHost</RootNamespace>
     </PropertyGroup>
 
