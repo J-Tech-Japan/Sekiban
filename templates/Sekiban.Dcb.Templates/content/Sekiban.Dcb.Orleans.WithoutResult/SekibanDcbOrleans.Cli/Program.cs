@@ -117,11 +117,10 @@ var tagOption = new Option<string>("--tag", "-t")
     Required = true
 };
 
-// Tag projector option
-var tagProjectorOption = new Option<string>("--tag-projector", "-P")
+// Tag projector option (optional - auto-detects from tag group if not specified)
+var tagProjectorOption = new Option<string?>("--tag-projector", "-P")
 {
-    Description = "Tag projector name to use for projection (e.g., 'WeatherForecastProjector')",
-    Required = true
+    Description = "Tag projector name to use for projection. Auto-detects if not specified (e.g., 'WeatherForecast' tag uses 'WeatherForecastProjector')"
 };
 
 // Build command
@@ -1010,34 +1009,52 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
     }
 }
 
-static async Task ShowTagStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string projectorName)
+static async Task ShowTagStateAsync(string connectionString, string databaseType, string cosmosDatabaseName, string tagString, string? projectorName)
 {
     Console.WriteLine("=== Tag State Projection ===\n");
     Console.WriteLine($"Database: {databaseType}");
     Console.WriteLine($"Tag: {tagString}");
-    Console.WriteLine($"Projector: {projectorName}");
-    Console.WriteLine();
 
     var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
     var tagStateService = services.GetRequiredService<TagStateService>();
+    var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
-    if (string.IsNullOrEmpty(projectorName))
+    // Auto-detect projector name from tag group if not specified
+    var resolvedProjectorName = projectorName;
+    if (string.IsNullOrEmpty(resolvedProjectorName))
     {
-        Console.WriteLine("Available Tag Projectors:");
-        foreach (var name in tagStateService.GetAllTagProjectorNames())
+        // Extract tag group from tag string (e.g., "WeatherForecast:xxx" -> "WeatherForecast")
+        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+        resolvedProjectorName = domainTypes.TagProjectorTypes.TryGetProjectorForTagGroup(tagGroup);
+
+        if (resolvedProjectorName != null)
         {
-            Console.WriteLine($"  - {name}");
+            Console.WriteLine($"Projector: {resolvedProjectorName} (auto-detected from tag group '{tagGroup}')");
         }
-        Console.WriteLine("\nAvailable Tag Groups:");
-        foreach (var name in tagStateService.GetAllTagGroupNames())
+        else
         {
-            Console.WriteLine($"  - {name}");
+            Console.WriteLine($"Projector: (not specified, could not auto-detect from '{tagGroup}')");
+            Console.WriteLine("\nAvailable Tag Projectors:");
+            foreach (var name in tagStateService.GetAllTagProjectorNames())
+            {
+                Console.WriteLine($"  - {name}");
+            }
+            Console.WriteLine("\nAvailable Tag Groups:");
+            foreach (var name in tagStateService.GetAllTagGroupNames())
+            {
+                Console.WriteLine($"  - {name}");
+            }
+            return;
         }
-        return;
     }
+    else
+    {
+        Console.WriteLine($"Projector: {resolvedProjectorName}");
+    }
+    Console.WriteLine();
 
     Console.WriteLine("Projecting events...\n");
-    var result = await tagStateService.ProjectTagStateAsync(tagString, projectorName);
+    var result = await tagStateService.ProjectTagStateAsync(tagString, resolvedProjectorName);
 
     if (!result.IsSuccess)
     {
