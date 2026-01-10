@@ -51,15 +51,30 @@ internal class Program
 
         if (string.IsNullOrWhiteSpace(templateType))
         {
-            Console.Write("Select template type (dcb/pure) [default: dcb]: ");
+            Console.WriteLine("Select template type:");
+            Console.WriteLine("  1. decider       - Sekiban Dcb Decider Aspire Template (recommended)");
+            Console.WriteLine("  2. dcb           - Sekiban Dcb Orleans Aspire Template");
+            Console.WriteLine("  3. withoutresult - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
+            Console.WriteLine("  4. pure          - Sekiban Pure Orleans Aspire Template");
+            Console.Write("Enter choice (decider/dcb/withoutresult/pure) [default: decider]: ");
             var input = Console.ReadLine();
-            templateType = string.IsNullOrWhiteSpace(input) ? "dcb" : input.Trim();
+            templateType = string.IsNullOrWhiteSpace(input) ? "decider" : input.Trim();
         }
 
         templateType = templateType.ToLowerInvariant();
-        if (templateType != "dcb" && templateType != "pure")
+        // Allow numeric shortcuts
+        templateType = templateType switch
         {
-             Console.Error.WriteLine($"❌ Invalid template type: {templateType}. Allowed values are 'dcb' or 'pure'.");
+            "1" => "decider",
+            "2" => "dcb",
+            "3" => "withoutresult",
+            "4" => "pure",
+            _ => templateType
+        };
+
+        if (templateType != "decider" && templateType != "dcb" && templateType != "withoutresult" && templateType != "pure")
+        {
+             Console.Error.WriteLine($"❌ Invalid template type: {templateType}. Allowed values are 'decider', 'dcb', 'withoutresult', or 'pure'.");
              return 1;
         }
 
@@ -75,7 +90,17 @@ internal class Program
              installCommand = "new install Sekiban.Pure.Templates";
              createCommand = $"new sekiban-orleans-aspire -n {projectName}";
         }
-        else
+        else if (templateType == "decider")
+        {
+             installCommand = "new install Sekiban.Dcb.Templates";
+             createCommand = $"new sekiban-dcb-decider -n {projectName}";
+        }
+        else if (templateType == "withoutresult")
+        {
+             installCommand = "new install Sekiban.Dcb.Templates";
+             createCommand = $"new sekiban-dcb-orleans-withoutresult -n {projectName}";
+        }
+        else // dcb
         {
              installCommand = "new install Sekiban.Dcb.Templates";
              createCommand = $"new sekiban-dcb-orleans -n {projectName}";
@@ -120,8 +145,20 @@ internal class Program
         Console.WriteLine("  ProjectName  The name of the project to create. If omitted, you will be prompted.");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  -t, --type   The type of template to use (dcb or pure). Default is dcb.");
+        Console.WriteLine("  -t, --type   The type of template to use. Default is 'decider'.");
+        Console.WriteLine("               Available types:");
+        Console.WriteLine("                 decider       - Sekiban Dcb Decider Aspire Template (recommended)");
+        Console.WriteLine("                 dcb           - Sekiban Dcb Orleans Aspire Template");
+        Console.WriteLine("                 withoutresult - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
+        Console.WriteLine("                 pure          - Sekiban Pure Orleans Aspire Template");
         Console.WriteLine("  -h, --help   Show this help message.");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t decider");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t dcb");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t withoutresult");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t pure");
     }
 
     /// <summary>
