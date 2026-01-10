@@ -832,14 +832,19 @@ static async Task FetchTagEventsAsync(string connectionString, string databaseTy
     };
 
     // Prepare events for JSON serialization
-    var eventsForJson = events.Select(e => new
+    var eventsForJson = events.Select(e =>
     {
-        e.Id,
-        SortableUniqueId = e.SortableUniqueIdValue,
-        e.EventType,
-        e.Tags,
-        PayloadJson = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), jsonOptions),
-        e.Payload
+        var payloadJsonString = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), jsonOptions);
+        // Parse the JSON string back to JsonElement for proper serialization
+        var payloadElement = System.Text.Json.JsonDocument.Parse(payloadJsonString).RootElement;
+        return new
+        {
+            e.Id,
+            SortableUniqueId = e.SortableUniqueIdValue,
+            e.EventType,
+            e.Tags,
+            Payload = payloadElement
+        };
     }).ToList();
 
     // Save to file
