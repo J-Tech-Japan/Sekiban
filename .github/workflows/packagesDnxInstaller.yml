@@ -1,0 +1,41 @@
+name: nuget package CreateSekibanTemplate tool release
+
+on:
+  push:
+    tags:
+      - 'dnxInstaller-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Detect version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" != dnxInstaller-v* ]]; then
+            echo "Unexpected tag format: $TAG"
+            exit 1
+          fi
+          echo "VERSION=${TAG#dnxInstaller-v}" >> $GITHUB_ENV
+
+      - name: Pack Tool
+        run: |
+          dotnet pack tools/dotnettools/CreateSekibanDcbTemplate/CreateSekibanDcbTemplate.csproj -c Release -o out -p:PackageVersion=$VERSION
+
+      - name: Push Tool
+        run: |
+          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.nupkg
