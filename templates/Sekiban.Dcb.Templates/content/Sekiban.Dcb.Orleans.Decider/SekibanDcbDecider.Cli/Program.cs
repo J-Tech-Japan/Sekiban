@@ -860,14 +860,19 @@ static async Task FetchTagEventsAsync(string connectionString, string databaseTy
 
     Directory.CreateDirectory(outputDir);
 
-    var eventsForJson = events.Select(e => new
+    var eventsForJson = events.Select(e =>
     {
-        e.Id,
-        SortableUniqueId = e.SortableUniqueIdValue,
-        e.EventType,
-        e.Tags,
-        PayloadJson = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), tagEventService.JsonSerializerOptions),
-        e.Payload
+        var payloadJsonString = System.Text.Json.JsonSerializer.Serialize(e.Payload, e.Payload.GetType(), tagEventService.JsonSerializerOptions);
+        // Parse the JSON string back to JsonElement for proper serialization
+        var payloadElement = System.Text.Json.JsonDocument.Parse(payloadJsonString).RootElement;
+        return new
+        {
+            e.Id,
+            SortableUniqueId = e.SortableUniqueIdValue,
+            e.EventType,
+            e.Tags,
+            Payload = payloadElement
+        };
     }).ToList();
 
     var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");

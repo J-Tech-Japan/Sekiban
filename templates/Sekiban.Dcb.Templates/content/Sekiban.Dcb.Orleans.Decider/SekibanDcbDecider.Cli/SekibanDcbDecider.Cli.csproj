@@ -23,4 +23,8 @@
         <ProjectReference Include="..\SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="output\" />
+    </ItemGroup>
+
 </Project>
