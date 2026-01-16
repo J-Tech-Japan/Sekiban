@@ -32,39 +32,49 @@ public partial class CosmosDbEventStore : IEventStore
 
     /// <summary>
     ///     Reads all events, optionally after a given sortable unique ID.
+    ///     Optimized for high-throughput bulk reads with parallel deserialization.
     /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
         try
         {
             var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var options = _context.Options;
 
-            var query = container.GetItemLinqQueryable<CosmosEvent>()
-                .OrderBy(e => e.SortableUniqueId);
+            // Build SQL query for better performance than LINQ
+            var sqlQuery = since != null
+                ? $"SELECT * FROM c WHERE c.sortableUniqueId > '{since.Value}' ORDER BY c.sortableUniqueId"
+                : "SELECT * FROM c ORDER BY c.sortableUniqueId";
 
-            if (since != null)
-            {
-                // Use CompareTo instead of string.Compare for Cosmos DB LINQ compatibility
-                query = query.Where(e => e.SortableUniqueId.CompareTo(since.Value) > 0)
-                    .OrderBy(e => e.SortableUniqueId);
-            }
+            var queryDefinition = new QueryDefinition(sqlQuery);
+            var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
 
             var events = new List<Event>();
-            using var iterator = query.ToFeedIterator();
+            var totalRuConsumed = 0.0;
+            var totalEventsRead = 0;
+
+            using var iterator = container.GetItemQueryIterator<CosmosEvent>(queryDefinition, requestOptions: queryRequestOptions);
 
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                foreach (var cosmosEvent in response)
-                {
-                    var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
-                    if (!payloadResult.IsSuccess)
-                    {
-                        return ResultBox.Error<IEnumerable<Event>>(payloadResult.GetException());
-                    }
+                totalRuConsumed += response.RequestCharge;
 
-                    events.Add(cosmosEvent.ToEvent(payloadResult.GetValue()));
+                // Process page with parallel deserialization
+                var pageEvents = await ProcessPageWithParallelDeserializationAsync(
+                    response.ToList(),
+                    options.MaxConcurrentDeserializations).ConfigureAwait(false);
+
+                if (!pageEvents.IsSuccess)
+                {
+                    return ResultBox.Error<IEnumerable<Event>>(pageEvents.GetException());
                 }
+
+                events.AddRange(pageEvents.GetValue());
+                totalEventsRead += response.Count;
+
+                // Report progress if callback is configured
+                options.ReadProgressCallback?.Invoke(totalEventsRead, totalRuConsumed);
             }
 
             return ResultBox.FromValue<IEnumerable<Event>>(events);
@@ -88,32 +98,98 @@ public partial class CosmosDbEventStore : IEventStore
     }
 
     /// <summary>
+    ///     Processes a page of CosmosEvents with parallel deserialization.
+    /// </summary>
+    private async Task<ResultBox<List<Event>>> ProcessPageWithParallelDeserializationAsync(
+        List<CosmosEvent> cosmosEvents,
+        int maxConcurrency)
+    {
+        if (cosmosEvents.Count == 0)
+        {
+            return ResultBox.FromValue(new List<Event>());
+        }
+
+        // For small pages, sequential is faster due to task overhead
+        if (cosmosEvents.Count <= 50)
+        {
+            var sequentialEvents = new List<Event>(cosmosEvents.Count);
+            foreach (var cosmosEvent in cosmosEvents)
+            {
+                var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
+                if (!payloadResult.IsSuccess)
+                {
+                    return ResultBox.Error<List<Event>>(payloadResult.GetException());
+                }
+                sequentialEvents.Add(cosmosEvent.ToEvent(payloadResult.GetValue()));
+            }
+            return ResultBox.FromValue(sequentialEvents);
+        }
+
+        // Parallel deserialization for larger pages
+        using var semaphore = new SemaphoreSlim(maxConcurrency);
+        var tasks = cosmosEvents.Select(async cosmosEvent =>
+        {
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
+                if (!payloadResult.IsSuccess)
+                {
+                    return (Event: (Event?)null, Error: payloadResult.GetException());
+                }
+                return (Event: cosmosEvent.ToEvent(payloadResult.GetValue()), Error: (Exception?)null);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        // Check for any errors
+        var firstError = results.FirstOrDefault(r => r.Error != null);
+        if (firstError.Error != null)
+        {
+            return ResultBox.Error<List<Event>>(firstError.Error);
+        }
+
+        // Collect successful results preserving order
+        var events = results.Select(r => r.Event!).ToList();
+        return ResultBox.FromValue(events);
+    }
+
+    /// <summary>
     ///     Reads events by tag, optionally after a given sortable unique ID.
+    ///     Optimized with batched point reads and parallel deserialization.
     /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try
         {
             var tagString = tag.GetTag();
+            var options = _context.Options;
 
-            // First, get all event IDs for this tag from the tags container
+            // First, get all event IDs for this tag from the tags container using optimized query
             var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
-            var tagQuery = tagsContainer.GetItemLinqQueryable<CosmosTag>()
-                .Where(t => t.Tag == tagString);
 
-            if (since != null)
-            {
-                // Use CompareTo instead of string.Compare for Cosmos DB LINQ compatibility
-                tagQuery = tagQuery.Where(t => t.SortableUniqueId.CompareTo(since.Value) > 0);
-            }
+            var sqlQuery = since != null
+                ? $"SELECT c.eventId FROM c WHERE c.tag = '{tagString}' AND c.sortableUniqueId > '{since.Value}' ORDER BY c.sortableUniqueId"
+                : $"SELECT c.eventId FROM c WHERE c.tag = '{tagString}' ORDER BY c.sortableUniqueId";
+
+            var queryDefinition = new QueryDefinition(sqlQuery);
+            var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
 
             var eventIds = new List<string>();
-            using (var tagIterator = tagQuery.OrderBy(t => t.SortableUniqueId).ToFeedIterator())
+            using (var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: queryRequestOptions))
             {
                 while (tagIterator.HasMoreResults)
                 {
                     var response = await tagIterator.ReadNextAsync().ConfigureAwait(false);
-                    eventIds.AddRange(response.Select(t => t.EventId));
+                    foreach (var item in response)
+                    {
+                        eventIds.Add((string)item.eventId);
+                    }
                 }
             }
 
@@ -122,43 +198,55 @@ public partial class CosmosDbEventStore : IEventStore
                 return ResultBox.FromValue<IEnumerable<Event>>(new List<Event>());
             }
 
-            // Now fetch the events by their IDs
+            // Fetch events using batched point reads with concurrency control
             var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
-            var events = new List<Event>();
+            using var semaphore = new SemaphoreSlim(options.MaxConcurrentDeserializations);
 
-            // Batch read events for better performance
             var tasks = eventIds.Select(async eventId =>
             {
+                await semaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
                         eventId,
                         new PartitionKey(eventId)).ConfigureAwait(false);
 
-                    return response.Resource;
+                    var cosmosEvent = response.Resource;
+                    var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
+                    if (!payloadResult.IsSuccess)
+                    {
+                        return (Event: (Event?)null, Error: payloadResult.GetException(), SortKey: string.Empty);
+                    }
+
+                    var ev = cosmosEvent.ToEvent(payloadResult.GetValue());
+                    return (Event: ev, Error: (Exception?)null, SortKey: ev.SortableUniqueIdValue);
                 }
                 catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
                 {
                     // Event might have been deleted, skip it
-                    return null;
+                    return (Event: null, Error: null, SortKey: string.Empty);
                 }
-            });
-
-            var cosmosEvents = await Task.WhenAll(tasks).ConfigureAwait(false);
-
-            foreach (var cosmosEvent in cosmosEvents.Where(e => e != null))
-            {
-                var payloadResult = DeserializeEventPayload(cosmosEvent!.EventType, cosmosEvent.Payload);
-                if (!payloadResult.IsSuccess)
+                finally
                 {
-                    return ResultBox.Error<IEnumerable<Event>>(payloadResult.GetException());
+                    semaphore.Release();
                 }
+            }).ToList();
 
-                events.Add(cosmosEvent.ToEvent(payloadResult.GetValue()));
+            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            // Check for any errors
+            var firstError = results.FirstOrDefault(r => r.Error != null);
+            if (firstError.Error != null)
+            {
+                return ResultBox.Error<IEnumerable<Event>>(firstError.Error);
             }
 
-            // Sort events by SortableUniqueId
-            events = events.OrderBy(e => e.SortableUniqueIdValue).ToList();
+            // Collect successful results and sort by SortableUniqueId
+            var events = results
+                .Where(r => r.Event != null)
+                .OrderBy(r => r.SortKey)
+                .Select(r => r.Event!)
+                .ToList();
 
             return ResultBox.FromValue<IEnumerable<Event>>(events);
         }
@@ -656,18 +744,19 @@ public partial class CosmosDbEventStore : IEventStore
         {
             var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
 
-            IQueryable<CosmosEvent> query = container.GetItemLinqQueryable<CosmosEvent>();
-            if (since != null)
-            {
-                query = query.Where(e => e.SortableUniqueId.CompareTo(since.Value) > 0);
-            }
+            // Use COUNT aggregate for efficiency instead of fetching all documents
+            var sqlQuery = since != null
+                ? $"SELECT VALUE COUNT(1) FROM c WHERE c.sortableUniqueId > '{since.Value}'"
+                : "SELECT VALUE COUNT(1) FROM c";
+
+            var queryDefinition = new QueryDefinition(sqlQuery);
+            using var iterator = container.GetItemQueryIterator<long>(queryDefinition);
 
             long count = 0;
-            using var iterator = query.ToFeedIterator();
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                count += response.Count;
+                count += response.FirstOrDefault();
             }
 
             return ResultBox.FromValue(count);

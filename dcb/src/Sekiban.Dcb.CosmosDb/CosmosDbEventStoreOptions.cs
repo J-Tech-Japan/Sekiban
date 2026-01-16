@@ -1,3 +1,4 @@
+using Microsoft.Azure.Cosmos;
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
@@ -49,4 +50,80 @@ public class CosmosDbEventStoreOptions
     ///     Default: false (disabled for better performance)
     /// </summary>
     public bool EnableContentResponseOnWrite { get; set; }
+
+    // ========== Read Optimization Options ==========
+
+    /// <summary>
+    ///     Maximum items per page when reading events from Cosmos DB.
+    ///     Higher values reduce round trips but increase memory usage.
+    ///     Default: 1000 (optimized for Azure Container Apps / Orleans)
+    /// </summary>
+    public int MaxItemCountPerPage { get; set; } = 1000;
+
+    /// <summary>
+    ///     Maximum degree of parallelism for cross-partition queries.
+    ///     Default: -1 (unlimited, let Cosmos DB SDK decide)
+    /// </summary>
+    public int MaxConcurrencyForQueries { get; set; } = -1;
+
+    /// <summary>
+    ///     Maximum buffered items for cross-partition queries.
+    ///     Default: 50000 (optimized for high-throughput reads)
+    /// </summary>
+    public int MaxBufferedItemCount { get; set; } = 50000;
+
+    /// <summary>
+    ///     Whether to use Direct connection mode (TCP) instead of Gateway (HTTPS).
+    ///     Direct mode offers significantly better performance.
+    ///     Default: true (optimized for Azure Container Apps / Orleans)
+    ///     Note: Set to false if running behind proxies/firewalls or in Azure Functions Consumption plan.
+    /// </summary>
+    public bool UseDirectConnectionMode { get; set; } = true;
+
+    /// <summary>
+    ///     Maximum concurrent deserialization tasks when processing read results.
+    ///     Default: Environment.ProcessorCount * 2 (optimized for parallel processing)
+    /// </summary>
+    public int MaxConcurrentDeserializations { get; set; } = Environment.ProcessorCount * 2;
+
+    /// <summary>
+    ///     Callback for progress reporting during bulk read operations.
+    ///     Called with (eventsRead, totalRuConsumed) after each page.
+    /// </summary>
+    public Action<int, double>? ReadProgressCallback { get; set; }
+
+    /// <summary>
+    ///     Creates QueryRequestOptions configured based on current settings.
+    ///     Values of -1 are omitted to use SDK defaults.
+    /// </summary>
+    public QueryRequestOptions CreateOptimizedQueryRequestOptions()
+    {
+        var options = new QueryRequestOptions();
+
+        if (MaxItemCountPerPage > 0)
+            options.MaxItemCount = MaxItemCountPerPage;
+
+        if (MaxConcurrencyForQueries != -1)
+            options.MaxConcurrency = MaxConcurrencyForQueries;
+
+        if (MaxBufferedItemCount > 0)
+            options.MaxBufferedItemCount = MaxBufferedItemCount;
+
+        return options;
+    }
+
+    /// <summary>
+    ///     Creates a compatibility-focused options instance for restricted environments.
+    ///     Use this for local testing behind proxies, Azure Functions Consumption plan,
+    ///     or other environments where Direct mode may not work.
+    /// </summary>
+    public static CosmosDbEventStoreOptions CreateForCompatibility() =>
+        new()
+        {
+            MaxItemCountPerPage = -1, // Use SDK default (~100)
+            MaxConcurrencyForQueries = -1,
+            MaxBufferedItemCount = -1, // Use SDK default
+            UseDirectConnectionMode = false, // Gateway mode (HTTPS)
+            MaxConcurrentDeserializations = 1 // Sequential processing
+        };
 }
