@@ -76,4 +76,7 @@ public static class MultiProjectionLogEvents
 
     /// <summary>Full catch-up initiated due to integrity violation.</summary>
     public static readonly EventId FullCatchUpInitiated = new(1023, "FullCatchUpInitiated");
+
+    /// <summary>Grain activation completed (catch-up may still be running in background).</summary>
+    public static readonly EventId ActivationCompleted = new(1024, "ActivationCompleted");
 }

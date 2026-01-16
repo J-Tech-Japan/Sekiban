@@ -1347,18 +1347,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         await base.OnActivateAsync(cancellationToken);
 
-        // After activation, catch up from the event store.
-        // If snapshot restore failed or there was no snapshot, perform a full catch-up to rebuild current state immediately.
-        await CatchUpFromEventStoreAsync(forceFullCatchUp);
+        // After activation, start catch-up in background (fire-and-forget).
+        // This prevents Orleans activation timeout when catch-up takes longer than 30 seconds.
+        // Queries will return partial/stale data with IsCatchUpInProgress=true until catch-up completes.
+        _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
 
-        // Check if activation was successful
-        if (_stateRestoreSource == StateRestoreSource.Failed && !_catchUpProgress.IsActive && _eventsProcessed == 0)
+        // Mark state restore source based on whether we need full catch-up
+        if (_stateRestoreSource == StateRestoreSource.Failed && _eventsProcessed == 0)
         {
-            // Both external store restore and catch-up failed
+            // External store restore failed, catch-up will rebuild state
             _activationHealthy = false;
-            _logger.LogCritical(
+            _logger.LogWarning(
                 MultiProjectionLogEvents.UnhealthyActivation,
-                "Grain activated without state - queries may fail: {ProjectorName}, Reason: {Reason}",
+                "Grain activated without persisted state - catch-up in progress: {ProjectorName}, Reason: {Reason}",
                 projectorName, _activationFailureReason);
         }
         else if (forceFullCatchUp && _stateRestoreSource != StateRestoreSource.Failed)
@@ -1366,6 +1367,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _stateRestoreSource = StateRestoreSource.FullCatchUp;
             _stateRestoredAt = DateTime.UtcNow;
         }
+
+        _logger.LogInformation(
+            MultiProjectionLogEvents.ActivationCompleted,
+            "Grain activation completed (catch-up running in background): {ProjectorName}",
+            projectorName);
     }
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
@@ -1752,45 +1758,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         // Mark as initiating early to prevent concurrent initiations
-        // We'll set proper values after reading from event store
         _catchUpProgress.IsActive = true;
 
         try
         {
-            // Get current position
+            // Get current position (fast operation - reads from local state)
             SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
 
-            // Get latest position in event store
-            var latestResult = await _eventStore.ReadAllEventsAsync(since: null);
-            if (!latestResult.IsSuccess || !latestResult.GetValue().Any())
-            {
-                Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
-                _catchUpProgress.IsActive = false;
-                return;
-            }
+            // NOTE: We intentionally skip reading all events to determine target position.
+            // Reading 200k+ events just to find the latest position causes activation timeout.
+            // Instead, we start catch-up immediately and let it run until no new events are found.
+            // The target position will be updated dynamically during catch-up batches.
 
-            var latestEvent = latestResult.GetValue().LastOrDefault();
-            if (latestEvent == null)
-            {
-                Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
-                _catchUpProgress.IsActive = false;
-                return;
-            }
-            var targetPosition = new SortableUniqueId(latestEvent.SortableUniqueIdValue);
-
-            // Check if catch-up is needed
-            if (!forceFull && currentPosition != null && currentPosition.Value == targetPosition.Value)
-            {
-                Console.WriteLine($"[{projectorName}] Already at latest position, no catch-up needed");
-                _catchUpProgress.IsActive = false;
-                return;
-            }
-
-            // Initialize catch-up progress with proper values
+            // Initialize catch-up progress (TargetPosition will be set during first batch)
             _catchUpProgress = new CatchUpProgress
             {
                 CurrentPosition = currentPosition,
-                TargetPosition = targetPosition,
+                TargetPosition = null, // Will be determined during catch-up
                 IsActive = true,
                 ConsecutiveEmptyBatches = 0,
                 BatchesProcessed = 0,
@@ -1800,7 +1784,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             MoveBufferedStreamEventsToPending(currentPosition);
 
-            Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} to {targetPosition.Value}");
+            Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} (target position will be determined dynamically)");
 
             // Start catch-up timer
             StartCatchUpTimer();
@@ -1896,6 +1880,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (allEvents.Count == 0)
         {
             return 0;
+        }
+
+        // Update target position dynamically based on latest event in this batch
+        // This avoids reading all events upfront just to determine the target
+        var latestInBatch = allEvents.Last();
+        if (_catchUpProgress.TargetPosition == null ||
+            string.Compare(latestInBatch.SortableUniqueIdValue, _catchUpProgress.TargetPosition.Value, StringComparison.Ordinal) > 0)
+        {
+            _catchUpProgress.TargetPosition = new SortableUniqueId(latestInBatch.SortableUniqueIdValue);
         }
 
         // Limit batch size based on whether this is initial catch-up
