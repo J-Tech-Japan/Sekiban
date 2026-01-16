@@ -16,8 +16,11 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Get the current state of the multi-projection
     /// </summary>
     /// <param name="canGetUnsafeState">Whether to return unsafe state (default: true)</param>
-    /// <returns>The current multi-projection state</returns>
-    Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
+    /// <param name="waitForCatchUp">Whether to wait for catch-up completion.
+    /// If false (default), returns immediately with current state and catch-up progress info.
+    /// If true, waits up to 30 seconds for catch-up to complete before returning.</param>
+    /// <returns>The current multi-projection state, including catch-up progress if in progress</returns>
+    Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false);
 
     /// <summary>
     ///     Get snapshot envelope (inline or offloaded) as JSON according to actor policy.

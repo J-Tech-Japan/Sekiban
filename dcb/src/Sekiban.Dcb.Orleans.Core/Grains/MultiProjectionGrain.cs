@@ -113,7 +113,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
     }
 
-    public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
+    public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false)
     {
         await EnsureInitializedAsync();
 
@@ -122,9 +122,74 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return ResultBox.Error<MultiProjectionState>(
                 new InvalidOperationException("Projection actor not initialized"));
         }
+
         await StartSubscriptionAsync();
-        await CatchUpFromEventStoreAsync();
-        return await _projectionActor.GetStateAsync(canGetUnsafeState);
+
+        // Start catch-up in background (fire-and-forget, does not block)
+        _ = CatchUpFromEventStoreAsync();
+
+        // If waitForCatchUp is true, wait with timeout
+        if (waitForCatchUp && _catchUpProgress.IsActive)
+        {
+            await WaitForCatchUpWithTimeoutAsync(TimeSpan.FromSeconds(30));
+        }
+
+        var stateResult = await _projectionActor.GetStateAsync(canGetUnsafeState);
+
+        // Enrich state with catch-up progress information
+        return stateResult.Remap(state => EnrichStateWithCatchUpProgress(state));
+    }
+
+    /// <summary>
+    ///     Enrich the projection state with catch-up progress information.
+    /// </summary>
+    private MultiProjectionState EnrichStateWithCatchUpProgress(MultiProjectionState state)
+    {
+        if (!_catchUpProgress.IsActive)
+        {
+            return state;
+        }
+
+        // Calculate approximate progress percentage based on batches processed
+        double? progressPercent = null;
+        if (_catchUpProgress.BatchesProcessed > 0 && _eventsProcessed > 0)
+        {
+            var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
+            if (elapsed.TotalSeconds > 1)
+            {
+                // Estimate based on events per second and typical event counts
+                // This is a rough estimate since we don't know total event count upfront
+                var eventsPerSecond = _eventsProcessed / elapsed.TotalSeconds;
+                if (eventsPerSecond > 0)
+                {
+                    // Use batches processed as a proxy for progress
+                    // Typical large projection might have 100+ batches
+                    progressPercent = Math.Min(99.0, _catchUpProgress.BatchesProcessed * 1.5);
+                }
+            }
+        }
+
+        return state with
+        {
+            IsCatchUpInProgress = true,
+            CatchUpCurrentPosition = _catchUpProgress.CurrentPosition?.Value,
+            CatchUpTargetPosition = _catchUpProgress.TargetPosition?.Value,
+            CatchUpProgressPercent = progressPercent
+        };
+    }
+
+    /// <summary>
+    ///     Wait for catch-up to complete with a timeout.
+    /// </summary>
+    private async Task WaitForCatchUpWithTimeoutAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var checkInterval = TimeSpan.FromMilliseconds(500);
+
+        while (_catchUpProgress.IsActive && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(checkInterval);
+        }
     }
 
     /// <summary>
@@ -1678,50 +1743,74 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var projectorName = this.GetPrimaryKeyString();
 
-        // Get current position
-        SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
-
-        // Get latest position in event store
-        var latestResult = await _eventStore.ReadAllEventsAsync(since: null);
-        if (!latestResult.IsSuccess || !latestResult.GetValue().Any())
+        // Double-check: If catch-up is already active, skip immediately
+        // This prevents race conditions when multiple requests arrive concurrently
+        if (_catchUpProgress.IsActive)
         {
-            Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
+            Console.WriteLine($"[{projectorName}] Catch-up already active, skipping initiation");
             return;
         }
 
-        var latestEvent = latestResult.GetValue().LastOrDefault();
-        if (latestEvent == null)
+        // Mark as initiating early to prevent concurrent initiations
+        // We'll set proper values after reading from event store
+        _catchUpProgress.IsActive = true;
+
+        try
         {
-            Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
-            return;
+            // Get current position
+            SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
+
+            // Get latest position in event store
+            var latestResult = await _eventStore.ReadAllEventsAsync(since: null);
+            if (!latestResult.IsSuccess || !latestResult.GetValue().Any())
+            {
+                Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
+                _catchUpProgress.IsActive = false;
+                return;
+            }
+
+            var latestEvent = latestResult.GetValue().LastOrDefault();
+            if (latestEvent == null)
+            {
+                Console.WriteLine($"[{projectorName}] No events in event store, skipping catch-up");
+                _catchUpProgress.IsActive = false;
+                return;
+            }
+            var targetPosition = new SortableUniqueId(latestEvent.SortableUniqueIdValue);
+
+            // Check if catch-up is needed
+            if (!forceFull && currentPosition != null && currentPosition.Value == targetPosition.Value)
+            {
+                Console.WriteLine($"[{projectorName}] Already at latest position, no catch-up needed");
+                _catchUpProgress.IsActive = false;
+                return;
+            }
+
+            // Initialize catch-up progress with proper values
+            _catchUpProgress = new CatchUpProgress
+            {
+                CurrentPosition = currentPosition,
+                TargetPosition = targetPosition,
+                IsActive = true,
+                ConsecutiveEmptyBatches = 0,
+                BatchesProcessed = 0,
+                StartTime = DateTime.UtcNow,
+                LastAttempt = DateTime.MinValue
+            };
+
+            MoveBufferedStreamEventsToPending(currentPosition);
+
+            Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} to {targetPosition.Value}");
+
+            // Start catch-up timer
+            StartCatchUpTimer();
         }
-        var targetPosition = new SortableUniqueId(latestEvent.SortableUniqueIdValue);
-
-        // Check if catch-up is needed
-        if (!forceFull && currentPosition != null && currentPosition.Value == targetPosition.Value)
+        catch (Exception ex)
         {
-            Console.WriteLine($"[{projectorName}] Already at latest position, no catch-up needed");
-            return;
+            Console.WriteLine($"[{projectorName}] Error during catch-up initiation: {ex.Message}");
+            _catchUpProgress.IsActive = false;
+            throw;
         }
-
-        // Initialize catch-up progress early to route incoming stream events to pending.
-        _catchUpProgress = new CatchUpProgress
-        {
-            CurrentPosition = currentPosition,
-            TargetPosition = targetPosition,
-            IsActive = true,
-            ConsecutiveEmptyBatches = 0,
-            BatchesProcessed = 0,
-            StartTime = DateTime.UtcNow,
-            LastAttempt = DateTime.MinValue
-        };
-
-        MoveBufferedStreamEventsToPending(currentPosition);
-
-        Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} to {targetPosition.Value}");
-
-        // Start catch-up timer
-        StartCatchUpTimer();
     }
 
     private void StartCatchUpTimer()
