@@ -1106,7 +1106,7 @@ static async Task ShowTagStateAsync(string connectionString, string databaseType
     Console.WriteLine(stateJson);
 }
 
-static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName)
+static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName, bool enableProgressReporting = true)
 {
     var services = new ServiceCollection();
 
@@ -1116,9 +1116,27 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
 
     if (databaseType.ToLowerInvariant() == "cosmos")
     {
-        // Register Cosmos DB services
-        var cosmosClient = new CosmosClient(connectionString);
-        var cosmosContext = new CosmosDbContext(cosmosClient, cosmosDatabaseName);
+        // Use default optimized options (Direct mode, large page size, parallel deserialization)
+        var cosmosOptions = new CosmosDbEventStoreOptions();
+
+        // Add progress callback if enabled
+        if (enableProgressReporting)
+        {
+            var lastReportTime = DateTime.UtcNow;
+            cosmosOptions.ReadProgressCallback = (eventsRead, ruConsumed) =>
+            {
+                // Report progress every 2 seconds to avoid too much console output
+                var now = DateTime.UtcNow;
+                if ((now - lastReportTime).TotalSeconds >= 2)
+                {
+                    Console.WriteLine($"  Progress: {eventsRead:N0} events read, {ruConsumed:N2} RU consumed");
+                    lastReportTime = now;
+                }
+            };
+        }
+
+        // Register Cosmos DB services with options
+        var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
         services.AddSingleton(cosmosContext);
         services.AddSingleton<IEventStore, CosmosDbEventStore>();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();

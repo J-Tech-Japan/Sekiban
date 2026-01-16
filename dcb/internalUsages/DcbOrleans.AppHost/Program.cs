@@ -6,7 +6,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 var storage = builder
     .AddAzureStorage("azurestorage")
     .RunAsEmulator(opt => opt.WithDataVolume());
-    // .RunAsEmulator();
+// .RunAsEmulator();
 var clusteringTable = storage.AddTables("DcbOrleansClusteringTable");
 var grainTable = storage.AddTables("DcbOrleansGrainTable");
 var grainStorage = storage.AddBlobs("DcbOrleansGrainState");

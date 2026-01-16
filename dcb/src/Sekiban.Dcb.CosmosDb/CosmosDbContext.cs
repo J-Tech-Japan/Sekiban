@@ -151,7 +151,9 @@ public class CosmosDbContext : IDisposable
                 AllowBulkExecution = true,
                 // Retry settings for Serverless mode (increased from defaults)
                 MaxRetryAttemptsOnRateLimitedRequests = _options.MaxRetryAttemptsOnRateLimited,
-                MaxRetryWaitTimeOnRateLimitedRequests = _options.MaxRetryWaitTime
+                MaxRetryWaitTimeOnRateLimitedRequests = _options.MaxRetryWaitTime,
+                // Use Direct mode for better read performance (TCP instead of HTTPS)
+                ConnectionMode = _options.UseDirectConnectionMode ? ConnectionMode.Direct : ConnectionMode.Gateway
             };
 
             _cosmosClient = new CosmosClient(_connectionString, cosmosClientOptions);
