@@ -459,6 +459,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             Console.WriteLine($"[{projectorName}] Starting persistence at {startUtc:yyyy-MM-dd HH:mm:ss.fff} UTC");
 
+            // Memory optimization: Force GC before serialization to free up memory for large projections
+            // This helps prevent OutOfMemoryException during snapshot serialization
+            if (_eventsProcessed > 100000)
+            {
+                Console.WriteLine($"[{projectorName}] Large projection ({_eventsProcessed:N0} events) - forcing GC before serialization");
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+            }
+
             // Phase1: force promotion of buffered events before snapshot
             try
             {
@@ -508,8 +517,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             catch { }
 
             // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
-            var envelopeJson = JsonSerializer.Serialize(envelope, _domainTypes.JsonSerializerOptions);
-            var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
+            // Memory optimization: Use streaming serialization to avoid intermediate string allocation
+            // This reduces peak memory usage for large projections
+            byte[] envelopeBytes;
+            using (var memoryStream = new MemoryStream())
+            {
+                await JsonSerializer.SerializeAsync(memoryStream, envelope, _domainTypes.JsonSerializerOptions);
+                envelopeBytes = memoryStream.ToArray();
+            }
             var envelopeSize = envelopeBytes.LongLength;
 
             // Extract original/compressed sizes from the internal state
