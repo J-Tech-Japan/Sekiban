@@ -446,6 +446,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
+    // Threshold for forcing GC before serialization (10MB payload)
+    private const long LargePayloadThresholdBytes = 10_000_000;
+
     public async Task<ResultBox<bool>> PersistStateAsync()
     {
         try
@@ -507,14 +510,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
 
-            // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
-            var envelopeJson = JsonSerializer.Serialize(envelope, _domainTypes.JsonSerializerOptions);
-            var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
-            var envelopeSize = envelopeBytes.LongLength;
-
-            // Extract original/compressed sizes from the internal state
-            long originalSizeBytes = envelopeSize;
-            long compressedSizeBytes = envelopeSize;
+            // Extract original/compressed sizes from the internal state (before serialization for GC decision)
+            long originalSizeBytes = 0;
+            long compressedSizeBytes = 0;
             long payloadBytesLength = 0;
             if (envelope.InlineState != null)
             {
@@ -525,6 +523,33 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     payloadBytesLength = envelope.InlineState.GetPayloadBytes().LongLength;
                 }
                 catch { }
+            }
+
+            // Memory optimization: Force GC before serialization for large payloads
+            // This helps prevent OutOfMemoryException during snapshot serialization
+            if (payloadBytesLength > LargePayloadThresholdBytes)
+            {
+                Console.WriteLine($"[{projectorName}] Large payload ({payloadBytesLength:N0} bytes) - forcing GC before serialization");
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+            }
+
+            // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
+            // Memory optimization: Use streaming serialization to avoid intermediate string allocation
+            // This reduces peak memory usage for large projections
+            byte[] envelopeBytes;
+            using (var memoryStream = new MemoryStream())
+            {
+                await JsonSerializer.SerializeAsync(memoryStream, envelope, _domainTypes.JsonSerializerOptions);
+                envelopeBytes = memoryStream.ToArray();
+            }
+            var envelopeSize = envelopeBytes.LongLength;
+
+            // Update sizes if not already set
+            if (originalSizeBytes == 0)
+            {
+                originalSizeBytes = envelopeSize;
+                compressedSizeBytes = envelopeSize;
             }
 
             // Get metadata
