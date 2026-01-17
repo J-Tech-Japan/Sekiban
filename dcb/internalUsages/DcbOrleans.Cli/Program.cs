@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using System.Reflection;
 using Dcb.Domain;
 using Microsoft.Azure.Cosmos;
@@ -56,55 +57,56 @@ var profileOption = new Option<string?>("--profile", "-P")
 };
 
 // Database type option (shared across commands)
-// Default from: --database option > Sekiban:Database config > DATABASE_TYPE env > "postgres"
-var databaseOption = new Option<string?>(
-    name: "--database",
-    description: "Database type: postgres or cosmos (defaults to Sekiban:Database config or DATABASE_TYPE env var)");
-databaseOption.AddAlias("-d");
+var databaseOption = new Option<string?>("--database", "-d")
+{
+    Description = "Database type: postgres or cosmos (defaults to Sekiban:Database config or DATABASE_TYPE env var)"
+};
 
 // Connection string option for Postgres
-var connectionStringOption = new Option<string?>(
-    name: "--connection-string",
-    description: "PostgreSQL connection string (defaults to ConnectionStrings:DcbPostgres config)");
-connectionStringOption.AddAlias("-c");
+var connectionStringOption = new Option<string?>("--connection-string", "-c")
+{
+    Description = "PostgreSQL connection string (defaults to ConnectionStrings:DcbPostgres config)"
+};
 
 // Connection string option for Cosmos
-var cosmosConnectionStringOption = new Option<string?>(
-    name: "--cosmos-connection-string",
-    description: "Cosmos DB connection string (defaults to ConnectionStrings:SekibanDcbCosmos config)");
+var cosmosConnectionStringOption = new Option<string?>("--cosmos-connection-string")
+{
+    Description = "Cosmos DB connection string (defaults to ConnectionStrings:SekibanDcbCosmos config)"
+};
 
 // Cosmos database name option
-var cosmosDatabaseNameOption = new Option<string?>(
-    name: "--cosmos-database",
-    description: "Cosmos DB database name (defaults to CosmosDb:DatabaseName config or 'SekibanDcb')");
+var cosmosDatabaseNameOption = new Option<string?>("--cosmos-database")
+{
+    Description = "Cosmos DB database name (defaults to CosmosDb:DatabaseName config or 'SekibanDcb')"
+};
 
 // Min events option
-var minEventsOption = new Option<int>(
-    name: "--min-events",
-    getDefaultValue: () => int.TryParse(configuration["MIN_EVENTS"], out var val) ? val : 3000,
-    description: "Minimum events required before building state");
-minEventsOption.AddAlias("-m");
+var minEventsOption = new Option<int>("--min-events", "-m")
+{
+    Description = "Minimum events required before building state",
+    DefaultValueFactory = _ => int.TryParse(configuration["MIN_EVENTS"], out var val) ? val : 3000
+};
 
 // Projector name option (optional - if not specified, build all)
-var projectorNameOption = new Option<string?>(
-    name: "--projector",
-    getDefaultValue: () => configuration["PROJECTOR_NAME"],
-    description: "Specific projector name to build (if not specified, builds all)");
-projectorNameOption.AddAlias("-p");
+var projectorNameOption = new Option<string?>("--projector", "-p")
+{
+    Description = "Specific projector name to build (if not specified, builds all)",
+    DefaultValueFactory = _ => configuration["PROJECTOR_NAME"]
+};
 
 // Force rebuild option
-var forceRebuildOption = new Option<bool>(
-    name: "--force",
-    getDefaultValue: () => configuration["FORCE_REBUILD"]?.ToLowerInvariant() == "true",
-    description: "Force rebuild even if state exists");
-forceRebuildOption.AddAlias("-f");
+var forceRebuildOption = new Option<bool>("--force", "-f")
+{
+    Description = "Force rebuild even if state exists",
+    DefaultValueFactory = _ => configuration["FORCE_REBUILD"]?.ToLowerInvariant() == "true"
+};
 
 // Verbose option
-var verboseOption = new Option<bool>(
-    name: "--verbose",
-    getDefaultValue: () => configuration["VERBOSE"]?.ToLowerInvariant() == "true",
-    description: "Show verbose output");
-verboseOption.AddAlias("-v");
+var verboseOption = new Option<bool>("--verbose", "-v")
+{
+    Description = "Show verbose output",
+    DefaultValueFactory = _ => configuration["VERBOSE"]?.ToLowerInvariant() == "true"
+};
 
 // Build command
 var buildCommand = new Command("build", "Build multi projection states")
@@ -120,17 +122,17 @@ var buildCommand = new Command("build", "Build multi projection states")
     verboseOption
 };
 
-buildCommand.SetHandler(async (context) =>
+buildCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var minEvents = context.ParseResult.GetValueForOption(minEventsOption);
-    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
-    var forceRebuild = context.ParseResult.GetValueForOption(forceRebuildOption);
-    var verbose = context.ParseResult.GetValueForOption(verboseOption);
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var minEvents = parseResult.GetValue(minEventsOption);
+    var projectorName = parseResult.GetValue(projectorNameOption);
+    var forceRebuild = parseResult.GetValue(forceRebuildOption);
+    var verbose = parseResult.GetValue(verboseOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -145,7 +147,7 @@ buildCommand.SetHandler(async (context) =>
 // List command
 var listCommand = new Command("list", "List all registered projectors");
 
-listCommand.SetHandler(async () =>
+listCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     await ListProjectorsAsync();
 });
@@ -160,13 +162,13 @@ var statusCommand = new Command("status", "Show status of all projection states"
     cosmosDatabaseNameOption
 };
 
-statusCommand.SetHandler(async (context) =>
+statusCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -179,11 +181,11 @@ statusCommand.SetHandler(async (context) =>
 });
 
 // Save command - export state JSON to file for debugging
-var outputDirOption = new Option<string?>(
-    name: "--output-dir",
-    getDefaultValue: () => configuration["OUTPUT_DIR"] ?? "./output",
-    description: "Output directory for saved state files");
-outputDirOption.AddAlias("-o");
+var outputDirOption = new Option<string?>("--output-dir", "-o")
+{
+    Description = "Output directory for saved state files",
+    DefaultValueFactory = _ => configuration["OUTPUT_DIR"] ?? "./output"
+};
 
 var saveCommand = new Command("save", "Save projection state JSON to files for debugging")
 {
@@ -196,15 +198,15 @@ var saveCommand = new Command("save", "Save projection state JSON to files for d
     outputDirOption
 };
 
-saveCommand.SetHandler(async (context) =>
+saveCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
-    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var projectorName = parseResult.GetValue(projectorNameOption);
+    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -227,14 +229,14 @@ var deleteCommand = new Command("delete", "Delete projection states")
     projectorNameOption
 };
 
-deleteCommand.SetHandler(async (context) =>
+deleteCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var projectorName = parseResult.GetValue(projectorNameOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -247,13 +249,11 @@ deleteCommand.SetHandler(async (context) =>
 });
 
 // Tag-events command - fetch events for a specific tag
-var tagOption = new Option<string>(
-    name: "--tag",
-    description: "Tag string in format 'group:content' (e.g., 'WeatherForecast:00000000-0000-0000-0000-000000000001')")
+var tagOption = new Option<string>("--tag", "-t")
 {
-    IsRequired = true
+    Description = "Tag string in format 'group:content' (e.g., 'WeatherForecast:00000000-0000-0000-0000-000000000001')",
+    Required = true
 };
-tagOption.AddAlias("-t");
 
 var tagEventsCommand = new Command("tag-events", "Fetch and save all events for a specific tag")
 {
@@ -266,15 +266,15 @@ var tagEventsCommand = new Command("tag-events", "Fetch and save all events for 
     outputDirOption
 };
 
-tagEventsCommand.SetHandler(async (context) =>
+tagEventsCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var tag = context.ParseResult.GetValueForOption(tagOption) ?? "";
-    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var tag = parseResult.GetValue(tagOption) ?? "";
+    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -297,14 +297,14 @@ var projectionCommand = new Command("projection", "Display the current state of 
     projectorNameOption
 };
 
-projectionCommand.SetHandler(async (context) =>
+projectionCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var projectorName = context.ParseResult.GetValueForOption(projectorNameOption);
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var projectorName = parseResult.GetValue(projectorNameOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -317,10 +317,10 @@ projectionCommand.SetHandler(async (context) =>
 });
 
 // Tag-state command - project events for a tag using a specific projector
-var tagProjectorOption = new Option<string?>(
-    name: "--projector",
-    description: "Tag projector name to use for projection. Auto-detects if not specified (e.g., 'UserMonthlyReservation' tag uses 'UserMonthlyReservationProjector')");
-tagProjectorOption.AddAlias("-P");
+var tagProjectorOption = new Option<string?>("--projector", "-P")
+{
+    Description = "Tag projector name to use for projection. Auto-detects if not specified (e.g., 'UserMonthlyReservation' tag uses 'UserMonthlyReservationProjector')"
+};
 
 var tagStateCommand = new Command("tag-state", "Project and display the current state for a specific tag")
 {
@@ -333,15 +333,15 @@ var tagStateCommand = new Command("tag-state", "Project and display the current 
     tagProjectorOption
 };
 
-tagStateCommand.SetHandler(async (context) =>
+tagStateCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var tag = context.ParseResult.GetValueForOption(tagOption) ?? "";
-    var tagProjector = context.ParseResult.GetValueForOption(tagProjectorOption) ?? "";
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var tag = parseResult.GetValue(tagOption) ?? "";
+    var tagProjector = parseResult.GetValue(tagProjectorOption) ?? "";
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -354,10 +354,10 @@ tagStateCommand.SetHandler(async (context) =>
 });
 
 // Tag-list command - list all tags in the event store
-var tagGroupOption = new Option<string?>(
-    name: "--tag-group",
-    description: "Filter by tag group name (e.g., 'WeatherForecast')");
-tagGroupOption.AddAlias("-g");
+var tagGroupOption = new Option<string?>("--tag-group", "-g")
+{
+    Description = "Filter by tag group name (e.g., 'WeatherForecast')"
+};
 
 var tagListCommand = new Command("tag-list", "List all tags in the event store and export to JSON")
 {
@@ -370,15 +370,15 @@ var tagListCommand = new Command("tag-list", "List all tags in the event store a
     outputDirOption
 };
 
-tagListCommand.SetHandler(async (context) =>
+tagListCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var tagGroup = context.ParseResult.GetValueForOption(tagGroupOption);
-    var outputDir = context.ParseResult.GetValueForOption(outputDirOption) ?? "./output";
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var tagGroup = parseResult.GetValue(tagGroupOption);
+    var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -391,17 +391,18 @@ tagListCommand.SetHandler(async (context) =>
 });
 
 // Cache directory option
-var cacheDirOption = new Option<string>(
-    name: "--cache-dir",
-    getDefaultValue: () => configuration["CACHE_DIR"] ?? "./cache",
-    description: "Directory for local SQLite cache");
-cacheDirOption.AddAlias("-C");
+var cacheDirOption = new Option<string>("--cache-dir", "-C")
+{
+    Description = "Directory for local SQLite cache",
+    DefaultValueFactory = _ => configuration["CACHE_DIR"] ?? "./cache"
+};
 
 // Safe window option (minutes)
-var safeWindowOption = new Option<int>(
-    name: "--safe-window",
-    getDefaultValue: () => int.TryParse(configuration["SAFE_WINDOW_MINUTES"], out var val) ? val : 10,
-    description: "Safe window in minutes (events within this window are not cached)");
+var safeWindowOption = new Option<int>("--safe-window")
+{
+    Description = "Safe window in minutes (events within this window are not cached)",
+    DefaultValueFactory = _ => int.TryParse(configuration["SAFE_WINDOW_MINUTES"], out var val) ? val : 10
+};
 
 // Cache-sync command - sync remote events to local SQLite cache
 var cacheSyncCommand = new Command("cache-sync", "Sync remote events to local SQLite cache")
@@ -416,16 +417,16 @@ var cacheSyncCommand = new Command("cache-sync", "Sync remote events to local SQ
     verboseOption
 };
 
-cacheSyncCommand.SetHandler(async (context) =>
+cacheSyncCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var profile = context.ParseResult.GetValueForOption(profileOption);
-    var database = context.ParseResult.GetValueForOption(databaseOption);
-    var connectionString = context.ParseResult.GetValueForOption(connectionStringOption);
-    var cosmosConnectionString = context.ParseResult.GetValueForOption(cosmosConnectionStringOption);
-    var cosmosDatabaseName = context.ParseResult.GetValueForOption(cosmosDatabaseNameOption);
-    var cacheDir = context.ParseResult.GetValueForOption(cacheDirOption);
-    var safeWindowMinutes = context.ParseResult.GetValueForOption(safeWindowOption);
-    var verbose = context.ParseResult.GetValueForOption(verboseOption);
+    var profile = parseResult.GetValue(profileOption);
+    var database = parseResult.GetValue(databaseOption);
+    var connectionString = parseResult.GetValue(connectionStringOption);
+    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
+    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
+    var safeWindowMinutes = parseResult.GetValue(safeWindowOption);
+    var verbose = parseResult.GetValue(verboseOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -443,9 +444,9 @@ var cacheStatsCommand = new Command("cache-stats", "Show local cache statistics"
     cacheDirOption
 };
 
-cacheStatsCommand.SetHandler(async (context) =>
+cacheStatsCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var cacheDir = context.ParseResult.GetValueForOption(cacheDirOption) ?? "./cache";
+    var cacheDir = parseResult.GetValue(cacheDirOption) ?? "./cache";
     await ShowCacheStatsAsync(cacheDir);
 });
 
@@ -455,34 +456,36 @@ var cacheClearCommand = new Command("cache-clear", "Clear local SQLite cache")
     cacheDirOption
 };
 
-cacheClearCommand.SetHandler(async (context) =>
+cacheClearCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var cacheDir = context.ParseResult.GetValueForOption(cacheDirOption) ?? "./cache";
+    var cacheDir = parseResult.GetValue(cacheDirOption) ?? "./cache";
     await ClearCacheAsync(cacheDir);
 });
 
 // Profiles command - list available profiles
 var profilesCommand = new Command("profiles", "List available profiles defined in user secrets");
-profilesCommand.SetHandler(() =>
+profilesCommand.SetAction((parseResult, cancellationToken) =>
 {
     ListProfiles(configuration);
+    return Task.CompletedTask;
 });
 
-rootCommand.AddCommand(buildCommand);
-rootCommand.AddCommand(listCommand);
-rootCommand.AddCommand(statusCommand);
-rootCommand.AddCommand(saveCommand);
-rootCommand.AddCommand(deleteCommand);
-rootCommand.AddCommand(tagEventsCommand);
-rootCommand.AddCommand(projectionCommand);
-rootCommand.AddCommand(tagStateCommand);
-rootCommand.AddCommand(tagListCommand);
-rootCommand.AddCommand(cacheSyncCommand);
-rootCommand.AddCommand(cacheStatsCommand);
-rootCommand.AddCommand(cacheClearCommand);
-rootCommand.AddCommand(profilesCommand);
+rootCommand.Add(buildCommand);
+rootCommand.Add(listCommand);
+rootCommand.Add(statusCommand);
+rootCommand.Add(saveCommand);
+rootCommand.Add(deleteCommand);
+rootCommand.Add(tagEventsCommand);
+rootCommand.Add(projectionCommand);
+rootCommand.Add(tagStateCommand);
+rootCommand.Add(tagListCommand);
+rootCommand.Add(cacheSyncCommand);
+rootCommand.Add(cacheStatsCommand);
+rootCommand.Add(cacheClearCommand);
+rootCommand.Add(profilesCommand);
 
-return await rootCommand.InvokeAsync(args);
+var parseResult = rootCommand.Parse(args);
+return await parseResult.InvokeAsync();
 
 // Helper to resolve profile configuration
 static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)

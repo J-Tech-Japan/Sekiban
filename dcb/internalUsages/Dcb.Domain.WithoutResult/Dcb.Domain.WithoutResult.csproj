@@ -11,5 +11,6 @@
   <ItemGroup>
     <PackageReference Include="ResultBoxes" Version="0.3.31" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="9.2.1" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
   </ItemGroup>
 </Project>
