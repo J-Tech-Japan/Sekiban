@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Sekiban.Dcb.Sqlite</AssemblyName>
+        <RootNamespace>Sekiban.Dcb.Sqlite</RootNamespace>
+        <PackageId>Sekiban.Dcb.Sqlite</PackageId>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
+        <PackageDescription>Sekiban DCB SQLite - SQLite event store implementation with local cache support</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+        <PackageVersion>10.0.2-preview03</PackageVersion>
+        <Description>SQLite event store and multi-projection state store for Sekiban DCB. Includes cache sync helper for use with remote backends (Cosmos DB, PostgreSQL).</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;sqlite;cache;local</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
+    </ItemGroup>
+
+</Project>
