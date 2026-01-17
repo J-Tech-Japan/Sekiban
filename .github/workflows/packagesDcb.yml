@@ -55,6 +55,7 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Sqlite/Sekiban.Dcb.Sqlite.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
       - name: Push to NuGet.org
