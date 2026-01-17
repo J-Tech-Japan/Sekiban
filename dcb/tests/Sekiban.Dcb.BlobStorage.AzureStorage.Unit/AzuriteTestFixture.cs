@@ -27,8 +27,7 @@ public class AzuriteTestFixture : IAsyncLifetime
 
         Console.WriteLine("Starting Azurite container using Testcontainers...");
 
-        _container = new ContainerBuilder()
-            .WithImage("mcr.microsoft.com/azure-storage/azurite:latest")
+        _container = new ContainerBuilder("mcr.microsoft.com/azure-storage/azurite:latest")
             .WithName($"azurite-test-{Guid.NewGuid():N}")
             .WithPortBinding(10000, true)
             .WithPortBinding(10001, true)
