@@ -18,10 +18,10 @@ namespace Sekiban.Pure.Orleans.xUnit;
 public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigurator, IAsyncLifetime
     where TDomainTypesGetter : ISiloConfigurator, new()
 {
-    private TestCluster _cluster;
+    private TestCluster _cluster = null!;
 
-    private ICommandMetadataProvider _commandMetadataProvider;
-    private ISekibanExecutor _executor;
+    private ICommandMetadataProvider _commandMetadataProvider = null!;
+    private ISekibanExecutor _executor = null!;
     private Repository _repository;
     /// <summary>
     ///     Each test case implements domain types through this abstract method.
@@ -54,7 +54,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
         await Task.CompletedTask;
     }
 
-    public void Configure(ISiloBuilder siloBuilder)
+    void ISiloConfigurator.Configure(ISiloBuilder siloBuilder)
     {
         siloBuilder.AddMemoryGrainStorageAsDefault();
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
@@ -186,7 +186,7 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     ///     DomainTypes is always registered by default.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
-    public virtual void ConfigureServices(IServiceCollection services)
+    protected virtual void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(_repository);
         services.AddTransient<IEventWriter, InMemoryEventWriter>();

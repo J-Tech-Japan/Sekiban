@@ -11,6 +11,7 @@ using Sekiban.Pure.Postgres;
 
 namespace Sekiban.Pure.Postgres.Migrations
 {
+#pragma warning disable CS8981
     [DbContext(typeof(SekibanDbContext))]
     [Migration("20250211221011_initial")]
     partial class initial

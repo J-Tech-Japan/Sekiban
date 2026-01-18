@@ -279,64 +279,32 @@ public class GeneralMultiProjectionActor
     }
 
     /// <summary>
-    ///     Returns a snapshot envelope using the actor's configured offload settings. Grain callers can persist
-    ///     this envelope as-is without caring whether the payload was offloaded.
+    ///     Returns a snapshot envelope containing an inline payload.
     /// </summary>
     public async Task<ResultBox<SerializableMultiProjectionStateEnvelope>> GetSnapshotAsync(
         bool canGetUnsafeState = true,
         CancellationToken cancellationToken = default)
     {
-        // If accessor or threshold is not configured, return inline snapshot
-        if (_options.SnapshotAccessor == null || _options.SnapshotOffloadThresholdBytes <= 0)
-        {
-            var inline = await BuildSerializableStateAsync(canGetUnsafeState);
-            if (!inline.IsSuccess)
-                return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(inline.GetException());
-            return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(false, inline.GetValue(), null));
-        }
-
-        // Use configured offload policy
-        return await GetSerializableStateWithOffloadAsync(
-            _options.SnapshotAccessor,
-            _options.SnapshotOffloadThresholdBytes,
-            canGetUnsafeState,
-            cancellationToken);
+        var inline = await BuildSerializableStateAsync(canGetUnsafeState);
+        if (!inline.IsSuccess)
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(inline.GetException());
+        return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(false, inline.GetValue(), null));
     }
 
     /// <summary>
-    ///     Restores this actor from a snapshot envelope. If offloaded, reads payload via configured accessor.
+    ///     Restores this actor from a snapshot envelope containing an inline payload.
     /// </summary>
     public async Task SetSnapshotAsync(SerializableMultiProjectionStateEnvelope envelope, CancellationToken cancellationToken = default)
     {
-        if (!envelope.IsOffloaded)
+        if (envelope.IsOffloaded)
         {
-            if (envelope.InlineState == null)
-                throw new InvalidOperationException("Inline snapshot missing InlineState");
-            await SetCurrentState(envelope.InlineState);
-            return;
+            throw new InvalidOperationException(
+                "Offloaded snapshots are not supported by the actor. Restore from the state store before applying.");
         }
 
-        // Offloaded path
-        if (_options.SnapshotAccessor == null)
-            throw new InvalidOperationException("SnapshotAccessor is not configured for offloaded snapshot restore");
-
-        if (envelope.OffloadedState == null)
-            throw new InvalidOperationException("Offloaded snapshot missing OffloadedState");
-
-        var bytes = await _options.SnapshotAccessor.ReadAsync(envelope.OffloadedState.OffloadKey, cancellationToken);
-
-        var reconstructed = SerializableMultiProjectionState.FromBytes(
-            bytes,
-            envelope.OffloadedState.MultiProjectionPayloadType,
-            envelope.OffloadedState.ProjectorName,
-            envelope.OffloadedState.ProjectorVersion,
-            envelope.OffloadedState.LastSortableUniqueId,
-            envelope.OffloadedState.LastEventId,
-            envelope.OffloadedState.Version,
-            envelope.OffloadedState.IsCatchedUp,
-            envelope.OffloadedState.IsSafeState);
-
-        await SetCurrentState(reconstructed);
+        if (envelope.InlineState == null)
+            throw new InvalidOperationException("Inline snapshot missing InlineState");
+        await SetCurrentState(envelope.InlineState);
     }
 
     /// <summary>
@@ -377,58 +345,6 @@ public class GeneralMultiProjectionActor
         // Safe position for hosts to persist
         var safePosition = await GetSafeLastSortableUniqueIdAsync();
         return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
-    }
-
-    /// <summary>
-    ///     Create a serializable snapshot. If the JSON size exceeds thresholdBytes, offload the payload to the provided
-    ///     blob storage and return an offloaded envelope.
-    /// </summary>
-    private async Task<ResultBox<SerializableMultiProjectionStateEnvelope>> GetSerializableStateWithOffloadAsync(
-        IBlobStorageSnapshotAccessor blobAccessor,
-        int thresholdBytes,
-        bool canGetUnsafeState,
-        CancellationToken cancellationToken)
-    {
-        var stateResult = await BuildSerializableStateAsync(canGetUnsafeState);
-        if (!stateResult.IsSuccess)
-        {
-            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(stateResult.GetException());
-        }
-
-        var inline = stateResult.GetValue();
-
-        // Estimate full JSON size as currently stored to Orleans (baseline)
-        var json = JsonSerializer.Serialize(inline, _jsonOptions);
-        var jsonSize = Encoding.UTF8.GetByteCount(json);
-
-        if (jsonSize <= thresholdBytes)
-        {
-            return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
-                IsOffloaded: false,
-                InlineState: inline,
-                OffloadedState: null));
-        }
-
-        // Offload only the payload bytes to minimize storage
-        var payloadBytes = inline.GetPayloadBytes();
-        var key = await blobAccessor.WriteAsync(payloadBytes, _projectorName, cancellationToken);
-        var offloaded = new SerializableMultiProjectionStateOffloaded(
-            key,
-            blobAccessor.ProviderName,
-            inline.MultiProjectionPayloadType,
-            inline.ProjectorName,
-            inline.ProjectorVersion,
-            inline.LastSortableUniqueId,
-            inline.LastEventId,
-            inline.Version,
-            inline.IsCatchedUp,
-            inline.IsSafeState,
-            payloadBytes.LongLength);
-
-        return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
-            IsOffloaded: true,
-            InlineState: null,
-            OffloadedState: offloaded));
     }
 
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)

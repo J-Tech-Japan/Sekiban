@@ -191,8 +191,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     // Add actor options for MultiProjectionGrain
                     services.AddTransient<Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions>(_ => new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions
                     {
-                        SafeWindowMs = 20000,
-                        SnapshotOffloadThresholdBytes = 2 * 1024 * 1024
+                        SafeWindowMs = 20000
                     });
                 })
                 .AddMemoryGrainStorageAsDefault()

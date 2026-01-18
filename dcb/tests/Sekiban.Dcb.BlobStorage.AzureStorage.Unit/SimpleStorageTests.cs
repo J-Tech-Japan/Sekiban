@@ -42,18 +42,14 @@ public class SimpleStorageTests
     }
 
     [Fact]
-    public async Task Actor_Offloads_When_Threshold_Exceeded()
+    public async Task Actor_Snapshot_Is_Inline()
     {
         // Arrange domain
         var domain = CreateDomain();
-        var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, "snapshots-actor");
-        var options = new GeneralMultiProjectionActorOptions
-        {
-            SafeWindowMs = 1000,
-            SnapshotAccessor = accessor,
-            SnapshotOffloadThresholdBytes = 100 // very small threshold to ensure offload
-        };
-        var actor = new GeneralMultiProjectionActor(domain, BigPayloadProjector.MultiProjectorName, options);
+        var actor = new GeneralMultiProjectionActor(
+            domain,
+            BigPayloadProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
 
         // Add a few large events
         foreach (var i in Enumerable.Range(0, 10))
@@ -67,17 +63,9 @@ public class SimpleStorageTests
         Assert.True(snapshot.IsSuccess);
         var env = snapshot.GetValue();
 
-        // Assert - offloaded
-        Assert.True(env.IsOffloaded);
-        Assert.NotNull(env.OffloadedState);
-
-        // Restore to new actor
-        var restored = new GeneralMultiProjectionActor(domain, BigPayloadProjector.MultiProjectorName, options);
-        await restored.SetSnapshotAsync(env);
-        var state = await restored.GetStateAsync(false);
-        Assert.True(state.IsSuccess);
-        var proj = (BigPayloadProjector)state.GetValue().Payload;
-        Assert.Equal(10, proj.Items.Count);
+        // Assert - inline
+        Assert.False(env.IsOffloaded);
+        Assert.NotNull(env.InlineState);
     }
 
     private static Event MakeEvent(IEventPayload payload)

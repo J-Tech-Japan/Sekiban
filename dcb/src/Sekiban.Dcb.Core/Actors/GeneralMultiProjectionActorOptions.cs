@@ -1,4 +1,3 @@
-using Sekiban.Dcb.Snapshots;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -12,17 +11,6 @@ public class GeneralMultiProjectionActorOptions
     ///     Default is 20000 milliseconds (20 seconds).
     /// </summary>
     public int SafeWindowMs { get; set; } = 20000;
-
-    /// <summary>
-    ///     If the serialized snapshot size exceeds this value (bytes), offload payload to <see cref="SnapshotAccessor"/>.
-    ///     Set to 0 or negative to disable offloading. Default is 2MB.
-    /// </summary>
-    public int SnapshotOffloadThresholdBytes { get; set; } = 2 * 1024 * 1024;
-
-    /// <summary>
-    ///     Snapshot offload storage accessor. When null, offloading is disabled regardless of threshold.
-    /// </summary>
-    public IBlobStorageSnapshotAccessor? SnapshotAccessor { get; set; }
 
     /// <summary>
     ///     Maximum allowed size (bytes) of the serialized snapshot (Envelope JSON).

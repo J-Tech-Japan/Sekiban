@@ -97,17 +97,8 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
 
-        // Wait for catch-up to complete
-        await Task.Delay(500);
-
-        // Should not throw; should rebuild from event store
-        // Check unsafe state to get all 7 events
-        var serStateAfter = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: true);
-        Assert.True(serStateAfter.IsSuccess);
-        var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(serStateAfter.GetValue());
-        Assert.NotNull(env);
-        var version = env!.IsOffloaded ? env.OffloadedState!.Version : env.InlineState!.Version;
-        // With unsafe state, should have all 7 events
+        // Wait for restore or catch-up to expose all 7 events
+        var version = await WaitForSnapshotVersionAsync(grain2, expectedVersion: 7, maxAttempts: 15, delayMs: 200);
         Assert.Equal(7, version);
     }
 
@@ -121,6 +112,42 @@ public class SnapshotVersioningTests : IAsyncLifetime
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string>());
+    }
+
+    private static async Task<int> WaitForSnapshotVersionAsync(
+        IMultiProjectionGrain grain,
+        int expectedVersion,
+        int maxAttempts,
+        int delayMs)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var serStateAfter = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true);
+            if (serStateAfter.IsSuccess)
+            {
+                var env = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(
+                    serStateAfter.GetValue());
+                if (env?.InlineState != null)
+                {
+                    var version = env.InlineState.Version;
+                    if (version >= expectedVersion)
+                    {
+                        return version;
+                    }
+                }
+            }
+
+            await Task.Delay(delayMs);
+        }
+
+        var finalState = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true);
+        if (!finalState.IsSuccess)
+        {
+            throw finalState.GetException();
+        }
+        var finalEnv = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(
+            finalState.GetValue());
+        return finalEnv?.InlineState?.Version ?? 0;
     }
 
     private class TestSiloConfigurator : ISiloConfigurator
@@ -162,8 +189,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
                     // Add actor options for MultiProjectionGrain
                     services.AddTransient<Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions>(_ => new Sekiban.Dcb.Actors.GeneralMultiProjectionActorOptions
                     {
-                        SafeWindowMs = 20000,
-                        SnapshotOffloadThresholdBytes = 2 * 1024 * 1024
+                        SafeWindowMs = 20000
                     });
                 })
                 .AddMemoryGrainStorageAsDefault()

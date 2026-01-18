@@ -216,6 +216,14 @@ public abstract class BaseTest : IDisposable
             {
                 return appHostPath;
             }
+
+            var internalUsagePath = Path.Combine(solutionRoot, "pure", "internalUsages", "OrleansSekiban.AppHost");
+            Console.WriteLine($"Checking solution-relative internal usage path: {internalUsagePath}");
+
+            if (Directory.Exists(internalUsagePath))
+            {
+                return internalUsagePath;
+            }
         }
 
         // Try each possible relative path
@@ -284,7 +292,8 @@ public abstract class BaseTest : IDisposable
                 Console.WriteLine($"Checking for solution in: {directory}");
 
                 // Check if the solution file exists in this directory
-                if (File.Exists(Path.Combine(directory, "OrleansSekiban.sln")))
+                if (File.Exists(Path.Combine(directory, "OrleansSekiban.sln")) ||
+                    File.Exists(Path.Combine(directory, "Sekiban.slnx")))
                 {
                     Console.WriteLine($"Found solution root at: {directory}");
                     return directory;

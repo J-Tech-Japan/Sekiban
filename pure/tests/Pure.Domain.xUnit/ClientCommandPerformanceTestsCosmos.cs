@@ -22,7 +22,7 @@ public class ClientCommandPerformanceTestsCosmos : SekibanOrleansTestBase<Client
     public override SekibanDomainTypes GetDomainTypes() =>
         PureDomainDomainTypes.Generate(PureDomainEventsJsonContext.Default.Options);
 
-    public override void ConfigureServices(IServiceCollection services)
+    protected override void ConfigureServices(IServiceCollection services)
     {
         var builder = new ConfigurationBuilder()
             .SetBasePath(ApplicationEnvironment.ApplicationBasePath)

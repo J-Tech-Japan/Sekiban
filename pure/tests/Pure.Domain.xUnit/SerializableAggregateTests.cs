@@ -207,7 +207,7 @@ public class SerializableAggregateTests
         var nonExistentType = _domainTypes.AggregateTypes.GetPayloadTypeByName("NonExistentType");
         Assert.Null(nonExistentType);
 
-        var nullType = _domainTypes.AggregateTypes.GetPayloadTypeByName(null);
+        var nullType = _domainTypes.AggregateTypes.GetPayloadTypeByName(null!);
         Assert.Null(nullType);
 
         var emptyType = _domainTypes.AggregateTypes.GetPayloadTypeByName(string.Empty);
@@ -249,7 +249,7 @@ public class SerializableAggregateTests
         var restoredBranch = (Branch)restoredAggregate.Payload;
 
         Assert.Equal(originalBranch.Name, restoredBranch.Name);
-        Assert.True(restoredBranch.Name.Contains(largeDescription));
+        Assert.Contains(largeDescription, restoredBranch.Name);
     }
 
     #region Helper Methods
