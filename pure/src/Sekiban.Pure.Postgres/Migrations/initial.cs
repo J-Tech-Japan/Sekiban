@@ -1,6 +1,7 @@
 ﻿#nullable disable
 
 using Microsoft.EntityFrameworkCore.Migrations;
+#pragma warning disable CS8981
 namespace Sekiban.Pure.Postgres.Migrations;
 
 /// <inheritdoc />

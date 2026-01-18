@@ -12,6 +12,9 @@ public class OrleansRepository(
     IEventTypes eventTypes,
     Aggregate aggregate)
 {
+    private readonly PartitionKeys _partitionKeys = partitionKeys;
+    private readonly IEventTypes _eventTypes = eventTypes;
+
     public Task<ResultBox<Aggregate>> Load() => ResultBox
         .FromValue(eventHandlerGrain.GetAllEventsAsync())
         .Remap(events => events.ToList())

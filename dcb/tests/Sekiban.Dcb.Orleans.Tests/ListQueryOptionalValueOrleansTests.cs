@@ -133,8 +133,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
                     services.AddTransient<IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
                     services.AddTransient(_ => new GeneralMultiProjectionActorOptions
                     {
-                        SafeWindowMs = 20000,
-                        SnapshotOffloadThresholdBytes = 2 * 1024 * 1024
+                        SafeWindowMs = 20000
                     });
                 })
                 .AddMemoryGrainStorageAsDefault()

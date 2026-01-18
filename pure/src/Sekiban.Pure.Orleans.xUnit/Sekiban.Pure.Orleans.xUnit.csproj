@@ -23,6 +23,8 @@
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <TargetFramework>net9.0</TargetFramework>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <IsTestProject>false</IsTestProject>
     </PropertyGroup>
 
     <ItemGroup>
@@ -32,6 +34,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.TestingHost" Version="9.2.1"/>
         <PackageReference Include="Sekiban.Pure.Orleans" Version="9.0.0"/>
+        <PackageReference Include="Humanizer.Core" Version="2.14.1"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>

@@ -32,7 +32,7 @@ public class SerializableMultiProjectionStateTests
 
         // Assert
         Assert.True(result.HasValue);
-        var restoredState = result.Value;
+        var restoredState = result.Value!;
 
         AssertMultiProjectionStatesEqual(originalState, restoredState);
 
@@ -87,7 +87,7 @@ public class SerializableMultiProjectionStateTests
 
         // Assert
         Assert.True(result.HasValue);
-        var restoredState = result.Value;
+        var restoredState = result.Value!;
 
         AssertMultiProjectionStatesEqual(originalState, restoredState);
 
@@ -217,7 +217,7 @@ public class SerializableMultiProjectionStateTests
 
         // Assert
         Assert.True(result.HasValue);
-        var restoredState = result.Value;
+        var restoredState = result.Value!;
 
         AssertMultiProjectionStatesEqual(originalState, restoredState);
 
