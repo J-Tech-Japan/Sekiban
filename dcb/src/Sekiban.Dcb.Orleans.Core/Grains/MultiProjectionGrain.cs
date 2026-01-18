@@ -633,9 +633,40 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var externalStoreSaved = _multiProjectionStateStore == null;
+            var allowExternalStoreSave = true;
+
+            if (_multiProjectionStateStore != null)
+            {
+                var latestResult = await _multiProjectionStateStore
+                    .GetLatestForVersionAsync(projectorName, projectorVersion);
+                if (!latestResult.IsSuccess)
+                {
+                    allowExternalStoreSave = false;
+                    _lastError = $"External store read failed: {latestResult.GetException().Message}";
+                    _logger.LogWarning(
+                        "Skip external store save: failed to read latest state for {ProjectorName} v{ProjectorVersion}.",
+                        projectorName,
+                        projectorVersion);
+                }
+                else
+                {
+                    var latestOptional = latestResult.GetValue();
+                    if (latestOptional.HasValue && latestOptional.Value.EventsProcessed > _eventsProcessed)
+                    {
+                        allowExternalStoreSave = false;
+                        _lastError = $"External store has newer state ({latestOptional.Value.EventsProcessed}) than local ({_eventsProcessed})";
+                        _logger.LogWarning(
+                            "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
+                            latestOptional.Value.EventsProcessed,
+                            _eventsProcessed,
+                            projectorName,
+                            projectorVersion);
+                    }
+                }
+            }
 
             // v10: Save to external store (Postgres/Cosmos) if available
-            if (_multiProjectionStateStore != null)
+            if (_multiProjectionStateStore != null && allowExternalStoreSave)
             {
                 var record = new MultiProjectionStateRecord(
                     ProjectorName: projectorName,
@@ -669,6 +700,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     externalStoreSaved = true;
                     Console.WriteLine($"[{projectorName}] External store save succeeded");
                 }
+            }
+            else if (_multiProjectionStateStore != null && !allowExternalStoreSave)
+            {
+                Console.WriteLine($"[{projectorName}] External store save skipped (store ahead or read failed)");
             }
 
             // v9: Update Orleans state with key info only (auxiliary/monitoring)
