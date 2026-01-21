@@ -1279,10 +1279,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 try
                 {
                     _logger.LogInformation(
-                        "Restoring from external store (latest any version): {ProjectorName}",
-                        projectorName);
-                    var stateStoreResult = await _multiProjectionStateStore.GetLatestAnyVersionAsync(
-                        projectorName, cancellationToken);
+                        "Restoring from external store (version match): {ProjectorName} v{ProjectorVersion}",
+                        projectorName,
+                        projectorVersion);
+                    var stateStoreResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
+                        projectorName,
+                        projectorVersion,
+                        cancellationToken);
 
                     if (!stateStoreResult.IsSuccess)
                     {
@@ -1300,15 +1303,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     else if (stateStoreResult.GetValue().HasValue)
                     {
                         var record = stateStoreResult.GetValue().GetValue();
-                        if (versionResult.IsSuccess &&
-                            !string.Equals(record.ProjectorVersion, projectorVersion, StringComparison.Ordinal))
-                        {
-                            _logger.LogWarning(
-                                "Restoring from latest available version {RecordVersion} (requested {RequestedVersion}) for {ProjectorName}",
-                                record.ProjectorVersion,
-                                projectorVersion,
-                                projectorName);
-                        }
                         byte[]? compressedData = record.StateData;
 
                         if (compressedData == null)
@@ -1420,8 +1414,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     {
                         _logger.LogInformation(
                             MultiProjectionLogEvents.StateNotFound,
-                            "No state found in external store: {ProjectorName}",
-                            projectorName);
+                            "No state found in external store: {ProjectorName} v{ProjectorVersion}",
+                            projectorName,
+                            projectorVersion);
                     }
                 }
                 catch (Exception ex)
