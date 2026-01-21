@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Snapshots;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -21,6 +23,7 @@ public class GeneralMultiProjectionActor
     private readonly GeneralMultiProjectionActorOptions _options;
     private readonly string _projectorName;
     private readonly ICoreMultiProjectorTypes _types;
+    private readonly ILogger _logger;
 
     // Catching up state
     private bool _isCatchedUp = true;
@@ -40,13 +43,15 @@ public class GeneralMultiProjectionActor
     public GeneralMultiProjectionActor(
         DcbDomainTypes domainTypes,
         string projectorName,
-        GeneralMultiProjectionActorOptions? options = null)
+        GeneralMultiProjectionActorOptions? options = null,
+        ILogger? logger = null)
     {
         _types = domainTypes.MultiProjectorTypes;
         _domain = domainTypes;
         _jsonOptions = domainTypes.JsonSerializerOptions;
         _projectorName = projectorName;
         _options = options ?? new GeneralMultiProjectionActorOptions();
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true, EventSource source = EventSource.Unknown)
@@ -643,11 +648,15 @@ public class GeneralMultiProjectionActor
             effectiveWindow = (int)Math.Max(0, Math.Min(int.MaxValue, (long)_options.SafeWindowMs + (long)extra));
         }
         var threshold = DateTime.UtcNow.AddMilliseconds(-effectiveWindow);
-        try
-        {
-            Console.WriteLine($"[SafeWindow] projector={_projectorName} baseMs={_options.SafeWindowMs} effectiveMs={effectiveWindow} emaLagMs={_observedLagMs:F1} maxLagMs={_maxLagMs:F1} now={DateTime.UtcNow:O} threshold={threshold:O}");
-        }
-        catch { }
+        _logger.LogDebug(
+            "[SafeWindow] projector={ProjectorName} baseMs={BaseMs} effectiveMs={EffectiveMs} emaLagMs={EmaLagMs:F1} maxLagMs={MaxLagMs:F1} now={Now:O} threshold={Threshold:O}",
+            _projectorName,
+            _options.SafeWindowMs,
+            effectiveWindow,
+            _observedLagMs,
+            _maxLagMs,
+            DateTime.UtcNow,
+            threshold);
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
 
