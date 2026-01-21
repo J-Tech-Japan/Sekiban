@@ -138,7 +138,7 @@ public class GeneralMultiProjectionActor
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
 
         var loadedPayload = deserializeResult.GetValue();
-        Console.WriteLine($"[{_projectorName}] Deserialize: via ICoreMultiProjectorTypes");
+        _logger.LogDebug("[{ProjectorName}] Deserialize: via ICoreMultiProjectorTypes", _projectorName);
 
         // Check if the payload type implements ISafeAndUnsafeStateAccessor
         var payloadType = loadedPayload.GetType();
@@ -199,7 +199,7 @@ public class GeneralMultiProjectionActor
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
 
         var loadedPayload = deserializeResult.GetValue();
-        Console.WriteLine($"[{_projectorName}] Deserialize(ignoreVersion): via ICoreMultiProjectorTypes");
+        _logger.LogDebug("[{ProjectorName}] Deserialize(ignoreVersion): via ICoreMultiProjectorTypes", _projectorName);
 
         var payloadType = loadedPayload.GetType();
         var accessorInterfaces = payloadType
@@ -261,7 +261,12 @@ public class GeneralMultiProjectionActor
             }
 
             var result = serializeResult.GetValue();
-            Console.WriteLine($"[{_projectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={result.CompressedSizeBytes} (original={result.OriginalSizeBytes}, ratio={result.CompressionRatio:P1})");
+            _logger.LogDebug(
+                "[{ProjectorName}] Serialize(binary): via ICoreMultiProjectorTypes len={CompressedBytes} (original={OriginalBytes}, ratio={CompressionRatio:P1})",
+                _projectorName,
+                result.CompressedSizeBytes,
+                result.OriginalSizeBytes,
+                result.CompressionRatio);
             var payloadType = payload.GetType();
             var state = SerializableMultiProjectionState.FromBytes(
                 result.Data,
@@ -483,7 +488,10 @@ public class GeneralMultiProjectionActor
                 // Use MaxValue threshold so全イベントが IsEarlierThanOrEqual となり昇格
                 var maxThreshold = SortableUniqueId.MaxValue;
                 _ = getSafeMethod.Invoke(_singleStateAccessor, new object[] { maxThreshold, _domain });
-                Console.WriteLine($"[SafePromotion] projector={_projectorName} force-promote-all invoked threshold={maxThreshold.Value}");
+                _logger.LogDebug(
+                    "[SafePromotion] projector={ProjectorName} force-promote-all invoked threshold={Threshold}",
+                    _projectorName,
+                    maxThreshold.Value);
             }
         }
         catch { }

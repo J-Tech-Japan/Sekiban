@@ -196,7 +196,6 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[RegisterProjectorWithoutResult] Error: {ex.Message}");
                         return ResultBox.Error<IMultiProjectionPayload>(ex);
                     }
                 }

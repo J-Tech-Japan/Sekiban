@@ -6,6 +6,8 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Sekiban.Dcb.MultiProjections;
 
@@ -19,17 +21,20 @@ public class MultiProjectionStateBuilder
     private readonly IEventStore _eventStore;
     private readonly IMultiProjectionStateStore _stateStore;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
+    private readonly ILogger<MultiProjectionStateBuilder> _logger;
 
     public MultiProjectionStateBuilder(
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
         IMultiProjectionStateStore stateStore,
-        IBlobStorageSnapshotAccessor? blobAccessor = null)
+        IBlobStorageSnapshotAccessor? blobAccessor = null,
+        ILogger<MultiProjectionStateBuilder>? logger = null)
     {
         _domainTypes = domainTypes;
         _eventStore = eventStore;
         _stateStore = stateStore;
         _blobAccessor = blobAccessor;
+        _logger = logger ?? NullLogger<MultiProjectionStateBuilder>.Instance;
     }
 
     /// <summary>
@@ -79,7 +84,10 @@ public class MultiProjectionStateBuilder
         }
         var projectorVersion = versionResult.GetValue();
 
-        Console.WriteLine($"[Builder] Processing {projectorName} (version: {projectorVersion})");
+        _logger.LogDebug(
+            "[Builder] Processing {ProjectorName} (version: {ProjectorVersion})",
+            projectorName,
+            projectorVersion);
 
         try
         {
@@ -89,12 +97,12 @@ public class MultiProjectionStateBuilder
 
             if (!shouldBuild)
             {
-                Console.WriteLine($"  Skipped: {reason}");
+                _logger.LogDebug("  Skipped: {Reason}", reason);
                 return new ProjectorBuildResult(
                     projectorName, projectorVersion, BuildStatus.Skipped, reason, currentEventsProcessed);
             }
 
-            Console.WriteLine($"  Building: {reason}");
+            _logger.LogDebug("  Building: {Reason}", reason);
 
             if (options.DryRun)
             {
@@ -107,7 +115,8 @@ public class MultiProjectionStateBuilder
             var actor = new GeneralMultiProjectionActor(
                 _domainTypes,
                 projectorName,
-                new GeneralMultiProjectionActorOptions { SafeWindowMs = options.SafeWindowMs });
+                new GeneralMultiProjectionActorOptions { SafeWindowMs = options.SafeWindowMs },
+                _logger);
 
             // Restore from existing state if available
             string? startPosition = null;
@@ -116,7 +125,7 @@ public class MultiProjectionStateBuilder
                 var envelope = await LoadEnvelopeAsync(currentState, ct);
                 await actor.SetSnapshotAsync(envelope, ct);
                 startPosition = currentState.LastSortableUniqueId;
-                Console.WriteLine($"  Restored from position: {startPosition}");
+                _logger.LogDebug("  Restored from position: {StartPosition}", startPosition);
             }
 
             // Process events
@@ -173,7 +182,11 @@ public class MultiProjectionStateBuilder
                 BuildSource: "CLI",
                 BuildHost: Environment.MachineName);
 
-            Console.WriteLine($"  v10: Envelope JSON size: {envelopeSize} bytes, payload: original={originalSizeBytes} compressed={compressedSizeBytes}");
+            _logger.LogDebug(
+                "  v10: Envelope JSON size: {EnvelopeSize} bytes, payload: original={OriginalSize} compressed={CompressedSize}",
+                envelopeSize,
+                originalSizeBytes,
+                compressedSizeBytes);
 
             // Save
             var saveResult = await _stateStore.UpsertAsync(record, options.OffloadThresholdBytes, ct);
@@ -184,7 +197,10 @@ public class MultiProjectionStateBuilder
                     saveResult.GetException().Message, 0);
             }
 
-            Console.WriteLine($"  Saved: +{eventsProcessed} events, total {totalEventsProcessed}");
+            _logger.LogDebug(
+                "  Saved: +{EventsProcessed} events, total {TotalEventsProcessed}",
+                eventsProcessed,
+                totalEventsProcessed);
 
             return new ProjectorBuildResult(
                 projectorName, projectorVersion, BuildStatus.Success, reason, eventsProcessed);
@@ -296,7 +312,9 @@ public class MultiProjectionStateBuilder
             var eventsResult = await _eventStore.ReadAllEventsAsync(since);
             if (!eventsResult.IsSuccess)
             {
-                Console.WriteLine($"    Error reading events: {eventsResult.GetException().Message}");
+                _logger.LogError(
+                    eventsResult.GetException(),
+                    "    Error reading events");
                 break;
             }
 
@@ -325,7 +343,10 @@ public class MultiProjectionStateBuilder
             await actor.AddEventsAsync(safeEvents, finishedCatchUp: false);
             processed += safeEvents.Count;
 
-            Console.WriteLine($"    Processed {safeEvents.Count} events (total: {processed})");
+            _logger.LogDebug(
+                "    Processed {BatchCount} events (total: {Processed})",
+                safeEvents.Count,
+                processed);
 
             since = new SortableUniqueId(safeEvents.Last().SortableUniqueIdValue);
 
