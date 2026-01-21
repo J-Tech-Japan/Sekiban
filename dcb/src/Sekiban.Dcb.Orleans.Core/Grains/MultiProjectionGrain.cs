@@ -339,7 +339,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 stateSize = safeStateSize; // Backward-compatible: report safe payload size in StateSize
                 var projectorName = this.GetPrimaryKeyString();
-                Console.WriteLine($"[{projectorName}] State size - Safe: {safeStateSize:N0} bytes, Unsafe: {unsafeStateSize:N0} bytes, Events: {_eventsProcessed:N0}");
+                _logger.LogDebug(
+                    "[{ProjectorName}] State size - Safe: {SafeBytes:N0} bytes, Unsafe: {UnsafeBytes:N0} bytes, Events: {EventsProcessed:N0}",
+                    projectorName,
+                    safeStateSize,
+                    unsafeStateSize,
+                    _eventsProcessed);
             }
             catch
             {
@@ -460,7 +465,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
             }
-            Console.WriteLine($"[{projectorName}] Starting persistence at {startUtc:yyyy-MM-dd HH:mm:ss.fff} UTC");
+            _logger.LogDebug(
+                "[{ProjectorName}] Starting persistence at {StartUtc:yyyy-MM-dd HH:mm:ss.fff} UTC",
+                projectorName,
+                startUtc);
 
             // Phase1: force promotion of buffered events before snapshot
             try
@@ -475,7 +483,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (!snapshotResult.IsSuccess)
             {
                 _lastError = snapshotResult.GetException().Message;
-                Console.WriteLine($"[{projectorName}] WARNING: {_lastError}");
+                _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
                 return ResultBox.FromValue(false);
             }
 
@@ -505,7 +513,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     var safeSt = safeStateInfo.GetValue();
                     safeVersion = safeSt.Version;
                     unsafeVersion = unsafeSt.Version;
-                    Console.WriteLine($"[{projectorName}] Snapshot state - Safe: {safeSt.Version} events @ {(safeSt.LastSortableUniqueId?.Length >= 20 ? safeSt.LastSortableUniqueId.Substring(0, 20) : safeSt.LastSortableUniqueId) ?? "empty"}, Unsafe: {unsafeSt.Version} events @ {(unsafeSt.LastSortableUniqueId?.Length >= 20 ? unsafeSt.LastSortableUniqueId.Substring(0, 20) : unsafeSt.LastSortableUniqueId) ?? "empty"}");
+                    var safeLastId = safeSt.LastSortableUniqueId;
+                    if (!string.IsNullOrEmpty(safeLastId) && safeLastId.Length >= 20)
+                    {
+                        safeLastId = safeLastId.Substring(0, 20);
+                    }
+                    var unsafeLastId = unsafeSt.LastSortableUniqueId;
+                    if (!string.IsNullOrEmpty(unsafeLastId) && unsafeLastId.Length >= 20)
+                    {
+                        unsafeLastId = unsafeLastId.Substring(0, 20);
+                    }
+                    _logger.LogDebug(
+                        "[{ProjectorName}] Snapshot state - Safe: {SafeVersion} events @ {SafeLastId}, Unsafe: {UnsafeVersion} events @ {UnsafeLastId}",
+                        projectorName,
+                        safeSt.Version,
+                        safeLastId ?? "empty",
+                        unsafeSt.Version,
+                        unsafeLastId ?? "empty");
                 }
             }
             catch { }
@@ -529,7 +553,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // This helps prevent OutOfMemoryException during snapshot serialization
             if (payloadBytesLength > LargePayloadThresholdBytes)
             {
-                Console.WriteLine($"[{projectorName}] Large payload ({payloadBytesLength:N0} bytes) - forcing GC before serialization");
+                _logger.LogWarning(
+                    "[{ProjectorName}] Large payload ({PayloadBytes:N0} bytes) - forcing GC before serialization",
+                    projectorName,
+                    payloadBytesLength);
                 GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
                 GC.WaitForPendingFinalizers();
             }
@@ -591,7 +618,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
 
-            Console.WriteLine($"[{projectorName}] v10: Writing snapshot: {envelopeSize:N0} bytes (payload: original={originalSizeBytes} compressed={compressedSizeBytes}), {_eventsProcessed:N0} events, checkpoint: {(safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty"}...");
+            _logger.LogDebug(
+                "[{ProjectorName}] v10: Writing snapshot: {EnvelopeSize:N0} bytes (payload: original={OriginalSize} compressed={CompressedSize}), {EventsProcessed:N0} events, checkpoint: {Checkpoint}",
+                projectorName,
+                envelopeSize,
+                originalSizeBytes,
+                compressedSizeBytes,
+                _eventsProcessed,
+                (safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty");
             _logger.LogInformation(
                 MultiProjectionLogEvents.PersistDetails,
                 "Persist: {ProjectorName}, Events={EventsProcessed}, SafeVer={SafeVersion}, UnsafeVer={UnsafeVersion}, PayloadBytes={PayloadBytes}, EnvelopeSize={EnvelopeSize}, Original={OriginalSize}, Compressed={CompressedSize}, SafeThreshold={SafeThreshold}, IsOffloaded={IsOffloaded}, OffloadKey={OffloadKey}",
@@ -651,13 +685,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 else
                 {
                     var latestOptional = latestResult.GetValue();
-                    if (latestOptional.HasValue && latestOptional.Value.EventsProcessed > _eventsProcessed)
+                    if (latestOptional.HasValue &&
+                        latestOptional.Value is { } latestRecord &&
+                        latestRecord.EventsProcessed > _eventsProcessed)
                     {
                         allowExternalStoreSave = false;
-                        _lastError = $"External store has newer state ({latestOptional.Value.EventsProcessed}) than local ({_eventsProcessed})";
+                        _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
                         _logger.LogWarning(
                             "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
-                            latestOptional.Value.EventsProcessed,
+                            latestRecord.EventsProcessed,
                             _eventsProcessed,
                             projectorName,
                             projectorVersion);
@@ -692,18 +728,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 if (!saveResult.IsSuccess)
                 {
                     _lastError = $"External store save failed: {saveResult.GetException().Message}";
-                    Console.WriteLine($"[{projectorName}] WARNING: {_lastError}");
+                    _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
                     // Continue to save Orleans state as fallback info
                 }
                 else
                 {
                     externalStoreSaved = true;
-                    Console.WriteLine($"[{projectorName}] External store save succeeded");
+                    _logger.LogDebug("[{ProjectorName}] External store save succeeded", projectorName);
                 }
             }
             else if (_multiProjectionStateStore != null && !allowExternalStoreSave)
             {
-                Console.WriteLine($"[{projectorName}] External store save skipped (store ahead or read failed)");
+                _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             }
 
             // v9: Update Orleans state with key info only (auxiliary/monitoring)
@@ -748,7 +784,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
                 catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
                 {
-                    Console.WriteLine($"[{projectorName}] ETag conflict on Orleans state write (attempt {retry + 1}/{maxRetries}), re-reading state...");
+                    _logger.LogWarning(
+                        "[{ProjectorName}] ETag conflict on Orleans state write (attempt {Attempt}/{MaxAttempts}), re-reading state...",
+                        projectorName,
+                        retry + 1,
+                        maxRetries);
                     // Re-read state to get fresh ETag, then re-apply our changes
                     await _state.ReadStateAsync();
                     _state.State.ProjectorName = projectorName;
@@ -782,13 +822,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
-            Console.WriteLine($"[{projectorName}] ✓ Persistence completed in {(finishUtc - startUtc).TotalMilliseconds:F0}ms - {envelopeSize:N0} bytes, {_eventsProcessed:N0} events saved");
+            _logger.LogDebug(
+                "[{ProjectorName}] Persistence completed in {ElapsedMs:F0}ms - {EnvelopeSize:N0} bytes, {EventsProcessed:N0} events saved",
+                projectorName,
+                (finishUtc - startUtc).TotalMilliseconds,
+                envelopeSize,
+                _eventsProcessed);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
             _lastError = $"Persistence failed: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✗ Persistence failed: {ex.Message}");
+            _logger.LogError(ex, "[{ProjectorName}] Persistence failed", this.GetPrimaryKeyString());
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -841,7 +886,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _subscriptionStarting = true;
                 var projectorName = this.GetPrimaryKeyString();
-                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Starting subscription to Orleans stream");
+                _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Starting subscription to Orleans stream", projectorName);
 
                 var observer = new StreamBatchObserver(this);
 
@@ -852,7 +897,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     // Resume the oldest handle
                     var primary = existing[0];
                     _orleansStreamHandle = await primary.ResumeAsync(observer);
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Resumed existing stream subscription ({existing.Count} handles found)");
+                    _logger.LogDebug(
+                        "[SimplifiedPureGrain-{ProjectorName}] Resumed existing stream subscription ({HandleCount} handles found)",
+                        projectorName,
+                        existing.Count);
 
                     // Unsubscribe duplicates
                     for (int i = 1; i < existing.Count; i++)
@@ -860,24 +908,31 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         try
                         {
                             await existing[i].UnsubscribeAsync();
-                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Unsubscribed duplicate stream subscription handle #{i}");
+                            _logger.LogDebug(
+                                "[SimplifiedPureGrain-{ProjectorName}] Unsubscribed duplicate stream subscription handle #{HandleIndex}",
+                                projectorName,
+                                i);
                         }
                         catch (Exception exDup)
                         {
-                            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] WARNING: Failed to unsubscribe duplicate handle #{i}: {exDup.Message}");
+                            _logger.LogWarning(
+                                exDup,
+                                "[SimplifiedPureGrain-{ProjectorName}] Failed to unsubscribe duplicate handle #{HandleIndex}",
+                                projectorName,
+                                i);
                         }
                     }
                 }
                 else
                 {
                     _orleansStreamHandle = await _orleansStream.SubscribeAsync(observer, null);
-                    Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Successfully subscribed to Orleans stream (new)");
+                    _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Successfully subscribed to Orleans stream (new)", projectorName);
                 }
             }
             catch (Exception ex)
             {
                 var projectorName = this.GetPrimaryKeyString();
-                Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] ERROR: Failed to subscribe to Orleans stream: {ex}");
+                _logger.LogError(ex, "[SimplifiedPureGrain-{ProjectorName}] Failed to subscribe to Orleans stream", projectorName);
                 _lastError = $"Stream subscription failed: {ex.Message}";
                 throw;
             }
@@ -889,7 +944,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         else if (_orleansStreamHandle != null)
         {
             var projectorName = this.GetPrimaryKeyString();
-            Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream subscription already active");
+            _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Stream subscription already active", projectorName);
         }
         // Do not auto-catch-up here; catch-up will be triggered by state/query access
     }
@@ -1153,7 +1208,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task RefreshAsync()
     {
-        Console.WriteLine($"[{this.GetPrimaryKeyString()}] Refreshing: Re-reading events from event store");
+        _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", this.GetPrimaryKeyString());
         await CatchUpFromEventStoreAsync();
     }
 
@@ -1213,7 +1268,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _projectionActor = new GeneralMultiProjectionActor(
                 _domainTypes,
                 projectorName,
-                mergedOptions);
+                mergedOptions,
+                _logger);
 
             bool restoredFromExternalStore = false;
 
@@ -1779,7 +1835,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Only run fallback if we haven't received events recently
         if (_lastEventTime == null || DateTime.UtcNow - _lastEventTime > TimeSpan.FromMinutes(1))
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Fallback: No stream events for over 1 minute, checking event store");
+            _logger.LogWarning(
+                "[{ProjectorName}] Fallback: No stream events for over 1 minute, checking event store",
+                this.GetPrimaryKeyString());
             await RefreshAsync();
         }
     }
@@ -1807,7 +1865,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // This prevents race conditions when multiple requests arrive concurrently
         if (_catchUpProgress.IsActive)
         {
-            Console.WriteLine($"[{projectorName}] Catch-up already active, skipping initiation");
+            _logger.LogDebug("[{ProjectorName}] Catch-up already active, skipping initiation", projectorName);
             return;
         }
 
@@ -1838,14 +1896,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             MoveBufferedStreamEventsToPending(currentPosition);
 
-            Console.WriteLine($"[{projectorName}] Starting catch-up from {currentPosition?.Value ?? "beginning"} (target position will be determined dynamically)");
+            _logger.LogDebug(
+                "[{ProjectorName}] Starting catch-up from {StartPosition} (target position will be determined dynamically)",
+                projectorName,
+                currentPosition?.Value ?? "beginning");
 
             // Start catch-up timer
             StartCatchUpTimer();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{projectorName}] Error during catch-up initiation: {ex.Message}");
+            _logger.LogError(ex, "[{ProjectorName}] Error during catch-up initiation", projectorName);
             _catchUpProgress.IsActive = false;
             throw;
         }
@@ -1859,7 +1920,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var projectorName = this.GetPrimaryKeyString();
-        Console.WriteLine($"[{projectorName}] Starting catch-up timer with interval: {_catchUpInterval.TotalMilliseconds}ms");
+        _logger.LogDebug(
+            "[{ProjectorName}] Starting catch-up timer with interval: {IntervalMs}ms",
+            projectorName,
+            _catchUpInterval.TotalMilliseconds);
 
         _catchUpTimer = this.RegisterGrainTimer(
             async () => await ProcessCatchUpBatchAsync(),
@@ -1905,7 +1969,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Catch-up batch failed: {ex.Message}";
-            Console.WriteLine($"[{projectorName}] Catch-up batch error: {ex.Message}");
+            _logger.LogError(ex, "[{ProjectorName}] Catch-up batch error", projectorName);
             // Continue with next timer execution
         }
     }
@@ -1926,7 +1990,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (!eventsResult.IsSuccess)
         {
-            Console.WriteLine($"[{projectorName}] Failed to read events: {eventsResult.GetException().Message}");
+            _logger.LogError(
+                eventsResult.GetException(),
+                "[{ProjectorName}] Failed to read events",
+                projectorName);
             return 0;
         }
 
@@ -2001,14 +2068,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (safeEvents.Count > 0)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            Console.WriteLine($"[{projectorName}] Catch-up: Processing {safeEvents.Count} safe events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Catch-up: Processing {EventCount} safe events",
+                projectorName,
+                safeEvents.Count);
             await _projectionActor.AddEventsAsync(safeEvents, false, EventSource.CatchUp);
             sw.Stop();
             _eventsProcessed += safeEvents.Count;
 
             if (sw.ElapsedMilliseconds > 1000)
             {
-                Console.WriteLine($"[{projectorName}] WARNING: AddEventsAsync took {sw.ElapsedMilliseconds}ms for {safeEvents.Count} events");
+                _logger.LogWarning(
+                    "[{ProjectorName}] AddEventsAsync took {ElapsedMs}ms for {EventCount} events",
+                    projectorName,
+                    sw.ElapsedMilliseconds,
+                    safeEvents.Count);
             }
 
             // Mark as processed
@@ -2021,7 +2095,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Buffer unsafe events for later - DO NOT count here, will be counted when flushed
         if (unsafeEvents.Count > 0)
         {
-            Console.WriteLine($"[{projectorName}] Catch-up: Buffering {unsafeEvents.Count} unsafe events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Catch-up: Buffering {EventCount} unsafe events",
+                projectorName,
+                unsafeEvents.Count);
             foreach (var ev in unsafeEvents)
             {
                 _eventBuffer.Add(ev);
@@ -2038,7 +2115,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Periodic persistence - only persist every 5000 events during catch-up
         if (_eventsProcessed > 0 && _eventsProcessed % 5000 == 0)
         {
-            Console.WriteLine($"[{projectorName}] Persisting state at {_eventsProcessed:N0} events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events",
+                projectorName,
+                _eventsProcessed);
             await PersistStateAsync();
         }
 
@@ -2049,9 +2129,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var eventsPerSecond = _eventsProcessed > 0 && elapsed.TotalSeconds > 0
                 ? (_eventsProcessed / elapsed.TotalSeconds).ToString("F0")
                 : "0";
-            Console.WriteLine($"[{projectorName}] Catch-up: Batch #{_catchUpProgress.BatchesProcessed}, " +
-                             $"{_eventsProcessed:N0} events ({eventsPerSecond}/sec), " +
-                             $"elapsed: {elapsed.TotalSeconds:F1}s");
+            _logger.LogDebug(
+                "[{ProjectorName}] Catch-up: Batch #{BatchNumber}, {EventsProcessed:N0} events ({EventsPerSecond}/sec), elapsed: {ElapsedSeconds:F1}s",
+                projectorName,
+                _catchUpProgress.BatchesProcessed,
+                _eventsProcessed,
+                eventsPerSecond,
+                elapsed.TotalSeconds);
         }
 
         return filtered.Count;
@@ -2080,8 +2164,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpProgress.IsActive = false;
 
         var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
-        Console.WriteLine($"[{projectorName}] ✓ Catch-up completed: {_catchUpProgress.BatchesProcessed} batches, " +
-                         $"{_eventsProcessed:N0} events, elapsed: {elapsed.TotalSeconds:F1}s");
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up completed: {BatchCount} batches, {EventsProcessed:N0} events, elapsed: {ElapsedSeconds:F1}s",
+            projectorName,
+            _catchUpProgress.BatchesProcessed,
+            _eventsProcessed,
+            elapsed.TotalSeconds);
     }
 
     private async Task TriggerSafePromotion()
@@ -2091,20 +2179,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (_projectionActor != null)
             {
                 var projectorName = this.GetPrimaryKeyString();
-                Console.WriteLine($"[{projectorName}] Triggering safe promotion check after catch-up");
+                _logger.LogDebug(
+                    "[{ProjectorName}] Triggering safe promotion check after catch-up",
+                    projectorName);
 
                 // Get the current safe state to trigger promotion
                 var safeState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
                 if (safeState.IsSuccess)
                 {
                     var state = safeState.GetValue();
-                    Console.WriteLine($"[{projectorName}] Safe state after promotion: version={state.Version}");
+                    _logger.LogDebug(
+                        "[{ProjectorName}] Safe state after promotion: version={StateVersion}",
+                        projectorName,
+                        state.Version);
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error during safe promotion: {ex.Message}");
+            _logger.LogError(ex, "[{ProjectorName}] Error during safe promotion", this.GetPrimaryKeyString());
         }
     }
 
@@ -2130,7 +2223,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        Console.WriteLine($"[{projectorName}] Processing {events.Count} pending stream events");
+        _logger.LogDebug(
+            "[{ProjectorName}] Processing {EventCount} pending stream events",
+            projectorName,
+            events.Count);
 
         // Determine safe/unsafe status for each event
         var safeThreshold = GetSafeWindowThreshold();
@@ -2215,7 +2311,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (buffered > 0)
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Buffered {buffered} stream events during catch-up (queue size: {_pendingStreamEvents.Count})");
+            _logger.LogDebug(
+                "[{ProjectorName}] Buffered {BufferedCount} stream events during catch-up (queue size: {QueueSize})",
+                this.GetPrimaryKeyString(),
+                buffered,
+                _pendingStreamEvents.Count);
         }
 
         if (_maxPendingStreamEvents > 0)
@@ -2255,7 +2355,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Stream batch received: {events.Count} events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Stream batch received: {EventCount} events",
+                this.GetPrimaryKeyString(),
+                events.Count);
 
             // Track event deliveries for debugging
             _eventStats.RecordStreamBatch(events);
@@ -2280,7 +2383,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 if (buffered > 0)
                 {
-                    Console.WriteLine($"[{this.GetPrimaryKeyString()}] Buffered {buffered} stream events during catch-up (queue size: {_pendingStreamEvents.Count})");
+                    _logger.LogDebug(
+                        "[{ProjectorName}] Buffered {BufferedCount} stream events during catch-up (queue size: {QueueSize})",
+                        this.GetPrimaryKeyString(),
+                        buffered,
+                        _pendingStreamEvents.Count);
                 }
 
                 // Limit buffer size to prevent memory issues
@@ -2337,7 +2444,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .SortableUniqueIdValue;
             _state.State.LastPosition = maxSortableId;
 
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] ✓ Processed {newEvents.Count} events - Total: {_eventsProcessed:N0} events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Processed {EventCount} events - Total: {EventsProcessed:N0} events",
+                this.GetPrimaryKeyString(),
+                newEvents.Count,
+                _eventsProcessed);
 
             // Persist state after processing a batch if it's large enough
             if (newEvents.Count >= _persistBatchSize)
@@ -2348,12 +2459,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Failed to process event batch: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing event batch: {ex}");
+            _logger.LogError(ex, "[{ProjectorName}] Error processing event batch", this.GetPrimaryKeyString());
 
             // Log inner exception for better debugging
             if (ex.InnerException != null)
             {
-                Console.WriteLine($"[{this.GetPrimaryKeyString()}] Inner exception: {ex.InnerException}");
+                _logger.LogError(
+                    ex.InnerException,
+                    "[{ProjectorName}] Inner exception during event batch processing",
+                    this.GetPrimaryKeyString());
                 _lastError += $" Inner: {ex.InnerException.Message}";
             }
         }
@@ -2436,7 +2550,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Process all events together - the actor will determine safe/unsafe based on current time
             // The second parameter is finishedCatchUp, not withinSafeWindow!
-            Console.WriteLine($"[{projectorName}] Processing {events.Count} buffered events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Processing {EventCount} buffered events",
+                projectorName,
+                events.Count);
             await _projectionActor.AddEventsAsync(events, true, EventSource.Stream);
             _eventsProcessed += events.Count;
 
@@ -2452,7 +2569,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .SortableUniqueIdValue;
             _state.State.LastPosition = maxSortableId;
 
-            Console.WriteLine($"[{projectorName}] ✓ Processed {events.Count} buffered events - Total: {_eventsProcessed:N0} events");
+            _logger.LogDebug(
+                "[{ProjectorName}] Processed {EventCount} buffered events - Total: {EventsProcessed:N0} events",
+                projectorName,
+                events.Count,
+                _eventsProcessed);
 
             // Trigger safe promotion after processing buffered events
             // This ensures that events transition from unsafe to safe as time passes
@@ -2461,7 +2582,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Failed to process buffered events: {ex.Message}";
-            Console.WriteLine($"[{this.GetPrimaryKeyString()}] Error processing buffered events: {ex}");
+            _logger.LogError(ex, "[{ProjectorName}] Error processing buffered events", this.GetPrimaryKeyString());
         }
     }
 
@@ -2476,7 +2597,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         public Task OnNextAsync(IList<SequentialItem<SerializableEvent>> batch)
         {
             var events = batch.Select(item => DeserializeEvent(item.Item)).Where(e => e != null).Cast<Event>().ToList();
-            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received batch of {events.Count} events");
+            _grain._logger.LogDebug(
+                "[StreamBatchObserver-{ProjectorName}] Received batch of {EventCount} events",
+                _grain.GetPrimaryKeyString(),
+                events.Count);
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
         }
@@ -2485,7 +2609,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         public Task OnNextBatchAsync(IEnumerable<SerializableEvent> batch, StreamSequenceToken? token = null)
         {
             var events = batch.Select(DeserializeEvent).Where(e => e != null).Cast<Event>().ToList();
-            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received legacy batch of {events.Count} events");
+            _grain._logger.LogDebug(
+                "[StreamBatchObserver-{ProjectorName}] Received legacy batch of {EventCount} events",
+                _grain.GetPrimaryKeyString(),
+                events.Count);
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
         }
@@ -2496,7 +2623,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var evt = DeserializeEvent(item);
             if (evt != null)
             {
-                Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Received single event {evt.EventType}, ID: {evt.Id}");
+                _grain._logger.LogDebug(
+                    "[StreamBatchObserver-{ProjectorName}] Received single event {EventType}, ID: {EventId}",
+                    _grain.GetPrimaryKeyString(),
+                    evt.EventType,
+                    evt.Id);
                 _grain.EnqueueStreamEvents(new[] { evt });
             }
             return Task.CompletedTask;
@@ -2507,7 +2638,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var result = serializableEvent.ToEvent(_grain._domainTypes.EventTypes);
             if (!result.IsSuccess)
             {
-                Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Failed to deserialize event: {result.GetException().Message}");
+                _grain._logger.LogWarning(
+                    result.GetException(),
+                    "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event",
+                    _grain.GetPrimaryKeyString());
                 return null;
             }
             return result.GetValue();
@@ -2515,13 +2649,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         public Task OnCompletedAsync()
         {
-            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream completed");
+            _grain._logger.LogDebug(
+                "[StreamBatchObserver-{ProjectorName}] Stream completed",
+                _grain.GetPrimaryKeyString());
             return Task.CompletedTask;
         }
 
         public Task OnErrorAsync(Exception ex)
         {
-            Console.WriteLine($"[StreamBatchObserver-{_grain.GetPrimaryKeyString()}] Stream error: {ex}");
+            _grain._logger.LogError(
+                ex,
+                "[StreamBatchObserver-{ProjectorName}] Stream error",
+                _grain.GetPrimaryKeyString());
             _grain._lastError = $"Stream error: {ex.Message}";
             return Task.CompletedTask;
         }
@@ -2592,16 +2731,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     #region ILifecycleParticipant
     public void Participate(IGrainLifecycle lifecycle)
     {
-        Console.WriteLine("[SimplifiedPureGrain] Participate called - registering lifecycle stage");
+        _logger.LogDebug("[SimplifiedPureGrain] Participate called - registering lifecycle stage");
         var stage = GrainLifecycleStage.Activate + 100;
         lifecycle.Subscribe(GetType().FullName!, stage, InitStreamsAsync, CloseStreamsAsync);
-        Console.WriteLine($"[SimplifiedPureGrain] Lifecycle stage registered at {stage}");
+        _logger.LogDebug("[SimplifiedPureGrain] Lifecycle stage registered at {Stage}", stage);
     }
 
     private async Task InitStreamsAsync(CancellationToken ct)
     {
         var projectorName = this.GetPrimaryKeyString();
-        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] InitStreamsAsync called in lifecycle stage");
+        _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] InitStreamsAsync called in lifecycle stage", projectorName);
 
         var streamInfo = _subscriptionResolver.Resolve(projectorName);
         if (streamInfo is not OrleansSekibanStream orleansStream)
@@ -2613,7 +2752,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _orleansStream = streamProvider.GetStream<SerializableEvent>(
             StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
         // Do NOT subscribe here. Subscription will start lazily on first query/state access.
-        Console.WriteLine($"[SimplifiedPureGrain-{projectorName}] Stream prepared (lazy subscription)");
+        _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Stream prepared (lazy subscription)", projectorName);
         _isInitialized = true;
     }
 
