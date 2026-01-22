@@ -29,6 +29,9 @@ export CONNECTION_STRING="Host=localhost;Database=...;Username=...;Password=..."
 export COSMOS_CONNECTION_STRING="AccountEndpoint=...;AccountKey=..."
 export COSMOS_DATABASE_NAME="SekibanDcb"
 export OUTPUT_DIR="./output"
+export CACHE_MODE="auto"
+export CACHE_DIR="./cache"
+export SAFE_WINDOW_MINUTES="10"
 ```
 
 3) User secrets (recommended for local dev)
@@ -52,7 +55,9 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `projection` : Show a projection state
 - `tag-state` : Project a tag state (auto or explicit projector)
 - `tag-list` : Export list of tags
-- `cache-update` : Update SQLite event cache (SafeWindow: now - 10 minutes)
+- `cache-sync` : Sync remote events to local SQLite cache
+- `cache-stats` : Show local cache statistics
+- `cache-clear` : Clear local SQLite cache
 
 ## Key Options
 
@@ -60,7 +65,6 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `-c, --connection-string` : PostgreSQL connection string
 - `--cosmos-connection-string` : Cosmos DB connection string
 - `--cosmos-database` : Cosmos database name
-- `--cache-mode` : Cache mode `auto` | `off` | `clear` | `cache-only` (default `auto`)
 - `-p, --projector` : Target projector name
 - `-o, --output-dir` : Output directory (default `./output`)
 - `-t, --tag` : Tag in `group:content` format
@@ -68,6 +72,9 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `-m, --min-events` : Min events before build (default from `MIN_EVENTS` or 3000)
 - `-f, --force` : Force rebuild
 - `-v, --verbose` : Verbose output
+- `--cache-mode` : `auto` | `off` | `clear` | `cache-only` (default `auto`)
+- `-C, --cache-dir` : Cache directory (default `./cache`)
+- `--safe-window` : Safe window minutes for `cache-sync`
 
 ## Examples
 
@@ -93,15 +100,14 @@ dotnet run -- tag-state -t "WeatherForecast:00000000-0000-0000-0000-000000000001
 # Explicit projector
 dotnet run -- tag-state -t "WeatherForecast:00000000-0000-0000-0000-000000000001" -P "WeatherForecastProjector"
 
-# Update cache
-dotnet run -- cache-update
-
-# Build using cache (auto uses cache if present)
-dotnet run -- build --cache-mode auto
+# Sync cache and use it for tag events
+dotnet run -- cache-sync --cache-dir ./cache --safe-window 10
+dotnet run -- tag-events -t "WeatherForecast:00000000-0000-0000-0000-000000000001" --cache-mode auto --cache-dir ./cache
 ```
 
 ## Notes
 
 - Output files are written to `./output` unless overridden with `--output-dir`.
+- When `--cache-mode` is `auto`, the CLI uses `events.db` from `--cache-dir` if it exists.
+- `cache-only` requires an existing cache (run `cache-sync` first).
 - Use `dotnet run -- <command> --help` to see command-specific options.
-- Cache path for `cache-update` and `--cache-mode` is fixed to `./output/cache/default`.
