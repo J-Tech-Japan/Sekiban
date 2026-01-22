@@ -21,7 +21,7 @@ public class SqliteEventStore : IEventStore
     private readonly DcbDomainTypes _domainTypes;
     private readonly SqliteEventStoreOptions _options;
     private readonly ILogger<SqliteEventStore>? _logger;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     public SqliteEventStore(
         string databasePath,
@@ -253,15 +253,17 @@ public class SqliteEventStore : IEventStore
     public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
         IEnumerable<Event> events)
     {
+        var eventList = events.ToList();
+        if (eventList.Count == 0)
+        {
+            return ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
+                (Array.Empty<Event>(), Array.Empty<TagWriteResult>()));
+        }
+
+        // Serialize all write operations to ensure consistency
+        await _writeLock.WaitAsync();
         try
         {
-            var eventList = events.ToList();
-            if (eventList.Count == 0)
-            {
-                return ResultBox.FromValue<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(
-                    (Array.Empty<Event>(), Array.Empty<TagWriteResult>()));
-            }
-
             var tagWrites = new List<TagWriteResult>();
 
             await using var connection = new SqliteConnection(_connectionString);
@@ -335,6 +337,10 @@ public class SqliteEventStore : IEventStore
         {
             _logger?.LogError(ex, "Error writing events to SQLite");
             return ResultBox.Error<(IReadOnlyList<Event>, IReadOnlyList<TagWriteResult>)>(ex);
+        }
+        finally
+        {
+            _writeLock.Release();
         }
     }
 
