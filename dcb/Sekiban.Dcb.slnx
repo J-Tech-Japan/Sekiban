@@ -16,6 +16,7 @@
     <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+    <Project Path="src/Sekiban.Dcb.Sqlite/Sekiban.Dcb.Sqlite.csproj" />
   </Folder>
   <Folder Name="/internalUsages/">
     <Project Path="internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
