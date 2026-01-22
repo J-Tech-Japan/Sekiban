@@ -52,6 +52,10 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `projection` : Show a projection state
 - `tag-state` : Project a tag state (auto or explicit projector)
 - `tag-list` : Export list of tags
+- `cache-update` : Update SQLite event cache (SafeWindow: now - 10 minutes)
+- `cache-sync` : Sync remote events to local SQLite cache (legacy)
+- `cache-stats` : Show local cache statistics
+- `cache-clear` : Clear local SQLite cache
 
 ## Key Options
 
@@ -59,6 +63,7 @@ dotnet user-secrets set "CosmosDb:DatabaseName" "SekibanDcb"
 - `-c, --connection-string` : PostgreSQL connection string
 - `--cosmos-connection-string` : Cosmos DB connection string
 - `--cosmos-database` : Cosmos database name
+- `--cache-mode` : Cache mode `auto` | `off` | `clear` | `cache-only` (default `auto`)
 - `-p, --projector` : Target projector name
 - `-o, --output-dir` : Output directory (default `./output`)
 - `-t, --tag` : Tag in `group:content` format
@@ -90,9 +95,16 @@ dotnet run -- tag-state -t "WeatherForecast:00000000-0000-0000-0000-000000000001
 
 # Explicit projector
 dotnet run -- tag-state -t "WeatherForecast:00000000-0000-0000-0000-000000000001" -P "WeatherForecastProjector"
+
+# Update cache (profile-based path: ./output/cache/{profile})
+dotnet run -- cache-update --profile stg
+
+# Build using cache (auto uses cache if present)
+dotnet run -- build --profile stg --cache-mode auto
 ```
 
 ## Notes
 
 - Output files are written to `./output` unless overridden with `--output-dir`.
 - Use `dotnet run -- <command> --help` to see command-specific options.
+- Cache path for `cache-update` and `--cache-mode` is fixed to `./output/cache/{profile}`.
