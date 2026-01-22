@@ -410,3 +410,7 @@ dev.log
 
 # pnpm store
 .pnpm-store/
+
+# SQLite database files
+events.db
+events.db-*
