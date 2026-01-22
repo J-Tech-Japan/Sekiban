@@ -23,6 +23,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -43,6 +44,7 @@ builder.Services.AddOpenApi();
 var cfgClustering = (builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower();
 var cfgGrainDefault = (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower();
 var cfgQueueType = (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower();
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 Console.WriteLine($"Config switches => ORLEANS_CLUSTERING_TYPE={cfgClustering}, ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}, ORLEANS_QUEUE_TYPE={cfgQueueType}");
 if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() != "cosmos")
     Console.WriteLine("Registering keyed Azure Table ServiceClient: DcbOrleansClusteringTable");
@@ -403,10 +405,12 @@ builder.UseOrleans(config =>
             services.AddTransient<IMultiProjectionEventStatistics, RecordingMultiProjectionEventStatistics>();
         else
             services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
+        // GeneralMultiProjectionActor options: enable dynamic safe window when not using in-memory streams
+        // SQLite uses 5s safe window, others use 20s baseline. Dynamic adds observed stream lag up to 30s.
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
-            SafeWindowMs = 20000,
-            EnableDynamicSafeWindow = !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
+            SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
+            EnableDynamicSafeWindow = databaseType != "sqlite" && !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
@@ -416,14 +420,27 @@ builder.UseOrleans(config =>
 });
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
-var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
+
+// Configure database storage based on configuration
 if (databaseType == "cosmos")
 {
+    // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
     builder.Services.AddSekibanDcbCosmosDbWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
 }
+else if (databaseType == "sqlite")
+{
+    // SQLite settings - use local events.db file
+    // Prefer project directory for development, fallback to base directory
+    var projectPath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
+    var sqlitePath = projectPath;
+    Console.WriteLine($"Using SQLite database: {sqlitePath}");
+    // SqliteEventStore will auto-create the database if AutoCreateDatabase is true (default)
+    builder.Services.AddSekibanDcbSqlite(sqlitePath);
+}
 else
 {
+    // Postgres settings (default)
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();

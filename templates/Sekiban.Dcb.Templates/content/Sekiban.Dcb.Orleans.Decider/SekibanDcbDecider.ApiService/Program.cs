@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
@@ -69,6 +70,7 @@ if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmo
 }
 
 var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 
 // Configure Orleans
 builder.UseOrleans(config =>
@@ -373,11 +375,11 @@ builder.UseOrleans(config =>
         }
 
         // GeneralMultiProjectionActor options: enable dynamic safe window when not using in-memory streams
-        // Default baseline uses 20s safe window, dynamic adds observed stream lag up to 30s.
+        // SQLite uses 5s safe window, others use 20s baseline. Dynamic adds observed stream lag up to 30s.
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
-            SafeWindowMs = 20000,
-            EnableDynamicSafeWindow = !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
+            SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
+            EnableDynamicSafeWindow = databaseType != "sqlite" && !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
@@ -395,12 +397,19 @@ builder.Services.AddSingleton<SseTopicHub>();
 builder.Services.AddHostedService<OrleansStreamEventRouter>();
 
 // Configure database storage based on configuration
-var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 if (databaseType == "cosmos")
 {
     // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
     builder.Services.AddSekibanDcbCosmosDbWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
+}
+else if (databaseType == "sqlite")
+{
+    // SQLite settings - use local events.db file
+    var projectPath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
+    var sqlitePath = projectPath;
+    Console.WriteLine($"Using SQLite database: {sqlitePath}");
+    builder.Services.AddSekibanDcbSqlite(sqlitePath);
 }
 else
 {
