@@ -23,11 +23,12 @@ public static class DebugEndpoints
     }
 
     private static async Task<IResult> GetEventsAsync(
-        [FromServices] IEventStore eventStore)
+        [FromServices] IEventStore eventStore,
+        [FromServices] ILogger<Program> logger)
     {
         var result = await eventStore.ReadAllEventsAsync();
         var events = result.GetValue().ToList();
-        Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+        logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
         return Results.Ok(new
         {
             totalEvents = events.Count,

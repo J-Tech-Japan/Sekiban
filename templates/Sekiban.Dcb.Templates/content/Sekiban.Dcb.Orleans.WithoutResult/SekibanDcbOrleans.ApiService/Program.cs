@@ -21,6 +21,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
@@ -64,6 +65,7 @@ if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmo
 }
 
 var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 
 // Configure Orleans
 builder.UseOrleans(config =>
@@ -190,7 +192,6 @@ builder.UseOrleans(config =>
     }
 
     // Configure grain storage providers
-    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
     if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorageAsDefault(options =>
@@ -368,11 +369,11 @@ builder.UseOrleans(config =>
         }
 
         // GeneralMultiProjectionActor options: enable dynamic safe window when not using in-memory streams
-        // Default baseline uses 20s safe window, dynamic adds observed stream lag up to 30s.
+        // SQLite uses 5s safe window, others use 20s baseline. Dynamic adds observed stream lag up to 30s.
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
-            SafeWindowMs = 20000,
-            EnableDynamicSafeWindow = !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
+            SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
+            EnableDynamicSafeWindow = databaseType != "sqlite" && !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
@@ -388,12 +389,18 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 // Configure database storage based on configuration
-var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
+string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
 {
     // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
     builder.Services.AddSekibanDcbCosmosDbWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
+}
+else if (databaseType == "sqlite")
+{
+    // SQLite settings - use local events.db file
+    configuredDatabasePath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
+    builder.Services.AddSekibanDcbSqlite(configuredDatabasePath);
 }
 else
 {
@@ -437,6 +444,12 @@ if (builder.Environment.IsDevelopment())
     });
 }
 var app = builder.Build();
+
+// Log startup configuration
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "postgres");
+if (configuredDatabasePath is not null)
+    startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
 
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
@@ -608,11 +621,11 @@ apiRoute
 apiRoute
     .MapGet(
         "/debug/events",
-        async ([FromServices] IEventStore eventStore) =>
+        async ([FromServices] IEventStore eventStore, [FromServices] ILogger<Program> logger) =>
         {
             var result = await eventStore.ReadAllEventsAsync();
             var events = result.GetValue().ToList();
-            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+            logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
             return Results.Ok(
                 new
                 {
@@ -876,21 +889,22 @@ apiRoute
 apiRoute
     .MapPost(
         "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+        async ([FromQuery] string name, [FromServices] IClusterClient client, [FromServices] ILogger<Program> logger) =>
         {
             var start = DateTime.UtcNow;
-            Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
+            logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
             var grain = client.GetGrain<IMultiProjectionGrain>(name);
             var rb = await grain.PersistStateAsync();
             var end = DateTime.UtcNow;
+            var elapsedMs = (end - start).TotalMilliseconds;
             if (rb.IsSuccess)
             {
-                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
+                logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
+                return Results.Ok(new { success = rb.GetValue(), elapsedMs });
             }
             var err = rb.GetException()?.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+            logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
+            return Results.BadRequest(new { error = err, elapsedMs });
         })
         .WithName("PersistProjectionState");
 

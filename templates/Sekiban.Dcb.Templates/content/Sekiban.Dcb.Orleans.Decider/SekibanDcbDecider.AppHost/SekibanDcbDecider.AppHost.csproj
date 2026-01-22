@@ -18,7 +18,8 @@
         <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.1.0" />
         <PackageReference Include="Aspire.Hosting.Orleans" Version="13.1.0" />
         <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
-        <PackageReference Include="CommunityToolkit.Aspire.Hosting.PostgreSQL.Extensions" Version="13.0.1-beta.468" />
+        <PackageReference Include="CommunityToolkit.Aspire.Hosting.PostgreSQL.Extensions" Version="13.1.1" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
     </ItemGroup>
 
     <ItemGroup>

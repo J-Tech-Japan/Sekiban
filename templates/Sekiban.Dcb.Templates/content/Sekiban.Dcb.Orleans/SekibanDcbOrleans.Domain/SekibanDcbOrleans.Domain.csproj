@@ -7,7 +7,8 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.0.2-preview07" />
+    <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.0.3" />
     <PackageReference Include="ResultBoxes" Version="0.3.31" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
   </ItemGroup>
 </Project>

@@ -10,6 +10,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Services;
 using Sekiban.Dcb.Storage;
 
@@ -412,6 +413,19 @@ static string ResolveConnectionString(IConfiguration config, string databaseType
             "  1. Use --cosmos-connection-string option\n" +
             "  2. Set user secret: dotnet user-secrets set \"ConnectionStrings:SekibanDcbCosmos\" \"your-connection-string\"\n" +
             "  3. Set environment variable: COSMOS_CONNECTION_STRING");
+    }
+    else if (databaseType.ToLowerInvariant() == "sqlite")
+    {
+        // For SQLite, connection string is the file path
+        if (!string.IsNullOrEmpty(connectionString))
+            return connectionString;
+
+        var configConnStr = config["ConnectionStrings:Sqlite"];
+        if (!string.IsNullOrEmpty(configConnStr))
+            return configConnStr;
+
+        // Default to events.db in current directory
+        return Path.Combine(Directory.GetCurrentDirectory(), "events.db");
     }
     else
     {
@@ -1106,6 +1120,11 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
         services.AddSingleton(cosmosContext);
         services.AddSingleton<IEventStore, CosmosDbEventStore>();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
+    }
+    else if (databaseType.ToLowerInvariant() == "sqlite")
+    {
+        // SQLite - connectionString is the file path
+        services.AddSekibanDcbSqlite(connectionString);
     }
     else
     {
