@@ -103,16 +103,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
         var isInSafeWindow = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold);
 
-        // Debug logging for safe window evaluation
-        if (_projectorName == "WeatherForecastProjection" && _unsafeVersion % 1000 == 0)
-        {
-            var eventDateTime = eventTime.GetDateTime();
-            var thresholdDateTime = safeWindowThreshold.GetDateTime();
-            var ageMs = (thresholdDateTime - eventDateTime).TotalMilliseconds;
-            Console.WriteLine($"[DualStateWrapper-{_projectorName}] Event age: {ageMs:F0}ms, " +
-                             $"isInSafeWindow: {isInSafeWindow}, " +
-                             $"safeVersion: {_safeVersion}, unsafeVersion: {_unsafeVersion}");
-        }
+        // Debug logging removed to avoid noisy console output.
 
         // Check if event already exists in either safe events or buffered events
         if (_allSafeEvents.ContainsKey(evt.Id) || _bufferedEvents.ContainsKey(evt.Id))
@@ -185,12 +176,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         var eventsToProcess = new List<Event>();
         var keysToRemove = new List<Guid>();
 
-        // Debug logging
-        if (_projectorName == "WeatherForecastProjection" && _bufferedEvents.Count > 0)
-        {
-            Console.WriteLine($"[ProcessBufferedEvents-{_projectorName}] Checking {_bufferedEvents.Count} buffered events for promotion");
-        }
-
         // Find events that are now outside safe window
         foreach (var kvp in _bufferedEvents)
         {
@@ -202,13 +187,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
                 eventsToProcess.Add(ev);
                 keysToRemove.Add(kvp.Key);
             }
-        }
-
-        // Debug logging
-        if (_projectorName == "WeatherForecastProjection" && eventsToProcess.Count > 0)
-        {
-            Console.WriteLine($"[ProcessBufferedEvents-{_projectorName}] Promoting {eventsToProcess.Count} events to safe, " +
-                             $"{_bufferedEvents.Count - eventsToProcess.Count} remain buffered");
         }
 
         // Remove processed events from buffer
@@ -250,7 +228,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         // restored _safeProjector with an empty initial state, causing data loss.
         if (_allSafeEvents.Count == 0)
         {
-            Console.WriteLine($"[RebuildSafeState] Skipped for {_projectorName}: no safe events to rebuild from (preserving existing safe state)");
             return;
         }
 

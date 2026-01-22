@@ -4,6 +4,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Sekiban.Dcb.Actors;
 
 /// <summary>
@@ -19,33 +21,21 @@ public class GeneralTagStateActor : ITagStateActorCommon
     private readonly TagStateOptions _options;
     private readonly ITagStatePersistent _statePersistent;
     private readonly TagStateId _tagStateId;
+    private readonly ILogger<GeneralTagStateActor> _logger;
 
     public GeneralTagStateActor(
         string tagStateId,
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
-        IActorObjectAccessor actorAccessor) : this(
+        IActorObjectAccessor actorAccessor,
+        ILogger<GeneralTagStateActor>? logger = null) : this(
         tagStateId,
         eventStore,
         domainTypes,
         new TagStateOptions(),
         actorAccessor,
-        new InMemoryTagStatePersistent())
-    {
-    }
-
-    public GeneralTagStateActor(
-        string tagStateId,
-        IEventStore eventStore,
-        DcbDomainTypes domainTypes,
-        TagStateOptions options,
-        IActorObjectAccessor actorAccessor) : this(
-        tagStateId,
-        eventStore,
-        domainTypes,
-        options,
-        actorAccessor,
-        new InMemoryTagStatePersistent())
+        new InMemoryTagStatePersistent(),
+        logger)
     {
     }
 
@@ -55,7 +45,25 @@ public class GeneralTagStateActor : ITagStateActorCommon
         DcbDomainTypes domainTypes,
         TagStateOptions options,
         IActorObjectAccessor actorAccessor,
-        ITagStatePersistent statePersistent)
+        ILogger<GeneralTagStateActor>? logger = null) : this(
+        tagStateId,
+        eventStore,
+        domainTypes,
+        options,
+        actorAccessor,
+        new InMemoryTagStatePersistent(),
+        logger)
+    {
+    }
+
+    public GeneralTagStateActor(
+        string tagStateId,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        TagStateOptions options,
+        IActorObjectAccessor actorAccessor,
+        ITagStatePersistent statePersistent,
+        ILogger<GeneralTagStateActor>? logger = null)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
             throw new ArgumentNullException(nameof(tagStateId));
@@ -66,6 +74,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _statePersistent = statePersistent ?? throw new ArgumentNullException(nameof(statePersistent));
+        _logger = logger ?? NullLogger<GeneralTagStateActor>.Instance;
     }
 
     public Task<string> GetTagStateActorIdAsync() => Task.FromResult(_tagStateId.GetTagStateId());
@@ -207,8 +216,10 @@ public class GeneralTagStateActor : ITagStateActorCommon
             {
                 // Log the error and throw exception instead of silently returning cached state
                 var error = eventsResult.GetException();
-                Console.WriteLine(
-                    $"[GeneralTagStateActor] Error reading events for tag {tag.GetTag()}: {error.Message}");
+                _logger.LogError(
+                    error,
+                    "[GeneralTagStateActor] Error reading events for tag {Tag}",
+                    tag.GetTag());
 
                 // For deserialization errors, we should not use cached state as it may be inconsistent
                 // Instead, throw the error so developers can see and fix the issue
@@ -241,8 +252,10 @@ public class GeneralTagStateActor : ITagStateActorCommon
             {
                 // Log the error for debugging
                 var error = eventsResult.GetException();
-                Console.WriteLine(
-                    $"[GeneralTagStateActor] Error reading events for full rebuild of tag {tag.GetTag()}: {error.Message}");
+                _logger.LogError(
+                    error,
+                    "[GeneralTagStateActor] Error reading events for full rebuild of tag {Tag}",
+                    tag.GetTag());
 
                 // For full rebuild, if we can't read events, throw the error
                 // This ensures developers see the issue (like missing event type registration)

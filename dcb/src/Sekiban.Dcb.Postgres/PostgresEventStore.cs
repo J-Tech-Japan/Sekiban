@@ -5,17 +5,24 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Sekiban.Dcb.Postgres;
 
 public class PostgresEventStore : IEventStore
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly ILogger<PostgresEventStore> _logger;
 
-    public PostgresEventStore(IDbContextFactory<SekibanDcbDbContext> contextFactory, DcbDomainTypes domainTypes)
+    public PostgresEventStore(
+        IDbContextFactory<SekibanDcbDbContext> contextFactory,
+        DcbDomainTypes domainTypes,
+        ILogger<PostgresEventStore>? logger = null)
     {
         _contextFactory = contextFactory;
         _domainTypes = domainTypes;
+        _logger = logger ?? NullLogger<PostgresEventStore>.Instance;
     }
 
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
@@ -181,12 +188,7 @@ public class PostgresEventStore : IEventStore
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WriteEventsAsync failed: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            if (ex.InnerException != null)
-            {
-                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-            }
+            _logger.LogError(ex, "WriteEventsAsync failed");
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
     }
