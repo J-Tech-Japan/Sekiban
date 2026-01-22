@@ -27,11 +27,12 @@
     <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
     <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="10.0.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.12.12" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.12.13" />
     <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.3" />
     <PackageReference Include="Sekiban.Dcb.Orleans.WithResult" Version="10.0.3" />
     <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.3" />
     <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.3" />
     <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.0.3" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
   </ItemGroup>
 </Project>

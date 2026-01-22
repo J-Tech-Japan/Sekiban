@@ -5,6 +5,10 @@
         <ProjectReference Include="..\SekibanDcbOrleans.Domain\SekibanDcbOrleans.Domain.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    </ItemGroup>
+
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>

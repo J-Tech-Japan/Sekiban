@@ -192,7 +192,6 @@ builder.UseOrleans(config =>
     }
 
     // Configure grain storage providers
-    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
     if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorageAsDefault(options =>
@@ -390,6 +389,7 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 // Configure database storage based on configuration
+string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
 {
     // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
@@ -399,10 +399,8 @@ if (databaseType == "cosmos")
 else if (databaseType == "sqlite")
 {
     // SQLite settings - use local events.db file
-    var projectPath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
-    var sqlitePath = projectPath;
-    Console.WriteLine($"Using SQLite database: {sqlitePath}");
-    builder.Services.AddSekibanDcbSqlite(sqlitePath);
+    configuredDatabasePath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
+    builder.Services.AddSekibanDcbSqlite(configuredDatabasePath);
 }
 else
 {
@@ -446,6 +444,12 @@ if (builder.Environment.IsDevelopment())
     });
 }
 var app = builder.Build();
+
+// Log startup configuration
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "postgres");
+if (configuredDatabasePath is not null)
+    startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
 
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations
@@ -617,11 +621,11 @@ apiRoute
 apiRoute
     .MapGet(
         "/debug/events",
-        async ([FromServices] IEventStore eventStore) =>
+        async ([FromServices] IEventStore eventStore, [FromServices] ILogger<Program> logger) =>
         {
             var result = await eventStore.ReadAllEventsAsync();
             var events = result.GetValue().ToList();
-            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+            logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
             return Results.Ok(
                 new
                 {
@@ -885,21 +889,22 @@ apiRoute
 apiRoute
     .MapPost(
         "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+        async ([FromQuery] string name, [FromServices] IClusterClient client, [FromServices] ILogger<Program> logger) =>
         {
             var start = DateTime.UtcNow;
-            Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
+            logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
             var grain = client.GetGrain<IMultiProjectionGrain>(name);
             var rb = await grain.PersistStateAsync();
             var end = DateTime.UtcNow;
+            var elapsedMs = (end - start).TotalMilliseconds;
             if (rb.IsSuccess)
             {
-                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
+                logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
+                return Results.Ok(new { success = rb.GetValue(), elapsedMs });
             }
             var err = rb.GetException()?.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+            logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
+            return Results.BadRequest(new { error = err, elapsedMs });
         })
         .WithName("PersistProjectionState");
 

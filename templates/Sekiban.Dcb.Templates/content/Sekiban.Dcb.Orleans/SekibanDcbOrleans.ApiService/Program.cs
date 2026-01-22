@@ -40,28 +40,23 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
-// Log key configuration switches early for troubleshooting
+// Configuration switches for Orleans
 var cfgClustering = (builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower();
 var cfgGrainDefault = (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower();
 var cfgQueueType = (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower();
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
-Console.WriteLine($"Config switches => ORLEANS_CLUSTERING_TYPE={cfgClustering}, ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}, ORLEANS_QUEUE_TYPE={cfgQueueType}");
+
 if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() != "cosmos")
-    Console.WriteLine("Registering keyed Azure Table ServiceClient: DcbOrleansClusteringTable");
     builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
 
 if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos")
-    Console.WriteLine("Registering keyed Azure Blob ServiceClient: DcbOrleansGrainState");
     builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
 
 if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "cosmos" ||
     (builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
-    Console.WriteLine("Registering keyed Azure Table ServiceClient: DcbOrleansGrainTable");
     builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
 
-Console.WriteLine("Registering keyed Azure Blob ServiceClient: MultiProjectionOffload");
 builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
-Console.WriteLine("Registering keyed Azure Queue ServiceClient: DcbOrleansQueue");
 builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 
 // Ensure Orleans fallbacks (GetRequiredKeyedService) can resolve clients even if options aren't set
@@ -247,7 +242,6 @@ builder.UseOrleans(config =>
         }
     }
 
-    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
     if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorageAsDefault(options =>
@@ -306,7 +300,6 @@ builder.UseOrleans(config =>
     }
     else
     {
-        Console.WriteLine("Configuring Azure Blob as default grain storage (non-cosmos setting)");
         config.AddAzureBlobGrainStorageAsDefault(options =>
         {
             options.Configure<IServiceProvider>((opt, sp) =>
@@ -317,7 +310,6 @@ builder.UseOrleans(config =>
                 {
                     var hasConn = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbOrleansGrainState"));
                     logger?.LogError("BlobServiceClient(DcbOrleansGrainState) not resolved. ConnectionStrings:DcbOrleansGrainState present={present}", hasConn);
-                    Console.WriteLine($"ERROR: BlobServiceClient(DcbOrleansGrainState) not resolved. ConnectionStrings:DcbOrleansGrainState present={hasConn}");
                 }
                 opt.BlobServiceClient = client;
                 opt.ContainerName = "sekiban-grainstate";
@@ -394,7 +386,6 @@ builder.UseOrleans(config =>
         var ports = builder.Configuration["WEBSITE_PRIVATE_PORTS"]!.Split(',');
         if (ports.Length < 2) throw new Exception("Insufficient number of private ports");
         int siloPort = int.Parse(ports[0]), gatewayPort = int.Parse(ports[1]);
-        Console.WriteLine($"Using WEBSITE_PRIVATE_IP: {ip}, siloPort: {siloPort}, gatewayPort: {gatewayPort}");
         config.ConfigureEndpoints(ip, siloPort, gatewayPort, true);
     }
 
@@ -422,6 +413,7 @@ var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
 // Configure database storage based on configuration
+string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
 {
     // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
@@ -431,12 +423,9 @@ if (databaseType == "cosmos")
 else if (databaseType == "sqlite")
 {
     // SQLite settings - use local events.db file
-    // Prefer project directory for development, fallback to base directory
-    var projectPath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
-    var sqlitePath = projectPath;
-    Console.WriteLine($"Using SQLite database: {sqlitePath}");
+    configuredDatabasePath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
     // SqliteEventStore will auto-create the database if AutoCreateDatabase is true (default)
-    builder.Services.AddSekibanDcbSqlite(sqlitePath);
+    builder.Services.AddSekibanDcbSqlite(configuredDatabasePath);
 }
 else
 {
@@ -468,6 +457,13 @@ if (builder.Environment.IsDevelopment())
         options.AddPolicy("AllowAll", policy => { policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod(); });
     });
 var app = builder.Build();
+
+// Log startup configuration
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "postgres");
+if (configuredDatabasePath is not null)
+    startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
+
 var apiRoute = app.MapGroup("/api");
 app.UseExceptionHandler();
 if (app.Environment.IsDevelopment())

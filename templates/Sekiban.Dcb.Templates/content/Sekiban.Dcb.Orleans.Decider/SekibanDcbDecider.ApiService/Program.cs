@@ -197,7 +197,6 @@ builder.UseOrleans(config =>
     }
 
     // Configure grain storage providers
-    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
     if (cfgGrainDefault == "cosmos")
     {
         config.AddCosmosGrainStorageAsDefault(options =>
@@ -397,6 +396,7 @@ builder.Services.AddSingleton<SseTopicHub>();
 builder.Services.AddHostedService<OrleansStreamEventRouter>();
 
 // Configure database storage based on configuration
+string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
 {
     // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
@@ -406,10 +406,8 @@ if (databaseType == "cosmos")
 else if (databaseType == "sqlite")
 {
     // SQLite settings - use local events.db file
-    var projectPath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
-    var sqlitePath = projectPath;
-    Console.WriteLine($"Using SQLite database: {sqlitePath}");
-    builder.Services.AddSekibanDcbSqlite(sqlitePath);
+    configuredDatabasePath = Path.Combine(Directory.GetCurrentDirectory(), "events.db");
+    builder.Services.AddSekibanDcbSqlite(configuredDatabasePath);
 }
 else
 {
@@ -453,6 +451,12 @@ if (builder.Environment.IsDevelopment())
     });
 }
 var app = builder.Build();
+
+// Log startup configuration
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+startupLogger.LogInformation("Database type: {DatabaseType}", databaseType ?? "postgres");
+if (configuredDatabasePath is not null)
+    startupLogger.LogInformation("SQLite database path: {DatabasePath}", configuredDatabasePath);
 
 // Database tables will be created automatically by the DatabaseInitializerService
 // configured in AddSekibanDcbPostgresWithAspire, so no need to run migrations

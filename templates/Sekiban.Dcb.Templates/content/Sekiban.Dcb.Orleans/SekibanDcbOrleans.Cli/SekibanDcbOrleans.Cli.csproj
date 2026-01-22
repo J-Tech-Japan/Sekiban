@@ -9,15 +9,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.56.0"/>
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
-        <PackageReference Include="System.CommandLine" Version="2.0.1" />
+        <PackageReference Include="System.CommandLine" Version="2.0.2" />
         <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.0.3" />
         <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.3" />
         <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.3" />
         <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.0.3" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
     </ItemGroup>
 
     <ItemGroup>
