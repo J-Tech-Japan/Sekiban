@@ -1124,9 +1124,7 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
     else if (databaseType.ToLowerInvariant() == "sqlite")
     {
         // SQLite - connectionString is the file path
-        var sqliteStore = new SqliteEventStore(connectionString, domainTypes);
-        services.AddSingleton<IEventStore>(sqliteStore);
-        services.AddSingleton<IMultiProjectionStateStore>(sqliteStore);
+        services.AddSekibanDcbSqlite(connectionString);
     }
     else
     {

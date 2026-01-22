@@ -10,6 +10,6 @@
     <ProjectReference Include="..\SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.2-preview12" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.3" />
   </ItemGroup>
 </Project>
