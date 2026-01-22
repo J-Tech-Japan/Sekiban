@@ -39,10 +39,10 @@ jobs:
       - name: Restore dependencies
         run: |
           dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-          dotnet restore Sekiban.slnx
+          dotnet restore dcb/Sekiban.Dcb.slnx
 
       - name: Build with dotnet
-        run: dotnet build Sekiban.slnx -c Release
+        run: dotnet build dcb/Sekiban.Dcb.slnx -c Release
 
       - name: Pack NuGet packages
         run: |
