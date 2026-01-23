@@ -1828,13 +1828,3 @@ static async Task ClearCacheAsync(string cacheDir)
 
     await Task.CompletedTask;
 }
-
-enum SimpleCacheMode
-{
-    Auto,
-    Off,
-    Clear,
-    CacheOnly
-}
-
-readonly record struct CacheOptions(SimpleCacheMode Mode, string CacheDir);
