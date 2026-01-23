@@ -1453,6 +1453,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Queries will return partial/stale data with IsCatchUpInProgress=true until catch-up completes.
         _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
 
+        // Auto-start subscription so stream-only projections resume after crashes/restarts.
+        try
+        {
+            await StartSubscriptionAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to auto-start stream subscription on activation: {ProjectorName}",
+                projectorName);
+        }
+
         // Mark state restore source based on whether we need full catch-up
         if (_stateRestoreSource == StateRestoreSource.Failed && _eventsProcessed == 0)
         {
@@ -2746,9 +2759,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
         _orleansStream = streamProvider.GetStream<SerializableEvent>(
             StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
-        // Do NOT subscribe here. Subscription will start lazily on first query/state access.
-        _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Stream prepared (lazy subscription)", projectorName);
-        _isInitialized = true;
+        _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Stream prepared", projectorName);
     }
 
     private async Task CloseStreamsAsync(CancellationToken ct)
