@@ -16,6 +16,8 @@
     <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
+    <Project Path="src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj" />
+    <Project Path="src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj" />
     <Project Path="src/Sekiban.Dcb.Sqlite/Sekiban.Dcb.Sqlite.csproj" />
   </Folder>
   <Folder Name="/internalUsages/">
@@ -30,10 +32,12 @@
     </Project>
     <Project Path="internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
     <Project Path="internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
+    <Project Path="internalUsages/DcbOrleansDynamoDB.AppHost/DcbOrleansDynamoDB.AppHost.csproj" />
     <Project Path="internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
     <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
+    <Project Path="internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj" />
     <Project Path="internalUsages/DcbOrleans.Cli/DcbOrleans.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -68,3 +68,33 @@ If ports conflict locally they may auto-shift; confirm via the console output at
 - [ ] Public surface (NuGet facing) reviewed for accidental breaking changes
 
 This section exists so AI coding assistants understand the active development nucleus and choose the correct host + projects for context-aware changes.
+
+## DCB Storage Provider Implementation Guide
+
+### Adding a New Storage Backend
+
+When adding a new storage provider (e.g., DynamoDB, MySQL), follow these patterns:
+
+1. **Reference existing implementations**:
+   - Cosmos DB: `dcb/src/Sekiban.Dcb.CosmosDb/`
+   - Postgres: `dcb/src/Sekiban.Dcb.Postgres/`
+
+2. **Required interfaces** (from `Sekiban.Dcb.Core`):
+   - `IEventStore` — Event persistence and retrieval
+   - `IMultiProjectionStateStore` — Projection state management
+
+3. **Blob storage offloading**:
+   - If the backend has item size limits, create a companion offload package
+   - Implement `IBlobStorageSnapshotAccessor` interface
+   - Examples: `Sekiban.Dcb.BlobStorage.AzureStorage` (for Cosmos), `Sekiban.Dcb.BlobStorage.S3` (for DynamoDB)
+
+4. **Design documents**: Store in `tasks/{issue-number}/design-{agent}/`
+
+### Current Storage Providers
+
+| Provider | Package | Offload Package | Status |
+|----------|---------|-----------------|--------|
+| Postgres | `Sekiban.Dcb.Postgres` | N/A (no limit) | Production |
+| Cosmos DB | `Sekiban.Dcb.CosmosDb` | `Sekiban.Dcb.BlobStorage.AzureStorage` | Production |
+| SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
+| DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Planned (#876) |

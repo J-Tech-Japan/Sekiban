@@ -87,7 +87,8 @@
       "mcp__playwright__browser_network_requests",
       "mcp__playwright__browser_navigate",
       "Bash(jq:*)",
-      "Bash(dcb/check.sh)"
+      "Bash(dcb/check.sh)",
+      "Bash(gh issue view:*)"
     ],
     "deny": []
   },

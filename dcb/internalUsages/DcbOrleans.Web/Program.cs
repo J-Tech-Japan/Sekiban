@@ -60,4 +60,7 @@ app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapDefaultEndpoints();
 
+// Health endpoint for ALB health checks (works in all environments)
+app.MapGet("/health", () => Results.Ok("Healthy"));
+
 app.Run();
