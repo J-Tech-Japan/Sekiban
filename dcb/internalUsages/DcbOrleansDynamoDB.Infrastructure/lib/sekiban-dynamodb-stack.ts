@@ -1,0 +1,479 @@
+import * as cdk from 'aws-cdk-lib';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as rds from 'aws-cdk-lib/aws-rds';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import { Construct } from 'constructs';
+
+export interface SekibanDynamoDbStackProps extends cdk.StackProps {
+  config: any;
+  envName: string;
+}
+
+export class SekibanDynamoDbStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props: SekibanDynamoDbStackProps) {
+    super(scope, id, props);
+
+    const { config, envName } = props;
+
+    // Check if HTTPS is enabled for external ALB (certificate ARN provided)
+    const httpsEnabled = config.alb?.certificateArn && config.alb.certificateArn !== '';
+
+    // ========================================
+    // VPC
+    // ========================================
+    const vpc = new ec2.Vpc(this, 'Vpc', {
+      ipAddresses: ec2.IpAddresses.cidr(config.vpc.cidr),
+      maxAzs: config.vpc.maxAzs,
+      natGateways: 1,
+      subnetConfiguration: [
+        {
+          name: 'Public',
+          subnetType: ec2.SubnetType.PUBLIC,
+          cidrMask: 24,
+        },
+        {
+          name: 'Private',
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+          cidrMask: 24,
+        },
+      ],
+    });
+
+    // ========================================
+    // Security Groups
+    // ========================================
+    const albSg = new ec2.SecurityGroup(this, 'AlbSg', {
+      vpc,
+      description: 'ALB Security Group',
+      allowAllOutbound: true,
+    });
+    albSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP');
+    albSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'Allow HTTPS');
+
+    const ecsSg = new ec2.SecurityGroup(this, 'EcsSg', {
+      vpc,
+      description: 'ECS Task Security Group',
+      allowAllOutbound: true,
+    });
+    // External ALB -> ECS HTTP (Web only - API is internal only)
+    ecsSg.addIngressRule(albSg, ec2.Port.tcp(config.web.httpPort), 'Allow ALB to Web HTTP');
+    // ECS (Web) -> ECS (API) via Cloud Map
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.httpPort), 'Allow Web to API HTTP');
+    // ECS <-> ECS Orleans Silo
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.siloPort), 'Allow Silo-to-Silo');
+    // ECS <-> ECS Orleans Gateway
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.gatewayPort), 'Allow Gateway');
+
+    const rdsSg = new ec2.SecurityGroup(this, 'RdsSg', {
+      vpc,
+      description: 'RDS Security Group',
+      allowAllOutbound: false,
+    });
+    rdsSg.addIngressRule(ecsSg, ec2.Port.tcp(5432), 'Allow ECS to RDS');
+
+    // ========================================
+    // RDS PostgreSQL (Orleans Clustering/State/Reminders)
+    // ========================================
+    const rdsSecret = new secretsmanager.Secret(this, 'RdsSecret', {
+      secretName: `sekiban-dynamodb-${envName}-rds`,
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ username: 'orleans' }),
+        generateStringKey: 'password',
+        excludePunctuation: true,
+      },
+    });
+
+    const rdsInstance = new rds.DatabaseInstance(this, 'RdsInstance', {
+      engine: rds.DatabaseInstanceEngine.postgres({
+        version: rds.PostgresEngineVersion.VER_16,
+      }),
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        config.rds.instanceClass === 'db.t4g.micro' ? ec2.InstanceSize.MICRO : ec2.InstanceSize.SMALL
+      ),
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [rdsSg],
+      credentials: rds.Credentials.fromSecret(rdsSecret),
+      databaseName: config.rds.databaseName,
+      allocatedStorage: config.rds.allocatedStorage,
+      multiAz: config.rds.multiAz,
+      deletionProtection: envName === 'prod',
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // ========================================
+    // DynamoDB (DCB Events)
+    // ========================================
+    const eventsTable = new dynamodb.Table(this, 'EventsTable', {
+      tableName: config.dynamodb.eventsTableName,
+      partitionKey: { name: 'PartitionKey', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SortableUniqueId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: envName === 'prod',
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // GSI for querying by SortableUniqueId
+    eventsTable.addGlobalSecondaryIndex({
+      indexName: 'SortableUniqueIdIndex',
+      partitionKey: { name: 'RootPartitionKey', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SortableUniqueId', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Multi-projection state table
+    const multiProjectionTable = new dynamodb.Table(this, 'MultiProjectionTable', {
+      tableName: `${config.dynamodb.eventsTableName}-projections`,
+      partitionKey: { name: 'ProjectionId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // ========================================
+    // SQS (Orleans Streams)
+    // ========================================
+    const dlq = new sqs.Queue(this, 'OrleansDlq', {
+      queueName: `${config.sqs.queueNamePrefix}-dlq`,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const sqsQueues: sqs.Queue[] = [];
+    for (let i = 0; i < config.sqs.queueCount; i++) {
+      const queue = new sqs.Queue(this, `OrleansQueue${i}`, {
+        queueName: `${config.sqs.queueNamePrefix}-${i}`,
+        visibilityTimeout: cdk.Duration.seconds(config.sqs.visibilityTimeoutSec),
+        retentionPeriod: cdk.Duration.days(config.sqs.messageRetentionDays),
+        deadLetterQueue: {
+          queue: dlq,
+          maxReceiveCount: 5,
+        },
+      });
+      sqsQueues.push(queue);
+    }
+
+    // ========================================
+    // S3 (Snapshots)
+    // ========================================
+    const snapshotBucket = new s3.Bucket(this, 'SnapshotBucket', {
+      bucketName: `${config.s3.snapshotBucketName}-${this.account}`,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: envName !== 'prod',
+    });
+
+    // ========================================
+    // ECR Repositories
+    // ========================================
+    const apiEcrRepo = new ecr.Repository(this, 'ApiEcrRepo', {
+      repositoryName: `sekiban-dynamodb-api-${envName}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      emptyOnDelete: true,
+    });
+
+    const webEcrRepo = new ecr.Repository(this, 'WebEcrRepo', {
+      repositoryName: `sekiban-dynamodb-web-${envName}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      emptyOnDelete: true,
+    });
+
+    // ========================================
+    // ECS Cluster
+    // ========================================
+    const cluster = new ecs.Cluster(this, 'Cluster', {
+      vpc,
+      clusterName: `sekiban-dynamodb-${envName}`,
+      containerInsights: true,
+    });
+
+    // Cloud Map namespace for service discovery
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'Namespace', {
+      name: `sekiban-${envName}.internal`,
+      vpc,
+    });
+
+    // ========================================
+    // Log Groups
+    // ========================================
+    const apiLogGroup = new logs.LogGroup(this, 'ApiLogGroup', {
+      logGroupName: `/ecs/sekiban-dynamodb-api-${envName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const webLogGroup = new logs.LogGroup(this, 'WebLogGroup', {
+      logGroupName: `/ecs/sekiban-dynamodb-web-${envName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // ========================================
+    // API Service Task Definition
+    // ========================================
+    const apiTaskDefinition = new ecs.FargateTaskDefinition(this, 'ApiTaskDef', {
+      cpu: config.ecs.cpu,
+      memoryLimitMiB: config.ecs.memory,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
+    });
+
+    // Grant permissions to API
+    eventsTable.grantReadWriteData(apiTaskDefinition.taskRole);
+    multiProjectionTable.grantReadWriteData(apiTaskDefinition.taskRole);
+    snapshotBucket.grantReadWrite(apiTaskDefinition.taskRole);
+    rdsSecret.grantRead(apiTaskDefinition.taskRole);
+    sqsQueues.forEach(q => {
+      q.grantSendMessages(apiTaskDefinition.taskRole);
+      q.grantConsumeMessages(apiTaskDefinition.taskRole);
+    });
+
+    apiTaskDefinition.addContainer('ApiService', {
+      image: ecs.ContainerImage.fromEcrRepository(apiEcrRepo, 'latest'),
+      logging: ecs.LogDrivers.awsLogs({
+        streamPrefix: 'api',
+        logGroup: apiLogGroup,
+      }),
+      environment: {
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        'Sekiban__Database': 'dynamodb',
+        'Orleans__UseInMemoryStreams': 'false',
+        'Orleans__ClusterId': config.orleans.clusterId,
+        'Orleans__ServiceId': config.orleans.serviceId,
+        'Orleans__SiloPort': config.orleans.siloPort.toString(),
+        'Orleans__GatewayPort': config.orleans.gatewayPort.toString(),
+        'AWS__Region': config.region,
+        'DynamoDb__TableName': config.dynamodb.eventsTableName,
+        'S3BlobStorage__BucketName': snapshotBucket.bucketName,
+        'Sqs__QueuePrefix': config.sqs.queueNamePrefix,
+        'Sqs__QueueCount': config.sqs.queueCount.toString(),
+      },
+      secrets: {
+        'RdsConnectionString': ecs.Secret.fromSecretsManager(rdsSecret),
+      },
+      portMappings: [
+        { containerPort: config.orleans.httpPort, name: 'http' },
+        { containerPort: config.orleans.siloPort, name: 'silo' },
+        { containerPort: config.orleans.gatewayPort, name: 'gateway' },
+      ],
+    });
+
+    // ========================================
+    // Web Service Task Definition
+    // ========================================
+    const webTaskDefinition = new ecs.FargateTaskDefinition(this, 'WebTaskDef', {
+      cpu: config.web.cpu,
+      memoryLimitMiB: config.web.memory,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
+    });
+
+    // API service URL via Cloud Map (internal HTTP communication)
+    const apiServiceUrl = `http://apiservice.sekiban-${envName}.internal:${config.orleans.httpPort}`;
+
+    webTaskDefinition.addContainer('WebService', {
+      image: ecs.ContainerImage.fromEcrRepository(webEcrRepo, 'latest'),
+      logging: ecs.LogDrivers.awsLogs({
+        streamPrefix: 'web',
+        logGroup: webLogGroup,
+      }),
+      environment: {
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        // Aspire Service Discovery configuration
+        // Use Cloud Map for Web -> API communication (HTTP)
+        'services__apiservice__http__0': apiServiceUrl,
+      },
+      portMappings: [
+        { containerPort: config.web.httpPort, name: 'http' },
+      ],
+    });
+
+    // ========================================
+    // External ALB (Web only - API is internal only)
+    // ========================================
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'Alb', {
+      vpc,
+      internetFacing: true,
+      securityGroup: albSg,
+    });
+
+    // Web Target Group
+    const webTargetGroup = new elbv2.ApplicationTargetGroup(this, 'WebTargetGroup', {
+      vpc,
+      port: config.web.httpPort,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targetType: elbv2.TargetType.IP,
+      healthCheck: {
+        path: '/health',
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(5),
+        healthyThresholdCount: 2,
+        unhealthyThresholdCount: 3,
+      },
+    });
+
+    // Configure external ALB listeners based on HTTPS configuration
+    if (httpsEnabled) {
+      // Import certificate
+      const certificate = acm.Certificate.fromCertificateArn(
+        this, 'Certificate', config.alb.certificateArn
+      );
+
+      // HTTPS Listener - all traffic to Web
+      alb.addListener('HttpsListener', {
+        port: 443,
+        protocol: elbv2.ApplicationProtocol.HTTPS,
+        certificates: [certificate],
+        defaultAction: elbv2.ListenerAction.forward([webTargetGroup]),
+      });
+
+      // HTTP to HTTPS redirect
+      alb.addListener('HttpListener', {
+        port: 80,
+        defaultAction: elbv2.ListenerAction.redirect({
+          protocol: 'HTTPS',
+          port: '443',
+          permanent: true,
+        }),
+      });
+    } else {
+      // HTTP only (when no certificate configured) - all traffic to Web
+      alb.addListener('HttpListener', {
+        port: 80,
+        defaultAction: elbv2.ListenerAction.forward([webTargetGroup]),
+      });
+    }
+
+    // ========================================
+    // API ECS Service (internal only - accessible via Cloud Map)
+    // ========================================
+    const apiService = new ecs.FargateService(this, 'ApiService', {
+      cluster,
+      taskDefinition: apiTaskDefinition,
+      desiredCount: config.ecs.desiredCount,
+      securityGroups: [ecsSg],
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      cloudMapOptions: {
+        name: 'apiservice',
+        cloudMapNamespace: namespace,
+        dnsRecordType: servicediscovery.DnsRecordType.A,
+        dnsTtl: cdk.Duration.seconds(10),
+      },
+      circuitBreaker: { rollback: true },
+    });
+
+    // API service is internal only - no external ALB attachment
+    // Access via Cloud Map: apiservice.sekiban-{env}.internal
+
+    // API Auto Scaling
+    const apiScaling = apiService.autoScaleTaskCount({
+      minCapacity: config.ecs.minCount,
+      maxCapacity: config.ecs.maxCount,
+    });
+
+    apiScaling.scaleOnCpuUtilization('ApiCpuScaling', {
+      targetUtilizationPercent: 70,
+    });
+
+    // ========================================
+    // Web ECS Service
+    // ========================================
+    const webService = new ecs.FargateService(this, 'WebService', {
+      cluster,
+      taskDefinition: webTaskDefinition,
+      desiredCount: config.web.desiredCount,
+      securityGroups: [ecsSg],
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      cloudMapOptions: {
+        name: 'webservice',
+        cloudMapNamespace: namespace,
+        dnsRecordType: servicediscovery.DnsRecordType.A,
+        dnsTtl: cdk.Duration.seconds(10),
+      },
+      circuitBreaker: { rollback: true },
+    });
+
+    webService.attachToApplicationTargetGroup(webTargetGroup);
+
+    // Web Auto Scaling
+    const webScaling = webService.autoScaleTaskCount({
+      minCapacity: config.web.minCount,
+      maxCapacity: config.web.maxCount,
+    });
+
+    webScaling.scaleOnCpuUtilization('WebCpuScaling', {
+      targetUtilizationPercent: 70,
+    });
+
+    // ========================================
+    // Outputs
+    // ========================================
+    new cdk.CfnOutput(this, 'AlbDnsName', {
+      value: alb.loadBalancerDnsName,
+      description: 'External ALB DNS Name (Web only)',
+    });
+
+    new cdk.CfnOutput(this, 'HttpsEnabled', {
+      value: httpsEnabled ? 'true' : 'false',
+      description: 'Whether HTTPS is enabled for external ALB',
+    });
+
+    new cdk.CfnOutput(this, 'InternalApiEndpoint', {
+      value: `http://apiservice.sekiban-${envName}.internal:${config.orleans.httpPort}`,
+      description: 'Internal API Endpoint (Cloud Map)',
+    });
+
+    new cdk.CfnOutput(this, 'ApiEcrRepositoryUri', {
+      value: apiEcrRepo.repositoryUri,
+      description: 'API ECR Repository URI',
+    });
+
+    new cdk.CfnOutput(this, 'WebEcrRepositoryUri', {
+      value: webEcrRepo.repositoryUri,
+      description: 'Web ECR Repository URI',
+    });
+
+    new cdk.CfnOutput(this, 'RdsEndpoint', {
+      value: rdsInstance.instanceEndpoint.hostname,
+      description: 'RDS Endpoint',
+    });
+
+    new cdk.CfnOutput(this, 'EventsTableName', {
+      value: eventsTable.tableName,
+      description: 'DynamoDB Events Table Name',
+    });
+
+    new cdk.CfnOutput(this, 'SnapshotBucketName', {
+      value: snapshotBucket.bucketName,
+      description: 'S3 Snapshot Bucket Name',
+    });
+
+    new cdk.CfnOutput(this, 'ClusterName', {
+      value: cluster.clusterName,
+      description: 'ECS Cluster Name',
+    });
+
+    new cdk.CfnOutput(this, 'ApiServiceName', {
+      value: apiService.serviceName,
+      description: 'API ECS Service Name',
+    });
+
+    new cdk.CfnOutput(this, 'WebServiceName', {
+      value: webService.serviceName,
+      description: 'Web ECS Service Name',
+    });
+  }
+}

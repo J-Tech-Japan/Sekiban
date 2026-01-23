@@ -43,53 +43,120 @@ builder.Services.AddOpenApi();
 
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "dynamodb";
 var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams", true);
-if (!useInMemoryStreams)
+
+// Determine if running locally (Aspire/LocalStack) or in AWS
+var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]) ||
+                         builder.Environment.IsDevelopment();
+
+// In AWS deployment, we use RDS for Orleans + SQS for streams
+// In local development, we use in-memory everything
+if (!isLocalDevelopment && !useInMemoryStreams)
 {
+    // AWS Deployment mode - will use RDS + SQS
+    // This is valid for production deployment
+}
+else if (!useInMemoryStreams)
+{
+    // Local mode but trying to use non-memory streams - not supported
     throw new InvalidOperationException(
-        "Orleans:UseInMemoryStreams must be true for the DynamoDB sample app.");
+        "Orleans:UseInMemoryStreams must be true for local development.");
 }
 
 // Configure Orleans
 builder.UseOrleans(config =>
 {
-    config.UseLocalhostClustering();
-
-    // Use in-memory streams for development/testing with enhanced configuration
-    if (useInMemoryStreams)
+    if (isLocalDevelopment)
     {
-        config.AddMemoryStreams("EventStreamProvider", configurator =>
-        {
-            configurator.ConfigurePartitioning(8);
-            configurator.ConfigurePullingAgent(options =>
-            {
-                options.Configure(opt =>
-                {
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                    opt.BatchContainerBatchSize = 100;
-                });
-            });
-        });
+        // Local development: use localhost clustering
+        config.UseLocalhostClustering();
+    }
+    else
+    {
+        // AWS deployment: use AdoNet clustering with RDS PostgreSQL
+        var rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
+                                  builder.Configuration.GetConnectionString("Orleans");
 
-        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
+        if (!string.IsNullOrEmpty(rdsConnectionString))
         {
-            configurator.ConfigurePartitioning(8);
-            configurator.ConfigurePullingAgent(options =>
+            config.UseAdoNetClustering(options =>
             {
-                options.Configure(opt =>
-                {
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                    opt.BatchContainerBatchSize = 100;
-                });
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
             });
+
+            config.AddAdoNetGrainStorage("OrleansStorage", options =>
+            {
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
+            });
+
+            config.AddAdoNetGrainStorage("PubSubStore", options =>
+            {
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
+            });
+
+            config.UseAdoNetReminderService(options =>
+            {
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
+            });
+        }
+
+        // Configure Orleans endpoint for ECS
+        var siloPort = builder.Configuration.GetValue<int>("Orleans:SiloPort", 11111);
+        var gatewayPort = builder.Configuration.GetValue<int>("Orleans:GatewayPort", 30000);
+
+        config.Configure<Orleans.Configuration.EndpointOptions>(options =>
+        {
+            options.SiloPort = siloPort;
+            options.GatewayPort = gatewayPort;
+            // In ECS Fargate, we need to get the private IP
+            options.AdvertisedIPAddress = GetPrivateIpAddress();
         });
     }
 
-    config.AddMemoryGrainStorageAsDefault();
-    config.AddMemoryGrainStorage("OrleansStorage");
-    config.AddMemoryGrainStorage("dcb-orleans-queue");
-    config.AddMemoryGrainStorage("DcbOrleansGrainTable");
-    config.AddMemoryGrainStorage("EventStreamProvider");
-    config.AddMemoryGrainStorage("PubSubStore");
+    // Configure streams
+    // Note: SQS streaming is not yet available due to AWS SDK version conflict
+    // (Orleans SQS 9.2.1 requires AWS SDK v3, but Sekiban DynamoDB uses AWS SDK v4)
+    // For now, use in-memory streams for both local and AWS deployment
+    // TODO: Add SQS support when Orleans SQS package supports AWS SDK v4
+    config.AddMemoryStreams("EventStreamProvider", configurator =>
+    {
+        configurator.ConfigurePartitioning(8);
+        configurator.ConfigurePullingAgent(options =>
+        {
+            options.Configure(opt =>
+            {
+                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                opt.BatchContainerBatchSize = 100;
+            });
+        });
+    });
+
+    config.AddMemoryStreams("DcbOrleansQueue", configurator =>
+    {
+        configurator.ConfigurePartitioning(8);
+        configurator.ConfigurePullingAgent(options =>
+        {
+            options.Configure(opt =>
+            {
+                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                opt.BatchContainerBatchSize = 100;
+            });
+        });
+    });
+
+    // Memory grain storage (used for both local and AWS until SQS is available)
+    if (isLocalDevelopment || useInMemoryStreams)
+    {
+        config.AddMemoryGrainStorageAsDefault();
+        config.AddMemoryGrainStorage("OrleansStorage");
+        config.AddMemoryGrainStorage("dcb-orleans-queue");
+        config.AddMemoryGrainStorage("DcbOrleansGrainTable");
+        config.AddMemoryGrainStorage("EventStreamProvider");
+        config.AddMemoryGrainStorage("PubSubStore");
+    }
 
     // Orleans will automatically discover grains in the same assembly
     config.ConfigureServices(services =>
@@ -741,3 +808,40 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+// Helper method to get private IP address for ECS Fargate
+static System.Net.IPAddress GetPrivateIpAddress()
+{
+    // In ECS Fargate, the task gets a private IP from the VPC
+    // We can use ECS metadata endpoint or enumerate network interfaces
+    var ecsMetadataUri = Environment.GetEnvironmentVariable("ECS_CONTAINER_METADATA_URI_V4");
+
+    if (!string.IsNullOrEmpty(ecsMetadataUri))
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient();
+            var response = client.GetStringAsync($"{ecsMetadataUri}/task").Result;
+            // Parse the response to get the IP address
+            // For simplicity, fall back to DNS-based resolution
+        }
+        catch
+        {
+            // Fall through to DNS-based resolution
+        }
+    }
+
+    // Fall back to getting the first non-loopback IPv4 address
+    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+    foreach (var ip in host.AddressList)
+    {
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+            !System.Net.IPAddress.IsLoopback(ip))
+        {
+            return ip;
+        }
+    }
+
+    // Last resort: return loopback
+    return System.Net.IPAddress.Loopback;
+}
