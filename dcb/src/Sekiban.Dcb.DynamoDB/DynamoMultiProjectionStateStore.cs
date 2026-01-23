@@ -139,12 +139,18 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
+            var effectiveThreshold = offloadThresholdBytes;
+            if (_options.OffloadThresholdBytes > 0 && _options.OffloadThresholdBytes < effectiveThreshold)
+            {
+                effectiveThreshold = (int)Math.Min(_options.OffloadThresholdBytes, int.MaxValue);
+            }
+
             var stateData = record.StateData;
             var isOffloaded = record.IsOffloaded;
             string? offloadKey = record.OffloadKey;
             string? offloadProvider = record.OffloadProvider;
 
-            if (stateData != null && stateData.Length > offloadThresholdBytes && _blobAccessor != null)
+            if (stateData != null && stateData.Length > effectiveThreshold && _blobAccessor != null)
             {
                 offloadKey = await _blobAccessor.WriteAsync(
                     stateData,
