@@ -32,8 +32,7 @@ RUN dotnet publish internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/Dc
     -c Release \
     -a $TARGETARCH \
     -f net9.0 \
-    -o /app \
-    --no-restore
+    -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime

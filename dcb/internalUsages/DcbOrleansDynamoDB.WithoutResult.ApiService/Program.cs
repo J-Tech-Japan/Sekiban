@@ -44,22 +44,24 @@ builder.Services.AddOpenApi();
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "dynamodb";
 var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams", true);
 
-// Determine if running locally (Aspire/LocalStack) or in AWS
-var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]) ||
-                         builder.Environment.IsDevelopment();
+// Determine if running locally (Aspire/LocalStack) vs in AWS
+// Only check DynamoDb:ServiceUrl - this is set when using LocalStack
+// Do NOT rely on IsDevelopment() as AWS "dev" environments still use ASPNETCORE_ENVIRONMENT=Development
+var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]);
 
-// In AWS deployment, we use RDS for Orleans + SQS for streams
+// In AWS deployment, we use RDS for Orleans (SQS streams not yet available due to SDK version conflict)
 // In local development, we use in-memory everything
 if (!isLocalDevelopment && !useInMemoryStreams)
 {
-    // AWS Deployment mode - will use RDS + SQS
+    // AWS Deployment mode - will use RDS for Orleans clustering/state
+    // Note: SQS streaming is not yet available, so we still use in-memory streams
     // This is valid for production deployment
 }
-else if (!useInMemoryStreams)
+else if (isLocalDevelopment && !useInMemoryStreams)
 {
     // Local mode but trying to use non-memory streams - not supported
     throw new InvalidOperationException(
-        "Orleans:UseInMemoryStreams must be true for local development.");
+        "Orleans:UseInMemoryStreams must be true for local development (LocalStack).");
 }
 
 // Configure Orleans
@@ -73,8 +75,25 @@ builder.UseOrleans(config =>
     else
     {
         // AWS deployment: use AdoNet clustering with RDS PostgreSQL
-        var rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
+        // Try to construct connection string from individual RDS secret fields (AWS ECS)
+        var rdsHost = builder.Configuration["RDS_HOST"];
+        var rdsPort = builder.Configuration["RDS_PORT"] ?? "5432";
+        var rdsUsername = builder.Configuration["RDS_USERNAME"];
+        var rdsPassword = builder.Configuration["RDS_PASSWORD"];
+        var rdsDatabase = builder.Configuration["RDS_DATABASE"];
+
+        string? rdsConnectionString;
+        if (!string.IsNullOrEmpty(rdsHost) && !string.IsNullOrEmpty(rdsUsername))
+        {
+            // Construct PostgreSQL connection string from individual fields
+            rdsConnectionString = $"Host={rdsHost};Port={rdsPort};Database={rdsDatabase};Username={rdsUsername};Password={rdsPassword}";
+        }
+        else
+        {
+            // Fall back to direct connection string configuration
+            rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
                                   builder.Configuration.GetConnectionString("Orleans");
+        }
 
         if (!string.IsNullOrEmpty(rdsConnectionString))
         {

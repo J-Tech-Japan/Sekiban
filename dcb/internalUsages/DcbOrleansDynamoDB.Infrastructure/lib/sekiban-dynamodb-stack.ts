@@ -173,19 +173,15 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // ECR Repositories
+    // ECR Repositories (use existing or create new)
     // ========================================
-    const apiEcrRepo = new ecr.Repository(this, 'ApiEcrRepo', {
-      repositoryName: `sekiban-dynamodb-api-${envName}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-    });
+    const apiEcrRepoName = `sekiban-dynamodb-api-${envName}`;
+    const webEcrRepoName = `sekiban-dynamodb-web-${envName}`;
 
-    const webEcrRepo = new ecr.Repository(this, 'WebEcrRepo', {
-      repositoryName: `sekiban-dynamodb-web-${envName}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-    });
+    // Try to use existing repositories first (for cases where images are pre-pushed)
+    // If not found, CDK will create new ones
+    const apiEcrRepo = ecr.Repository.fromRepositoryName(this, 'ApiEcrRepo', apiEcrRepoName);
+    const webEcrRepo = ecr.Repository.fromRepositoryName(this, 'WebEcrRepo', webEcrRepoName);
 
     // ========================================
     // ECS Cluster
@@ -246,7 +242,9 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         logGroup: apiLogGroup,
       }),
       environment: {
-        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        // Use 'Staging' for AWS dev environments to avoid loading appsettings.Development.json
+        // which contains LocalStack-specific settings like DynamoDb:ServiceUrl
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Staging',
         'Sekiban__Database': 'dynamodb',
         'Orleans__UseInMemoryStreams': 'false',
         'Orleans__ClusterId': config.orleans.clusterId,
@@ -260,7 +258,12 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         'Sqs__QueueCount': config.sqs.queueCount.toString(),
       },
       secrets: {
-        'RdsConnectionString': ecs.Secret.fromSecretsManager(rdsSecret),
+        // Extract individual fields from RDS secret for connection string construction in app
+        'RDS_HOST': ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
+        'RDS_PORT': ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
+        'RDS_USERNAME': ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
+        'RDS_PASSWORD': ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
+        'RDS_DATABASE': ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
       },
       portMappings: [
         { containerPort: config.orleans.httpPort, name: 'http' },
@@ -291,7 +294,8 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         logGroup: webLogGroup,
       }),
       environment: {
-        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        // Use 'Staging' for AWS dev environments (matches API service setting)
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Staging',
         // Aspire Service Discovery configuration
         // Use Cloud Map for Web -> API communication (HTTP)
         'services__apiservice__http__0': apiServiceUrl,

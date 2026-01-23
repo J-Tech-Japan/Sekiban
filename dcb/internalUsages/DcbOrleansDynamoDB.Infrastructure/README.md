@@ -230,10 +230,36 @@ npx cdk destroy -c env=dev
 ## Orleans Schema Setup
 
 Before the first deployment, you need to initialize the Orleans schema in RDS PostgreSQL.
+
+### Option 1: Using the provided script (Recommended)
+
+```bash
+# Initialize schema (requires psql and network access to RDS)
+./scripts/init-orleans-schema.sh dev
+
+# With SSH tunnel through bastion host
+./scripts/init-orleans-schema.sh dev user@bastion-host
+```
+
+The script automatically:
+- Downloads Orleans PostgreSQL scripts from GitHub
+- Retrieves RDS credentials from Secrets Manager
+- Runs all required schema scripts
+
+### Option 2: Manual initialization
+
 The schema scripts are available at:
 https://github.com/dotnet/orleans/tree/main/src/AdoNet/Shared/PostgreSQL
 
 Run these SQL scripts against your RDS instance:
-1. `PostgreSQL-Main.sql` - Clustering and persistence tables
-2. `PostgreSQL-Reminders.sql` - Reminder tables
-3. `PostgreSQL-Persistence.sql` - Grain storage tables
+1. `PostgreSQL-Main.sql` - Clustering and membership tables
+2. `PostgreSQL-Persistence.sql` - Grain storage tables
+3. `PostgreSQL-Reminders.sql` - Reminder tables
+
+### Network Access to RDS
+
+Since RDS is in a private subnet, you need one of these options:
+- VPN/Direct Connect to VPC
+- SSH tunnel through a bastion host
+- AWS Cloud9 in the same VPC
+- Temporarily add your IP to security group (not recommended for production)

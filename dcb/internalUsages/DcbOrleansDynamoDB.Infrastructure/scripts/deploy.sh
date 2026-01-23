@@ -79,3 +79,22 @@ aws cloudformation describe-stacks \
     --query "Stacks[0].Outputs[*].{Key:OutputKey,Value:OutputValue}" \
     --output table \
     --region "$REGION" 2>/dev/null || echo "Stack outputs not available yet."
+
+# Check if Orleans schema needs to be initialized
+echo ""
+echo -e "${YELLOW}Orleans Schema Setup:${NC}"
+echo "If this is a first-time deployment, you need to initialize the Orleans schema in RDS."
+echo ""
+read -p "Initialize Orleans schema now? [y/N] " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Initializing Orleans schema...${NC}"
+    "$SCRIPT_DIR/init-orleans-schema.sh" "$ENV"
+fi
+
+echo ""
+echo -e "${BOLD}${GREEN}All done!${NC}"
+echo ""
+echo "Next steps:"
+echo "  1. Build and push container images: ./scripts/build-push.sh $ENV all"
+echo "  2. Force ECS service update: aws ecs update-service --cluster sekiban-dynamodb-$ENV --service <service-name> --force-new-deployment"
