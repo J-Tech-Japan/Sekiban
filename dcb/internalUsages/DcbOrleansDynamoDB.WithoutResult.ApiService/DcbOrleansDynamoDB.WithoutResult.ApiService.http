@@ -1,0 +1,6 @@
+@DcbOrleansDynamoDB.ApiService_HostAddress = http://localhost:5141
+
+GET {{DcbOrleansDynamoDB.ApiService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

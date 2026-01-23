@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Sekiban.Dcb.DynamoDB;
 
+#pragma warning disable CA1031
+
 /// <summary>
 ///     Background service to initialize DynamoDB tables on startup.
 /// </summary>
@@ -23,12 +25,18 @@ public class DynamoDbInitializer : IHostedService
     private readonly DynamoDbContext _context;
     private readonly ILogger<DynamoDbInitializer>? _logger;
 
+    /// <summary>
+    ///     Initializes a new DynamoDbInitializer.
+    /// </summary>
     public DynamoDbInitializer(DynamoDbContext context, ILogger<DynamoDbInitializer>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _logger = logger;
     }
 
+    /// <summary>
+    ///     Starts the table initialization process.
+    /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -49,5 +57,8 @@ public class DynamoDbInitializer : IHostedService
         }
     }
 
+    /// <summary>
+    ///     Stops the initializer (no-op).
+    /// </summary>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

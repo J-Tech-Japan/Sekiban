@@ -46,7 +46,7 @@ public class DynamoEvent
     /// <summary>
     ///     Tag strings associated with this event.
     /// </summary>
-    public List<string> Tags { get; set; } = [];
+    public IReadOnlyList<string> Tags { get; private set; } = Array.Empty<string>();
 
     /// <summary>
     ///     Event timestamp (ISO8601).
@@ -107,7 +107,7 @@ public class DynamoEvent
                 CausationId ?? string.Empty,
                 CorrelationId ?? string.Empty,
                 ExecutedUser ?? string.Empty),
-            Tags);
+            Tags.ToList());
     }
 
     /// <summary>

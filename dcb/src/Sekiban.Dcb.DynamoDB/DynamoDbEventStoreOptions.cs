@@ -29,7 +29,7 @@ public class DynamoDbEventStoreOptions
     ///     Service URL for DynamoDB (for LocalStack or DynamoDB Local).
     ///     Leave null to use AWS default endpoint.
     /// </summary>
-    public string? ServiceUrl { get; set; }
+    public Uri? ServiceUrl { get; set; }
 
     /// <summary>
     ///     Maximum concurrent read operations for parallel deserialization.

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0"/>
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsAspireHost>true</IsAspireHost>
+        <UserSecretsId>64845cd6-595d-452c-825b-063d4df00509</UserSecretsId>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting" Version="13.1.0" />
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.0" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DcbOrleansDynamoDB.WithoutResult.ApiService\DcbOrleansDynamoDB.WithoutResult.ApiService.csproj"/>
+        <ProjectReference Include="..\DcbOrleans.Web\DcbOrleans.Web.csproj"/>
+        <ProjectReference Include="..\DcbOrleans.Benchmark\DcbOrleans.Benchmark.csproj"/>
+        <ProjectReference Include="..\DcbOrleans.Cli\DcbOrleans.Cli.csproj"/>
+    </ItemGroup>
+
+</Project>

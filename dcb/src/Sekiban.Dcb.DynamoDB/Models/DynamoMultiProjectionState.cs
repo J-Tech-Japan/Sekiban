@@ -1,4 +1,5 @@
 using Amazon.DynamoDBv2.Model;
+using System.Globalization;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.DynamoDB.Models;
@@ -111,10 +112,10 @@ public class DynamoMultiProjectionState
             ["projectorVersion"] = new AttributeValue { S = ProjectorVersion },
             ["payloadType"] = new AttributeValue { S = PayloadType },
             ["lastSortableUniqueId"] = new AttributeValue { S = LastSortableUniqueId },
-            ["eventsProcessed"] = new AttributeValue { N = EventsProcessed.ToString() },
+            ["eventsProcessed"] = new AttributeValue { N = EventsProcessed.ToString(CultureInfo.InvariantCulture) },
             ["isOffloaded"] = new AttributeValue { BOOL = IsOffloaded },
-            ["originalSizeBytes"] = new AttributeValue { N = OriginalSizeBytes.ToString() },
-            ["compressedSizeBytes"] = new AttributeValue { N = CompressedSizeBytes.ToString() },
+            ["originalSizeBytes"] = new AttributeValue { N = OriginalSizeBytes.ToString(CultureInfo.InvariantCulture) },
+            ["compressedSizeBytes"] = new AttributeValue { N = CompressedSizeBytes.ToString(CultureInfo.InvariantCulture) },
             ["safeWindowThreshold"] = new AttributeValue { S = SafeWindowThreshold },
             ["updatedAt"] = new AttributeValue { S = UpdatedAt },
             ["createdAt"] = new AttributeValue { S = CreatedAt },

@@ -5,13 +5,26 @@ using Microsoft.Extensions.Options;
 
 namespace Sekiban.Dcb.DynamoDB;
 
+#pragma warning disable CA1031
+
 /// <summary>
 ///     Context for DynamoDB table access and initialization.
 /// </summary>
 public class DynamoDbContext
 {
+    /// <summary>
+    ///     GSI name used for event ordering queries.
+    /// </summary>
     public const string EventsGsiName = "GSI1";
+
+    /// <summary>
+    ///     GSI name used for tag lookup queries.
+    /// </summary>
     public const string TagsGsiName = "GSI1";
+
+    /// <summary>
+    ///     Partition key value for the events GSI.
+    /// </summary>
     public const string EventsGsiPartitionKey = "ALL_EVENTS";
 
     private static readonly Action<ILogger, string, Exception?> LogEnsuringTable =
@@ -31,6 +44,9 @@ public class DynamoDbContext
     private readonly ILogger<DynamoDbContext>? _logger;
     private bool _tablesEnsured;
 
+    /// <summary>
+    ///     Initializes a new DynamoDbContext.
+    /// </summary>
     public DynamoDbContext(
         IAmazonDynamoDB client,
         IOptions<DynamoDbEventStoreOptions> options,
@@ -41,16 +57,34 @@ public class DynamoDbContext
         _logger = logger;
     }
 
+    /// <summary>
+    ///     DynamoDB client used for all operations.
+    /// </summary>
     public IAmazonDynamoDB Client => _client;
 
+    /// <summary>
+    ///     Bound DynamoDB event store options.
+    /// </summary>
     public DynamoDbEventStoreOptions Options => _options;
 
+    /// <summary>
+    ///     DynamoDB table name for events.
+    /// </summary>
     public string EventsTableName => _options.EventsTableName;
 
+    /// <summary>
+    ///     DynamoDB table name for tags.
+    /// </summary>
     public string TagsTableName => _options.TagsTableName;
 
+    /// <summary>
+    ///     DynamoDB table name for projection states.
+    /// </summary>
     public string ProjectionStatesTableName => _options.ProjectionStatesTableName;
 
+    /// <summary>
+    ///     Ensures required DynamoDB tables exist when auto-create is enabled.
+    /// </summary>
     public async Task EnsureTablesAsync(CancellationToken cancellationToken = default)
     {
         if (_tablesEnsured || !_options.AutoCreateTables)

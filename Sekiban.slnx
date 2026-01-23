@@ -72,11 +72,13 @@
     </Project>
     <Project Path="dcb/internalUsages/DcbOrleans.ApiService/DcbOrleans.ApiService.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
+    <Project Path="dcb/internalUsages/DcbOrleansDynamoDB.AppHost/DcbOrleansDynamoDB.AppHost.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.Cli/DcbOrleans.Cli.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="dcb/internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
+    <Project Path="dcb/internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj" />
   </Folder>
   <Folder Name="/dcb/tests/">
     <Project Path="dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />

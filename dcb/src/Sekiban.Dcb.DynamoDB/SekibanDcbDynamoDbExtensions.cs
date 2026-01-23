@@ -80,11 +80,11 @@ public static class SekibanDcbDynamoDbExtensions
 
     private static IAmazonDynamoDB CreateClient(IConfiguration configuration, DynamoDbEventStoreOptions options)
     {
-        if (!string.IsNullOrEmpty(options.ServiceUrl))
+        if (options.ServiceUrl != null)
         {
             var config = new AmazonDynamoDBConfig
             {
-                ServiceURL = options.ServiceUrl
+                ServiceURL = options.ServiceUrl.ToString()
             };
             return new AmazonDynamoDBClient(config);
         }

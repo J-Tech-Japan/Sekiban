@@ -8,6 +8,8 @@ using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.DynamoDB;
 
+#pragma warning disable CA1031
+
 /// <summary>
 ///     DynamoDB implementation of IMultiProjectionStateStore.
 /// </summary>
@@ -18,6 +20,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
     private readonly DynamoDbEventStoreOptions _options;
     private readonly IAmazonDynamoDB _client;
 
+    /// <summary>
+    ///     Initializes a new DynamoMultiProjectionStateStore.
+    /// </summary>
     public DynamoMultiProjectionStateStore(
         DynamoDbContext context,
         IBlobStorageSnapshotAccessor? blobAccessor = null)
@@ -28,6 +33,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         _client = context.Client;
     }
 
+    /// <summary>
+    ///     Gets the latest projection state for a specific version.
+    /// </summary>
     public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
@@ -75,6 +83,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
+    /// <summary>
+    ///     Gets the latest projection state for any version of a projector.
+    /// </summary>
     public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(
         string projectorName,
         CancellationToken cancellationToken = default)
@@ -114,6 +125,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
+    /// <summary>
+    ///     Inserts or updates a projection state record.
+    /// </summary>
     public async Task<ResultBox<bool>> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
@@ -166,6 +180,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
+    /// <summary>
+    ///     Lists all projection state records.
+    /// </summary>
     public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
         CancellationToken cancellationToken = default)
     {
@@ -209,6 +226,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
+    /// <summary>
+    ///     Deletes a projection state record for a specific version.
+    /// </summary>
     public async Task<ResultBox<bool>> DeleteAsync(
         string projectorName,
         string projectorVersion,
@@ -243,6 +263,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
+    /// <summary>
+    ///     Deletes all projection state records for a projector (or all projectors if null).
+    /// </summary>
     public async Task<ResultBox<int>> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default)

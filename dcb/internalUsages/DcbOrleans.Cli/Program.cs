@@ -903,14 +903,6 @@ static async Task ListProjectorsAsync()
     await Task.CompletedTask;
 }
 
-internal enum SimpleCacheMode
-{
-    Auto,
-    Off,
-    Clear,
-    CacheOnly
-}
-
 static async Task ShowStatusAsync(string connectionString, string databaseType, string cosmosDatabaseName)
 {
     Console.WriteLine("=== Projection State Status ===\n");

@@ -13,6 +13,8 @@ using System.Text;
 
 namespace Sekiban.Dcb.DynamoDB;
 
+#pragma warning disable CA1031
+
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
@@ -32,6 +34,9 @@ public class DynamoDbEventStore : IEventStore
     private readonly DynamoDbEventStoreOptions _options;
     private readonly IAmazonDynamoDB _client;
 
+    /// <summary>
+    ///     Initializes a new DynamoDbEventStore.
+    /// </summary>
     public DynamoDbEventStore(
         DynamoDbContext context,
         DcbDomainTypes domainTypes,
@@ -44,6 +49,9 @@ public class DynamoDbEventStore : IEventStore
         _client = context.Client;
     }
 
+    /// <summary>
+    ///     Reads all events ordered by sortable unique ID.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
         try
@@ -78,6 +86,9 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads events for a given tag.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try
@@ -120,6 +131,9 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads a single event by ID.
+    /// </summary>
     public async Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
     {
         try
@@ -135,7 +149,7 @@ public class DynamoDbEventStore : IEventStore
             }).ConfigureAwait(false);
 
             if (response.Item == null || response.Item.Count == 0)
-                return ResultBox.Error<Event>(new Exception($"Event with ID {eventId} not found"));
+                return ResultBox.Error<Event>(new InvalidOperationException($"Event with ID {eventId} not found"));
 
             var dynEvent = DynamoEvent.FromAttributeValues(response.Item);
             var payloadResult = DeserializeEventPayload(dynEvent.EventType, dynEvent.Payload);
@@ -152,6 +166,9 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Writes events and associated tag records.
+    /// </summary>
     public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
         IEnumerable<Event> events)
     {
@@ -193,7 +210,9 @@ public class DynamoDbEventStore : IEventStore
             }
 
             var tagWrites = BuildTagWriteResults(eventsList);
-            return ResultBox.FromValue((Events: (IReadOnlyList<Event>)eventsList, TagWrites: tagWrites));
+            return ResultBox.FromValue((
+                Events: (IReadOnlyList<Event>)eventsList,
+                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites));
         }
         catch (Exception ex)
         {
@@ -203,8 +222,12 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads tag streams for the specified tag.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -227,8 +250,12 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Gets the latest tag state for the specified tag.
+    /// </summary>
     public async Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -284,8 +311,12 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Checks whether a tag exists.
+    /// </summary>
     public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
@@ -315,6 +346,9 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Returns the total event count optionally after a specific sortable ID.
+    /// </summary>
     public async Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
     {
         try
@@ -345,6 +379,9 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Returns all tag infos, optionally filtered by tag group.
+    /// </summary>
     public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         try
@@ -517,7 +554,7 @@ public class DynamoDbEventStore : IEventStore
         return tags;
     }
 
-    private async Task<Dictionary<string, DynamoEvent>> BatchGetEventsAsync(IReadOnlyList<string> eventIds)
+    private async Task<Dictionary<string, DynamoEvent>> BatchGetEventsAsync(List<string> eventIds)
     {
         var results = new Dictionary<string, DynamoEvent>(StringComparer.Ordinal);
         if (eventIds.Count == 0)
@@ -790,7 +827,7 @@ public class DynamoDbEventStore : IEventStore
         };
     }
 
-    private IReadOnlyList<TagWriteResult> BuildTagWriteResults(IEnumerable<Event> events)
+    private static List<TagWriteResult> BuildTagWriteResults(IEnumerable<Event> events)
     {
         var now = DateTimeOffset.UtcNow;
         return events
