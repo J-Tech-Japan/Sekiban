@@ -80,12 +80,6 @@ var cosmosDatabaseNameOption = new Option<string?>("--cosmos-database")
     Description = "Cosmos DB database name (defaults to CosmosDb:DatabaseName config or 'SekibanDcb')"
 };
 
-var cacheModeOption = new Option<string?>("--cache-mode")
-{
-    Description = "Cache mode: auto | off | clear | cache-only (default: auto)",
-    DefaultValueFactory = _ => "auto"
-};
-
 // Min events option
 var minEventsOption = new Option<int>("--min-events", "-m")
 {
@@ -114,6 +108,20 @@ var verboseOption = new Option<bool>("--verbose", "-v")
     DefaultValueFactory = _ => configuration["VERBOSE"]?.ToLowerInvariant() == "true"
 };
 
+// Cache mode option
+var cacheModeOption = new Option<string?>("--cache-mode")
+{
+    Description = "Cache mode: auto | off | clear | cache-only (default: auto)",
+    DefaultValueFactory = _ => configuration["CACHE_MODE"] ?? "auto"
+};
+
+// Cache directory option
+var cacheDirOption = new Option<string>("--cache-dir", "-C")
+{
+    Description = "Directory for local SQLite cache",
+    DefaultValueFactory = _ => configuration["CACHE_DIR"] ?? "./cache"
+};
+
 // Build command
 var buildCommand = new Command("build", "Build multi projection states")
 {
@@ -123,6 +131,7 @@ var buildCommand = new Command("build", "Build multi projection states")
     cosmosConnectionStringOption,
     cosmosDatabaseNameOption,
     cacheModeOption,
+    cacheDirOption,
     minEventsOption,
     projectorNameOption,
     forceRebuildOption,
@@ -137,6 +146,7 @@ buildCommand.SetAction(async (parseResult, cancellationToken) =>
     var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
     var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
     var cacheMode = parseResult.GetValue(cacheModeOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
     var minEvents = parseResult.GetValue(minEventsOption);
     var projectorName = parseResult.GetValue(projectorNameOption);
     var forceRebuild = parseResult.GetValue(forceRebuildOption);
@@ -148,19 +158,9 @@ buildCommand.SetAction(async (parseResult, cancellationToken) =>
     var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
     var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
     var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
+    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
 
-    var cacheProfileName = ResolveCacheProfileName(configuration, profile);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheProfileName);
-
-    await BuildProjectionStatesAsync(
-        resolvedConnectionString,
-        resolvedDatabase,
-        resolvedCosmosDatabaseName,
-        minEvents,
-        projectorName,
-        forceRebuild,
-        verbose,
-        cacheOptions);
+    await BuildProjectionStatesAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, minEvents, projectorName, forceRebuild, verbose, cacheOptions);
 });
 
 // List command
@@ -178,7 +178,9 @@ var statusCommand = new Command("status", "Show status of all projection states"
     databaseOption,
     connectionStringOption,
     cosmosConnectionStringOption,
-    cosmosDatabaseNameOption
+    cosmosDatabaseNameOption,
+    cacheModeOption,
+    cacheDirOption
 };
 
 statusCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -188,6 +190,8 @@ statusCommand.SetAction(async (parseResult, cancellationToken) =>
     var connectionString = parseResult.GetValue(connectionStringOption);
     var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
     var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
+    var cacheMode = parseResult.GetValue(cacheModeOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
 
     var profileConfig = ResolveProfile(configuration, profile);
     if (profileConfig == null) return;
@@ -195,8 +199,9 @@ statusCommand.SetAction(async (parseResult, cancellationToken) =>
     var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
     var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
     var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
+    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
 
-    await ShowStatusAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName);
+    await ShowStatusAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, cacheOptions);
 });
 
 // Save command - export state JSON to file for debugging
@@ -282,6 +287,7 @@ var tagEventsCommand = new Command("tag-events", "Fetch and save all events for 
     cosmosConnectionStringOption,
     cosmosDatabaseNameOption,
     cacheModeOption,
+    cacheDirOption,
     tagOption,
     outputDirOption
 };
@@ -294,6 +300,7 @@ tagEventsCommand.SetAction(async (parseResult, cancellationToken) =>
     var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
     var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
     var cacheMode = parseResult.GetValue(cacheModeOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
     var tag = parseResult.GetValue(tagOption) ?? "";
     var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
 
@@ -303,17 +310,9 @@ tagEventsCommand.SetAction(async (parseResult, cancellationToken) =>
     var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
     var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
     var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
+    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
 
-    var cacheProfileName = ResolveCacheProfileName(configuration, profile);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheProfileName);
-
-    await FetchTagEventsAsync(
-        resolvedConnectionString,
-        resolvedDatabase,
-        resolvedCosmosDatabaseName,
-        tag,
-        outputDir,
-        cacheOptions);
+    await FetchTagEventsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, outputDir, cacheOptions);
 });
 
 // Projection command - display current projection state
@@ -360,6 +359,7 @@ var tagStateCommand = new Command("tag-state", "Project and display the current 
     cosmosConnectionStringOption,
     cosmosDatabaseNameOption,
     cacheModeOption,
+    cacheDirOption,
     tagOption,
     tagProjectorOption
 };
@@ -372,6 +372,7 @@ tagStateCommand.SetAction(async (parseResult, cancellationToken) =>
     var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
     var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
     var cacheMode = parseResult.GetValue(cacheModeOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
     var tag = parseResult.GetValue(tagOption) ?? "";
     var tagProjector = parseResult.GetValue(tagProjectorOption) ?? "";
 
@@ -381,17 +382,9 @@ tagStateCommand.SetAction(async (parseResult, cancellationToken) =>
     var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
     var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
     var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
+    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
 
-    var cacheProfileName = ResolveCacheProfileName(configuration, profile);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheProfileName);
-
-    await ShowTagStateAsync(
-        resolvedConnectionString,
-        resolvedDatabase,
-        resolvedCosmosDatabaseName,
-        tag,
-        tagProjector,
-        cacheOptions);
+    await ShowTagStateAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tag, tagProjector, cacheOptions);
 });
 
 // Tag-list command - list all tags in the event store
@@ -408,6 +401,7 @@ var tagListCommand = new Command("tag-list", "List all tags in the event store a
     cosmosConnectionStringOption,
     cosmosDatabaseNameOption,
     cacheModeOption,
+    cacheDirOption,
     tagGroupOption,
     outputDirOption
 };
@@ -420,6 +414,7 @@ tagListCommand.SetAction(async (parseResult, cancellationToken) =>
     var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
     var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
     var cacheMode = parseResult.GetValue(cacheModeOption);
+    var cacheDir = parseResult.GetValue(cacheDirOption);
     var tagGroup = parseResult.GetValue(tagGroupOption);
     var outputDir = parseResult.GetValue(outputDirOption) ?? "./output";
 
@@ -429,66 +424,10 @@ tagListCommand.SetAction(async (parseResult, cancellationToken) =>
     var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
     var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
     var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
+    var cacheOptions = BuildCacheOptions(cacheMode, cacheDir);
 
-    var cacheProfileName = ResolveCacheProfileName(configuration, profile);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheProfileName);
-
-    await ListTagsAsync(
-        resolvedConnectionString,
-        resolvedDatabase,
-        resolvedCosmosDatabaseName,
-        tagGroup,
-        outputDir,
-        cacheOptions);
+    await ListTagsAsync(resolvedConnectionString, resolvedDatabase, resolvedCosmosDatabaseName, tagGroup, outputDir, cacheOptions);
 });
-
-// Cache-update command - update sqlite cache until SafeWindow
-var cacheUpdateCommand = new Command("cache-update", "Update SQLite event cache (SafeWindow: now - 10 minutes)")
-{
-    profileOption,
-    databaseOption,
-    connectionStringOption,
-    cosmosConnectionStringOption,
-    cosmosDatabaseNameOption,
-    cacheModeOption,
-    verboseOption
-};
-
-cacheUpdateCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var profile = parseResult.GetValue(profileOption);
-    var database = parseResult.GetValue(databaseOption);
-    var connectionString = parseResult.GetValue(connectionStringOption);
-    var cosmosConnectionString = parseResult.GetValue(cosmosConnectionStringOption);
-    var cosmosDatabaseName = parseResult.GetValue(cosmosDatabaseNameOption);
-    var cacheMode = parseResult.GetValue(cacheModeOption);
-    var verbose = parseResult.GetValue(verboseOption);
-
-    var profileConfig = ResolveProfile(configuration, profile);
-    if (profileConfig == null) return;
-
-    var resolvedDatabase = ResolveDatabaseType(profileConfig, database);
-    var resolvedConnectionString = ResolveConnectionString(profileConfig, resolvedDatabase, connectionString, cosmosConnectionString);
-    var resolvedCosmosDatabaseName = ResolveCosmosDatabaseName(profileConfig, cosmosDatabaseName);
-
-    var cacheProfileName = ResolveCacheProfileName(configuration, profile);
-    var cacheOptions = BuildCacheOptions(cacheMode, cacheProfileName);
-
-    await UpdateCacheAsync(
-        resolvedConnectionString,
-        resolvedDatabase,
-        resolvedCosmosDatabaseName,
-        cacheOptions,
-        verbose,
-        cancellationToken);
-});
-
-// Cache directory option
-var cacheDirOption = new Option<string>("--cache-dir", "-C")
-{
-    Description = "Directory for local SQLite cache",
-    DefaultValueFactory = _ => configuration["CACHE_DIR"] ?? "./cache"
-};
 
 // Safe window option (minutes)
 var safeWindowOption = new Option<int>("--safe-window")
@@ -572,7 +511,6 @@ rootCommand.Add(tagEventsCommand);
 rootCommand.Add(projectionCommand);
 rootCommand.Add(tagStateCommand);
 rootCommand.Add(tagListCommand);
-rootCommand.Add(cacheUpdateCommand);
 rootCommand.Add(cacheSyncCommand);
 rootCommand.Add(cacheStatsCommand);
 rootCommand.Add(cacheClearCommand);
@@ -659,37 +597,6 @@ static IConfiguration? ResolveProfile(IConfiguration configuration, string? prof
         .AddConfiguration(configuration)
         .AddInMemoryCollection(overrides!)
         .Build();
-}
-
-static string ResolveCacheProfileName(IConfiguration configuration, string? profileName)
-{
-    if (!string.IsNullOrWhiteSpace(profileName))
-    {
-        return profileName!;
-    }
-
-    var defaultProfile = configuration["DefaultProfile"];
-    if (!string.IsNullOrWhiteSpace(defaultProfile))
-    {
-        return defaultProfile!;
-    }
-
-    return "default";
-}
-
-static (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) BuildCacheOptions(string? cacheMode, string profileName)
-{
-    var resolvedMode = cacheMode?.ToLowerInvariant() switch
-    {
-        "off" => SimpleCacheMode.Off,
-        "clear" => SimpleCacheMode.Clear,
-        "cache-only" or "cacheonly" => SimpleCacheMode.CacheOnly,
-        _ => SimpleCacheMode.Auto
-    };
-
-    var cachePath = $"./output/cache/{profileName}";
-    var safeMargin = TimeSpan.FromMinutes(10);
-    return (resolvedMode, cachePath, safeMargin);
 }
 
 // Helper to list profiles
@@ -799,6 +706,92 @@ static string ResolveConnectionString(IConfiguration config, string databaseType
     }
 }
 
+static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir)
+{
+    var resolvedMode = cacheMode?.ToLowerInvariant() switch
+    {
+        "off" => SimpleCacheMode.Off,
+        "clear" => SimpleCacheMode.Clear,
+        "cache-only" or "cacheonly" => SimpleCacheMode.CacheOnly,
+        _ => SimpleCacheMode.Auto
+    };
+
+    var resolvedCacheDir = string.IsNullOrWhiteSpace(cacheDir) ? "./cache" : cacheDir;
+    return new CacheOptions(resolvedMode, resolvedCacheDir);
+}
+
+static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
+{
+    var resolvedPath = Path.Combine(cacheOptions.CacheDir, "events.db");
+
+    if (cacheOptions.Mode == SimpleCacheMode.Clear && File.Exists(resolvedPath))
+    {
+        Console.WriteLine("Clearing existing cache...");
+        DeleteCacheFiles(resolvedPath);
+    }
+
+    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
+                   cacheOptions.Mode != SimpleCacheMode.Clear &&
+                   File.Exists(resolvedPath);
+
+    if (cacheOptions.Mode == SimpleCacheMode.CacheOnly && !useCache)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Error: SQLite cache not found: {resolvedPath}");
+        Console.WriteLine("Run 'cache-sync' first to create the cache.");
+        Console.ResetColor();
+        cachePath = null;
+        return false;
+    }
+
+    cachePath = useCache ? resolvedPath : null;
+    return true;
+}
+
+static bool TryReportCacheUsage(CacheOptions cacheOptions, out string? cachePath)
+{
+    if (!TryResolveCachePath(cacheOptions, out cachePath))
+    {
+        return false;
+    }
+
+    if (cacheOptions.Mode == SimpleCacheMode.CacheOnly)
+    {
+        Console.WriteLine("Mode: cache-only (SQLite cache only)");
+    }
+
+    if (cachePath != null)
+    {
+        Console.WriteLine($"Using SQLite cache: {cachePath}");
+    }
+    else if (cacheOptions.Mode != SimpleCacheMode.Off)
+    {
+        Console.WriteLine("No cache found, using remote database...");
+    }
+
+    return true;
+}
+
+static void DeleteCacheFiles(string cachePath)
+{
+    if (File.Exists(cachePath))
+    {
+        File.Delete(cachePath);
+    }
+
+    var walPath = cachePath + "-wal";
+    if (File.Exists(walPath))
+    {
+        File.Delete(walPath);
+    }
+
+    var shmPath = cachePath + "-shm";
+    if (File.Exists(shmPath))
+    {
+        File.Delete(shmPath);
+    }
+}
+
 // Implementation methods
 static async Task BuildProjectionStatesAsync(
     string connectionString,
@@ -808,7 +801,7 @@ static async Task BuildProjectionStatesAsync(
     string? projectorName,
     bool forceRebuild,
     bool verbose,
-    (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) cacheOptions)
+    CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Multi Projection State Builder ===");
     Console.WriteLine($"Database: {databaseType}");
@@ -819,34 +812,14 @@ static async Task BuildProjectionStatesAsync(
     }
     Console.WriteLine($"Min Events: {minEvents}");
     Console.WriteLine($"Force Rebuild: {forceRebuild}");
-    Console.WriteLine();
 
-    ServiceProvider services;
-    var cachePath = Path.Combine(cacheOptions.CachePath, "events.db");
-    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
-                   cacheOptions.Mode != SimpleCacheMode.Clear &&
-                   File.Exists(cachePath);
-
-    if (useCache)
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
     {
-        Console.WriteLine($"Using SQLite cache: {cachePath}");
-        var domainTypes = DomainType.GetDomainTypes();
-        var sqliteEventStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes);
-        services = BuildServicesWithEventStore(domainTypes, connectionString, databaseType, cosmosDatabaseName, sqliteEventStore, enableProgressReporting: verbose);
-    }
-    else if (cacheOptions.Mode == SimpleCacheMode.CacheOnly)
-    {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"Error: SQLite cache not found: {cachePath}");
-        Console.WriteLine("Run 'cache-update' first to create the cache.");
-        Console.ResetColor();
         return;
     }
-    else
-    {
-        services = BuildServices(connectionString, databaseType, cosmosDatabaseName, enableProgressReporting: verbose);
-    }
+    Console.WriteLine();
 
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
     var builder = services.GetRequiredService<MultiProjectionStateBuilder>();
 
     var options = new MultiProjectionBuildOptions
@@ -903,7 +876,7 @@ static async Task ListProjectorsAsync()
     await Task.CompletedTask;
 }
 
-static async Task ShowStatusAsync(string connectionString, string databaseType, string cosmosDatabaseName)
+static async Task ShowStatusAsync(string connectionString, string databaseType, string cosmosDatabaseName, CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Projection State Status ===\n");
     Console.WriteLine($"Database: {databaseType}");
@@ -913,7 +886,13 @@ static async Task ShowStatusAsync(string connectionString, string databaseType, 
     }
     Console.WriteLine();
 
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
+    {
+        return;
+    }
+    Console.WriteLine();
+
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
     var stateStore = services.GetRequiredService<IMultiProjectionStateStore>();
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
@@ -1204,42 +1183,19 @@ static async Task FetchTagEventsAsync(
     string cosmosDatabaseName,
     string tagString,
     string outputDir,
-    (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) cacheOptions)
+    CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Fetch Tag Events ===\n");
     Console.WriteLine($"Database: {databaseType}");
     Console.WriteLine($"Tag: {tagString}");
     Console.WriteLine($"Output Directory: {outputDir}");
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
+    {
+        return;
+    }
     Console.WriteLine();
 
-    var isCacheOnly = cacheOptions.Mode == SimpleCacheMode.CacheOnly;
-    var cachePath = Path.Combine(cacheOptions.CachePath, "events.db");
-    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
-                   cacheOptions.Mode != SimpleCacheMode.Clear &&
-                   File.Exists(cachePath);
-    ServiceProvider services;
-    if (isCacheOnly)
-    {
-        if (!File.Exists(cachePath))
-        {
-            Console.WriteLine($"Error: SQLite cache not found: {cachePath}");
-            Console.WriteLine("Run 'cache-update' first to create the cache.");
-            return;
-        }
-        Console.WriteLine("Mode: cache-only (SQLite cache only)");
-        Console.WriteLine($"Cache path: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else if (useCache)
-    {
-        Console.WriteLine($"Using SQLite cache: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else
-    {
-        services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
-    }
-
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
     var eventStore = services.GetRequiredService<IEventStore>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
@@ -1472,40 +1428,18 @@ static async Task ShowTagStateAsync(
     string cosmosDatabaseName,
     string tagString,
     string? projectorName,
-    (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) cacheOptions)
+    CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Tag State Projection ===\n");
     Console.WriteLine($"Database: {databaseType}");
     Console.WriteLine($"Tag: {tagString}");
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
+    {
+        return;
+    }
+    Console.WriteLine();
 
-    var isCacheOnly = cacheOptions.Mode == SimpleCacheMode.CacheOnly;
-    var cachePath = Path.Combine(cacheOptions.CachePath, "events.db");
-    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
-                   cacheOptions.Mode != SimpleCacheMode.Clear &&
-                   File.Exists(cachePath);
-    ServiceProvider services;
-    if (isCacheOnly)
-    {
-        if (!File.Exists(cachePath))
-        {
-            Console.WriteLine($"Error: SQLite cache not found: {cachePath}");
-            Console.WriteLine("Run 'cache-update' first to create the cache.");
-            return;
-        }
-        Console.WriteLine("Mode: cache-only (SQLite cache only)");
-        Console.WriteLine($"Cache path: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else if (useCache)
-    {
-        Console.WriteLine($"Using SQLite cache: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else
-    {
-        services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
-    }
-
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
     var tagStateService = services.GetRequiredService<TagStateService>();
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
@@ -1584,13 +1518,20 @@ static async Task ShowTagStateAsync(
     Console.WriteLine(stateJson);
 }
 
-static ServiceProvider BuildServices(string connectionString, string databaseType, string cosmosDatabaseName, bool enableProgressReporting = true)
+static ServiceProvider BuildServices(
+    string connectionString,
+    string databaseType,
+    string cosmosDatabaseName,
+    bool enableProgressReporting = true,
+    string? cachePath = null)
 {
     var services = new ServiceCollection();
 
     // Register domain types
     var domainTypes = DomainType.GetDomainTypes();
     services.AddSingleton(domainTypes);
+
+    var useCache = !string.IsNullOrWhiteSpace(cachePath);
 
     if (databaseType.ToLowerInvariant() == "cosmos")
     {
@@ -1616,7 +1557,15 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
         // Register Cosmos DB services with options
         var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
         services.AddSingleton(cosmosContext);
-        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        if (useCache)
+        {
+            services.AddSingleton<IEventStore>(sp =>
+                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>()));
+        }
+        else
+        {
+            services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        }
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
     }
     else
@@ -1628,7 +1577,15 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
         });
 
         // Register event store
-        services.AddSingleton<IEventStore, PostgresEventStore>();
+        if (useCache)
+        {
+            services.AddSingleton<IEventStore>(sp =>
+                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>()));
+        }
+        else
+        {
+            services.AddSingleton<IEventStore, PostgresEventStore>();
+        }
 
         // Register multi projection state store
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
@@ -1645,83 +1602,13 @@ static ServiceProvider BuildServices(string connectionString, string databaseTyp
     return services.BuildServiceProvider();
 }
 
-static ServiceProvider BuildServicesWithEventStore(
-    DcbDomainTypes domainTypes,
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
-    IEventStore eventStore,
-    bool enableProgressReporting = true)
-{
-    var services = new ServiceCollection();
-
-    services.AddSingleton(domainTypes);
-    services.AddSingleton<IEventStore>(eventStore);
-
-    if (databaseType.ToLowerInvariant() == "cosmos")
-    {
-        var cosmosOptions = new CosmosDbEventStoreOptions();
-
-        if (enableProgressReporting)
-        {
-            var lastReportTime = DateTime.UtcNow;
-            cosmosOptions.ReadProgressCallback = (eventsRead, ruConsumed) =>
-            {
-                var now = DateTime.UtcNow;
-                if ((now - lastReportTime).TotalSeconds >= 2)
-                {
-                    Console.WriteLine($"  Progress: {eventsRead:N0} events read, {ruConsumed:N2} RU consumed");
-                    lastReportTime = now;
-                }
-            };
-        }
-
-        var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
-        services.AddSingleton(cosmosContext);
-        services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
-    }
-    else
-    {
-        services.AddPooledDbContextFactory<SekibanDcbDbContext>(options =>
-        {
-            options.UseNpgsql(connectionString);
-        });
-
-        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
-    }
-
-    services.AddSingleton<MultiProjectionStateBuilder>();
-    services.AddSingleton<TagEventService>();
-    services.AddSingleton<TagStateService>();
-    services.AddSingleton<TagListService>();
-
-    return services.BuildServiceProvider();
-}
-
-static ServiceProvider BuildCacheOnlyServices(string cachePath)
-{
-    var services = new ServiceCollection();
-
-    var domainTypes = DomainType.GetDomainTypes();
-    services.AddSingleton(domainTypes);
-
-    var sqliteEventStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes);
-    services.AddSingleton<IEventStore>(sqliteEventStore);
-
-    services.AddSingleton<TagEventService>();
-    services.AddSingleton<TagStateService>();
-    services.AddSingleton<TagListService>();
-
-    return services.BuildServiceProvider();
-}
-
 static async Task ListTagsAsync(
     string connectionString,
     string databaseType,
     string cosmosDatabaseName,
     string? tagGroup,
     string outputDir,
-    (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) cacheOptions)
+    CacheOptions cacheOptions)
 {
     Console.WriteLine("=== Tag List ===\n");
     Console.WriteLine($"Database: {databaseType}");
@@ -1730,36 +1617,13 @@ static async Task ListTagsAsync(
         Console.WriteLine($"Filter: {tagGroup}");
     }
     Console.WriteLine($"Output Directory: {outputDir}");
+    if (!TryReportCacheUsage(cacheOptions, out var cachePath))
+    {
+        return;
+    }
     Console.WriteLine();
 
-    var isCacheOnly = cacheOptions.Mode == SimpleCacheMode.CacheOnly;
-    var cachePath = Path.Combine(cacheOptions.CachePath, "events.db");
-    var useCache = cacheOptions.Mode != SimpleCacheMode.Off &&
-                   cacheOptions.Mode != SimpleCacheMode.Clear &&
-                   File.Exists(cachePath);
-    ServiceProvider services;
-    if (isCacheOnly)
-    {
-        if (!File.Exists(cachePath))
-        {
-            Console.WriteLine($"Error: SQLite cache not found: {cachePath}");
-            Console.WriteLine("Run 'cache-update' first to create the cache.");
-            return;
-        }
-        Console.WriteLine("Mode: cache-only (SQLite cache only)");
-        Console.WriteLine($"Cache path: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else if (useCache)
-    {
-        Console.WriteLine($"Using SQLite cache: {cachePath}");
-        services = BuildCacheOnlyServices(cachePath);
-    }
-    else
-    {
-        services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
-    }
-
+    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, cachePath: cachePath);
     var tagListService = services.GetRequiredService<TagListService>();
 
     // Export tag list
@@ -1804,73 +1668,6 @@ static async Task ListTagsAsync(
     }
 
     Console.WriteLine($"Tag list saved to: {filePath}");
-}
-
-static async Task UpdateCacheAsync(
-    string connectionString,
-    string databaseType,
-    string cosmosDatabaseName,
-    (SimpleCacheMode Mode, string CachePath, TimeSpan SafeMargin) cacheOptions,
-    bool verbose,
-    CancellationToken cancellationToken)
-{
-    Console.WriteLine("=== Cache Update ===\n");
-    Console.WriteLine($"Remote Database: {databaseType}");
-    if (databaseType.ToLowerInvariant() == "cosmos")
-    {
-        Console.WriteLine($"Cosmos Database: {cosmosDatabaseName}");
-    }
-    Console.WriteLine($"SafeWindow: now - {cacheOptions.SafeMargin.TotalSeconds:N0}s");
-    Console.WriteLine($"Cache Directory: {cacheOptions.CachePath}");
-    Console.WriteLine();
-
-    if (cacheOptions.Mode == SimpleCacheMode.Off)
-    {
-        Console.WriteLine("Cache mode is off. Skipping update.");
-        return;
-    }
-
-    Directory.CreateDirectory(cacheOptions.CachePath);
-    var cachePath = Path.Combine(cacheOptions.CachePath, "events.db");
-
-    if (cacheOptions.Mode == SimpleCacheMode.Clear && File.Exists(cachePath))
-    {
-        Console.WriteLine("Clearing existing cache...");
-        File.Delete(cachePath);
-        var walPath = cachePath + "-wal";
-        var shmPath = cachePath + "-shm";
-        if (File.Exists(walPath)) File.Delete(walPath);
-        if (File.Exists(shmPath)) File.Delete(shmPath);
-    }
-
-    var services = BuildServices(connectionString, databaseType, cosmosDatabaseName, enableProgressReporting: verbose);
-    var remoteStore = services.GetRequiredService<IEventStore>();
-    var domainTypes = services.GetRequiredService<DcbDomainTypes>();
-
-    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes);
-    var syncOptions = new CacheSyncOptions
-    {
-        SafeWindow = cacheOptions.SafeMargin,
-        RemoteEndpoint = connectionString.Length > 50 ? connectionString[..50] + "..." : connectionString,
-        DatabaseName = databaseType.ToLowerInvariant() == "cosmos" ? cosmosDatabaseName : "postgres"
-    };
-    var cacheSync = SekibanDcbSqliteExtensions.CreateCacheSync(localStore, remoteStore, syncOptions);
-
-    Console.WriteLine("Syncing events from remote to local cache...\n");
-    var result = await cacheSync.SyncAsync(cancellationToken);
-
-    if (result.IsSuccess)
-    {
-        Console.WriteLine($"Action: {result.Action}");
-        Console.WriteLine($"Events synced: {result.EventsSynced:N0}");
-        Console.WriteLine($"Total in cache: {result.TotalEventsInCache:N0}");
-        Console.WriteLine($"Duration: {result.Duration.TotalSeconds:F2}s");
-        Console.WriteLine($"\nCache file: {cachePath}");
-    }
-    else
-    {
-        Console.WriteLine($"Cache sync failed: {result.ErrorMessage}");
-    }
 }
 
 static async Task SyncCacheAsync(string connectionString, string databaseType, string cosmosDatabaseName, string cacheDir, int safeWindowMinutes, bool verbose)
@@ -2021,16 +1818,7 @@ static async Task ClearCacheAsync(string cacheDir)
     // Delete the cache file and WAL/SHM files
     try
     {
-        File.Delete(cachePath);
-
-        var walPath = cachePath + "-wal";
-        var shmPath = cachePath + "-shm";
-
-        if (File.Exists(walPath))
-            File.Delete(walPath);
-        if (File.Exists(shmPath))
-            File.Delete(shmPath);
-
+        DeleteCacheFiles(cachePath);
         Console.WriteLine("\nCache cleared successfully.");
     }
     catch (Exception ex)
@@ -2040,3 +1828,5 @@ static async Task ClearCacheAsync(string cacheDir)
 
     await Task.CompletedTask;
 }
+
+readonly record struct CacheOptions(SimpleCacheMode Mode, string CacheDir);
