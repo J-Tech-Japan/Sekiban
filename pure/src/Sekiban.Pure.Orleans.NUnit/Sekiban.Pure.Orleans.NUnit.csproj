@@ -38,7 +38,7 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="../../README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="Sekiban.Pure.Orleans" Version="9.0.0"/>
     </ItemGroup>
 

@@ -2,6 +2,15 @@
 
 Azure Blob Storage integration for Sekiban Dynamic Consistency Boundary (DCB) framework.
 
+📚 **Full Documentation**: [sekiban.dev](https://www.sekiban.dev/)
+
+## Sekiban Implementations
+
+| Implementation | Status |
+|---------------|--------|
+| **Sekiban DCB** | ✅ Recommended |
+| Sekiban.Pure | ⚠️ Deprecated |
+
 ## Overview
 
 This package provides Azure Blob Storage-based snapshot offloading for Sekiban DCB MultiProjection. It enables efficient storage of large projection state snapshots in Azure Blob Storage, reducing memory pressure and improving scalability for projections with significant state.
