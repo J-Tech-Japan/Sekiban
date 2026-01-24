@@ -12,9 +12,11 @@ COPY internalUsages/Dcb.Domain/*.csproj internalUsages/Dcb.Domain/
 COPY internalUsages/DcbOrleans.Web/*.csproj internalUsages/DcbOrleans.Web/
 
 # Restore dependencies (target net9.0 only for Docker builds)
+# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
 RUN dotnet restore internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj \
     -a $TARGETARCH \
-    /p:TargetFramework=net9.0
+    /p:TargetFramework=net9.0 \
+    /p:TargetFrameworks=net9.0
 
 # Copy all source code
 COPY src/ src/
@@ -23,12 +25,13 @@ COPY internalUsages/Dcb.Domain/ internalUsages/Dcb.Domain/
 COPY internalUsages/DcbOrleans.Web/ internalUsages/DcbOrleans.Web/
 
 # Build and publish
+# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
 RUN dotnet publish internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj \
     -c Release \
     -a $TARGETARCH \
     -f net9.0 \
-    -o /app \
-    --no-restore
+    /p:TargetFrameworks=net9.0 \
+    -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime

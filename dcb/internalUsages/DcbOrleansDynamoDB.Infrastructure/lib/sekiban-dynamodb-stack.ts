@@ -387,6 +387,10 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       circuitBreaker: { rollback: true },
     });
 
+    // Ensure RDS is fully created before ECS service starts
+    // This prevents tasks from failing due to missing RDS endpoint
+    apiService.node.addDependency(rdsInstance);
+
     // API service is internal only - no external ALB attachment
     // Access via Cloud Map: apiservice.sekiban-{env}.internal
 
