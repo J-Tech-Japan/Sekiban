@@ -17,9 +17,11 @@ COPY internalUsages/Dcb.Domain.WithoutResult/*.csproj internalUsages/Dcb.Domain.
 COPY internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/*.csproj internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/
 
 # Restore dependencies (target net9.0 only for Docker builds)
+# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
 RUN dotnet restore internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj \
     -a $TARGETARCH \
-    /p:TargetFramework=net9.0
+    /p:TargetFramework=net9.0 \
+    /p:TargetFrameworks=net9.0
 
 # Copy all source code
 COPY src/ src/
@@ -28,12 +30,13 @@ COPY internalUsages/Dcb.Domain.WithoutResult/ internalUsages/Dcb.Domain.WithoutR
 COPY internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/ internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/
 
 # Build and publish
+# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
 RUN dotnet publish internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj \
     -c Release \
     -a $TARGETARCH \
     -f net9.0 \
-    -o /app \
-    --no-restore
+    /p:TargetFrameworks=net9.0 \
+    -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime

@@ -18,6 +18,8 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using DcbOrleansDynamoDB.WithoutResult.ApiService;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress noisy AWS SDK logs in development
@@ -44,22 +46,54 @@ builder.Services.AddOpenApi();
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "dynamodb";
 var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams", true);
 
-// Determine if running locally (Aspire/LocalStack) or in AWS
-var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]) ||
-                         builder.Environment.IsDevelopment();
+// Determine if running locally (Aspire/LocalStack) vs in AWS
+// Only check DynamoDb:ServiceUrl - this is set when using LocalStack
+// Do NOT rely on IsDevelopment() as AWS "dev" environments still use ASPNETCORE_ENVIRONMENT=Development
+var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]);
 
-// In AWS deployment, we use RDS for Orleans + SQS for streams
+// In AWS deployment, we use RDS for Orleans (SQS streams not yet available due to SDK version conflict)
 // In local development, we use in-memory everything
 if (!isLocalDevelopment && !useInMemoryStreams)
 {
-    // AWS Deployment mode - will use RDS + SQS
+    // AWS Deployment mode - will use RDS for Orleans clustering/state
+    // Note: SQS streaming is not yet available, so we still use in-memory streams
     // This is valid for production deployment
 }
-else if (!useInMemoryStreams)
+else if (isLocalDevelopment && !useInMemoryStreams)
 {
     // Local mode but trying to use non-memory streams - not supported
     throw new InvalidOperationException(
-        "Orleans:UseInMemoryStreams must be true for local development.");
+        "Orleans:UseInMemoryStreams must be true for local development (LocalStack).");
+}
+
+// Build RDS connection string early (needed for schema init and Orleans config)
+string? rdsConnectionString = null;
+if (!isLocalDevelopment)
+{
+    var rdsHost = builder.Configuration["RDS_HOST"];
+    var rdsPort = builder.Configuration["RDS_PORT"] ?? "5432";
+    var rdsUsername = builder.Configuration["RDS_USERNAME"];
+    var rdsPassword = builder.Configuration["RDS_PASSWORD"];
+    var rdsDatabase = builder.Configuration["RDS_DATABASE"];
+
+    if (!string.IsNullOrEmpty(rdsHost) && !string.IsNullOrEmpty(rdsUsername))
+    {
+        rdsConnectionString = $"Host={rdsHost};Port={rdsPort};Database={rdsDatabase};Username={rdsUsername};Password={rdsPassword}";
+    }
+    else
+    {
+        rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
+                              builder.Configuration.GetConnectionString("Orleans");
+    }
+
+    // Initialize Orleans schema if RDS is configured
+    if (!string.IsNullOrEmpty(rdsConnectionString))
+    {
+        Console.WriteLine("Initializing Orleans PostgreSQL schema...");
+        var schemaInitializer = new OrleansSchemaInitializer(
+            LoggerFactory.Create(b => b.AddConsole()).CreateLogger<OrleansSchemaInitializer>());
+        schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+    }
 }
 
 // Configure Orleans
@@ -73,10 +107,6 @@ builder.UseOrleans(config =>
     else
     {
         // AWS deployment: use AdoNet clustering with RDS PostgreSQL
-        var rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
-                                  builder.Configuration.GetConnectionString("Orleans");
-
-        if (!string.IsNullOrEmpty(rdsConnectionString))
         {
             config.UseAdoNetClustering(options =>
             {
@@ -244,10 +274,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+    // Use CORS middleware only in Development (matches AddCors registration)
+    app.UseCors();
 }
-
-// Use CORS middleware
-app.UseCors();
 
 // Student endpoints
 apiRoute

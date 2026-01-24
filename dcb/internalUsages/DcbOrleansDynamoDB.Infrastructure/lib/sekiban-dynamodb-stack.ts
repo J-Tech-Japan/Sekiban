@@ -11,6 +11,8 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Construct } from 'constructs';
 
 export interface SekibanDynamoDbStackProps extends cdk.StackProps {
@@ -112,32 +114,13 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // DynamoDB (DCB Events)
+    // DynamoDB Tables
+    // Tables are auto-created by the application with correct schema via DynamoDbContext.EnsureTablesAsync()
+    // Here we just reference them by name for IAM permissions
     // ========================================
-    const eventsTable = new dynamodb.Table(this, 'EventsTable', {
-      tableName: config.dynamodb.eventsTableName,
-      partitionKey: { name: 'PartitionKey', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'SortableUniqueId', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecovery: envName === 'prod',
-      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
-    });
-
-    // GSI for querying by SortableUniqueId
-    eventsTable.addGlobalSecondaryIndex({
-      indexName: 'SortableUniqueIdIndex',
-      partitionKey: { name: 'RootPartitionKey', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'SortableUniqueId', type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
-
-    // Multi-projection state table
-    const multiProjectionTable = new dynamodb.Table(this, 'MultiProjectionTable', {
-      tableName: `${config.dynamodb.eventsTableName}-projections`,
-      partitionKey: { name: 'ProjectionId', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
-    });
+    const eventsTableName = config.dynamodb.eventsTableName;
+    const projectionsTableName = `${config.dynamodb.eventsTableName}-projections`;
+    const tagsTableName = `${config.dynamodb.eventsTableName}-tags`;
 
     // ========================================
     // SQS (Orleans Streams)
@@ -173,19 +156,15 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // ECR Repositories
+    // ECR Repositories (use existing or create new)
     // ========================================
-    const apiEcrRepo = new ecr.Repository(this, 'ApiEcrRepo', {
-      repositoryName: `sekiban-dynamodb-api-${envName}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-    });
+    const apiEcrRepoName = `sekiban-dynamodb-api-${envName}`;
+    const webEcrRepoName = `sekiban-dynamodb-web-${envName}`;
 
-    const webEcrRepo = new ecr.Repository(this, 'WebEcrRepo', {
-      repositoryName: `sekiban-dynamodb-web-${envName}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-    });
+    // Try to use existing repositories first (for cases where images are pre-pushed)
+    // If not found, CDK will create new ones
+    const apiEcrRepo = ecr.Repository.fromRepositoryName(this, 'ApiEcrRepo', apiEcrRepoName);
+    const webEcrRepo = ecr.Repository.fromRepositoryName(this, 'WebEcrRepo', webEcrRepoName);
 
     // ========================================
     // ECS Cluster
@@ -229,9 +208,32 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       },
     });
 
-    // Grant permissions to API
-    eventsTable.grantReadWriteData(apiTaskDefinition.taskRole);
-    multiProjectionTable.grantReadWriteData(apiTaskDefinition.taskRole);
+    // Grant DynamoDB permissions to API
+    // Tables are auto-created by the app, so we grant permissions by table name pattern
+    apiTaskDefinition.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({
+      effect: cdk.aws_iam.Effect.ALLOW,
+      actions: [
+        'dynamodb:GetItem',
+        'dynamodb:PutItem',
+        'dynamodb:UpdateItem',
+        'dynamodb:DeleteItem',
+        'dynamodb:Query',
+        'dynamodb:Scan',
+        'dynamodb:BatchGetItem',
+        'dynamodb:BatchWriteItem',
+        'dynamodb:DescribeTable',
+        'dynamodb:CreateTable',
+        'dynamodb:TransactWriteItems',
+      ],
+      resources: [
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${eventsTableName}`,
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${eventsTableName}/index/*`,
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${projectionsTableName}`,
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${projectionsTableName}/index/*`,
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${tagsTableName}`,
+        `arn:aws:dynamodb:${config.region}:${this.account}:table/${tagsTableName}/index/*`,
+      ],
+    }));
     snapshotBucket.grantReadWrite(apiTaskDefinition.taskRole);
     rdsSecret.grantRead(apiTaskDefinition.taskRole);
     sqsQueues.forEach(q => {
@@ -246,7 +248,9 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         logGroup: apiLogGroup,
       }),
       environment: {
-        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        // Use 'Staging' for AWS dev environments to avoid loading appsettings.Development.json
+        // which contains LocalStack-specific settings like DynamoDb:ServiceUrl
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Staging',
         'Sekiban__Database': 'dynamodb',
         'Orleans__UseInMemoryStreams': 'false',
         'Orleans__ClusterId': config.orleans.clusterId,
@@ -254,13 +258,20 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         'Orleans__SiloPort': config.orleans.siloPort.toString(),
         'Orleans__GatewayPort': config.orleans.gatewayPort.toString(),
         'AWS__Region': config.region,
-        'DynamoDb__TableName': config.dynamodb.eventsTableName,
+        'DynamoDb__EventsTableName': config.dynamodb.eventsTableName,
+        'DynamoDb__TagsTableName': `${config.dynamodb.eventsTableName}-tags`,
+        'DynamoDb__ProjectionStatesTableName': `${config.dynamodb.eventsTableName}-projections`,
         'S3BlobStorage__BucketName': snapshotBucket.bucketName,
         'Sqs__QueuePrefix': config.sqs.queueNamePrefix,
         'Sqs__QueueCount': config.sqs.queueCount.toString(),
       },
       secrets: {
-        'RdsConnectionString': ecs.Secret.fromSecretsManager(rdsSecret),
+        // Extract individual fields from RDS secret for connection string construction in app
+        'RDS_HOST': ecs.Secret.fromSecretsManager(rdsSecret, 'host'),
+        'RDS_PORT': ecs.Secret.fromSecretsManager(rdsSecret, 'port'),
+        'RDS_USERNAME': ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
+        'RDS_PASSWORD': ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
+        'RDS_DATABASE': ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
       },
       portMappings: [
         { containerPort: config.orleans.httpPort, name: 'http' },
@@ -291,7 +302,8 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         logGroup: webLogGroup,
       }),
       environment: {
-        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Development',
+        // Use 'Staging' for AWS dev environments (matches API service setting)
+        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Staging',
         // Aspire Service Discovery configuration
         // Use Cloud Map for Web -> API communication (HTTP)
         'services__apiservice__http__0': apiServiceUrl,
@@ -419,16 +431,43 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // Outputs
+    // CloudFront Distribution (HTTPS frontend)
+    // Using CloudFront default domain (*.cloudfront.net) for HTTPS
+    // This avoids needing a custom domain and ACM certificate
     // ========================================
-    new cdk.CfnOutput(this, 'AlbDnsName', {
-      value: alb.loadBalancerDnsName,
-      description: 'External ALB DNS Name (Web only)',
+    const distribution = new cloudfront.Distribution(this, 'Distribution', {
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(alb.loadBalancerDnsName, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+          httpPort: 80,
+        }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
+      },
+      // Use PriceClass_100 for lowest cost (US, Canada, Europe only)
+      // Change to PriceClass_200 if you need Asia/Pacific edge locations
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
+      comment: `Sekiban DynamoDB ${envName} - CloudFront Distribution`,
     });
 
-    new cdk.CfnOutput(this, 'HttpsEnabled', {
-      value: httpsEnabled ? 'true' : 'false',
-      description: 'Whether HTTPS is enabled for external ALB',
+    // ========================================
+    // Outputs
+    // ========================================
+    new cdk.CfnOutput(this, 'CloudFrontUrl', {
+      value: `https://${distribution.distributionDomainName}`,
+      description: 'CloudFront HTTPS URL (use this for public access)',
+    });
+
+    new cdk.CfnOutput(this, 'CloudFrontDistributionId', {
+      value: distribution.distributionId,
+      description: 'CloudFront Distribution ID',
+    });
+
+    new cdk.CfnOutput(this, 'AlbDnsName', {
+      value: alb.loadBalancerDnsName,
+      description: 'ALB DNS Name (internal, use CloudFront URL instead)',
     });
 
     new cdk.CfnOutput(this, 'InternalApiEndpoint', {
@@ -452,7 +491,7 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'EventsTableName', {
-      value: eventsTable.tableName,
+      value: eventsTableName,
       description: 'DynamoDB Events Table Name',
     });
 

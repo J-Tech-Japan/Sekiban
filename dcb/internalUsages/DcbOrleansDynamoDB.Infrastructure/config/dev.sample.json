@@ -24,7 +24,7 @@
     "memory": 1024,
     "desiredCount": 2,
     "minCount": 1,
-    "maxCount": 4
+    "maxCount": 2
   },
 
   "web": {
