@@ -1,7 +1,7 @@
 using System.Reflection;
 using Npgsql;
 
-namespace SekibanDcbOrleansAws.ApiService;
+namespace DcbOrleans.WithoutResult.ApiService;
 
 /// <summary>
 /// Initializes Orleans PostgreSQL schema at startup if it doesn't exist.

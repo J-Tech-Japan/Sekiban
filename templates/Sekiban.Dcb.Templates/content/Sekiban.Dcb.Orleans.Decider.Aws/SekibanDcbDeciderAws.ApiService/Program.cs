@@ -14,6 +14,7 @@ using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.BlobStorage.S3;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Snapshots;
+using SekibanDcbDeciderAws.ApiService;
 using SekibanDcbDeciderAws.ApiService.Endpoints;
 using SekibanDcbDeciderAws.ApiService.Auth;
 using SekibanDcbDeciderAws.ApiService.Exceptions;

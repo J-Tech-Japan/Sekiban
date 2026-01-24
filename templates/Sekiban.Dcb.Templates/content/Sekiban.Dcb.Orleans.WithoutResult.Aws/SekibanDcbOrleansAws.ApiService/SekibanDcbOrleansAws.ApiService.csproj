@@ -22,7 +22,7 @@
         <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Npgsql" Version="9.0.3" />
+        <PackageReference Include="Npgsql" Version="10.0.0" />
         <!-- Note: Microsoft.Orleans.Streaming.SQS conflicts with AWS SDK v4 used by DynamoDB -->
         <!-- SQS streaming will be added when Orleans SQS package supports AWS SDK v4 -->
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />

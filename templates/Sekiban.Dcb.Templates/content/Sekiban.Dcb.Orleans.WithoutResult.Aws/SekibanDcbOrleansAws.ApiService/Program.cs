@@ -1,10 +1,10 @@
-using SekibanDcbOrleansAws.Domain;
-using SekibanDcbOrleansAws.Domain.ClassRoom;
-using SekibanDcbOrleansAws.Domain.Enrollment;
-using SekibanDcbOrleansAws.Domain.Queries;
-using SekibanDcbOrleansAws.Domain.Student;
-using SekibanDcbOrleansAws.Domain.Weather;
-using SekibanDcbOrleansAws.ApiService.Exceptions;
+using Dcb.Domain.WithoutResult;
+using Dcb.Domain.WithoutResult.ClassRoom;
+using Dcb.Domain.WithoutResult.Enrollment;
+using Dcb.Domain.WithoutResult.Queries;
+using Dcb.Domain.WithoutResult.Student;
+using Dcb.Domain.WithoutResult.Weather;
+using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Orleans.Storage;
@@ -18,7 +18,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using SekibanDcbOrleansAws.ApiService;
+using DcbOrleans.WithoutResult.ApiService;
 
 var builder = WebApplication.CreateBuilder(args);
 
