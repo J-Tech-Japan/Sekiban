@@ -11,7 +11,7 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client UI (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md)
-> - [Storage Providers](11_dapr_setup.md)
+> - [Storage Providers](11_storage_providers.md)
 > - [Testing](12_unit_testing.md)
 > - [Common Issues and Solutions](13_common_issues.md) (You are here)
 > - [ResultBox](14_result_box.md)

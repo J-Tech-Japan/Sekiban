@@ -11,32 +11,45 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client UI (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md)
-> - [Storage Providers](11_dapr_setup.md)
+> - [Storage Providers](11_storage_providers.md)
 > - [Testing](12_unit_testing.md)
 > - [Common Issues and Solutions](13_common_issues.md)
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md) (You are here)
 
-This guide summarizes the moving parts required to deploy a DCB solution and keep it healthy in production.
+This guide summarizes the moving parts required to deploy a DCB solution and keep it healthy in production. DCB supports both Azure and AWS cloud platforms.
+
+## Platform Comparison
+
+| Component | Azure | AWS |
+|-----------|-------|-----|
+| Container Hosting | App Service / AKS | ECS Fargate |
+| Event Store | Postgres / Cosmos DB | DynamoDB |
+| Orleans Clustering | Azure Table / Cosmos DB | RDS PostgreSQL (ADO.NET) |
+| Orleans Streams | Azure Queue | Amazon SQS |
+| Snapshots | Azure Blob Storage | Amazon S3 |
+| CDN | Azure CDN | CloudFront |
 
 ## Pre-Deployment Checklist
 
-- ✅ Run database migrations (Postgres) or ensure Cosmos containers exist.
-- ✅ Configure secrets (connection strings, Azure storage keys) in your secret manager.
-- ✅ Verify `DcbDomainTypes` registration is identical across API, silo, and background services.
-- ✅ Enable logging, metrics, and distributed tracing (`builder.AddServiceDefaults()` covers Aspire + OTLP setup).
+- ✅ Prepare event store (Postgres/Cosmos/DynamoDB)
+- ✅ Configure secrets (connection strings, credentials) in your secret manager
+- ✅ Verify `DcbDomainTypes` registration is identical across API, silo, and background services
+- ✅ Enable logging, metrics, and distributed tracing (`builder.AddServiceDefaults()` covers Aspire + OTLP setup)
 
-## Infrastructure
+---
+
+## Azure Deployment
+
+### Infrastructure
 
 - **Orleans Cluster** – Deploy silos behind a load balancer. Use Azure App Service, AKS, or container orchestrators.
 - **Event Store** – Managed Postgres (Azure Database for PostgreSQL Flexible Server) or Cosmos DB.
 - **Azure Storage** – Tables (clustering), Queues (streams), Blobs (grain state + snapshots).
 - **Redis** (optional) – For caching API responses or storing session state if you run Blazor Server at scale.
 
-## Configuration
-
-Use environment variables or appsettings per environment:
+### Configuration
 
 ```json
 {
@@ -50,6 +63,52 @@ Use environment variables or appsettings per environment:
   "ORLEANS_GRAIN_DEFAULT_TYPE": "blob"
 }
 ```
+
+---
+
+## AWS Deployment
+
+### Infrastructure
+
+AWS uses CDK for infrastructure provisioning:
+
+- **ECS Fargate** – Hosts API/Web containers
+- **CloudFront + ALB** – CDN and load balancing
+- **DynamoDB** – Event store (tables auto-created)
+- **RDS PostgreSQL** – Orleans clustering
+- **Amazon SQS** – Orleans streams
+- **Amazon S3** – MultiProjection snapshots
+
+### CDK Deployment
+
+```bash
+cd dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure
+
+# Create configuration file
+cp lib/config/dev.sample.json lib/config/dev.json
+# Edit dev.json to set AWS_ACCOUNT_ID and AWS_REGION
+
+# Deploy
+./deploy.sh dev
+```
+
+### Configuration
+
+```json
+{
+  "Sekiban": {
+    "Database": "dynamodb"
+  },
+  "AWS_REGION": "us-west-1",
+  "DYNAMODB_TABLE_PREFIX": "myapp"
+}
+```
+
+### AWS-Specific Notes
+
+- DynamoDB tables are auto-created on application startup
+- RDS PostgreSQL Orleans schema is auto-created by `OrleansSchemaInitializer`
+- SQS queues are provisioned via CDK
 
 ## Observability
 
