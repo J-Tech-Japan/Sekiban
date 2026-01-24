@@ -34,7 +34,7 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="../../README.md" Pack="true" PackagePath="\"/>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
     </ItemGroup>
 

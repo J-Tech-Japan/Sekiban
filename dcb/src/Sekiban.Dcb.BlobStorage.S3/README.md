@@ -1,6 +1,21 @@
 # Sekiban.Dcb.BlobStorage.S3
 
-AWS S3 implementation of `IBlobStorageSnapshotAccessor` for offloading large MultiProjection snapshots.
+AWS S3 implementation of `IBlobStorageSnapshotAccessor` for offloading large MultiProjection snapshots in Sekiban DCB.
+
+📚 **Full Documentation**: [sekiban.dev](https://www.sekiban.dev/)
+
+## Sekiban Implementations
+
+| Implementation | Status |
+|---------------|--------|
+| **Sekiban DCB** | ✅ Recommended |
+| Sekiban.Pure | ⚠️ Deprecated |
+
+## Installation
+
+```bash
+dotnet add package Sekiban.Dcb.BlobStorage.S3
+```
 
 ## Usage
 
@@ -34,3 +49,10 @@ services.AddSekibanDcbS3BlobStorage(configuration);
 }
 ```
 
+## Related Packages
+
+- `Sekiban.Dcb.DynamoDB` - DynamoDB event store for AWS deployments
+
+## License
+
+Apache 2.0 - Copyright (c) 2022- J-Tech Japan
