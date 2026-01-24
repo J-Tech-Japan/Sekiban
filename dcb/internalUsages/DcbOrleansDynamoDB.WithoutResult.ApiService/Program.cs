@@ -18,6 +18,8 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using DcbOrleansDynamoDB.WithoutResult.ApiService;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress noisy AWS SDK logs in development
@@ -64,6 +66,36 @@ else if (isLocalDevelopment && !useInMemoryStreams)
         "Orleans:UseInMemoryStreams must be true for local development (LocalStack).");
 }
 
+// Build RDS connection string early (needed for schema init and Orleans config)
+string? rdsConnectionString = null;
+if (!isLocalDevelopment)
+{
+    var rdsHost = builder.Configuration["RDS_HOST"];
+    var rdsPort = builder.Configuration["RDS_PORT"] ?? "5432";
+    var rdsUsername = builder.Configuration["RDS_USERNAME"];
+    var rdsPassword = builder.Configuration["RDS_PASSWORD"];
+    var rdsDatabase = builder.Configuration["RDS_DATABASE"];
+
+    if (!string.IsNullOrEmpty(rdsHost) && !string.IsNullOrEmpty(rdsUsername))
+    {
+        rdsConnectionString = $"Host={rdsHost};Port={rdsPort};Database={rdsDatabase};Username={rdsUsername};Password={rdsPassword}";
+    }
+    else
+    {
+        rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
+                              builder.Configuration.GetConnectionString("Orleans");
+    }
+
+    // Initialize Orleans schema if RDS is configured
+    if (!string.IsNullOrEmpty(rdsConnectionString))
+    {
+        Console.WriteLine("Initializing Orleans PostgreSQL schema...");
+        var schemaInitializer = new OrleansSchemaInitializer(
+            LoggerFactory.Create(b => b.AddConsole()).CreateLogger<OrleansSchemaInitializer>());
+        schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+    }
+}
+
 // Configure Orleans
 builder.UseOrleans(config =>
 {
@@ -75,27 +107,6 @@ builder.UseOrleans(config =>
     else
     {
         // AWS deployment: use AdoNet clustering with RDS PostgreSQL
-        // Try to construct connection string from individual RDS secret fields (AWS ECS)
-        var rdsHost = builder.Configuration["RDS_HOST"];
-        var rdsPort = builder.Configuration["RDS_PORT"] ?? "5432";
-        var rdsUsername = builder.Configuration["RDS_USERNAME"];
-        var rdsPassword = builder.Configuration["RDS_PASSWORD"];
-        var rdsDatabase = builder.Configuration["RDS_DATABASE"];
-
-        string? rdsConnectionString;
-        if (!string.IsNullOrEmpty(rdsHost) && !string.IsNullOrEmpty(rdsUsername))
-        {
-            // Construct PostgreSQL connection string from individual fields
-            rdsConnectionString = $"Host={rdsHost};Port={rdsPort};Database={rdsDatabase};Username={rdsUsername};Password={rdsPassword}";
-        }
-        else
-        {
-            // Fall back to direct connection string configuration
-            rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
-                                  builder.Configuration.GetConnectionString("Orleans");
-        }
-
-        if (!string.IsNullOrEmpty(rdsConnectionString))
         {
             config.UseAdoNetClustering(options =>
             {
@@ -263,10 +274,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+    // Use CORS middleware only in Development (matches AddCors registration)
+    app.UseCors();
 }
-
-// Use CORS middleware
-app.UseCors();
 
 // Student endpoints
 apiRoute
