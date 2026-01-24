@@ -19,8 +19,8 @@ AWS CDK Infrastructure for deploying Sekiban DCB + Orleans with DynamoDB.
               │ Cloud Map (HTTP)
               ▼
       ┌─────────────┐
-      │ API Service │
-      │ (ECS:8080)  │
+      │ API Service │◄────► SQS
+      │ (ECS:8080)  │   (Orleans Streams)
       └─────────────┘
               │
   ┌───────────┼───────────┐
@@ -41,6 +41,7 @@ RDS Postgres DynamoDB     S3
 | ALB | HTTP load balancer for Web service |
 | RDS PostgreSQL | Orleans Clustering, Grain State, Reminders |
 | DynamoDB | DCB Event Store (auto-created by app) |
+| SQS | Orleans Streams (message queues for grain communication) |
 | S3 | Snapshot Offload |
 | ECS Fargate (API) | Orleans Silos + REST API (internal only) |
 | ECS Fargate (Web) | Blazor Server Frontend (external) |
@@ -203,8 +204,9 @@ curl $CF_URL/weather
 | RDS PostgreSQL (db.t4g.micro) | ~$12 |
 | ALB | ~$18-24 |
 | CloudFront (PriceClass_200) | ~$1-5 |
+| SQS (Orleans Streams) | ~$0-5 |
 | DynamoDB/S3 | ~$0-10 |
-| **Total** | **~$67-103** |
+| **Total** | **~$67-108** |
 
 ## Useful Commands
 
@@ -260,3 +262,34 @@ DynamoDB tables are **automatically created** by the application with the correc
 | `sekiban-events-{env}-projections` | pk | sk | - |
 
 The CDK grants IAM permissions for these tables but does not create them.
+
+## SQS Streams (Orleans)
+
+Orleans uses SQS queues for stream communication between grains. The CDK creates the following queues:
+
+| Queue | Purpose |
+|-------|---------|
+| `{prefix}-0` to `{prefix}-{N-1}` | Stream message queues (configurable count) |
+| `{prefix}-dlq` | Dead letter queue for failed messages |
+
+### Configuration
+
+```json
+{
+  "sqs": {
+    "queueNamePrefix": "orleans-stream-dev",  // Queue name prefix
+    "queueCount": 4,                          // Number of stream queues
+    "visibilityTimeoutSec": 60,               // Message visibility timeout
+    "messageRetentionDays": 4                 // Message retention period
+  }
+}
+```
+
+### Local vs AWS
+
+| Environment | Stream Provider |
+|-------------|-----------------|
+| Local (Aspire) | In-memory streams (`Orleans:UseInMemoryStreams=true`) |
+| AWS | SQS streams (`Orleans:UseInMemoryStreams=false`) |
+
+The application automatically selects the appropriate stream provider based on the `Orleans:UseInMemoryStreams` environment variable.
