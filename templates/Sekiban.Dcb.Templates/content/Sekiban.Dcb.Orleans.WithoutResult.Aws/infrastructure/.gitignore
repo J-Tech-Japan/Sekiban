@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# CDK output
+cdk.out/
+
+# Build output
+dist/
+
+# Configuration (except samples)
+config/*.json
+!config/*.sample.json

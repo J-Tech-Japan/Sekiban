@@ -1,0 +1,419 @@
+@page "/enrollments"
+@using Dcb.Domain.WithoutResult.Enrollment
+@using Dcb.Domain.WithoutResult.Student
+@using Dcb.Domain.WithoutResult.ClassRoom
+@attribute [StreamRendering]
+@rendermode InteractiveServer
+
+@inject IHttpClientFactory HttpClientFactory
+@inject EnrollmentApiClient EnrollmentApiClient
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Enrollments</PageTitle>
+
+<h1>Enrollment Management</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Enroll Student in Classroom</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="studentSelect" class="form-label">Select Student</label>
+                    <select id="studentSelect" class="form-select" @bind="selectedStudentId">
+                        <option value="">-- Select a Student --</option>
+                        @if (students != null)
+                        {
+                            @foreach (var student in students)
+                            {
+                                <option value="@student.StudentId">@student.StudentName (@student.Grade)</option>
+                            }
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="classroomSelect" class="form-label">Select Classroom</label>
+                    <select id="classroomSelect" class="form-select" @bind="selectedClassroomId">
+                        <option value="">-- Select a Classroom --</option>
+                        @if (classrooms != null)
+                        {
+                            @foreach (var classroom in classrooms.Where(c => c.EnrolledStudents.Count < c.MaxCapacity))
+                            {
+                                <option value="@classroom.ClassRoomId">
+                                    @classroom.ClassName (Available: @(classroom.MaxCapacity - classroom.EnrolledStudents.Count)/@classroom.MaxCapacity)
+                                </option>
+                            }
+                        }
+                    </select>
+                </div>
+
+                <button class="btn btn-primary" @onclick="HandleEnrollStudent"
+                        disabled="@(string.IsNullOrEmpty(selectedStudentId) || string.IsNullOrEmpty(selectedClassroomId))">
+                    Enroll Student
+                </button>
+
+                @if (!string.IsNullOrEmpty(enrollmentMessage))
+                {
+                    <div class="alert @(enrollmentError ? "alert-danger" : "alert-success") mt-3" role="alert">
+                        @enrollmentMessage
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Drop Student from Classroom</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="enrolledStudentSelect" class="form-label">Select Enrolled Student</label>
+                    <select id="enrolledStudentSelect" class="form-select" @bind="selectedEnrollmentForDrop">
+                        <option value="">-- Select an Enrollment --</option>
+                        @if (enrollments != null)
+                        {
+                            @foreach (var enrollment in enrollments)
+                            {
+                                <option value="@($"{enrollment.StudentId}:{enrollment.ClassRoomId}")">
+                                    @enrollment.StudentName - @enrollment.ClassName
+                                </option>
+                            }
+                        }
+                    </select>
+                </div>
+
+                <button class="btn btn-warning" @onclick="HandleDropStudent"
+                        disabled="@string.IsNullOrEmpty(selectedEnrollmentForDrop)">
+                    Drop Student
+                </button>
+
+                @if (!string.IsNullOrEmpty(dropMessage))
+                {
+                    <div class="alert @(dropError ? "alert-danger" : "alert-success") mt-3" role="alert">
+                        @dropMessage
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <h3>Current Enrollments</h3>
+
+    @if (enrollments == null)
+    {
+        <p><em>Loading...</em></p>
+    } else if (enrollments.Count == 0)
+    {
+        <p>No enrollments found.</p>
+    } else
+    {
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Student Name</th>
+                <th>Grade</th>
+                <th>Classroom</th>
+                <th>Enrollment Date</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var enrollment in enrollments)
+            {
+                <tr>
+                    <td>@enrollment.StudentName</td>
+                    <td>@enrollment.Grade</td>
+                    <td>@enrollment.ClassName</td>
+                    <td>@enrollment.EnrollmentDate.ToString("d")</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger"
+                                @onclick="() => HandleQuickDrop(enrollment.StudentId, enrollment.ClassRoomId)">
+                            Drop
+                        </button>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<StudentView>? students;
+    private List<ClassroomView>? classrooms;
+    private List<EnrollmentView>? enrollments;
+
+    private string selectedStudentId = string.Empty;
+    private string selectedClassroomId = string.Empty;
+    private string selectedEnrollmentForDrop = string.Empty;
+
+    private string enrollmentMessage = string.Empty;
+    private bool enrollmentError;
+
+    private string dropMessage = string.Empty;
+    private bool dropError;
+
+    private string? lastSortableUniqueId;
+
+    public class StudentView
+    {
+        public Guid StudentId { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+        public int Grade { get; set; }
+    }
+
+    public class ClassroomView
+    {
+        public Guid ClassRoomId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public int MaxCapacity { get; set; }
+        public List<EnrolledStudentView> EnrolledStudents { get; set; } = new();
+    }
+
+    public class EnrolledStudentView
+    {
+        public Guid StudentId { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+    }
+
+    public class EnrollmentView
+    {
+        public Guid StudentId { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+        public int Grade { get; set; }
+        public Guid ClassRoomId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public DateTime EnrollmentDate { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData(string? waitForSortableUniqueId = null)
+    {
+        await Task.WhenAll(
+            LoadStudents(waitForSortableUniqueId), 
+            LoadClassrooms(waitForSortableUniqueId), 
+            LoadEnrollments(waitForSortableUniqueId));
+    }
+
+    private async Task LoadStudents(string? waitForSortableUniqueId = null)
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/students";
+            var response = await httpClient.GetFromJsonAsync<List<StudentState>>(requestUri);
+            if (response != null)
+            {
+                students = response.Select(s => new StudentView
+                {
+                    StudentId = s.StudentId,
+                    StudentName = s.Name,
+                    Grade = s.MaxClassCount // Using MaxClassCount as Grade for now
+                }).ToList();
+            }
+            else
+            {
+                students = new List<StudentView>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading students: {ex.Message}");
+            students = new List<StudentView>();
+        }
+    }
+
+    private async Task LoadClassrooms(string? waitForSortableUniqueId = null)
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/classrooms";
+            var response = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri);
+            if (response != null)
+            {
+                classrooms = response.Select(c => new ClassroomView
+                {
+                    ClassRoomId = c.ClassRoomId,
+                    ClassName = c.Name,
+                    MaxCapacity = c.MaxStudents,
+                    // The .Where in the razor uses EnrolledStudents.Count, so we need to populate dummy entries
+                    EnrolledStudents = Enumerable.Range(0, c.EnrolledCount).Select(_ => new EnrolledStudentView()).ToList()
+                }).ToList();
+            }
+            else
+            {
+                classrooms = new List<ClassroomView>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading classrooms: {ex.Message}");
+            classrooms = new List<ClassroomView>();
+        }
+    }
+
+    private async Task LoadEnrollments(string? waitForSortableUniqueId = null)
+    {
+        try
+        {
+            // Since there's no /api/enrollments endpoint, we need to build enrollment data
+            // from students and classrooms data that we already have
+            var httpClient = HttpClientFactory.CreateClient("ApiService");
+            
+            // Build query string with waitForSortableUniqueId if provided
+            var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/students";
+            var classroomsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
+                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : "api/classrooms";
+            
+            // Get all students with their enrolled classrooms, waiting for the sortableUniqueId if provided
+            var studentsResponse = await httpClient.GetFromJsonAsync<List<StudentState>>(studentsUri);
+            var classroomsResponse = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(classroomsUri);
+            
+            var enrollmentsList = new List<EnrollmentView>();
+            
+            if (studentsResponse != null && classroomsResponse != null)
+            {
+                foreach (var student in studentsResponse)
+                {
+                    foreach (var classroomId in student.EnrolledClassRoomIds)
+                    {
+                        var classroom = classroomsResponse.FirstOrDefault(c => c.ClassRoomId == classroomId);
+                        if (classroom != null)
+                        {
+                            enrollmentsList.Add(new EnrollmentView
+                            {
+                                StudentId = student.StudentId,
+                                StudentName = student.Name,
+                                Grade = student.MaxClassCount, // Using MaxClassCount as Grade
+                                ClassRoomId = classroom.ClassRoomId,
+                                ClassName = classroom.Name,
+                                EnrollmentDate = DateTime.Now // We don't have the actual enrollment date
+                            });
+                        }
+                    }
+                }
+            }
+            
+            enrollments = enrollmentsList;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading enrollments: {ex.Message}");
+            enrollments = new List<EnrollmentView>();
+        }
+    }
+
+    private async Task HandleEnrollStudent()
+    {
+        if (!Guid.TryParse(selectedStudentId, out var studentId) || !Guid.TryParse(selectedClassroomId, out var classroomId))
+        {
+            enrollmentMessage = "Invalid selection. Please select both a student and a classroom.";
+            enrollmentError = true;
+            return;
+        }
+
+        try
+        {
+            var command = new EnrollStudentInClassRoom(studentId, classroomId);
+            var response = await EnrollmentApiClient.EnrollStudentAsync(command);
+
+            if (response?.Success == true)
+            {
+                enrollmentMessage = "Student enrolled successfully!";
+                enrollmentError = false;
+                selectedStudentId = string.Empty;
+                selectedClassroomId = string.Empty;
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadData(lastSortableUniqueId);
+            }
+            else
+            {
+                enrollmentMessage = response?.Error ?? "Failed to enroll student. Please try again.";
+                enrollmentError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            enrollmentMessage = $"Error enrolling student: {ex.Message}";
+            enrollmentError = true;
+        }
+    }
+
+    private async Task HandleDropStudent()
+    {
+        if (string.IsNullOrEmpty(selectedEnrollmentForDrop))
+        {
+            dropMessage = "Please select an enrollment to drop.";
+            dropError = true;
+            return;
+        }
+
+        var parts = selectedEnrollmentForDrop.Split(':');
+        if (parts.Length != 2 || !Guid.TryParse(parts[0], out var studentId) || !Guid.TryParse(parts[1], out var classroomId))
+        {
+            dropMessage = "Invalid selection.";
+            dropError = true;
+            return;
+        }
+
+        await DropStudent(studentId, classroomId);
+    }
+
+    private async Task HandleQuickDrop(Guid studentId, Guid classroomId)
+    {
+        await DropStudent(studentId, classroomId);
+    }
+
+    private async Task DropStudent(Guid studentId, Guid classroomId)
+    {
+        try
+        {
+            var command = new DropStudentFromClassRoom(studentId, classroomId);
+            var response = await EnrollmentApiClient.DropStudentAsync(command);
+
+            if (response?.Success == true)
+            {
+                dropMessage = "Student dropped successfully!";
+                dropError = false;
+                enrollmentMessage = dropMessage;
+                enrollmentError = dropError;
+                selectedEnrollmentForDrop = string.Empty;
+                lastSortableUniqueId = response.SortableUniqueId;
+                await LoadData(lastSortableUniqueId);
+            }
+            else
+            {
+                dropMessage = response?.Error ?? "Failed to drop student. Please try again.";
+                dropError = true;
+                enrollmentMessage = dropMessage;
+                enrollmentError = dropError;
+            }
+        }
+        catch (Exception ex)
+        {
+            dropMessage = $"Error dropping student: {ex.Message}";
+            dropError = true;
+            enrollmentMessage = dropMessage;
+            enrollmentError = dropError;
+        }
+    }
+}

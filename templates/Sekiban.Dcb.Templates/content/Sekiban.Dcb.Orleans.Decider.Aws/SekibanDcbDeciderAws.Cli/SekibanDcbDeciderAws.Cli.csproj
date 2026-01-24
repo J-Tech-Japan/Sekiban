@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>SekibanDcbOrleans.Cli</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+        <PackageReference Include="System.CommandLine" Version="2.0.2" />
+        <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.3" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.0.3" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.0.3" />
+        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.0.3" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\SekibanDcbDeciderAws.Interactions\SekibanDcbDeciderAws.Interactions.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="output\" />
+    </ItemGroup>
+
+</Project>

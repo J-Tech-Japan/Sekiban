@@ -1,0 +1,25 @@
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+namespace Dcb.Domain.WithoutResult.ClassRoom;
+
+public class CreateClassRoomHandler : ICommandHandler<CreateClassRoom>
+{
+    public static async Task<EventOrNone> HandleAsync(
+        CreateClassRoom command,
+        ICommandContext context)
+    {
+        var tag = new ClassRoomTag(command.ClassRoomId);
+        var exists = await context.TagExistsAsync(tag);
+        if (exists)
+        {
+            throw new ApplicationException("ClassRoom Already Exists");
+        }
+
+        return EventOrNone.From(
+            new ClassRoomCreated(command.ClassRoomId, command.Name, command.MaxStudents),
+            tag);
+        // return new EventPayloadWithTags(
+        //     new ClassRoomCreated(command.ClassRoomId, command.Name, command.MaxStudents),
+        //     tag);
+    }
+}

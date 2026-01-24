@@ -1,0 +1,15 @@
+<Solution>
+  <Project Path="SekibanDcbDeciderAws.ApiService\SekibanDcbDeciderAws.ApiService.csproj" />
+  <Project Path="SekibanDcbDeciderAws.AppHost\SekibanDcbDeciderAws.AppHost.csproj" />
+  <Project Path="SekibanDcbDeciderAws.Cli\SekibanDcbDeciderAws.Cli.csproj" />
+  <Project Path="SekibanDcbDeciderAws.Interactions.Unit\SekibanDcbDeciderAws.Interactions.Unit.csproj" />
+  <Project Path="SekibanDcbDeciderAws.Interactions\SekibanDcbDeciderAws.Interactions.csproj" />
+  <Project Path="SekibanDcbDeciderAws.EventSource\SekibanDcbDeciderAws.EventSource.csproj" />
+  <Project Path="SekibanDcbDeciderAws.ImmutableModels.Unit\SekibanDcbDeciderAws.ImmutableModels.Unit.csproj" />
+  <Project Path="SekibanDcbDeciderAws.ImmutableModels\SekibanDcbDeciderAws.ImmutableModels.csproj" />
+  <Project Path="SekibanDcbDeciderAws.MeetingRoomModels.Unit\SekibanDcbDeciderAws.MeetingRoomModels.Unit.csproj" />
+  <Project Path="SekibanDcbDeciderAws.MeetingRoomModels\SekibanDcbDeciderAws.MeetingRoomModels.csproj" />
+  <Project Path="SekibanDcbDeciderAws.ServiceDefaults\SekibanDcbDeciderAws.ServiceDefaults.csproj" />
+  <Project Path="SekibanDcbDeciderAws.Unit\SekibanDcbDeciderAws.Unit.csproj" />
+  <Project Path="SekibanDcbDeciderAws.Web\SekibanDcbDeciderAws.Web.csproj" />
+</Solution>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <ItemGroup>
+        <ProjectReference Include="..\SekibanDcbOrleansAws.ServiceDefaults\SekibanDcbOrleansAws.ServiceDefaults.csproj"/>
+        <ProjectReference Include="..\SekibanDcbOrleansAws.Domain\SekibanDcbOrleansAws.Domain.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+</Project>

@@ -1,0 +1,62 @@
+{
+  "environment": "prod",
+  "region": "ap-northeast-1",
+
+  "vpc": {
+    "cidr": "10.1.0.0/16",
+    "maxAzs": 2
+  },
+
+  "alb": {
+    "certificateArn": "",
+    "domainName": ""
+  },
+
+  "rds": {
+    "instanceClass": "db.t4g.small",
+    "multiAz": true,
+    "allocatedStorage": 50,
+    "databaseName": "orleans"
+  },
+
+  "ecs": {
+    "cpu": 1024,
+    "memory": 2048,
+    "desiredCount": 3,
+    "minCount": 2,
+    "maxCount": 6
+  },
+
+  "web": {
+    "cpu": 512,
+    "memory": 1024,
+    "desiredCount": 2,
+    "minCount": 1,
+    "maxCount": 4,
+    "httpPort": 8081
+  },
+
+  "orleans": {
+    "clusterId": "sekibandcborleansaws-prod",
+    "serviceId": "sekiban-service",
+    "siloPort": 11111,
+    "gatewayPort": 30000,
+    "httpPort": 8080
+  },
+
+  "dynamodb": {
+    "eventsTableName": "sekibandcborleansaws-events-prod",
+    "billingMode": "PAY_PER_REQUEST"
+  },
+
+  "sqs": {
+    "queueNamePrefix": "sekibandcborleansaws-stream-prod",
+    "queueCount": 8,
+    "visibilityTimeoutSec": 60,
+    "messageRetentionDays": 4
+  },
+
+  "s3": {
+    "snapshotBucketName": "sekibandcborleansaws-snapshots-prod"
+  }
+}

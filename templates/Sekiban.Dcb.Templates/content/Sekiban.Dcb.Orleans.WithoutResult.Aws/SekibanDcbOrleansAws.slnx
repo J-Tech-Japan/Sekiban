@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="SekibanDcbOrleansAws.ApiService/SekibanDcbOrleansAws.ApiService.csproj" />
+  <Project Path="SekibanDcbOrleansAws.AppHost/SekibanDcbOrleansAws.AppHost.csproj" />
+  <Project Path="SekibanDcbOrleansAws.Cli/SekibanDcbOrleansAws.Cli.csproj" />
+  <Project Path="SekibanDcbOrleansAws.Domain/SekibanDcbOrleansAws.Domain.csproj" />
+  <Project Path="SekibanDcbOrleansAws.ServiceDefaults/SekibanDcbOrleansAws.ServiceDefaults.csproj" />
+  <Project Path="SekibanDcbOrleansAws.Unit/SekibanDcbOrleansAws.Unit.csproj" />
+  <Project Path="SekibanDcbOrleansAws.Web/SekibanDcbOrleansAws.Web.csproj" />
+</Solution>
