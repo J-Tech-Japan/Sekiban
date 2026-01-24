@@ -414,3 +414,4 @@ dev.log
 # SQLite database files
 events.db
 events.db-*
+dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure/config/dev2.json
