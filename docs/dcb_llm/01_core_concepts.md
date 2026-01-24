@@ -11,7 +11,7 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client UI (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md)
-> - [Storage Providers](11_dapr_setup.md)
+> - [Storage Providers](11_storage_providers.md)
 > - [Testing](12_unit_testing.md)
 > - [Common Issues and Solutions](13_common_issues.md)
 > - [ResultBox](14_result_box.md)
@@ -70,8 +70,8 @@ intermediate queues, and eventual reconciliation. DCB removes that friction:
 - **TagStateActor / TagConsistentActor**: Actor implementations maintain cached projections and reservation state
   (`src/Sekiban.Dcb/Actors/GeneralTagStateActor.cs`, `src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs`). Orleans
   grains wrap these actors for distributed execution (`src/Sekiban.Dcb.Orleans/Grains/TagStateGrain.cs`).
-- **Event Store**: Provides ordered persistence and tag lookup. Postgres (`src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`)
-  and Cosmos DB (`src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`) share the same contract.
+- **Event Store**: Provides ordered persistence and tag lookup. Postgres (`src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`),
+  Cosmos DB (`src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`), and DynamoDB (`src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`) share the same contract.
 
 ## Benefits
 

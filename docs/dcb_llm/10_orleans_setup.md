@@ -11,7 +11,7 @@
 > - [API Implementation](08_api_implementation.md)
 > - [Client UI (Blazor)](09_client_api_blazor.md)
 > - [Orleans Setup](10_orleans_setup.md) (You are here)
-> - [Storage Providers](11_dapr_setup.md)
+> - [Storage Providers](11_storage_providers.md)
 > - [Testing](12_unit_testing.md)
 > - [Common Issues and Solutions](13_common_issues.md)
 > - [ResultBox](14_result_box.md)
@@ -21,7 +21,17 @@
 DCB uses Orleans grains to implement TagConsistent actors, TagState caches, and MultiProjections. The sample AppHost
 configures everything via `.UseOrleans` (`internalUsages/DcbOrleans.ApiService/Program.cs`).
 
-## Cluster Configuration
+## Supported Environments
+
+| Environment | Clustering | Grain Storage | Streams |
+|-------------|------------|---------------|---------|
+| **Development (Aspire)** | Localhost | Memory | Memory |
+| **Azure** | Cosmos DB / Azure Table | Azure Blob | Azure Queue |
+| **AWS** | RDS PostgreSQL (ADO.NET) | Memory / Custom | Amazon SQS |
+
+---
+
+## Azure Cluster Configuration
 
 ```csharp
 builder.UseOrleans(config =>
@@ -30,7 +40,7 @@ builder.UseOrleans(config =>
     {
         config.UseLocalhostClustering();
     }
-    else if (useCosmosClustering)
+    else
     {
         config.UseCosmosClustering(options =>
         {
@@ -44,6 +54,63 @@ builder.UseOrleans(config =>
         options.ServiceId = "sekiban-dcb-service";
     });
 });
+```
+
+---
+
+## AWS Cluster Configuration
+
+AWS uses RDS PostgreSQL for Orleans clustering and SQS for streams.
+
+```csharp
+builder.UseOrleans(config =>
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        config.UseLocalhostClustering();
+        config.AddMemoryStreams("EventStreamProvider");
+    }
+    else
+    {
+        // RDS PostgreSQL clustering
+        var rdsConnectionString = BuildRdsConnectionString();
+        config.UseAdoNetClustering(options =>
+        {
+            options.Invariant = "Npgsql";
+            options.ConnectionString = rdsConnectionString;
+        });
+        config.UseAdoNetReminderService(options =>
+        {
+            options.Invariant = "Npgsql";
+            options.ConnectionString = rdsConnectionString;
+        });
+
+        // SQS streams
+        config.AddSqsStreams("EventStreamProvider", configurator =>
+        {
+            configurator.ConfigureSqs(options =>
+            {
+                options.Region = "ap-northeast-1";
+                options.QueuePrefix = "orleans-stream-prod";
+            });
+        });
+    }
+
+    config.Configure<ClusterOptions>(opt =>
+    {
+        opt.ClusterId = "sekiban-dcb";
+        opt.ServiceId = "sekiban-service";
+    });
+});
+```
+
+### Orleans Schema Initialization (AWS)
+
+RDS PostgreSQL requires Orleans schema tables. Use `OrleansSchemaInitializer` to create them at startup.
+
+```csharp
+var schemaInitializer = new OrleansSchemaInitializer(logger);
+await schemaInitializer.InitializeAsync(rdsConnectionString);
 ```
 
 ## Storage Providers
@@ -97,9 +164,17 @@ Dashboard. Add `app.MapHealthChecks("/health")` for readiness probes.
 
 ## Deployment Considerations
 
-- Set `ORLEANS_CLUSTERING_TYPE` to `azuretable`, `cosmos`, or leave empty for development.
-- Pre-create Azure Queues in production or enable `IsResourceCreationEnabled` during provisioning.
-- Scale out silos horizontally; Orleans handles tag grain placement automatically.
+### Azure
+- Set `ORLEANS_CLUSTERING_TYPE` to `azuretable` or `cosmos`
+- Pre-create Azure Queues or enable `IsResourceCreationEnabled` during provisioning
+
+### AWS
+- RDS PostgreSQL schema is auto-created by `OrleansSchemaInitializer`
+- SQS queues are provisioned via CDK
+- Set `Orleans__ClusterId` and `Orleans__ServiceId` via environment variables
+
+### Common
+- Scale out silos horizontally; Orleans handles tag grain placement automatically
 
 ## Testing Without Orleans
 

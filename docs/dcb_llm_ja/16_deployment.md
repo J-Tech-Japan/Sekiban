@@ -11,32 +11,45 @@
 > - [API実装](08_api_implementation.md)
 > - [クライアントUI (Blazor)](09_client_api_blazor.md)
 > - [Orleans構成](10_orleans_setup.md)
-> - [ストレージプロバイダー](11_dapr_setup.md)
+> - [ストレージプロバイダー](11_storage_providers.md)
 > - [テスト](12_unit_testing.md)
 > - [よくある問題と解決策](13_common_issues.md)
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md) (現在位置)
 
-DCB を本番運用する際のポイントをまとめます。
+DCB を本番運用する際のポイントをまとめます。DCB は Azure と AWS の両方のクラウドプラットフォームで運用できます。
+
+## プラットフォーム比較
+
+| コンポーネント | Azure | AWS |
+|--------------|-------|-----|
+| コンテナホスティング | App Service / AKS | ECS Fargate |
+| イベントストア | Postgres / Cosmos DB | DynamoDB |
+| Orleans クラスタリング | Azure Table / Cosmos DB | RDS PostgreSQL (ADO.NET) |
+| Orleans ストリーム | Azure Queue | Amazon SQS |
+| スナップショット | Azure Blob Storage | Amazon S3 |
+| CDN | Azure CDN | CloudFront |
 
 ## 事前チェックリスト
 
-- ✅ Postgres マイグレーションまたは Cosmos コンテナの準備
-- ✅ シークレット管理 (接続文字列、Azure 資格情報)
+- ✅ イベントストアの準備 (Postgres/Cosmos/DynamoDB)
+- ✅ シークレット管理 (接続文字列、資格情報)
 - ✅ すべてのサービスで同じ `DcbDomainTypes` を使用
 - ✅ ログ/メトリクス/トレーシング (Aspire + OTLP) の設定
 
-## インフラ構成
+---
 
-- **Orleans クラスタ**: 複数サイロをロードバランサ配下に配置 (App Service, AKS など)
+## Azure デプロイ
+
+### インフラ構成
+
+- **Orleans クラスタ**: 複数サイロをロードバランサ配下に配置 (App Service, AKS)
 - **イベントストア**: Azure Database for PostgreSQL / Cosmos DB
 - **Azure Storage**: Table (クラスタリング)、Queue (ストリーム)、Blob (Grain 状態 + スナップショット)
 - **Blazor/API**: Orleans クライアントとして独立デプロイし、個別にスケール
 
-## 設定管理
-
-環境変数や AppConfiguration を利用して設定します。
+### 設定管理
 
 ```json
 {
@@ -50,6 +63,52 @@ DCB を本番運用する際のポイントをまとめます。
   "ORLEANS_GRAIN_DEFAULT_TYPE": "blob"
 }
 ```
+
+---
+
+## AWS デプロイ
+
+### インフラ構成
+
+AWS では CDK を使用してインフラをプロビジョニングします。
+
+- **ECS Fargate**: API/Web コンテナをホスト
+- **CloudFront + ALB**: CDN とロードバランサ
+- **DynamoDB**: イベントストア (テーブル自動作成)
+- **RDS PostgreSQL**: Orleans クラスタリング
+- **Amazon SQS**: Orleans ストリーム
+- **Amazon S3**: マルチプロジェクションスナップショット
+
+### CDK によるデプロイ
+
+```bash
+cd dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure
+
+# 設定ファイルを作成
+cp lib/config/dev.sample.json lib/config/dev.json
+# dev.json を編集して AWS_ACCOUNT_ID と AWS_REGION を設定
+
+# デプロイ実行
+./deploy.sh dev
+```
+
+### 設定管理
+
+```json
+{
+  "Sekiban": {
+    "Database": "dynamodb"
+  },
+  "AWS_REGION": "us-west-1",
+  "DYNAMODB_TABLE_PREFIX": "myapp"
+}
+```
+
+### AWS 固有の注意点
+
+- DynamoDB テーブルはアプリ起動時に自動作成されます
+- RDS PostgreSQL の Orleans スキーマは `OrleansSchemaInitializer` が自動作成します
+- SQS キューは CDK でプロビジョニングされます
 
 ## 可観測性
 

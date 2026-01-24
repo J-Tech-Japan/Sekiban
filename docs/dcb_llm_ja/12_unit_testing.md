@@ -11,7 +11,7 @@
 > - [API実装](08_api_implementation.md)
 > - [クライアントUI (Blazor)](09_client_api_blazor.md)
 > - [Orleans構成](10_orleans_setup.md)
-> - [ストレージプロバイダー](11_dapr_setup.md)
+> - [ストレージプロバイダー](11_storage_providers.md)
 > - [テスト](12_unit_testing.md) (現在位置)
 > - [よくある問題と解決策](13_common_issues.md)
 > - [ResultBox](14_result_box.md)

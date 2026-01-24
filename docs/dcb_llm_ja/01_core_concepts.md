@@ -11,7 +11,7 @@
 > - [API実装](08_api_implementation.md)
 > - [クライアントUI (Blazor)](09_client_api_blazor.md)
 > - [Orleans構成](10_orleans_setup.md)
-> - [ストレージプロバイダー](11_dapr_setup.md)
+> - [ストレージプロバイダー](11_storage_providers.md)
 > - [テスト](12_unit_testing.md)
 > - [よくある問題と解決策](13_common_issues.md)
 > - [ResultBox](14_result_box.md)
@@ -61,9 +61,10 @@ Dynamic Consistency Boundary (DCB) は Sekiban が採用する次世代のイベ
   (`src/Sekiban.Dcb/Actors/GeneralSekibanExecutor.cs`)
 - **TagStateActor / TagConsistentActor**: タグ状態のキャッシュと予約管理を担当するアクター。
   (`src/Sekiban.Dcb/Actors/GeneralTagStateActor.cs`, `GeneralTagConsistentActor.cs`)
-- **イベントストア**: 順序保証とタグ検索を提供します。Postgres 実装は
-  `src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`、Cosmos 実装は
-  `src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`。
+- **イベントストア**: 順序保証とタグ検索を提供します。
+  - Postgres: `src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`
+  - Cosmos DB: `src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`
+  - DynamoDB: `src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`
 
 ## メリット
 
