@@ -10,3 +10,6 @@ dist/
 # Configuration (except samples)
 config/*.json
 !config/*.sample.json
+
+# CDK context (contains account-specific info)
+cdk.context.json
