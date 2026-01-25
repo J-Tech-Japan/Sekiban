@@ -27,6 +27,7 @@ using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using SekibanDcbOrleans.ApiService.Health;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsDevelopment())
@@ -37,6 +38,8 @@ if (builder.Environment.IsDevelopment())
 }
 
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 

@@ -26,6 +26,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using SekibanDcbOrleans.ApiService.Health;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress Azure Storage warnings in development
@@ -38,6 +40,8 @@ if (builder.Environment.IsDevelopment())
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
