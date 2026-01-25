@@ -30,10 +30,15 @@
         <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.Cosmos" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="10.0.0" />
+        <!-- Note: Aspire.Azure.Messaging.EventHubs is NOT used. Orleans handles EventHub directly -->
+        <!-- via Microsoft.Orleans.Streaming.EventHubs. The Aspire package adds health checks that -->
+        <!-- require extra configuration (EventHubName or EntityPath in ConnectionString). -->
         <PackageReference Include="Scalar.AspNetCore" Version="2.12.13" />
         <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.3" />
         <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.3" />

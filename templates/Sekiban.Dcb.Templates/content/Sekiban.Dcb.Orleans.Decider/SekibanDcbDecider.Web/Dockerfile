@@ -1,24 +1,24 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
 WORKDIR /src
 
-COPY ["SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj", "SekibanDcbOrleans.Web/"]
-COPY ["SekibanDcbOrleans.EventSource/SekibanDcbOrleans.EventSource.csproj", "SekibanDcbOrleans.EventSource/"]
-COPY ["SekibanDcbOrleans.Interactions/SekibanDcbOrleans.Interactions.csproj", "SekibanDcbOrleans.Interactions/"]
-COPY ["SekibanDcbOrleans.ImmutableModels/SekibanDcbOrleans.ImmutableModels.csproj", "SekibanDcbOrleans.ImmutableModels/"]
-COPY ["SekibanDcbOrleans.MeetingRoomModels/SekibanDcbOrleans.MeetingRoomModels.csproj", "SekibanDcbOrleans.MeetingRoomModels/"]
-COPY ["SekibanDcbOrleans.ServiceDefaults/SekibanDcbOrleans.ServiceDefaults.csproj", "SekibanDcbOrleans.ServiceDefaults/"]
+COPY ["SekibanDcbDecider.Web/SekibanDcbDecider.Web.csproj", "SekibanDcbDecider.Web/"]
+COPY ["SekibanDcbDecider.EventSource/SekibanDcbDecider.EventSource.csproj", "SekibanDcbDecider.EventSource/"]
+COPY ["SekibanDcbDecider.Interactions/SekibanDcbDecider.Interactions.csproj", "SekibanDcbDecider.Interactions/"]
+COPY ["SekibanDcbDecider.ImmutableModels/SekibanDcbDecider.ImmutableModels.csproj", "SekibanDcbDecider.ImmutableModels/"]
+COPY ["SekibanDcbDecider.MeetingRoomModels/SekibanDcbDecider.MeetingRoomModels.csproj", "SekibanDcbDecider.MeetingRoomModels/"]
+COPY ["SekibanDcbDecider.ServiceDefaults/SekibanDcbDecider.ServiceDefaults.csproj", "SekibanDcbDecider.ServiceDefaults/"]
 
-RUN dotnet restore "SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj"
+RUN dotnet restore "SekibanDcbDecider.Web/SekibanDcbDecider.Web.csproj"
 
 COPY . .
-WORKDIR /src/SekibanDcbOrleans.Web
+WORKDIR /src/SekibanDcbDecider.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS final
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 COPY --from=build /app/publish .
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "SekibanDcbOrleans.Web.dll"]
+ENTRYPOINT ["dotnet", "SekibanDcbDecider.Web.dll"]

@@ -1,5 +1,5 @@
 @description('The name of the existing storage account for Orleans')
-param storageAccountName string = 'storage${replace(resourceGroup().name, '-', '')}'
+param storageAccountName string = 'st${uniqueString(resourceGroup().id)}'
 
 @description('The name of the existing Key Vault to store secrets')
 param keyVaultName string = 'kv-${resourceGroup().name}'
