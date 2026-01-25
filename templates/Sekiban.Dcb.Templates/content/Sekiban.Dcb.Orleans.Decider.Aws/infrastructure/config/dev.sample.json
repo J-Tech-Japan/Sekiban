@@ -27,13 +27,13 @@
     "maxCount": 2
   },
 
-  "web": {
+  "webnext": {
     "cpu": 256,
     "memory": 512,
     "desiredCount": 1,
     "minCount": 1,
     "maxCount": 2,
-    "httpPort": 8081
+    "httpPort": 3000
   },
 
   "orleans": {

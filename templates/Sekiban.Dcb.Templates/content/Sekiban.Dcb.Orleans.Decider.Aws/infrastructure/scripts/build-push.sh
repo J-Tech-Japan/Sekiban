@@ -2,7 +2,7 @@
 # ============================================================================
 # Build and Push Container Images to ECR
 # ============================================================================
-# Usage: ./build-push.sh [dev|prod] [api|web|all] [tag]
+# Usage: ./build-push.sh [dev|prod] [api|webnext|all] [tag]
 # ============================================================================
 
 set -euo pipefail
@@ -57,10 +57,10 @@ if [ "$SERVICE" = "api" ] || [ "$SERVICE" = "all" ]; then
         "sekibandcbdecideraws-api-${ENV}"
 fi
 
-if [ "$SERVICE" = "web" ] || [ "$SERVICE" = "all" ]; then
-    build_and_push "Web" \
-        "$PROJECT_ROOT/SekibanDcbDeciderAws.Web/Dockerfile" \
-        "sekibandcbdecideraws-web-${ENV}"
+if [ "$SERVICE" = "webnext" ] || [ "$SERVICE" = "all" ]; then
+    build_and_push "WebNext" \
+        "$PROJECT_ROOT/SekibanDcbDeciderAws.WebNext/Dockerfile" \
+        "sekibandcbdecideraws-webnext-${ENV}"
 fi
 
 echo -e "${GREEN}Done!${NC}"

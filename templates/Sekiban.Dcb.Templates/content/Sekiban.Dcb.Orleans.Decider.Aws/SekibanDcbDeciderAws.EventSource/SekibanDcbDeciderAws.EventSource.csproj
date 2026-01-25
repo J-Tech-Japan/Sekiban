@@ -11,7 +11,7 @@
     <ProjectReference Include="..\SekibanDcbDeciderAws.MeetingRoomModels\SekibanDcbDeciderAws.MeetingRoomModels.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.3" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.5" />
     <PackageReference Include="ResultBoxes" Version="0.3.31" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="10.0.0" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />

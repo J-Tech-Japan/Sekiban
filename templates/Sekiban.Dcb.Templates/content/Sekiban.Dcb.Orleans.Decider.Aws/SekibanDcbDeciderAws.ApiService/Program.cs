@@ -40,7 +40,22 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Add Authentication & Identity
 // Get the PostgreSQL connection string from Aspire configuration (separate database for Identity)
+// First try Aspire configuration, then fall back to AWS environment variables
 var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres");
+if (string.IsNullOrEmpty(authConnectionString))
+{
+    // Build connection string from AWS environment variables (Identity RDS)
+    var identityHost = builder.Configuration["IDENTITY_RDS_HOST"];
+    var identityPort = builder.Configuration["IDENTITY_RDS_PORT"] ?? "5432";
+    var identityUsername = builder.Configuration["IDENTITY_RDS_USERNAME"];
+    var identityPassword = builder.Configuration["IDENTITY_RDS_PASSWORD"];
+    var identityDatabase = builder.Configuration["IDENTITY_RDS_DATABASE"];
+
+    if (!string.IsNullOrEmpty(identityHost) && !string.IsNullOrEmpty(identityUsername))
+    {
+        authConnectionString = $"Host={identityHost};Port={identityPort};Database={identityDatabase};Username={identityUsername};Password={identityPassword}";
+    }
+}
 if (!string.IsNullOrEmpty(authConnectionString))
 {
     builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
@@ -77,13 +92,40 @@ if (!isLocalDevelopment)
                               builder.Configuration.GetConnectionString("Orleans");
     }
 
-    // Initialize Orleans schema if RDS is configured
+    // Initialize Orleans schema if RDS is configured (with retries for RDS startup time)
     if (!string.IsNullOrEmpty(rdsConnectionString))
     {
         Console.WriteLine("Initializing Orleans PostgreSQL schema...");
         var schemaInitializer = new OrleansSchemaInitializer(
             LoggerFactory.Create(b => b.AddConsole()).CreateLogger<OrleansSchemaInitializer>());
-        schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+
+        // Retry schema initialization to handle RDS startup delays
+        var maxRetries = 12;
+        var retryDelay = TimeSpan.FromSeconds(10);
+        var schemaInitialized = false;
+        for (var retry = 0; retry < maxRetries; retry++)
+        {
+            try
+            {
+                schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+                Console.WriteLine("Orleans schema initialized successfully.");
+                schemaInitialized = true;
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Schema initialization attempt {retry + 1}/{maxRetries} failed: {ex.Message}");
+                if (retry < maxRetries - 1)
+                {
+                    Console.WriteLine($"Retrying in {retryDelay.TotalSeconds}s...");
+                    Thread.Sleep(retryDelay);
+                }
+            }
+        }
+        if (!schemaInitialized)
+        {
+            Console.WriteLine("WARNING: Orleans schema initialization failed after all retries. Proceeding anyway - schema may already exist.");
+        }
     }
 }
 
@@ -103,17 +145,22 @@ builder.UseOrleans(config =>
             options.Invariant = "Npgsql";
         });
 
-        config.AddAdoNetGrainStorage("OrleansStorage", options =>
+        // Only use AdoNet grain storage when NOT using in-memory streams
+        // to avoid conflicts with memory grain storage providers
+        if (!useInMemoryStreams)
         {
-            options.ConnectionString = rdsConnectionString;
-            options.Invariant = "Npgsql";
-        });
+            config.AddAdoNetGrainStorage("OrleansStorage", options =>
+            {
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
+            });
 
-        config.AddAdoNetGrainStorage("PubSubStore", options =>
-        {
-            options.ConnectionString = rdsConnectionString;
-            options.Invariant = "Npgsql";
-        });
+            config.AddAdoNetGrainStorage("PubSubStore", options =>
+            {
+                options.ConnectionString = rdsConnectionString;
+                options.Invariant = "Npgsql";
+            });
+        }
 
         config.UseAdoNetReminderService(options =>
         {
@@ -250,8 +297,11 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-// Use CORS middleware
-app.UseCors();
+// Use CORS middleware (only in Development where it's configured)
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors();
+}
 
 // Use authentication & authorization middleware (if configured)
 if (!string.IsNullOrEmpty(authConnectionString))

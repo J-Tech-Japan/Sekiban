@@ -73,7 +73,7 @@ echo ""
 echo -e "${YELLOW}[4/6] Creating ECR repositories...${NC}"
 ECR_URI="${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
 API_REPO="sekibandcbdecideraws-api-${ENV}"
-WEB_REPO="sekibandcbdecideraws-web-${ENV}"
+WEBNEXT_REPO="sekibandcbdecideraws-webnext-${ENV}"
 
 create_ecr_repo() {
     local repo_name=$1
@@ -86,7 +86,7 @@ create_ecr_repo() {
 }
 
 create_ecr_repo "$API_REPO"
-create_ecr_repo "$WEB_REPO"
+create_ecr_repo "$WEBNEXT_REPO"
 echo ""
 
 # Build and push container images
@@ -97,7 +97,7 @@ aws ecr get-login-password --region "$REGION" | docker login --username AWS --pa
 TAG="latest"
 GIT_TAG=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-build_and_push() {
+build_and_push_dotnet() {
     local service_name=$1
     local dockerfile=$2
     local repo_name=$3
@@ -113,14 +113,32 @@ build_and_push() {
     echo -e "${GREEN}  Pushed: ${ECR_URI}/${repo_name}:${TAG}${NC}"
 }
 
-# Note: You need to create Dockerfiles for your API and Web projects
-build_and_push "API" \
+build_and_push_node() {
+    local service_name=$1
+    local dockerfile=$2
+    local repo_name=$3
+
+    echo "Building ${service_name}..."
+    docker buildx build \
+        --platform linux/arm64 \
+        --tag "${ECR_URI}/${repo_name}:${TAG}" \
+        --tag "${ECR_URI}/${repo_name}:${GIT_TAG}" \
+        --push \
+        -f "$dockerfile" \
+        "$PROJECT_ROOT"
+    echo -e "${GREEN}  Pushed: ${ECR_URI}/${repo_name}:${TAG}${NC}"
+}
+
+# Build API (ASP.NET Core)
+build_and_push_dotnet "API" \
     "$PROJECT_ROOT/SekibanDcbDeciderAws.ApiService/Dockerfile" \
     "$API_REPO"
 
-build_and_push "Web" \
-    "$PROJECT_ROOT/SekibanDcbDeciderAws.Web/Dockerfile" \
-    "$WEB_REPO"
+# Build WebNext (Next.js)
+build_and_push_node "WebNext" \
+    "$PROJECT_ROOT/SekibanDcbDeciderAws.WebNext/Dockerfile" \
+    "$WEBNEXT_REPO"
+
 echo ""
 
 # Deploy CDK stack

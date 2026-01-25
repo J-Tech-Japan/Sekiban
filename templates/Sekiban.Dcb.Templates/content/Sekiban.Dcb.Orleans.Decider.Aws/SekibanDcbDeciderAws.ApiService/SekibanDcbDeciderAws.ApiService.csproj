@@ -29,13 +29,13 @@
         <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Npgsql" Version="10.0.0" />
+        <PackageReference Include="Npgsql" Version="10.0.1" />
 
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.13" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.3" />
-        <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="10.0.3" />
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="10.0.3" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.17" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.5" />
+        <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="10.0.5" />
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="10.0.5" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
     </ItemGroup>
 

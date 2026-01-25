@@ -65,10 +65,10 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       description: 'ECS Task Security Group',
       allowAllOutbound: true,
     });
-    // External ALB -> ECS HTTP (Web only - API is internal only)
-    ecsSg.addIngressRule(albSg, ec2.Port.tcp(config.web.httpPort), 'Allow ALB to Web HTTP');
-    // ECS (Web) -> ECS (API) via Cloud Map
-    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.httpPort), 'Allow Web to API HTTP');
+    // External ALB -> ECS HTTP (WebNext)
+    ecsSg.addIngressRule(albSg, ec2.Port.tcp(config.webnext.httpPort), 'Allow ALB to WebNext HTTP');
+    // ECS (WebNext) -> ECS (API) via Cloud Map
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.httpPort), 'Allow WebNext to API HTTP');
     // ECS <-> ECS Orleans Silo
     ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(config.orleans.siloPort), 'Allow Silo-to-Silo');
     // ECS <-> ECS Orleans Gateway
@@ -108,6 +108,37 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       databaseName: config.rds.databaseName,
       allocatedStorage: config.rds.allocatedStorage,
       multiAz: config.rds.multiAz,
+      deletionProtection: envName === 'prod',
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // ========================================
+    // RDS PostgreSQL (Identity/Auth - separate from Orleans)
+    // ========================================
+    const identityRdsSecret = new secretsmanager.Secret(this, 'IdentityRdsSecret', {
+      secretName: `sekibandcbdecideraws-${envName}-identity-rds`,
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ username: 'authuser' }),
+        generateStringKey: 'password',
+        excludePunctuation: true,
+      },
+    });
+
+    const identityRdsInstance = new rds.DatabaseInstance(this, 'IdentityRdsInstance', {
+      engine: rds.DatabaseInstanceEngine.postgres({
+        version: rds.PostgresEngineVersion.VER_16,
+      }),
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        ec2.InstanceSize.MICRO  // Smaller instance for Identity DB
+      ),
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [rdsSg],
+      credentials: rds.Credentials.fromSecret(identityRdsSecret),
+      databaseName: 'authdb',
+      allocatedStorage: 20,
+      multiAz: false,
       deletionProtection: envName === 'prod',
       removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
@@ -158,12 +189,12 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     // ECR Repositories (use existing or create new)
     // ========================================
     const apiEcrRepoName = `sekibandcbdecideraws-api-${envName}`;
-    const webEcrRepoName = `sekibandcbdecideraws-web-${envName}`;
+    const webnextEcrRepoName = `sekibandcbdecideraws-webnext-${envName}`;
 
     // Try to use existing repositories first (for cases where images are pre-pushed)
     // If not found, CDK will create new ones
     const apiEcrRepo = ecr.Repository.fromRepositoryName(this, 'ApiEcrRepo', apiEcrRepoName);
-    const webEcrRepo = ecr.Repository.fromRepositoryName(this, 'WebEcrRepo', webEcrRepoName);
+    const webnextEcrRepo = ecr.Repository.fromRepositoryName(this, 'WebNextEcrRepo', webnextEcrRepoName);
 
     // ========================================
     // ECS Cluster
@@ -189,8 +220,8 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const webLogGroup = new logs.LogGroup(this, 'WebLogGroup', {
-      logGroupName: `/ecs/sekibandcbdecideraws-web-${envName}`,
+    const webnextLogGroup = new logs.LogGroup(this, 'WebNextLogGroup', {
+      logGroupName: `/ecs/sekibandcbdecideraws-webnext-${envName}`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -235,6 +266,7 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     }));
     snapshotBucket.grantReadWrite(apiTaskDefinition.taskRole);
     rdsSecret.grantRead(apiTaskDefinition.taskRole);
+    identityRdsSecret.grantRead(apiTaskDefinition.taskRole);
     sqsQueues.forEach(q => {
       q.grantSendMessages(apiTaskDefinition.taskRole);
       q.grantConsumeMessages(apiTaskDefinition.taskRole);
@@ -246,6 +278,13 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         streamPrefix: 'api',
         logGroup: apiLogGroup,
       }),
+      healthCheck: {
+        command: ['CMD-SHELL', `curl -f http://localhost:${config.orleans.httpPort}/health || exit 1`],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(10),
+        retries: 10,
+        startPeriod: cdk.Duration.seconds(300), // Give Orleans + RDS connection time to start
+      },
       environment: {
         // Use 'Staging' for AWS dev environments to avoid loading appsettings.Development.json
         // which contains LocalStack-specific settings like DynamoDb:ServiceUrl
@@ -271,6 +310,12 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         'RDS_USERNAME': ecs.Secret.fromSecretsManager(rdsSecret, 'username'),
         'RDS_PASSWORD': ecs.Secret.fromSecretsManager(rdsSecret, 'password'),
         'RDS_DATABASE': ecs.Secret.fromSecretsManager(rdsSecret, 'dbname'),
+        // Identity RDS (separate database for authentication)
+        'IDENTITY_RDS_HOST': ecs.Secret.fromSecretsManager(identityRdsSecret, 'host'),
+        'IDENTITY_RDS_PORT': ecs.Secret.fromSecretsManager(identityRdsSecret, 'port'),
+        'IDENTITY_RDS_USERNAME': ecs.Secret.fromSecretsManager(identityRdsSecret, 'username'),
+        'IDENTITY_RDS_PASSWORD': ecs.Secret.fromSecretsManager(identityRdsSecret, 'password'),
+        'IDENTITY_RDS_DATABASE': ecs.Secret.fromSecretsManager(identityRdsSecret, 'dbname'),
       },
       portMappings: [
         { containerPort: config.orleans.httpPort, name: 'http' },
@@ -280,11 +325,11 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // Web Service Task Definition
+    // WebNext (Next.js) Service Task Definition
     // ========================================
-    const webTaskDefinition = new ecs.FargateTaskDefinition(this, 'WebTaskDef', {
-      cpu: config.web.cpu,
-      memoryLimitMiB: config.web.memory,
+    const webnextTaskDefinition = new ecs.FargateTaskDefinition(this, 'WebNextTaskDef', {
+      cpu: config.webnext.cpu,
+      memoryLimitMiB: config.webnext.memory,
       runtimePlatform: {
         cpuArchitecture: ecs.CpuArchitecture.ARM64,
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
@@ -294,26 +339,25 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     // API service URL via Cloud Map (internal HTTP communication)
     const apiServiceUrl = `http://apiservice.sekibandcbdecideraws-${envName}.internal:${config.orleans.httpPort}`;
 
-    webTaskDefinition.addContainer('WebService', {
-      image: ecs.ContainerImage.fromEcrRepository(webEcrRepo, 'latest'),
+    webnextTaskDefinition.addContainer('WebNextService', {
+      image: ecs.ContainerImage.fromEcrRepository(webnextEcrRepo, 'latest'),
       logging: ecs.LogDrivers.awsLogs({
-        streamPrefix: 'web',
-        logGroup: webLogGroup,
+        streamPrefix: 'webnext',
+        logGroup: webnextLogGroup,
       }),
       environment: {
-        // Use 'Staging' for AWS dev environments (matches API service setting)
-        'ASPNETCORE_ENVIRONMENT': envName === 'prod' ? 'Production' : 'Staging',
-        // Aspire Service Discovery configuration
-        // Use Cloud Map for Web -> API communication (HTTP)
-        'services__apiservice__http__0': apiServiceUrl,
+        'NODE_ENV': envName === 'prod' ? 'production' : 'production',
+        'PORT': config.webnext.httpPort.toString(),
+        // API endpoint for tRPC/BFF
+        'API_BASE_URL': apiServiceUrl,
       },
       portMappings: [
-        { containerPort: config.web.httpPort, name: 'http' },
+        { containerPort: config.webnext.httpPort, name: 'http' },
       ],
     });
 
     // ========================================
-    // External ALB (Web only - API is internal only)
+    // External ALB (WebNext only - API is internal only)
     // ========================================
     const alb = new elbv2.ApplicationLoadBalancer(this, 'Alb', {
       vpc,
@@ -321,14 +365,14 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       securityGroup: albSg,
     });
 
-    // Web Target Group
-    const webTargetGroup = new elbv2.ApplicationTargetGroup(this, 'WebTargetGroup', {
+    // WebNext Target Group
+    const webnextTargetGroup = new elbv2.ApplicationTargetGroup(this, 'WebNextTargetGroup', {
       vpc,
-      port: config.web.httpPort,
+      port: config.webnext.httpPort,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targetType: elbv2.TargetType.IP,
       healthCheck: {
-        path: '/health',
+        path: '/',
         interval: cdk.Duration.seconds(30),
         timeout: cdk.Duration.seconds(5),
         healthyThresholdCount: 2,
@@ -343,12 +387,12 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         this, 'Certificate', config.alb.certificateArn
       );
 
-      // HTTPS Listener - all traffic to Web
+      // HTTPS Listener - all traffic to WebNext
       alb.addListener('HttpsListener', {
         port: 443,
         protocol: elbv2.ApplicationProtocol.HTTPS,
         certificates: [certificate],
-        defaultAction: elbv2.ListenerAction.forward([webTargetGroup]),
+        defaultAction: elbv2.ListenerAction.forward([webnextTargetGroup]),
       });
 
       // HTTP to HTTPS redirect
@@ -361,10 +405,10 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         }),
       });
     } else {
-      // HTTP only (when no certificate configured) - all traffic to Web
+      // HTTP only (when no certificate configured) - all traffic to WebNext
       alb.addListener('HttpListener', {
         port: 80,
-        defaultAction: elbv2.ListenerAction.forward([webTargetGroup]),
+        defaultAction: elbv2.ListenerAction.forward([webnextTargetGroup]),
       });
     }
 
@@ -383,12 +427,13 @@ export class SekibanDynamoDbStack extends cdk.Stack {
         dnsRecordType: servicediscovery.DnsRecordType.A,
         dnsTtl: cdk.Duration.seconds(10),
       },
-      circuitBreaker: { rollback: true },
+      circuitBreaker: { rollback: false },  // Temporarily disabled for debugging
     });
 
-    // Ensure RDS is fully created before ECS service starts
+    // Ensure RDS instances are fully created before ECS service starts
     // This prevents tasks from failing due to missing RDS endpoint
     apiService.node.addDependency(rdsInstance);
+    apiService.node.addDependency(identityRdsInstance);
 
     // API service is internal only - no external ALB attachment
     // Access via Cloud Map: apiservice.sekibandcbdecideraws-{env}.internal
@@ -404,16 +449,16 @@ export class SekibanDynamoDbStack extends cdk.Stack {
     });
 
     // ========================================
-    // Web ECS Service
+    // WebNext ECS Service
     // ========================================
-    const webService = new ecs.FargateService(this, 'WebService', {
+    const webnextService = new ecs.FargateService(this, 'WebNextService', {
       cluster,
-      taskDefinition: webTaskDefinition,
-      desiredCount: config.web.desiredCount,
+      taskDefinition: webnextTaskDefinition,
+      desiredCount: config.webnext.desiredCount,
       securityGroups: [ecsSg],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       cloudMapOptions: {
-        name: 'webservice',
+        name: 'webnextservice',
         cloudMapNamespace: namespace,
         dnsRecordType: servicediscovery.DnsRecordType.A,
         dnsTtl: cdk.Duration.seconds(10),
@@ -421,15 +466,15 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       circuitBreaker: { rollback: true },
     });
 
-    webService.attachToApplicationTargetGroup(webTargetGroup);
+    webnextService.attachToApplicationTargetGroup(webnextTargetGroup);
 
-    // Web Auto Scaling
-    const webScaling = webService.autoScaleTaskCount({
-      minCapacity: config.web.minCount,
-      maxCapacity: config.web.maxCount,
+    // WebNext Auto Scaling
+    const webnextScaling = webnextService.autoScaleTaskCount({
+      minCapacity: config.webnext.minCount,
+      maxCapacity: config.webnext.maxCount,
     });
 
-    webScaling.scaleOnCpuUtilization('WebCpuScaling', {
+    webnextScaling.scaleOnCpuUtilization('WebNextCpuScaling', {
       targetUtilizationPercent: 70,
     });
 
@@ -483,14 +528,19 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       description: 'API ECR Repository URI',
     });
 
-    new cdk.CfnOutput(this, 'WebEcrRepositoryUri', {
-      value: webEcrRepo.repositoryUri,
-      description: 'Web ECR Repository URI',
+    new cdk.CfnOutput(this, 'WebNextEcrRepositoryUri', {
+      value: webnextEcrRepo.repositoryUri,
+      description: 'WebNext ECR Repository URI',
     });
 
     new cdk.CfnOutput(this, 'RdsEndpoint', {
       value: rdsInstance.instanceEndpoint.hostname,
-      description: 'RDS Endpoint',
+      description: 'RDS Endpoint (Orleans)',
+    });
+
+    new cdk.CfnOutput(this, 'IdentityRdsEndpoint', {
+      value: identityRdsInstance.instanceEndpoint.hostname,
+      description: 'RDS Endpoint (Identity)',
     });
 
     new cdk.CfnOutput(this, 'EventsTableName', {
@@ -513,9 +563,9 @@ export class SekibanDynamoDbStack extends cdk.Stack {
       description: 'API ECS Service Name',
     });
 
-    new cdk.CfnOutput(this, 'WebServiceName', {
-      value: webService.serviceName,
-      description: 'Web ECS Service Name',
+    new cdk.CfnOutput(this, 'WebNextServiceName', {
+      value: webnextService.serviceName,
+      description: 'WebNext ECS Service Name',
     });
   }
 }
