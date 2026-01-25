@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "J-Tech Japan",
+  "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing", "Decider", "AWS", "DynamoDB"],
+  "name": "Sekiban Dcb Decider AWS Template (DynamoDB)",
+  "description": "Sekiban DCB Decider template for AWS with DynamoDB, ECS, and CDK infrastructure",
+  "precedence": "0",
+  "identity": "Sekiban.Dcb.Orleans.Aspire.Decider.Aws",
+  "shortName": "sekiban-dcb-decider-aws",
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sourceName": "SekibanDcbDeciderAws",
+  "preferNameDirectory": true,
+  "symbols": {
+    "IncludeTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Include unit test project"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**/*",
+        ".idea",
+        "**/bin/**",
+        "**/obj/**",
+        "**/node_modules/**",
+        "**/cdk.out/**"
+      ],
+      "modifiers": [
+        {
+          "condition": "(!IncludeTests)",
+          "exclude": [
+            "SekibanDcbDeciderAws.Unit/**/*",
+            "SekibanDcbDeciderAws.ImmutableModels.Unit/**/*",
+            "SekibanDcbDeciderAws.Interactions.Unit/**/*",
+            "SekibanDcbDeciderAws.MeetingRoomModels.Unit/**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "SekibanDcbDeciderAws.slnx" }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "manualInstructions": [
+        { "text": "Run 'dotnet restore'" }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

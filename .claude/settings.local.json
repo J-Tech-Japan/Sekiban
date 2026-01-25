@@ -88,7 +88,21 @@
       "mcp__playwright__browser_navigate",
       "Bash(jq:*)",
       "Bash(dcb/check.sh)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "Bash(cd:*)",
+      "Bash(docker buildx build:*)",
+      "Bash(aws logs get-log-events:*)",
+      "Bash(aws secretsmanager get-secret-value:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(aws logs tail:*)",
+      "Bash(aws ecs describe-services:*)",
+      "Bash(aws logs describe-log-groups:*)",
+      "Bash(aws ecs:*)",
+      "Bash(aws cloudformation describe-stacks:*)",
+      "Bash(aws cloudformation list-stacks:*)",
+      "Bash(./scripts/build-push.sh:*)",
+      "Bash(aws dynamodb describe-table:*)",
+      "Bash(npx cdk deploy -c env=dev --require-approval never)"
     ],
     "deny": []
   },

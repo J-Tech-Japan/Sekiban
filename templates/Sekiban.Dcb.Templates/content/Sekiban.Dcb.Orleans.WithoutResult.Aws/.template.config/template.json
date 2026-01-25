@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "J-Tech Japan",
+  "classifications": ["Aspire", "Orleans", "Sekiban", "Dcb", "EventSourcing", "AWS", "DynamoDB"],
+  "name": "Sekiban Dcb Orleans AWS Template (DynamoDB)",
+  "description": "Sekiban DCB Orleans template for AWS with DynamoDB, ECS, and CDK infrastructure",
+  "precedence": "0",
+  "identity": "Sekiban.Dcb.Orleans.Aspire.WithoutResult.Aws",
+  "shortName": "sekiban-dcb-orleans-aws",
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sourceName": "SekibanDcbOrleansAws",
+  "preferNameDirectory": true,
+  "symbols": {
+    "IncludeTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Include unit test project"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**/*",
+        ".idea",
+        "**/bin/**",
+        "**/obj/**",
+        "**/node_modules/**",
+        "**/cdk.out/**"
+      ],
+      "modifiers": [
+        {
+          "condition": "(!IncludeTests)",
+          "exclude": [
+            "SekibanDcbOrleansAws.Unit/**/*"
+          ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "SekibanDcbOrleansAws.slnx" }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "manualInstructions": [
+        { "text": "Run 'dotnet restore'" }
+      ],
+      "continueOnError": true
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Dcb.Interactions</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbDeciderAws.EventSource\SekibanDcbDeciderAws.EventSource.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.5" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+  </ItemGroup>
+</Project>

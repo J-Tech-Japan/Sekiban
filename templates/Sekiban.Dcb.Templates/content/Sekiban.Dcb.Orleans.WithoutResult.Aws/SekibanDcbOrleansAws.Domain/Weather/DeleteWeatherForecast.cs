@@ -1,0 +1,31 @@
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+using System.ComponentModel.DataAnnotations;
+namespace Dcb.Domain.WithoutResult.Weather;
+
+public record DeleteWeatherForecast : ICommandWithHandler<DeleteWeatherForecast>
+{
+    [Required]
+    public Guid ForecastId { get; init; }
+
+    public static async Task<EventOrNone> HandleAsync(
+        DeleteWeatherForecast command,
+        ICommandContext context)
+    {
+        var tag = new WeatherForecastTag(command.ForecastId);
+        var exists = await context.TagExistsAsync(tag);
+        if (!exists)
+        {
+            throw new ApplicationException($"Weather forecast {command.ForecastId} does not exist");
+        }
+
+        var state = await context.GetStateAsync<WeatherForecastProjector>(tag);
+        if (state.Payload is WeatherForecastState payload && payload.IsDeleted)
+        {
+            throw new ApplicationException($"Weather forecast {command.ForecastId} has already been deleted");
+        }
+
+        return EventOrNone.From(new WeatherForecastDeleted(command.ForecastId), tag);
+    }
+
+}

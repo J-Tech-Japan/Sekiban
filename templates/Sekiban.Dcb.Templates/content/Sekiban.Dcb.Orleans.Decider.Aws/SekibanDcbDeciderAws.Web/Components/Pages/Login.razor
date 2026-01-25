@@ -1,0 +1,158 @@
+@page "/login"
+@inject AuthApiClient AuthClient
+@inject NavigationManager Navigation
+
+<PageTitle>Login</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Login</h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+
+                    @if (isAuthenticated)
+                    {
+                        <div class="alert alert-success" role="alert">
+                            <p>You are logged in as <strong>@currentUser?.DisplayName</strong></p>
+                            <p class="mb-0">Email: @currentUser?.Email</p>
+                        </div>
+                        <button class="btn btn-danger w-100" @onclick="HandleLogout" disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Logout
+                        </button>
+                    }
+                    else
+                    {
+                        <EditForm Model="loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <InputText id="email" class="form-control" @bind-Value="loginModel.Email" placeholder="Enter email" />
+                                <ValidationMessage For="@(() => loginModel.Email)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <InputText id="password" type="password" class="form-control" @bind-Value="loginModel.Password" placeholder="Enter password" />
+                                <ValidationMessage For="@(() => loginModel.Password)" />
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Login
+                            </button>
+                        </EditForm>
+                    }
+                </div>
+                <div class="card-footer bg-light">
+                    <h6 class="text-muted mb-2">Sample Accounts:</h6>
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            <tr><td>user1@example.com</td><td rowspan="4" class="text-muted">Sekiban1234%</td></tr>
+                            <tr><td>user2@example.com</td></tr>
+                            <tr><td>user3@example.com</td></tr>
+                            <tr><td><strong>admin@example.com</strong></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private bool isLoading = false;
+    private string? errorMessage;
+    private bool isAuthenticated = false;
+    private UserInfoResponse? currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthStatus();
+    }
+
+    private async Task CheckAuthStatus()
+    {
+        var status = await AuthClient.GetAuthStatusAsync();
+        if (status?.IsAuthenticated == true)
+        {
+            isAuthenticated = true;
+            currentUser = status;
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = await AuthClient.LoginAsync(loginModel.Email, loginModel.Password);
+
+            if (result.Success)
+            {
+                isAuthenticated = true;
+                currentUser = result.User;
+                // Optionally redirect to home page
+                // Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = result.ErrorMessage ?? "Login failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        isLoading = true;
+
+        try
+        {
+            await AuthClient.LogoutAsync();
+            isAuthenticated = false;
+            currentUser = null;
+            loginModel = new LoginModel();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class LoginModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = "";
+    }
+}

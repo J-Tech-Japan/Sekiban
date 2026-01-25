@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
+        <RootNamespace>SekibanDcbDeciderAws.ApiService</RootNamespace>
+        <NoWarn>$(NoWarn);CS0618;ASPDEPR002</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\SekibanDcbDeciderAws.Interactions\SekibanDcbDeciderAws.Interactions.csproj" />
+        <ProjectReference Include="..\SekibanDcbDeciderAws.ServiceDefaults\SekibanDcbDeciderAws.ServiceDefaults.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Authentication / Identity -->
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2" />
+
+        <!-- Orleans Core -->
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
+        <!-- AWS deployment packages (RDS/AdoNet for Orleans) -->
+        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.0" />
+        <PackageReference Include="Npgsql" Version="10.0.1" />
+
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.17" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.5" />
+        <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="10.0.5" />
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="10.0.5" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="SqlScripts\*.sql" />
+    </ItemGroup>
+
+</Project>

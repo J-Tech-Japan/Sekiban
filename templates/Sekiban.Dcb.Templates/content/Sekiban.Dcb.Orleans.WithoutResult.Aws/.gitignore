@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+**/bin/
+**/obj/
+.env
+secrets.json

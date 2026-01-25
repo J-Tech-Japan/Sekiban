@@ -1,0 +1,62 @@
+{
+  "environment": "dev",
+  "region": "ap-northeast-1",
+
+  "vpc": {
+    "cidr": "10.0.0.0/16",
+    "maxAzs": 2
+  },
+
+  "alb": {
+    "certificateArn": "",
+    "domainName": ""
+  },
+
+  "rds": {
+    "instanceClass": "db.t4g.micro",
+    "multiAz": false,
+    "allocatedStorage": 20,
+    "databaseName": "orleans"
+  },
+
+  "ecs": {
+    "cpu": 512,
+    "memory": 1024,
+    "desiredCount": 2,
+    "minCount": 1,
+    "maxCount": 2
+  },
+
+  "webnext": {
+    "cpu": 256,
+    "memory": 512,
+    "desiredCount": 1,
+    "minCount": 1,
+    "maxCount": 2,
+    "httpPort": 3000
+  },
+
+  "orleans": {
+    "clusterId": "sekibandcbdecideraws-dev",
+    "serviceId": "sekiban-service",
+    "siloPort": 11111,
+    "gatewayPort": 30000,
+    "httpPort": 8080
+  },
+
+  "dynamodb": {
+    "eventsTableName": "sekibandcbdecideraws-events-dev",
+    "billingMode": "PAY_PER_REQUEST"
+  },
+
+  "sqs": {
+    "queueNamePrefix": "sekibandcbdecideraws-stream-dev",
+    "queueCount": 4,
+    "visibilityTimeoutSec": 60,
+    "messageRetentionDays": 4
+  },
+
+  "s3": {
+    "snapshotBucketName": "sekibandcbdecideraws-snapshots-dev"
+  }
+}
