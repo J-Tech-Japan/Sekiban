@@ -14,6 +14,10 @@ param orleansQueueType string = 'eventhub' //'azurestorage'
 @secure()
 param logAnalyticsSharedKey string
 
+@secure()
+@description('PostgreSQL administrator password for Identity database')
+param postgresAdminPassword string = newGuid()
+
 // 1. Key Vault
 module keyVaultCreate '1.keyvault/create.bicep' = {
   name: 'keyVaultDeployment'
@@ -120,6 +124,25 @@ module eventHubSaveKeyVault '6.eventhub/2.save-keyvalult.bicep' = {
   ]
 }
 
+// 10. PostgreSQL Flexible Server (for Identity database)
+module postgresCreate '10.postgres/1.create.bicep' = {
+  name: 'postgresCreateDeployment'
+  params: {
+    administratorLoginPassword: postgresAdminPassword
+  }
+}
+
+module postgresSaveKeyVault '10.postgres/2.save-keyvault.bicep' = {
+  name: 'postgresSaveKeyVaultDeployment'
+  params: {
+    administratorLoginPassword: postgresAdminPassword
+  }
+  dependsOn: [
+    keyVaultCreate
+    postgresCreate
+  ]
+}
+
 // 7. Backend App Container
 module managedEnv '7.backend/1.managed-env.bicep' = {
   name: 'managedEnvDeployment'
@@ -145,6 +168,7 @@ module backendContainerApp '7.backend/2.container-app.bicep' = {
   dependsOn: [
     managedEnv
     cosmosSaveKeyVault
+    postgresSaveKeyVault
   ]
 }
 
@@ -180,6 +204,24 @@ module blazorDiagnosticSettings '8.blazor/2.diagnositic-settings.bicep' = {
   params: {}
   dependsOn: [
     blazorContainerApp
+  ]
+}
+
+// 9. WebNext (Next.js) App Container
+module webnextContainerApp '9.webnext/1.container-app.bicep' = {
+  name: 'webnextContainerAppDeployment'
+  params: {}
+  dependsOn: [
+    vnetCreate
+    backendContainerApp
+  ]
+}
+
+module webnextDiagnosticSettings '9.webnext/2.diagnostic-settings.bicep' = {
+  name: 'webnextDiagnosticSettingsDeployment'
+  params: {}
+  dependsOn: [
+    webnextContainerApp
   ]
 }
 

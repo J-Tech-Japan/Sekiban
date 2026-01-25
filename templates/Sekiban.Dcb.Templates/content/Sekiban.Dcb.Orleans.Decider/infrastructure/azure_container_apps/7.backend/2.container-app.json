@@ -1,0 +1,332 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "13536708257134080785"
+    }
+  },
+  "parameters": {
+    "managedEnvName": {
+      "type": "string",
+      "defaultValue": "[format('aca-{0}', resourceGroup().name)]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "defaultValue": "[format('backend-{0}', resourceGroup().name)]"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "orleansQueueType": {
+      "type": "string",
+      "defaultValue": "eventhub",
+      "metadata": {
+        "description": "The params provided by aca_main.bicep."
+      }
+    },
+    "orleansClusterType": {
+      "type": "string",
+      "defaultValue": "cosmos"
+    },
+    "orleansDefaultGrainType": {
+      "type": "string",
+      "defaultValue": "cosmos"
+    }
+  },
+  "variables": {
+    "acrName": "[replace(toLower(format('acr-{0}', resourceGroup().name)), '-', '')]",
+    "containerImage": "[format('{0}.azurecr.io/{1}:latest', variables('acrName'), parameters('containerAppName'))]",
+    "managedEnvId": "[resourceId('Microsoft.App/managedEnvironments', parameters('managedEnvName'))]"
+  },
+  "resources": {
+    "managedEnv": {
+      "existing": true,
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2023-05-01",
+      "name": "[parameters('managedEnvName')]"
+    },
+    "acr": {
+      "existing": true,
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-01-01-preview",
+      "name": "[variables('acrName')]"
+    },
+    "containerApp": {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('containerAppName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "environmentId": "[variables('managedEnvId')]",
+        "configuration": {
+          "secrets": "[reference('envModule').outputs.secretVars.value]",
+          "registries": [
+            {
+              "server": "[reference('acr').loginServer]",
+              "username": "[listCredentials('acr', '2023-01-01-preview').username]",
+              "passwordSecretRef": "acr-password"
+            }
+          ],
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false,
+            "traffic": [
+              {
+                "latestRevision": true,
+                "weight": 100
+              }
+            ],
+            "additionalPortMappings": [
+              {
+                "targetPort": 11111,
+                "external": false
+              },
+              {
+                "targetPort": 30000,
+                "external": false
+              }
+            ]
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "backend",
+              "image": "[variables('containerImage')]",
+              "env": "[reference('envModule').outputs.envVars.value]"
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 5,
+            "rules": [
+              {
+                "name": "http-scaling",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "50"
+                  }
+                }
+              },
+              {
+                "name": "cpu-scaler",
+                "custom": {
+                  "type": "cpu",
+                  "metadata": {
+                    "type": "Utilization",
+                    "value": "70"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "dependsOn": [
+        "acr",
+        "envModule"
+      ]
+    },
+    "envModule": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "envVarsModule",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "orleansQueueType": {
+            "value": "[parameters('orleansQueueType')]"
+          },
+          "orleansClusterType": {
+            "value": "[parameters('orleansClusterType')]"
+          },
+          "orleansDefaultGrainType": {
+            "value": "[parameters('orleansDefaultGrainType')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "5121049879382351709"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "defaultValue": "[format('kv-{0}', resourceGroup().name)]",
+              "metadata": {
+                "description": "The name of the Key Vault."
+              }
+            },
+            "databaseType": {
+              "type": "string",
+              "defaultValue": "cosmos",
+              "allowedValues": [
+                "cosmos",
+                "postgres"
+              ],
+              "metadata": {
+                "description": "Database type to use (cosmos or postgres)"
+              }
+            },
+            "orleansClusterType": {
+              "type": "string",
+              "defaultValue": "cosmos"
+            },
+            "orleansQueueType": {
+              "type": "string",
+              "defaultValue": "eventhub",
+              "metadata": {
+                "description": "Queue type for Orleans"
+              }
+            },
+            "orleansDefaultGrainType": {
+              "type": "string",
+              "defaultValue": "cosmos",
+              "allowedValues": [
+                "cosmos",
+                "postgres"
+              ],
+              "metadata": {
+                "description": "Database type to use (cosmos or postgres)"
+              }
+            },
+            "eventHubName": {
+              "type": "string",
+              "defaultValue": "[format('eventhub-{0}', resourceGroup().name)]",
+              "metadata": {
+                "description": "Event Hub instance name"
+              }
+            },
+            "aspNetCoreEnvironment": {
+              "type": "string",
+              "defaultValue": "Production"
+            },
+            "applicationInsightsName": {
+              "type": "string",
+              "defaultValue": "[format('ai-{0}', resourceGroup().name)]"
+            },
+            "orleansClusterId": {
+              "type": "string",
+              "defaultValue": "[format('orleans-cluster-{0}', uniqueString(format('{0}cluster', resourceGroup().name)))]"
+            },
+            "orleansClusteringProviderType": {
+              "type": "string",
+              "defaultValue": "AzureTableStorage"
+            },
+            "orleansClusteringServiceKey": {
+              "type": "string",
+              "defaultValue": "MyProjectClustering"
+            },
+            "orleansEnableDistributedTracing": {
+              "type": "bool",
+              "defaultValue": true
+            },
+            "orleansGatewayPort": {
+              "type": "int",
+              "defaultValue": 30000
+            },
+            "orleansSiloPort": {
+              "type": "int",
+              "defaultValue": 11111
+            },
+            "orleansGrainStorageDefaultProviderType": {
+              "type": "string",
+              "defaultValue": "AzureBlobStorage"
+            },
+            "orleansGrainStorageDefaultServiceKey": {
+              "type": "string",
+              "defaultValue": "MyProjectGrainState"
+            },
+            "orleansServiceId": {
+              "type": "string",
+              "defaultValue": "[format('orleans-service-{0}', uniqueString(format('{0}service', resourceGroup().name)))]"
+            },
+            "orleansStreamingMyProjectQueueProviderType": {
+              "type": "string",
+              "defaultValue": "AzureQueueStorage"
+            },
+            "orleansStreamingMyProjectQueueServiceKey": {
+              "type": "string",
+              "defaultValue": "MyProjectQueue"
+            }
+          },
+          "variables": {
+            "acrName": "[replace(toLower(format('acr-{0}', resourceGroup().name)), '-', '')]",
+            "databaseConnectionStringName": "[if(equals(parameters('databaseType'), 'postgres'), 'DcbPostgres', 'SekibanDcbCosmos')]",
+            "databaseConnectionStringSecretName": "[if(equals(parameters('databaseType'), 'postgres'), 'SekibanPostgresConnectionString', 'SekibanCosmosDbConnectionString')]",
+            "orleansClusteringConnectionStringName": "[if(equals(parameters('orleansClusterType'), 'cosmos'), 'OrleansCosmos', 'DcbOrleansClusteringTable')]",
+            "orleansClusteringConnectionStringSecretName": "[if(equals(parameters('orleansClusterType'), 'cosmos'), 'SekibanCosmosDbConnectionString', 'OrleansClusteringConnectionString')]",
+            "orleansGrainStateConnectionStringSecretName": "OrleansGrainStateConnectionString",
+            "orleansQueueConnectionStringSecretName": "[if(equals(parameters('orleansQueueType'), 'eventhub'), 'EventHubConnectionString', 'OrleansQueueConnectionString')]",
+            "orleansQueueConnectionStringName": "[if(equals(parameters('orleansQueueType'), 'eventhub'), 'OrleansEventHub', 'DcbOrleansQueue')]",
+            "myProjectTableEnvSecret": "[if(equals(parameters('orleansQueueType'), 'eventhub'), createArray(createObject('name', 'myproject-table-secret', 'keyVaultUrl', format('https://{0}{1}/secrets/OrleansClusteringConnectionString', parameters('keyVaultName'), environment().suffixes.keyvaultDns), 'identity', 'System')), createArray())]",
+            "myProjectTableEnv": "[if(equals(parameters('orleansQueueType'), 'eventhub'), createArray(createObject('name', 'MyProjectTable', 'secretRef', 'myproject-table-secret')), createArray())]",
+            "orleansClusterIdEnv": [
+              {
+                "name": "Orleans__ClusterId",
+                "value": "[parameters('orleansClusterId')]"
+              }
+            ],
+            "orleansClusterEnv": "[if(not(equals(parameters('orleansClusterType'), 'cosmos')), createArray(createObject('name', 'Orleans__Clustering__ProviderType', 'value', parameters('orleansClusteringProviderType')), createObject('name', 'Orleans__Clustering__ServiceKey', 'value', parameters('orleansClusteringServiceKey'))), createArray())]",
+            "orleansClusterTypeEnv": "[if(equals(parameters('orleansClusterType'), 'cosmos'), createArray(createObject('name', 'ORLEANS_CLUSTERING_TYPE', 'value', 'cosmos')), createArray())]",
+            "orleansGrainStorageDefaultEnv": "[if(not(equals(parameters('orleansDefaultGrainType'), 'cosmos')), createArray(createObject('name', 'Orleans__GrainStorage__Default__ProviderType', 'value', parameters('orleansGrainStorageDefaultProviderType')), createObject('name', 'Orleans__GrainStorage__Default__ServiceKey', 'value', parameters('orleansGrainStorageDefaultServiceKey'))), createArray())]",
+            "orleansDefaultGrainTypeEnv": "[if(equals(parameters('orleansDefaultGrainType'), 'cosmos'), createArray(createObject('name', 'ORLEANS_GRAIN_DEFAULT_TYPE', 'value', 'cosmos')), createArray())]",
+            "orleansStreamingMyProjectQueueEnv": "[if(not(equals(parameters('orleansQueueType'), 'eventhub')), createArray(createObject('name', 'Orleans__Streaming__MyProjectQueue__ProviderType', 'value', parameters('orleansStreamingMyProjectQueueProviderType')), createObject('name', 'Orleans__Streaming__MyProjectQueue__ServiceKey', 'value', parameters('orleansStreamingMyProjectQueueServiceKey'))), createArray())]",
+            "orleansQueueEnv": "[if(equals(parameters('orleansQueueType'), 'eventhub'), createArray(createObject('name', 'ORLEANS_QUEUE_TYPE', 'value', 'eventhub'), createObject('name', 'ORLEANS_QUEUE_EVENTHUB_NAME', 'value', parameters('eventHubName'))), createArray())]"
+          },
+          "resources": [],
+          "outputs": {
+            "secretVars": {
+              "type": "array",
+              "value": "[concat(createArray(createObject('name', 'acr-password', 'value', listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), '2023-01-01-preview').passwords[0].value), createObject('name', 'database-connection-string-name', 'keyVaultUrl', format('https://{0}{1}/secrets/{2}', parameters('keyVaultName'), environment().suffixes.keyvaultDns, variables('databaseConnectionStringSecretName')), 'identity', 'System'), createObject('name', 'identity-postgres-connection-string', 'keyVaultUrl', format('https://{0}{1}/secrets/IdentityPostgresConnectionString', parameters('keyVaultName'), environment().suffixes.keyvaultDns), 'identity', 'System'), createObject('name', 'orleans-clustering-connection-string-name', 'keyVaultUrl', format('https://{0}{1}/secrets/{2}', parameters('keyVaultName'), environment().suffixes.keyvaultDns, variables('orleansClusteringConnectionStringSecretName')), 'identity', 'System'), createObject('name', 'table-connection-string-name', 'keyVaultUrl', format('https://{0}{1}/secrets/OrleansClusteringConnectionString', parameters('keyVaultName'), environment().suffixes.keyvaultDns), 'identity', 'System'), createObject('name', 'myproject-grain-state-secret', 'keyVaultUrl', format('https://{0}{1}/secrets/{2}', parameters('keyVaultName'), environment().suffixes.keyvaultDns, variables('orleansGrainStateConnectionStringSecretName')), 'identity', 'System'), createObject('name', 'orleans-queue-connection-string-name', 'keyVaultUrl', format('https://{0}{1}/secrets/{2}', parameters('keyVaultName'), environment().suffixes.keyvaultDns, variables('orleansQueueConnectionStringSecretName')), 'identity', 'System')), variables('myProjectTableEnvSecret'))]"
+            },
+            "envVars": {
+              "type": "array",
+              "value": "[concat(createArray(createObject('name', format('ConnectionStrings__{0}', variables('databaseConnectionStringName')), 'secretRef', 'database-connection-string-name'), createObject('name', 'ConnectionStrings__IdentityPostgres', 'secretRef', 'identity-postgres-connection-string'), createObject('name', format('ConnectionStrings__{0}', variables('orleansClusteringConnectionStringName')), 'secretRef', 'orleans-clustering-connection-string-name'), createObject('name', 'ConnectionStrings__DcbOrleansGrainTable', 'secretRef', 'table-connection-string-name'), createObject('name', 'ConnectionStrings__DcbOrleansGrainState', 'secretRef', 'myproject-grain-state-secret'), createObject('name', 'ConnectionStrings__MultiProjectionOffload', 'secretRef', 'myproject-grain-state-secret'), createObject('name', format('ConnectionStrings__{0}', variables('orleansQueueConnectionStringName')), 'secretRef', 'orleans-queue-connection-string-name'), createObject('name', 'ConnectionStrings__DcbOrleansQueue', 'secretRef', 'table-connection-string-name'), createObject('name', 'ASPNETCORE_ENVIRONMENT', 'value', parameters('aspNetCoreEnvironment')), createObject('name', 'APPINSIGHTS_INSTRUMENTATIONKEY', 'value', reference(resourceId('Microsoft.Insights/components', parameters('applicationInsightsName')), '2020-02-02').InstrumentationKey), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', parameters('applicationInsightsName')), '2020-02-02').ConnectionString), createObject('name', 'ApplicationInsightsAgent_EXTENSION_VERSION', 'value', '~3'), createObject('name', 'Sekiban__Database', 'value', parameters('databaseType')), createObject('name', 'Orleans__EnableDistributedTracing', 'value', string(parameters('orleansEnableDistributedTracing'))), createObject('name', 'Orleans__Endpoints__GatewayPort', 'value', string(parameters('orleansGatewayPort'))), createObject('name', 'Orleans__Endpoints__SiloPort', 'value', string(parameters('orleansSiloPort'))), createObject('name', 'Orleans__ServiceId', 'value', parameters('orleansServiceId'))), variables('myProjectTableEnv'), variables('orleansClusterIdEnv'), variables('orleansClusterEnv'), variables('orleansClusterTypeEnv'), variables('orleansGrainStorageDefaultEnv'), variables('orleansDefaultGrainTypeEnv'), variables('orleansStreamingMyProjectQueueEnv'), variables('orleansQueueEnv'))]"
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "name": {
+      "type": "string",
+      "value": "[parameters('containerAppName')]"
+    },
+    "url": {
+      "type": "string",
+      "value": "[format('https://{0}', reference('containerApp').configuration.ingress.fqdn)]"
+    },
+    "containerAppResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.App/containerApps', parameters('containerAppName'))]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference('containerApp', '2024-03-01', 'full').identity.principalId]"
+    },
+    "tenantId": {
+      "type": "string",
+      "value": "[subscription().tenantId]"
+    }
+  }
+}

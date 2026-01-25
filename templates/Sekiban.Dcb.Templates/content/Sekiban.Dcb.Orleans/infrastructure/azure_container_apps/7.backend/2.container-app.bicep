@@ -31,8 +31,9 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existin
   name: acrName
 }
 
-// Create the basic Conrainer App
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
+// Create the basic Container App
+// Note: API version 2024-03-01 or later required for additionalPortMappings
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
   identity: {
@@ -60,6 +61,17 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             weight: 100
           }
         ]
+        // Additional TCP ports for Orleans silo-to-silo communication
+        additionalPortMappings: [
+          {
+            targetPort: 11111  // Orleans Silo Port
+            external: false    // Internal only within Container Apps environment
+          }
+          {
+            targetPort: 30000  // Orleans Gateway Port
+            external: false    // Internal only within Container Apps environment
+          }
+        ]
       }
     }
     template: {
@@ -68,11 +80,53 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           name: 'backend'
           image: containerImage
           env: envModule.outputs.envVars
-          // Default value: 0.5/1Gi
-          // resources: {
-          //   cpu: 1
-          //   memory: '2Gi'
-          // }
+          // Orleans resources - adjust based on workload
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          probes: [
+            // Startup probe: Wait for Orleans silo and ASP.NET Core to fully start
+            // Readiness/Liveness probes won't run until this succeeds
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              failureThreshold: 30 // Allow up to 305 seconds (~5 minutes) for startup
+              timeoutSeconds: 5
+            }
+            // Readiness probe: Check if ready to accept traffic
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 0 // Start immediately after Startup succeeds
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+            }
+            // Liveness probe: Check if application is still responsive
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/alive'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 0 // Start immediately after Startup succeeds
+              periodSeconds: 30
+              timeoutSeconds: 5
+              failureThreshold: 3
+            }
+          ]
         }
       ]
       scale: {

@@ -81,11 +81,15 @@ var myProjectTableEnv = orleansQueueType == 'eventhub'? [
   }
 ] : []
 
-var orleansClusterEnv = orleansClusterType != 'cosmos'? [
+// Orleans ClusterId is needed for ALL clustering types
+var orleansClusterIdEnv = [
   {
     name: 'Orleans__ClusterId'
     value: orleansClusterId
   }
+]
+
+var orleansClusterEnv = orleansClusterType != 'cosmos'? [
   {
     name: 'Orleans__Clustering__ProviderType'
     value: orleansClusteringProviderType
@@ -94,7 +98,7 @@ var orleansClusterEnv = orleansClusterType != 'cosmos'? [
     name: 'Orleans__Clustering__ServiceKey'
     value: orleansClusteringServiceKey
   }
-] : [] 
+] : []
 
 var orleansClusterTypeEnv = orleansClusterType == 'cosmos'? [
   {
@@ -155,6 +159,11 @@ var secretVars = concat([
     identity: 'System'
   }
   {
+    name: 'identity-postgres-connection-string'
+    keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/IdentityPostgresConnectionString'
+    identity: 'System'
+  }
+  {
     name: 'orleans-clustering-connection-string-name'
     keyVaultUrl: 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/${orleansClusteringConnectionStringSecretName}'
     identity: 'System'
@@ -187,6 +196,10 @@ var envVars = concat([
     secretRef: 'database-connection-string-name'
   }
   {
+    name: 'ConnectionStrings__IdentityPostgres'
+    secretRef: 'identity-postgres-connection-string'
+  }
+  {
     name: 'ConnectionStrings__${orleansClusteringConnectionStringName}'
     secretRef: 'orleans-clustering-connection-string-name'
   }
@@ -205,6 +218,10 @@ var envVars = concat([
   {
     name: 'ConnectionStrings__${orleansQueueConnectionStringName}'
     secretRef: 'orleans-queue-connection-string-name'
+  }
+  {
+    name: 'ConnectionStrings__DcbOrleansQueue'
+    secretRef: 'table-connection-string-name'
   }
   {
     name: 'ASPNETCORE_ENVIRONMENT'
@@ -243,8 +260,9 @@ var envVars = concat([
     name: 'Orleans__ServiceId'
     value: orleansServiceId
   }
-  ], 
+  ],
   myProjectTableEnv,
+  orleansClusterIdEnv,
   orleansClusterEnv,
   orleansClusterTypeEnv,
   orleansGrainStorageDefaultEnv,

@@ -2,7 +2,7 @@ param containerAppNameBackend string = 'backend-${resourceGroup().name}'
 param aspNetCoreEnvironment string = 'Production'
 param applicationInsightsName string = 'ai-${resourceGroup().name}'
 
-resource containerAppBackend 'Microsoft.App/containerApps@2022-03-01' existing = {
+resource containerAppBackend 'Microsoft.App/containerApps@2023-05-01' existing = {
   name: containerAppNameBackend
 }
 

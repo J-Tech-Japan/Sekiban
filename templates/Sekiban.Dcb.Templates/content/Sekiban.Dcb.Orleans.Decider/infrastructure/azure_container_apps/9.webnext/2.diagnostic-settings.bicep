@@ -1,4 +1,4 @@
-param containerAppName string = 'backend-${resourceGroup().name}'
+param containerAppName string = 'webnext-${resourceGroup().name}'
 param logAnalyticsWorkspaceName string = 'law-${resourceGroup().name}'
 
 var logAnalyticsWorkspaceId = resourceId('Microsoft.OperationalInsights/workspaces', logAnalyticsWorkspaceName)

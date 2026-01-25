@@ -2,7 +2,7 @@
 param location string = resourceGroup().location
 
 @description('The name of the storage account for Orleans')
-param storageAccountName string = 'storage${replace(resourceGroup().name, '-', '')}'
+param storageAccountName string = 'st${uniqueString(resourceGroup().id)}'
 
 @description('The name of the table used for Orleans clustering')
 param clusteringTableName string = 'myprojectclustering'

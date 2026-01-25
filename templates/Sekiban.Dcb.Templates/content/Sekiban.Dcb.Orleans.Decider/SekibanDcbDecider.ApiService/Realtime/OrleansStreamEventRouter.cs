@@ -45,6 +45,34 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Wait for Orleans silo to fully start and join the cluster
+        // This is necessary because the silo needs time to register with the membership table
+        const int maxRetries = 30;
+        const int delayMs = 2000;
+
+        for (int retry = 0; retry < maxRetries; retry++)
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+
+            try
+            {
+                await Task.Delay(delayMs, cancellationToken);
+                // Try to resolve stream to verify Orleans is ready
+                var testDescriptor = _subscriptionResolver.Resolve("ReservationProjector") as OrleansSekibanStream;
+                if (testDescriptor != null)
+                {
+                    var testProvider = _clusterClient.GetStreamProvider(testDescriptor.ProviderName);
+                    // If we can get the stream provider, Orleans is likely ready
+                    break;
+                }
+            }
+            catch (Exception ex) when (retry < maxRetries - 1)
+            {
+                _logger.LogWarning("Waiting for Orleans to be ready (attempt {Attempt}/{Max}): {Message}",
+                    retry + 1, maxRetries, ex.Message);
+            }
+        }
+
         try
         {
             var streamDescriptor = _subscriptionResolver.Resolve("ReservationProjector") as OrleansSekibanStream;
