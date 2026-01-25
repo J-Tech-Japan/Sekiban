@@ -60,17 +60,24 @@ if ((builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() != "co
     builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
 
 builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 
-// Ensure Orleans fallbacks (GetRequiredKeyedService) can resolve clients even if options aren't set
-builder.Services.AddKeyedSingleton<QueueServiceClient>(
-    "DcbOrleansQueue",
-    (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
-// Some Orleans Azure Queue configurations use the provider name as the DI key.
-// Register an alias for the EventStreamProvider as well, resolving via the same connection.
-builder.Services.AddKeyedSingleton<QueueServiceClient>(
-    "EventStreamProvider",
-    (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
+// Queue client only when using Azure Storage queues (not EventHub)
+if (cfgQueueType != "eventhub")
+{
+    builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
+
+    // Ensure Orleans fallbacks (GetRequiredKeyedService) can resolve clients even if options aren't set
+    builder.Services.AddKeyedSingleton<QueueServiceClient>(
+        "DcbOrleansQueue",
+        (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
+    // Some Orleans Azure Queue configurations use the provider name as the DI key.
+    // Register an alias for the EventStreamProvider as well, resolving via the same connection.
+    builder.Services.AddKeyedSingleton<QueueServiceClient>(
+        "EventStreamProvider",
+        (sp, _) => sp.GetRequiredService<IAzureClientFactory<QueueServiceClient>>().CreateClient("DcbOrleansQueue"));
+}
+// Note: Orleans handles EventHub connection directly via AddEventHubStreams
+// No need to register Aspire EventHub clients (they add health checks that require extra config)
 builder.Services.AddKeyedSingleton<BlobServiceClient>(
     "DcbOrleansGrainState",
     (sp, _) => sp.GetRequiredService<IAzureClientFactory<BlobServiceClient>>().CreateClient("DcbOrleansGrainState"));
