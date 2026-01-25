@@ -86,13 +86,40 @@ if (!isLocalDevelopment)
                               builder.Configuration.GetConnectionString("Orleans");
     }
 
-    // Initialize Orleans schema if RDS is configured
+    // Initialize Orleans schema if RDS is configured (with retries for RDS startup time)
     if (!string.IsNullOrEmpty(rdsConnectionString))
     {
         Console.WriteLine("Initializing Orleans PostgreSQL schema...");
         var schemaInitializer = new OrleansSchemaInitializer(
             LoggerFactory.Create(b => b.AddConsole()).CreateLogger<OrleansSchemaInitializer>());
-        schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+
+        // Retry schema initialization to handle RDS startup delays
+        var maxRetries = 12;
+        var retryDelay = TimeSpan.FromSeconds(10);
+        var schemaInitialized = false;
+        for (var retry = 0; retry < maxRetries; retry++)
+        {
+            try
+            {
+                schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
+                Console.WriteLine("Orleans schema initialized successfully.");
+                schemaInitialized = true;
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Schema initialization attempt {retry + 1}/{maxRetries} failed: {ex.Message}");
+                if (retry < maxRetries - 1)
+                {
+                    Console.WriteLine($"Retrying in {retryDelay.TotalSeconds}s...");
+                    Thread.Sleep(retryDelay);
+                }
+            }
+        }
+        if (!schemaInitialized)
+        {
+            Console.WriteLine("WARNING: Orleans schema initialization failed after all retries. Proceeding anyway - schema may already exist.");
+        }
     }
 }
 
@@ -107,13 +134,16 @@ builder.UseOrleans(config =>
     else
     {
         // AWS deployment: use AdoNet clustering with RDS PostgreSQL
+        config.UseAdoNetClustering(options =>
         {
-            config.UseAdoNetClustering(options =>
-            {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
-            });
+            options.ConnectionString = rdsConnectionString;
+            options.Invariant = "Npgsql";
+        });
 
+        // Only use AdoNet grain storage when NOT using in-memory streams
+        // to avoid conflicts with memory grain storage providers
+        if (!useInMemoryStreams)
+        {
             config.AddAdoNetGrainStorage("OrleansStorage", options =>
             {
                 options.ConnectionString = rdsConnectionString;
@@ -125,13 +155,13 @@ builder.UseOrleans(config =>
                 options.ConnectionString = rdsConnectionString;
                 options.Invariant = "Npgsql";
             });
-
-            config.UseAdoNetReminderService(options =>
-            {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
-            });
         }
+
+        config.UseAdoNetReminderService(options =>
+        {
+            options.ConnectionString = rdsConnectionString;
+            options.Invariant = "Npgsql";
+        });
 
         // Configure Orleans endpoint for ECS
         var siloPort = builder.Configuration.GetValue<int>("Orleans:SiloPort", 11111);

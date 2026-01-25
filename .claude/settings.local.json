@@ -102,7 +102,9 @@
       "Bash(aws cloudformation list-stacks:*)",
       "Bash(./scripts/build-push.sh:*)",
       "Bash(aws dynamodb describe-table:*)",
-      "Bash(npx cdk deploy -c env=dev --require-approval never)"
+      "Bash(npx cdk deploy -c env=dev --require-approval never)",
+      "Bash(docker build:*)",
+      "Bash(npx cdk deploy:*)"
     ],
     "deny": []
   },
