@@ -78,10 +78,12 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     Orleans__GrainStorage__OrleansSekibanQueue__ProviderType: orleansGrainStorageOrleansSekibanQueueProviderType
     Orleans__GrainStorage__OrleansSekibanQueue__ServiceKey: orleansGrainStorageOrleansSekibanQueueServiceKey
     Orleans__ServiceId: orleansServiceId
-    ...(orleansQueueType != 'eventhub' ? {
-      Orleans__Streaming__OrleansSekibanQueue__ProviderType: orleansStreamingOrleansSekibanQueueProviderType
-      Orleans__Streaming__OrleansSekibanQueue__ServiceKey: orleansStreamingOrleansSekibanQueueServiceKey
-    } : {})
+    // NOTE: Orleans Streaming settings disabled due to Orleans 10 keyed service resolution issues
+    // Using in-memory streams instead. Uncomment when Orleans fixes GetRequiredKeyedService<QueueServiceClient>.
+    // ...(orleansQueueType != 'eventhub' ? {
+    //   Orleans__Streaming__OrleansSekibanQueue__ProviderType: orleansStreamingOrleansSekibanQueueProviderType
+    //   Orleans__Streaming__OrleansSekibanQueue__ServiceKey: orleansStreamingOrleansSekibanQueueServiceKey
+    // } : {})
     // EventHub settings - only added if orleansQueueType is 'eventhub'
     ...(orleansQueueType == 'eventhub' ? {
       ORLEANS_QUEUE_TYPE: 'eventhub'

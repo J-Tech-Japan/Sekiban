@@ -10,7 +10,7 @@ param databaseType string = 'cosmos'
 param orleansClusterType string = 'cosmos'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'eventhub' //'azurestorage'
+param orleansQueueType string = 'azurestorage' // WithoutResult template uses Azure Storage queues
 
 // Database connection string parameter names (for application settings)
 var databaseConnectionStringName = databaseType == 'postgres' ? 'DcbPostgres' : 'SekibanDcbCosmos'
@@ -121,16 +121,18 @@ var orleansDefaultGrainTypeEnv = orleansDefaultGrainType == 'cosmos'? [
   }
 ] : []
 
-var orleansStreamingMyProjectQueueEnv = orleansQueueType != 'eventhub'? [
-  {
-    name: 'Orleans__Streaming__MyProjectQueue__ProviderType'
-    value: orleansStreamingMyProjectQueueProviderType
-  }
-  {
-    name: 'Orleans__Streaming__MyProjectQueue__ServiceKey'
-    value: orleansStreamingMyProjectQueueServiceKey
-  }
-] : []
+// NOTE: Orleans Streaming settings disabled due to Orleans 10 keyed service resolution issues
+// Using in-memory streams instead. Uncomment when Orleans fixes GetRequiredKeyedService<QueueServiceClient>.
+var orleansStreamingMyProjectQueueEnv = [] // orleansQueueType != 'eventhub'? [
+//   {
+//     name: 'Orleans__Streaming__MyProjectQueue__ProviderType'
+//     value: orleansStreamingMyProjectQueueProviderType
+//   }
+//   {
+//     name: 'Orleans__Streaming__MyProjectQueue__ServiceKey'
+//     value: orleansStreamingMyProjectQueueServiceKey
+//   }
+// ] : []
 
 var orleansQueueEnv = orleansQueueType == 'eventhub'? [
   {
