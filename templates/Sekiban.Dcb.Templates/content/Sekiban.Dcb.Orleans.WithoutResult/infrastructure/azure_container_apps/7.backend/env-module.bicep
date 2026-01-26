@@ -10,7 +10,7 @@ param databaseType string = 'cosmos'
 param orleansClusterType string = 'cosmos'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'eventhub' //'azurestorage'
+param orleansQueueType string = 'azurestorage' // WithoutResult template uses Azure Storage queues
 
 // Database connection string parameter names (for application settings)
 var databaseConnectionStringName = databaseType == 'postgres' ? 'DcbPostgres' : 'SekibanDcbCosmos'

@@ -1,6 +1,8 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
-using Azure.Storage.Queues;
+// NOTE: Azure.Storage.Queues is not used because Azure Queue Streams are disabled
+// due to Orleans 10 keyed service resolution issues.
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
@@ -54,21 +56,35 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Add Azure Storage clients for Orleans
-builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
-builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
-builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
-builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
+// Configuration switches for Orleans
+var cfgClustering = (builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower();
+var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 
-// Add Cosmos DB client for Orleans (if using Cosmos)
-if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos" ||
-    (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
+// Add Azure Storage clients for Orleans (conditionally based on configuration)
+// Table client for clustering - only when NOT using Cosmos
+if (cfgClustering != "cosmos")
+    builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
+
+// Blob storage for grain state - only when NOT using Cosmos
+if (cfgGrainDefault != "cosmos")
+    builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
+
+// Table client for grain storage - only when NOT using Cosmos
+if (cfgGrainDefault != "cosmos")
+    builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
+
+// Always register blob storage for snapshot offloading
+builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
+
+// NOTE: Azure Queue Streams are currently disabled due to Orleans 10 keyed service resolution issues.
+// QueueServiceClient registration is skipped to avoid errors during silo startup.
+
+// Add Cosmos DB client for Orleans (if using Cosmos for clustering or grain storage)
+if (cfgClustering == "cosmos" || cfgGrainDefault == "cosmos")
 {
     builder.AddAzureCosmosClient("OrleansCosmos");
 }
 
-var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 
 // Configure Orleans
@@ -93,107 +109,49 @@ builder.UseOrleans(config =>
         }
     }
 
-    // Check if we should use in-memory streams (for development/testing)
-    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    // TEMPORARY: Always use in-memory streams until Orleans 10 keyed service issue is resolved
+    // Orleans 10.0.0 has a bug where it calls GetRequiredKeyedService<QueueServiceClient> during silo options logging,
+    // even when QueueServiceClient is registered as a keyed singleton. This prevents Azure Queue Streams from working.
+    // For now, we'll use in-memory streams which work correctly in all environments.
+    // TODO: Revisit when Orleans team fixes the keyed service resolution issue.
 
-    if (useInMemoryStreams)
+    // Use in-memory streams with enhanced configuration
+    config.AddMemoryStreams("EventStreamProvider", configurator =>
     {
-        // Use in-memory streams for development/testing with enhanced configuration
-        config.AddMemoryStreams("EventStreamProvider", configurator =>
-        {
-            // Increase partitions for better parallelism
-            configurator.ConfigurePartitioning(8);
+        // Increase partitions for better parallelism
+        configurator.ConfigurePartitioning(8);
 
-            // Configure pulling agent for better batch processing
-            configurator.ConfigurePullingAgent(options =>
+        // Configure pulling agent for better batch processing
+        configurator.ConfigurePullingAgent(options =>
+        {
+            options.Configure(opt =>
             {
-                options.Configure(opt =>
-                {
-                    // Process events more frequently
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                    // Increase batch size for better throughput
-                    opt.BatchContainerBatchSize = 100;
-                });
+                // Process events more frequently
+                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                // Increase batch size for better throughput
+                opt.BatchContainerBatchSize = 100;
             });
         });
+    });
 
-        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
+    config.AddMemoryStreams("DcbOrleansQueue", configurator =>
+    {
+        configurator.ConfigurePartitioning(8);
+        configurator.ConfigurePullingAgent(options =>
         {
-            configurator.ConfigurePartitioning(8);
-            configurator.ConfigurePullingAgent(options =>
+            options.Configure(opt =>
             {
-                options.Configure(opt =>
-                {
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                    opt.BatchContainerBatchSize = 100;
-                });
+                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                opt.BatchContainerBatchSize = 100;
             });
         });
+    });
 
-        // Add memory storage for PubSubStore when using in-memory streams
-        config.AddMemoryGrainStorage("PubSubStore");
-    }
-    else
-    {
-        // Add Azure Queue Streams for production
-        config.AddAzureQueueStreams(
-            "EventStreamProvider",
-            configurator =>
-            {
-                configurator.ConfigureAzureQueue(options =>
-                {
-                    options.Configure<IServiceProvider>((queueOptions, sp) =>
-                    {
-                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                        queueOptions.QueueNames =
-                        [
-                            "dcborleans-eventstreamprovider-0",
-                            "dcborleans-eventstreamprovider-1",
-                            "dcborleans-eventstreamprovider-2"
-                        ];
-                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                    });
-                });
-                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+    // Add memory storage for PubSubStore when using in-memory streams
+    config.AddMemoryGrainStorage("PubSubStore");
 
-                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-                {
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                    opt.BatchContainerBatchSize = 256;
-                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-                }));
-                configurator.ConfigureCacheSize(8192);
-            });
-
-        config.AddAzureQueueStreams(
-            "DcbOrleansQueue",
-            configurator =>
-            {
-                configurator.ConfigureAzureQueue(options =>
-                {
-                    options.Configure<IServiceProvider>((queueOptions, sp) =>
-                    {
-                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
-                        queueOptions.QueueNames =
-                        [
-                            "dcborleans-queue-0",
-                            "dcborleans-queue-1",
-                            "dcborleans-queue-2"
-                        ];
-                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
-                    });
-                });
-                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
-
-                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
-                {
-                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
-                    opt.BatchContainerBatchSize = 256;
-                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
-                }));
-                configurator.ConfigureCacheSize(8192);
-            });
-    }
+    // Flag to track that we're using in-memory streams
+    var useInMemoryStreams = true;
 
     // Configure grain storage providers
     if (cfgGrainDefault == "cosmos")
@@ -469,8 +427,11 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-// Use CORS middleware
-app.UseCors();
+// Use CORS middleware only in development (where AddCors is called)
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors();
+}
 
 // Student endpoints
 apiRoute

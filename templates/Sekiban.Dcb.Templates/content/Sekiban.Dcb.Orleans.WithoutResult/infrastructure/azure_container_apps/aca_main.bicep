@@ -9,7 +9,7 @@ param orleansClusterType string = 'cosmos'
 param orleansDefaultGrainType string = 'cosmos'
 
 @description('Queue type for Orleans')
-param orleansQueueType string = 'eventhub' //'azurestorage'
+param orleansQueueType string = 'azurestorage' // WithoutResult template uses Azure Storage queues
 
 @secure()
 param logAnalyticsSharedKey string

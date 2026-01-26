@@ -16,7 +16,7 @@
         <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.1" />
         <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
         <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
-        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
+        <!-- Aspire.Azure.Storage.Queues removed: Azure Queue Streams disabled due to Orleans 10 keyed service issues -->
         <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.0" />
         <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
@@ -28,7 +28,7 @@
         <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
+        <!-- Microsoft.Orleans.Streaming.AzureStorage removed: Using in-memory streams only -->
         <PackageReference Include="Scalar.AspNetCore" Version="2.12.13" />
         <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.0.3" />
         <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.3" />
