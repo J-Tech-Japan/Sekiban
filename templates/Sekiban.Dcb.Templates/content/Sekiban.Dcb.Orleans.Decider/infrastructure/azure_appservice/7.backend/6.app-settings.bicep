@@ -78,10 +78,12 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     Orleans__Endpoints__GatewayPort: string(orleansGatewayPort)
     Orleans__Endpoints__SiloPort: string(orleansSiloPort)
     Orleans__ServiceId: orleansServiceId
-    ...(orleansQueueType != 'eventhub' ? {
-      Orleans__Streaming__MyProjectQueue__ProviderType: orleansStreamingMyProjectQueueProviderType
-      Orleans__Streaming__MyProjectQueue__ServiceKey: orleansStreamingMyProjectQueueServiceKey
-    } : {})
+    // NOTE: Orleans Streaming settings disabled due to Orleans 10 keyed service resolution issues
+    // Using in-memory streams instead. Uncomment when Orleans fixes GetRequiredKeyedService<QueueServiceClient>.
+    // ...(orleansQueueType != 'eventhub' ? {
+    //   Orleans__Streaming__MyProjectQueue__ProviderType: orleansStreamingMyProjectQueueProviderType
+    //   Orleans__Streaming__MyProjectQueue__ServiceKey: orleansStreamingMyProjectQueueServiceKey
+    // } : {})
     ...(orleansQueueType == 'eventhub' ? {
       ORLEANS_QUEUE_TYPE: 'eventhub'
       ORLEANS_QUEUE_EVENTHUB_NAME: eventHubName

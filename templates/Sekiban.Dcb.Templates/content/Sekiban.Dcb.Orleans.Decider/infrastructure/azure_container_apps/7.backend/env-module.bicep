@@ -125,16 +125,18 @@ var orleansDefaultGrainTypeEnv = orleansDefaultGrainType == 'cosmos'? [
   }
 ] : []
 
-var orleansStreamingMyProjectQueueEnv = orleansQueueType != 'eventhub'? [
-  {
-    name: 'Orleans__Streaming__MyProjectQueue__ProviderType'
-    value: orleansStreamingMyProjectQueueProviderType
-  }
-  {
-    name: 'Orleans__Streaming__MyProjectQueue__ServiceKey'
-    value: orleansStreamingMyProjectQueueServiceKey
-  }
-] : []
+// NOTE: Orleans Streaming settings disabled due to Orleans 10 keyed service resolution issues
+// Using in-memory streams instead. Uncomment when Orleans fixes GetRequiredKeyedService<QueueServiceClient>.
+var orleansStreamingMyProjectQueueEnv = [] // orleansQueueType != 'eventhub'? [
+//   {
+//     name: 'Orleans__Streaming__MyProjectQueue__ProviderType'
+//     value: orleansStreamingMyProjectQueueProviderType
+//   }
+//   {
+//     name: 'Orleans__Streaming__MyProjectQueue__ServiceKey'
+//     value: orleansStreamingMyProjectQueueServiceKey
+//   }
+// ] : []
 
 var orleansQueueEnv = orleansQueueType == 'eventhub'? [
   {
