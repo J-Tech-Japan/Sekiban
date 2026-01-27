@@ -122,6 +122,28 @@ module eventHubSaveKeyVault '6.eventhub/2.save-keyvalult.bicep' = {
   ]
 }
 
+// 10. PostgreSQL for Identity (ASP.NET Identity storage)
+@secure()
+param postgresAdminPassword string = newGuid()
+
+module postgresCreate '10.postgres/1.create.bicep' = {
+  name: 'postgresCreateDeployment'
+  params: {
+    administratorLoginPassword: postgresAdminPassword
+  }
+}
+
+module postgresSaveKeyVault '10.postgres/2.save-keyvault.bicep' = {
+  name: 'postgresSaveKeyVaultDeployment'
+  params: {
+    administratorLoginPassword: postgresAdminPassword
+  }
+  dependsOn: [
+    keyVaultCreate
+    postgresCreate
+  ]
+}
+
 // 7. Backend App Service
 module backendPlan '7.backend/1.plan.bicep' = {
   name: 'backendPlanDeployment'
@@ -180,6 +202,7 @@ module backendAppSettings '7.backend/6.app-settings.bicep' = {
     appInsightsCreate
     backendAppServiceCreate
     eventHubCreate
+    postgresSaveKeyVault
   ]
 }
 
@@ -243,6 +266,49 @@ module blazorVnetIntegration '8.blazor/5.vnet-integration.bicep' = {
   ]
 }
 
+// 9. WebNext (Next.js) App Service
+module webnextPlan '9.webnext/1.plan.bicep' = {
+  name: 'webnextPlanDeployment'
+  params: {}
+}
+
+module webnextAppService '9.webnext/2.app-service.bicep' = {
+  name: 'webnextAppServiceDeployment'
+  params: {}
+  dependsOn: [
+    webnextPlan
+  ]
+}
+
+module webnextDiagnosticSettings '9.webnext/3.diagnostic-settings.bicep' = {
+  name: 'webnextDiagnosticSettingsDeployment'
+  params: {}
+  dependsOn: [
+    logAnalyticsCreate
+    webnextAppService
+  ]
+}
+
+module webnextAppSettings '9.webnext/4.app-settings.bicep' = {
+  name: 'webnextAppSettingsDeployment'
+  params: {}
+  dependsOn: [
+    appInsightsCreate
+    backendAppServiceCreate
+    webnextAppService
+  ]
+}
+
+module webnextVnetIntegration '9.webnext/5.vnet-integration.bicep' = {
+  name: 'webnextVnetIntegrationDeployment'
+  params: {}
+  dependsOn: [
+    vnetCreate
+    webnextAppService
+  ]
+}
+
 // Outputs can be added here if needed, for example:
 // output backendHostName string = backendAppServiceCreate.outputs.hostName
 // output frontendHostName string = blazorAppService.outputs.hostName
+// output webnextHostName string = webnextAppService.outputs.url

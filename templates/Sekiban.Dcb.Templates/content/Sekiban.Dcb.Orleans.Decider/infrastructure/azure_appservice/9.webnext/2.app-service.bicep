@@ -1,7 +1,6 @@
-param shareAppServicePlan bool = true
-param appServicePlanName string = shareAppServicePlan ? 'asp-${resourceGroup().name}' : 'asp-backend-${resourceGroup().name}'
-param appServiceName string = 'backend-${resourceGroup().name}'
+param appServiceName string = 'webnext-${resourceGroup().name}'
 param location string = resourceGroup().location
+param appServicePlanName string = 'asp-webnext-${resourceGroup().name}'
 
 // Reference to existing App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' existing = {
@@ -11,7 +10,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' existing = {
 // Get the App Service Plan ID
 var appServicePlanId = appServicePlan.id
 
-// Create the basic App Service (Web App)
+// Create the App Service for Next.js (Node.js)
 resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   name: appServiceName
   location: location
@@ -19,15 +18,14 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
     serverFarmId: appServicePlanId
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|10.0'
-      netFrameworkVersion: 'v10.0'
+      linuxFxVersion: 'NODE|20-lts'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       httpLoggingEnabled: true
       logsDirectorySizeLimit: 35
       detailedErrorLoggingEnabled: true
-      vnetPrivatePortsCount: 2
       webSocketsEnabled: true
+      appCommandLine: 'npm run start'
     }
   }
   identity: {
