@@ -47,6 +47,7 @@ resource appSettingsConfig 'Microsoft.Web/sites/config@2022-09-01' = {
     ConnectionStrings__SekibanDcbCosmos: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanCosmosDbConnectionString)'
     ConnectionStrings__DcbPostgres: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanPostgresConnectionString)'
     ConnectionStrings__OrleansCosmos: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/SekibanCosmosDbConnectionString)'
+    ConnectionStrings__IdentityPostgres: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/IdentityPostgresConnectionString)'
     ConnectionStrings__DcbOrleansClusteringTable: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansClusteringConnectionString)'
     ConnectionStrings__DcbOrleansGrainTable: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansClusteringConnectionString)'
     ConnectionStrings__DcbOrleansGrainState: '@Microsoft.KeyVault(SecretUri=https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/OrleansGrainStateConnectionString)'
