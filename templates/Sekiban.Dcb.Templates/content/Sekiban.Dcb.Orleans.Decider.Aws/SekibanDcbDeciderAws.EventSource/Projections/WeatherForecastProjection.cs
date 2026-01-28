@@ -15,7 +15,6 @@ namespace Dcb.EventSource.Projections;
 /// <summary>
 ///     Simple weather forecast projection for testing DualStateProjectionWrapper
 /// </summary>
-[GenerateSerializer]
 public record WeatherForecastProjection : IMultiProjector<WeatherForecastProjection>
 {
     /// <summary>

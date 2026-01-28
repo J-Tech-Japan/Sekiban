@@ -24,7 +24,6 @@ public record UserDirectoryListItem(
         this with { Roles = roles };
 }
 
-[GenerateSerializer]
 public record GetUserDirectoryListQuery :
     IMultiProjectionListQuery<UserDirectoryListProjection, GetUserDirectoryListQuery, UserDirectoryListItem>,
     IWaitForSortableUniqueId,

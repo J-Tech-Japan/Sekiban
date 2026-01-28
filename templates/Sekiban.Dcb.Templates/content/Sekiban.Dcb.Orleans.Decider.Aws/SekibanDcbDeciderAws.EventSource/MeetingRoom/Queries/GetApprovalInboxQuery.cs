@@ -16,7 +16,6 @@ public record ApprovalInboxItem(
     DateTime RequestedAt,
     string Status);
 
-[GenerateSerializer]
 public record GetApprovalInboxQuery :
     IMultiProjectionListQuery<ApprovalRequestListProjection, GetApprovalInboxQuery, ApprovalInboxItem>,
     IWaitForSortableUniqueId,

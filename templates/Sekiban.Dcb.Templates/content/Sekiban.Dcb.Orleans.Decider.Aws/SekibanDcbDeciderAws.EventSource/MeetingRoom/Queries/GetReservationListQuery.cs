@@ -21,7 +21,6 @@ public record ReservationListItem(
     string? ApprovalRequestComment,
     string? ApprovalDecisionComment);
 
-[GenerateSerializer]
 public record GetReservationListQuery :
     IMultiProjectionListQuery<ReservationListProjection, GetReservationListQuery, ReservationListItem>,
     IWaitForSortableUniqueId,

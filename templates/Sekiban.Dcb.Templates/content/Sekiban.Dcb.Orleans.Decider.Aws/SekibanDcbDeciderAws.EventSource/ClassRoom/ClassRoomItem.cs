@@ -5,7 +5,6 @@ namespace Dcb.EventSource.ClassRoom;
 /// <summary>
 /// Unified representation of a classroom for list display
 /// </summary>
-[GenerateSerializer]
 public record ClassRoomItem
 {
     [Id(0)]

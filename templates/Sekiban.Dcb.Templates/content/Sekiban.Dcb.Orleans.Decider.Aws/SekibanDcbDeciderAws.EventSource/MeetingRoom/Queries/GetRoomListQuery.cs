@@ -15,7 +15,6 @@ public record RoomListItem(
     bool RequiresApproval,
     bool IsActive);
 
-[GenerateSerializer]
 public record GetRoomListQuery :
     IMultiProjectionListQuery<RoomListProjection, GetRoomListQuery, RoomListItem>,
     IWaitForSortableUniqueId,
