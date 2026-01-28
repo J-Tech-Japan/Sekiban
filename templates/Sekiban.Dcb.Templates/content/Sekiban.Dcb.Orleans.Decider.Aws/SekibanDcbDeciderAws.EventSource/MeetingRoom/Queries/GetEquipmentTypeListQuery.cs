@@ -13,7 +13,6 @@ public record EquipmentTypeListItem(
     int TotalQuantity,
     int MaxPerReservation);
 
-[GenerateSerializer]
 public record GetEquipmentTypeListQuery :
     IMultiProjectionListQuery<EquipmentTypeListProjection, GetEquipmentTypeListQuery, EquipmentTypeListItem>,
     IWaitForSortableUniqueId,

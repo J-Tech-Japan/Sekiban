@@ -7,7 +7,6 @@ using Sekiban.Dcb.Tags;
 
 namespace Dcb.Domain.WithoutResult.Queries;
 
-[GenerateSerializer]
 public record GetWeatherForecastListSingleQuery :
     IMultiProjectionListQuery<WeatherForecastProjectorWithTagStateProjector, GetWeatherForecastListSingleQuery, WeatherForecastItem>,
     IWaitForSortableUniqueId,

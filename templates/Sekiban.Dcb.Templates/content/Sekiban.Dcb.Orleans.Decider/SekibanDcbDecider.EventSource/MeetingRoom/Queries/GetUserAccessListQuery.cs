@@ -12,7 +12,6 @@ public record UserAccessListItem(
     bool IsActive,
     DateTime GrantedAt);
 
-[GenerateSerializer]
 public record GetUserAccessListQuery :
     IMultiProjectionListQuery<UserAccessListProjection, GetUserAccessListQuery, UserAccessListItem>,
     IWaitForSortableUniqueId,

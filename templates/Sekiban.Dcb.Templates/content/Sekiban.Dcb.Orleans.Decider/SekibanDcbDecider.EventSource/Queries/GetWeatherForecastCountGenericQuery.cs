@@ -8,7 +8,6 @@ namespace Dcb.EventSource.Queries;
 /// <summary>
 /// Count query for WeatherForecastProjection-based Weather
 /// </summary>
-[GenerateSerializer]
 public record GetWeatherForecastCountGenericQuery :
     IMultiProjectionQuery<WeatherForecastProjection, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
