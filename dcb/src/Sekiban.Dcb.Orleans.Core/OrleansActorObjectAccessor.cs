@@ -109,6 +109,8 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
 
         public Task<bool> CancelReservationAsync(TagWriteReservation reservation) =>
             _grain.CancelReservationAsync(reservation);
+
+        public Task NotifyEventWrittenAsync() => _grain.NotifyEventWrittenAsync();
     }
 
     /// <summary>

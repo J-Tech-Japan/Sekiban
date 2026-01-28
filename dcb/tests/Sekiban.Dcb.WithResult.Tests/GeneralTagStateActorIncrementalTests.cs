@@ -353,6 +353,8 @@ public class GeneralTagStateActorIncrementalTests
 
         public Task<bool> CancelReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
 
+        public Task NotifyEventWrittenAsync() => Task.CompletedTask;
+
         public void SetLastSortableUniqueId(string sortableUniqueId) => _lastSortableUniqueId = sortableUniqueId;
 
         public void SetActorId(string actorId) => _actorId = actorId;

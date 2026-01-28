@@ -203,6 +203,9 @@ public class CoreGeneralSekibanExecutor
                 // Step 6: Confirm reservations with TagConsistentActors
                 await ConfirmReservationsAsync(reservations, cancellationToken);
 
+                // Step 6.1: Notify non-consistency tags about the event write
+                await NotifyNonConsistencyTagsAsync(allTags, reservations.Keys, cancellationToken);
+
                 var firstEvent = writtenEvents.First();
 
                 if (_eventPublisher != null)
@@ -639,6 +642,38 @@ public class CoreGeneralSekibanExecutor
         catch
         {
             // Best effort - log error in production
+        }
+    }
+
+    private async Task NotifyNonConsistencyTagsAsync(
+        HashSet<ITag> allTags,
+        IEnumerable<ITag> reservedTags,
+        CancellationToken cancellationToken)
+    {
+        var reservedSet = reservedTags.ToHashSet();
+        var nonConsistencyTags = allTags.Where(t => !reservedSet.Contains(t)).ToList();
+
+        if (nonConsistencyTags.Count == 0) return;
+
+        var notifyTasks = nonConsistencyTags.Select(tag => NotifyTagAsync(tag, cancellationToken));
+        await Task.WhenAll(notifyTasks);
+    }
+
+    private async Task NotifyTagAsync(ITag tag, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tagConsistentActorId = tag.GetTag();
+            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+
+            if (actorResult.IsSuccess)
+            {
+                await actorResult.GetValue().NotifyEventWrittenAsync();
+            }
+        }
+        catch
+        {
+            // Best effort - ignore failures for non-consistency tags
         }
     }
 }

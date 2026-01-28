@@ -21,4 +21,11 @@ public interface ITagConsistentActorCommon
     Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId);
     Task<bool> ConfirmReservationAsync(TagWriteReservation reservation);
     Task<bool> CancelReservationAsync(TagWriteReservation reservation);
+
+    /// <summary>
+    ///     Notifies the actor that an event was written with this tag.
+    ///     This is used for non-consistency tags to trigger a catch-up refresh.
+    ///     This method never fails - it is a best-effort notification.
+    /// </summary>
+    Task NotifyEventWrittenAsync();
 }

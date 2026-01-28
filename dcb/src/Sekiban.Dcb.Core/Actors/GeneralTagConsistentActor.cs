@@ -168,6 +168,13 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         }
     }
 
+    public Task NotifyEventWrittenAsync()
+    {
+        // Simply mark catch-up as incomplete to force refresh on next access
+        _catchUpCompleted = false;
+        return Task.CompletedTask;
+    }
+
     private async Task EnsureCatchUpCompletedAsync()
     {
         if (_catchUpCompleted)

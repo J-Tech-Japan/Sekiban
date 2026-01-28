@@ -76,6 +76,15 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
         return _actor.CancelReservationAsync(reservation);
     }
 
+    public Task NotifyEventWrittenAsync()
+    {
+        if (_actor == null)
+        {
+            return Task.CompletedTask;
+        }
+        return _actor.NotifyEventWrittenAsync();
+    }
+
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Extract tag name from grain key
