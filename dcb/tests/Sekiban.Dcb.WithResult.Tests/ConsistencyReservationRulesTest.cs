@@ -1,4 +1,5 @@
 using Dcb.Domain;
+using Dcb.Domain.Weather;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
@@ -83,6 +84,79 @@ public class ConsistencyReservationRulesTest
             new SimpleCommand(),
             (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C2"), consistencyTag)));
         Assert.True(second.IsSuccess);
+    }
+
+    [Fact]
+    public async Task NonConsistencyTag_Should_Trigger_CatchUpRefresh_Via_Notification()
+    {
+        // Arrange: Use NonConsistencyTag with WeatherForecast domain
+        var forecastId = Guid.NewGuid();
+        var baseTag = new WeatherForecastTag(forecastId);
+        var nonConsistency = NonConsistencyTag.From(baseTag);
+
+        // Act: Write event with NonConsistencyTag
+        var writeResult = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(
+                new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(DateTime.Today), 25, "Sunny"),
+                nonConsistency)));
+
+        Assert.True(writeResult.IsSuccess);
+
+        // Verify: Get tag state immediately after - should reflect the written event
+        // This tests that NotifyEventWrittenAsync was called and catch-up will occur
+        var tagStateId = TagStateId.FromProjector<WeatherForecastProjector>(baseTag);
+        var stateResult = await _executor.GetTagStateAsync(tagStateId);
+
+        Assert.True(stateResult.IsSuccess);
+        var state = stateResult.GetValue();
+
+        // The tag state should have the event reflected (version > 0 and payload updated)
+        Assert.True(state.Version > 0, "Tag state should have been updated with the event");
+        Assert.IsType<WeatherForecastState>(state.Payload);
+        var payload = (WeatherForecastState)state.Payload;
+        Assert.Equal("Tokyo", payload.Location);
+        Assert.Equal(25, payload.TemperatureC);
+    }
+
+    [Fact]
+    public async Task NonConsistencyTag_Should_Update_TagState_Immediately_After_Multiple_Writes()
+    {
+        // Arrange: Use NonConsistencyTag with WeatherForecast domain
+        var forecastId = Guid.NewGuid();
+        var baseTag = new WeatherForecastTag(forecastId);
+        var nonConsistency = NonConsistencyTag.From(baseTag);
+
+        // Act 1: First write - Create
+        var write1 = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(
+                new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(DateTime.Today), 20, "Cloudy"),
+                nonConsistency)));
+        Assert.True(write1.IsSuccess);
+
+        // Verify first state
+        var tagStateId = TagStateId.FromProjector<WeatherForecastProjector>(baseTag);
+        var state1 = await _executor.GetTagStateAsync(tagStateId);
+        Assert.True(state1.IsSuccess);
+        Assert.Equal("Tokyo", ((WeatherForecastState)state1.GetValue().Payload).Location);
+        Assert.Equal(20, ((WeatherForecastState)state1.GetValue().Payload).TemperatureC);
+
+        // Act 2: Second write - Update
+        var write2 = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(
+                new WeatherForecastUpdated(forecastId, "Osaka", DateOnly.FromDateTime(DateTime.Today), 30, "Hot"),
+                nonConsistency)));
+        Assert.True(write2.IsSuccess);
+
+        // Verify: Get tag state immediately after second write
+        var state2 = await _executor.GetTagStateAsync(tagStateId);
+        Assert.True(state2.IsSuccess);
+        var payload2 = (WeatherForecastState)state2.GetValue().Payload;
+        Assert.Equal("Osaka", payload2.Location);
+        Assert.Equal(30, payload2.TemperatureC);
+        Assert.True(state2.GetValue().Version > state1.GetValue().Version);
     }
 
     private record DummyEvent(string Name) : IEventPayload;

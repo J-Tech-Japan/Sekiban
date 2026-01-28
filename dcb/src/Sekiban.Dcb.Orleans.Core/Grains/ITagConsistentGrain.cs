@@ -32,4 +32,9 @@ public interface ITagConsistentGrain : IGrainWithStringKey
     ///     Cancel a reservation
     /// </summary>
     Task<bool> CancelReservationAsync(TagWriteReservation reservation);
+
+    /// <summary>
+    ///     Notifies the grain that an event was written with this tag.
+    /// </summary>
+    Task NotifyEventWrittenAsync();
 }
