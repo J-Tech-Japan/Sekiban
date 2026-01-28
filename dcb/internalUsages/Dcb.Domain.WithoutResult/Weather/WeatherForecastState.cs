@@ -1,8 +1,6 @@
 using Orleans;
 using Sekiban.Dcb.Tags;
 namespace Dcb.Domain.WithoutResult.Weather;
-
-[GenerateSerializer]
 public record WeatherForecastState : ITagStatePayload
 {
     [Id(0)] public Guid ForecastId { get; init; }
