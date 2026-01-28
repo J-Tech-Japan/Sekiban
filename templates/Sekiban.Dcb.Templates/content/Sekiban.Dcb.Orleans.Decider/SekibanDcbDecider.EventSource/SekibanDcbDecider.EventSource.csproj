@@ -12,7 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.3" />
-    <PackageReference Include="ResultBoxes" Version="0.3.31" />
+    <PackageReference Include="ResultBoxes" Version="0.4.0" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="10.0.0" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
   </ItemGroup>
