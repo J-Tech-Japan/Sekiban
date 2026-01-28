@@ -4,7 +4,6 @@ namespace Dcb.Domain.WithoutResult.Projections;
 /// <summary>
 ///     Weather forecast item in projection
 /// </summary>
-[GenerateSerializer]
 public record WeatherForecastItem(
     [property: Id(0)]
     Guid ForecastId,

@@ -3,8 +3,6 @@ using Orleans;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 namespace Dcb.Domain.WithoutResult.Queries;
-
-[GenerateSerializer]
 public record GetStudentListQuery :
     IMultiProjectionListQuery<GenericTagMultiProjector<StudentProjector, StudentTag>, GetStudentListQuery, StudentState>,
     IWaitForSortableUniqueId,

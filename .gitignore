@@ -420,3 +420,6 @@ dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure/config/dev2.json
 *.local.json
 .claude/settings.local.json
 .worktrees/
+
+# TAKT config (user data)
+.takt/

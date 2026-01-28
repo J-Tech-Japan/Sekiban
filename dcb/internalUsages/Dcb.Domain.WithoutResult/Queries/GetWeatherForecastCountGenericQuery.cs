@@ -9,7 +9,6 @@ namespace Dcb.Domain.WithoutResult.Queries;
 /// <summary>
 /// Count query for GenericTagMultiProjector-based Weather
 /// </summary>
-[GenerateSerializer]
 public record GetWeatherForecastCountGenericQuery :
     IMultiProjectionQuery<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>, GetWeatherForecastCountGenericQuery, WeatherForecastCountResult>,
     IWaitForSortableUniqueId
