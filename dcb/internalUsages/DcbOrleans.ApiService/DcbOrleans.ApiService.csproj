@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>34e8262c-ed2c-453b-b399-8d2662dc3d88</UserSecretsId>
         <LangVersion>default</LangVersion>
-        <TargetFrameworks>net10.0;net9.0</TargetFrameworks>
+        <TargetFramework>net10.0</TargetFramework>
         <NoWarn>$(NoWarn);CS0618;ASPDEPR002</NoWarn>
     </PropertyGroup>
 
