@@ -48,6 +48,8 @@ jobs:
         run: |
           dotnet pack dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithResult.Model/Sekiban.Dcb.WithResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build

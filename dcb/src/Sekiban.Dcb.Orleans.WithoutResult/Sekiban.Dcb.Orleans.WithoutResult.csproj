@@ -32,6 +32,7 @@
     <ItemGroup>
         <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="10.0.2-preview05" />
         <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.2-preview05" />
+        <PackageReference Include="Sekiban.Dcb.WithoutResult.Model" Version="$(PackageVersion)" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.3">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -41,6 +42,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Sekiban.Dcb.Orleans.Core\Sekiban.Dcb.Orleans.Core.csproj"/>
         <ProjectReference Include="..\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj"/>
     </ItemGroup>
 
 </Project>
