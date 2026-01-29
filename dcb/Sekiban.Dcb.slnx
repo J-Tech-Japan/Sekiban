@@ -7,6 +7,8 @@
   <Folder Name="/src/">
     <Project Path="src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" />
     <Project Path="src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithResult.Model/Sekiban.Dcb.WithResult.Model.csproj" />
+    <Project Path="src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj" />
     <Project Path="src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj" />
     <Project Path="src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
