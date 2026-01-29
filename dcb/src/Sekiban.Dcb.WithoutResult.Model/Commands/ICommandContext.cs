@@ -53,11 +53,11 @@ public interface ICommandContext
     /// <returns>EventOrNone representing the appended event</returns>
     /// <exception cref="Exception">Thrown when event appending fails</exception>
     Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags);
+
     /// <summary>
-    /// Appends an event with tags to the context
+    ///     Appends an event with tags to the context
     /// </summary>
     /// <param name="eventPayloadWithTags">event with tags</param>
-    /// <returns></returns>
+    /// <returns>EventOrNone representing the appended event</returns>
     Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags);
-
 }

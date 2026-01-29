@@ -1,5 +1,4 @@
 using Sekiban.Dcb.MultiProjections;
-
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
