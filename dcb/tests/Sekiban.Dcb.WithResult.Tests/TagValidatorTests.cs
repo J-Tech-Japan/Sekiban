@@ -82,13 +82,13 @@ public class TagValidatorTests
         var errors = TagValidator.ValidateTag(tag);
 
         // Assert
-        // "NoDelimiter" becomes "NoDelimiter:" when processed by TestTag, so expect empty content error
+        // When there's no ':' delimiter, validator returns InvalidFormat and returns early
         Assert.Single(errors);
-        Assert.Equal(TagValidationErrorType.EmptyContent, errors[0].ErrorType);
+        Assert.Equal(TagValidationErrorType.InvalidFormat, errors[0].ErrorType);
     }
 
     [Fact]
-    public void ValidateTag_EmptyString_ReturnsMultipleErrors()
+    public void ValidateTag_EmptyString_ReturnsFormatError()
     {
         // Arrange
         var tag = new TestTag("");
@@ -97,14 +97,13 @@ public class TagValidatorTests
         var errors = TagValidator.ValidateTag(tag);
 
         // Assert
-        // Empty string becomes ":" when processed by TestTag, so expect empty group and empty content errors
-        Assert.Equal(2, errors.Count);
-        Assert.Contains(errors, e => e.ErrorType == TagValidationErrorType.EmptyGroup);
-        Assert.Contains(errors, e => e.ErrorType == TagValidationErrorType.EmptyContent);
+        // Empty string has no ':' delimiter, so validator returns InvalidFormat and returns early
+        Assert.Single(errors);
+        Assert.Equal(TagValidationErrorType.InvalidFormat, errors[0].ErrorType);
     }
 
     [Fact]
-    public void ValidateTag_WhitespaceOnly_ReturnsErrors()
+    public void ValidateTag_WhitespaceOnly_ReturnsFormatError()
     {
         // Arrange
         var tag = new TestTag("   ");
@@ -113,10 +112,9 @@ public class TagValidatorTests
         var errors = TagValidator.ValidateTag(tag);
 
         // Assert
-        // Whitespace becomes "   :" when processed by TestTag
-        Assert.Equal(2, errors.Count);
-        Assert.Contains(errors, e => e.ErrorType == TagValidationErrorType.InvalidCharactersInGroup);
-        Assert.Contains(errors, e => e.ErrorType == TagValidationErrorType.EmptyContent);
+        // Whitespace string has no ':' delimiter, so validator returns InvalidFormat and returns early
+        Assert.Single(errors);
+        Assert.Equal(TagValidationErrorType.InvalidFormat, errors[0].ErrorType);
     }
     #endregion
 
