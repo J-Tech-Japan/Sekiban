@@ -14,6 +14,10 @@ public class DbTag
     public long Id { get; set; }
 
     [Required]
+    [MaxLength(64)]
+    public string ServiceId { get; set; } = string.Empty;
+
+    [Required]
     public string Tag { get; set; } = string.Empty;
 
     [Required]
@@ -34,9 +38,11 @@ public class DbTag
         string tagGroup,
         string sortableUniqueId,
         Guid eventId,
-        string eventType) =>
+        string eventType,
+        string serviceId) =>
         new()
         {
+            ServiceId = serviceId,
             Tag = tag,
             TagGroup = tagGroup,
             EventType = eventType,

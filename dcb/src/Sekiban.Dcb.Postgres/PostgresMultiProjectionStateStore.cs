@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Postgres.DbModels;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 
@@ -14,14 +15,19 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
+    private readonly IServiceIdProvider _serviceIdProvider;
 
     public PostgresMultiProjectionStateStore(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
+        IServiceIdProvider serviceIdProvider,
         IBlobStorageSnapshotAccessor? blobAccessor = null)
     {
         _contextFactory = contextFactory;
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _blobAccessor = blobAccessor;
     }
+
+    private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
     public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
         string projectorName,
@@ -31,8 +37,10 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         try
         {
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
             var entity = await ctx.MultiProjectionStates
                 .FirstOrDefaultAsync(s =>
+                    s.ServiceId == serviceId &&
                     s.ProjectorName == projectorName &&
                     s.ProjectorVersion == projectorVersion, cancellationToken);
 
@@ -77,8 +85,9 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         try
         {
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
             var entity = await ctx.MultiProjectionStates
-                .Where(s => s.ProjectorName == projectorName)
+                .Where(s => s.ServiceId == serviceId && s.ProjectorName == projectorName)
                 .OrderByDescending(s => s.EventsProcessed)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -124,6 +133,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         try
         {
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
 
             var stateData = record.StateData;
             var isOffloaded = record.IsOffloaded;
@@ -147,6 +157,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
 
             var dbRecord = new DbMultiProjectionState
             {
+                ServiceId = serviceId,
                 ProjectorName = record.ProjectorName,
                 ProjectorVersion = record.ProjectorVersion,
                 PayloadType = record.PayloadType,
@@ -168,6 +179,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             // Upsert
             var existing = await ctx.MultiProjectionStates
                 .FirstOrDefaultAsync(s =>
+                    s.ServiceId == serviceId &&
                     s.ProjectorName == record.ProjectorName &&
                     s.ProjectorVersion == record.ProjectorVersion, cancellationToken);
 
@@ -196,6 +208,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var list = await ctx.MultiProjectionStates
+                .Where(s => s.ServiceId == CurrentServiceId)
                 .Select(s => new ProjectorStateInfo(
                     s.ProjectorName,
                     s.ProjectorVersion,
@@ -222,8 +235,10 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         try
         {
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
             var entity = await ctx.MultiProjectionStates
                 .FirstOrDefaultAsync(s =>
+                    s.ServiceId == serviceId &&
                     s.ProjectorName == projectorName &&
                     s.ProjectorVersion == projectorVersion, cancellationToken);
 
@@ -254,7 +269,11 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             IQueryable<DbMultiProjectionState> query = ctx.MultiProjectionStates;
             if (!string.IsNullOrEmpty(projectorName))
             {
-                query = query.Where(s => s.ProjectorName == projectorName);
+                query = query.Where(s => s.ServiceId == CurrentServiceId && s.ProjectorName == projectorName);
+            }
+            else
+            {
+                query = query.Where(s => s.ServiceId == CurrentServiceId);
             }
 
             var entities = await query.ToListAsync(cancellationToken);

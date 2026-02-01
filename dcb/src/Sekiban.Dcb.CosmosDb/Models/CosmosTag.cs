@@ -8,13 +8,25 @@ namespace Sekiban.Dcb.CosmosDb.Models;
 public class CosmosTag
 {
     /// <summary>
+    ///     Composite partition key: "{serviceId}|{tag}".
+    /// </summary>
+    [JsonProperty("pk")]
+    public string Pk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    [JsonProperty("serviceId")]
+    public string ServiceId { get; set; } = string.Empty;
+
+    /// <summary>
     ///     CosmosDB document ID.
     /// </summary>
     [JsonProperty("id")]
     public string Id { get; set; } = string.Empty; // Unique ID for the document
 
     /// <summary>
-    ///     Tag string (partition key).
+    ///     Tag string.
     /// </summary>
     [JsonProperty("tag")]
     public string Tag { get; set; } = string.Empty; // Partition key
@@ -58,9 +70,17 @@ public class CosmosTag
     /// <summary>
     ///     Creates a tag document from event metadata.
     /// </summary>
-    public static CosmosTag FromEventTag(string tag, string tagGroup, string sortableUniqueId, Guid eventId, string eventType) =>
+    public static CosmosTag FromEventTag(
+        string tag,
+        string tagGroup,
+        string sortableUniqueId,
+        Guid eventId,
+        string eventType,
+        string serviceId) =>
         new()
         {
+            Pk = $"{serviceId}|{tag}",
+            ServiceId = serviceId,
             Id = Guid.NewGuid().ToString(), // Generate unique ID for the document
             Tag = tag,
             TagGroup = tagGroup,

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
@@ -37,7 +38,9 @@ public static class SekibanDcbPostgresExtensions
         });
 
         // Register IEventStore implementation
+        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, PostgresEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
     }
@@ -80,7 +83,9 @@ public static class SekibanDcbPostgresExtensions
         services.AddHostedService<DatabaseInitializerService>();
 
         // IEventStore実装を登録
+        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, PostgresEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
     }
@@ -108,7 +113,9 @@ public static class SekibanDcbPostgresExtensions
         });
 
         // IEventStore実装を登録
+        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, PostgresEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
     }

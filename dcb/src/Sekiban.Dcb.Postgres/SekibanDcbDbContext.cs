@@ -20,10 +20,11 @@ public class SekibanDcbDbContext : DbContext
         modelBuilder.Entity<DbEvent>(entity =>
         {
             entity.ToTable("dcb_events");
-            entity.HasKey(e => e.Id);
+            entity.HasKey(e => new { e.ServiceId, e.Id });
 
-            // SortableUniqueId is the primary ordering column
-            entity.HasIndex(e => e.SortableUniqueId).IsUnique().HasDatabaseName("IX_Events_SortableUniqueId");
+            entity.HasIndex(e => e.ServiceId).HasDatabaseName("IX_Events_ServiceId");
+            entity.HasIndex(e => new { e.ServiceId, e.SortableUniqueId })
+                .HasDatabaseName("IX_Events_Service_SortableUniqueId");
 
             entity.HasIndex(e => e.EventType);
             entity.HasIndex(e => e.Timestamp);
@@ -36,6 +37,7 @@ public class SekibanDcbDbContext : DbContext
 
             // Ensure proper ordering
             entity.Property(e => e.SortableUniqueId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ServiceId).IsRequired().HasMaxLength(64);
         });
 
         // Configure Tags table
@@ -45,7 +47,8 @@ public class SekibanDcbDbContext : DbContext
             entity.HasKey(t => t.Id);
 
             // Indexes for efficient querying
-            entity.HasIndex(t => t.Tag).HasDatabaseName("IX_Tags_Tag");
+            entity.HasIndex(t => t.ServiceId).HasDatabaseName("IX_Tags_ServiceId");
+            entity.HasIndex(t => new { t.ServiceId, t.Tag }).HasDatabaseName("IX_Tags_Service_Tag");
 
             // SortableUniqueId for ordering
             entity.HasIndex(t => t.SortableUniqueId).HasDatabaseName("IX_Tags_SortableUniqueId");
@@ -53,10 +56,11 @@ public class SekibanDcbDbContext : DbContext
             entity.HasIndex(t => t.EventId).HasDatabaseName("IX_Tags_EventId");
 
             // Composite index for tag queries ordered by SortableUniqueId
-            entity.HasIndex(t => new { t.Tag, t.SortableUniqueId }).HasDatabaseName("IX_Tags_Tag_SortableUniqueId");
+            entity.HasIndex(t => new { t.ServiceId, t.Tag, t.SortableUniqueId }).HasDatabaseName("IX_Tags_Service_Tag_SortableUniqueId");
 
             // Ensure proper ordering
             entity.Property(t => t.SortableUniqueId).IsRequired().HasMaxLength(100);
+            entity.Property(t => t.ServiceId).IsRequired().HasMaxLength(64);
         });
 
         // Configure MultiProjectionStates table
@@ -65,10 +69,11 @@ public class SekibanDcbDbContext : DbContext
             entity.ToTable("dcb_multi_projection_states");
 
             // Composite primary key
-            entity.HasKey(s => new { s.ProjectorName, s.ProjectorVersion });
+            entity.HasKey(s => new { s.ServiceId, s.ProjectorName, s.ProjectorVersion });
 
             // Index for projector name queries
-            entity.HasIndex(s => s.ProjectorName).HasDatabaseName("IX_MultiProjectionStates_ProjectorName");
+            entity.HasIndex(s => new { s.ServiceId, s.ProjectorName })
+                .HasDatabaseName("IX_MultiProjectionStates_Service_ProjectorName");
 
             // Index for updated timestamp
             entity.HasIndex(s => s.UpdatedAt).HasDatabaseName("IX_MultiProjectionStates_UpdatedAt");
@@ -80,6 +85,8 @@ public class SekibanDcbDbContext : DbContext
             entity.ToTable(t => t.HasCheckConstraint(
                 "CK_MultiProjectionStates_OffloadConsistency",
                 "(\"IsOffloaded\" = false AND \"StateData\" IS NOT NULL) OR (\"IsOffloaded\" = true AND \"OffloadKey\" IS NOT NULL)"));
+
+            entity.Property(s => s.ServiceId).IsRequired().HasMaxLength(64);
         });
     }
 }

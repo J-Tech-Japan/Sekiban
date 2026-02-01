@@ -8,6 +8,10 @@ namespace Sekiban.Dcb.Postgres.DbModels;
 public class DbMultiProjectionState
 {
     [Required]
+    [MaxLength(64)]
+    public string ServiceId { get; set; } = string.Empty;
+
+    [Required]
     [MaxLength(256)]
     public string ProjectorName { get; set; } = string.Empty;
 
@@ -55,9 +59,10 @@ public class DbMultiProjectionState
     [MaxLength(256)]
     public string? BuildHost { get; set; }
 
-    public static DbMultiProjectionState FromRecord(MultiProjectionStateRecord record) =>
+    public static DbMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId) =>
         new()
         {
+            ServiceId = serviceId,
             ProjectorName = record.ProjectorName,
             ProjectorVersion = record.ProjectorVersion,
             PayloadType = record.PayloadType,

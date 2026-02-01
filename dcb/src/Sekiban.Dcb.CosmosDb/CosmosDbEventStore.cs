@@ -5,6 +5,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Net;
@@ -18,17 +19,39 @@ public partial class CosmosDbEventStore : IEventStore
 {
     private readonly CosmosDbContext _context;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly ICosmosContainerResolver _containerResolver;
     private readonly ILogger<CosmosDbEventStore>? _logger;
 
     /// <summary>
     ///     Creates a new CosmosDB event store.
     /// </summary>
-    public CosmosDbEventStore(CosmosDbContext context, DcbDomainTypes domainTypes, ILogger<CosmosDbEventStore>? logger = null)
+    public CosmosDbEventStore(
+        CosmosDbContext context,
+        DcbDomainTypes domainTypes,
+        IServiceIdProvider serviceIdProvider,
+        ICosmosContainerResolver containerResolver,
+        ILogger<CosmosDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+        _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
     }
+
+    private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
+
+    private static string GetEventPartitionKey(string eventId, CosmosContainerSettings settings, string serviceId) =>
+        settings.IsLegacy ? eventId : $"{serviceId}|{eventId}";
+
+    private static string GetTagPartitionKey(string tag, CosmosContainerSettings settings, string serviceId) =>
+        settings.IsLegacy ? tag : $"{serviceId}|{tag}";
+
+    private static bool ServiceIdMatches(string? storedServiceId, string currentServiceId, bool allowEmpty) =>
+        allowEmpty
+            ? string.IsNullOrEmpty(storedServiceId) || string.Equals(storedServiceId, currentServiceId, StringComparison.Ordinal)
+            : string.Equals(storedServiceId, currentServiceId, StringComparison.Ordinal);
 
     /// <summary>
     ///     Reads all events, optionally after a given sortable unique ID.
@@ -38,15 +61,28 @@ public partial class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveEventsContainer(serviceId);
+            var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
             var options = _context.Options;
 
-            // Build SQL query for better performance than LINQ
-            var sqlQuery = since != null
-                ? $"SELECT * FROM c WHERE c.sortableUniqueId > '{since.Value}' ORDER BY c.sortableUniqueId"
-                : "SELECT * FROM c ORDER BY c.sortableUniqueId";
-
-            var queryDefinition = new QueryDefinition(sqlQuery);
+            QueryDefinition queryDefinition;
+            if (settings.IsLegacy)
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT * FROM c WHERE c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT * FROM c ORDER BY c.sortableUniqueId");
+            }
+            else
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
+                        .WithParameter("@serviceId", serviceId)
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId ORDER BY c.sortableUniqueId")
+                        .WithParameter("@serviceId", serviceId);
+            }
             var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
 
             var events = new List<Event>();
@@ -168,20 +204,48 @@ public partial class CosmosDbEventStore : IEventStore
         try
         {
             var tagString = tag.GetTag();
+            var serviceId = CurrentServiceId;
             var options = _context.Options;
 
             // First, get all event IDs for this tag from the tags container using optimized query
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
-            var sqlQuery = since != null
-                ? $"SELECT c.eventId FROM c WHERE c.tag = '{tagString}' AND c.sortableUniqueId > '{since.Value}' ORDER BY c.sortableUniqueId"
-                : $"SELECT c.eventId FROM c WHERE c.tag = '{tagString}' ORDER BY c.sortableUniqueId";
+            QueryDefinition queryDefinition;
+            QueryRequestOptions? requestOptions = null;
 
-            var queryDefinition = new QueryDefinition(sqlQuery);
-            var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
+            if (tagsSettings.IsLegacy)
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT c.eventId FROM c WHERE c.tag = @tag AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
+                        .WithParameter("@tag", tagString)
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT c.eventId FROM c WHERE c.tag = @tag ORDER BY c.sortableUniqueId")
+                        .WithParameter("@tag", tagString);
+
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagString)
+                };
+            }
+            else
+            {
+                var tagPk = GetTagPartitionKey(tagString, tagsSettings, serviceId);
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
+                        .WithParameter("@pk", tagPk)
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
+                        .WithParameter("@pk", tagPk);
+
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagPk)
+                };
+            }
 
             var eventIds = new List<string>();
-            using (var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: queryRequestOptions))
+            using (var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: requestOptions))
             {
                 while (tagIterator.HasMoreResults)
                 {
@@ -199,7 +263,8 @@ public partial class CosmosDbEventStore : IEventStore
             }
 
             // Fetch events using batched point reads with concurrency control
-            var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+            var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
             using var semaphore = new SemaphoreSlim(options.MaxConcurrentDeserializations);
 
             var tasks = eventIds.Select(async eventId =>
@@ -207,11 +272,17 @@ public partial class CosmosDbEventStore : IEventStore
                 await semaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
+                    var eventPk = GetEventPartitionKey(eventId, eventsSettings, serviceId);
                     var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
                         eventId,
-                        new PartitionKey(eventId)).ConfigureAwait(false);
+                        new PartitionKey(eventPk)).ConfigureAwait(false);
 
                     var cosmosEvent = response.Resource;
+                    if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId, allowEmpty: eventsSettings.IsLegacy))
+                    {
+                        return (Event: (Event?)null, Error: new UnauthorizedAccessException(
+                            $"Event {eventId} does not belong to service {serviceId}"), SortKey: string.Empty);
+                    }
                     var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
                     if (!payloadResult.IsSuccess)
                     {
@@ -276,13 +347,21 @@ public partial class CosmosDbEventStore : IEventStore
         try
         {
             var eventIdStr = eventId.ToString();
-            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveEventsContainer(serviceId);
+            var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
+            var pk = GetEventPartitionKey(eventIdStr, settings, serviceId);
 
             var response = await container.ReadItemAsync<CosmosEvent>(
                 eventIdStr,
-                new PartitionKey(eventIdStr)).ConfigureAwait(false);
+                new PartitionKey(pk)).ConfigureAwait(false);
 
             var cosmosEvent = response.Resource;
+            if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId, allowEmpty: settings.IsLegacy))
+            {
+                return ResultBox.Error<Event>(
+                    new UnauthorizedAccessException($"Event {eventId} does not belong to service {serviceId}"));
+            }
 
             var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
             if (!payloadResult.IsSuccess)
@@ -327,11 +406,14 @@ public partial class CosmosDbEventStore : IEventStore
         WriteEventsAsync(IEnumerable<Event> events)
     {
         var options = _context.Options;
+        var serviceId = CurrentServiceId;
 
         try
         {
-            var eventsContainer = await _context.GetEventsContainerAsync().ConfigureAwait(false);
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+            var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+            var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+            var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
             var eventsList = events.ToList();
             if (eventsList.Count == 0)
@@ -346,7 +428,9 @@ public partial class CosmosDbEventStore : IEventStore
             var writtenEvents = await WriteEventsInParallelAsync(
                 eventsList,
                 eventsContainer,
-                options).ConfigureAwait(false);
+                options,
+                serviceId,
+                eventsSettings).ConfigureAwait(false);
 
             // Step 2: Write tags using TransactionalBatch (grouped by tag = same partition key)
             List<TagWriteResult> tagWriteResults;
@@ -355,14 +439,16 @@ public partial class CosmosDbEventStore : IEventStore
                 tagWriteResults = await WriteTagsWithBatchAsync(
                     writtenEvents,
                     tagsContainer,
-                    options).ConfigureAwait(false);
+                    options,
+                    serviceId,
+                    tagsSettings).ConfigureAwait(false);
             }
             catch (Exception tagEx)
             {
                 // Tag write failed - attempt to rollback written events
                 if (options.TryRollbackOnFailure)
                 {
-                    await TryRollbackEventsAsync(writtenEvents, eventsContainer).ConfigureAwait(false);
+                    await TryRollbackEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings).ConfigureAwait(false);
                 }
 
                 throw new InvalidOperationException(
@@ -401,7 +487,9 @@ public partial class CosmosDbEventStore : IEventStore
     private async Task<List<Event>> WriteEventsInParallelAsync(
         List<Event> eventsList,
         Container eventsContainer,
-        CosmosDbEventStoreOptions options)
+        CosmosDbEventStoreOptions options,
+        string serviceId,
+        CosmosContainerSettings settings)
     {
         using var semaphore = new SemaphoreSlim(options.MaxConcurrentEventWrites);
         var itemRequestOptions = new ItemRequestOptions
@@ -415,11 +503,12 @@ public partial class CosmosDbEventStore : IEventStore
             try
             {
                 var serializedPayload = SerializeEventPayload(ev.Payload);
-                var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload);
+                var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload, serviceId);
+                var eventPk = GetEventPartitionKey(cosmosEvent.Id, settings, serviceId);
 
                 await eventsContainer.CreateItemAsync(
                     cosmosEvent,
-                    new PartitionKey(cosmosEvent.Id),
+                    new PartitionKey(eventPk),
                     itemRequestOptions).ConfigureAwait(false);
 
                 return ev;
@@ -441,18 +530,21 @@ public partial class CosmosDbEventStore : IEventStore
     private static async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
         List<Event> writtenEvents,
         Container tagsContainer,
-        CosmosDbEventStoreOptions options)
+        CosmosDbEventStoreOptions options,
+        string serviceId,
+        CosmosContainerSettings settings)
     {
         var tagWriteResults = new List<TagWriteResult>();
 
         // Group all tag entries by tag string (partition key)
         var tagEntries = writtenEvents
             .SelectMany(ev => ev.Tags.Select(tagString => (TagString: tagString, Event: ev)))
-            .GroupBy(x => x.TagString);
+            .GroupBy(x => settings.IsLegacy ? x.TagString : $"{serviceId}|{x.TagString}");
 
         foreach (var group in tagEntries)
         {
-            var tagString = group.Key;
+            var tagPk = group.Key;
+            var tagString = settings.IsLegacy ? group.Key : group.First().TagString;
             var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
                 ? tagString.Split(':')[0]
                 : tagString;
@@ -461,7 +553,7 @@ public partial class CosmosDbEventStore : IEventStore
             if (options.UseTransactionalBatchForTags && items.Count <= options.MaxBatchOperations)
             {
                 // Use TransactionalBatch for same-partition writes
-                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagString));
+                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
 
                 foreach (var item in items)
                 {
@@ -470,7 +562,8 @@ public partial class CosmosDbEventStore : IEventStore
                         tagGroup,
                         item.Event.SortableUniqueIdValue,
                         item.Event.Id,
-                        item.Event.EventType);
+                        item.Event.EventType,
+                        serviceId);
 
                     batch.CreateItem(cosmosTag);
                 }
@@ -499,7 +592,7 @@ public partial class CosmosDbEventStore : IEventStore
                 for (var i = 0; i < items.Count; i += options.MaxBatchOperations)
                 {
                     var batchItems = items.Skip(i).Take(options.MaxBatchOperations).ToList();
-                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagString));
+                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
 
                     foreach (var item in batchItems)
                     {
@@ -508,7 +601,8 @@ public partial class CosmosDbEventStore : IEventStore
                             tagGroup,
                             item.Event.SortableUniqueIdValue,
                             item.Event.Id,
-                            item.Event.EventType);
+                            item.Event.EventType,
+                            serviceId);
 
                         batch.CreateItem(cosmosTag);
                     }
@@ -539,15 +633,21 @@ public partial class CosmosDbEventStore : IEventStore
     /// <summary>
     ///     Attempts to rollback (delete) written events after a failure.
     /// </summary>
-    private async Task TryRollbackEventsAsync(List<Event> writtenEvents, Container eventsContainer)
+    private async Task TryRollbackEventsAsync(
+        List<Event> writtenEvents,
+        Container eventsContainer,
+        string serviceId,
+        CosmosContainerSettings settings)
     {
         var deleteTasks = writtenEvents.Select(async ev =>
         {
             try
             {
+                var eventId = ev.Id.ToString();
+                var eventPk = GetEventPartitionKey(eventId, settings, serviceId);
                 await eventsContainer.DeleteItemAsync<CosmosEvent>(
-                    ev.Id.ToString(),
-                    new PartitionKey(ev.Id.ToString())).ConfigureAwait(false);
+                    eventId,
+                    new PartitionKey(eventPk)).ConfigureAwait(false);
                 return (ev.Id, Success: true, Error: (Exception?)null);
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -589,14 +689,38 @@ public partial class CosmosDbEventStore : IEventStore
         try
         {
             var tagString = tag.GetTag();
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
-            var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
-                .Where(t => t.Tag == tagString)
-                .OrderBy(t => t.SortableUniqueId);
+            QueryDefinition queryDefinition;
+            QueryRequestOptions requestOptions;
+            if (settings.IsLegacy)
+            {
+                queryDefinition = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.tag = @tag ORDER BY c.sortableUniqueId")
+                    .WithParameter("@tag", tagString);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagString)
+                };
+            }
+            else
+            {
+                var tagPk = GetTagPartitionKey(tagString, settings, serviceId);
+                queryDefinition = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
+                    .WithParameter("@pk", tagPk);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagPk)
+                };
+            }
 
             var tagStreams = new List<TagStream>();
-            using var iterator = query.ToFeedIterator();
+            using var iterator = tagsContainer.GetItemQueryIterator<CosmosTag>(
+                queryDefinition,
+                requestOptions: requestOptions);
 
             while (iterator.HasMoreResults)
             {
@@ -642,16 +766,40 @@ public partial class CosmosDbEventStore : IEventStore
             var tagGroup = tag.GetTagGroup();
             var tagContent = tag.GetTagContent();
 
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
-            // Get the latest tag entry
-            var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
-                .Where(t => t.Tag == tagString)
-                .OrderByDescending(t => t.SortableUniqueId)
-                .Take(1);
+            QueryDefinition queryDefinition;
+            QueryRequestOptions requestOptions;
+            if (settings.IsLegacy)
+            {
+                queryDefinition = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.tag = @tag ORDER BY c.sortableUniqueId DESC")
+                    .WithParameter("@tag", tagString);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagString),
+                    MaxItemCount = 1
+                };
+            }
+            else
+            {
+                var tagPk = GetTagPartitionKey(tagString, settings, serviceId);
+                queryDefinition = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId DESC")
+                    .WithParameter("@pk", tagPk);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagPk),
+                    MaxItemCount = 1
+                };
+            }
 
             CosmosTag? latestTag = null;
-            using var iterator = query.ToFeedIterator();
+            using var iterator = tagsContainer.GetItemQueryIterator<CosmosTag>(
+                queryDefinition,
+                requestOptions: requestOptions);
 
             if (iterator.HasMoreResults)
             {
@@ -707,21 +855,44 @@ public partial class CosmosDbEventStore : IEventStore
         try
         {
             var tagString = tag.GetTag();
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
-            var query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
-                .Where(t => t.Tag == tagString)
-                .Take(1);
-
-            using var iterator = query.ToFeedIterator();
-
-            if (iterator.HasMoreResults)
+            QueryDefinition queryDefinition;
+            QueryRequestOptions requestOptions;
+            if (settings.IsLegacy)
             {
-                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                return ResultBox.FromValue(response.Count > 0);
+                queryDefinition = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.tag = @tag")
+                    .WithParameter("@tag", tagString);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagString)
+                };
+            }
+            else
+            {
+                var tagPk = GetTagPartitionKey(tagString, settings, serviceId);
+                queryDefinition = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.pk = @pk")
+                    .WithParameter("@pk", tagPk);
+                requestOptions = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(tagPk)
+                };
             }
 
-            return ResultBox.FromValue(false);
+            using var iterator = tagsContainer.GetItemQueryIterator<long>(
+                queryDefinition,
+                requestOptions: requestOptions);
+
+            long count = 0;
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                count += response.FirstOrDefault();
+            }
+
+            return ResultBox.FromValue(count > 0);
         }
         catch (CosmosException ex)
         {
@@ -742,14 +913,27 @@ public partial class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var container = await _context.GetEventsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveEventsContainer(serviceId);
+            var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
 
-            // Use COUNT aggregate for efficiency instead of fetching all documents
-            var sqlQuery = since != null
-                ? $"SELECT VALUE COUNT(1) FROM c WHERE c.sortableUniqueId > '{since.Value}'"
-                : "SELECT VALUE COUNT(1) FROM c";
-
-            var queryDefinition = new QueryDefinition(sqlQuery);
+            QueryDefinition queryDefinition;
+            if (settings.IsLegacy)
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.sortableUniqueId > @since")
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT VALUE COUNT(1) FROM c");
+            }
+            else
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = @serviceId AND c.sortableUniqueId > @since")
+                        .WithParameter("@serviceId", serviceId)
+                        .WithParameter("@since", since.Value)
+                    : new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = @serviceId")
+                        .WithParameter("@serviceId", serviceId);
+            }
             using var iterator = container.GetItemQueryIterator<long>(queryDefinition);
 
             long count = 0;
@@ -780,10 +964,16 @@ public partial class CosmosDbEventStore : IEventStore
     {
         try
         {
-            var tagsContainer = await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
             // Query all tags and group in memory (Cosmos DB doesn't support complex GROUP BY with aggregations)
             IQueryable<CosmosTag> query = tagsContainer.GetItemLinqQueryable<CosmosTag>();
+            if (!settings.IsLegacy)
+            {
+                query = query.Where(t => t.ServiceId == serviceId);
+            }
             if (!string.IsNullOrEmpty(tagGroup))
             {
                 query = query.Where(t => t.TagGroup == tagGroup);

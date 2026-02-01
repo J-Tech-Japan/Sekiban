@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
@@ -24,13 +25,12 @@ public class CosmosDbContext : IDisposable
     private readonly string _databaseName;
     private readonly ILogger<CosmosDbContext>? _logger;
     private readonly CosmosDbEventStoreOptions _options;
-    private Container? _eventsContainer;
-    private Container? _tagsContainer;
-    private Container? _multiProjectionStatesContainer;
+    private readonly Dictionary<string, Container> _containers = new();
     private CosmosClient? _cosmosClient;
     private Database? _database;
     private bool _disposed;
     private readonly bool _ownsCosmosClient;
+    private readonly SemaphoreSlim _containerLock = new(1, 1);
 
     /// <summary>
     ///     Constructor from configuration (deprecated - use extension methods instead)
@@ -92,40 +92,22 @@ public class CosmosDbContext : IDisposable
     public CosmosDbEventStoreOptions Options => _options;
 
     /// <summary>
-    ///     Gets the events container, initializing if needed.
+    ///     Gets the events container for the provided settings, initializing if needed.
     /// </summary>
-    public async Task<Container> GetEventsContainerAsync()
-    {
-        if (_eventsContainer != null)
-            return _eventsContainer;
-
-        await InitializeAsync().ConfigureAwait(false);
-        return _eventsContainer!;
-    }
+    public Task<Container> GetEventsContainerAsync(CosmosContainerSettings settings) =>
+        GetOrCreateContainerAsync(settings, CreateEventsContainerProperties);
 
     /// <summary>
-    ///     Gets the tags container, initializing if needed.
+    ///     Gets the tags container for the provided settings, initializing if needed.
     /// </summary>
-    public async Task<Container> GetTagsContainerAsync()
-    {
-        if (_tagsContainer != null)
-            return _tagsContainer;
-
-        await InitializeAsync().ConfigureAwait(false);
-        return _tagsContainer!;
-    }
+    public Task<Container> GetTagsContainerAsync(CosmosContainerSettings settings) =>
+        GetOrCreateContainerAsync(settings, CreateTagsContainerProperties);
 
     /// <summary>
-    ///     Gets the multi projection states container, initializing if needed.
+    ///     Gets the multi projection states container for the provided settings, initializing if needed.
     /// </summary>
-    public async Task<Container> GetMultiProjectionStatesContainerAsync()
-    {
-        if (_multiProjectionStatesContainer != null)
-            return _multiProjectionStatesContainer;
-
-        await InitializeAsync().ConfigureAwait(false);
-        return _multiProjectionStatesContainer!;
-    }
+    public Task<Container> GetMultiProjectionStatesContainerAsync(CosmosContainerSettings settings) =>
+        GetOrCreateContainerAsync(settings, CreateStatesContainerProperties);
 
     private async Task InitializeAsync()
     {
@@ -168,49 +150,105 @@ public class CosmosDbContext : IDisposable
             LogUsingDatabase(_logger, _databaseName, null);
         }
 
-        // Create events container with partition key on id
-        var eventsContainerProperties = new ContainerProperties
-        {
-            Id = "events",
-            PartitionKeyPath = "/id"
-        };
-
-        var eventsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            eventsContainerProperties).ConfigureAwait(false);
-        _eventsContainer = eventsContainerResponse.Container;
-
-        if (_logger != null)
-        {
-            LogEventsContainerInitialized(_logger, null);
-        }
-
-        // Create tags container with partition key on tag
-        var tagsContainerProperties = new ContainerProperties
-        {
-            Id = "tags",
-            PartitionKeyPath = "/tag"
-        };
-
-        var tagsContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            tagsContainerProperties).ConfigureAwait(false);
-        _tagsContainer = tagsContainerResponse.Container;
-
-        if (_logger != null)
-        {
-            LogTagsContainerInitialized(_logger, null);
-        }
-
-        // Create multi projection states container with partition key on partitionKey
-        var statesContainerProperties = new ContainerProperties
-        {
-            Id = "multiProjectionStates",
-            PartitionKeyPath = "/partitionKey"
-        };
-
-        var statesContainerResponse = await _database.CreateContainerIfNotExistsAsync(
-            statesContainerProperties).ConfigureAwait(false);
-        _multiProjectionStatesContainer = statesContainerResponse.Container;
+        // Containers are created lazily per settings.
     }
+
+    private async Task<Container> GetOrCreateContainerAsync(
+        CosmosContainerSettings settings,
+        Func<CosmosContainerSettings, ContainerProperties> propertiesFactory)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (_containers.TryGetValue(settings.Name, out var cached))
+        {
+            return cached;
+        }
+
+        await InitializeAsync().ConfigureAwait(false);
+
+        await _containerLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_containers.TryGetValue(settings.Name, out cached))
+            {
+                return cached;
+            }
+
+            var properties = propertiesFactory(settings);
+            var response = await _database!.CreateContainerIfNotExistsAsync(properties).ConfigureAwait(false);
+            var container = response.Container;
+
+            _containers[settings.Name] = container;
+
+            if (_logger != null)
+            {
+                if (string.Equals(settings.Name, _options.EventsContainerName, StringComparison.Ordinal) ||
+                    string.Equals(settings.Name, _options.LegacyEventsContainerName, StringComparison.Ordinal))
+                {
+                    LogEventsContainerInitialized(_logger, null);
+                }
+                else if (string.Equals(settings.Name, _options.TagsContainerName, StringComparison.Ordinal) ||
+                         string.Equals(settings.Name, _options.LegacyTagsContainerName, StringComparison.Ordinal))
+                {
+                    LogTagsContainerInitialized(_logger, null);
+                }
+            }
+
+            return container;
+        }
+        finally
+        {
+            _containerLock.Release();
+        }
+    }
+
+    private ContainerProperties CreateEventsContainerProperties(CosmosContainerSettings settings)
+    {
+        var properties = new ContainerProperties
+        {
+            Id = settings.Name,
+            PartitionKeyPath = settings.PartitionKeyPath
+        };
+
+        if (!settings.IsLegacy)
+        {
+            properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
+            {
+                new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
+                new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
+            });
+        }
+
+        return properties;
+    }
+
+    private ContainerProperties CreateTagsContainerProperties(CosmosContainerSettings settings)
+    {
+        var properties = new ContainerProperties
+        {
+            Id = settings.Name,
+            PartitionKeyPath = settings.PartitionKeyPath
+        };
+
+        if (!settings.IsLegacy)
+        {
+            properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
+            {
+                new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
+                new() { Path = "/tag", Order = CompositePathSortOrder.Ascending },
+                new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
+            });
+        }
+
+        return properties;
+    }
+
+    private static ContainerProperties CreateStatesContainerProperties(CosmosContainerSettings settings) =>
+        new()
+        {
+            Id = settings.Name,
+            PartitionKeyPath = settings.PartitionKeyPath
+        };
 
     /// <summary>
     ///     Disposes owned CosmosDB resources.
@@ -234,6 +272,11 @@ public class CosmosDbContext : IDisposable
         if (disposing && _ownsCosmosClient)
         {
             _cosmosClient?.Dispose();
+        }
+
+        if (disposing)
+        {
+            _containerLock.Dispose();
         }
 
         _disposed = true;

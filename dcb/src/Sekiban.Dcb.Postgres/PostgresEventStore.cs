@@ -3,6 +3,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Postgres.DbModels;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Microsoft.Extensions.Logging;
@@ -13,25 +14,31 @@ public class PostgresEventStore : IEventStore
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ILogger<PostgresEventStore> _logger;
 
     public PostgresEventStore(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
         DcbDomainTypes domainTypes,
+        IServiceIdProvider serviceIdProvider,
         ILogger<PostgresEventStore>? logger = null)
     {
         _contextFactory = contextFactory;
         _domainTypes = domainTypes;
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger ?? NullLogger<PostgresEventStore>.Instance;
     }
+
+    private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
-            var query = context.Events.AsQueryable();
+            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
 
             if (since != null)
             {
@@ -65,10 +72,13 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
             var tagJson = $"\"{tagString}\"";
-            var query = context.Events.Where(e => EF.Functions.JsonContains(e.Tags, tagJson));
+            var query = context.Events.Where(e =>
+                e.ServiceId == serviceId &&
+                EF.Functions.JsonContains(e.Tags, tagJson));
 
             if (since != null)
             {
@@ -102,8 +112,11 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
-            var dbEvent = await context.Events.FirstOrDefaultAsync(e => e.Id == eventId);
+            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
+                e.ServiceId == serviceId &&
+                e.Id == eventId);
 
             if (dbEvent == null)
             {
@@ -130,6 +143,7 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
             // Use the execution strategy for retry logic
             var strategy = context.Database.CreateExecutionStrategy();
@@ -150,7 +164,7 @@ public class PostgresEventStore : IEventStore
                     var serializedPayload = SerializeEventPayload(ev.Payload);
 
                     // Create and add the database event
-                    var dbEvent = DbEvent.FromEvent(ev, serializedPayload);
+                    var dbEvent = DbEvent.FromEvent(ev, serializedPayload, serviceId);
                     context.Events.Add(dbEvent);
                     writtenEvents.Add(ev);
 
@@ -166,7 +180,8 @@ public class PostgresEventStore : IEventStore
                             tagGroup,
                             ev.SortableUniqueIdValue,
                             ev.Id,
-                            ev.EventType);
+                            ev.EventType,
+                            serviceId);
                         context.Tags.Add(dbTag);
 
                         tagWriteResults.Add(
@@ -198,11 +213,15 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
 
             // Get all tag entries for this tag
-            var tags = await context.Tags.Where(t => t.Tag == tagString).OrderBy(t => t.SortableUniqueId).ToListAsync();
+            var tags = await context.Tags
+                .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
+                .OrderBy(t => t.SortableUniqueId)
+                .ToListAsync();
 
             var tagStreams = new List<TagStream>();
             foreach (var dbTag in tags)
@@ -223,6 +242,7 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
             var tagGroup = tag.GetTagGroup();
@@ -231,7 +251,7 @@ public class PostgresEventStore : IEventStore
             // Get the latest tag entry
             var dbTag = await context
                 .Tags
-                .Where(t => t.Tag == tagString)
+                .Where(t => t.ServiceId == serviceId && t.Tag == tagString)
                 .OrderByDescending(t => t.SortableUniqueId)
                 .FirstOrDefaultAsync();
 
@@ -272,9 +292,10 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
-            var exists = await context.Tags.AnyAsync(t => t.Tag == tagString);
+            var exists = await context.Tags.AnyAsync(t => t.ServiceId == serviceId && t.Tag == tagString);
 
             return ResultBox.FromValue(exists);
         }
@@ -289,8 +310,9 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
-            var query = context.Events.AsQueryable();
+            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
             if (since != null)
             {
                 query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
@@ -310,8 +332,9 @@ public class PostgresEventStore : IEventStore
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
 
-            var query = context.Tags.AsQueryable();
+            var query = context.Tags.AsQueryable().Where(t => t.ServiceId == serviceId);
             if (!string.IsNullOrEmpty(tagGroup))
             {
                 query = query.Where(t => t.TagGroup == tagGroup);
