@@ -6,6 +6,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
@@ -167,6 +168,35 @@ public class MinimalOrleansTests : IAsyncLifetime
         Assert.Equal(tagId, await grainB.GetTagActorIdAsync());
     }
 
+    [Fact]
+    public async Task Orleans_Should_Isolate_TagStateGrain_By_ServiceId()
+    {
+        var tagStateId = "order:123:projector";
+        var tenantA = ServiceIdGrainKey.Build("tenant-a", tagStateId);
+        var tenantB = ServiceIdGrainKey.Build("tenant-b", tagStateId);
+
+        var grainA = _client.GetGrain<ITagStateGrain>(tenantA);
+        var grainB = _client.GetGrain<ITagStateGrain>(tenantB);
+
+        Assert.Equal(tagStateId, await grainA.GetTagStateActorIdAsync());
+        Assert.Equal(tagStateId, await grainB.GetTagStateActorIdAsync());
+    }
+
+    [Fact]
+    public void DefaultOrleansEventSubscriptionResolver_Should_Separate_StreamNamespace_By_ServiceId()
+    {
+        var resolver = new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty);
+        var tenantKey = ServiceIdGrainKey.Build("tenant-a", "projector");
+
+        var tenantStream = resolver.Resolve(tenantKey) as OrleansSekibanStream;
+        var defaultStream = resolver.Resolve("projector") as OrleansSekibanStream;
+
+        Assert.NotNull(tenantStream);
+        Assert.NotNull(defaultStream);
+        Assert.Equal("tenant-a|AllEvents", tenantStream!.StreamNamespace);
+        Assert.Equal("AllEvents", defaultStream!.StreamNamespace);
+    }
+
     private class TestSiloConfigurator : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
@@ -206,6 +236,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+                    services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
                     // Add mock IBlobStorageSnapshotAccessor for tests
                     services.AddSingleton<Sekiban.Dcb.Snapshots.IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     // Add event statistics for MultiProjectionGrain
