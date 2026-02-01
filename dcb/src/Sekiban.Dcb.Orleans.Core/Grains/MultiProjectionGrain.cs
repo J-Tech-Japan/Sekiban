@@ -9,10 +9,12 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.ServiceId;
 using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -30,6 +32,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
+    private string? _grainKey;
+    private string? _projectorName;
+    private string _serviceId = DefaultServiceIdProvider.DefaultServiceId;
 
     // State restoration tracking
     private DateTime? _stateRestoredAt;
@@ -112,6 +117,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _injectedActorOptions = actorOptions;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
     }
+
+    private (string GrainKey, string ProjectorName, string ServiceId) GetIdentity()
+    {
+        if (!string.IsNullOrEmpty(_grainKey) && !string.IsNullOrEmpty(_projectorName))
+        {
+            return (_grainKey!, _projectorName!, _serviceId);
+        }
+
+        var grainKey = this.GetPrimaryKeyString();
+        var parsed = ServiceIdGrainKey.Parse(grainKey);
+        _grainKey = grainKey;
+        _projectorName = parsed.RawKey;
+        _serviceId = parsed.ServiceId;
+        return (_grainKey, _projectorName, _serviceId);
+    }
+
+    private string GetProjectorName() => GetIdentity().ProjectorName;
+
+    private string GetGrainKey() => GetIdentity().GrainKey;
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false)
     {
@@ -338,7 +362,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 stateSize = safeStateSize; // Backward-compatible: report safe payload size in StateSize
-                var projectorName = this.GetPrimaryKeyString();
+                var projectorName = GetProjectorName();
                 _logger.LogDebug(
                     "[{ProjectorName}] State size - Safe: {SafeBytes:N0} bytes, Unsafe: {UnsafeBytes:N0} bytes, Events: {EventsProcessed:N0}",
                     projectorName,
@@ -353,7 +377,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         return new MultiProjectionGrainStatus(
-            this.GetPrimaryKeyString(),
+            GetProjectorName(),
             _orleansStreamHandle != null,
             isCaughtUp,
             currentPosition,
@@ -459,7 +483,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             var startUtc = DateTime.UtcNow;
-            var projectorName = this.GetPrimaryKeyString();
+            var projectorName = GetProjectorName();
 
             if (_projectionActor == null)
             {
@@ -833,7 +857,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Persistence failed: {ex.Message}";
-            _logger.LogError(ex, "[{ProjectorName}] Persistence failed", this.GetPrimaryKeyString());
+            _logger.LogError(ex, "[{ProjectorName}] Persistence failed", GetProjectorName());
             return ResultBox.Error<bool>(ex);
         }
     }
@@ -869,8 +893,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Defensive: ensure stream is prepared even if lifecycle hook hasn't run yet
         if (_orleansStream == null)
         {
-            var projectorName = this.GetPrimaryKeyString();
-            var streamInfo = _subscriptionResolver.Resolve(projectorName);
+            var grainKey = GetGrainKey();
+            var streamInfo = _subscriptionResolver.Resolve(grainKey);
             if (streamInfo is OrleansSekibanStream orleansStream)
             {
                 var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
@@ -885,7 +909,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             try
             {
                 _subscriptionStarting = true;
-                var projectorName = this.GetPrimaryKeyString();
+                var projectorName = GetProjectorName();
                 _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Starting subscription to Orleans stream", projectorName);
 
                 var observer = new StreamBatchObserver(this);
@@ -931,7 +955,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch (Exception ex)
             {
-                var projectorName = this.GetPrimaryKeyString();
+                var projectorName = GetProjectorName();
                 _logger.LogError(ex, "[SimplifiedPureGrain-{ProjectorName}] Failed to subscribe to Orleans stream", projectorName);
                 _lastError = $"Stream subscription failed: {ex.Message}";
                 throw;
@@ -943,7 +967,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         else if (_orleansStreamHandle != null)
         {
-            var projectorName = this.GetPrimaryKeyString();
+            var projectorName = GetProjectorName();
             _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] Stream subscription already active", projectorName);
         }
         // Do not auto-catch-up here; catch-up will be triggered by state/query access
@@ -957,7 +981,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _logger.LogWarning(
                 MultiProjectionLogEvents.QueryRejected,
                 "Query rejected due to unhealthy activation: {ProjectorName}",
-                this.GetPrimaryKeyString());
+                GetProjectorName());
             throw new InvalidOperationException($"Projection not healthy: {_activationFailureReason}");
         }
 
@@ -1082,7 +1106,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _logger.LogWarning(
                 MultiProjectionLogEvents.QueryRejected,
                 "List query rejected due to unhealthy activation: {ProjectorName}",
-                this.GetPrimaryKeyString());
+                GetProjectorName());
             throw new InvalidOperationException($"Projection not healthy: {_activationFailureReason}");
         }
 
@@ -1208,13 +1232,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task RefreshAsync()
     {
-        _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", this.GetPrimaryKeyString());
+        _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", GetProjectorName());
         await CatchUpFromEventStoreAsync();
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
         _logger.LogInformation(
             MultiProjectionLogEvents.ActivationStarted,
             "Grain activation started: {ProjectorName}",
@@ -1490,7 +1514,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
         _logger.LogInformation(
             MultiProjectionLogEvents.DeactivationStarted,
             "Grain deactivation started: {ProjectorName}, Reason: {Reason}",
@@ -1643,7 +1667,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             if (_state.State != null)
             {
-                _state.State.ProjectorName = this.GetPrimaryKeyString();
+                _state.State.ProjectorName = GetProjectorName();
                 _state.State.SerializedState = null;
                 _state.State.LastPosition = null;
                 _state.State.SafeLastPosition = null;
@@ -1716,7 +1740,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         try
         {
-            var projectorName = this.GetPrimaryKeyString();
+            var projectorName = GetProjectorName();
             var currentVersion = _state.State?.ProjectorVersion;
             bool updated = false;
 
@@ -1845,7 +1869,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogWarning(
                 "[{ProjectorName}] Fallback: No stream events for over 1 minute, checking event store",
-                this.GetPrimaryKeyString());
+                GetProjectorName());
             await RefreshAsync();
         }
     }
@@ -1867,7 +1891,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task InitiateCatchUpIfNeeded(bool forceFull = false)
     {
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
 
         // Double-check: If catch-up is already active, skip immediately
         // This prevents race conditions when multiple requests arrive concurrently
@@ -1927,7 +1951,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return; // Timer already running
         }
 
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
         _logger.LogDebug(
             "[{ProjectorName}] Starting catch-up timer with interval: {IntervalMs}ms",
             projectorName,
@@ -1952,7 +1976,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
 
         try
         {
@@ -1986,7 +2010,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_projectionActor == null || _eventStore == null) return 0;
 
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
 
         // Always use small batch size to avoid blocking
         var batchSize = CatchUpBatchSize;
@@ -2151,7 +2175,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task CompleteCatchUp()
     {
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
 
         // Stop timer
         _catchUpTimer?.Dispose();
@@ -2186,7 +2210,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             if (_projectionActor != null)
             {
-                var projectorName = this.GetPrimaryKeyString();
+                var projectorName = GetProjectorName();
                 _logger.LogDebug(
                     "[{ProjectorName}] Triggering safe promotion check after catch-up",
                     projectorName);
@@ -2205,7 +2229,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[{ProjectorName}] Error during safe promotion", this.GetPrimaryKeyString());
+            _logger.LogError(ex, "[{ProjectorName}] Error during safe promotion", GetProjectorName());
         }
     }
 
@@ -2213,7 +2237,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_pendingStreamEvents.Count == 0) return;
 
-        var projectorName = this.GetPrimaryKeyString();
+        var projectorName = GetProjectorName();
         var events = new List<Event>();
 
         while (_pendingStreamEvents.Count > 0)
@@ -2321,7 +2345,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogDebug(
                 "[{ProjectorName}] Buffered {BufferedCount} stream events during catch-up (queue size: {QueueSize})",
-                this.GetPrimaryKeyString(),
+                GetProjectorName(),
                 buffered,
                 _pendingStreamEvents.Count);
         }
@@ -2365,7 +2389,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogDebug(
                 "[{ProjectorName}] Stream batch received: {EventCount} events",
-                this.GetPrimaryKeyString(),
+                GetProjectorName(),
                 events.Count);
 
             // Track event deliveries for debugging
@@ -2393,7 +2417,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     _logger.LogDebug(
                         "[{ProjectorName}] Buffered {BufferedCount} stream events during catch-up (queue size: {QueueSize})",
-                        this.GetPrimaryKeyString(),
+                        GetProjectorName(),
                         buffered,
                         _pendingStreamEvents.Count);
                 }
@@ -2454,7 +2478,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             _logger.LogDebug(
                 "[{ProjectorName}] Processed {EventCount} events - Total: {EventsProcessed:N0} events",
-                this.GetPrimaryKeyString(),
+                GetProjectorName(),
                 newEvents.Count,
                 _eventsProcessed);
 
@@ -2467,15 +2491,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Failed to process event batch: {ex.Message}";
-            _logger.LogError(ex, "[{ProjectorName}] Error processing event batch", this.GetPrimaryKeyString());
+            _logger.LogError(ex, "[{ProjectorName}] Error processing event batch", GetProjectorName());
 
             // Log inner exception for better debugging
             if (ex.InnerException != null)
             {
-                _logger.LogError(
-                    ex.InnerException,
-                    "[{ProjectorName}] Inner exception during event batch processing",
-                    this.GetPrimaryKeyString());
+                    _logger.LogError(
+                        ex.InnerException,
+                        "[{ProjectorName}] Inner exception during event batch processing",
+                        GetProjectorName());
                 _lastError += $" Inner: {ex.InnerException.Message}";
             }
         }
@@ -2527,7 +2551,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            var projectorName = this.GetPrimaryKeyString();
+            var projectorName = GetProjectorName();
 
             // Separate events based on whether they were marked as unsafe
             var safeEvents = new List<Event>();
@@ -2590,7 +2614,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         catch (Exception ex)
         {
             _lastError = $"Failed to process buffered events: {ex.Message}";
-            _logger.LogError(ex, "[{ProjectorName}] Error processing buffered events", this.GetPrimaryKeyString());
+            _logger.LogError(ex, "[{ProjectorName}] Error processing buffered events", GetProjectorName());
         }
     }
 
@@ -2607,7 +2631,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var events = batch.Select(item => DeserializeEvent(item.Item)).Where(e => e != null).Cast<Event>().ToList();
             _grain._logger.LogDebug(
                 "[StreamBatchObserver-{ProjectorName}] Received batch of {EventCount} events",
-                _grain.GetPrimaryKeyString(),
+                _grain.GetProjectorName(),
                 events.Count);
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
@@ -2619,7 +2643,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var events = batch.Select(DeserializeEvent).Where(e => e != null).Cast<Event>().ToList();
             _grain._logger.LogDebug(
                 "[StreamBatchObserver-{ProjectorName}] Received legacy batch of {EventCount} events",
-                _grain.GetPrimaryKeyString(),
+                _grain.GetProjectorName(),
                 events.Count);
             _grain.EnqueueStreamEvents(events);
             return Task.CompletedTask;
@@ -2633,7 +2657,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _grain._logger.LogDebug(
                     "[StreamBatchObserver-{ProjectorName}] Received single event {EventType}, ID: {EventId}",
-                    _grain.GetPrimaryKeyString(),
+                    _grain.GetProjectorName(),
                     evt.EventType,
                     evt.Id);
                 _grain.EnqueueStreamEvents(new[] { evt });
@@ -2649,7 +2673,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _grain._logger.LogWarning(
                     result.GetException(),
                     "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event",
-                    _grain.GetPrimaryKeyString());
+                    _grain.GetProjectorName());
                 return null;
             }
             return result.GetValue();
@@ -2659,7 +2683,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _grain._logger.LogDebug(
                 "[StreamBatchObserver-{ProjectorName}] Stream completed",
-                _grain.GetPrimaryKeyString());
+                _grain.GetProjectorName());
             return Task.CompletedTask;
         }
 
@@ -2668,7 +2692,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _grain._logger.LogError(
                 ex,
                 "[StreamBatchObserver-{ProjectorName}] Stream error",
-                _grain.GetPrimaryKeyString());
+                _grain.GetProjectorName());
             _grain._lastError = $"Stream error: {ex.Message}";
             return Task.CompletedTask;
         }
@@ -2747,10 +2771,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task InitStreamsAsync(CancellationToken ct)
     {
-        var projectorName = this.GetPrimaryKeyString();
+        var grainKey = GetGrainKey();
+        var projectorName = GetProjectorName();
         _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] InitStreamsAsync called in lifecycle stage", projectorName);
 
-        var streamInfo = _subscriptionResolver.Resolve(projectorName);
+        var streamInfo = _subscriptionResolver.Resolve(grainKey);
         if (streamInfo is not OrleansSekibanStream orleansStream)
         {
             throw new InvalidOperationException($"Invalid stream type: {streamInfo?.GetType().Name}");

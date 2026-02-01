@@ -4,7 +4,9 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Diagnostics;
@@ -22,17 +24,20 @@ public class OrleansDcbExecutor : ISekibanExecutor
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _generalExecutor;
+    private readonly IServiceIdProvider _serviceIdProvider;
 
     public OrleansDcbExecutor(
         IClusterClient clusterClient,
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher = null)
+        IEventPublisher? eventPublisher = null,
+        IServiceIdProvider? serviceIdProvider = null)
     {
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes);
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
         _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher);
     }
 
@@ -97,7 +102,8 @@ public class OrleansDcbExecutor : ISekibanExecutor
         }
 
         // Get the multi-projection grain directly
-        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
+        var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
+        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
         // Wait for sortable unique ID if needed
         await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
@@ -142,7 +148,8 @@ public class OrleansDcbExecutor : ISekibanExecutor
         }
 
         // Get the multi-projection grain directly
-        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(projectorName);
+        var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
+        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
         // Wait for sortable unique ID if needed
         await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);

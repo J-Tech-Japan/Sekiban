@@ -1,6 +1,8 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.ServiceId;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans;
@@ -14,12 +16,18 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
     private readonly IClusterClient _clusterClient;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
+    private readonly IServiceIdProvider _serviceIdProvider;
 
-    public OrleansActorObjectAccessor(IClusterClient clusterClient, IEventStore eventStore, DcbDomainTypes domainTypes)
+    public OrleansActorObjectAccessor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        IServiceIdProvider? serviceIdProvider = null)
     {
         _clusterClient = clusterClient;
         _eventStore = eventStore;
         _domainTypes = domainTypes;
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
     public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
@@ -35,13 +43,15 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
 
             if (actorType == typeof(ITagConsistentActorCommon))
             {
-                var grain = _clusterClient.GetGrain<ITagConsistentGrain>(actorId);
+                var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), actorId);
+                var grain = _clusterClient.GetGrain<ITagConsistentGrain>(grainId);
                 var wrapper = new TagConsistentGrainWrapper(grain);
                 return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
             }
             if (actorType == typeof(ITagStateActorCommon))
             {
-                var grain = _clusterClient.GetGrain<ITagStateGrain>(actorId);
+                var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), actorId);
+                var grain = _clusterClient.GetGrain<ITagStateGrain>(grainId);
                 var wrapper = new TagStateGrainWrapper(grain);
                 return Task.FromResult(ResultBox.FromValue((T)(object)wrapper));
             }
@@ -57,7 +67,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor
     public async Task<bool> ActorExistsAsync(string actorId)
     {
         // In Orleans, grains are created on demand, so we check if the tag exists in the event store
-        var tag = ParseTagFromActorId(actorId);
+        var tag = ParseTagFromActorId(ServiceIdGrainKey.Strip(actorId));
         if (tag == null)
         {
             return false;
