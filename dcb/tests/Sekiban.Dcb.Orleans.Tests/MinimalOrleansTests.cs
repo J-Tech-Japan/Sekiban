@@ -7,6 +7,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
@@ -143,6 +144,27 @@ public class MinimalOrleansTests : IAsyncLifetime
         // Get status to verify persistence details
         var status = await grain.GetStatusAsync();
         Assert.NotNull(status.LastPersistTime);
+    }
+
+    [Fact]
+    public async Task Orleans_Should_Isolate_TagConsistentGrain_By_ServiceId()
+    {
+        var tagId = "order:123";
+        var tenantA = ServiceIdGrainKey.Build("tenant-a", tagId);
+        var tenantB = ServiceIdGrainKey.Build("tenant-b", tagId);
+
+        var grainA = _client.GetGrain<ITagConsistentGrain>(tenantA);
+        var grainB = _client.GetGrain<ITagConsistentGrain>(tenantB);
+
+        var reservationA = await grainA.MakeReservationAsync(string.Empty);
+        var reservationB = await grainB.MakeReservationAsync(string.Empty);
+
+        Assert.True(reservationA.IsSuccess);
+        Assert.True(reservationB.IsSuccess);
+        Assert.Equal(tagId, reservationA.GetValue().Tag);
+        Assert.Equal(tagId, reservationB.GetValue().Tag);
+        Assert.Equal(tagId, await grainA.GetTagActorIdAsync());
+        Assert.Equal(tagId, await grainB.GetTagActorIdAsync());
     }
 
     private class TestSiloConfigurator : ISiloConfigurator
