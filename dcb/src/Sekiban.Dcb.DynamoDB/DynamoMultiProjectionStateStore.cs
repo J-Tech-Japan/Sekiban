@@ -3,6 +3,7 @@ using Amazon.DynamoDBv2.Model;
 using ResultBoxes;
 using Sekiban.Dcb.DynamoDB.Models;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 
@@ -19,19 +20,24 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly DynamoDbEventStoreOptions _options;
     private readonly IAmazonDynamoDB _client;
+    private readonly IServiceIdProvider _serviceIdProvider;
 
     /// <summary>
     ///     Initializes a new DynamoMultiProjectionStateStore.
     /// </summary>
     public DynamoMultiProjectionStateStore(
         DynamoDbContext context,
+        IServiceIdProvider serviceIdProvider,
         IBlobStorageSnapshotAccessor? blobAccessor = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _blobAccessor = blobAccessor;
         _options = context.Options;
         _client = context.Client;
     }
+
+    private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
     /// <summary>
     ///     Gets the latest projection state for a specific version.
@@ -45,7 +51,8 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var key = BuildProjectionKey(projectorName, projectorVersion);
+            var serviceId = CurrentServiceId;
+            var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
             var response = await _client.GetItemAsync(new GetItemRequest
             {
                 TableName = _context.ProjectionStatesTableName,
@@ -94,7 +101,8 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var items = await QueryProjectionItemsAsync(projectorName, cancellationToken).ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var items = await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false);
             if (items.Count == 0)
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
 
@@ -139,6 +147,7 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var effectiveThreshold = offloadThresholdBytes;
             if (_options.OffloadThresholdBytes > 0 && _options.OffloadThresholdBytes < effectiveThreshold)
             {
@@ -170,7 +179,7 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
                 UpdatedAt = DateTime.UtcNow
             };
 
-            var doc = DynamoMultiProjectionState.FromRecord(updatedRecord);
+            var doc = DynamoMultiProjectionState.FromRecord(updatedRecord, serviceId);
 
             await _client.PutItemAsync(new PutItemRequest
             {
@@ -198,12 +207,18 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
 
             var list = new List<ProjectorStateInfo>();
             Dictionary<string, AttributeValue>? lastKey = null;
+            var serviceId = CurrentServiceId;
 
             do
             {
                 var response = await _client.ScanAsync(new ScanRequest
                 {
                     TableName = _context.ProjectionStatesTableName,
+                    FilterExpression = "serviceId = :serviceId",
+                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                    {
+                        [":serviceId"] = new AttributeValue { S = serviceId }
+                    },
                     ExclusiveStartKey = lastKey,
                     Limit = _options.QueryPageSize
                 }, cancellationToken).ConfigureAwait(false);
@@ -244,7 +259,8 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var key = BuildProjectionKey(projectorName, projectorVersion);
+            var serviceId = CurrentServiceId;
+            var key = BuildProjectionKey(serviceId, projectorName, projectorVersion);
             var response = await _client.GetItemAsync(new GetItemRequest
             {
                 TableName = _context.ProjectionStatesTableName,
@@ -280,9 +296,10 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var items = projectorName != null
-                ? await QueryProjectionItemsAsync(projectorName, cancellationToken).ConfigureAwait(false)
-                : await ScanProjectionItemsAsync(cancellationToken).ConfigureAwait(false);
+                ? await QueryProjectionItemsAsync(serviceId, projectorName, cancellationToken).ConfigureAwait(false)
+                : await ScanProjectionItemsAsync(serviceId, cancellationToken).ConfigureAwait(false);
 
             foreach (var item in items)
             {
@@ -306,12 +323,13 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
     }
 
     private async Task<List<DynamoMultiProjectionState>> QueryProjectionItemsAsync(
+        string serviceId,
         string projectorName,
         CancellationToken cancellationToken)
     {
         var items = new List<DynamoMultiProjectionState>();
         Dictionary<string, AttributeValue>? lastKey = null;
-        var pk = $"PROJECTOR#{projectorName}";
+        var pk = BuildProjectorPk(serviceId, projectorName);
 
         do
         {
@@ -338,7 +356,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         return items;
     }
 
-    private async Task<List<DynamoMultiProjectionState>> ScanProjectionItemsAsync(CancellationToken cancellationToken)
+    private async Task<List<DynamoMultiProjectionState>> ScanProjectionItemsAsync(
+        string serviceId,
+        CancellationToken cancellationToken)
     {
         var items = new List<DynamoMultiProjectionState>();
         Dictionary<string, AttributeValue>? lastKey = null;
@@ -348,6 +368,11 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
             var response = await _client.ScanAsync(new ScanRequest
             {
                 TableName = _context.ProjectionStatesTableName,
+                FilterExpression = "serviceId = :serviceId",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":serviceId"] = new AttributeValue { S = serviceId }
+                },
                 ExclusiveStartKey = lastKey,
                 Limit = _options.QueryPageSize
             }, cancellationToken).ConfigureAwait(false);
@@ -363,12 +388,18 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         return items;
     }
 
-    private static Dictionary<string, AttributeValue> BuildProjectionKey(string projectorName, string projectorVersion)
+    private static Dictionary<string, AttributeValue> BuildProjectionKey(
+        string serviceId,
+        string projectorName,
+        string projectorVersion)
     {
         return new Dictionary<string, AttributeValue>
         {
-            ["pk"] = new AttributeValue { S = $"PROJECTOR#{projectorName}" },
+            ["pk"] = new AttributeValue { S = BuildProjectorPk(serviceId, projectorName) },
             ["sk"] = new AttributeValue { S = $"VERSION#{projectorVersion}" }
         };
     }
+
+    private static string BuildProjectorPk(string serviceId, string projectorName) =>
+        $"SERVICE#{serviceId}#PROJECTOR#{projectorName}";
 }

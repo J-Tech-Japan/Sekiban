@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite.Services;
 using Sekiban.Dcb.Storage;
 
@@ -26,17 +27,20 @@ public static class SekibanDcbSqliteExtensions
         configure?.Invoke(options);
 
         services.AddSingleton(options);
+        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore>(sp =>
         {
             var domainTypes = sp.GetRequiredService<DcbDomainTypes>();
             var logger = sp.GetService<ILogger<SqliteEventStore>>();
-            return new SqliteEventStore(databasePath, domainTypes, options, logger);
+            var serviceIdProvider = sp.GetRequiredService<IServiceIdProvider>();
+            return new SqliteEventStore(databasePath, domainTypes, options, logger, serviceIdProvider);
         });
 
         services.AddSingleton<IMultiProjectionStateStore>(sp =>
         {
             var logger = sp.GetService<ILogger<SqliteMultiProjectionStateStore>>();
-            return new SqliteMultiProjectionStateStore(databasePath, logger);
+            var serviceIdProvider = sp.GetRequiredService<IServiceIdProvider>();
+            return new SqliteMultiProjectionStateStore(databasePath, logger, serviceIdProvider);
         });
 
         return services;

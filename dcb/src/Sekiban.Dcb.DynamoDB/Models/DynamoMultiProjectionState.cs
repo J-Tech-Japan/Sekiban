@@ -10,7 +10,7 @@ namespace Sekiban.Dcb.DynamoDB.Models;
 public class DynamoMultiProjectionState
 {
     /// <summary>
-    ///     Partition key: PROJECTOR#{projectorName}
+    ///     Partition key: SERVICE#{serviceId}#PROJECTOR#{projectorName}
     /// </summary>
     public string Pk { get; set; } = string.Empty;
 
@@ -18,6 +18,11 @@ public class DynamoMultiProjectionState
     ///     Sort key: VERSION#{projectorVersion}
     /// </summary>
     public string Sk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    public string ServiceId { get; set; } = string.Empty;
 
     /// <summary>
     ///     Projector name.
@@ -108,6 +113,7 @@ public class DynamoMultiProjectionState
         {
             ["pk"] = new AttributeValue { S = Pk },
             ["sk"] = new AttributeValue { S = Sk },
+            ["serviceId"] = new AttributeValue { S = ServiceId },
             ["projectorName"] = new AttributeValue { S = ProjectorName },
             ["projectorVersion"] = new AttributeValue { S = ProjectorVersion },
             ["payloadType"] = new AttributeValue { S = PayloadType },
@@ -143,6 +149,7 @@ public class DynamoMultiProjectionState
         {
             Pk = item.GetValueOrDefault("pk")?.S ?? string.Empty,
             Sk = item.GetValueOrDefault("sk")?.S ?? string.Empty,
+            ServiceId = item.GetValueOrDefault("serviceId")?.S ?? string.Empty,
             ProjectorName = item.GetValueOrDefault("projectorName")?.S ?? string.Empty,
             ProjectorVersion = item.GetValueOrDefault("projectorVersion")?.S ?? string.Empty,
             PayloadType = item.GetValueOrDefault("payloadType")?.S ?? string.Empty,
@@ -165,13 +172,14 @@ public class DynamoMultiProjectionState
     /// <summary>
     ///     Creates from a MultiProjectionStateRecord.
     /// </summary>
-    public static DynamoMultiProjectionState FromRecord(MultiProjectionStateRecord record)
+    public static DynamoMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId)
     {
         ArgumentNullException.ThrowIfNull(record);
         return new DynamoMultiProjectionState
         {
-            Pk = $"PROJECTOR#{record.ProjectorName}",
+            Pk = $"SERVICE#{serviceId}#PROJECTOR#{record.ProjectorName}",
             Sk = $"VERSION#{record.ProjectorVersion}",
+            ServiceId = serviceId,
             ProjectorName = record.ProjectorName,
             ProjectorVersion = record.ProjectorVersion,
             PayloadType = record.PayloadType,

@@ -9,7 +9,7 @@ namespace Sekiban.Dcb.DynamoDB.Models;
 public class DynamoEvent
 {
     /// <summary>
-    ///     Partition key: EVENT#{eventId}
+    ///     Partition key: SERVICE#{serviceId}#EVENT#{eventId}
     /// </summary>
     public string Pk { get; set; } = string.Empty;
 
@@ -17,6 +17,11 @@ public class DynamoEvent
     ///     Sort key: EVENT#{eventId}
     /// </summary>
     public string Sk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    public string ServiceId { get; set; } = string.Empty;
 
     /// <summary>
     ///     GSI1 partition key for chronological queries.
@@ -71,15 +76,17 @@ public class DynamoEvent
     /// <summary>
     ///     Creates a DynamoEvent from a domain Event.
     /// </summary>
-    public static DynamoEvent FromEvent(Event ev, string serializedPayload, string gsi1Pk)
+    public static DynamoEvent FromEvent(Event ev, string serializedPayload, string gsi1Pk, string serviceId)
     {
         ArgumentNullException.ThrowIfNull(ev);
         ArgumentNullException.ThrowIfNull(serializedPayload);
+        ArgumentNullException.ThrowIfNull(serviceId);
 
         return new DynamoEvent
         {
-            Pk = $"EVENT#{ev.Id}",
+            Pk = $"SERVICE#{serviceId}#EVENT#{ev.Id}",
             Sk = $"EVENT#{ev.Id}",
+            ServiceId = serviceId,
             Gsi1Pk = gsi1Pk,
             EventId = ev.Id.ToString(),
             SortableUniqueId = ev.SortableUniqueIdValue,
@@ -119,6 +126,7 @@ public class DynamoEvent
         {
             ["pk"] = new AttributeValue { S = Pk },
             ["sk"] = new AttributeValue { S = Sk },
+            ["serviceId"] = new AttributeValue { S = ServiceId },
             ["gsi1pk"] = new AttributeValue { S = Gsi1Pk },
             ["eventId"] = new AttributeValue { S = EventId },
             ["sortableUniqueId"] = new AttributeValue { S = SortableUniqueId },
@@ -147,6 +155,7 @@ public class DynamoEvent
         {
             Pk = item.GetValueOrDefault("pk")?.S ?? string.Empty,
             Sk = item.GetValueOrDefault("sk")?.S ?? string.Empty,
+            ServiceId = item.GetValueOrDefault("serviceId")?.S ?? string.Empty,
             Gsi1Pk = item.GetValueOrDefault("gsi1pk")?.S ?? string.Empty,
             EventId = item.GetValueOrDefault("eventId")?.S ?? string.Empty,
             SortableUniqueId = item.GetValueOrDefault("sortableUniqueId")?.S ?? string.Empty,

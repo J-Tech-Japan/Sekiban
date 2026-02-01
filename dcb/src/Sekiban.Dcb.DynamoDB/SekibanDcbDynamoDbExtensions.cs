@@ -3,6 +3,7 @@ using Amazon.Extensions.NETCore.Setup;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.DynamoDB;
@@ -30,7 +31,9 @@ public static class SekibanDcbDynamoDbExtensions
         });
 
         services.AddSingleton<DynamoDbContext>();
+        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;
@@ -49,7 +52,9 @@ public static class SekibanDcbDynamoDbExtensions
 
         services.AddSingleton(dynamoDbClient);
         services.AddSingleton<DynamoDbContext>();
+        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;
@@ -72,7 +77,9 @@ public static class SekibanDcbDynamoDbExtensions
         });
 
         services.AddSingleton<DynamoDbContext>();
+        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;

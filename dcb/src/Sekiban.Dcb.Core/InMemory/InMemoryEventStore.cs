@@ -1,6 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
@@ -12,29 +13,48 @@ namespace Sekiban.Dcb.InMemory;
 /// </summary>
 public class InMemoryEventStore : IEventStore
 {
-    private readonly object _eventLock = new();
-    private readonly List<Event> _eventOrder = new();
-    private readonly ConcurrentDictionary<Guid, Event> _events = new();
-    private readonly ConcurrentDictionary<string, List<TagStream>> _tagStreams = new();
+    private sealed class ServiceState
+    {
+        public object Lock { get; } = new();
+        public List<Event> EventOrder { get; } = new();
+        public Dictionary<Guid, Event> Events { get; } = new();
+        public Dictionary<string, List<TagStream>> TagStreams { get; } = new(StringComparer.Ordinal);
+    }
+
+    private readonly ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
+    private readonly IServiceIdProvider _serviceIdProvider;
+
+    public InMemoryEventStore(IServiceIdProvider? serviceIdProvider = null)
+    {
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+    }
+
+    private ServiceState GetState()
+    {
+        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        return _states.GetOrAdd(serviceId, _ => new ServiceState());
+    }
 
     /// <summary>
     ///     Clear all events and tag streams. Used for test isolation.
     /// </summary>
     public void Clear()
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            _eventOrder.Clear();
-            _events.Clear();
-            _tagStreams.Clear();
+            state.EventOrder.Clear();
+            state.Events.Clear();
+            state.TagStreams.Clear();
         }
     }
 
     public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            var events = _eventOrder.AsEnumerable();
+            var events = state.EventOrder.AsEnumerable();
 
             if (since != null)
             {
@@ -51,10 +71,11 @@ public class InMemoryEventStore : IEventStore
 
     public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
             var tagString = tag.GetTag();
-            var events = _eventOrder.Where(e => e.Tags.Contains(tagString));
+            var events = state.EventOrder.Where(e => e.Tags.Contains(tagString));
 
             if (since != null)
             {
@@ -70,14 +91,24 @@ public class InMemoryEventStore : IEventStore
     }
 
     public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) =>
-        _events.TryGetValue(eventId, out var evt)
-            ? Task.FromResult(ResultBox.FromValue(evt))
-            : Task.FromResult(ResultBox.Error<Event>(new Exception($"Event {eventId} not found")));
+        ReadEventInternalAsync(eventId);
+
+    private Task<ResultBox<Event>> ReadEventInternalAsync(Guid eventId)
+    {
+        var state = GetState();
+        lock (state.Lock)
+        {
+            return state.Events.TryGetValue(eventId, out var evt)
+                ? Task.FromResult(ResultBox.FromValue(evt))
+                : Task.FromResult(ResultBox.Error<Event>(new Exception($"Event {eventId} not found")));
+        }
+    }
 
     public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
         IEnumerable<Event> events)
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
             var eventList = events.ToList();
             var writtenEvents = new List<Event>();
@@ -97,7 +128,7 @@ public class InMemoryEventStore : IEventStore
             // Get current versions
             foreach (var tagString in affectedTags)
             {
-                if (_tagStreams.TryGetValue(tagString, out var streams))
+                if (state.TagStreams.TryGetValue(tagString, out var streams))
                 {
                     tagVersions[tagString] = streams.Count;
                 }
@@ -110,8 +141,8 @@ public class InMemoryEventStore : IEventStore
             // Write events
             foreach (var evt in eventList)
             {
-                _events[evt.Id] = evt;
-                _eventOrder.Add(evt);
+                state.Events[evt.Id] = evt;
+                state.EventOrder.Add(evt);
                 writtenEvents.Add(evt);
 
                 // Add tag streams for each tag in the event
@@ -119,19 +150,19 @@ public class InMemoryEventStore : IEventStore
                 {
                     var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
 
-                    if (!_tagStreams.ContainsKey(tagString))
+                    if (!state.TagStreams.ContainsKey(tagString))
                     {
-                        _tagStreams[tagString] = new List<TagStream>();
+                        state.TagStreams[tagString] = new List<TagStream>();
                     }
 
-                    _tagStreams[tagString].Add(tagStream);
+                    state.TagStreams[tagString].Add(tagStream);
                 }
             }
 
             // Create tag write results
             foreach (var tagString in affectedTags)
             {
-                var newVersion = _tagStreams[tagString].Count;
+                var newVersion = state.TagStreams[tagString].Count;
                 tagWriteResults.Add(new TagWriteResult(tagString, newVersion, DateTimeOffset.UtcNow));
             }
 
@@ -146,9 +177,10 @@ public class InMemoryEventStore : IEventStore
     {
         var tagString = tag.GetTag();
 
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            if (_tagStreams.TryGetValue(tagString, out var streams))
+            if (state.TagStreams.TryGetValue(tagString, out var streams))
             {
                 return Task.FromResult(ResultBox.FromValue(streams.AsEnumerable()));
             }
@@ -161,9 +193,10 @@ public class InMemoryEventStore : IEventStore
     {
         var tagString = tag.GetTag();
 
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            if (_tagStreams.TryGetValue(tagString, out var streams) && streams.Any())
+            if (state.TagStreams.TryGetValue(tagString, out var streams) && streams.Any())
             {
                 var latestStream = streams.OrderBy(s => s.SortableUniqueId).Last();
                 var version = streams.Count;
@@ -193,22 +226,24 @@ public class InMemoryEventStore : IEventStore
     {
         var tagString = tag.GetTag();
 
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            return Task.FromResult(ResultBox.FromValue(_tagStreams.ContainsKey(tagString)));
+            return Task.FromResult(ResultBox.FromValue(state.TagStreams.ContainsKey(tagString)));
         }
     }
 
     public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
             if (since == null)
             {
-                return Task.FromResult(ResultBox.FromValue((long)_eventOrder.Count));
+                return Task.FromResult(ResultBox.FromValue((long)state.EventOrder.Count));
             }
 
-            var count = _eventOrder.Count(e => string.Compare(
+            var count = state.EventOrder.Count(e => string.Compare(
                 e.SortableUniqueIdValue,
                 since.Value,
                 StringComparison.Ordinal) > 0);
@@ -219,9 +254,10 @@ public class InMemoryEventStore : IEventStore
 
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
-        lock (_eventLock)
+        var state = GetState();
+        lock (state.Lock)
         {
-            var tagInfos = _tagStreams
+            var tagInfos = state.TagStreams
                 .Where(kvp => string.IsNullOrEmpty(tagGroup) || kvp.Key.StartsWith(tagGroup + ":"))
                 .Select(kvp =>
                 {
