@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orleans.Streams;
@@ -15,6 +16,7 @@ using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Primitives;
 using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -32,6 +34,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
+    private readonly IPrimitiveProjectionHost? _primitiveHost;
+    private readonly IPrimitiveProjectionKeyFactory? _primitiveKeyFactory;
     private string? _grainKey;
     private string? _projectorName;
     private string _serviceId = DefaultServiceIdProvider.DefaultServiceId;
@@ -49,7 +53,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IDisposable? _fallbackTimer;
 
     // Core projection actor - contains business logic
-    private GeneralMultiProjectionActor? _projectionActor;
+    private IMultiProjectionActor? _projectionActor;
 
     // Simple tracking
     private bool _isInitialized;
@@ -106,6 +110,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
         GeneralMultiProjectionActorOptions? actorOptions,
+        IServiceProvider serviceProvider,
         ILogger<MultiProjectionGrain>? logger = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
@@ -116,6 +121,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
+        _primitiveHost = serviceProvider.GetService<IPrimitiveProjectionHost>();
+        _primitiveKeyFactory = serviceProvider.GetService<IPrimitiveProjectionKeyFactory>();
     }
 
     private (string GrainKey, string ProjectorName, string ServiceId) GetIdentity()
@@ -1289,11 +1296,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
 
-            _projectionActor = new GeneralMultiProjectionActor(
-                _domainTypes,
-                projectorName,
-                mergedOptions,
-                _logger);
+            if (_primitiveHost != null && _primitiveKeyFactory != null)
+            {
+                var instanceKey = _primitiveKeyFactory.GetMultiProjectionKey(projectorName, _serviceId);
+                _projectionActor = new PrimitiveMultiProjectionActorAdapter(
+                    _domainTypes,
+                    _primitiveHost,
+                    projectorName,
+                    instanceKey,
+                    _logger);
+            }
+            else
+            {
+                _projectionActor = new GeneralMultiProjectionActor(
+                    _domainTypes,
+                    projectorName,
+                    mergedOptions,
+                    _logger);
+            }
 
             bool restoredFromExternalStore = false;
 

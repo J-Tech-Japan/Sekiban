@@ -19,6 +19,7 @@ public sealed class PrimitiveMultiProjectionActor
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger _logger;
     private readonly string _projectorName;
+    private readonly string _instanceKey;
 
     private IPrimitiveProjectionInstance? _instance;
     private string? _lastSortableUniqueId;
@@ -28,11 +29,13 @@ public sealed class PrimitiveMultiProjectionActor
         DcbDomainTypes domainTypes,
         IPrimitiveProjectionHost host,
         string projectorName,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string? instanceKey = null)
     {
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _projectorName = projectorName ?? throw new ArgumentNullException(nameof(projectorName));
+        _instanceKey = string.IsNullOrWhiteSpace(instanceKey) ? _projectorName : instanceKey;
         _jsonOptions = domainTypes.JsonSerializerOptions;
         _logger = logger ?? NullLogger.Instance;
     }
@@ -149,7 +152,7 @@ public sealed class PrimitiveMultiProjectionActor
     {
         if (_instance == null)
         {
-            _instance = _host.CreateInstance(_projectorName);
+            _instance = _host.CreateInstance(_instanceKey);
             _logger.LogDebug("Primitive projection instance created for {ProjectorName}", _projectorName);
         }
 

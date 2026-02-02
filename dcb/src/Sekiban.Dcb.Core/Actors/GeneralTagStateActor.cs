@@ -13,7 +13,7 @@ namespace Sekiban.Dcb.Actors;
 ///     Computes tag state by reading events and projecting them
 ///     Can be used with different actor frameworks (InMemory, Orleans, Dapr)
 /// </summary>
-public class GeneralTagStateActor : ITagStateActorCommon
+public class GeneralTagStateActor : ITagStateActor
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
