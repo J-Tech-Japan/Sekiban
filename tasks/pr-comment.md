@@ -1,11 +1,18 @@
 ## Summary
-- CosmosDB の legacy events/tags を JSONL 退避 → コンテナ再作成(/pk) → 新形式へ変換アップロードするツールを追加。
+- ServiceId によるテナント分離を DCB コア〜各ストレージ〜Orleans まで一貫対応。
+- WASM/primitive projection を見据えた contract/actor を追加。
+- CosmosDB legacy events/tags を新形式(/pk)へ移行する一括コンバージョンツールを追加。
 
 ## Changes
+- ServiceId のコア抽象/実装を追加し、イベント/タグ/プロジェクション状態の分離基盤を整備。
+- Cosmos/Postgres/DynamoDB/SQLite/InMemory に ServiceId 対応を反映。
+- Orleans のストリーム/Grain を ServiceId でスコープし、TagState/TagConsistency も分離。
+- ServiceId 分離のテストを追加（InMemory/Orleans）。
+- primitive projection contract/actor を追加。
 - `tools/MigrateDcbCosmosEventsTags` を新規追加（export/delete/recreate/import を一括実行）。
-- 変換ロジックで `serviceId`/`pk`/`timestamp`/`createdAt` の欠落を補完し、payload/tags を正規化。
-- `appsettings.json` と `README.md` で設定・使い方を整備。
-- 生成される `cosmos-backup/` を `.gitignore` に追加。
+  - 変換ロジックで `serviceId`/`pk`/`timestamp`/`createdAt` の欠落を補完し、payload/tags を正規化。
+  - `appsettings.json` と `README.md` で設定・使い方を整備。
+  - 生成される `cosmos-backup/` を `.gitignore` に追加。
 
 ## Tests
 - `dotnet build tools/MigrateDcbCosmosEventsTags/MigrateDcbCosmosEventsTags.csproj`
