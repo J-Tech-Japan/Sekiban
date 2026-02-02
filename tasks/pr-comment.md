@@ -5,6 +5,7 @@
 - `tools/MigrateDcbCosmosEventsTags` を新規追加（export/delete/recreate/import を一括実行）。
 - 変換ロジックで `serviceId`/`pk`/`timestamp`/`createdAt` の欠落を補完し、payload/tags を正規化。
 - `appsettings.json` と `README.md` で設定・使い方を整備。
+- 生成される `cosmos-backup/` を `.gitignore` に追加。
 
 ## Tests
 - `dotnet build tools/MigrateDcbCosmosEventsTags/MigrateDcbCosmosEventsTags.csproj`
