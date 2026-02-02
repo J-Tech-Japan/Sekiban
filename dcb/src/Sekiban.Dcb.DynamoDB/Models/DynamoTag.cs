@@ -8,7 +8,7 @@ namespace Sekiban.Dcb.DynamoDB.Models;
 public class DynamoTag
 {
     /// <summary>
-    ///     Partition key: TAG#{tagString}
+    ///     Partition key: SERVICE#{serviceId}#TAG#{tagString}
     /// </summary>
     public string Pk { get; set; } = string.Empty;
 
@@ -16,6 +16,11 @@ public class DynamoTag
     ///     Sort key: {sortableUniqueId}#{eventId} for uniqueness and ordering.
     /// </summary>
     public string Sk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    public string ServiceId { get; set; } = string.Empty;
 
     /// <summary>
     ///     Full tag string.
@@ -51,6 +56,7 @@ public class DynamoTag
     ///     Creates a DynamoTag from event tag data.
     /// </summary>
     public static DynamoTag FromEventTag(
+        string serviceId,
         string tagString,
         string tagGroup,
         string sortableUniqueId,
@@ -59,8 +65,9 @@ public class DynamoTag
     {
         return new DynamoTag
         {
-            Pk = $"TAG#{tagString}",
+            Pk = $"SERVICE#{serviceId}#TAG#{tagString}",
             Sk = $"{sortableUniqueId}#{eventId}",
+            ServiceId = serviceId,
             TagString = tagString,
             TagGroup = tagGroup,
             EventType = eventType,
@@ -79,6 +86,7 @@ public class DynamoTag
         {
             ["pk"] = new AttributeValue { S = Pk },
             ["sk"] = new AttributeValue { S = Sk },
+            ["serviceId"] = new AttributeValue { S = ServiceId },
             ["tagString"] = new AttributeValue { S = TagString },
             ["tagGroup"] = new AttributeValue { S = TagGroup },
             ["eventType"] = new AttributeValue { S = EventType },
@@ -97,6 +105,7 @@ public class DynamoTag
         {
             Pk = item.GetValueOrDefault("pk")?.S ?? string.Empty,
             Sk = item.GetValueOrDefault("sk")?.S ?? string.Empty,
+            ServiceId = item.GetValueOrDefault("serviceId")?.S ?? string.Empty,
             TagString = item.GetValueOrDefault("tagString")?.S ?? string.Empty,
             TagGroup = item.GetValueOrDefault("tagGroup")?.S ?? string.Empty,
             EventType = item.GetValueOrDefault("eventType")?.S ?? string.Empty,

@@ -6,6 +6,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.DynamoDB.Models;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Security.Cryptography;
@@ -33,6 +34,7 @@ public class DynamoDbEventStore : IEventStore
     private readonly ILogger<DynamoDbEventStore>? _logger;
     private readonly DynamoDbEventStoreOptions _options;
     private readonly IAmazonDynamoDB _client;
+    private readonly IServiceIdProvider _serviceIdProvider;
 
     /// <summary>
     ///     Initializes a new DynamoDbEventStore.
@@ -40,14 +42,18 @@ public class DynamoDbEventStore : IEventStore
     public DynamoDbEventStore(
         DynamoDbContext context,
         DcbDomainTypes domainTypes,
+        IServiceIdProvider serviceIdProvider,
         ILogger<DynamoDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger;
         _options = context.Options;
         _client = context.Client;
     }
+
+    private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
     /// <summary>
     ///     Reads all events ordered by sortable unique ID.
@@ -58,11 +64,12 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var shardCount = Math.Max(1, _options.WriteShardCount);
             var shardKeys = shardCount == 1
-                ? new[] { DynamoDbContext.EventsGsiPartitionKey }
+                ? new[] { BuildEventsGsiPartitionKey(serviceId) }
                 : Enumerable.Range(0, shardCount)
-                    .Select(i => $"{DynamoDbContext.EventsGsiPartitionKey}#{i}")
+                    .Select(i => BuildEventsGsiPartitionKey(serviceId, i))
                     .ToArray();
 
             var allEvents = new List<Event>();
@@ -95,15 +102,16 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var tagString = tag.GetTag();
-            var tagPk = $"TAG#{tagString}";
+            var tagPk = BuildTagPk(serviceId, tagString);
             var tagItems = await QueryTagsAsync(tagPk, since).ConfigureAwait(false);
 
             if (tagItems.Count == 0)
                 return ResultBox.FromValue<IEnumerable<Event>>(Array.Empty<Event>());
 
             var eventIds = tagItems.Select(t => t.EventId).Distinct().ToList();
-            var eventsById = await BatchGetEventsAsync(eventIds).ConfigureAwait(false);
+            var eventsById = await BatchGetEventsAsync(serviceId, eventIds).ConfigureAwait(false);
 
             var result = new List<Event>(tagItems.Count);
             foreach (var tagItem in tagItems)
@@ -140,7 +148,8 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
-            var key = BuildEventKey(eventId.ToString());
+            var serviceId = CurrentServiceId;
+            var key = BuildEventKey(serviceId, eventId.ToString());
             var response = await _client.GetItemAsync(new GetItemRequest
             {
                 TableName = _context.EventsTableName,
@@ -176,6 +185,7 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var eventsList = events.ToList();
             if (eventsList.Count == 0)
             {
@@ -189,13 +199,21 @@ public class DynamoDbEventStore : IEventStore
                 DynamoEvent.FromEvent(
                     ev,
                     SerializeEventPayload(ev.Payload),
-                    GetGsiPartitionKey(ev.SortableUniqueIdValue)),
+                    GetGsiPartitionKey(ev.SortableUniqueIdValue, serviceId),
+                    serviceId),
                 ev.Tags.Select(tagString =>
                 {
                     var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
                         ? tagString.Split(':')[0]
                         : tagString;
-                    return DynamoTag.FromEventTag(tagString, tagGroup, ev.SortableUniqueIdValue, ev.Id, ev.EventType);
+                    var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
+                    return DynamoTag.FromEventTag(
+                        serviceId,
+                        tagString,
+                        storedTagGroup,
+                        ev.SortableUniqueIdValue,
+                        ev.Id,
+                        ev.EventType);
                 }).ToList()
             )).ToList();
 
@@ -232,8 +250,9 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var tagString = tag.GetTag();
-            var tagPk = $"TAG#{tagString}";
+            var tagPk = BuildTagPk(serviceId, tagString);
             var tagItems = await QueryTagsAsync(tagPk, null).ConfigureAwait(false);
 
             var streams = tagItems
@@ -260,8 +279,9 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var tagString = tag.GetTag();
-            var tagPk = $"TAG#{tagString}";
+            var tagPk = BuildTagPk(serviceId, tagString);
 
             var request = new QueryRequest
             {
@@ -321,8 +341,9 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var tagString = tag.GetTag();
-            var tagPk = $"TAG#{tagString}";
+            var tagPk = BuildTagPk(serviceId, tagString);
 
             var response = await _client.QueryAsync(new QueryRequest
             {
@@ -355,11 +376,12 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
+            var serviceId = CurrentServiceId;
             var shardCount = Math.Max(1, _options.WriteShardCount);
             var shardKeys = shardCount == 1
-                ? new[] { DynamoDbContext.EventsGsiPartitionKey }
+                ? new[] { BuildEventsGsiPartitionKey(serviceId) }
                 : Enumerable.Range(0, shardCount)
-                    .Select(i => $"{DynamoDbContext.EventsGsiPartitionKey}#{i}")
+                    .Select(i => BuildEventsGsiPartitionKey(serviceId, i))
                     .ToArray();
 
             long total = 0;
@@ -388,7 +410,8 @@ public class DynamoDbEventStore : IEventStore
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);
 
-            var tagItems = await ReadAllTagItemsAsync(tagGroup).ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var tagItems = await ReadAllTagItemsAsync(serviceId, tagGroup).ConfigureAwait(false);
 
             var grouped = tagItems
                 .GroupBy(t => t.TagString)
@@ -402,7 +425,7 @@ public class DynamoDbEventStore : IEventStore
 
                     return new TagInfo(
                         g.Key,
-                        g.First().TagGroup,
+                        ToDisplayTagGroup(serviceId, g.First().TagGroup),
                         g.Count(),
                         first.SortableUniqueId,
                         last.SortableUniqueId,
@@ -554,7 +577,7 @@ public class DynamoDbEventStore : IEventStore
         return tags;
     }
 
-    private async Task<Dictionary<string, DynamoEvent>> BatchGetEventsAsync(List<string> eventIds)
+    private async Task<Dictionary<string, DynamoEvent>> BatchGetEventsAsync(string serviceId, List<string> eventIds)
     {
         var results = new Dictionary<string, DynamoEvent>(StringComparer.Ordinal);
         if (eventIds.Count == 0)
@@ -564,7 +587,7 @@ public class DynamoDbEventStore : IEventStore
         {
             var chunk = eventIds.Skip(i).Take(_options.MaxBatchGetItems).ToList();
             var keys = chunk
-                .Select(id => BuildEventKey(id))
+                .Select(id => BuildEventKey(serviceId, id))
                 .ToList();
 
             var requestItems = new Dictionary<string, KeysAndAttributes>
@@ -716,7 +739,7 @@ public class DynamoDbEventStore : IEventStore
                 var deleteRequests = eventItems
                     .Select(item => new WriteRequest
                     {
-                        DeleteRequest = new DeleteRequest { Key = BuildEventKey(item.DynamoEvent.EventId) }
+                        DeleteRequest = new DeleteRequest { Key = BuildEventKey(item.DynamoEvent.ServiceId, item.DynamoEvent.EventId) }
                     })
                     .ToList();
 
@@ -761,68 +784,84 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
-    private async Task<List<DynamoTag>> ReadAllTagItemsAsync(string? tagGroup)
+    private async Task<List<DynamoTag>> ReadAllTagItemsAsync(string serviceId, string? tagGroup)
+    {
+        return tagGroup != null
+            ? await ReadTagItemsByGroupAsync(serviceId, tagGroup).ConfigureAwait(false)
+            : await ReadTagItemsByScanAsync(serviceId).ConfigureAwait(false);
+    }
+
+    private async Task<List<DynamoTag>> ReadTagItemsByGroupAsync(string serviceId, string tagGroup)
     {
         var tags = new List<DynamoTag>();
         Dictionary<string, AttributeValue>? lastKey = null;
+        var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
 
-        if (tagGroup != null)
+        do
         {
-            do
+            var response = await _client.QueryAsync(new QueryRequest
             {
-                var response = await _client.QueryAsync(new QueryRequest
+                TableName = _context.TagsTableName,
+                IndexName = DynamoDbContext.TagsGsiName,
+                KeyConditionExpression = "tagGroup = :group",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    TableName = _context.TagsTableName,
-                    IndexName = DynamoDbContext.TagsGsiName,
-                    KeyConditionExpression = "tagGroup = :group",
-                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                    {
-                        [":group"] = new AttributeValue { S = tagGroup }
-                    },
-                    ExclusiveStartKey = lastKey,
-                    Limit = _options.QueryPageSize
-                }).ConfigureAwait(false);
+                    [":group"] = new AttributeValue { S = storedTagGroup },
+                    [":serviceId"] = new AttributeValue { S = serviceId }
+                },
+                FilterExpression = "serviceId = :serviceId",
+                ExclusiveStartKey = lastKey,
+                Limit = _options.QueryPageSize
+            }).ConfigureAwait(false);
 
-                foreach (var item in response.Items)
-                {
-                    if (!item.ContainsKey("eventId"))
-                        continue;
-                    tags.Add(DynamoTag.FromAttributeValues(item));
-                }
-
-                lastKey = response.LastEvaluatedKey;
-            } while (lastKey != null && lastKey.Count > 0);
-        }
-        else
-        {
-            do
-            {
-                var response = await _client.ScanAsync(new ScanRequest
-                {
-                    TableName = _context.TagsTableName,
-                    ExclusiveStartKey = lastKey,
-                    Limit = _options.QueryPageSize
-                }).ConfigureAwait(false);
-
-                foreach (var item in response.Items)
-                {
-                    if (!item.ContainsKey("eventId"))
-                        continue;
-                    tags.Add(DynamoTag.FromAttributeValues(item));
-                }
-
-                lastKey = response.LastEvaluatedKey;
-            } while (lastKey != null && lastKey.Count > 0);
-        }
+            AppendTags(response.Items, tags);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
 
         return tags;
     }
 
-    private static Dictionary<string, AttributeValue> BuildEventKey(string eventId)
+    private async Task<List<DynamoTag>> ReadTagItemsByScanAsync(string serviceId)
+    {
+        var tags = new List<DynamoTag>();
+        Dictionary<string, AttributeValue>? lastKey = null;
+
+        do
+        {
+            var response = await _client.ScanAsync(new ScanRequest
+            {
+                TableName = _context.TagsTableName,
+                FilterExpression = "serviceId = :serviceId",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":serviceId"] = new AttributeValue { S = serviceId }
+                },
+                ExclusiveStartKey = lastKey,
+                Limit = _options.QueryPageSize
+            }).ConfigureAwait(false);
+
+            AppendTags(response.Items, tags);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
+
+        return tags;
+    }
+
+    private static void AppendTags(List<Dictionary<string, AttributeValue>> items, List<DynamoTag> tags)
+    {
+        foreach (var item in items)
+        {
+            if (!item.ContainsKey("eventId"))
+                continue;
+            tags.Add(DynamoTag.FromAttributeValues(item));
+        }
+    }
+
+    private static Dictionary<string, AttributeValue> BuildEventKey(string serviceId, string eventId)
     {
         return new Dictionary<string, AttributeValue>
         {
-            ["pk"] = new AttributeValue { S = $"EVENT#{eventId}" },
+            ["pk"] = new AttributeValue { S = $"SERVICE#{serviceId}#EVENT#{eventId}" },
             ["sk"] = new AttributeValue { S = $"EVENT#{eventId}" }
         };
     }
@@ -861,13 +900,33 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
-    private string GetGsiPartitionKey(string sortableUniqueId)
+    private string GetGsiPartitionKey(string sortableUniqueId, string serviceId)
     {
         if (_options.WriteShardCount <= 1)
-            return DynamoDbContext.EventsGsiPartitionKey;
+            return BuildEventsGsiPartitionKey(serviceId);
 
         var shard = ComputeShardIndex(sortableUniqueId, _options.WriteShardCount);
-        return $"{DynamoDbContext.EventsGsiPartitionKey}#{shard}";
+        return BuildEventsGsiPartitionKey(serviceId, shard);
+    }
+
+    private static string BuildEventsGsiPartitionKey(string serviceId, int? shard = null)
+    {
+        var baseKey = $"SERVICE#{serviceId}#{DynamoDbContext.EventsGsiPartitionKey}";
+        return shard.HasValue ? $"{baseKey}#{shard.Value}" : baseKey;
+    }
+
+    private static string BuildTagPk(string serviceId, string tagString) =>
+        $"SERVICE#{serviceId}#TAG#{tagString}";
+
+    private static string BuildStoredTagGroup(string serviceId, string tagGroup) =>
+        $"{serviceId}|{tagGroup}";
+
+    private static string ToDisplayTagGroup(string serviceId, string storedTagGroup)
+    {
+        var prefix = $"{serviceId}|";
+        return storedTagGroup.StartsWith(prefix, StringComparison.Ordinal)
+            ? storedTagGroup[prefix.Length..]
+            : storedTagGroup;
     }
 
     private static int ComputeShardIndex(string value, int shardCount)

@@ -3,6 +3,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Common;
@@ -71,13 +72,26 @@ public class InMemoryDcbExecutor : ISekibanExecutor
     /// </summary>
     private sealed class InternalInMemoryEventStore : IEventStore
     {
-        private readonly List<SerializedEventData> _events = new();
-        private readonly object _lock = new();
-        private readonly DcbDomainTypes _domainTypes;
+        private sealed class ServiceState
+        {
+            public object Lock { get; } = new();
+            public List<SerializedEventData> Events { get; } = new();
+        }
 
-        public InternalInMemoryEventStore(DcbDomainTypes domainTypes)
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
+        private readonly DcbDomainTypes _domainTypes;
+        private readonly IServiceIdProvider _serviceIdProvider;
+
+        public InternalInMemoryEventStore(DcbDomainTypes domainTypes, IServiceIdProvider? serviceIdProvider = null)
         {
             _domainTypes = domainTypes;
+            _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        }
+
+        private ServiceState GetState()
+        {
+            var serviceId = _serviceIdProvider.GetCurrentServiceId();
+            return _states.GetOrAdd(serviceId, _ => new ServiceState());
         }
 
         /// <summary>
@@ -93,9 +107,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
-                var events = _events.AsEnumerable();
+                var events = state.Events.AsEnumerable();
                 if (since != null)
                 {
                     events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
@@ -120,10 +135,11 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 var tagString = tag.GetTag();
-                var events = _events.Where(e => e.Tags.Contains(tagString));
+                var events = state.Events.Where(e => e.Tags.Contains(tagString));
                 if (since != null)
                 {
                     events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
@@ -148,9 +164,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
-                var serializedEvent = _events.FirstOrDefault(e => e.Id == eventId);
+                var serializedEvent = state.Events.FirstOrDefault(e => e.Id == eventId);
                 if (serializedEvent == null)
                 {
                     return Task.FromResult(ResultBox.Error<Event>(new KeyNotFoundException($"Event {eventId} not found")));
@@ -168,7 +185,8 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 var list = events.ToList();
                 var serializedEvents = new List<SerializedEventData>();
@@ -202,13 +220,13 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                     deserializedEvents.Add(deserializeResult.GetValue());
                 }
 
-                _events.AddRange(serializedEvents);
+                state.Events.AddRange(serializedEvents);
                 var tagWrites = new List<TagWriteResult>();
                 var uniqueTags = list.SelectMany(e => e.Tags).Distinct();
                 foreach (var tagString in uniqueTags)
                 {
-                    var tagEventCount = _events.Count(e => e.Tags.Contains(tagString));
-                    var lastEvent = _events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).LastOrDefault();
+                    var tagEventCount = state.Events.Count(e => e.Tags.Contains(tagString));
+                    var lastEvent = state.Events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).LastOrDefault();
                     if (lastEvent != null)
                     {
                         tagWrites.Add(new TagWriteResult(tagString, tagEventCount, DateTimeOffset.UtcNow));
@@ -220,10 +238,11 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 var tagString = tag.GetTag();
-                var tagEvents = _events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).ToList();
+                var tagEvents = state.Events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).ToList();
                 if (!tagEvents.Any()) return Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
                 var streams = tagEvents.Select(e => new TagStream(tagString, e.Id, e.SortableUniqueIdValue));
                 return Task.FromResult(ResultBox.FromValue(streams));
@@ -232,38 +251,47 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 var tagString = tag.GetTag();
-                var tagEvents = _events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).ToList();
+                var tagEvents = state.Events.Where(e => e.Tags.Contains(tagString)).OrderBy(e => e.SortableUniqueIdValue).ToList();
                 var tagStateId = new TagStateId(tag, "InMemoryProjector");
                 if (!tagEvents.Any()) return Task.FromResult(ResultBox.FromValue(TagState.GetEmpty(tagStateId)));
                 var lastEvent = tagEvents.Last();
-                var state = new TagState(new EmptyTagStatePayload(), tagEvents.Count, lastEvent.SortableUniqueIdValue, tagStateId.TagGroup, tagStateId.TagContent, tagStateId.TagProjectorName);
-                return Task.FromResult(ResultBox.FromValue(state));
+                var tagState = new TagState(
+                    new EmptyTagStatePayload(),
+                    tagEvents.Count,
+                    lastEvent.SortableUniqueIdValue,
+                    tagStateId.TagGroup,
+                    tagStateId.TagContent,
+                    tagStateId.TagProjectorName);
+                return Task.FromResult(ResultBox.FromValue(tagState));
             }
         }
 
         public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 var tagString = tag.GetTag();
-                var exists = _events.Any(e => e.Tags.Contains(tagString));
+                var exists = state.Events.Any(e => e.Tags.Contains(tagString));
                 return Task.FromResult(ResultBox.FromValue(exists));
             }
         }
 
         public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
                 if (since == null)
                 {
-                    return Task.FromResult(ResultBox.FromValue((long)_events.Count));
+                    return Task.FromResult(ResultBox.FromValue((long)state.Events.Count));
                 }
 
-                var count = _events.Count(e => string.Compare(
+                var count = state.Events.Count(e => string.Compare(
                     e.SortableUniqueIdValue,
                     since.Value,
                     StringComparison.Ordinal) > 0);
@@ -274,9 +302,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
         {
-            lock (_lock)
+            var state = GetState();
+            lock (state.Lock)
             {
-                var allTags = _events
+                var allTags = state.Events
                     .SelectMany(e => e.Tags)
                     .Distinct()
                     .Where(t => string.IsNullOrEmpty(tagGroup) || t.StartsWith(tagGroup + ":"))
@@ -285,7 +314,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor
                 var tagInfos = allTags.Select(tagString =>
                 {
                     var group = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
-                    var tagEvents = _events.Where(e => e.Tags.Contains(tagString)).ToList();
+                    var tagEvents = state.Events.Where(e => e.Tags.Contains(tagString)).ToList();
 
                     return new TagInfo(
                         tagString,

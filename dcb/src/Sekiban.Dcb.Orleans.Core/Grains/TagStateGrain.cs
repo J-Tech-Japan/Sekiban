@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -99,7 +100,7 @@ public class TagStateGrain : Grain, ITagStateGrain
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Extract tag state ID from grain key
-        var tagStateId = this.GetPrimaryKeyString();
+        var tagStateId = ServiceIdGrainKey.Strip(this.GetPrimaryKeyString());
 
         // Create the actor instance with Orleans-specific cache persistence
         var tagStatePersistent = new OrleansTagStatePersistent(_cache, _domainTypes.TagStatePayloadTypes);

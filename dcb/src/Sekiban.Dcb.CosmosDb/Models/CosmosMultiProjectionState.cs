@@ -11,6 +11,18 @@ namespace Sekiban.Dcb.CosmosDb.Models;
 public class CosmosMultiProjectionState
 {
     /// <summary>
+    ///     Composite partition key: "{serviceId}|{partitionKey}".
+    /// </summary>
+    [JsonProperty("pk")]
+    public string Pk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    [JsonProperty("serviceId")]
+    public string ServiceId { get; set; } = string.Empty;
+
+    /// <summary>
     ///     CosmosDB document ID (ProjectorVersion).
     /// </summary>
     [JsonProperty("id")]
@@ -128,14 +140,19 @@ public class CosmosMultiProjectionState
     ///     Creates a CosmosMultiProjectionState from a MultiProjectionStateRecord.
     /// </summary>
     /// <param name="record">The record to convert.</param>
+    /// <param name="serviceId">The ServiceId for tenant isolation.</param>
     /// <returns>A new CosmosMultiProjectionState instance.</returns>
-    public static CosmosMultiProjectionState FromRecord(MultiProjectionStateRecord record)
+    public static CosmosMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId)
     {
         ArgumentNullException.ThrowIfNull(record);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
+        var partitionKey = record.GetPartitionKey();
         return new CosmosMultiProjectionState
         {
+            Pk = $"{serviceId}|{partitionKey}",
+            ServiceId = serviceId,
             Id = record.ProjectorVersion,
-            PartitionKey = record.GetPartitionKey(),
+            PartitionKey = partitionKey,
             ProjectorName = record.ProjectorName,
             ProjectorVersion = record.ProjectorVersion,
             PayloadType = record.PayloadType,

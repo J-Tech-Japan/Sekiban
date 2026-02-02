@@ -10,6 +10,18 @@ namespace Sekiban.Dcb.CosmosDb.Models;
 public class CosmosEvent
 {
     /// <summary>
+    ///     Composite partition key: "{serviceId}|{id}".
+    /// </summary>
+    [JsonProperty("pk")]
+    public string Pk { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Service ID for tenant isolation.
+    /// </summary>
+    [JsonProperty("serviceId")]
+    public string ServiceId { get; set; } = string.Empty;
+
+    /// <summary>
     ///     CosmosDB document ID.
     /// </summary>
     [JsonProperty("id")]
@@ -73,14 +85,19 @@ public class CosmosEvent
     /// <summary>
     ///     Creates a CosmosDB event document from a domain event.
     /// </summary>
-    public static CosmosEvent FromEvent(Event ev, string serializedPayload)
+    public static CosmosEvent FromEvent(Event ev, string serializedPayload, string serviceId)
     {
         ArgumentNullException.ThrowIfNull(ev);
         ArgumentNullException.ThrowIfNull(serializedPayload);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
+
+        var id = ev.Id.ToString();
 
         return new CosmosEvent
         {
-            Id = ev.Id.ToString(),
+            Pk = $"{serviceId}|{id}",
+            ServiceId = serviceId,
+            Id = id,
             SortableUniqueId = ev.SortableUniqueIdValue,
             EventType = ev.EventType,
             Payload = serializedPayload,

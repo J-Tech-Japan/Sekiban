@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Orleans.ServiceId;
 namespace Sekiban.Dcb.Orleans.Streams;
 
 /// <summary>
@@ -23,5 +24,8 @@ public class DefaultOrleansEventSubscriptionResolver : IEventSubscriptionResolve
     public ISekibanStream Resolve(string projectorName) =>
         // For now, all projectors use the same stream
         // In the future, this could route different projectors to different streams
-        new OrleansSekibanStream(_providerName, _namespace, _streamId);
+        new OrleansSekibanStream(
+            _providerName,
+            ServiceIdGrainKey.BuildStreamNamespace(_namespace, ServiceIdGrainKey.Parse(projectorName).ServiceId),
+            _streamId);
 }

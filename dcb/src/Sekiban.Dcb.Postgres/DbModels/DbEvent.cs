@@ -7,7 +7,10 @@ namespace Sekiban.Dcb.Postgres.DbModels;
 [Table("dcb_events")]
 public class DbEvent
 {
-    [Key]
+    [Required]
+    [MaxLength(64)]
+    public string ServiceId { get; set; } = string.Empty;
+
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; }
 
@@ -31,9 +34,10 @@ public class DbEvent
     public string? CorrelationId { get; set; }
     public string? ExecutedUser { get; set; }
 
-    public static DbEvent FromEvent(Event ev, string serializedPayload) =>
+    public static DbEvent FromEvent(Event ev, string serializedPayload, string serviceId) =>
         new()
         {
+            ServiceId = serviceId,
             Id = ev.Id,
             SortableUniqueId = ev.SortableUniqueIdValue,
             EventType = ev.EventType,

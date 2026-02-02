@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -88,7 +89,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Extract tag name from grain key
-        var tagName = this.GetPrimaryKeyString();
+        var tagName = ServiceIdGrainKey.Strip(this.GetPrimaryKeyString());
 
         // Create the actor instance
         _actor = new GeneralTagConsistentActor(tagName, _eventStore, _options, _domainTypes);

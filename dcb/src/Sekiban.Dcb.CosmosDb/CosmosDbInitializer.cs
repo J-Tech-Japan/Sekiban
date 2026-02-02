@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.ServiceId;
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
@@ -17,14 +18,19 @@ public class CosmosDbInitializer : IHostedService
         LoggerMessage.Define(LogLevel.Error, new EventId(3, nameof(LogInitializationFailed)), "Failed to initialize CosmosDB containers");
 
     private readonly CosmosDbContext _context;
+    private readonly ICosmosContainerResolver _containerResolver;
     private readonly ILogger<CosmosDbInitializer>? _logger;
 
     /// <summary>
     ///     Creates a new CosmosDB initializer hosted service.
     /// </summary>
-    public CosmosDbInitializer(CosmosDbContext context, ILogger<CosmosDbInitializer>? logger = null)
+    public CosmosDbInitializer(
+        CosmosDbContext context,
+        ICosmosContainerResolver containerResolver,
+        ILogger<CosmosDbInitializer>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
     }
 
@@ -41,8 +47,14 @@ public class CosmosDbInitializer : IHostedService
             }
 
             // This will trigger the initialization of containers if they don't exist
-            await _context.GetEventsContainerAsync().ConfigureAwait(false);
-            await _context.GetTagsContainerAsync().ConfigureAwait(false);
+            var defaultServiceId = DefaultServiceIdProvider.DefaultServiceId;
+            var eventsSettings = _containerResolver.ResolveEventsContainer(defaultServiceId);
+            var tagsSettings = _containerResolver.ResolveTagsContainer(defaultServiceId);
+            var statesSettings = _containerResolver.ResolveStatesContainer(defaultServiceId);
+
+            await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+            await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+            await _context.GetMultiProjectionStatesContainerAsync(statesSettings).ConfigureAwait(false);
 
             if (_logger != null)
             {

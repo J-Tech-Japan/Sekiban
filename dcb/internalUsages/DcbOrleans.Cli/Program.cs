@@ -1556,6 +1556,9 @@ static ServiceProvider BuildServices(
 
         // Register Cosmos DB services with options
         var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
+        services.AddSingleton(cosmosOptions);
+        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+        services.AddSingleton<ICosmosContainerResolver, DefaultCosmosContainerResolver>();
         services.AddSingleton(cosmosContext);
         if (useCache)
         {
@@ -1577,6 +1580,7 @@ static ServiceProvider BuildServices(
         });
 
         // Register event store
+        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
