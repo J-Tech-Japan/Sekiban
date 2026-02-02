@@ -503,28 +503,27 @@ static bool GetBoolSetting(IConfiguration config, string key)
     var value = config[key];
     return bool.TryParse(value, out var result) && result;
 }
-
-static class MigrationFields
-{
-    public const string ServiceId = "serviceId";
-    public const string SortableUniqueId = "sortableUniqueId";
-    public const string EventType = "eventType";
-}
-
-sealed record MigrationSettings(
-    string ConnectionString,
-    string DatabaseName,
-    string EventsContainerName,
-    string TagsContainerName,
-    string ServiceId,
-    string OutputDir,
-    int MaxConcurrency,
-    int? Throughput,
-    int? AutoscaleMaxThroughput,
-    bool Confirm);
-
 namespace Sekiban.Dcb.Tools.CosmosMigration
 {
+    sealed record MigrationSettings(
+        string ConnectionString,
+        string DatabaseName,
+        string EventsContainerName,
+        string TagsContainerName,
+        string ServiceId,
+        string OutputDir,
+        int MaxConcurrency,
+        int? Throughput,
+        int? AutoscaleMaxThroughput,
+        bool Confirm);
+
+    static class MigrationFields
+    {
+        public const string ServiceId = "serviceId";
+        public const string SortableUniqueId = "sortableUniqueId";
+        public const string EventType = "eventType";
+    }
+
     sealed class CliOptions
     {
         public string? ConnectionString { get; init; }
