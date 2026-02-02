@@ -17,6 +17,8 @@ namespace Sekiban.Dcb.CosmosDb;
 /// </summary>
 public partial class CosmosDbEventStore : IEventStore
 {
+    private const string ParamSince = "@since";
+    private const string ParamServiceId = "@serviceId";
     private readonly CosmosDbContext _context;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -70,18 +72,18 @@ public partial class CosmosDbEventStore : IEventStore
             if (settings.IsLegacy)
             {
                 queryDefinition = since != null
-                    ? new QueryDefinition("SELECT * FROM c WHERE c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
-                        .WithParameter("@since", since.Value)
+                    ? new QueryDefinition($"SELECT * FROM c WHERE c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamSince, since.Value)
                     : new QueryDefinition("SELECT * FROM c ORDER BY c.sortableUniqueId");
             }
             else
             {
                 queryDefinition = since != null
-                    ? new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
-                        .WithParameter("@serviceId", serviceId)
-                        .WithParameter("@since", since.Value)
-                    : new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId ORDER BY c.sortableUniqueId")
-                        .WithParameter("@serviceId", serviceId);
+                    ? new QueryDefinition($"SELECT * FROM c WHERE c.serviceId = {ParamServiceId} AND c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamServiceId, serviceId)
+                        .WithParameter(ParamSince, since.Value)
+                    : new QueryDefinition($"SELECT * FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamServiceId, serviceId);
             }
             var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
 
@@ -211,51 +213,8 @@ public partial class CosmosDbEventStore : IEventStore
             var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
             var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
-            QueryDefinition queryDefinition;
-            QueryRequestOptions? requestOptions = null;
-
-            if (tagsSettings.IsLegacy)
-            {
-                queryDefinition = since != null
-                    ? new QueryDefinition("SELECT c.eventId FROM c WHERE c.tag = @tag AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
-                        .WithParameter("@tag", tagString)
-                        .WithParameter("@since", since.Value)
-                    : new QueryDefinition("SELECT c.eventId FROM c WHERE c.tag = @tag ORDER BY c.sortableUniqueId")
-                        .WithParameter("@tag", tagString);
-
-                requestOptions = new QueryRequestOptions
-                {
-                    PartitionKey = new PartitionKey(tagString)
-                };
-            }
-            else
-            {
-                var tagPk = GetTagPartitionKey(tagString, tagsSettings, serviceId);
-                queryDefinition = since != null
-                    ? new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId")
-                        .WithParameter("@pk", tagPk)
-                        .WithParameter("@since", since.Value)
-                    : new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
-                        .WithParameter("@pk", tagPk);
-
-                requestOptions = new QueryRequestOptions
-                {
-                    PartitionKey = new PartitionKey(tagPk)
-                };
-            }
-
-            var eventIds = new List<string>();
-            using (var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: requestOptions))
-            {
-                while (tagIterator.HasMoreResults)
-                {
-                    var response = await tagIterator.ReadNextAsync().ConfigureAwait(false);
-                    foreach (var item in response)
-                    {
-                        eventIds.Add((string)item.eventId);
-                    }
-                }
-            }
+            var (queryDefinition, requestOptions) = BuildTagEventIdQuery(tagString, serviceId, tagsSettings, since);
+            var eventIds = await FetchEventIdsAsync(tagsContainer, queryDefinition, requestOptions).ConfigureAwait(false);
 
             if (eventIds.Count == 0)
             {
@@ -265,61 +224,12 @@ public partial class CosmosDbEventStore : IEventStore
             // Fetch events using batched point reads with concurrency control
             var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
             var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
-            using var semaphore = new SemaphoreSlim(options.MaxConcurrentDeserializations);
-
-            var tasks = eventIds.Select(async eventId =>
-            {
-                await semaphore.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    var eventPk = GetEventPartitionKey(eventId, eventsSettings, serviceId);
-                    var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
-                        eventId,
-                        new PartitionKey(eventPk)).ConfigureAwait(false);
-
-                    var cosmosEvent = response.Resource;
-                    if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId, allowEmpty: eventsSettings.IsLegacy))
-                    {
-                        return (Event: (Event?)null, Error: new UnauthorizedAccessException(
-                            $"Event {eventId} does not belong to service {serviceId}"), SortKey: string.Empty);
-                    }
-                    var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
-                    if (!payloadResult.IsSuccess)
-                    {
-                        return (Event: (Event?)null, Error: payloadResult.GetException(), SortKey: string.Empty);
-                    }
-
-                    var ev = cosmosEvent.ToEvent(payloadResult.GetValue());
-                    return (Event: ev, Error: (Exception?)null, SortKey: ev.SortableUniqueIdValue);
-                }
-                catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-                {
-                    // Event might have been deleted, skip it
-                    return (Event: null, Error: null, SortKey: string.Empty);
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }).ToList();
-
-            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-
-            // Check for any errors
-            var firstError = results.FirstOrDefault(r => r.Error != null);
-            if (firstError.Error != null)
-            {
-                return ResultBox.Error<IEnumerable<Event>>(firstError.Error);
-            }
-
-            // Collect successful results and sort by SortableUniqueId
-            var events = results
-                .Where(r => r.Event != null)
-                .OrderBy(r => r.SortKey)
-                .Select(r => r.Event!)
-                .ToList();
-
-            return ResultBox.FromValue<IEnumerable<Event>>(events);
+            return await FetchEventsByIdsAsync(
+                eventsContainer,
+                eventsSettings,
+                serviceId,
+                eventIds,
+                options.MaxConcurrentDeserializations).ConfigureAwait(false);
         }
         catch (CosmosException ex)
         {
@@ -337,6 +247,126 @@ public partial class CosmosDbEventStore : IEventStore
         {
             return ResultBox.Error<IEnumerable<Event>>(ex);
         }
+    }
+
+    private static (QueryDefinition QueryDefinition, QueryRequestOptions? RequestOptions) BuildTagEventIdQuery(
+        string tagString,
+        string serviceId,
+        CosmosContainerSettings tagsSettings,
+        SortableUniqueId? since)
+    {
+        if (tagsSettings.IsLegacy)
+        {
+            var queryDefinition = since != null
+                ? new QueryDefinition($"SELECT c.eventId FROM c WHERE c.tag = @tag AND c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                    .WithParameter("@tag", tagString)
+                    .WithParameter(ParamSince, since.Value)
+                : new QueryDefinition("SELECT c.eventId FROM c WHERE c.tag = @tag ORDER BY c.sortableUniqueId")
+                    .WithParameter("@tag", tagString);
+
+            var requestOptions = new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tagString)
+            };
+
+            return (queryDefinition, requestOptions);
+        }
+
+        var tagPk = GetTagPartitionKey(tagString, tagsSettings, serviceId);
+        var queryDefinitionV2 = since != null
+            ? new QueryDefinition($"SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                .WithParameter("@pk", tagPk)
+                .WithParameter(ParamSince, since.Value)
+            : new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
+                .WithParameter("@pk", tagPk);
+
+        var requestOptionsV2 = new QueryRequestOptions
+        {
+            PartitionKey = new PartitionKey(tagPk)
+        };
+
+        return (queryDefinitionV2, requestOptionsV2);
+    }
+
+    private static async Task<List<string>> FetchEventIdsAsync(
+        Container tagsContainer,
+        QueryDefinition queryDefinition,
+        QueryRequestOptions? requestOptions)
+    {
+        var eventIds = new List<string>();
+        using var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: requestOptions);
+        while (tagIterator.HasMoreResults)
+        {
+            var response = await tagIterator.ReadNextAsync().ConfigureAwait(false);
+            foreach (var item in response)
+            {
+                eventIds.Add((string)item.eventId);
+            }
+        }
+
+        return eventIds;
+    }
+
+    private async Task<ResultBox<IEnumerable<Event>>> FetchEventsByIdsAsync(
+        Container eventsContainer,
+        CosmosContainerSettings eventsSettings,
+        string serviceId,
+        IReadOnlyList<string> eventIds,
+        int maxConcurrency)
+    {
+        using var semaphore = new SemaphoreSlim(maxConcurrency);
+
+        var tasks = eventIds.Select(async eventId =>
+        {
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var eventPk = GetEventPartitionKey(eventId, eventsSettings, serviceId);
+                var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
+                    eventId,
+                    new PartitionKey(eventPk)).ConfigureAwait(false);
+
+                var cosmosEvent = response.Resource;
+                if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId, allowEmpty: eventsSettings.IsLegacy))
+                {
+                    return (Event: (Event?)null, Error: new UnauthorizedAccessException(
+                        $"Event {eventId} does not belong to service {serviceId}"), SortKey: string.Empty);
+                }
+                var payloadResult = DeserializeEventPayload(cosmosEvent.EventType, cosmosEvent.Payload);
+                if (!payloadResult.IsSuccess)
+                {
+                    return (Event: (Event?)null, Error: payloadResult.GetException(), SortKey: string.Empty);
+                }
+
+                var ev = cosmosEvent.ToEvent(payloadResult.GetValue());
+                return (Event: ev, Error: (Exception?)null, SortKey: ev.SortableUniqueIdValue);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Event might have been deleted, skip it
+                return (Event: null, Error: null, SortKey: string.Empty);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        var firstError = results.FirstOrDefault(r => r.Error != null);
+        if (firstError.Error != null)
+        {
+            return ResultBox.Error<IEnumerable<Event>>(firstError.Error);
+        }
+
+        var events = results
+            .Where(r => r.Event != null)
+            .OrderBy(r => r.SortKey)
+            .Select(r => r.Event!)
+            .ToList();
+
+        return ResultBox.FromValue<IEnumerable<Event>>(events);
     }
 
     /// <summary>
@@ -921,18 +951,18 @@ public partial class CosmosDbEventStore : IEventStore
             if (settings.IsLegacy)
             {
                 queryDefinition = since != null
-                    ? new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.sortableUniqueId > @since")
-                        .WithParameter("@since", since.Value)
+                    ? new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE c.sortableUniqueId > {ParamSince}")
+                        .WithParameter(ParamSince, since.Value)
                     : new QueryDefinition("SELECT VALUE COUNT(1) FROM c");
             }
             else
             {
                 queryDefinition = since != null
-                    ? new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = @serviceId AND c.sortableUniqueId > @since")
-                        .WithParameter("@serviceId", serviceId)
-                        .WithParameter("@since", since.Value)
-                    : new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = @serviceId")
-                        .WithParameter("@serviceId", serviceId);
+                    ? new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = {ParamServiceId} AND c.sortableUniqueId > {ParamSince}")
+                        .WithParameter(ParamServiceId, serviceId)
+                        .WithParameter(ParamSince, since.Value)
+                    : new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE c.serviceId = {ParamServiceId}")
+                        .WithParameter(ParamServiceId, serviceId);
             }
             using var iterator = container.GetItemQueryIterator<long>(queryDefinition);
 

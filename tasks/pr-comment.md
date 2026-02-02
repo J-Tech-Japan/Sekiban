@@ -9,6 +9,7 @@
 - Orleans のストリーム/Grain を ServiceId でスコープし、TagState/TagConsistency も分離。
 - ServiceId 分離のテストを追加（InMemory/Orleans）。
 - primitive projection contract/actor を追加。
+- SonarCloud 指摘対応（定数化、複雑度分割、SQL識別子の安全化）。
 - `tools/MigrateDcbCosmosEventsTags` を新規追加（export/delete/recreate/import を一括実行）。
   - 変換ロジックで `serviceId`/`pk`/`timestamp`/`createdAt` の欠落を補完し、payload/tags を正規化。
   - `appsettings.json` と `README.md` で設定・使い方を整備。

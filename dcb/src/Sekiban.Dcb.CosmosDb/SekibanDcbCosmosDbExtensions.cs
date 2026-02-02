@@ -12,6 +12,7 @@ namespace Sekiban.Dcb.CosmosDb;
 /// </summary>
 public static class SekibanDcbCosmosDbExtensions
 {
+    private const string DefaultDatabaseName = "SekibanDcb";
     private static readonly Action<ILogger, string, Exception?> LogUsingAspireClient =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, nameof(LogUsingAspireClient)), "Using Aspire-provided CosmosClient for database {DatabaseName}");
 
@@ -37,7 +38,7 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<CosmosDbContext>(provider =>
         {
             var logger = provider.GetService<ILogger<CosmosDbContext>>();
-            var databaseName = configuration["CosmosDb:DatabaseName"] ?? "SekibanDcb";
+            var databaseName = configuration["CosmosDb:DatabaseName"] ?? DefaultDatabaseName;
 
             // Check for connection strings in order of specificity
             var connectionString = configuration.GetConnectionString("SekibanDcbCosmos")
@@ -69,7 +70,7 @@ public static class SekibanDcbCosmosDbExtensions
     public static IServiceCollection AddSekibanDcbCosmosDb(
         this IServiceCollection services,
         string connectionString,
-        string databaseName = "SekibanDcb",
+        string databaseName = DefaultDatabaseName,
         Action<CosmosDbEventStoreOptions>? configureOptions = null)
     {
         var options = new CosmosDbEventStoreOptions();
@@ -112,7 +113,7 @@ public static class SekibanDcbCosmosDbExtensions
         {
             var configuration = provider.GetRequiredService<IConfiguration>();
             var logger = provider.GetService<ILogger<CosmosDbContext>>();
-            var databaseName = configuration["CosmosDb:DatabaseName"] ?? "SekibanDcb";
+            var databaseName = configuration["CosmosDb:DatabaseName"] ?? DefaultDatabaseName;
 
             // Try to get CosmosClient from Aspire DI first (if Aspire has registered it)
             var cosmosClient = provider.GetService<Microsoft.Azure.Cosmos.CosmosClient>();

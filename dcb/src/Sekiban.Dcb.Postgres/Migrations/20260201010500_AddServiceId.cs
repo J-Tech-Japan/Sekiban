@@ -7,174 +7,183 @@ namespace Sekiban.Dcb.Postgres.Migrations;
 /// <inheritdoc />
 public partial class AddServiceId : Migration
 {
+    private const string ServiceIdColumn = "ServiceId";
+    private const string EventsTable = "dcb_events";
+    private const string TagsTable = "dcb_tags";
+    private const string StatesTable = "dcb_multi_projection_states";
+    private const string EventsPrimaryKey = "PK_dcb_events";
+    private const string StatesPrimaryKey = "PK_dcb_multi_projection_states";
+    private const string ProjectorNameColumn = "ProjectorName";
+    private const string SortableUniqueIdColumn = "SortableUniqueId";
+
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.AddColumn<string>(
-            name: "ServiceId",
-            table: "dcb_events",
+            name: ServiceIdColumn,
+            table: EventsTable,
             type: "character varying(64)",
             maxLength: 64,
             nullable: false,
             defaultValue: "default");
 
         migrationBuilder.AddColumn<string>(
-            name: "ServiceId",
-            table: "dcb_tags",
+            name: ServiceIdColumn,
+            table: TagsTable,
             type: "character varying(64)",
             maxLength: 64,
             nullable: false,
             defaultValue: "default");
 
         migrationBuilder.AddColumn<string>(
-            name: "ServiceId",
-            table: "dcb_multi_projection_states",
+            name: ServiceIdColumn,
+            table: StatesTable,
             type: "character varying(64)",
             maxLength: 64,
             nullable: false,
             defaultValue: "default");
 
         migrationBuilder.DropPrimaryKey(
-            name: "PK_dcb_events",
-            table: "dcb_events");
+            name: EventsPrimaryKey,
+            table: EventsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Events_SortableUniqueId",
-            table: "dcb_events");
+            table: EventsTable);
 
         migrationBuilder.DropPrimaryKey(
-            name: "PK_dcb_multi_projection_states",
-            table: "dcb_multi_projection_states");
+            name: StatesPrimaryKey,
+            table: StatesTable);
 
         migrationBuilder.DropIndex(
             name: "IX_MultiProjectionStates_ProjectorName",
-            table: "dcb_multi_projection_states");
+            table: StatesTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Tags_Tag",
-            table: "dcb_tags");
+            table: TagsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Tags_Tag_SortableUniqueId",
-            table: "dcb_tags");
+            table: TagsTable);
 
         migrationBuilder.AddPrimaryKey(
-            name: "PK_dcb_events",
-            table: "dcb_events",
-            columns: new[] { "ServiceId", "Id" });
+            name: EventsPrimaryKey,
+            table: EventsTable,
+            columns: new[] { ServiceIdColumn, "Id" });
 
         migrationBuilder.AddPrimaryKey(
-            name: "PK_dcb_multi_projection_states",
-            table: "dcb_multi_projection_states",
-            columns: new[] { "ServiceId", "ProjectorName", "ProjectorVersion" });
+            name: StatesPrimaryKey,
+            table: StatesTable,
+            columns: new[] { ServiceIdColumn, ProjectorNameColumn, "ProjectorVersion" });
 
         migrationBuilder.CreateIndex(
             name: "IX_Events_ServiceId",
-            table: "dcb_events",
-            column: "ServiceId");
+            table: EventsTable,
+            column: ServiceIdColumn);
 
         migrationBuilder.CreateIndex(
             name: "IX_Events_Service_SortableUniqueId",
-            table: "dcb_events",
-            columns: new[] { "ServiceId", "SortableUniqueId" });
+            table: EventsTable,
+            columns: new[] { ServiceIdColumn, SortableUniqueIdColumn });
 
         migrationBuilder.CreateIndex(
             name: "IX_Tags_ServiceId",
-            table: "dcb_tags",
-            column: "ServiceId");
+            table: TagsTable,
+            column: ServiceIdColumn);
 
         migrationBuilder.CreateIndex(
             name: "IX_Tags_Service_Tag",
-            table: "dcb_tags",
-            columns: new[] { "ServiceId", "Tag" });
+            table: TagsTable,
+            columns: new[] { ServiceIdColumn, "Tag" });
 
         migrationBuilder.CreateIndex(
             name: "IX_Tags_Service_Tag_SortableUniqueId",
-            table: "dcb_tags",
-            columns: new[] { "ServiceId", "Tag", "SortableUniqueId" });
+            table: TagsTable,
+            columns: new[] { ServiceIdColumn, "Tag", SortableUniqueIdColumn });
 
         migrationBuilder.CreateIndex(
             name: "IX_MultiProjectionStates_Service_ProjectorName",
-            table: "dcb_multi_projection_states",
-            columns: new[] { "ServiceId", "ProjectorName" });
+            table: StatesTable,
+            columns: new[] { ServiceIdColumn, ProjectorNameColumn });
     }
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.DropPrimaryKey(
-            name: "PK_dcb_events",
-            table: "dcb_events");
+            name: EventsPrimaryKey,
+            table: EventsTable);
 
         migrationBuilder.DropPrimaryKey(
-            name: "PK_dcb_multi_projection_states",
-            table: "dcb_multi_projection_states");
+            name: StatesPrimaryKey,
+            table: StatesTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Events_ServiceId",
-            table: "dcb_events");
+            table: EventsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Events_Service_SortableUniqueId",
-            table: "dcb_events");
+            table: EventsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Tags_ServiceId",
-            table: "dcb_tags");
+            table: TagsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Tags_Service_Tag",
-            table: "dcb_tags");
+            table: TagsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_Tags_Service_Tag_SortableUniqueId",
-            table: "dcb_tags");
+            table: TagsTable);
 
         migrationBuilder.DropIndex(
             name: "IX_MultiProjectionStates_Service_ProjectorName",
-            table: "dcb_multi_projection_states");
+            table: StatesTable);
 
         migrationBuilder.AddPrimaryKey(
-            name: "PK_dcb_events",
-            table: "dcb_events",
+            name: EventsPrimaryKey,
+            table: EventsTable,
             column: "Id");
 
         migrationBuilder.AddPrimaryKey(
-            name: "PK_dcb_multi_projection_states",
-            table: "dcb_multi_projection_states",
-            columns: new[] { "ProjectorName", "ProjectorVersion" });
+            name: StatesPrimaryKey,
+            table: StatesTable,
+            columns: new[] { ProjectorNameColumn, "ProjectorVersion" });
 
         migrationBuilder.CreateIndex(
             name: "IX_Events_SortableUniqueId",
-            table: "dcb_events",
-            column: "SortableUniqueId",
+            table: EventsTable,
+            column: SortableUniqueIdColumn,
             unique: true);
 
         migrationBuilder.CreateIndex(
             name: "IX_Tags_Tag",
-            table: "dcb_tags",
+            table: TagsTable,
             column: "Tag");
 
         migrationBuilder.CreateIndex(
             name: "IX_Tags_Tag_SortableUniqueId",
-            table: "dcb_tags",
-            columns: new[] { "Tag", "SortableUniqueId" });
+            table: TagsTable,
+            columns: new[] { "Tag", SortableUniqueIdColumn });
 
         migrationBuilder.CreateIndex(
             name: "IX_MultiProjectionStates_ProjectorName",
-            table: "dcb_multi_projection_states",
-            column: "ProjectorName");
+            table: StatesTable,
+            column: ProjectorNameColumn);
 
         migrationBuilder.DropColumn(
-            name: "ServiceId",
-            table: "dcb_events");
+            name: ServiceIdColumn,
+            table: EventsTable);
 
         migrationBuilder.DropColumn(
-            name: "ServiceId",
-            table: "dcb_tags");
+            name: ServiceIdColumn,
+            table: TagsTable);
 
         migrationBuilder.DropColumn(
-            name: "ServiceId",
-            table: "dcb_multi_projection_states");
+            name: ServiceIdColumn,
+            table: StatesTable);
     }
 }

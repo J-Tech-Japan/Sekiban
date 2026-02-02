@@ -63,13 +63,13 @@ public sealed class PrimitiveMultiProjectionActor
             var resultJson = instance.ExecuteQuery(queryType, queryJson);
 
             var result = JsonSerializer.Deserialize<TResult>(resultJson, _jsonOptions);
-            if (result == null)
+            if (default(TResult) is null && result is null)
             {
                 return Task.FromResult(ResultBox.Error<TResult>(
                     new InvalidOperationException($"Failed to deserialize query result for {queryType}")));
             }
 
-            return Task.FromResult(ResultBox.FromValue(result));
+            return Task.FromResult(ResultBox.FromValue(result!));
         }
         catch (Exception ex)
         {
@@ -88,7 +88,7 @@ public sealed class PrimitiveMultiProjectionActor
             var resultJson = instance.ExecuteListQuery(queryType, queryJson);
 
             var result = JsonSerializer.Deserialize<ListQueryResult<TResult>>(resultJson, _jsonOptions);
-            if (result == null)
+            if (result is null)
             {
                 return Task.FromResult(ResultBox.Error<ListQueryResult<TResult>>(
                     new InvalidOperationException($"Failed to deserialize list query result for {queryType}")));

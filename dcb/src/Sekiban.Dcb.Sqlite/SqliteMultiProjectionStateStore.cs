@@ -12,6 +12,15 @@ namespace Sekiban.Dcb.Sqlite;
 /// </summary>
 public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
 {
+    private const string ParamServiceId = "@serviceId";
+    private static readonly HashSet<string> AllowedTableNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dcb_multi_projection_states"
+    };
+    private static readonly HashSet<string> AllowedColumnNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ServiceId"
+    };
     private readonly string _connectionString;
     private readonly string _databasePath;
     private readonly ILogger<SqliteMultiProjectionStateStore>? _logger;
@@ -109,7 +118,7 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
         cmd.ExecuteNonQuery();
     }
 
-    private void MigrateSchemaToServiceId(SqliteConnection connection)
+    private static void MigrateSchemaToServiceId(SqliteConnection connection)
     {
         using var transaction = connection.BeginTransaction();
         try
@@ -142,17 +151,17 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
 
             using var copyCmd = connection.CreateCommand();
             copyCmd.Transaction = transaction;
-            copyCmd.CommandText = """
+            copyCmd.CommandText = $"""
                 INSERT INTO dcb_multi_projection_states_new
                 (ServiceId, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
                  StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
                  SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost)
-                SELECT @serviceId, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
+                SELECT {ParamServiceId}, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
                        StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
                        SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost
                 FROM dcb_multi_projection_states;
                 """;
-            copyCmd.Parameters.AddWithValue("@serviceId", DefaultServiceIdProvider.DefaultServiceId);
+            copyCmd.Parameters.AddWithValue(ParamServiceId, DefaultServiceIdProvider.DefaultServiceId);
             copyCmd.ExecuteNonQuery();
 
             using var dropCmd = connection.CreateCommand();
@@ -165,7 +174,7 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             renameCmd.CommandText = "ALTER TABLE dcb_multi_projection_states_new RENAME TO dcb_multi_projection_states;";
             renameCmd.ExecuteNonQuery();
 
-            EnsureIndexes(connection, (SqliteTransaction)transaction);
+            EnsureIndexes(connection, transaction);
 
             transaction.Commit();
         }
@@ -187,6 +196,7 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
 
     private static bool HasColumn(SqliteConnection connection, string tableName, string columnName)
     {
+        ValidateSchemaIdentifier(tableName, columnName);
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $"PRAGMA table_info({tableName});";
         using var reader = cmd.ExecuteReader();
@@ -201,6 +211,14 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
         return false;
     }
 
+    private static void ValidateSchemaIdentifier(string tableName, string columnName)
+    {
+        if (!AllowedTableNames.Contains(tableName) || !AllowedColumnNames.Contains(columnName))
+        {
+            throw new ArgumentException($"Unsupported schema identifier: {tableName}.{columnName}");
+        }
+    }
+
     public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
         string projectorName,
         string projectorVersion,
@@ -213,16 +231,16 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await connection.OpenAsync(cancellationToken);
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
                        StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
                        SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost
                 FROM dcb_multi_projection_states
-                WHERE ServiceId = @serviceId AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
                 """;
             cmd.Parameters.AddWithValue("@projectorName", projectorName);
             cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
@@ -252,17 +270,17 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await connection.OpenAsync(cancellationToken);
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
                        StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
                        SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost
                 FROM dcb_multi_projection_states
-                WHERE ServiceId = @serviceId AND ProjectorName = @projectorName
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName
                 ORDER BY EventsProcessed DESC
                 LIMIT 1
                 """;
             cmd.Parameters.AddWithValue("@projectorName", projectorName);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
@@ -293,18 +311,18 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await connection.OpenAsync(cancellationToken);
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 INSERT OR REPLACE INTO dcb_multi_projection_states
                 (ServiceId, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
                  StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
                  SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost)
                 VALUES
-                (@serviceId, @projectorName, @projectorVersion, @payloadType, @lastSortableUniqueId, @eventsProcessed,
+                ({ParamServiceId}, @projectorName, @projectorVersion, @payloadType, @lastSortableUniqueId, @eventsProcessed,
                  @stateData, @isOffloaded, @offloadKey, @offloadProvider, @originalSizeBytes, @compressedSizeBytes,
                  @safeWindowThreshold, @createdAt, @updatedAt, @buildSource, @buildHost)
                 """;
 
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
             cmd.Parameters.AddWithValue("@projectorName", record.ProjectorName);
             cmd.Parameters.AddWithValue("@projectorVersion", record.ProjectorVersion);
             cmd.Parameters.AddWithValue("@payloadType", record.PayloadType);
@@ -346,14 +364,14 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await connection.OpenAsync(cancellationToken);
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT ProjectorName, ProjectorVersion, EventsProcessed, UpdatedAt,
                        OriginalSizeBytes, CompressedSizeBytes, LastSortableUniqueId
                 FROM dcb_multi_projection_states
-                WHERE ServiceId = @serviceId
+                WHERE ServiceId = {ParamServiceId}
                 ORDER BY ProjectorName, ProjectorVersion
                 """;
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
@@ -398,13 +416,13 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await connection.OpenAsync(cancellationToken);
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 DELETE FROM dcb_multi_projection_states
-                WHERE ServiceId = @serviceId AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
                 """;
             cmd.Parameters.AddWithValue("@projectorName", projectorName);
             cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var deleted = await cmd.ExecuteNonQueryAsync(cancellationToken);
             return ResultBox.FromValue(deleted > 0);
@@ -430,17 +448,17 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             await using var cmd = connection.CreateCommand();
             if (!string.IsNullOrEmpty(projectorName))
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     DELETE FROM dcb_multi_projection_states
-                    WHERE ServiceId = @serviceId AND ProjectorName = @projectorName
+                    WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName
                     """;
                 cmd.Parameters.AddWithValue("@projectorName", projectorName);
             }
             else
             {
-                cmd.CommandText = "DELETE FROM dcb_multi_projection_states WHERE ServiceId = @serviceId";
+                cmd.CommandText = $"DELETE FROM dcb_multi_projection_states WHERE ServiceId = {ParamServiceId}";
             }
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var deleted = await cmd.ExecuteNonQueryAsync(cancellationToken);
             return ResultBox.FromValue(deleted);

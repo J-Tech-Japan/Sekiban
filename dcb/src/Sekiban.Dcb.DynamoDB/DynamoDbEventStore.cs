@@ -786,67 +786,75 @@ public class DynamoDbEventStore : IEventStore
 
     private async Task<List<DynamoTag>> ReadAllTagItemsAsync(string serviceId, string? tagGroup)
     {
+        return tagGroup != null
+            ? await ReadTagItemsByGroupAsync(serviceId, tagGroup).ConfigureAwait(false)
+            : await ReadTagItemsByScanAsync(serviceId).ConfigureAwait(false);
+    }
+
+    private async Task<List<DynamoTag>> ReadTagItemsByGroupAsync(string serviceId, string tagGroup)
+    {
+        var tags = new List<DynamoTag>();
+        Dictionary<string, AttributeValue>? lastKey = null;
+        var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
+
+        do
+        {
+            var response = await _client.QueryAsync(new QueryRequest
+            {
+                TableName = _context.TagsTableName,
+                IndexName = DynamoDbContext.TagsGsiName,
+                KeyConditionExpression = "tagGroup = :group",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":group"] = new AttributeValue { S = storedTagGroup },
+                    [":serviceId"] = new AttributeValue { S = serviceId }
+                },
+                FilterExpression = "serviceId = :serviceId",
+                ExclusiveStartKey = lastKey,
+                Limit = _options.QueryPageSize
+            }).ConfigureAwait(false);
+
+            AppendTags(response.Items, tags);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
+
+        return tags;
+    }
+
+    private async Task<List<DynamoTag>> ReadTagItemsByScanAsync(string serviceId)
+    {
         var tags = new List<DynamoTag>();
         Dictionary<string, AttributeValue>? lastKey = null;
 
-        if (tagGroup != null)
+        do
         {
-            var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
-            do
+            var response = await _client.ScanAsync(new ScanRequest
             {
-                var response = await _client.QueryAsync(new QueryRequest
+                TableName = _context.TagsTableName,
+                FilterExpression = "serviceId = :serviceId",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    TableName = _context.TagsTableName,
-                    IndexName = DynamoDbContext.TagsGsiName,
-                    KeyConditionExpression = "tagGroup = :group",
-                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                    {
-                        [":group"] = new AttributeValue { S = storedTagGroup },
-                        [":serviceId"] = new AttributeValue { S = serviceId }
-                    },
-                    FilterExpression = "serviceId = :serviceId",
-                    ExclusiveStartKey = lastKey,
-                    Limit = _options.QueryPageSize
-                }).ConfigureAwait(false);
+                    [":serviceId"] = new AttributeValue { S = serviceId }
+                },
+                ExclusiveStartKey = lastKey,
+                Limit = _options.QueryPageSize
+            }).ConfigureAwait(false);
 
-                foreach (var item in response.Items)
-                {
-                    if (!item.ContainsKey("eventId"))
-                        continue;
-                    tags.Add(DynamoTag.FromAttributeValues(item));
-                }
-
-                lastKey = response.LastEvaluatedKey;
-            } while (lastKey != null && lastKey.Count > 0);
-        }
-        else
-        {
-            do
-            {
-                var response = await _client.ScanAsync(new ScanRequest
-                {
-                    TableName = _context.TagsTableName,
-                    FilterExpression = "serviceId = :serviceId",
-                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
-                    {
-                        [":serviceId"] = new AttributeValue { S = serviceId }
-                    },
-                    ExclusiveStartKey = lastKey,
-                    Limit = _options.QueryPageSize
-                }).ConfigureAwait(false);
-
-                foreach (var item in response.Items)
-                {
-                    if (!item.ContainsKey("eventId"))
-                        continue;
-                    tags.Add(DynamoTag.FromAttributeValues(item));
-                }
-
-                lastKey = response.LastEvaluatedKey;
-            } while (lastKey != null && lastKey.Count > 0);
-        }
+            AppendTags(response.Items, tags);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
 
         return tags;
+    }
+
+    private static void AppendTags(List<Dictionary<string, AttributeValue>> items, List<DynamoTag> tags)
+    {
+        foreach (var item in items)
+        {
+            if (!item.ContainsKey("eventId"))
+                continue;
+            tags.Add(DynamoTag.FromAttributeValues(item));
+        }
     }
 
     private static Dictionary<string, AttributeValue> BuildEventKey(string serviceId, string eventId)

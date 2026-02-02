@@ -64,53 +64,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             var doc = response.Resource;
             if (doc == null)
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
-            if (settings.IsLegacy)
-            {
-                if (!string.IsNullOrEmpty(doc.ServiceId) && !string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new UnauthorizedAccessException(
-                            $"Projection state does not belong to service {serviceId}."));
-                }
-            }
-            else if (!string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
-            {
-                return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                    new UnauthorizedAccessException(
-                        $"Projection state does not belong to service {serviceId}."));
-            }
-
-            // Load from blob if offloaded - explicit error on failure
-            byte[]? blobData = null;
-            if (doc.IsOffloaded && _blobAccessor != null && doc.OffloadKey != null)
-            {
-                try
-                {
-                    blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
-                }
-                catch (InvalidOperationException blobEx)
-                {
-                    // Return explicit error instead of null stateData
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob storage. " +
-                            $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                            $"BlobKey: {doc.OffloadKey}",
-                            blobEx));
-                }
-                catch (System.IO.IOException blobEx)
-                {
-                    // Return explicit error instead of null stateData
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob storage (IO error). " +
-                            $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                            $"BlobKey: {doc.OffloadKey}",
-                            blobEx));
-                }
-            }
-
-            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
+            return await BuildRecordResultAsync(
+                doc,
+                serviceId,
+                projectorName,
+                projectorVersion,
+                settings.IsLegacy,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -159,53 +119,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                 var doc = response.FirstOrDefault();
                 if (doc == null)
                     return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
-                if (settings.IsLegacy)
-                {
-                    if (!string.IsNullOrEmpty(doc.ServiceId) && !string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
-                    {
-                        return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                            new UnauthorizedAccessException(
-                                $"Projection state does not belong to service {serviceId}."));
-                    }
-                }
-                else if (!string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new UnauthorizedAccessException(
-                            $"Projection state does not belong to service {serviceId}."));
-                }
-
-                // Load from blob if offloaded - explicit error on failure
-                byte[]? blobData = null;
-                if (doc.IsOffloaded && _blobAccessor != null && doc.OffloadKey != null)
-                {
-                    try
-                    {
-                        blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (InvalidOperationException blobEx)
-                    {
-                        // Return explicit error instead of null stateData
-                        return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                            new InvalidOperationException(
-                                $"Failed to read offloaded state from blob storage. " +
-                                $"Projector: {projectorName}, " +
-                                $"BlobKey: {doc.OffloadKey}",
-                                blobEx));
-                    }
-                    catch (System.IO.IOException blobEx)
-                    {
-                        // Return explicit error instead of null stateData
-                        return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                            new InvalidOperationException(
-                                $"Failed to read offloaded state from blob storage (IO error). " +
-                                $"Projector: {projectorName}, " +
-                                $"BlobKey: {doc.OffloadKey}",
-                                blobEx));
-                    }
-                }
-
-                return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
+                return await BuildRecordResultAsync(
+                    doc,
+                    serviceId,
+                    projectorName,
+                    doc.ProjectorVersion,
+                    settings.IsLegacy,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
@@ -213,6 +133,94 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+        }
+    }
+
+    private async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> BuildRecordResultAsync(
+        CosmosMultiProjectionState doc,
+        string serviceId,
+        string projectorName,
+        string projectorVersion,
+        bool isLegacy,
+        CancellationToken cancellationToken)
+    {
+        var validationError = ValidateServiceId(doc, serviceId, isLegacy);
+        if (validationError != null)
+        {
+            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(validationError);
+        }
+
+        var blobResult = await TryLoadOffloadedStateAsync(
+            doc,
+            projectorName,
+            projectorVersion,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!blobResult.IsSuccess)
+        {
+            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(blobResult.GetException());
+        }
+
+        var blobDataOpt = blobResult.GetValue();
+        var blobData = blobDataOpt.HasValue ? blobDataOpt.GetValue() : null;
+        return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
+    }
+
+    private static UnauthorizedAccessException? ValidateServiceId(
+        CosmosMultiProjectionState doc,
+        string serviceId,
+        bool isLegacy)
+    {
+        if (isLegacy)
+        {
+            if (!string.IsNullOrEmpty(doc.ServiceId) && !string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
+            {
+                return new UnauthorizedAccessException(
+                    $"Projection state does not belong to service {serviceId}.");
+            }
+
+            return null;
+        }
+
+        return string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal)
+            ? null
+            : new UnauthorizedAccessException(
+                $"Projection state does not belong to service {serviceId}.");
+    }
+
+    private async Task<ResultBox<OptionalValue<byte[]>>> TryLoadOffloadedStateAsync(
+        CosmosMultiProjectionState doc,
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken)
+    {
+        if (!doc.IsOffloaded || _blobAccessor == null || doc.OffloadKey == null)
+        {
+            return ResultBox.FromValue(OptionalValue<byte[]>.Empty);
+        }
+
+        try
+        {
+            var blobData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+            return ResultBox.FromValue(OptionalValue.FromValue(blobData));
+        }
+        catch (InvalidOperationException blobEx)
+        {
+            return ResultBox.Error<OptionalValue<byte[]>>(
+                new InvalidOperationException(
+                    $"Failed to read offloaded state from blob storage. " +
+                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
+                    $"BlobKey: {doc.OffloadKey}",
+                    blobEx));
+        }
+        catch (System.IO.IOException blobEx)
+        {
+            return ResultBox.Error<OptionalValue<byte[]>>(
+                new InvalidOperationException(
+                    $"Failed to read offloaded state from blob storage (IO error). " +
+                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
+                    $"BlobKey: {doc.OffloadKey}",
+                    blobEx));
         }
     }
 

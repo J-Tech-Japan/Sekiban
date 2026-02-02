@@ -17,6 +17,18 @@ namespace Sekiban.Dcb.Sqlite;
 public class SqliteEventStore : IEventStore
 {
     private const string SchemaVersion = "1.1";
+    private const string SchemaVersionKey = "schemaVersion";
+    private const string ParamServiceId = "@serviceId";
+    private static readonly HashSet<string> AllowedTableNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dcb_events",
+        "dcb_tags",
+        "dcb_meta"
+    };
+    private static readonly HashSet<string> AllowedColumnNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ServiceId"
+    };
     private readonly string _connectionString;
     private readonly string _databasePath;
     private readonly DcbDomainTypes _domainTypes;
@@ -82,7 +94,7 @@ public class SqliteEventStore : IEventStore
         if (!hasEvents || !hasTags)
         {
             CreateSchema(connection);
-            SetMetaValue(connection, "schemaVersion", SchemaVersion);
+            SetMetaValue(connection, SchemaVersionKey, SchemaVersion);
             return;
         }
 
@@ -98,7 +110,7 @@ public class SqliteEventStore : IEventStore
             EnsureIndexes(connection);
         }
 
-        SetMetaValue(connection, "schemaVersion", SchemaVersion);
+        SetMetaValue(connection, SchemaVersionKey, SchemaVersion);
     }
 
     private static void EnsureMetaTable(SqliteConnection connection)
@@ -170,7 +182,7 @@ public class SqliteEventStore : IEventStore
         cmd.ExecuteNonQuery();
     }
 
-    private void MigrateSchemaToServiceId(SqliteConnection connection)
+    private static void MigrateSchemaToServiceId(SqliteConnection connection)
     {
         using var transaction = connection.BeginTransaction();
         try
@@ -206,24 +218,24 @@ public class SqliteEventStore : IEventStore
 
             using var copyEventsCmd = connection.CreateCommand();
             copyEventsCmd.Transaction = transaction;
-            copyEventsCmd.CommandText = """
+            copyEventsCmd.CommandText = $"""
                 INSERT INTO dcb_events_new
                 (ServiceId, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser)
-                SELECT @serviceId, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                SELECT {ParamServiceId}, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
                 FROM dcb_events;
                 """;
-            copyEventsCmd.Parameters.AddWithValue("@serviceId", DefaultServiceIdProvider.DefaultServiceId);
+            copyEventsCmd.Parameters.AddWithValue(ParamServiceId, DefaultServiceIdProvider.DefaultServiceId);
             copyEventsCmd.ExecuteNonQuery();
 
             using var copyTagsCmd = connection.CreateCommand();
             copyTagsCmd.Transaction = transaction;
-            copyTagsCmd.CommandText = """
+            copyTagsCmd.CommandText = $"""
                 INSERT INTO dcb_tags_new
                 (ServiceId, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt)
-                SELECT @serviceId, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt
+                SELECT {ParamServiceId}, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt
                 FROM dcb_tags;
                 """;
-            copyTagsCmd.Parameters.AddWithValue("@serviceId", DefaultServiceIdProvider.DefaultServiceId);
+            copyTagsCmd.Parameters.AddWithValue(ParamServiceId, DefaultServiceIdProvider.DefaultServiceId);
             copyTagsCmd.ExecuteNonQuery();
 
             using var dropCmd = connection.CreateCommand();
@@ -242,7 +254,7 @@ public class SqliteEventStore : IEventStore
                 """;
             renameCmd.ExecuteNonQuery();
 
-            EnsureIndexes(connection, (SqliteTransaction)transaction);
+            EnsureIndexes(connection, transaction);
 
             transaction.Commit();
         }
@@ -264,6 +276,7 @@ public class SqliteEventStore : IEventStore
 
     private static bool HasColumn(SqliteConnection connection, string tableName, string columnName)
     {
+        ValidateSchemaIdentifier(tableName, columnName);
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $"PRAGMA table_info({tableName});";
         using var reader = cmd.ExecuteReader();
@@ -276,6 +289,14 @@ public class SqliteEventStore : IEventStore
         }
 
         return false;
+    }
+
+    private static void ValidateSchemaIdentifier(string tableName, string columnName)
+    {
+        if (!AllowedTableNames.Contains(tableName) || !AllowedColumnNames.Contains(columnName))
+        {
+            throw new ArgumentException($"Unsupported schema identifier: {tableName}.{columnName}");
+        }
     }
 
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
@@ -291,24 +312,24 @@ public class SqliteEventStore : IEventStore
             await using var cmd = connection.CreateCommand();
             if (since != null)
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
                     FROM dcb_events
-                    WHERE ServiceId = @serviceId AND SortableUniqueId > @since
+                    WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
                     ORDER BY SortableUniqueId
                     """;
                 cmd.Parameters.AddWithValue("@since", since.Value);
             }
             else
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
                     FROM dcb_events
-                    WHERE ServiceId = @serviceId
+                    WHERE ServiceId = {ParamServiceId}
                     ORDER BY SortableUniqueId
                     """;
             }
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             var eventsRead = 0;
@@ -351,11 +372,11 @@ public class SqliteEventStore : IEventStore
             await using var cmd = connection.CreateCommand();
             if (since != null)
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
                     FROM dcb_events e
                     INNER JOIN dcb_tags t ON e.Id = t.EventId
-                    WHERE e.ServiceId = @serviceId AND t.ServiceId = @serviceId AND t.Tag = @tag AND e.SortableUniqueId > @since
+                    WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag AND e.SortableUniqueId > @since
                     ORDER BY e.SortableUniqueId
                     """;
                 cmd.Parameters.AddWithValue("@tag", tagString);
@@ -363,16 +384,16 @@ public class SqliteEventStore : IEventStore
             }
             else
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
                     FROM dcb_events e
                     INNER JOIN dcb_tags t ON e.Id = t.EventId
-                    WHERE e.ServiceId = @serviceId AND t.ServiceId = @serviceId AND t.Tag = @tag
+                    WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag
                     ORDER BY e.SortableUniqueId
                     """;
                 cmd.Parameters.AddWithValue("@tag", tagString);
             }
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -403,13 +424,13 @@ public class SqliteEventStore : IEventStore
             await connection.OpenAsync();
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
                 FROM dcb_events
-                WHERE ServiceId = @serviceId AND Id = @id
+                WHERE ServiceId = {ParamServiceId} AND Id = @id
                 """;
             cmd.Parameters.AddWithValue("@id", eventId.ToString());
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -461,15 +482,15 @@ public class SqliteEventStore : IEventStore
                     // Insert event
                     await using var eventCmd = connection.CreateCommand();
                     eventCmd.Transaction = (SqliteTransaction)transaction;
-                    eventCmd.CommandText = """
+                    eventCmd.CommandText = $"""
                         INSERT OR REPLACE INTO dcb_events (ServiceId, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser)
-                        VALUES (@serviceId, @id, @sortableUniqueId, @eventType, @payloadJson, @tagsJson, @timestamp, @causationId, @correlationId, @executedUser)
+                        VALUES ({ParamServiceId}, @id, @sortableUniqueId, @eventType, @payloadJson, @tagsJson, @timestamp, @causationId, @correlationId, @executedUser)
                         """;
 
                     var payloadJson = JsonSerializer.Serialize(evt.Payload, evt.Payload.GetType(), _domainTypes.JsonSerializerOptions);
                     var tagsJson = JsonSerializer.Serialize(evt.Tags);
 
-                    eventCmd.Parameters.AddWithValue("@serviceId", serviceId);
+                    eventCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
                     eventCmd.Parameters.AddWithValue("@id", evt.Id.ToString());
                     eventCmd.Parameters.AddWithValue("@sortableUniqueId", evt.SortableUniqueIdValue);
                     eventCmd.Parameters.AddWithValue("@eventType", evt.EventType);
@@ -489,11 +510,11 @@ public class SqliteEventStore : IEventStore
 
                         await using var tagCmd = connection.CreateCommand();
                         tagCmd.Transaction = (SqliteTransaction)transaction;
-                        tagCmd.CommandText = """
+                        tagCmd.CommandText = $"""
                             INSERT INTO dcb_tags (ServiceId, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt)
-                            VALUES (@serviceId, @tag, @tagGroup, @sortableUniqueId, @eventId, @eventType, @createdAt)
+                            VALUES ({ParamServiceId}, @tag, @tagGroup, @sortableUniqueId, @eventId, @eventType, @createdAt)
                             """;
-                        tagCmd.Parameters.AddWithValue("@serviceId", serviceId);
+                        tagCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
                         tagCmd.Parameters.AddWithValue("@tag", tagString);
                         tagCmd.Parameters.AddWithValue("@tagGroup", tagGroup);
                         tagCmd.Parameters.AddWithValue("@sortableUniqueId", evt.SortableUniqueIdValue);
@@ -541,14 +562,14 @@ public class SqliteEventStore : IEventStore
             await connection.OpenAsync();
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT EventId, SortableUniqueId, EventType
                 FROM dcb_tags
-                WHERE ServiceId = @serviceId AND Tag = @tag
+                WHERE ServiceId = {ParamServiceId} AND Tag = @tag
                 ORDER BY SortableUniqueId
                 """;
             cmd.Parameters.AddWithValue("@tag", tagString);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -583,21 +604,21 @@ public class SqliteEventStore : IEventStore
 
             // Get count for version
             await using var countCmd = connection.CreateCommand();
-            countCmd.CommandText = "SELECT COUNT(*) FROM dcb_tags WHERE ServiceId = @serviceId AND Tag = @tag";
+            countCmd.CommandText = $"SELECT COUNT(*) FROM dcb_tags WHERE ServiceId = {ParamServiceId} AND Tag = @tag";
             countCmd.Parameters.AddWithValue("@tag", tagString);
-            countCmd.Parameters.AddWithValue("@serviceId", serviceId);
+            countCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
             var version = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
+            cmd.CommandText = $"""
                 SELECT EventId, SortableUniqueId, EventType
                 FROM dcb_tags
-                WHERE ServiceId = @serviceId AND Tag = @tag
+                WHERE ServiceId = {ParamServiceId} AND Tag = @tag
                 ORDER BY SortableUniqueId DESC
                 LIMIT 1
                 """;
             cmd.Parameters.AddWithValue("@tag", tagString);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -642,9 +663,9 @@ public class SqliteEventStore : IEventStore
             await connection.OpenAsync();
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT COUNT(*) FROM dcb_tags WHERE ServiceId = @serviceId AND Tag = @tag LIMIT 1";
+            cmd.CommandText = $"SELECT COUNT(*) FROM dcb_tags WHERE ServiceId = {ParamServiceId} AND Tag = @tag LIMIT 1";
             cmd.Parameters.AddWithValue("@tag", tagString);
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync());
             return ResultBox.FromValue(count > 0);
@@ -667,14 +688,14 @@ public class SqliteEventStore : IEventStore
             await using var cmd = connection.CreateCommand();
             if (since != null)
             {
-                cmd.CommandText = "SELECT COUNT(*) FROM dcb_events WHERE ServiceId = @serviceId AND SortableUniqueId > @since";
+                cmd.CommandText = $"SELECT COUNT(*) FROM dcb_events WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since";
                 cmd.Parameters.AddWithValue("@since", since.Value);
             }
             else
             {
-                cmd.CommandText = "SELECT COUNT(*) FROM dcb_events WHERE ServiceId = @serviceId";
+                cmd.CommandText = $"SELECT COUNT(*) FROM dcb_events WHERE ServiceId = {ParamServiceId}";
             }
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync());
             return ResultBox.FromValue(count);
@@ -699,11 +720,11 @@ public class SqliteEventStore : IEventStore
             await using var cmd = connection.CreateCommand();
             if (!string.IsNullOrEmpty(tagGroup))
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT Tag, TagGroup, COUNT(*) as EventCount,
                            MIN(SortableUniqueId) as FirstId, MAX(SortableUniqueId) as LastId
                     FROM dcb_tags
-                    WHERE ServiceId = @serviceId AND TagGroup = @tagGroup
+                    WHERE ServiceId = {ParamServiceId} AND TagGroup = @tagGroup
                     GROUP BY Tag, TagGroup
                     ORDER BY Tag
                     """;
@@ -711,16 +732,16 @@ public class SqliteEventStore : IEventStore
             }
             else
             {
-                cmd.CommandText = """
+                cmd.CommandText = $"""
                     SELECT Tag, TagGroup, COUNT(*) as EventCount,
                            MIN(SortableUniqueId) as FirstId, MAX(SortableUniqueId) as LastId
                     FROM dcb_tags
-                    WHERE ServiceId = @serviceId
+                    WHERE ServiceId = {ParamServiceId}
                     GROUP BY Tag, TagGroup
                     ORDER BY TagGroup, Tag
                     """;
             }
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -768,11 +789,11 @@ public class SqliteEventStore : IEventStore
         await connection.OpenAsync();
 
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            DELETE FROM dcb_events WHERE ServiceId = @serviceId;
-            DELETE FROM dcb_tags WHERE ServiceId = @serviceId;
+        cmd.CommandText = $"""
+            DELETE FROM dcb_events WHERE ServiceId = {ParamServiceId};
+            DELETE FROM dcb_tags WHERE ServiceId = {ParamServiceId};
             """;
-        cmd.Parameters.AddWithValue("@serviceId", serviceId);
+        cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
         await cmd.ExecuteNonQueryAsync();
 
         await using var metaCmd = connection.CreateCommand();
@@ -810,7 +831,7 @@ public class SqliteEventStore : IEventStore
             {
                 RemoteEndpoint = remoteEndpoint,
                 DatabaseName = GetMetaValue(connection, "databaseName") ?? "",
-                SchemaVersion = GetMetaValue(connection, "schemaVersion") ?? "",
+                SchemaVersion = GetMetaValue(connection, SchemaVersionKey) ?? "",
                 TotalCountAtFetch = long.TryParse(GetMetaValue(connection, "totalCountAtFetch"), out var count) ? count : 0,
                 LastCachedSortableUniqueId = GetMetaValue(connection, "lastCachedSortableUniqueId"),
                 LastSafeWindowUtc = DateTime.TryParse(GetMetaValue(connection, "lastSafeWindowUtc"), out var dt) ? dt : null,
@@ -835,7 +856,7 @@ public class SqliteEventStore : IEventStore
 
         SetMetaValue(connection, "remoteEndpoint", metadata.RemoteEndpoint);
         SetMetaValue(connection, "databaseName", metadata.DatabaseName);
-        SetMetaValue(connection, "schemaVersion", metadata.SchemaVersion);
+        SetMetaValue(connection, SchemaVersionKey, metadata.SchemaVersion);
         SetMetaValue(connection, "totalCountAtFetch", metadata.TotalCountAtFetch.ToString());
         SetMetaValue(connection, "lastCachedSortableUniqueId", metadata.LastCachedSortableUniqueId ?? "");
         SetMetaValue(connection, "lastSafeWindowUtc", metadata.LastSafeWindowUtc?.ToString("O") ?? "");
@@ -853,8 +874,8 @@ public class SqliteEventStore : IEventStore
         await connection.OpenAsync();
 
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT MAX(SortableUniqueId) FROM dcb_events WHERE ServiceId = @serviceId";
-        cmd.Parameters.AddWithValue("@serviceId", serviceId);
+        cmd.CommandText = $"SELECT MAX(SortableUniqueId) FROM dcb_events WHERE ServiceId = {ParamServiceId}";
+        cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
         var result = await cmd.ExecuteScalarAsync();
         return result as string;
     }
