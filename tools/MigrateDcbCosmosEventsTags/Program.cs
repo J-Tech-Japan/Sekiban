@@ -4,6 +4,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Sekiban.Dcb.Tools.CosmosMigration;
 
 var config = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
@@ -19,108 +20,64 @@ if (options.ShowHelp)
     return;
 }
 
-var connectionString = options.ConnectionString
-    ?? config.GetConnectionString("SekibanDcbCosmos")
-    ?? config.GetConnectionString("CosmosDb")
-    ?? config.GetConnectionString("SekibanDcbCosmosDb")
-    ?? config["ConnectionStrings:SekibanDcbCosmos"]
-    ?? config["ConnectionStrings:CosmosDb"]
-    ?? config["ConnectionStrings:SekibanDcbCosmosDb"];
-
-if (string.IsNullOrWhiteSpace(connectionString))
+var settings = ResolveSettings(config, options);
+if (string.IsNullOrWhiteSpace(settings.ConnectionString))
 {
     Console.WriteLine("Cosmos DB connection string is required.");
     PrintUsage();
     return;
 }
 
-var databaseName = options.DatabaseName
-    ?? config["CosmosDb:DatabaseName"]
-    ?? "SekibanDcb";
-
-var eventsContainerName = options.EventsContainerName
-    ?? config["CosmosDb:EventsContainerName"]
-    ?? "events";
-
-var tagsContainerName = options.TagsContainerName
-    ?? config["CosmosDb:TagsContainerName"]
-    ?? "tags";
-
-var serviceId = options.ServiceId
-    ?? config["CosmosDb:ServiceId"]
-    ?? "default";
-
-var outputDir = options.OutputDir
-    ?? config["CosmosDb:OutputDir"]
-    ?? "./cosmos-backup";
-
-var maxConcurrency = options.MaxConcurrency
-    ?? GetIntSetting(config, "CosmosDb:MaxConcurrency")
-    ?? 20;
-
-var throughput = options.Throughput
-    ?? GetIntSetting(config, "CosmosDb:Throughput");
-
-var autoscaleMax = options.AutoscaleMaxThroughput
-    ?? GetIntSetting(config, "CosmosDb:AutoscaleMaxThroughput");
-
-var confirm = options.Confirm || GetBoolSetting(config, "CosmosDb:Confirm");
-
-Directory.CreateDirectory(outputDir);
+Directory.CreateDirectory(settings.OutputDir);
 
 var timestampSuffix = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-var eventsBackupPath = Path.Combine(outputDir, $"events-{timestampSuffix}.jsonl");
-var tagsBackupPath = Path.Combine(outputDir, $"tags-{timestampSuffix}.jsonl");
+var eventsBackupPath = Path.Combine(settings.OutputDir, $"events-{timestampSuffix}.jsonl");
+var tagsBackupPath = Path.Combine(settings.OutputDir, $"tags-{timestampSuffix}.jsonl");
 
 var clientOptions = new CosmosClientOptions
 {
     AllowBulkExecution = true
 };
 
-using var cosmosClient = new CosmosClient(connectionString, clientOptions);
-var database = cosmosClient.GetDatabase(databaseName);
+using var cosmosClient = new CosmosClient(settings.ConnectionString, clientOptions);
+var database = cosmosClient.GetDatabase(settings.DatabaseName);
 
-Console.WriteLine($"Cosmos DB: {databaseName}");
-Console.WriteLine($"Events Container: {eventsContainerName}");
-Console.WriteLine($"Tags Container: {tagsContainerName}");
-Console.WriteLine($"ServiceId (default for legacy rows): {serviceId}");
-Console.WriteLine($"Backup directory: {Path.GetFullPath(outputDir)}");
-Console.WriteLine($"Max concurrency: {maxConcurrency}");
+LogSettings(settings);
 
 Console.WriteLine("\nStep 1/4: Export legacy data to JSONL...");
-var eventsExported = await ExportContainerAsync(database, eventsContainerName, eventsBackupPath);
-var tagsExported = await ExportContainerAsync(database, tagsContainerName, tagsBackupPath);
+var eventsExported = await ExportContainerAsync(database, settings.EventsContainerName, eventsBackupPath);
+var tagsExported = await ExportContainerAsync(database, settings.TagsContainerName, tagsBackupPath);
 Console.WriteLine($"Export completed. events={eventsExported}, tags={tagsExported}");
 
-if (!confirm)
+if (!settings.Confirm)
 {
     Console.WriteLine("\nDestructive steps are disabled. Re-run with --confirm to delete/recreate containers and upload.");
     return;
 }
 
 Console.WriteLine("\nStep 2/4: Delete containers...");
-await DeleteContainerIfExistsAsync(database, eventsContainerName);
-await DeleteContainerIfExistsAsync(database, tagsContainerName);
+await DeleteContainerIfExistsAsync(database, settings.EventsContainerName);
+await DeleteContainerIfExistsAsync(database, settings.TagsContainerName);
 
 Console.WriteLine("\nStep 3/4: Recreate containers with /pk partition key...");
-await CreateContainerAsync(database, eventsContainerName, throughput, autoscaleMax);
-await CreateContainerAsync(database, tagsContainerName, throughput, autoscaleMax);
+await CreateContainerAsync(database, settings.EventsContainerName, settings.Throughput, settings.AutoscaleMaxThroughput);
+await CreateContainerAsync(database, settings.TagsContainerName, settings.Throughput, settings.AutoscaleMaxThroughput);
 
 Console.WriteLine("\nStep 4/4: Convert and upload data...");
-var eventsContainer = database.GetContainer(eventsContainerName);
-var tagsContainer = database.GetContainer(tagsContainerName);
+var eventsContainer = database.GetContainer(settings.EventsContainerName);
+var tagsContainer = database.GetContainer(settings.TagsContainerName);
 
 var eventsUploaded = await ImportJsonlAsync(
     eventsContainer,
     eventsBackupPath,
-    line => ConvertEvent(line, serviceId),
-    maxConcurrency);
+    line => ConvertEvent(line, settings.ServiceId),
+    settings.MaxConcurrency);
 
 var tagsUploaded = await ImportJsonlAsync(
     tagsContainer,
     tagsBackupPath,
-    line => ConvertTag(line, serviceId),
-    maxConcurrency);
+    line => ConvertTag(line, settings.ServiceId),
+    settings.MaxConcurrency);
 
 Console.WriteLine($"Import completed. events={eventsUploaded}, tags={tagsUploaded}");
 
@@ -196,7 +153,7 @@ static async Task<int> ImportJsonlAsync(
 {
     var total = 0;
     var skipped = 0;
-    var batch = new List<Task>();
+    var batch = new List<Task>(maxConcurrency);
 
     foreach (var line in File.ReadLines(inputPath))
     {
@@ -205,29 +162,7 @@ static async Task<int> ImportJsonlAsync(
             continue;
         }
 
-        batch.Add(Task.Run(async () =>
-        {
-            var converted = converter(line);
-            if (converted == null)
-            {
-                Interlocked.Increment(ref skipped);
-                return;
-            }
-
-            var pk = converted["pk"]?.ToString();
-            if (string.IsNullOrWhiteSpace(pk))
-            {
-                Interlocked.Increment(ref skipped);
-                return;
-            }
-
-            await container.UpsertItemAsync(converted, new PartitionKey(pk));
-            var current = Interlocked.Increment(ref total);
-            if (current % 1000 == 0)
-            {
-                Console.WriteLine($"  imported {current} into {container.Id}");
-            }
-        }));
+        batch.Add(UpsertConvertedAsync(container, converter, line, ref total, ref skipped));
 
         if (batch.Count >= maxConcurrency)
         {
@@ -249,6 +184,35 @@ static async Task<int> ImportJsonlAsync(
     return total;
 }
 
+static async Task UpsertConvertedAsync(
+    Container container,
+    Func<string, JObject?> converter,
+    string line,
+    ref int total,
+    ref int skipped)
+{
+    var converted = converter(line);
+    if (converted == null)
+    {
+        Interlocked.Increment(ref skipped);
+        return;
+    }
+
+    var pk = converted["pk"]?.ToString();
+    if (string.IsNullOrWhiteSpace(pk))
+    {
+        Interlocked.Increment(ref skipped);
+        return;
+    }
+
+    await container.UpsertItemAsync(converted, new PartitionKey(pk));
+    var current = Interlocked.Increment(ref total);
+    if (current % 1000 == 0)
+    {
+        Console.WriteLine($"  imported {current} into {container.Id}");
+    }
+}
+
 static JObject? ConvertEvent(string jsonLine, string defaultServiceId)
 {
     JObject source;
@@ -267,11 +231,11 @@ static JObject? ConvertEvent(string jsonLine, string defaultServiceId)
         return null;
     }
 
-    var serviceId = GetString(source, "serviceId", "ServiceId") ?? defaultServiceId;
+    var serviceId = GetString(source, MigrationFields.ServiceId, "ServiceId") ?? defaultServiceId;
     var pk = GetString(source, "pk", "Pk") ?? $"{serviceId}|{id}";
 
-    var sortableUniqueId = GetString(source, "sortableUniqueId", "SortableUniqueId") ?? string.Empty;
-    var eventType = GetString(source, "eventType", "EventType") ?? string.Empty;
+    var sortableUniqueId = GetString(source, MigrationFields.SortableUniqueId, "SortableUniqueId") ?? string.Empty;
+    var eventType = GetString(source, MigrationFields.EventType, "EventType") ?? string.Empty;
 
     var payloadToken = GetToken(source, "payload", "Payload", "payloadJson", "PayloadJson") ?? JValue.CreateString("{}");
     var payload = payloadToken.Type == JTokenType.String
@@ -289,10 +253,10 @@ static JObject? ConvertEvent(string jsonLine, string defaultServiceId)
     var dest = new JObject
     {
         ["pk"] = pk,
-        ["serviceId"] = serviceId,
+        [MigrationFields.ServiceId] = serviceId,
         ["id"] = id,
-        ["sortableUniqueId"] = sortableUniqueId,
-        ["eventType"] = eventType,
+        [MigrationFields.SortableUniqueId] = sortableUniqueId,
+        [MigrationFields.EventType] = eventType,
         ["payload"] = payload,
         ["tags"] = tags,
         ["timestamp"] = timestampToken ?? JValue.CreateString(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture))
@@ -323,13 +287,13 @@ static JObject? ConvertTag(string jsonLine, string defaultServiceId)
         return null;
     }
 
-    var serviceId = GetString(source, "serviceId", "ServiceId") ?? defaultServiceId;
+    var serviceId = GetString(source, MigrationFields.ServiceId, "ServiceId") ?? defaultServiceId;
     var pk = GetString(source, "pk", "Pk") ?? $"{serviceId}|{tag}";
     var id = GetString(source, "id", "Id") ?? Guid.NewGuid().ToString();
     var tagGroup = GetString(source, "tagGroup", "TagGroup") ?? BuildTagGroup(tag);
 
-    var sortableUniqueId = GetString(source, "sortableUniqueId", "SortableUniqueId") ?? string.Empty;
-    var eventType = GetString(source, "eventType", "EventType") ?? string.Empty;
+    var sortableUniqueId = GetString(source, MigrationFields.SortableUniqueId, "SortableUniqueId") ?? string.Empty;
+    var eventType = GetString(source, MigrationFields.EventType, "EventType") ?? string.Empty;
     var eventId = GetString(source, "eventId", "EventId") ?? string.Empty;
 
     var createdAtToken = GetToken(source, "createdAt", "CreatedAt") ?? ConvertUnixTimestamp(source["_ts"]);
@@ -337,53 +301,17 @@ static JObject? ConvertTag(string jsonLine, string defaultServiceId)
     var dest = new JObject
     {
         ["pk"] = pk,
-        ["serviceId"] = serviceId,
+        [MigrationFields.ServiceId] = serviceId,
         ["id"] = id,
         ["tag"] = tag,
         ["tagGroup"] = tagGroup,
-        ["eventType"] = eventType,
-        ["sortableUniqueId"] = sortableUniqueId,
+        [MigrationFields.EventType] = eventType,
+        [MigrationFields.SortableUniqueId] = sortableUniqueId,
         ["eventId"] = eventId,
         ["createdAt"] = createdAtToken ?? JValue.CreateString(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture))
     };
 
     return dest;
-}
-
-static string? GetString(JObject source, params string[] names)
-{
-    foreach (var name in names)
-    {
-        if (source.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out var token))
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                continue;
-            }
-
-            return token.ToString();
-        }
-    }
-
-    return null;
-}
-
-static JToken? GetToken(JObject source, params string[] names)
-{
-    foreach (var name in names)
-    {
-        if (source.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out var token))
-        {
-            if (token == null || token.Type == JTokenType.Null)
-            {
-                continue;
-            }
-
-            return token;
-        }
-    }
-
-    return null;
 }
 
 static JArray NormalizeTags(JToken? token)
@@ -440,6 +368,113 @@ static string BuildTagGroup(string tag)
     return colonIndex > 0 ? tag[..colonIndex] : tag;
 }
 
+static MigrationSettings ResolveSettings(IConfiguration config, CliOptions options)
+{
+    var connectionString = options.ConnectionString
+        ?? config.GetConnectionString("SekibanDcbCosmos")
+        ?? config.GetConnectionString("CosmosDb")
+        ?? config.GetConnectionString("SekibanDcbCosmosDb")
+        ?? config["ConnectionStrings:SekibanDcbCosmos"]
+        ?? config["ConnectionStrings:CosmosDb"]
+        ?? config["ConnectionStrings:SekibanDcbCosmosDb"]
+        ?? string.Empty;
+
+    var databaseName = options.DatabaseName
+        ?? config["CosmosDb:DatabaseName"]
+        ?? "SekibanDcb";
+
+    var eventsContainerName = options.EventsContainerName
+        ?? config["CosmosDb:EventsContainerName"]
+        ?? "events";
+
+    var tagsContainerName = options.TagsContainerName
+        ?? config["CosmosDb:TagsContainerName"]
+        ?? "tags";
+
+    var serviceId = options.ServiceId
+        ?? config["CosmosDb:ServiceId"]
+        ?? "default";
+
+    var outputDir = options.OutputDir
+        ?? config["CosmosDb:OutputDir"]
+        ?? "./cosmos-backup";
+
+    var maxConcurrency = options.MaxConcurrency
+        ?? GetIntSetting(config, "CosmosDb:MaxConcurrency")
+        ?? 20;
+
+    var throughput = options.Throughput
+        ?? GetIntSetting(config, "CosmosDb:Throughput");
+
+    var autoscaleMax = options.AutoscaleMaxThroughput
+        ?? GetIntSetting(config, "CosmosDb:AutoscaleMaxThroughput");
+
+    var confirm = options.Confirm || GetBoolSetting(config, "CosmosDb:Confirm");
+
+    return new MigrationSettings(
+        connectionString,
+        databaseName,
+        eventsContainerName,
+        tagsContainerName,
+        serviceId,
+        outputDir,
+        maxConcurrency,
+        throughput,
+        autoscaleMax,
+        confirm);
+}
+
+static void LogSettings(MigrationSettings settings)
+{
+    Console.WriteLine($"Cosmos DB: {settings.DatabaseName}");
+    Console.WriteLine($"Events Container: {settings.EventsContainerName}");
+    Console.WriteLine($"Tags Container: {settings.TagsContainerName}");
+    Console.WriteLine($"ServiceId (default for legacy rows): {settings.ServiceId}");
+    Console.WriteLine($"Backup directory: {Path.GetFullPath(settings.OutputDir)}");
+    Console.WriteLine($"Max concurrency: {settings.MaxConcurrency}");
+}
+
+static string? GetString(JObject source, string primaryName, string fallbackName)
+{
+    return GetString(source, new[] { primaryName, fallbackName });
+}
+
+static string? GetString(JObject source, params string[] names)
+{
+    foreach (var name in names)
+    {
+        if (source.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out var token))
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                continue;
+            }
+
+            return token.ToString();
+        }
+    }
+
+    return null;
+}
+
+static JToken? GetToken(JObject source, params string[] names)
+{
+    foreach (var name in names)
+    {
+        if (source.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out var token))
+        {
+            if (token == null || token.Type == JTokenType.Null)
+            {
+                continue;
+            }
+
+            return token;
+        }
+    }
+
+    return null;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("Usage:");
@@ -469,73 +504,99 @@ static bool GetBoolSetting(IConfiguration config, string key)
     return bool.TryParse(value, out var result) && result;
 }
 
-sealed class CliOptions
+static class MigrationFields
 {
-    public string? ConnectionString { get; init; }
-    public string? DatabaseName { get; init; }
-    public string? EventsContainerName { get; init; }
-    public string? TagsContainerName { get; init; }
-    public string? ServiceId { get; init; }
-    public string? OutputDir { get; init; }
-    public int? MaxConcurrency { get; init; }
-    public int? Throughput { get; init; }
-    public int? AutoscaleMaxThroughput { get; init; }
-    public bool Confirm { get; init; }
-    public bool ShowHelp { get; init; }
+    public const string ServiceId = "serviceId";
+    public const string SortableUniqueId = "sortableUniqueId";
+    public const string EventType = "eventType";
+}
 
-    public static CliOptions Parse(string[] args)
+sealed record MigrationSettings(
+    string ConnectionString,
+    string DatabaseName,
+    string EventsContainerName,
+    string TagsContainerName,
+    string ServiceId,
+    string OutputDir,
+    int MaxConcurrency,
+    int? Throughput,
+    int? AutoscaleMaxThroughput,
+    bool Confirm);
+
+namespace Sekiban.Dcb.Tools.CosmosMigration
+{
+    sealed class CliOptions
     {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public string? ConnectionString { get; init; }
+        public string? DatabaseName { get; init; }
+        public string? EventsContainerName { get; init; }
+        public string? TagsContainerName { get; init; }
+        public string? ServiceId { get; init; }
+        public string? OutputDir { get; init; }
+        public int? MaxConcurrency { get; init; }
+        public int? Throughput { get; init; }
+        public int? AutoscaleMaxThroughput { get; init; }
+        public bool Confirm { get; init; }
+        public bool ShowHelp { get; init; }
 
-        for (var i = 0; i < args.Length; i++)
+        public static CliOptions Parse(string[] args)
         {
-            var arg = args[i];
-            if (!arg.StartsWith("--", StringComparison.Ordinal))
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+
+            while (index < args.Length)
             {
-                continue;
+                var arg = args[index];
+                if (!arg.StartsWith("--", StringComparison.Ordinal))
+                {
+                    index++;
+                    continue;
+                }
+
+                var key = arg[2..];
+                if (string.Equals(key, "help", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(key, "h", StringComparison.OrdinalIgnoreCase))
+                {
+                    flags.Add("help");
+                    index++;
+                    continue;
+                }
+
+                if (index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal))
+                {
+                    values[key] = args[index + 1];
+                    index += 2;
+                }
+                else
+                {
+                    flags.Add(key);
+                    index++;
+                }
             }
 
-            var key = arg[2..];
-            if (string.Equals(key, "help", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(key, "h", StringComparison.OrdinalIgnoreCase))
+            return new CliOptions
             {
-                flags.Add("help");
-                continue;
-            }
-
-            if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
-            {
-                values[key] = args[i + 1];
-                i++;
-            }
-            else
-            {
-                flags.Add(key);
-            }
+                ConnectionString = Get(values, "connection-string"),
+                DatabaseName = Get(values, "database"),
+                EventsContainerName = Get(values, "events-container"),
+                TagsContainerName = Get(values, "tags-container"),
+                ServiceId = Get(values, "service-id"),
+                OutputDir = Get(values, "output-dir"),
+                MaxConcurrency = ParseInt(values, "max-concurrency"),
+                Throughput = ParseInt(values, "throughput"),
+                AutoscaleMaxThroughput = ParseInt(values, "autoscale-max"),
+                Confirm = flags.Contains("confirm"),
+                ShowHelp = flags.Contains("help")
+            };
         }
 
-        return new CliOptions
-        {
-            ConnectionString = Get(values, "connection-string"),
-            DatabaseName = Get(values, "database"),
-            EventsContainerName = Get(values, "events-container"),
-            TagsContainerName = Get(values, "tags-container"),
-            ServiceId = Get(values, "service-id"),
-            OutputDir = Get(values, "output-dir"),
-            MaxConcurrency = ParseInt(values, "max-concurrency"),
-            Throughput = ParseInt(values, "throughput"),
-            AutoscaleMaxThroughput = ParseInt(values, "autoscale-max"),
-            Confirm = flags.Contains("confirm"),
-            ShowHelp = flags.Contains("help")
-        };
+        private static string? Get(Dictionary<string, string> values, string key) =>
+            values.TryGetValue(key, out var value) ? value : null;
+
+        private static int? ParseInt(Dictionary<string, string> values, string key) =>
+            values.TryGetValue(key, out var value) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
+                ? result
+                : null;
     }
-
-    private static string? Get(Dictionary<string, string> values, string key) =>
-        values.TryGetValue(key, out var value) ? value : null;
-
-    private static int? ParseInt(Dictionary<string, string> values, string key) =>
-        values.TryGetValue(key, out var value) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result)
-            ? result
-            : null;
 }

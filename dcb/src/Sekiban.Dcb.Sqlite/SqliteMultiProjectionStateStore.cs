@@ -55,7 +55,7 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
         EnsureSchema(connection);
     }
 
-    private void EnsureSchema(SqliteConnection connection)
+    private static void EnsureSchema(SqliteConnection connection)
     {
         if (!TableExists(connection, "dcb_multi_projection_states"))
         {
@@ -198,11 +198,12 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
     {
         ValidateSchemaIdentifier(tableName, columnName);
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"PRAGMA table_info({tableName});";
+        cmd.CommandText = "SELECT name FROM pragma_table_info(@tableName);";
+        cmd.Parameters.AddWithValue("@tableName", tableName);
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(reader.GetString(0), columnName, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

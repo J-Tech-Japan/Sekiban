@@ -6,7 +6,8 @@ public static class ServiceIdValidator
 {
     private static readonly Regex Pattern = new(
         "^[a-z0-9-]{1,64}$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     public static string NormalizeAndValidate(string serviceId)
     {
