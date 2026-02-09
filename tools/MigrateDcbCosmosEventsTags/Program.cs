@@ -153,7 +153,7 @@ static async Task<int> ImportJsonlAsync(
 {
     var total = 0;
     var skipped = 0;
-    var batch = new List<Task>(maxConcurrency);
+    var batch = new List<Task<(bool success, bool skipped)>>(maxConcurrency);
 
     foreach (var line in File.ReadLines(inputPath))
     {
@@ -162,18 +162,32 @@ static async Task<int> ImportJsonlAsync(
             continue;
         }
 
-        batch.Add(UpsertConvertedAsync(container, converter, line, ref total, ref skipped));
+        batch.Add(UpsertConvertedAsync(container, converter, line));
 
         if (batch.Count >= maxConcurrency)
         {
-            await Task.WhenAll(batch);
+            var results = await Task.WhenAll(batch);
+            foreach (var result in results)
+            {
+                if (result.success) total++;
+                if (result.skipped) skipped++;
+            }
+            if (total % 1000 < maxConcurrency && total >= 1000)
+            {
+                Console.WriteLine($"  imported {total} into {container.Id}");
+            }
             batch.Clear();
         }
     }
 
     if (batch.Count > 0)
     {
-        await Task.WhenAll(batch);
+        var results = await Task.WhenAll(batch);
+        foreach (var result in results)
+        {
+            if (result.success) total++;
+            if (result.skipped) skipped++;
+        }
     }
 
     if (skipped > 0)
@@ -184,33 +198,25 @@ static async Task<int> ImportJsonlAsync(
     return total;
 }
 
-static async Task UpsertConvertedAsync(
+static async Task<(bool success, bool skipped)> UpsertConvertedAsync(
     Container container,
     Func<string, JObject?> converter,
-    string line,
-    ref int total,
-    ref int skipped)
+    string line)
 {
     var converted = converter(line);
     if (converted == null)
     {
-        Interlocked.Increment(ref skipped);
-        return;
+        return (false, true);
     }
 
     var pk = converted["pk"]?.ToString();
     if (string.IsNullOrWhiteSpace(pk))
     {
-        Interlocked.Increment(ref skipped);
-        return;
+        return (false, true);
     }
 
     await container.UpsertItemAsync(converted, new PartitionKey(pk));
-    var current = Interlocked.Increment(ref total);
-    if (current % 1000 == 0)
-    {
-        Console.WriteLine($"  imported {current} into {container.Id}");
-    }
+    return (true, false);
 }
 
 static JObject? ConvertEvent(string jsonLine, string defaultServiceId)
@@ -432,11 +438,6 @@ static void LogSettings(MigrationSettings settings)
     Console.WriteLine($"ServiceId (default for legacy rows): {settings.ServiceId}");
     Console.WriteLine($"Backup directory: {Path.GetFullPath(settings.OutputDir)}");
     Console.WriteLine($"Max concurrency: {settings.MaxConcurrency}");
-}
-
-static string? GetString(JObject source, string primaryName, string fallbackName)
-{
-    return GetString(source, new[] { primaryName, fallbackName });
 }
 
 static string? GetString(JObject source, params string[] names)
