@@ -29,7 +29,7 @@ public class TagConsistentActorOptionsTest
         };
 
         var domainTypes = DomainType.GetDomainTypes();
-        var actor = new GeneralTagConsistentActor(tagName, null, customOptions, domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, customOptions, domainTypes.TagTypes);
 
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");
@@ -64,7 +64,7 @@ public class TagConsistentActorOptionsTest
             tagName,
             null,
             new TagConsistentActorOptions(),
-            domainTypes); // Using default options
+            domainTypes.TagTypes); // Using default options
 
         // Act
         var reservationResult = await actor.MakeReservationAsync("test-sortable-id");

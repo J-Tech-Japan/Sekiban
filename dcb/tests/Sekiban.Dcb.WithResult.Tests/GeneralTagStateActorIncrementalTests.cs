@@ -61,7 +61,9 @@ public class GeneralTagStateActorIncrementalTests
         var actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             _statePersistent);
@@ -109,7 +111,9 @@ public class GeneralTagStateActorIncrementalTests
         var actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             _statePersistent);
@@ -131,7 +135,9 @@ public class GeneralTagStateActorIncrementalTests
         var newActor = new GeneralTagStateActor(
             newTagStateId,
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             new InMemoryTagStatePersistent()); // New cache
@@ -154,7 +160,9 @@ public class GeneralTagStateActorIncrementalTests
         var actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             _statePersistent);
@@ -188,7 +196,9 @@ public class GeneralTagStateActorIncrementalTests
         var actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             _statePersistent);

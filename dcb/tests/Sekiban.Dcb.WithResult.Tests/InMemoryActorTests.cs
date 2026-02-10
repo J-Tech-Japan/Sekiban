@@ -20,7 +20,7 @@ public class InMemoryActorTests
             "Student:student-123",
             null,
             new TagConsistentActorOptions(),
-            _domainTypes);
+            _domainTypes.TagTypes);
 
         // Act
         var actorId = await actor.GetTagActorIdAsync();
@@ -35,7 +35,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
         var lastSortableId = SortableUniqueId.GenerateNew();
 
         // Act
@@ -60,7 +60,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
         var lastSortableId = SortableUniqueId.GenerateNew();
 
         // Make first reservation
@@ -82,7 +82,7 @@ public class InMemoryActorTests
             "Student:student-123",
             null,
             new TagConsistentActorOptions(),
-            _domainTypes);
+            _domainTypes.TagTypes);
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
 
         // Act
@@ -105,7 +105,7 @@ public class InMemoryActorTests
             "Student:student-123",
             null,
             new TagConsistentActorOptions(),
-            _domainTypes);
+            _domainTypes.TagTypes);
         var fakeReservation = new TagWriteReservation(
             Guid.NewGuid().ToString(),
             DateTime.UtcNow.AddSeconds(30).ToString("O"),
@@ -126,7 +126,7 @@ public class InMemoryActorTests
             "Student:student-123",
             null,
             new TagConsistentActorOptions(),
-            _domainTypes);
+            _domainTypes.TagTypes);
         var reservation = (await actor.MakeReservationAsync("")).GetValue();
 
         // Act
@@ -147,7 +147,7 @@ public class InMemoryActorTests
         // Arrange
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
-        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+        var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
 
         // Create reservation
         var reservationResult = await actor.MakeReservationAsync("");
@@ -324,7 +324,7 @@ public class InMemoryActorTests
 
         // Create actors
         var tagName = $"{tagGroup}:{tagContent}";
-    var consistentActor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes);
+    var consistentActor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
         var studentState = new StudentState(studentId, "John", 5, new List<Guid>());
         var tagState = new TagState(
             studentState,

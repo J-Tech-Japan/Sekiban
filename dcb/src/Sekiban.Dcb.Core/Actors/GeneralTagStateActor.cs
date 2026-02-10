@@ -1,9 +1,8 @@
 using ResultBoxes;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Sekiban.Dcb.Actors;
@@ -16,7 +15,9 @@ namespace Sekiban.Dcb.Actors;
 public class GeneralTagStateActor : ITagStateActorCommon
 {
     private readonly IActorObjectAccessor _actorAccessor;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagProjectorTypes _tagProjectorTypes;
+    private readonly ITagTypes _tagTypes;
+    private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
     private readonly IEventStore _eventStore;
     private readonly TagStateOptions _options;
     private readonly ITagStatePersistent _statePersistent;
@@ -26,12 +27,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
     public GeneralTagStateActor(
         string tagStateId,
         IEventStore eventStore,
-        DcbDomainTypes domainTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
         IActorObjectAccessor actorAccessor,
         ILogger<GeneralTagStateActor>? logger = null) : this(
         tagStateId,
         eventStore,
-        domainTypes,
+        tagProjectorTypes,
+        tagTypes,
+        tagStatePayloadTypes,
         new TagStateOptions(),
         actorAccessor,
         new InMemoryTagStatePersistent(),
@@ -42,13 +47,17 @@ public class GeneralTagStateActor : ITagStateActorCommon
     public GeneralTagStateActor(
         string tagStateId,
         IEventStore eventStore,
-        DcbDomainTypes domainTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
         TagStateOptions options,
         IActorObjectAccessor actorAccessor,
         ILogger<GeneralTagStateActor>? logger = null) : this(
         tagStateId,
         eventStore,
-        domainTypes,
+        tagProjectorTypes,
+        tagTypes,
+        tagStatePayloadTypes,
         options,
         actorAccessor,
         new InMemoryTagStatePersistent(),
@@ -59,7 +68,9 @@ public class GeneralTagStateActor : ITagStateActorCommon
     public GeneralTagStateActor(
         string tagStateId,
         IEventStore eventStore,
-        DcbDomainTypes domainTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
         TagStateOptions options,
         IActorObjectAccessor actorAccessor,
         ITagStatePersistent statePersistent,
@@ -70,7 +81,9 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         _tagStateId = TagStateId.Parse(tagStateId);
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _tagProjectorTypes = tagProjectorTypes ?? throw new ArgumentNullException(nameof(tagProjectorTypes));
+        _tagTypes = tagTypes ?? throw new ArgumentNullException(nameof(tagTypes));
+        _tagStatePayloadTypes = tagStatePayloadTypes ?? throw new ArgumentNullException(nameof(tagStatePayloadTypes));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _statePersistent = statePersistent ?? throw new ArgumentNullException(nameof(statePersistent));
@@ -97,7 +110,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         }
 
         // Use ITagStatePayloadTypes for serialization
-        var serializeResult = _domainTypes.TagStatePayloadTypes.SerializePayload(tagState.Payload);
+        var serializeResult = _tagStatePayloadTypes.SerializePayload(tagState.Payload);
         if (!serializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -169,7 +182,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
     private async Task<TagState> ComputeStateFromEventsAsync(string? latestSortableUniqueId, TagState? cachedState)
     {
         // Get the projector function
-        var projectorFuncResult = _domainTypes.TagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName);
+        var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName);
         if (!projectorFuncResult.IsSuccess)
         {
             // Return empty state if projector not found
@@ -179,7 +192,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var projectFunc = projectorFuncResult.GetValue();
 
         // Get the projector version
-        var versionResult = _domainTypes.TagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        var versionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
         // Check if we can do incremental update
@@ -309,7 +322,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
     {
         // Create tag string in "group:content" format
         var tagString = $"{tagGroup}:{tagContent}";
-        return _domainTypes.TagTypes.GetTag(tagString);
+        return _tagTypes.GetTag(tagString);
     }
 
     /// <summary>
