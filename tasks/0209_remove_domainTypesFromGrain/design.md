@@ -1,35 +1,103 @@
-# Design: Remove DcbDomainTypes from Orleans Grains (WASM-Compatible)
+# Design: Remove DcbDomainTypes from Orleans Grains (WASM-Friendly Boundary)
+
+## Purpose (Why we are doing this)
+
+This work exists to make **projection execution swappable** (native C# now, WASM later) without rewriting Orleans Grain orchestration.
+
+Concretely:
+
+- Orleans Grains should become "infrastructure only": stream subscription, catch-up, timers, persistence, and routing.
+- All domain-specific logic and .NET-only dependencies must be pushed behind a seam so that a future WASM-backed implementation can be added.
+
+This is not about running Orleans in WASM. It is about preventing **C#-domain implementation details** from leaking into Grain code.
+
+## Definition of Done (Exit Criteria)
+
+This task is "done" when all of the following are true:
+
+1. `dcb/src/Sekiban.Dcb.Orleans.Core/Grains/MultiProjectionGrain.cs` no longer references:
+   - `DcbDomainTypes`
+   - `JsonSerializerOptions`
+   - `IServiceProvider`
+   - `IQueryCommon` / `IListQueryCommon`
+   - `IMultiProjectionPayload`
+   - `Event` (for projection execution; the Grain should forward `SerializableEvent`)
+2. Snapshot persistence in the Grain is **opaque bytes only**:
+   - Grain stores/restores `byte[]` provided by the host
+   - No `JsonSerializer.Serialize/Deserialize(..., _domainTypes.JsonSerializerOptions)` remains in the Grain
+3. Query execution path in the Grain is host-driven:
+   - Grain forwards `SerializableQueryParameter`
+   - Grain receives `SerializableQueryResult` / `SerializableListQueryResult`
+   - No query deserialization inside the Grain
+4. Backward compatibility is preserved for native execution:
+   - Existing snapshots can still be restored (native host keeps legacy format initially)
+   - Query results match existing behavior for representative projections/queries
+5. Integration wiring is complete:
+   - DI registers the new host factory
+   - Existing hosts/apps build without manual wiring changes
+
+Validation should include at least:
+
+- Build succeeds for the solution/projects affected by Orleans runtime.
+- A basic smoke test: activate a `MultiProjectionGrain`, ingest a batch, persist snapshot, deactivate/reactivate, restore, and query.
 
 ## Goal
 
-Completely remove the `DcbDomainTypes` field from all Orleans Grain classes. The runtime interfaces (`IProjectionRuntime`, `IEventRuntime`, `ITagProjectionRuntime`) must be **WASM-compatible**, meaning they must NOT reference concrete C# domain types, .NET-specific infrastructure (e.g., `JsonSerializerOptions`, `IServiceProvider`), or any type that cannot exist in a WASM sandbox.
+Remove `DcbDomainTypes` from Orleans Grain constructors/fields (especially `MultiProjectionGrain`, `TagStateGrain`, `TagConsistentGrain`) and stop Grains from directly touching:
 
-## Design Principle: WASM Boundary
+- Domain "god objects": `DcbDomainTypes`
+- .NET-only infrastructure leaking into "engine boundary": `JsonSerializerOptions`, `IServiceProvider`
+- Deserialized C# domain payloads: `Event` with `IEventPayload`, `IQueryCommon` / `IListQueryCommon`, `IMultiProjectionPayload`
 
-`IProjectionRuntime` and related interfaces serve as the **boundary between the orchestration layer (Grain/Actor)** and the **projection engine (native C# or WASM)**. Everything crossing this boundary must be serializable to primitive types, byte arrays, and strings.
+The long-term intent is to allow the projection engine implementation to be swapped (native C# vs WASM) without rewriting the Grain orchestration logic.
+
+## Non-goals (for this design doc)
+
+- Making Orleans itself run inside WASM (Grains remain .NET).
+- Solving tag projections in WASM now. (We keep a clean seam so tags can follow later.)
+- Enforcing a cross-language ABI at the interface level (we are still .NET); instead we keep interfaces "data-only" so a WASM-backed host can implement them.
+
+## Boundary Definition (what must stay clean)
+
+The **Grain should only depend on an engine-agnostic, data-only API**. Anything that depends on:
+
+- `DcbDomainTypes`, reflection over domain types, query handler registration
+- `JsonSerializerOptions` / System.Text.Json model types
+- .NET DI (`IServiceProvider`)
+
+must be moved behind that seam into the *native* implementation, or into a future *WASM* implementation.
+
+Visually:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Orleans Grain (Orchestration)                  │
-│  - Stream subscription, catch-up, timers        │
-│  - Persist/restore snapshots                    │
-│  - Route queries                                │
-│  Uses ONLY runtime interfaces ↓                 │
-├─────────────────────────────────────────────────┤
-│  IProjectionRuntime / IEventRuntime / etc.      │  ← WASM boundary
-│  (no concrete C# types, no JsonSerializerOptions│
-│   no IServiceProvider, no DcbDomainTypes)       │
-├─────────────────────────────────────────────────┤
-│  Native Implementation    │  WASM Implementation │
-│  (DcbDomainTypes inside)  │  (WASM module inside)│
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Orleans Grain (orchestration)                         │
+│ - stream subscription / catch-up / timers             │
+│ - persistence of opaque snapshot bytes                │
+│ - routes queries to correct projector                 │
+│ Depends only on:                                      │
+│   - SerializableEvent / SerializableQuery* DTOs       │
+│   - IProjectionActorHost (+ factory)                  │
+├──────────────────────────────────────────────────────┤
+│ IProjectionActorHost (engine-agnostic, data-only)     │  ← Clean seam
+│ - accepts SerializableEvent batches                   │
+│ - returns snapshot bytes and SerializableQuery*       │
+│ - returns metadata (versions / ids) as primitives     │
+├──────────────────────────────────────────────────────┤
+│ Native host (wraps current C# actor + domain types)   │
+│ - owns DcbDomainTypes / JsonSerializerOptions / DI    │
+│ - wraps GeneralMultiProjectionActor                   │
+├──────────────────────────────────────────────────────┤
+│ Future: WASM host (wraps WASM module)                 │
+│ - owns WASM instance / memory / imports               │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Current State Analysis
 
-### Types that CANNOT cross the WASM boundary
+### Types that must not be referenced by Grain code
 
 | Type | Where used | Why problematic |
 |------|-----------|-----------------|
@@ -40,7 +108,7 @@ Completely remove the `DcbDomainTypes` field from all Orleans Grain classes. The
 | `IQueryCommon` / `IListQueryCommon` | `IProjectionRuntime.ResolveProjectorName` | C# interface for deserialized query |
 | `IMultiProjectionPayload` | `IProjectionState.GetSafePayload()/GetUnsafePayload()` | C# interface for projection state |
 
-### Types that CAN cross the WASM boundary
+### Types that can be used at the clean seam (data-only)
 
 | Type | Fields | WASM-safe? |
 |------|--------|------------|
@@ -48,449 +116,204 @@ Completely remove the `DcbDomainTypes` field from all Orleans Grain classes. The
 | `SerializableQueryParameter` | `string QueryTypeName, byte[] CompressedQueryJson, string QueryAssemblyVersion` | Yes |
 | `SerializableQueryResult` | `string ResultTypeName, string QueryTypeName, byte[] CompressedResultJson, ...` | Yes |
 | `SerializableListQueryResult` | Similar byte[]-based fields | Yes |
-| `IProjectionState` metadata | `int SafeVersion, int UnsafeVersion, string? SafeLastSortableUniqueId, ...` | Yes (primitives only) |
+| State metadata | versions/ids as primitives | Yes |
 
 ---
 
-## Proposed Interface Changes
+## Proposed Design
 
-### 1. `IProjectionRuntime` (Revised for WASM)
+### 1) Grain-facing abstraction: `IProjectionActorHost`
 
-```csharp
-public interface IProjectionRuntime
-{
-    // --- Metadata ---
-    ResultBox<string> GetProjectorVersion(string projectorName);
-    IReadOnlyList<string> GetAllProjectorNames();
-
-    // --- State lifecycle ---
-    ResultBox<IProjectionState> GenerateInitialState(string projectorName);
-    ResultBox<byte[]> SerializeState(string projectorName, IProjectionState state);
-    ResultBox<IProjectionState> DeserializeState(
-        string projectorName, byte[] data, string safeWindowThreshold);
-
-    // --- Event processing (CHANGED: SerializableEvent instead of Event) ---
-    ResultBox<IProjectionState> ApplyEvent(
-        string projectorName,
-        IProjectionState currentState,
-        SerializableEvent ev,            // ← Was: Event
-        string safeWindowThreshold);
-
-    ResultBox<IProjectionState> ApplyEvents(
-        string projectorName,
-        IProjectionState currentState,
-        IReadOnlyList<SerializableEvent> events,  // ← Was: IReadOnlyList<Event>
-        string safeWindowThreshold);
-
-    // --- Buffered event promotion (NEW) ---
-    ResultBox<IProjectionState> PromoteBufferedEvents(
-        string projectorName,
-        IProjectionState currentState,
-        string safeWindowThreshold);
-
-    // --- Query execution (CHANGED: no IServiceProvider) ---
-    Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
-        string projectorName,
-        IProjectionState state,
-        SerializableQueryParameter query);     // ← Removed: IServiceProvider
-
-    Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
-        string projectorName,
-        IProjectionState state,
-        SerializableQueryParameter query);     // ← Removed: IServiceProvider
-
-    // --- Query routing (CHANGED: from SerializableQueryParameter) ---
-    ResultBox<string> ResolveProjectorName(
-        SerializableQueryParameter query);     // ← Was: IQueryCommon / IListQueryCommon
-
-    // --- Snapshot envelope (NEW: replaces Grain-level JSON serialization) ---
-    ResultBox<byte[]> SerializeSnapshot(
-        string projectorName,
-        IProjectionState state,
-        bool isSafeState);
-
-    ResultBox<IProjectionState> DeserializeSnapshot(
-        string projectorName,
-        byte[] snapshotData,
-        string safeWindowThreshold);
-
-    // --- Size estimation (NEW: replaces Grain's EstimatePayloadSizeBytesAsync) ---
-    long EstimateStateSizeBytes(
-        string projectorName,
-        IProjectionState state);
-}
-```
-
-**Key changes from current interface:**
-
-| Change | Reason |
-|--------|--------|
-| `Event` → `SerializableEvent` | `Event.Payload` is `IEventPayload` (C# object). `SerializableEvent.Payload` is `byte[]`. WASM receives bytes and deserializes internally. |
-| Remove `IServiceProvider` from query methods | .NET DI does not exist in WASM. Native implementation resolves services internally via captured reference. WASM implementation handles dependencies within the WASM module. |
-| `ResolveProjectorName(IQueryCommon)` → `ResolveProjectorName(SerializableQueryParameter)` | `IQueryCommon` is a deserialized C# interface. `SerializableQueryParameter` contains the type name as string, sufficient for routing. |
-| Add `PromoteBufferedEvents` | Safe/unsafe buffering management needs to be controllable from the orchestration layer but executed inside the runtime. |
-| Add `SerializeSnapshot` / `DeserializeSnapshot` | Grain currently uses `JsonSerializer.Serialize(envelope, _domainTypes.JsonSerializerOptions)`. This must move into the runtime. |
-| Add `EstimateStateSizeBytes` | Grain currently uses `_domainTypes.JsonSerializerOptions` for size estimation. |
-
-### 2. `IProjectionState` (Revised for WASM)
-
-```csharp
-public interface IProjectionState
-{
-    // Metadata only — no object? payloads exposed
-    int SafeVersion { get; }
-    int UnsafeVersion { get; }
-    string? SafeLastSortableUniqueId { get; }
-    string? LastSortableUniqueId { get; }
-    Guid? LastEventId { get; }
-
-    // REMOVED: object? GetSafePayload()
-    // REMOVED: object? GetUnsafePayload()
-    // REMOVED: long EstimatePayloadSizeBytes(JsonSerializerOptions? options)
-}
-```
-
-**Why remove payload access?**
-
-The Grain currently accesses payloads for two reasons:
-1. Query execution: `projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!))`
-2. Snapshot serialization
-
-Both are now handled inside `IProjectionRuntime`:
-- Query execution: `IProjectionRuntime.ExecuteQueryAsync` takes `IProjectionState` and handles payload access internally
-- Snapshot: `IProjectionRuntime.SerializeSnapshot` takes `IProjectionState` and produces bytes
-
-The Grain never needs to touch the payload directly. `IProjectionState` becomes an **opaque handle** — the native implementation holds C# objects internally, the WASM implementation holds a reference to WASM memory.
-
-### 3. `IEventRuntime` (No change needed)
-
-```csharp
-public interface IEventRuntime
-{
-    string SerializeEventPayload(IEventPayload payload);
-    IEventPayload? DeserializeEventPayload(string eventTypeName, string json);
-    Type? GetEventType(string eventTypeName);
-}
-```
-
-**Note**: `IEventRuntime` is used in the Grain's stream handler to convert `SerializableEvent` → `Event`. With the new design where `IProjectionRuntime.ApplyEvent` accepts `SerializableEvent`, the Grain no longer needs `IEventRuntime` at all for projection purposes. `IEventRuntime` may still be needed for event writing/command handling but can potentially be removed from Grain dependencies.
-
-### 4. `ITagProjectionRuntime` (Minor change)
-
-```csharp
-public interface ITagProjectionRuntime
-{
-    ResultBox<ITagProjector> GetProjector(string tagProjectorName);
-    ResultBox<string> GetProjectorVersion(string tagProjectorName);
-    IReadOnlyList<string> GetAllProjectorNames();
-    string? TryGetProjectorForTagGroup(string tagGroupName);
-    ITag ResolveTag(string tagString);
-    ResultBox<byte[]> SerializePayload(ITagStatePayload payload);
-    ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] data);
-}
-```
-
-Note: `ITag` and `ITagStatePayload` are interfaces, not concrete classes. If WASM needs tag actors, these would need to be serializable too. For now, tag grains are likely native-only.
-
----
-
-## Actor Layer Abstraction
-
-### Problem
-
-The Grain currently creates `GeneralMultiProjectionActor` directly:
-```csharp
-_projectionActor = new GeneralMultiProjectionActor(_domainTypes, projectorName, options, logger);
-```
-
-`GeneralMultiProjectionActor` is a concrete C# class in `Sekiban.Dcb.Core` with 600+ lines that:
-- Manages safe/unsafe state via `IDualStateAccessor` / reflection
-- Handles event buffering and safe window
-- Builds snapshot envelopes using `DcbDomainTypes`
-- Deserializes `SerializableEvent` using `_domain.EventTypes`
-
-For WASM, a completely different actor implementation would exist.
-
-### Solution: `IProjectionActorHost`
-
-Introduce an abstract actor interface that the Grain talks to. This replaces direct `GeneralMultiProjectionActor` usage.
+The Grain should not create `GeneralMultiProjectionActor` directly and should never deserialize queries/events into C# payload objects. Instead, it talks to an engine-agnostic host that operates on DTOs (`SerializableEvent`, `SerializableQueryParameter`, `SerializableQueryResult`) and opaque snapshot bytes.
 
 ```csharp
 /// <summary>
-///     Abstraction over the projection actor that manages safe/unsafe state.
-///     Native implementation wraps GeneralMultiProjectionActor.
-///     WASM implementation delegates to the WASM projection engine.
+/// Grain-facing projection host.
+/// Must be engine-agnostic and avoid .NET DI, JsonSerializerOptions, or domain payload types.
 /// </summary>
 public interface IProjectionActorHost
 {
-    // --- Event processing ---
+    // Event ingestion (Grain receives SerializableEvent from Orleans stream already)
     Task AddSerializableEventsAsync(
         IReadOnlyList<SerializableEvent> events,
-        bool finishedCatchUp = true,
-        EventSource source = EventSource.Unknown);
+        bool finishedCatchUp = true);
 
-    // --- State access (metadata only) ---
+    // Metadata only; nullable values are allowed for "no events yet".
     Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(
-        bool canGetUnsafeState = true);
+        bool includeUnsafe = true);
 
-    // --- Snapshot management (bytes in/out) ---
+    // Snapshot is opaque bytes (format is owned by the implementation).
     Task<ResultBox<byte[]>> GetSnapshotBytesAsync(
-        bool canGetUnsafeState = true);
+        bool includeUnsafe = true);
 
-    Task RestoreSnapshotAsync(byte[] snapshotData, CancellationToken ct = default);
+    // Returns success/failure only. The snapshot format is implementation-owned.
+    Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData);
 
-    // --- Query execution ---
+    // Query execution (query and results are DTOs)
     Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
         SerializableQueryParameter query);
 
     Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
         SerializableQueryParameter query);
 
-    // --- Orchestration control ---
+    // Controls/state checks needed by orchestration
     void ForcePromoteBufferedEvents();
     Task<string> GetSafeLastSortableUniqueIdAsync();
-    string PeekCurrentSafeWindowThresholdValue();
-    Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId);
+    Task<bool> IsSortableUniqueIdReceivedAsync(string sortableUniqueId);
     long EstimateStateSizeBytes();
 }
 ```
 
-**`ProjectionStateMetadata`** — WASM-safe metadata record:
+Notes:
+
+- No `IServiceProvider` in method signatures. The native implementation can use DI internally via constructor injection.
+- No `JsonSerializerOptions`. Snapshot serialization/deserialization is owned by the host implementation.
+- No `CancellationToken` at the seam. Orleans can still cancel internally, but we keep the interface "data-only".
+
+### 2) Metadata DTO: `ProjectionStateMetadata`
 
 ```csharp
-public record ProjectionStateMetadata(
+public sealed record ProjectionStateMetadata(
     string ProjectorName,
     string ProjectorVersion,
-    string LastSortableUniqueId,
-    Guid LastEventId,
-    int Version,
     bool IsCatchedUp,
-    bool IsSafeState,
-    int? SafeVersion = null,
-    string? SafeLastSortableUniqueId = null);
+    // Unsafe ("latest") state
+    int UnsafeVersion,
+    string? UnsafeLastSortableUniqueId,
+    Guid? UnsafeLastEventId,
+    // Safe state
+    int SafeVersion,
+    string? SafeLastSortableUniqueId);
 ```
 
-### `NativeProjectionActorHost`
+### 3) Factory: `IProjectionActorHostFactory`
 
-Wraps `GeneralMultiProjectionActor` for native C# execution:
-
-```csharp
-public class NativeProjectionActorHost : IProjectionActorHost
-{
-    private readonly GeneralMultiProjectionActor _actor;
-    private readonly IProjectionRuntime _runtime;
-
-    public NativeProjectionActorHost(
-        IProjectionRuntime runtime,
-        string projectorName,
-        GeneralMultiProjectionActorOptions? options,
-        ILogger? logger)
-    {
-        // The native runtime has access to DcbDomainTypes internally
-        // Extract it for actor construction (internal detail)
-        _runtime = runtime;
-        _actor = CreateActorFromRuntime(runtime, projectorName, options, logger);
-    }
-
-    // All methods delegate to _actor, converting between
-    // IProjectionRuntime types and actor-internal types
-}
-```
-
-### `IProjectionActorHostFactory`
+Grains should create hosts via a factory so the engine can be swapped without changing Grain code.
 
 ```csharp
 public interface IProjectionActorHostFactory
 {
     IProjectionActorHost Create(
         string projectorName,
-        GeneralMultiProjectionActorOptions? options = null,
-        ILogger? logger = null);
+        GeneralMultiProjectionActorOptions? options = null);
 }
 ```
 
-Native implementation:
+The factory itself is resolved via DI. The native factory captures `DcbDomainTypes`, `IServiceProvider`, etc internally. The Grain never sees them.
+
+### 4) Routing / projector-name resolution (query-to-projector)
+
+Today the Grain resolves projector name using `IQueryCommon`/`IListQueryCommon` after deserializing the query. That must disappear from Grain code.
+
+At the seam, routing can be done from `SerializableQueryParameter.QueryTypeName` (string). Two options:
+
+1. Put routing into the host: `host.ExecuteQueryAsync(query)` implicitly routes because Grain already activated per projector.
+2. Put routing into a small router interface (recommended for clarity):
+
 ```csharp
-public class NativeProjectionActorHostFactory : IProjectionActorHostFactory
+public interface IProjectorQueryRouter
 {
-    private readonly DcbDomainTypes _domainTypes;
-
-    public NativeProjectionActorHostFactory(DcbDomainTypes domainTypes)
-    {
-        _domainTypes = domainTypes;
-    }
-
-    public IProjectionActorHost Create(
-        string projectorName,
-        GeneralMultiProjectionActorOptions? options = null,
-        ILogger? logger = null)
-    {
-        return new NativeProjectionActorHost(_domainTypes, projectorName, options, logger);
-    }
+    // Input is the DTO; output is projectorName string.
+    ResultBox<string> ResolveProjectorName(SerializableQueryParameter query);
 }
 ```
+
+Native router implementation can use `DcbDomainTypes.QueryTypes` internally. A future WASM router could consult WASM-exported metadata.
+
+### 5) Native implementation strategy (wrap, don't rewrite yet)
+
+We keep existing business logic in `GeneralMultiProjectionActor` initially.
+
+- `NativeProjectionActorHost` wraps `GeneralMultiProjectionActor`.
+- It is responsible for:
+  - converting `SerializableEvent` to internal `Event` if needed (native only)
+  - executing queries using native query handlers + DI internally
+  - producing snapshot bytes (envelope and payload) and restoring from them
+  - exposing only metadata to the Grain
+
+This delivers the immediate goal: **remove `DcbDomainTypes` and `JsonSerializerOptions` from `MultiProjectionGrain`** without forcing a full rewrite of the actor/runtime internals.
+
+### 6) Future: make the engine itself WASM-friendly (optional Phase 2+)
+
+Once the Grain is clean, we can refactor deeper so that the host does not need to materialize native `Event` / query objects:
+
+- Introduce a WASM-friendly engine runtime (can reuse and evolve the existing `IProjectionRuntime`):
+  - `ApplyEvents` consumes `SerializableEvent` bytes
+  - query execution consumes `SerializableQueryParameter` bytes
+  - state is represented as an opaque handle + metadata
+
+This can be done without changing Grain code again because the Grain only sees `IProjectionActorHost`.
 
 ---
 
-## Tag Actor Abstraction
+## Tag Projections (Scope Clarification)
 
-### `ITagActorFactory`
+Tags are not required for the immediate goal (issue #906 is focused on projection grains). For now:
 
-```csharp
-public interface ITagActorFactory
-{
-    GeneralTagStateActor CreateTagStateActor(
-        string tagStateId,
-        IEventStore eventStore,
-        TagStateOptions options,
-        IActorObjectAccessor actorAccessor,
-        ITagStatePersistent statePersistent);
-
-    GeneralTagConsistentActor CreateTagConsistentActor(
-        string tagName,
-        IEventStore? eventStore,
-        TagConsistentActorOptions options);
-}
-```
-
-For WASM support of tag actors (future), these return types would need to become interfaces too. For now, tag actors are native-only.
+- Keep tag grains native-only, or apply the same host pattern later.
+- Avoid introducing a "clean seam" interface that returns concrete C# actor classes (that defeats the purpose).
 
 ---
 
-## MultiProjectionGrain Migration
+## MultiProjectionGrain Migration (Concrete Targets)
 
-### Before (current):
+### Current problematic dependencies in `MultiProjectionGrain`
+
+`dcb/src/Sekiban.Dcb.Orleans.Core/Grains/MultiProjectionGrain.cs` currently uses:
+
+- `_domainTypes` for projector version, query execution, snapshot JSON serialization, size estimation.
+- `_eventRuntime` and/or `_domainTypes.EventTypes` for stream event deserialization.
+- `JsonSerializer.Serialize(..., _domainTypes.JsonSerializerOptions)` inside the Grain.
+
+### Target (after migration)
 
 ```csharp
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain
 {
-    private readonly DcbDomainTypes _domainTypes;        // ← REMOVE
-    private readonly IEventRuntime _eventRuntime;        // ← REMOVE (no longer needed)
-    private GeneralMultiProjectionActor? _projectionActor;  // ← Change type
+    private readonly IProjectionActorHostFactory _actorFactory;
+    private IProjectionActorHost? _host;
 
     public MultiProjectionGrain(
         ...,
-        DcbDomainTypes domainTypes,                      // ← REMOVE
-        IEventRuntime eventRuntime,                      // ← REMOVE
-        ...)
-    {
-        _domainTypes = domainTypes;
-        _eventRuntime = eventRuntime;
-    }
-}
-```
-
-### After:
-
-```csharp
-public class MultiProjectionGrain : Grain, IMultiProjectionGrain
-{
-    private readonly IProjectionRuntime _projectionRuntime;   // ← NEW
-    private readonly IProjectionActorHostFactory _actorFactory; // ← NEW
-    private IProjectionActorHost? _projectionActor;           // ← Changed type
-
-    public MultiProjectionGrain(
-        ...,
-        IProjectionRuntime projectionRuntime,
         IProjectionActorHostFactory actorFactory,
         ...)
     {
-        _projectionRuntime = projectionRuntime;
         _actorFactory = actorFactory;
     }
 }
 ```
 
-### Usage migration (all ~20 `_domainTypes` occurrences):
+The Grain becomes:
 
-| # | Current code | New code | Category |
-|---|-------------|----------|----------|
-| 1 | `new GeneralMultiProjectionActor(_domainTypes, ...)` | `_actorFactory.Create(projectorName, ...)` | Actor creation |
-| 2 | `_domainTypes.MultiProjectorTypes.GetProjectorVersion(name)` | `_projectionRuntime.GetProjectorVersion(name)` | Metadata |
-| 3 | `queryParameter.ToQueryAsync(_domainTypes)` | Eliminated — `_projectionActor.ExecuteQueryAsync(query)` handles internally | Query |
-| 4 | `_domainTypes.QueryTypes.ExecuteQueryAsync(query, provider, ...)` | `_projectionActor.ExecuteQueryAsync(query)` | Query |
-| 5 | `_domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(...)` | `_projectionActor.ExecuteListQueryAsync(query)` | Query |
-| 6 | `SerializableQueryResult.CreateFromAsync(result, _domainTypes.JsonSerializerOptions)` | Eliminated — actor returns `SerializableQueryResult` directly | Query |
-| 7 | `SerializableListQueryResult.CreateFromAsync(result, _domainTypes.JsonSerializerOptions)` | Eliminated — actor returns `SerializableListQueryResult` directly | Query |
-| 8 | `JsonSerializer.Serialize(dto, _domainTypes.JsonSerializerOptions)` (size estimation) | `_projectionActor.EstimateStateSizeBytes()` | Size |
-| 9 | `JsonSerializer.SerializeAsync(envelope, _domainTypes.JsonSerializerOptions)` (persist) | `_projectionActor.GetSnapshotBytesAsync()` | Snapshot |
-| 10 | `JsonSerializer.Deserialize<...>(json, _domainTypes.JsonSerializerOptions)` (restore) | `_projectionActor.RestoreSnapshotAsync(bytes)` | Snapshot |
-| 11 | `JsonSerializer.Serialize(rb.GetValue(), _domainTypes.JsonSerializerOptions)` (GetSnapshotJson) | `_projectionActor.GetSnapshotBytesAsync()` + UTF8 encode | Snapshot |
-| 12 | Stream event deserialization using `_eventRuntime` | Pass `SerializableEvent` directly to `_projectionActor.AddSerializableEventsAsync()` | Events |
+- stream subscriber and catch-up orchestrator
+- persistence owner of `byte[] snapshot` only
+- query dispatcher that forwards DTOs
 
-### Query execution simplification
+### Key “delete-from-Grain” moves
 
-Current Grain code (~100 lines):
-```csharp
-// 1. Deserialize query
-var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
-var query = (IQueryCommon)queryBox.GetValue();
-// 2. Get state from actor
-var stateResult = await _projectionActor.GetStateAsync();
-var projectorProvider = () => Task.FromResult(ResultBox.FromValue(stateResult.GetValue().Payload!));
-// 3. Execute query
-var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(query, projectorProvider, ServiceProvider, ...);
-// 4. Serialize result
-return await SerializableQueryResult.CreateFromAsync(new QueryResultGeneral(value, resultType, query), _domainTypes.JsonSerializerOptions);
-```
+- Query execution: move *query deserialization* and *handler execution* behind `IProjectionActorHost`.
+- Snapshot persistence: Grain stores opaque `byte[]` only; encoding/decoding lives behind `IProjectionActorHost`.
+- Event application: Grain forwards `SerializableEvent` directly; host decides how to interpret it.
 
-New Grain code (~5 lines):
+### Query execution simplification (what the Grain should look like)
+
 ```csharp
 await EnsureInitializedAsync();
 await StartSubscriptionAsync();
-if (_projectionActor == null) return SerializableQueryResult.Empty;
-return await _projectionActor.ExecuteQueryAsync(queryParameter);
+if (_host == null) return SerializableQueryResult.Empty;
+return await _host.ExecuteQueryAsync(queryParameter);
 ```
-
-The `NativeProjectionActorHost` handles all the internal complexity (deserialize query, get payload, execute, serialize result) using `DcbDomainTypes` internally.
 
 ---
 
-## IServiceProvider Handling
+## IServiceProvider Handling (Fixing the key contradiction)
 
-### Problem
-Current `IProjectionRuntime.ExecuteQueryAsync` takes `IServiceProvider` for DI resolution in query handlers. WASM cannot use .NET DI.
+Do not pass `IServiceProvider` through any interface that is intended to be engine-agnostic.
 
-### Solution
-Move `IServiceProvider` into the native implementation:
+- Native implementations can receive `IServiceProvider` via constructor injection (or directly inject the few services they need).
+- WASM implementations will not use .NET DI; they will provide their own internal resolution mechanism.
 
-```csharp
-public class NativeProjectionActorHost : IProjectionActorHost
-{
-    // IServiceProvider is captured at construction time from the Grain's context
-    private readonly IServiceProvider _serviceProvider;
-
-    public NativeProjectionActorHost(
-        DcbDomainTypes domainTypes,
-        string projectorName,
-        IServiceProvider serviceProvider,  // ← From Grain
-        ...)
-    {
-        _serviceProvider = serviceProvider;
-    }
-
-    public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
-        SerializableQueryParameter query)
-    {
-        // Uses _serviceProvider internally
-        return _runtime.ExecuteQueryAsync(projectorName, state, query, _serviceProvider);
-    }
-}
-```
-
-The `IProjectionActorHostFactory.Create` method receives `IServiceProvider` from the Grain:
-```csharp
-public interface IProjectionActorHostFactory
-{
-    IProjectionActorHost Create(
-        string projectorName,
-        IServiceProvider serviceProvider,      // ← Grain passes this
-        GeneralMultiProjectionActorOptions? options = null,
-        ILogger? logger = null);
-}
-```
-
-For WASM, the factory implementation would handle service resolution differently (e.g., WASM module has its own service registry).
+This keeps the seam clean and still allows native query handlers to use DI.
 
 ---
 
@@ -510,68 +333,53 @@ For future reference, here's how `IProjectionRuntime` methods would map to WASM 
 | `GetProjectorVersion(name)` | `projection_version(name_ptr, name_len)` | string | string ptr + len |
 | `EstimateStateSizeBytes(name, state)` | `projection_estimate_size(state_handle)` | state handle | i64 |
 
-The state handle is an opaque `i32` (index into WASM-side state table). The .NET side wraps it in `WasmProjectionState : IProjectionState` that stores the handle and fetches metadata from WASM when needed.
+State should be treated as an opaque handle in the WASM engine. The .NET side can wrap it in a host-owned object and expose only `ProjectionStateMetadata` at the seam.
 
 ---
 
-## Implementation Phases
+## Implementation Plan (Incremental)
 
-### Phase 3A: Interface Changes + Actor Abstraction
+### Phase 1: Introduce host seam and remove domain types from Grain (fast win)
 
-1. Revise `IProjectionRuntime`:
-   - `Event` → `SerializableEvent`
-   - Remove `IServiceProvider` from query methods
-   - `ResolveProjectorName(IQueryCommon)` → `ResolveProjectorName(SerializableQueryParameter)`
-   - Add `PromoteBufferedEvents`, `SerializeSnapshot`, `DeserializeSnapshot`, `EstimateStateSizeBytes`
-2. Revise `IProjectionState`: remove `GetSafePayload()`, `GetUnsafePayload()`, `EstimatePayloadSizeBytes()`
-3. Update `NativeProjectionRuntime` + `NativeProjectionState` for new signatures
-4. Create `IProjectionActorHost` interface
-5. Create `NativeProjectionActorHost` (wraps `GeneralMultiProjectionActor`)
-6. Create `IProjectionActorHostFactory` + `NativeProjectionActorHostFactory`
-7. Create `ITagActorFactory` + `NativeTagActorFactory`
+1. Add `IProjectionActorHost`, `ProjectionStateMetadata`, `IProjectionActorHostFactory`.
+2. Implement `NativeProjectionActorHost` wrapping `GeneralMultiProjectionActor`.
+3. Migrate `MultiProjectionGrain`:
+   - remove `DcbDomainTypes` / `IEventRuntime`
+   - delete all `JsonSerializer.*(_domainTypes.JsonSerializerOptions)` usage
+   - persist/restore using `GetSnapshotBytesAsync` / `RestoreSnapshotAsync`
+   - execute queries using `host.ExecuteQueryAsync` / `ExecuteListQueryAsync`
 
-### Phase 3B: Grain Migration
+Acceptance criteria:
 
-1. Remove `DcbDomainTypes` from `MultiProjectionGrain` constructor
-2. Remove `IEventRuntime` from `MultiProjectionGrain` (no longer needed)
-3. Add `IProjectionRuntime` + `IProjectionActorHostFactory` to `MultiProjectionGrain`
-4. Replace `GeneralMultiProjectionActor?` with `IProjectionActorHost?`
-5. Migrate all ~20 `_domainTypes` usages (see migration table above)
-6. Remove `DcbDomainTypes` from `TagStateGrain` + `TagConsistentGrain`
-7. Update DI registrations in all host `Program.cs` files
-8. Update test projects
+- `MultiProjectionGrain` compiles without referencing `DcbDomainTypes`, `JsonSerializerOptions`, `IServiceProvider`, `IQueryCommon`/`IListQueryCommon`, `IMultiProjectionPayload`.
+- Existing behavior remains identical for snapshot format and query results (because native host preserves legacy encoding).
 
-### Phase 3C: Actor Internals (Future, enables WASM)
+### Phase 2: Optional deeper cleanup for WASM engine enablement
 
-1. Refactor `GeneralMultiProjectionActor` to use `IProjectionRuntime` instead of `DcbDomainTypes`
-2. Remove `_domain` field from `GeneralMultiProjectionActor`
-3. Refactor `IDualStateAccessor.ProcessEventAs/PromoteBufferedEvents` to not take `DcbDomainTypes`
-4. Refactor `GeneralTagStateActor` to use `ITagProjectionRuntime`
-5. Refactor `GeneralTagConsistentActor` to use `ITagProjectionRuntime`
+1. Introduce/adjust a WASM-friendly projection engine runtime (can evolve `IProjectionRuntime`):
+   - consume `SerializableEvent`
+   - route queries using `SerializableQueryParameter.QueryTypeName`
+   - avoid `IServiceProvider` in signatures
+2. Refactor `GeneralMultiProjectionActor` internals to depend on that engine runtime instead of `DcbDomainTypes`.
+
+This phase can proceed without touching Grains again.
 
 ---
 
 ## Files to Modify/Create
 
 ### New files:
-1. `Runtimes/IProjectionActorHost.cs` — Actor abstraction interface
-2. `Runtimes/IProjectionActorHostFactory.cs` — Factory interface
-3. `Runtimes/NativeProjectionActorHost.cs` — Native implementation wrapping GeneralMultiProjectionActor
-4. `Runtimes/NativeProjectionActorHostFactory.cs` — Native factory
-5. `Runtimes/ProjectionStateMetadata.cs` — WASM-safe state metadata record
-6. `Runtimes/ITagActorFactory.cs` — Tag actor factory
-7. `Runtimes/NativeTagActorFactory.cs` — Native tag actor factory
+1. `Runtimes/IProjectionActorHost.cs`
+2. `Runtimes/IProjectionActorHostFactory.cs`
+3. `Runtimes/NativeProjectionActorHost.cs`
+4. `Runtimes/NativeProjectionActorHostFactory.cs`
+5. `Runtimes/ProjectionStateMetadata.cs`
+6. (Optional) `Runtimes/IProjectorQueryRouter.cs` + native implementation
 
 ### Modified files:
-1. `Runtimes/IProjectionRuntime.cs` — Revised interface (SerializableEvent, remove IServiceProvider, etc.)
-2. `Runtimes/IProjectionState.cs` — Remove payload accessors
-3. `Runtimes/NativeProjectionRuntime.cs` — Implement revised interface
-4. `Runtimes/NativeProjectionState.cs` — Remove payload exposure
-5. `Grains/MultiProjectionGrain.cs` — Replace _domainTypes with runtime interfaces
-6. `Grains/TagStateGrain.cs` — Replace _domainTypes with factory
-7. `Grains/TagConsistentGrain.cs` — Replace _domainTypes with factory
-8. Host `Program.cs` files (3+) — DI registration updates
-9. Test files — DI registration updates
+1. `Grains/MultiProjectionGrain.cs`
+2. Host `Program.cs` files — DI registrations for the factory/host
+3. Tests
 
 ---
 
@@ -580,9 +388,8 @@ The state handle is an opaque `i32` (index into WASM-side state table). The .NET
 | Risk | Severity | Mitigation |
 |------|----------|------------|
 | `NativeProjectionActorHost` is a large adapter between `IProjectionActorHost` and `GeneralMultiProjectionActor` | High | Incremental: first wrap actor 1:1, then optimize |
-| `IProjectionRuntime.ExecuteQueryAsync` without `IServiceProvider` requires capturing it at actor creation | Medium | Factory pattern provides `IServiceProvider` from Grain context |
-| Removing `IProjectionState.GetSafePayload()/GetUnsafePayload()` may break existing consumers | Medium | Check all consumers — only Grain query execution uses it, which is being refactored |
-| `GeneralMultiProjectionActor` stays dependent on `DcbDomainTypes` in Phase 3A/3B | Low | Acceptable — hidden behind `NativeProjectionActorHost`. Phase 3C addresses this |
+| Native query execution still needs DI | Medium | Inject DI into native host internally; do not pass `IServiceProvider` across the seam |
+| Snapshot compatibility regressions | High | Keep legacy snapshot encoding in native host initially; add tests that round-trip old snapshots |
 | Large number of files affected | Medium | Phase 3B can be done incrementally (one method at a time) |
 
 ---
@@ -590,28 +397,20 @@ The state handle is an opaque `i32` (index into WASM-side state table). The .NET
 ## Summary of Interface Boundaries
 
 ```
-                     WASM-safe boundary
-                     (only primitives, bytes, strings)
-                           │
-  Grain ──→ IProjectionActorHost ──→ [NativeProjectionActorHost]
-                           │                    │
-                           │              GeneralMultiProjectionActor
-                           │                    │
-                           │              DcbDomainTypes (internal)
-                           │
-            IProjectionRuntime ──→ [NativeProjectionRuntime]
-                           │                    │
-                           │              DcbDomainTypes (internal)
-                           │
-                      [Future: WasmProjectionActorHost]
-                           │
-                      [WASM module via wasm-bindgen]
+Grain (orchestration)
+  └─ depends only on clean seam:
+     - IProjectionActorHost (+ factory)
+     - SerializableEvent / SerializableQuery*
+     - byte[] snapshot
+
+Clean seam
+  ├─ NativeProjectionActorHost (wraps existing C# actor + domain types internally)
+  └─ Future: WasmProjectionActorHost (wraps WASM module)
 ```
 
 The Grain layer sees ONLY:
 - `IProjectionActorHost` (event processing, queries, snapshots)
-- `IProjectionRuntime` (metadata, projector routing)
 - Primitive types (`string`, `int`, `byte[]`, `Guid`)
 - Serializable DTOs (`SerializableEvent`, `SerializableQueryParameter`, `SerializableQueryResult`)
 
-No `DcbDomainTypes`, no `JsonSerializerOptions`, no `IServiceProvider`, no `IMultiProjectionPayload`.
+No `DcbDomainTypes`, no `JsonSerializerOptions`, no `IServiceProvider`, no `IQueryCommon`/`IListQueryCommon`, no `IMultiProjectionPayload`.
