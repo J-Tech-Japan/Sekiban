@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.MultiProjections;
 ///     Wrapper class that adapts traditional IMultiProjectionPayload implementations
 ///     to work with the ISafeAndUnsafeStateAccessor interface by managing safe and unsafe states internally.
 /// </summary>
-public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload
+public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload, IDualStateAccessor
     where T : IMultiProjectionPayload
 {
     // Keep track of all safe events for proper rebuilding
@@ -170,6 +170,21 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     public Guid GetLastEventId() => _unsafeLastEventId;
     public string GetLastSortableUniqueId() => _unsafeLastSortableUniqueId;
     public int GetVersion() => _unsafeVersion;
+
+    // IDualStateAccessor explicit implementation — non-generic access without reflection
+    int IDualStateAccessor.UnsafeVersion => _unsafeVersion;
+    Guid IDualStateAccessor.UnsafeLastEventId => _unsafeLastEventId;
+    string IDualStateAccessor.UnsafeLastSortableUniqueId => _unsafeLastSortableUniqueId;
+    string? IDualStateAccessor.SafeLastSortableUniqueId =>
+        string.IsNullOrEmpty(_safeLastSortableUniqueId) ? null : _safeLastSortableUniqueId;
+    object IDualStateAccessor.GetSafeProjectorPayload() => _safeProjector!;
+    object IDualStateAccessor.GetUnsafeProjectorPayload() => _unsafeProjector!;
+    IDualStateAccessor IDualStateAccessor.ProcessEventAs(
+        Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    {
+        ProcessEvent(evt, safeWindowThreshold, domainTypes);
+        return this;
+    }
 
     private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
