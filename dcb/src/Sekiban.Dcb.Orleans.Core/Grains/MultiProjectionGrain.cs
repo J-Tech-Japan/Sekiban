@@ -12,12 +12,10 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Serialization;
-using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
 using System.Text;
-using System.Text.Json;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -26,13 +24,12 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// </summary>
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
-    private readonly IEventRuntime _eventRuntime;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private string? _grainKey;
     private string? _projectorName;
@@ -50,8 +47,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IDisposable? _persistTimer;
     private IDisposable? _fallbackTimer;
 
-    // Core projection actor - contains business logic
-    private GeneralMultiProjectionActor? _projectionActor;
+    // Projection host - engine-agnostic abstraction over the projection actor
+    private IProjectionActorHost? _host;
 
     // Simple tracking
     private bool _isInitialized;
@@ -64,7 +61,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics _eventStats;
 
     // Event batching
-    private readonly List<Event> _eventBuffer = new();
+    private readonly List<SerializableEvent> _eventBuffer = new();
     private readonly HashSet<string> _unsafeEventIds = new(); // Track which buffered events are unsafe
     private DateTime _lastBufferFlush = DateTime.UtcNow;
     private readonly TimeSpan _batchTimeout = TimeSpan.FromMilliseconds(50); // Flush promptly but return quickly to stream
@@ -89,7 +86,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private CatchUpProgress _catchUpProgress = new();
     private IDisposable? _catchUpTimer;
-    private readonly Queue<Event> _pendingStreamEvents = new();
+    private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
     private const int CatchUpBatchSize = 3000; // Optimized batch size after fixing O(n²) issue
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
@@ -102,9 +99,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
-        DcbDomainTypes domainTypes,
+        IProjectionActorHostFactory actorHostFactory,
         IEventStore eventStore,
-        IEventRuntime eventRuntime,
         IEventSubscriptionResolver? subscriptionResolver,
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
@@ -112,9 +108,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ILogger<MultiProjectionGrain>? logger = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _eventRuntime = eventRuntime ?? throw new ArgumentNullException(nameof(eventRuntime));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _multiProjectionStateStore = multiProjectionStateStore;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
@@ -145,10 +140,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        if (_projectionActor == null)
+        if (_host == null)
         {
             return ResultBox.Error<MultiProjectionState>(
-                new InvalidOperationException("Projection actor not initialized"));
+                new InvalidOperationException("Projection host not initialized"));
         }
 
         await StartSubscriptionAsync();
@@ -162,7 +157,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await WaitForCatchUpWithTimeoutAsync(TimeSpan.FromSeconds(30));
         }
 
-        var stateResult = await _projectionActor.GetStateAsync(canGetUnsafeState);
+        var stateResult = await _host.GetStateAsync(canGetUnsafeState);
 
         // Enrich state with catch-up progress information
         return stateResult.Remap(state => EnrichStateWithCatchUpProgress(state));
@@ -272,7 +267,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         return Task.FromResult(new MultiProjectionHealthStatus(
             IsInitialized: _isInitialized,
-            HasProjectionActor: _projectionActor != null,
+            HasProjectionActor: _host != null,
             EventsProcessed: _eventsProcessed,
             LastError: _lastError,
             IsCatchUpActive: isCatchUpActive,
@@ -289,26 +284,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        if (_projectionActor == null)
+        if (_host == null)
         {
             return ResultBox.Error<string>(
-                new InvalidOperationException("Projection actor not initialized"));
+                new InvalidOperationException("Projection host not initialized"));
         }
 
-        var rb = await _projectionActor.GetSnapshotAsync(canGetUnsafeState);
+        var rb = await _host.GetSnapshotBytesAsync(canGetUnsafeState);
         if (!rb.IsSuccess)
             return ResultBox.Error<string>(rb.GetException());
-        var json = JsonSerializer.Serialize(rb.GetValue(), _domainTypes.JsonSerializerOptions);
-        return ResultBox.FromValue(json);
+        // v10 format: byte[] is plain UTF-8 JSON
+        return ResultBox.FromValue(Encoding.UTF8.GetString(rb.GetValue()));
     }
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)
     {
         await EnsureInitializedAsync();
 
-        if (_projectionActor == null)
+        if (_host == null)
         {
-            throw new InvalidOperationException("Projection actor not initialized");
+            throw new InvalidOperationException("Projection host not initialized");
         }
 
         // Track event deliveries as well for events coming from the EventStore catch-up
@@ -320,8 +315,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (newEvents.Count > 0)
         {
-            // Delegate to projection actor
-            await _projectionActor.AddEventsAsync(newEvents, finishedCatchUp, Sekiban.Dcb.Actors.EventSource.CatchUp);
+            // Delegate to host (Event→SerializableEvent conversion happens internally)
+            await _host.AddEventsFromCatchUpAsync(newEvents, finishedCatchUp);
             _eventsProcessed += newEvents.Count;
 
             // Mark events as processed
@@ -345,26 +340,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         long stateSize = 0;
         long safeStateSize = 0;
         long unsafeStateSize = 0;
-        if (_projectionActor != null)
+        if (_host != null)
         {
             try
             {
-                // Compute both safe and unsafe sizes from in-memory state (payload only, with runtime type)
-                var unsafeStateResult = await _projectionActor.GetStateAsync(canGetUnsafeState: true);
-                var safeStateResult = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
-
-                if (unsafeStateResult.IsSuccess)
-                {
-                    var us = unsafeStateResult.GetValue();
-                    unsafeStateSize = EstimatePayloadJsonSize(us.Payload, includeUnsafeDetails: true);
-                }
-
-                if (safeStateResult.IsSuccess)
-                {
-                    var ss = safeStateResult.GetValue();
-                    safeStateSize = EstimatePayloadJsonSize(ss.Payload, includeUnsafeDetails: false);
-                }
-
+                unsafeStateSize = _host.EstimateStateSizeBytes(includeUnsafeDetails: true);
+                safeStateSize = _host.EstimateStateSizeBytes(includeUnsafeDetails: false);
                 stateSize = safeStateSize; // Backward-compatible: report safe payload size in StateSize
                 var projectorName = GetProjectorName();
                 _logger.LogDebug(
@@ -395,90 +376,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastError);
     }
 
-    private long EstimatePayloadJsonSize(object payload, bool includeUnsafeDetails)
-    {
-        try
-        {
-            // Special handling for TagState-based projectors (payloads exposing a 'State' property
-            // of type SafeUnsafeProjectionState<,>), where direct JSON would be minimal due to
-            // private fields. Build a representative DTO to reflect collection sizes.
-            var payloadType = payload.GetType();
-            var stateProp = payloadType.GetProperty("State");
-            if (stateProp != null)
-            {
-                var stateObj = stateProp.GetValue(payload);
-                if (stateObj != null && stateObj.GetType().Name.StartsWith("SafeUnsafeProjectionState"))
-                {
-                    var stateType = stateObj.GetType();
-                    var currentDataField = stateType.GetField("_currentData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    var safeBackupField = stateType.GetField("_safeBackup", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-
-                    var currentData = currentDataField?.GetValue(stateObj) as System.Collections.IDictionary;
-                    var safeBackup = safeBackupField?.GetValue(stateObj) as System.Collections.IDictionary;
-
-                    var safeKeys = new List<string>();
-                    var unsafeKeys = new List<string>();
-                    var unsafeEventIds = new List<string>();
-
-                    if (currentData != null)
-                    {
-                        foreach (System.Collections.DictionaryEntry de in currentData)
-                        {
-                            var keyStr = de.Key?.ToString() ?? string.Empty;
-                            safeKeys.Add(keyStr);
-                        }
-                    }
-                    if (safeBackup != null)
-                    {
-                        var backupKeys = new HashSet<string>();
-                        foreach (System.Collections.DictionaryEntry de in safeBackup)
-                        {
-                            var keyStr = de.Key?.ToString() ?? string.Empty;
-                            backupKeys.Add(keyStr);
-                        }
-                        // Unsafe keys are those in backup
-                        unsafeKeys.AddRange(backupKeys);
-                        // Safe-only keys are those not in backup
-                        safeKeys = safeKeys.Where(k => !backupKeys.Contains(k)).ToList();
-
-                        if (includeUnsafeDetails)
-                        {
-                            foreach (System.Collections.DictionaryEntry de in safeBackup)
-                            {
-                                var backupVal = de.Value; // SafeStateBackup<TState>
-                                var unsafeEventsProp = backupVal?.GetType().GetProperty("UnsafeEvents");
-                                var list = unsafeEventsProp?.GetValue(backupVal) as System.Collections.IEnumerable;
-                                if (list != null)
-                                {
-                                    foreach (var ev in list)
-                                    {
-                                        var idProp = ev.GetType().GetProperty("Id");
-                                        var id = idProp?.GetValue(ev)?.ToString() ?? string.Empty;
-                                        unsafeEventIds.Add(id);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    object dto = includeUnsafeDetails
-                        ? new { safeKeys, unsafeKeys, unsafeEventIds }
-                        : new { safeKeys };
-                    var json = JsonSerializer.Serialize(dto, _domainTypes.JsonSerializerOptions);
-                    return Encoding.UTF8.GetByteCount(json);
-                }
-            }
-
-            // Default: serialize payload itself with runtime type
-            var defJson = JsonSerializer.Serialize(payload, payload.GetType(), _domainTypes.JsonSerializerOptions);
-            return Encoding.UTF8.GetByteCount(defJson);
-        }
-        catch
-        {
-            return 0;
-        }
-    }
-
     // Threshold for forcing GC before serialization (10MB payload)
     private const long LargePayloadThresholdBytes = 10_000_000;
 
@@ -489,9 +386,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var startUtc = DateTime.UtcNow;
             var projectorName = GetProjectorName();
 
-            if (_projectionActor == null)
+            if (_host == null)
             {
-                return ResultBox.Error<bool>(new InvalidOperationException("Projection actor not initialized"));
+                return ResultBox.Error<bool>(new InvalidOperationException("Projection host not initialized"));
             }
             _logger.LogDebug(
                 "[{ProjectorName}] Starting persistence at {StartUtc:yyyy-MM-dd HH:mm:ss.fff} UTC",
@@ -501,182 +398,80 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Phase1: force promotion of buffered events before snapshot
             try
             {
-                _projectionActor.ForcePromoteBufferedEvents();
+                _host.ForcePromoteBufferedEvents();
             }
             catch { }
 
-            // v9: Get Envelope (SafeState) from actor
-            var snapshotResult = await _projectionActor.GetSnapshotAsync(canGetUnsafeState: false);
-            if (!snapshotResult.IsSuccess)
+            // Get snapshot as opaque bytes from the host
+            var snapshotBytesResult = await _host.GetSnapshotBytesAsync(canGetUnsafeState: false);
+            if (!snapshotBytesResult.IsSuccess)
             {
-                _lastError = snapshotResult.GetException().Message;
+                _lastError = snapshotBytesResult.GetException().Message;
                 _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
                 return ResultBox.FromValue(false);
             }
 
-            var envelope = snapshotResult.GetValue();
-            if (ShouldBlockPersist(envelope))
-            {
-                var envelopeVersion = GetEnvelopeVersion(envelope);
-                _lastError = $"Persistence blocked due to invalid envelope state: {projectorName}";
-                _logger.LogError(
-                    MultiProjectionLogEvents.EmptyStatePersistBlocked,
-                    "Blocked attempt to persist invalid envelope: {ProjectorName}, Events: {EventsProcessed}, Version: {EnvelopeVersion}",
-                    projectorName,
-                    _eventsProcessed,
-                    envelopeVersion);
-                return ResultBox.FromValue(false);
-            }
+            var envelopeBytes = snapshotBytesResult.GetValue();
+            var envelopeSize = (long)envelopeBytes.Length;
 
+            // Get metadata via host
             int? safeVersion = null;
             int? unsafeVersion = null;
+            long originalSizeBytes = envelopeSize;
+            long compressedSizeBytes = envelopeSize;
             try
             {
-                var unsafeStateInfo = await _projectionActor.GetStateAsync(true);
-                var safeStateInfo = await _projectionActor.GetStateAsync(false);
-                if (unsafeStateInfo.IsSuccess && safeStateInfo.IsSuccess)
+                var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
+                if (metadataResult.IsSuccess)
                 {
-                    var unsafeSt = unsafeStateInfo.GetValue();
-                    var safeSt = safeStateInfo.GetValue();
-                    safeVersion = safeSt.Version;
-                    unsafeVersion = unsafeSt.Version;
-                    var safeLastId = safeSt.LastSortableUniqueId;
-                    if (!string.IsNullOrEmpty(safeLastId) && safeLastId.Length >= 20)
-                    {
-                        safeLastId = safeLastId.Substring(0, 20);
-                    }
-                    var unsafeLastId = unsafeSt.LastSortableUniqueId;
-                    if (!string.IsNullOrEmpty(unsafeLastId) && unsafeLastId.Length >= 20)
-                    {
-                        unsafeLastId = unsafeLastId.Substring(0, 20);
-                    }
+                    var metadata = metadataResult.GetValue();
+                    safeVersion = metadata.SafeVersion;
+                    unsafeVersion = metadata.UnsafeVersion;
+                    var safeLastId = metadata.SafeLastSortableUniqueId ?? string.Empty;
+                    if (safeLastId.Length >= 20) safeLastId = safeLastId.Substring(0, 20);
+                    var unsafeLastId = metadata.UnsafeLastSortableUniqueId ?? string.Empty;
+                    if (unsafeLastId.Length >= 20) unsafeLastId = unsafeLastId.Substring(0, 20);
                     _logger.LogDebug(
                         "[{ProjectorName}] Snapshot state - Safe: {SafeVersion} events @ {SafeLastId}, Unsafe: {UnsafeVersion} events @ {UnsafeLastId}",
                         projectorName,
-                        safeSt.Version,
-                        safeLastId ?? "empty",
-                        unsafeSt.Version,
-                        unsafeLastId ?? "empty");
+                        metadata.SafeVersion,
+                        safeLastId.Length > 0 ? safeLastId : "empty",
+                        metadata.UnsafeVersion,
+                        unsafeLastId.Length > 0 ? unsafeLastId : "empty");
                 }
             }
             catch { }
 
-            // Extract original/compressed sizes from the internal state (before serialization for GC decision)
-            long originalSizeBytes = 0;
-            long compressedSizeBytes = 0;
-            long payloadBytesLength = 0;
-            if (envelope.InlineState != null)
-            {
-                originalSizeBytes = envelope.InlineState.OriginalSizeBytes;
-                compressedSizeBytes = envelope.InlineState.CompressedSizeBytes;
-                try
-                {
-                    payloadBytesLength = envelope.InlineState.GetPayloadBytes().LongLength;
-                }
-                catch { }
-            }
+            var projectorVersion = _host.GetProjectorVersion();
 
-            // Memory optimization: Force GC before serialization for large payloads
-            // This helps prevent OutOfMemoryException during snapshot serialization
-            if (payloadBytesLength > LargePayloadThresholdBytes)
-            {
-                _logger.LogWarning(
-                    "[{ProjectorName}] Large payload ({PayloadBytes:N0} bytes) - forcing GC before serialization",
-                    projectorName,
-                    payloadBytesLength);
-                GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
-                GC.WaitForPendingFinalizers();
-            }
+            // Get safe position from the host
+            var safePosition = await _host.GetSafeLastSortableUniqueIdAsync();
 
-            // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
-            // Memory optimization: Use streaming serialization to avoid intermediate string allocation
-            // This reduces peak memory usage for large projections
-            byte[] envelopeBytes;
-            using (var memoryStream = new MemoryStream())
-            {
-                await JsonSerializer.SerializeAsync(memoryStream, envelope, _domainTypes.JsonSerializerOptions);
-                envelopeBytes = memoryStream.ToArray();
-            }
-            var envelopeSize = envelopeBytes.LongLength;
-
-            // Update sizes if not already set
-            if (originalSizeBytes == 0)
-            {
-                originalSizeBytes = envelopeSize;
-                compressedSizeBytes = envelopeSize;
-            }
-
-            // Get metadata
-            var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-            var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
-
-            // Use envelope's LastSortableUniqueId (time point A) for consistency with StateData
-            var envelopeLastSortableUniqueId = envelope.InlineState?.LastSortableUniqueId
-                                             ?? envelope.OffloadedState?.LastSortableUniqueId
-                                             ?? string.Empty;
-
-            // Get current safe position (time point B) for comparison/logging only
-            var currentSafePosition = await _projectionActor.GetSafeLastSortableUniqueIdAsync();
-
-            // Warn if positions diverged between snapshot creation and now (normal but worth observing)
-            if (!string.IsNullOrEmpty(envelopeLastSortableUniqueId) &&
-                !string.IsNullOrEmpty(currentSafePosition) &&
-                envelopeLastSortableUniqueId != currentSafePosition)
-            {
-                _logger.LogWarning(
-                    "SafePosition diverged during persist: {ProjectorName} - Envelope={EnvelopePosition}, Current={CurrentPosition}. Using envelope position for consistency.",
-                    projectorName,
-                    envelopeLastSortableUniqueId.Length >= 20 ? envelopeLastSortableUniqueId.Substring(0, 20) : envelopeLastSortableUniqueId,
-                    currentSafePosition.Length >= 20 ? currentSafePosition.Substring(0, 20) : currentSafePosition);
-            }
-
-            // Use envelope's position for record (ensures record.LastSortableUniqueId matches StateData)
-            var safePosition = envelopeLastSortableUniqueId;
-
-            var lastEventId = envelope.InlineState?.LastEventId
-                           ?? envelope.OffloadedState?.LastEventId
-                           ?? Guid.Empty;
-            SortableUniqueId? safeThreshold = null;
+            string? safeThresholdValue = null;
             DateTime? safeThresholdTime = null;
             try
             {
-                safeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
-                safeThresholdTime = safeThreshold.GetDateTime();
+                safeThresholdValue = _host.PeekCurrentSafeWindowThreshold();
+                var safeThresholdId = new SortableUniqueId(safeThresholdValue);
+                safeThresholdTime = safeThresholdId.GetDateTime();
             }
             catch { }
 
             _logger.LogDebug(
-                "[{ProjectorName}] v10: Writing snapshot: {EnvelopeSize:N0} bytes (payload: original={OriginalSize} compressed={CompressedSize}), {EventsProcessed:N0} events, checkpoint: {Checkpoint}",
+                "[{ProjectorName}] v10: Writing snapshot: {EnvelopeSize:N0} bytes, {EventsProcessed:N0} events, checkpoint: {Checkpoint}",
                 projectorName,
                 envelopeSize,
-                originalSizeBytes,
-                compressedSizeBytes,
                 _eventsProcessed,
                 (safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty");
             _logger.LogInformation(
                 MultiProjectionLogEvents.PersistDetails,
-                "Persist: {ProjectorName}, Events={EventsProcessed}, SafeVer={SafeVersion}, UnsafeVer={UnsafeVersion}, PayloadBytes={PayloadBytes}, EnvelopeSize={EnvelopeSize}, Original={OriginalSize}, Compressed={CompressedSize}, SafeThreshold={SafeThreshold}, IsOffloaded={IsOffloaded}, OffloadKey={OffloadKey}",
+                "Persist: {ProjectorName}, Events={EventsProcessed}, SafeVer={SafeVersion}, UnsafeVer={UnsafeVersion}, EnvelopeSize={EnvelopeSize}, SafeThreshold={SafeThreshold}",
                 projectorName,
                 _eventsProcessed,
                 safeVersion,
                 unsafeVersion,
-                payloadBytesLength,
                 envelopeSize,
-                originalSizeBytes,
-                compressedSizeBytes,
-                safeThresholdTime,
-                envelope.IsOffloaded,
-                envelope.OffloadedState?.OffloadKey);
-
-            if (_eventsProcessed > 1000 && payloadBytesLength > 0 && payloadBytesLength < 1000)
-            {
-                _logger.LogWarning(
-                    MultiProjectionLogEvents.SuspiciousPayload,
-                    "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but payload only {PayloadBytes} bytes",
-                    projectorName,
-                    _eventsProcessed,
-                    payloadBytesLength);
-            }
+                safeThresholdTime);
 
             // Integrity guard: Block persist if safeVersion regressed (indicates data corruption)
             var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
@@ -743,7 +538,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     OffloadProvider: null,
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
-                    SafeWindowThreshold: _projectionActor.PeekCurrentSafeWindowThreshold().Value,
+                    SafeWindowThreshold: _host.PeekCurrentSafeWindowThreshold(),
                     CreatedAt: _state.State!.LastPersistTime == default
                         ? DateTime.UtcNow
                         : _state.State.LastPersistTime,
@@ -783,9 +578,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     _state.State.LastGoodSafeVersion = safeVersion.Value;
                 }
-                if (payloadBytesLength > 0)
+                if (envelopeSize > 0)
                 {
-                    _state.State.LastGoodPayloadBytes = payloadBytesLength;
+                    _state.State.LastGoodPayloadBytes = envelopeSize;
                 }
                 if (originalSizeBytes > 0)
                 {
@@ -830,9 +625,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         {
                             _state.State.LastGoodSafeVersion = safeVersion.Value;
                         }
-                        if (payloadBytesLength > 0)
+                        if (envelopeSize > 0)
                         {
-                            _state.State.LastGoodPayloadBytes = payloadBytesLength;
+                            _state.State.LastGoodPayloadBytes = envelopeSize;
                         }
                         if (originalSizeBytes > 0)
                         {
@@ -868,11 +663,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Debug: force promotion of ALL buffered events regardless of window
     public Task ForcePromoteAllAsync()
     {
-        if (_projectionActor != null)
+        if (_host != null)
         {
             try
             {
-                _projectionActor.ForcePromoteAllBufferedEvents();
+                _host.ForcePromoteAllBufferedEvents();
             }
             catch { }
         }
@@ -989,96 +784,59 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         await EnsureInitializedAsync();
 
-        var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
-        if (!queryBox.IsSuccess)
+        if (_host == null)
         {
-            throw queryBox.GetException();
-        }
-
-        if (queryBox.GetValue() is not IQueryCommon query)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized query does not implement {nameof(IQueryCommon)}: {queryBox.GetValue().GetType().FullName}");
-        }
-
-        if (_projectionActor == null)
-        {
-            return await SerializableQueryResult.CreateFromAsync(
-                new QueryResultGeneral(null!, string.Empty, query),
-                _domainTypes.JsonSerializerOptions);
+            return new SerializableQueryResult();
         }
 
         try
         {
             await StartSubscriptionAsync();
-            var projectionActor = _projectionActor;
-            ResultBox<MultiProjectionState>? safeStateResultBox = null;
-            if (projectionActor != null)
-            {
-                safeStateResultBox = await projectionActor.GetStateAsync(canGetUnsafeState: false);
-            }
-            if (_orleansStreamHandle == null)
-            {
-                await CatchUpFromEventStoreAsync();
-            }
 
-            if (projectionActor == null)
-            {
-                return await SerializableQueryResult.CreateFromAsync(
-                    new QueryResultGeneral(null!, string.Empty, query),
-                    _domainTypes.JsonSerializerOptions);
-            }
-
-            var stateResult = await projectionActor.GetStateAsync();
-            if (!stateResult.IsSuccess)
-            {
-                return await SerializableQueryResult.CreateFromAsync(
-                    new QueryResultGeneral(null!, string.Empty, query),
-                    _domainTypes.JsonSerializerOptions);
-            }
-
-            var state = stateResult.GetValue();
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            // Get safe/unsafe metadata for query context
             int? safeVersion = null;
             string? safeThreshold = null;
             DateTime? safeThresholdTime = null;
             int? unsafeVersion = null;
 
-            if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
+            var safeStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
+            if (safeStateResult.IsSuccess)
             {
-                safeVersion = safeStateResultBox.GetValue().Version;
+                safeVersion = safeStateResult.GetValue().Version;
             }
 
-            if (_projectionActor != null)
+            safeThreshold = _host.PeekCurrentSafeWindowThreshold();
+            try
             {
-                var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
-                safeThreshold = actorSafeThreshold.Value;
-                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+                var safeThresholdId = new SortableUniqueId(safeThreshold);
+                safeThresholdTime = safeThresholdId.GetDateTime();
+            }
+            catch { }
+
+            var unsafeStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
+            if (unsafeStateResult.IsSuccess)
+            {
+                unsafeVersion = unsafeStateResult.GetValue().Version;
             }
 
-            unsafeVersion = state.Version;
+            if (_orleansStreamHandle == null)
+            {
+                await CatchUpFromEventStoreAsync();
+            }
 
-            var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
-                query,
-                projectorProvider,
-                ServiceProvider,
+            var result = await _host.ExecuteQueryAsync(
+                queryParameter,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
                 unsafeVersion);
 
-            object? value = null;
-            string resultType = string.Empty;
-
-            if (result.IsSuccess)
+            if (!result.IsSuccess)
             {
-                value = result.GetValue();
-                resultType = value?.GetType().FullName ?? string.Empty;
+                throw result.GetException();
             }
 
-            return await SerializableQueryResult.CreateFromAsync(
-                new QueryResultGeneral(value ?? null!, resultType, query),
-                _domainTypes.JsonSerializerOptions);
+            return result.GetValue();
         }
         catch (Exception ex)
         {
@@ -1101,94 +859,59 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         await EnsureInitializedAsync();
 
-        var queryBox = await queryParameter.ToQueryAsync(_domainTypes);
-        if (!queryBox.IsSuccess)
+        if (_host == null)
         {
-            throw queryBox.GetException();
-        }
-
-        if (queryBox.GetValue() is not IListQueryCommon listQuery)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized query does not implement IListQueryCommon: {queryBox.GetValue().GetType().FullName}");
-        }
-
-        Task<SerializableListQueryResult> CreateEmptyAsync() =>
-            SerializableListQueryResult.CreateFromAsync(
-                new ListQueryResultGeneral(
-                    0,
-                    0,
-                    0,
-                    0,
-                    Array.Empty<object>(),
-                    string.Empty,
-                    listQuery),
-                _domainTypes.JsonSerializerOptions);
-
-        await StartSubscriptionAsync();
-        ResultBox<MultiProjectionState>? safeStateResultBox = null;
-        if (_projectionActor != null)
-        {
-            safeStateResultBox = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
-        }
-        if (_orleansStreamHandle == null)
-        {
-            await CatchUpFromEventStoreAsync();
-        }
-
-        if (_projectionActor == null)
-        {
-            return await CreateEmptyAsync();
+            return new SerializableListQueryResult();
         }
 
         try
         {
-            var stateResult = await _projectionActor.GetStateAsync();
-            if (!stateResult.IsSuccess)
-            {
-                return await CreateEmptyAsync();
-            }
+            await StartSubscriptionAsync();
 
-            var state = stateResult.GetValue();
-            var projectorProvider = () => Task.FromResult(ResultBox.FromValue(state.Payload!));
+            // Get safe/unsafe metadata for query context
             int? safeVersion = null;
             string? safeThreshold = null;
             DateTime? safeThresholdTime = null;
             int? unsafeVersion = null;
-            if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
+
+            var safeStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
+            if (safeStateResult.IsSuccess)
             {
-                safeVersion = safeStateResultBox.GetValue().Version;
+                safeVersion = safeStateResult.GetValue().Version;
             }
-            if (_projectionActor != null)
+
+            safeThreshold = _host.PeekCurrentSafeWindowThreshold();
+            try
             {
-                var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
-                safeThreshold = actorSafeThreshold.Value;
-                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+                var safeThresholdId = new SortableUniqueId(safeThreshold);
+                safeThresholdTime = safeThresholdId.GetDateTime();
             }
-            unsafeVersion = state.Version;
-            var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
-                listQuery,
-                projectorProvider,
-                ServiceProvider,
+            catch { }
+
+            var unsafeStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
+            if (unsafeStateResult.IsSuccess)
+            {
+                unsafeVersion = unsafeStateResult.GetValue().Version;
+            }
+
+            if (_orleansStreamHandle == null)
+            {
+                await CatchUpFromEventStoreAsync();
+            }
+
+            var result = await _host.ExecuteListQueryAsync(
+                queryParameter,
                 safeVersion,
                 safeThreshold,
                 safeThresholdTime,
                 unsafeVersion);
 
-            var general = result.IsSuccess
-                ? result.GetValue()
-                : new ListQueryResultGeneral(
-                    0,
-                    0,
-                    0,
-                    0,
-                    Array.Empty<object>(),
-                    string.Empty,
-                    listQuery);
+            if (!result.IsSuccess)
+            {
+                throw result.GetException();
+            }
 
-            return await SerializableListQueryResult.CreateFromAsync(
-                general,
-                _domainTypes.JsonSerializerOptions);
+            return result.GetValue();
         }
         catch (Exception ex)
         {
@@ -1201,9 +924,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        if (_projectionActor == null) return false;
+        if (_host == null) return false;
 
-        return await _projectionActor.IsSortableUniqueIdReceived(sortableUniqueId);
+        return await _host.IsSortableUniqueIdReceivedAsync(sortableUniqueId);
     }
 
     public async Task RefreshAsync()
@@ -1241,15 +964,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
 
-        // v9: Get projector version from DomainTypes
-        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-        var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
-
-        // Create projection actor
+        // Create projection host via factory
         bool forceFullCatchUp = false;
-        if (_projectionActor == null)
+        if (_host == null)
         {
-            _logger.LogDebug("Creating new projection actor: {ProjectorName}", projectorName);
+            _logger.LogDebug("Creating new projection host: {ProjectorName}", projectorName);
             // Merge injected options - snapshot offload is handled by IMultiProjectionStateStore
             var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
             var mergedOptions = new GeneralMultiProjectionActorOptions
@@ -1265,15 +984,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
 
-            _projectionActor = new GeneralMultiProjectionActor(
-                _domainTypes,
+            _host = _actorHostFactory.Create(
                 projectorName,
                 mergedOptions,
                 _logger);
 
+            var projectorVersion = _host.GetProjectorVersion();
             bool restoredFromExternalStore = false;
 
-            // Restore from external store (Postgres/Cosmos) - only v9 format supported
+            // Restore from external store (Postgres/Cosmos)
             if (_multiProjectionStateStore != null)
             {
                 try
@@ -1303,9 +1022,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     else if (stateStoreResult.GetValue().HasValue)
                     {
                         var record = stateStoreResult.GetValue().GetValue();
-                        byte[]? compressedData = record.StateData;
+                        byte[]? snapshotData = record.StateData;
 
-                        if (compressedData == null)
+                        if (snapshotData == null)
                         {
                             var errorMsg = record.IsOffloaded
                                 ? $"Blob read returned null for key: {record.OffloadKey}"
@@ -1320,37 +1039,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         }
                         else
                         {
-                            // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
-                            string envelopeJson;
-                            if (compressedData.Length >= 2 && compressedData[0] == 0x1f && compressedData[1] == 0x8b)
-                            {
-                                // v9 format: Gzip compressed
-                                envelopeJson = GzipCompression.DecompressToString(compressedData);
-                            }
-                            else
-                            {
-                                // v10 format: Plain UTF-8 JSON
-                                envelopeJson = Encoding.UTF8.GetString(compressedData);
-                            }
-                            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                                envelopeJson, _domainTypes.JsonSerializerOptions)!;
+                            // Delegate snapshot restoration to the host (handles format detection, deserialization, validation)
+                            var restoreResult = await _host.RestoreSnapshotAsync(snapshotData);
 
-                            if (IsRestoredStateInvalid(record, envelope))
+                            if (!restoreResult.IsSuccess)
                             {
-                                var envelopeVersion = GetEnvelopeVersion(envelope);
                                 _logger.LogError(
-                                    MultiProjectionLogEvents.StateValidationFailed,
-                                    "Restored state is invalid; forcing full catch-up: {ProjectorName}, Events: {EventsProcessed}, Version: {EnvelopeVersion}",
-                                    projectorName,
-                                    record.EventsProcessed,
-                                    envelopeVersion);
+                                    MultiProjectionLogEvents.StateRestoreFailed,
+                                    restoreResult.GetException(),
+                                    "Snapshot restore failed: {ProjectorName}",
+                                    projectorName);
                                 _stateRestoreSource = StateRestoreSource.Failed;
-                                _activationFailureReason = "Restored state failed validation";
+                                _activationFailureReason = restoreResult.GetException().Message;
                                 forceFullCatchUp = true;
                             }
                             else
                             {
-                                await _projectionActor.SetSnapshotAsync(envelope, cancellationToken);
                                 _eventsProcessed = record.EventsProcessed;
                                 _processedEventIds.Clear();
 
@@ -1358,36 +1062,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                 int? postUnsafeVersion = null;
                                 try
                                 {
-                                    var unsafeState = await _projectionActor.GetStateAsync(true);
-                                    var safeState = await _projectionActor.GetStateAsync(false);
-                                    if (unsafeState.IsSuccess)
+                                    var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
+                                    if (metadataResult.IsSuccess)
                                     {
-                                        postUnsafeVersion = unsafeState.GetValue().Version;
+                                        var metadata = metadataResult.GetValue();
+                                        postSafeVersion = metadata.SafeVersion;
+                                        postUnsafeVersion = metadata.UnsafeVersion;
                                     }
-                                    if (safeState.IsSuccess)
-                                    {
-                                        postSafeVersion = safeState.GetValue().Version;
-                                    }
-                                }
-                                catch { }
-
-                                long restoredPayloadBytes = 0;
-                                try
-                                {
-                                    restoredPayloadBytes = envelope.InlineState?.GetPayloadBytes().LongLength ?? 0;
                                 }
                                 catch { }
 
                                 _logger.LogInformation(
                                     MultiProjectionLogEvents.RestoreDetails,
-                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, EnvelopeVer={EnvelopeVersion}, PayloadBytes={PayloadBytes}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
+                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
                                     projectorName,
                                     record.EventsProcessed,
                                     record.StateData?.Length ?? 0,
                                     record.OriginalSizeBytes,
                                     record.CompressedSizeBytes,
-                                    GetEnvelopeVersion(envelope),
-                                    restoredPayloadBytes,
                                     postSafeVersion,
                                     postUnsafeVersion);
 
@@ -1575,68 +1267,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
 
-    private static int GetEnvelopeVersion(SerializableMultiProjectionStateEnvelope envelope) =>
-        envelope.InlineState?.Version ?? 0;
-
-    private bool ShouldBlockPersist(SerializableMultiProjectionStateEnvelope envelope)
-    {
-        if (_eventsProcessed <= 100)
-        {
-            return false;
-        }
-
-        if (GetEnvelopeVersion(envelope) == 0)
-        {
-            return true;
-        }
-
-        if (envelope.InlineState == null)
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsRestoredStateInvalid(
-        MultiProjectionStateRecord record,
-        SerializableMultiProjectionStateEnvelope envelope)
-    {
-        if (envelope.IsOffloaded)
-        {
-            return true;
-        }
-
-        if (record.EventsProcessed > 0 && string.IsNullOrEmpty(record.LastSortableUniqueId))
-        {
-            return true;
-        }
-
-        if (record.EventsProcessed <= 100)
-        {
-            return false;
-        }
-
-        if (GetEnvelopeVersion(envelope) == 0)
-        {
-            return true;
-        }
-
-        if (envelope.InlineState == null)
-        {
-            return true;
-        }
-
-        // Check envelope's LastSortableUniqueId: if Version > 0, it should not be empty
-        var envelopeLastSortableUniqueId = envelope.InlineState?.LastSortableUniqueId;
-        if (string.IsNullOrEmpty(envelopeLastSortableUniqueId) && GetEnvelopeVersion(envelope) > 0)
-        {
-            return true;
-        }
-
-        return false;
-    }
-
     private async Task ResetPersistedStateForFullRebuildAsync(string? currentVersion)
     {
         try
@@ -1720,8 +1350,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var currentVersion = _state.State?.ProjectorVersion;
             bool updated = false;
 
-            // Update external store (Postgres/Cosmos)
-            if (_multiProjectionStateStore != null && !string.IsNullOrEmpty(currentVersion))
+            // Update external store (Postgres/Cosmos) via host
+            if (_multiProjectionStateStore != null && !string.IsNullOrEmpty(currentVersion) && _host != null)
             {
                 var stateResult = await _multiProjectionStateStore.GetLatestForVersionAsync(
                     projectorName, currentVersion);
@@ -1730,61 +1360,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     var record = stateResult.GetValue().GetValue();
 
-                    // Only v9 format supported
+                    // Only envelope format supported
                     if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
                     {
                         throw new InvalidOperationException(
                             $"Legacy format not supported. PayloadType: {record.PayloadType}. Please delete old snapshots and rebuild.");
                     }
 
-                    // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
-                    var stateData = record.StateData!;
-                    string envelopeJson;
-                    if (stateData.Length >= 2 && stateData[0] == 0x1f && stateData[1] == 0x8b)
-                    {
-                        // v9 format: Gzip compressed
-                        envelopeJson = GzipCompression.DecompressToString(stateData);
-                    }
-                    else
-                    {
-                        // v10 format: Plain UTF-8 JSON
-                        envelopeJson = Encoding.UTF8.GetString(stateData);
-                    }
-                    var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                        envelopeJson, _domainTypes.JsonSerializerOptions)!;
-
-                    // Modify version
-                    SerializableMultiProjectionStateEnvelope modified;
-                    if (!envelope.IsOffloaded && envelope.InlineState != null)
-                    {
-                        var s = envelope.InlineState;
-                        modified = new SerializableMultiProjectionStateEnvelope(
-                            false,
-                            SerializableMultiProjectionState.FromBytes(
-                                s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
-                                s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
-                                s.OriginalSizeBytes, s.CompressedSizeBytes),
-                            null);
-                    }
-                    else if (envelope.OffloadedState != null)
-                    {
-                        var o = envelope.OffloadedState;
-                        modified = new SerializableMultiProjectionStateEnvelope(
-                            true,
-                            null,
-                            new SerializableMultiProjectionStateOffloaded(
-                                o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
-                                newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
-                                o.PayloadLength));
-                    }
-                    else
-                    {
-                        return false;
-                    }
-
-                    // v10: Save modified envelope to external store (no outer Gzip)
-                    var modifiedJson = JsonSerializer.Serialize(modified, _domainTypes.JsonSerializerOptions);
-                    var modifiedBytes = Encoding.UTF8.GetBytes(modifiedJson);
+                    // Delegate version rewriting to the host (handles format detection, deserialization, version patching)
+                    var modifiedBytes = _host.RewriteSnapshotVersion(record.StateData!, newVersion);
 
                     var modifiedRecord = new MultiProjectionStateRecord(
                         record.ProjectorName,
@@ -1792,11 +1376,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                         record.LastSortableUniqueId,
                         record.EventsProcessed,
-                        modifiedBytes,  // v10: No outer compression
+                        modifiedBytes,
                         record.IsOffloaded,
                         record.OffloadKey,
                         record.OffloadProvider,
-                        record.OriginalSizeBytes,  // Preserve original payload sizes
+                        record.OriginalSizeBytes,
                         record.CompressedSizeBytes,
                         record.SafeWindowThreshold,
                         record.CreatedAt,
@@ -1853,7 +1437,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task CatchUpFromEventStoreAsync(bool forceFull = false)
     {
         // Legacy method for compatibility - now triggers timer-based catch-up
-        if (_projectionActor == null || _eventStore == null) return;
+        if (_host == null || _eventStore == null) return;
 
         // If catch-up is already active, skip
         if (_catchUpProgress.IsActive)
@@ -1984,7 +1568,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<int> ProcessSingleCatchUpBatch()
     {
-        if (_projectionActor == null || _eventStore == null) return 0;
+        if (_host == null || _eventStore == null) return 0;
 
         var projectorName = GetProjectorName();
 
@@ -2054,66 +1638,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return 0;
         }
 
-        // Separate safe and unsafe events
-        var safeThreshold = GetSafeWindowThreshold();
-        var safeEvents = new List<Event>();
-        var unsafeEvents = new List<Event>();
-
-        foreach (var ev in filtered)
-        {
-            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-            if (eventTime.IsEarlierThanOrEqual(safeThreshold))
-            {
-                safeEvents.Add(ev);
-            }
-            else
-            {
-                unsafeEvents.Add(ev);
-            }
-        }
-
-        // Process safe events immediately (false = outside safe window, these are "safe" to persist)
-        if (safeEvents.Count > 0)
+        // Pass all filtered events to the host (host handles safe/unsafe separation internally)
+        if (filtered.Count > 0)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             _logger.LogDebug(
-                "[{ProjectorName}] Catch-up: Processing {EventCount} safe events",
+                "[{ProjectorName}] Catch-up: Processing {EventCount} events",
                 projectorName,
-                safeEvents.Count);
-            await _projectionActor.AddEventsAsync(safeEvents, false, EventSource.CatchUp);
+                filtered.Count);
+            await _host.AddEventsFromCatchUpAsync(filtered, false);
             sw.Stop();
-            _eventsProcessed += safeEvents.Count;
+            _eventsProcessed += filtered.Count;
 
             if (sw.ElapsedMilliseconds > 1000)
             {
                 _logger.LogWarning(
-                    "[{ProjectorName}] AddEventsAsync took {ElapsedMs}ms for {EventCount} events",
+                    "[{ProjectorName}] AddEventsFromCatchUpAsync took {ElapsedMs}ms for {EventCount} events",
                     projectorName,
                     sw.ElapsedMilliseconds,
-                    safeEvents.Count);
+                    filtered.Count);
             }
 
             // Mark as processed
-            foreach (var ev in safeEvents)
+            foreach (var ev in filtered)
             {
                 _processedEventIds.Add(ev.Id.ToString());
             }
-        }
-
-        // Buffer unsafe events for later - DO NOT count here, will be counted when flushed
-        if (unsafeEvents.Count > 0)
-        {
-            _logger.LogDebug(
-                "[{ProjectorName}] Catch-up: Buffering {EventCount} unsafe events",
-                projectorName,
-                unsafeEvents.Count);
-            foreach (var ev in unsafeEvents)
-            {
-                _eventBuffer.Add(ev);
-                _unsafeEventIds.Add(ev.Id.ToString()); // Mark as unsafe
-                _processedEventIds.Add(ev.Id.ToString());
-            }
-            // Note: _eventsProcessed is NOT incremented here - events will be counted when buffer is flushed
         }
 
         // Update position
@@ -2184,7 +1734,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         try
         {
-            if (_projectionActor != null)
+            if (_host != null)
             {
                 var projectorName = GetProjectorName();
                 _logger.LogDebug(
@@ -2192,7 +1742,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     projectorName);
 
                 // Get the current safe state to trigger promotion
-                var safeState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+                var safeState = await _host.GetStateAsync(canGetUnsafeState: false);
                 if (safeState.IsSuccess)
                 {
                     var state = safeState.GetValue();
@@ -2214,7 +1764,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (_pendingStreamEvents.Count == 0) return;
 
         var projectorName = GetProjectorName();
-        var events = new List<Event>();
+        var events = new List<SerializableEvent>();
 
         while (_pendingStreamEvents.Count > 0)
         {
@@ -2236,30 +1786,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             projectorName,
             events.Count);
 
-        // Determine safe/unsafe status for each event
-        var safeThreshold = GetSafeWindowThreshold();
-        var safeEvents = new List<Event>();
-        var unsafeEvents = new List<Event>();
-
-        foreach (var ev in events)
+        // Process all events via host - host handles safe/unsafe internally
+        var allEvents = events.OrderBy(e => e.SortableUniqueIdValue).ToList();
+        if (allEvents.Count > 0 && _host != null)
         {
-            var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-            if (eventTime.IsEarlierThanOrEqual(safeThreshold))
-            {
-                safeEvents.Add(ev);
-            }
-            else
-            {
-                unsafeEvents.Add(ev);
-            }
-        }
-
-        // Process all events - the actor will determine safe/unsafe based on current time
-        // The second parameter is finishedCatchUp, not withinSafeWindow!
-        var allEvents = safeEvents.Concat(unsafeEvents).OrderBy(e => e.SortableUniqueIdValue).ToList();
-        if (allEvents.Count > 0)
-        {
-            await _projectionActor!.AddEventsAsync(allEvents, true, EventSource.Stream);
+            await _host.AddSerializableEventsAsync(allEvents, true);
             _eventsProcessed += allEvents.Count;
             foreach (var ev in allEvents)
             {
@@ -2275,10 +1806,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<SortableUniqueId?> GetCurrentPositionAsync()
     {
-        if (_projectionActor == null) return null;
+        if (_host == null) return null;
 
         // Try to get from current state
-        var currentState = await _projectionActor.GetStateAsync(canGetUnsafeState: false);
+        var currentState = await _host.GetStateAsync(canGetUnsafeState: false);
         if (currentState.IsSuccess)
         {
             var state = currentState.GetValue();
@@ -2300,7 +1831,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return SortableUniqueId.Generate(threshold, Guid.Empty);
     }
 
-    private void EnqueuePendingStreamEvents(IEnumerable<Event> events, SortableUniqueId? currentPosition)
+    private void EnqueuePendingStreamEvents(IEnumerable<SerializableEvent> events, SortableUniqueId? currentPosition)
     {
         var buffered = 0;
         foreach (var ev in events)
@@ -2337,11 +1868,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private void MoveBufferedStreamEventsToPending(SortableUniqueId? currentPosition)
     {
-        List<Event> buffered;
+        List<SerializableEvent> buffered;
         lock (_eventBuffer)
         {
             if (_eventBuffer.Count == 0) return;
-            buffered = new List<Event>(_eventBuffer);
+            buffered = new List<SerializableEvent>(_eventBuffer);
             _eventBuffer.Clear();
             _unsafeEventIds.Clear();
         }
@@ -2350,16 +1881,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     /// <summary>
-    ///     Process a batch of events from the stream
+    ///     Process a batch of serializable events from the stream
     /// </summary>
-    internal async Task ProcessEventBatch(IReadOnlyList<Event> events)
+    internal async Task ProcessEventBatch(IReadOnlyList<SerializableEvent> events)
     {
-        if (!_isInitialized || _projectionActor == null)
+        if (!_isInitialized || _host == null)
         {
             await EnsureInitializedAsync();
         }
 
-        if (_projectionActor == null || events.Count == 0) return;
+        if (_host == null || events.Count == 0) return;
 
         try
         {
@@ -2367,9 +1898,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 "[{ProjectorName}] Stream batch received: {EventCount} events",
                 GetProjectorName(),
                 events.Count);
-
-            // Track event deliveries for debugging
-            _eventStats.RecordStreamBatch(events);
 
             // If catch-up is active, buffer events for later
             if (_catchUpProgress.IsActive)
@@ -2413,27 +1941,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             if (newEvents.Count > 0)
             {
-                // Determine safe/unsafe for each event based on current time
-                var safeThreshold = GetSafeWindowThreshold();
-                var safeStreamEvents = new List<Event>();
-                var unsafeStreamEvents = new List<Event>();
-
-                foreach (var ev in newEvents)
-                {
-                    var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-                    if (eventTime.IsEarlierThanOrEqual(safeThreshold))
-                    {
-                        safeStreamEvents.Add(ev);
-                    }
-                    else
-                    {
-                        unsafeStreamEvents.Add(ev);
-                    }
-                }
-
-                // Process all events together - the actor will determine safe/unsafe based on current time
-                // The second parameter is finishedCatchUp, not withinSafeWindow!
-                await _projectionActor.AddEventsAsync(newEvents, true, Sekiban.Dcb.Actors.EventSource.Stream);
+                // Delegate to host - host handles safe/unsafe internally
+                await _host.AddSerializableEventsAsync(newEvents, true);
                 _eventsProcessed += newEvents.Count;
 
                 // Mark all events as processed
@@ -2472,10 +1981,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Log inner exception for better debugging
             if (ex.InnerException != null)
             {
-                    _logger.LogError(
-                        ex.InnerException,
-                        "[{ProjectorName}] Inner exception during event batch processing",
-                        GetProjectorName());
+                _logger.LogError(
+                    ex.InnerException,
+                    "[{ProjectorName}] Inner exception during event batch processing",
+                    GetProjectorName());
                 _lastError += $" Inner: {ex.InnerException.Message}";
             }
         }
@@ -2486,21 +1995,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     private async Task FlushEventBufferAsync()
     {
-        List<Event> eventsToProcess;
-        HashSet<string> unsafeIds;
+        List<SerializableEvent> eventsToProcess;
         lock (_eventBuffer)
         {
             if (_eventBuffer.Count == 0)
             {
                 // Even if buffer is empty, trigger safe promotion periodically
                 // to ensure events transition from unsafe to safe over time
-                eventsToProcess = new List<Event>();
-                unsafeIds = new HashSet<string>();
+                eventsToProcess = new List<SerializableEvent>();
             }
             else
             {
-                eventsToProcess = new List<Event>(_eventBuffer);
-                unsafeIds = new HashSet<string>(_unsafeEventIds);
+                eventsToProcess = new List<SerializableEvent>(_eventBuffer);
                 _eventBuffer.Clear();
                 _unsafeEventIds.Clear();
                 _lastBufferFlush = DateTime.UtcNow;
@@ -2509,7 +2015,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (eventsToProcess.Count > 0)
         {
-            await ProcessBufferedEventsWithSafetyInfo(eventsToProcess, unsafeIds);
+            await ProcessBufferedSerializableEvents(eventsToProcess);
         }
         else
         {
@@ -2519,50 +2025,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     /// <summary>
-    ///     Process buffered events with knowledge of their safe/unsafe status
+    ///     Process buffered serializable events via host
     /// </summary>
-    private async Task ProcessBufferedEventsWithSafetyInfo(List<Event> events, HashSet<string> unsafeIds)
+    private async Task ProcessBufferedSerializableEvents(List<SerializableEvent> events)
     {
-        if (_projectionActor == null || events.Count == 0) return;
+        if (_host == null || events.Count == 0) return;
 
         try
         {
             var projectorName = GetProjectorName();
 
-            // Separate events based on whether they were marked as unsafe
-            var safeEvents = new List<Event>();
-            var unsafeEvents = new List<Event>();
-
-            foreach (var ev in events)
-            {
-                if (unsafeIds.Contains(ev.Id.ToString()))
-                {
-                    unsafeEvents.Add(ev);
-                }
-                else
-                {
-                    // Re-evaluate based on current safe window
-                    var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-                    var safeThreshold = GetSafeWindowThreshold();
-
-                    if (eventTime.IsEarlierThanOrEqual(safeThreshold))
-                    {
-                        safeEvents.Add(ev);
-                    }
-                    else
-                    {
-                        unsafeEvents.Add(ev);
-                    }
-                }
-            }
-
-            // Process all events together - the actor will determine safe/unsafe based on current time
-            // The second parameter is finishedCatchUp, not withinSafeWindow!
+            // Delegate to host - host handles safe/unsafe internally
             _logger.LogDebug(
                 "[{ProjectorName}] Processing {EventCount} buffered events",
                 projectorName,
                 events.Count);
-            await _projectionActor.AddEventsAsync(events, true, EventSource.Stream);
+            await _host.AddSerializableEventsAsync(events, true);
             _eventsProcessed += events.Count;
 
             foreach (var ev in events)
@@ -2594,7 +2072,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    // Orleans stream batch observer - processes events in batches for efficiency
+    // Orleans stream batch observer - passes SerializableEvent directly to the Grain without deserialization
     private class StreamBatchObserver : IAsyncBatchObserver<SerializableEvent>
     {
         private readonly MultiProjectionGrain _grain;
@@ -2604,7 +2082,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Batch processing method - Orleans v9.0+ uses IList<SequentialItem<T>>
         public Task OnNextAsync(IList<SequentialItem<SerializableEvent>> batch)
         {
-            var events = batch.Select(item => DeserializeEvent(item.Item)).Where(e => e != null).Cast<Event>().ToList();
+            var events = batch.Select(item => item.Item).ToList();
             _grain._logger.LogDebug(
                 "[StreamBatchObserver-{ProjectorName}] Received batch of {EventCount} events",
                 _grain.GetProjectorName(),
@@ -2616,7 +2094,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Legacy batch method for compatibility
         public Task OnNextBatchAsync(IEnumerable<SerializableEvent> batch, StreamSequenceToken? token = null)
         {
-            var events = batch.Select(DeserializeEvent).Where(e => e != null).Cast<Event>().ToList();
+            var events = batch.ToList();
             _grain._logger.LogDebug(
                 "[StreamBatchObserver-{ProjectorName}] Received legacy batch of {EventCount} events",
                 _grain.GetProjectorName(),
@@ -2627,53 +2105,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         public Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
         {
-            // Single event fallback - enqueue as batch of 1
-            var evt = DeserializeEvent(item);
-            if (evt != null)
-            {
-                _grain._logger.LogDebug(
-                    "[StreamBatchObserver-{ProjectorName}] Received single event {EventType}, ID: {EventId}",
-                    _grain.GetProjectorName(),
-                    evt.EventType,
-                    evt.Id);
-                _grain.EnqueueStreamEvents(new[] { evt });
-            }
+            _grain._logger.LogDebug(
+                "[StreamBatchObserver-{ProjectorName}] Received single event {EventType}, ID: {EventId}",
+                _grain.GetProjectorName(),
+                item.EventPayloadName,
+                item.Id);
+            _grain.EnqueueStreamEvents(new[] { item });
             return Task.CompletedTask;
-        }
-
-        private Event? DeserializeEvent(SerializableEvent serializableEvent)
-        {
-            try
-            {
-                var payloadJson = Encoding.UTF8.GetString(serializableEvent.Payload);
-                var payload = _grain._eventRuntime.DeserializeEventPayload(
-                    serializableEvent.EventPayloadName, payloadJson);
-
-                if (payload == null)
-                {
-                    _grain._logger.LogWarning(
-                        "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event payload of type {EventType}",
-                        _grain.GetProjectorName(),
-                        serializableEvent.EventPayloadName);
-                    return null;
-                }
-
-                return new Event(
-                    payload,
-                    serializableEvent.SortableUniqueIdValue,
-                    serializableEvent.EventPayloadName,
-                    serializableEvent.Id,
-                    serializableEvent.EventMetadata,
-                    serializableEvent.Tags);
-            }
-            catch (Exception ex)
-            {
-                _grain._logger.LogWarning(
-                    ex,
-                    "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event",
-                    _grain.GetProjectorName());
-                return null;
-            }
         }
 
         public Task OnCompletedAsync()
@@ -2697,9 +2135,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // (removed test-only projector tag scoping)
 
-    internal void EnqueueStreamEvents(IEnumerable<Event> events)
+    internal void EnqueueStreamEvents(IEnumerable<SerializableEvent> events)
     {
-        var list = events as IList<Event> ?? events.ToList();
+        var list = events as IList<SerializableEvent> ?? events.ToList();
         if (list.Count == 0) return;
 
         if (_catchUpProgress.IsActive)
@@ -2713,21 +2151,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (newEvents.Count == 0) return;
         list = newEvents;
 
-        // Evaluate each event's safe/unsafe status at the time of enqueuing
-        var safeThreshold = GetSafeWindowThreshold();
-
         lock (_eventBuffer)
         {
             foreach (var ev in list)
             {
                 _eventBuffer.Add(ev);
-
-                // Mark events that are within the safe window as unsafe
-                var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
-                if (!eventTime.IsEarlierThanOrEqual(safeThreshold))
-                {
-                    _unsafeEventIds.Add(ev.Id.ToString());
-                }
             }
         }
         _lastEventTime = DateTime.UtcNow;
