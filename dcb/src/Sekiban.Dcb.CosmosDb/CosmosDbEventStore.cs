@@ -1109,7 +1109,15 @@ public partial class CosmosDbEventStore : IEventStore
 
             return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
         }
@@ -1149,7 +1157,15 @@ public partial class CosmosDbEventStore : IEventStore
                 eventIds,
                 options.MaxConcurrentDeserializations).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+        catch (ArgumentException ex)
         {
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
         }
