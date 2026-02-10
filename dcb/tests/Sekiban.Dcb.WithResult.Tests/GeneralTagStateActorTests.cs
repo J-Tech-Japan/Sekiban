@@ -38,7 +38,7 @@ public class GeneralTagStateActorTests
         await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag));
 
         // Act
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
         var state = await actor.GetTagStateAsync();
 
         // Assert
@@ -78,7 +78,7 @@ public class GeneralTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag));
 
         // Act
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
         var state = await actor.GetTagStateAsync();
 
         // Assert
@@ -112,7 +112,7 @@ public class GeneralTagStateActorTests
             EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag));
 
         // Act
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
         var state = await actor.GetTagStateAsync();
 
         // Assert
@@ -148,7 +148,7 @@ public class GeneralTagStateActorTests
             EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag));
 
         // Act
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
         var state = await actor.GetTagStateAsync();
 
         // Assert
@@ -167,7 +167,7 @@ public class GeneralTagStateActorTests
         var tagStateId = TagStateId.FromProjector<StudentProjector>(studentTag);
 
         // Act
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
         var state = await actor.GetTagStateAsync();
 
         // Assert
@@ -191,7 +191,7 @@ public class GeneralTagStateActorTests
         await _eventStore.WriteEventAsync(
             EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
 
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
 
         // Act
         var serializableState = await actor.GetStateAsync();
@@ -218,13 +218,17 @@ public class GeneralTagStateActorTests
         Assert.Throws<ArgumentException>(() => new GeneralTagStateActor(
             "InvalidFormat",
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             _accessor));
 
         Assert.Throws<ArgumentException>(() => new GeneralTagStateActor(
             "Only:Two",
             _eventStore,
-            _domainTypes,
+            _domainTypes.TagProjectorTypes,
+            _domainTypes.TagTypes,
+            _domainTypes.TagStatePayloadTypes,
             _accessor));
     }
 
@@ -239,7 +243,7 @@ public class GeneralTagStateActorTests
         var studentTag = new StudentTag(studentId);
         var tagStateId = TagStateId.FromProjector<StudentProjector>(studentTag);
 
-        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes, _accessor);
+        var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
 
         var differentState = new TagState(
             null!,

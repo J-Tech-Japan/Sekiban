@@ -47,7 +47,7 @@ public class TagConsistentActorCatchupTest
             tagConsistentId,
             null,
             new TagConsistentActorOptions(),
-            _domainTypes);
+            _domainTypes.TagTypes);
         var latestIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
         Assert.True(latestIdResult.IsSuccess);
         Assert.Equal("", latestIdResult.GetValue()); // Verify it's empty
@@ -56,7 +56,7 @@ public class TagConsistentActorCatchupTest
         var accessor = new TestActorAccessor(tagConsistentActor);
 
         // Create TagStateActor
-        var tagStateActor = new GeneralTagStateActor(tagStateId, _eventStore, _domainTypes, accessor);
+        var tagStateActor = new GeneralTagStateActor(tagStateId, _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, accessor);
 
         // Act
         var state = await tagStateActor.GetStateAsync();
@@ -117,7 +117,7 @@ public class TagConsistentActorCatchupTest
         var accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
 
         // First access - TagConsistentActor doesn't exist yet, should create and catchup
-        var tagStateActor = new GeneralTagStateActor(tagStateId, _eventStore, _domainTypes, accessor);
+        var tagStateActor = new GeneralTagStateActor(tagStateId, _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, accessor);
         var state1 = await tagStateActor.GetStateAsync();
 
         // Should see events after TagConsistentActor catches up

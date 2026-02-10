@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -11,18 +12,18 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// </summary>
 public class TagConsistentGrain : Grain, ITagConsistentGrain
 {
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagTypes _tagTypes;
     private readonly IEventStore _eventStore;
     private readonly TagConsistentActorOptions _options;
     private GeneralTagConsistentActor? _actor;
 
     public TagConsistentGrain(
         IEventStore eventStore,
-        DcbDomainTypes domainTypes,
+        ITagTypes tagTypes,
         TagConsistentActorOptions? options = null)
     {
         _eventStore = eventStore;
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _tagTypes = tagTypes ?? throw new ArgumentNullException(nameof(tagTypes));
         _options = options ?? new TagConsistentActorOptions();
     }
 
@@ -92,7 +93,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
         var tagName = ServiceIdGrainKey.Strip(this.GetPrimaryKeyString());
 
         // Create the actor instance
-        _actor = new GeneralTagConsistentActor(tagName, _eventStore, _options, _domainTypes);
+        _actor = new GeneralTagConsistentActor(tagName, _eventStore, _options, _tagTypes);
 
         return base.OnActivateAsync(cancellationToken);
     }

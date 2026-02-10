@@ -115,14 +115,20 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
                 tagName,
                 _eventStore,
                 new TagConsistentActorOptions(),
-                _domainTypes) as T;
+                _domainTypes.TagTypes) as T;
         }
 
         // Create TagStateActor
         if (typeof(T) == typeof(ITagStateActorCommon) && parts.Length >= 3)
         {
             // Format: "TagGroup:TagContent:TagProjectorName"
-            return new GeneralTagStateActor(actorId, _eventStore, _domainTypes, this) as T;
+            return new GeneralTagStateActor(
+                actorId,
+                _eventStore,
+                _domainTypes.TagProjectorTypes,
+                _domainTypes.TagTypes,
+                _domainTypes.TagStatePayloadTypes,
+                this) as T;
         }
 
         // Create MultiProjectionActor (projectorName passed as actorId)

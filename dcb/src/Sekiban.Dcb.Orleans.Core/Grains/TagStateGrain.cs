@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
@@ -13,20 +14,26 @@ public class TagStateGrain : Grain, ITagStateGrain
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly IPersistentState<TagStateCacheState> _cache;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagProjectorTypes _tagProjectorTypes;
+    private readonly ITagTypes _tagTypes;
+    private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
     private readonly IEventStore _eventStore;
     private readonly ITagProjectionRuntime _tagProjectionRuntime;
     private GeneralTagStateActor? _actor;
 
     public TagStateGrain(
         IEventStore eventStore,
-        DcbDomainTypes domainTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
         ITagProjectionRuntime tagProjectionRuntime,
         IActorObjectAccessor actorAccessor,
         [PersistentState("tagStateCache", "OrleansStorage")] IPersistentState<TagStateCacheState> cache)
     {
         _eventStore = eventStore;
-        _domainTypes = domainTypes;
+        _tagProjectorTypes = tagProjectorTypes;
+        _tagTypes = tagTypes;
+        _tagStatePayloadTypes = tagStatePayloadTypes;
         _tagProjectionRuntime = tagProjectionRuntime;
         _actorAccessor = actorAccessor;
         _cache = cache;
@@ -111,7 +118,9 @@ public class TagStateGrain : Grain, ITagStateGrain
         _actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,
-            _domainTypes,
+            _tagProjectorTypes,
+            _tagTypes,
+            _tagStatePayloadTypes,
             new TagStateOptions(),
             _actorAccessor,
             tagStatePersistent);

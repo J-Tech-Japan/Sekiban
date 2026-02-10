@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ResultBoxes;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
@@ -15,7 +18,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 {
     private readonly ConcurrentDictionary<string, TagWriteReservation> _activeReservations = new();
     private readonly SemaphoreSlim _catchUpLock = new(1, 1);
-    private readonly DcbDomainTypes _domainTypes; // Non-nullable per new requirement
+    private readonly ILogger<GeneralTagConsistentActor> _logger;
+    private readonly ITagTypes _tagTypes;
     private readonly IEventStore? _eventStore;
     private readonly TagConsistentActorOptions _options;
     private readonly SemaphoreSlim _reservationLock = new(1, 1);
@@ -27,12 +31,14 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         string tagName,
         IEventStore? eventStore,
         TagConsistentActorOptions options,
-        DcbDomainTypes domainTypes)
+        ITagTypes tagTypes,
+        ILogger<GeneralTagConsistentActor>? logger = null)
     {
         _tagName = tagName ?? throw new ArgumentNullException(nameof(tagName));
         _eventStore = eventStore;
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _tagTypes = tagTypes ?? throw new ArgumentNullException(nameof(tagTypes));
+        _logger = logger ?? NullLogger<GeneralTagConsistentActor>.Instance;
     }
 
     public Task<string> GetTagActorIdAsync() => Task.FromResult(_tagName);
@@ -211,8 +217,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     {
         try
         {
-            // Parse tag name using ITagTypes from DcbDomainTypes instead of GenericTag
-            var tag = _domainTypes.TagTypes.GetTag(_tagName);
+            // Parse tag name using ITagTypes instead of GenericTag
+            var tag = _tagTypes.GetTag(_tagName);
 
             // Get the latest tag state
             var latestTagResult = await _eventStore!.GetLatestTagAsync(tag);
@@ -234,10 +240,10 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // No tag exists yet or error reading, which is fine
             // The actor starts with empty state
         }
-        catch
+        catch (Exception ex)
         {
-            // If there's any error during catch-up, we still mark as completed
-            // to avoid blocking operations
+            // Catch-up failure must not block the reservation system, but we log the error for observability
+            _logger.LogError(ex, "[GeneralTagConsistentActor] Error during catch-up for tag {TagName}", _tagName);
         }
     }
 

@@ -394,6 +394,9 @@ builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IEventRuntime, Sekiban.Dcb.Run
 builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>();
 builder.Services.AddSingleton<Sekiban.Dcb.Runtime.ITagProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeTagProjectionRuntime>();
 builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionActorHostFactory, Sekiban.Dcb.Runtime.Native.NativeProjectionActorHostFactory>();
+builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagProjectorTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
+builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
+builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagStatePayloadTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagStatePayloadTypes);
 
 // Configure database storage based on configuration
 if (databaseType == "cosmos")
