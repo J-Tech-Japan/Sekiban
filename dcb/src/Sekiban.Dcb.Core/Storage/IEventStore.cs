@@ -65,6 +65,32 @@ public interface IEventStore
     /// <param name="tagGroup">Optional: Filter by tag group name</param>
     /// <returns>List of unique tag information</returns>
     Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null);
+
+    // SerializableEvent operations (no deserialization needed - payload stays as byte[])
+
+    /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization).
+    /// </summary>
+    /// <param name="since">Optional: Only return events after this ID</param>
+    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        => throw new NotSupportedException("SerializableEvent read not implemented");
+
+    /// <summary>
+    ///     Reads events for a specific tag as SerializableEvent (no payload deserialization).
+    /// </summary>
+    /// <param name="tag">The tag to filter events by</param>
+    /// <param name="since">Optional: Only return events after this ID</param>
+    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+        => throw new NotSupportedException("SerializableEvent read not implemented");
+
+    /// <summary>
+    ///     Writes multiple pre-serialized events to the event store atomically.
+    ///     Also updates tag states for all affected tags.
+    /// </summary>
+    /// <returns>ResultBox containing the written serializable events and tag write results</returns>
+    Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        IEnumerable<SerializableEvent> events)
+        => throw new NotSupportedException("SerializableEvent write not implemented");
 }
 
 /// <summary>

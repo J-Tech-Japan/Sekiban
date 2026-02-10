@@ -1563,7 +1563,7 @@ static ServiceProvider BuildServices(
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
-                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>()));
+                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes));
         }
         else
         {
@@ -1584,7 +1584,7 @@ static ServiceProvider BuildServices(
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
-                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>()));
+                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes));
         }
         else
         {
@@ -1597,6 +1597,12 @@ static ServiceProvider BuildServices(
 
     // Register the builder
     services.AddSingleton<MultiProjectionStateBuilder>();
+
+    // Register individual interfaces from DcbDomainTypes for Service DI
+    services.AddSingleton(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+    services.AddSingleton(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
+    services.AddSingleton(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
+    services.AddSingleton(sp => sp.GetRequiredService<DcbDomainTypes>().JsonSerializerOptions);
 
     // Register CLI services
     services.AddSingleton<TagEventService>();
@@ -1692,7 +1698,7 @@ static async Task SyncCacheAsync(string connectionString, string databaseType, s
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Create local SQLite cache
-    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes);
+    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes.EventTypes);
 
     // Create cache sync helper
     var syncOptions = new CacheSyncOptions
@@ -1745,7 +1751,7 @@ static async Task ShowCacheStatsAsync(string cacheDir)
 
     // Create a minimal SQLite store to read stats
     var domainTypes = DomainType.GetDomainTypes();
-    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes);
+    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes.EventTypes);
 
     // Get event count
     var countResult = await localStore.GetEventCountAsync();

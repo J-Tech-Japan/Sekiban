@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
@@ -10,7 +11,7 @@ namespace Sekiban.Dcb.CosmosDb;
 public sealed class CosmosDbEventStoreFactory : IEventStoreFactory
 {
     private readonly CosmosDbContext _context;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly ICosmosContainerResolver _containerResolver;
     private readonly ILoggerFactory? _loggerFactory;
 
@@ -19,12 +20,12 @@ public sealed class CosmosDbEventStoreFactory : IEventStoreFactory
     /// </summary>
     public CosmosDbEventStoreFactory(
         CosmosDbContext context,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         ICosmosContainerResolver containerResolver,
         ILoggerFactory? loggerFactory = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _loggerFactory = loggerFactory;
     }
@@ -34,6 +35,6 @@ public sealed class CosmosDbEventStoreFactory : IEventStoreFactory
     {
         var provider = new FixedServiceIdProvider(serviceId);
         var logger = _loggerFactory?.CreateLogger<CosmosDbEventStore>();
-        return new CosmosDbEventStore(_context, _domainTypes, provider, _containerResolver, logger);
+        return new CosmosDbEventStore(_context, _eventTypes, provider, _containerResolver, logger);
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
@@ -8,23 +9,25 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
+using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
 public class PostgresEventStore : IEventStore
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ILogger<PostgresEventStore> _logger;
 
     public PostgresEventStore(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         IServiceIdProvider serviceIdProvider,
         ILogger<PostgresEventStore>? logger = null)
     {
         _contextFactory = contextFactory;
-        _domainTypes = domainTypes;
+        _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger ?? NullLogger<PostgresEventStore>.Instance;
     }
@@ -374,18 +377,169 @@ public class PostgresEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            var query = context.Events.AsQueryable().Where(e => e.ServiceId == serviceId);
+
+            if (since != null)
+            {
+                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+            }
+
+            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+
+            var events = dbEvents.Select(dbEvent => new SerializableEvent(
+                Encoding.UTF8.GetBytes(dbEvent.Payload),
+                dbEvent.SortableUniqueId,
+                dbEvent.Id,
+                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                dbEvent.EventType));
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            var tagString = tag.GetTag();
+            var tagJson = $"\"{tagString}\"";
+            var query = context.Events.Where(e =>
+                e.ServiceId == serviceId &&
+                EF.Functions.JsonContains(e.Tags, tagJson));
+
+            if (since != null)
+            {
+                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+            }
+
+            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+
+            var events = dbEvents.Select(dbEvent => new SerializableEvent(
+                Encoding.UTF8.GetBytes(dbEvent.Payload),
+                dbEvent.SortableUniqueId,
+                dbEvent.Id,
+                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                dbEvent.EventType));
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            // Use the execution strategy for retry logic
+            var strategy = context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                // Begin transaction inside the execution strategy
+                await using var transaction = await context.Database.BeginTransactionAsync();
+
+                var eventsList = events.ToList();
+                var writtenEvents = new List<SerializableEvent>();
+                var tagWriteResults = new List<TagWriteResult>();
+
+                // Process each event
+                foreach (var se in eventsList)
+                {
+                    // Convert byte[] payload to string
+                    var serializedPayload = Encoding.UTF8.GetString(se.Payload);
+
+                    // Create and add the database event
+                    var dbEvent = new DbEvent
+                    {
+                        ServiceId = serviceId,
+                        Id = se.Id,
+                        SortableUniqueId = se.SortableUniqueIdValue,
+                        EventType = se.EventPayloadName,
+                        Payload = serializedPayload,
+                        Tags = JsonSerializer.Serialize(se.Tags),
+                        Timestamp = DateTime.UtcNow,
+                        CausationId = se.EventMetadata.CausationId,
+                        CorrelationId = se.EventMetadata.CorrelationId,
+                        ExecutedUser = se.EventMetadata.ExecutedUser
+                    };
+                    context.Events.Add(dbEvent);
+                    writtenEvents.Add(se);
+
+                    // Process tags associated with this event
+                    foreach (var tagString in se.Tags)
+                    {
+                        // Extract tag group from tag string (format: "group:content")
+                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+
+                        // Create a tag entry for this event
+                        var dbTag = DbTag.FromEventTag(
+                            tagString,
+                            tagGroup,
+                            se.SortableUniqueIdValue,
+                            se.Id,
+                            se.EventPayloadName,
+                            serviceId);
+                        context.Tags.Add(dbTag);
+
+                        tagWriteResults.Add(
+                            new TagWriteResult(
+                                tagString,
+                                1, // Version placeholder
+                                DateTimeOffset.UtcNow));
+                    }
+                }
+
+                // Save changes
+                await context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return ResultBox.FromValue(
+                    (Events: (IReadOnlyList<SerializableEvent>)writtenEvents,
+                        TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WriteSerializableEventsAsync failed");
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+    }
+
     // Note: Tag state is not stored in the database
     // Tags table only tracks tag-to-event relationships
     // Tag state should be computed by projectors when needed
 
     private string SerializeEventPayload(IEventPayload payload) =>
-        _domainTypes.EventTypes.SerializeEventPayload(payload);
+        _eventTypes.SerializeEventPayload(payload);
 
     private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
     {
         try
         {
-            var payload = _domainTypes.EventTypes.DeserializeEventPayload(eventType, json);
+            var payload = _eventTypes.DeserializeEventPayload(eventType, json);
             if (payload == null)
             {
                 return ResultBox.Error<IEventPayload>(

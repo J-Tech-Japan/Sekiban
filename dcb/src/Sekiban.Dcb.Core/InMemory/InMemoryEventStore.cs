@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -23,9 +24,17 @@ public class InMemoryEventStore : IEventStore
 
     private readonly ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
     private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly IEventTypes? _eventTypes;
 
     public InMemoryEventStore(IServiceIdProvider? serviceIdProvider = null)
     {
+        _eventTypes = null;
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+    }
+
+    public InMemoryEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
+    {
+        _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
@@ -279,6 +288,139 @@ public class InMemoryEventStore : IEventStore
                 .ToList();
 
             return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
+        }
+    }
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    {
+        if (_eventTypes == null)
+            return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
+                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var events = state.EventOrder.AsEnumerable();
+
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                        e.SortableUniqueIdValue,
+                        since.Value,
+                        StringComparison.Ordinal) >
+                    0);
+            }
+
+            var serializableEvents = events
+                .Select(e => e.ToSerializableEvent(_eventTypes))
+                .ToList();
+
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializableEvents));
+        }
+    }
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    {
+        if (_eventTypes == null)
+            return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
+                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var tagString = tag.GetTag();
+            var events = state.EventOrder.Where(e => e.Tags.Contains(tagString));
+
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                        e.SortableUniqueIdValue,
+                        since.Value,
+                        StringComparison.Ordinal) >
+                    0);
+            }
+
+            var serializableEvents = events
+                .Select(e => e.ToSerializableEvent(_eventTypes))
+                .ToList();
+
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializableEvents));
+        }
+    }
+
+    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        IEnumerable<SerializableEvent> events)
+    {
+        if (_eventTypes == null)
+            return Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var eventList = events.ToList();
+            var writtenEvents = new List<SerializableEvent>();
+            var tagWriteResults = new List<TagWriteResult>();
+            var tagVersions = new Dictionary<string, long>();
+
+            var affectedTags = new HashSet<string>();
+            foreach (var se in eventList)
+            {
+                foreach (var tagString in se.Tags)
+                {
+                    affectedTags.Add(tagString);
+                }
+            }
+
+            foreach (var tagString in affectedTags)
+            {
+                if (state.TagStreams.TryGetValue(tagString, out var streams))
+                {
+                    tagVersions[tagString] = streams.Count;
+                }
+                else
+                {
+                    tagVersions[tagString] = 0;
+                }
+            }
+
+            foreach (var se in eventList)
+            {
+                var eventResult = se.ToEvent(_eventTypes);
+                if (!eventResult.IsSuccess)
+                {
+                    return Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                        eventResult.GetException()));
+                }
+
+                var evt = eventResult.GetValue();
+                state.Events[evt.Id] = evt;
+                state.EventOrder.Add(evt);
+                writtenEvents.Add(se);
+
+                foreach (var tagString in se.Tags)
+                {
+                    var tagStream = new TagStream(tagString, se.Id, se.SortableUniqueIdValue);
+
+                    if (!state.TagStreams.ContainsKey(tagString))
+                    {
+                        state.TagStreams[tagString] = new List<TagStream>();
+                    }
+
+                    state.TagStreams[tagString].Add(tagStream);
+                }
+            }
+
+            foreach (var tagString in affectedTags)
+            {
+                var newVersion = state.TagStreams[tagString].Count;
+                tagWriteResults.Add(new TagWriteResult(tagString, newVersion, DateTimeOffset.UtcNow));
+            }
+
+            return Task.FromResult(
+                ResultBox.FromValue(
+                    (Events: (IReadOnlyList<SerializableEvent>)writtenEvents,
+                        TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults)));
         }
     }
 }

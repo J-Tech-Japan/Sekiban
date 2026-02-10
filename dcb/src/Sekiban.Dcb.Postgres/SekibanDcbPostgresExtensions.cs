@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using System.Text.Json;
@@ -36,6 +38,9 @@ public static class SekibanDcbPostgresExtensions
         {
             options.UseNpgsql(connectionString);
         });
+
+        // Register IEventTypes from DcbDomainTypes (if not already registered)
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
 
         // Register IEventStore implementation
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
@@ -82,6 +87,9 @@ public static class SekibanDcbPostgresExtensions
         // Add a hosted service to ensure database tables exist
         services.AddHostedService<DatabaseInitializerService>();
 
+        // Register IEventTypes from DcbDomainTypes (if not already registered)
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+
         // IEventStore実装を登録
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.AddSingleton<IEventStore, PostgresEventStore>();
@@ -111,6 +119,7 @@ public static class SekibanDcbPostgresExtensions
             var jsonOptions = new JsonSerializerOptions();
             return TDomainTypesProvider.Generate(jsonOptions);
         });
+        services.AddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
 
         // IEventStore実装を登録
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();

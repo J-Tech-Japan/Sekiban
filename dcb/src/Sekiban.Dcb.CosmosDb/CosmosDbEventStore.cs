@@ -4,11 +4,13 @@ using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.CosmosDb;
 
@@ -20,7 +22,7 @@ public partial class CosmosDbEventStore : IEventStore
     private const string ParamSince = "@since";
     private const string ParamServiceId = "@serviceId";
     private readonly CosmosDbContext _context;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ICosmosContainerResolver _containerResolver;
     private readonly ILogger<CosmosDbEventStore>? _logger;
@@ -30,13 +32,13 @@ public partial class CosmosDbEventStore : IEventStore
     /// </summary>
     public CosmosDbEventStore(
         CosmosDbContext context,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         IServiceIdProvider serviceIdProvider,
         ICosmosContainerResolver containerResolver,
         ILogger<CosmosDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
@@ -1051,14 +1053,459 @@ public partial class CosmosDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization).
+    /// </summary>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveEventsContainer(serviceId);
+            var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
+            var options = _context.Options;
+
+            QueryDefinition queryDefinition;
+            if (settings.IsLegacy)
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition($"SELECT * FROM c WHERE c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamSince, since.Value)
+                    : new QueryDefinition("SELECT * FROM c ORDER BY c.sortableUniqueId");
+            }
+            else
+            {
+                queryDefinition = since != null
+                    ? new QueryDefinition($"SELECT * FROM c WHERE c.serviceId = {ParamServiceId} AND c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamServiceId, serviceId)
+                        .WithParameter(ParamSince, since.Value)
+                    : new QueryDefinition($"SELECT * FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId")
+                        .WithParameter(ParamServiceId, serviceId);
+            }
+            var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
+
+            var events = new List<SerializableEvent>();
+
+            using var iterator = container.GetItemQueryIterator<CosmosEvent>(queryDefinition, requestOptions: queryRequestOptions);
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+
+                foreach (var cosmosEvent in response)
+                {
+                    events.Add(new SerializableEvent(
+                        Encoding.UTF8.GetBytes(cosmosEvent.Payload),
+                        cosmosEvent.SortableUniqueId,
+                        Guid.Parse(cosmosEvent.Id),
+                        new EventMetadata(
+                            cosmosEvent.CausationId ?? "",
+                            cosmosEvent.CorrelationId ?? "",
+                            cosmosEvent.ExecutedUser ?? ""),
+                        cosmosEvent.Tags?.ToList() ?? new List<string>(),
+                        cosmosEvent.EventType));
+                }
+            }
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Reads events for a specific tag as SerializableEvent (no payload deserialization).
+    /// </summary>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        try
+        {
+            var tagString = tag.GetTag();
+            var serviceId = CurrentServiceId;
+            var options = _context.Options;
+
+            // First, get all event IDs for this tag from the tags container using optimized query
+            var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+
+            var (queryDefinition, requestOptions) = BuildTagEventIdQuery(tagString, serviceId, tagsSettings, since);
+            var eventIds = await FetchEventIdsAsync(tagsContainer, queryDefinition, requestOptions).ConfigureAwait(false);
+
+            if (eventIds.Count == 0)
+            {
+                return ResultBox.FromValue<IEnumerable<SerializableEvent>>(new List<SerializableEvent>());
+            }
+
+            // Fetch events using batched point reads with concurrency control
+            var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+            var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+            return await FetchSerializableEventsByIdsAsync(
+                eventsContainer,
+                eventsSettings,
+                serviceId,
+                eventIds,
+                options.MaxConcurrentDeserializations).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Fetches events by IDs and returns them as SerializableEvent (no deserialization).
+    /// </summary>
+    private static async Task<ResultBox<IEnumerable<SerializableEvent>>> FetchSerializableEventsByIdsAsync(
+        Container eventsContainer,
+        CosmosContainerSettings eventsSettings,
+        string serviceId,
+        IReadOnlyList<string> eventIds,
+        int maxConcurrency)
+    {
+        using var semaphore = new SemaphoreSlim(maxConcurrency);
+
+        var tasks = eventIds.Select(async eventId =>
+        {
+            await semaphore.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var eventPk = GetEventPartitionKey(eventId, eventsSettings, serviceId);
+                var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
+                    eventId,
+                    new PartitionKey(eventPk)).ConfigureAwait(false);
+
+                var cosmosEvent = response.Resource;
+                if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId, allowEmpty: eventsSettings.IsLegacy))
+                {
+                    return (Event: (SerializableEvent?)null, Error: new UnauthorizedAccessException(
+                        $"Event {eventId} does not belong to service {serviceId}"), SortKey: string.Empty);
+                }
+
+                var se = new SerializableEvent(
+                    Encoding.UTF8.GetBytes(cosmosEvent.Payload),
+                    cosmosEvent.SortableUniqueId,
+                    Guid.Parse(cosmosEvent.Id),
+                    new EventMetadata(
+                        cosmosEvent.CausationId ?? "",
+                        cosmosEvent.CorrelationId ?? "",
+                        cosmosEvent.ExecutedUser ?? ""),
+                    cosmosEvent.Tags?.ToList() ?? new List<string>(),
+                    cosmosEvent.EventType);
+                return (Event: se, Error: (Exception?)null, SortKey: se.SortableUniqueIdValue);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Event might have been deleted, skip it
+                return (Event: (SerializableEvent?)null, Error: (Exception?)null, SortKey: string.Empty);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        var firstError = results.FirstOrDefault(r => r.Error != null);
+        if (firstError.Error != null)
+        {
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(firstError.Error);
+        }
+
+        var events = results
+            .Where(r => r.Event != null)
+            .OrderBy(r => r.SortKey)
+            .Select(r => r.Event!)
+            .ToList();
+
+        return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+    }
+
+    /// <summary>
+    ///     Writes pre-serialized events and associated tags.
+    ///     Events are written in parallel (distributed partition keys).
+    ///     Tags are written using TransactionalBatch (same partition key per tag).
+    /// </summary>
+    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+    {
+        var options = _context.Options;
+        var serviceId = CurrentServiceId;
+
+        try
+        {
+            var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+            var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+            var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+            var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+
+            var eventsList = events.ToList();
+            if (eventsList.Count == 0)
+            {
+                return ResultBox.FromValue(
+                    (Events: (IReadOnlyList<SerializableEvent>)Array.Empty<SerializableEvent>(),
+                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
+            }
+
+            // Step 1: Write events in parallel with concurrency control
+            using var semaphore = new SemaphoreSlim(options.MaxConcurrentEventWrites);
+            var itemRequestOptions = new ItemRequestOptions
+            {
+                EnableContentResponseOnWrite = options.EnableContentResponseOnWrite
+            };
+
+            var eventTasks = eventsList.Select(async se =>
+            {
+                await semaphore.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    var serializedPayload = Encoding.UTF8.GetString(se.Payload);
+                    var id = se.Id.ToString();
+                    var cosmosEvent = new CosmosEvent
+                    {
+                        Pk = $"{serviceId}|{id}",
+                        ServiceId = serviceId,
+                        Id = id,
+                        SortableUniqueId = se.SortableUniqueIdValue,
+                        EventType = se.EventPayloadName,
+                        Payload = serializedPayload,
+                        Tags = se.Tags,
+                        Timestamp = DateTime.UtcNow,
+                        CausationId = se.EventMetadata.CausationId,
+                        CorrelationId = se.EventMetadata.CorrelationId,
+                        ExecutedUser = se.EventMetadata.ExecutedUser
+                    };
+                    var eventPk = GetEventPartitionKey(cosmosEvent.Id, eventsSettings, serviceId);
+
+                    await eventsContainer.CreateItemAsync(
+                        cosmosEvent,
+                        new PartitionKey(eventPk),
+                        itemRequestOptions).ConfigureAwait(false);
+
+                    return se;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var results = await Task.WhenAll(eventTasks).ConfigureAwait(false);
+            var writtenEvents = results.ToList();
+
+            // Step 2: Write tags using TransactionalBatch (grouped by tag = same partition key)
+            List<TagWriteResult> tagWriteResults;
+            try
+            {
+                tagWriteResults = await WriteSerializableTagsWithBatchAsync(
+                    writtenEvents,
+                    tagsContainer,
+                    options,
+                    serviceId,
+                    tagsSettings).ConfigureAwait(false);
+            }
+            catch (Exception tagEx)
+            {
+                // Tag write failed - attempt to rollback written events
+                if (options.TryRollbackOnFailure)
+                {
+                    await TryRollbackSerializableEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings).ConfigureAwait(false);
+                }
+
+                throw new InvalidOperationException(
+                    $"Tag write failed after {writtenEvents.Count} events were written. " +
+                    $"Rollback attempted: {options.TryRollbackOnFailure}",
+                    tagEx);
+            }
+
+            return ResultBox.FromValue(
+                (Events: (IReadOnlyList<SerializableEvent>)writtenEvents,
+                    TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
+        }
+        catch (CosmosException ex)
+        {
+            if (_logger != null)
+                LogWriteEventsCosmosError(_logger, ex, ex.Message);
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (_logger != null)
+                LogWriteEventsFailed(_logger, ex, ex.Message);
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            if (_logger != null)
+                LogWriteEventsFailed(_logger, ex, ex.Message);
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Writes tags for serializable events using TransactionalBatch.
+    /// </summary>
+    private static async Task<List<TagWriteResult>> WriteSerializableTagsWithBatchAsync(
+        List<SerializableEvent> writtenEvents,
+        Container tagsContainer,
+        CosmosDbEventStoreOptions options,
+        string serviceId,
+        CosmosContainerSettings settings)
+    {
+        var tagWriteResults = new List<TagWriteResult>();
+
+        // Group all tag entries by tag string (partition key)
+        var tagEntries = writtenEvents
+            .SelectMany(se => se.Tags.Select(tagString => (TagString: tagString, Event: se)))
+            .GroupBy(x => settings.IsLegacy ? x.TagString : $"{serviceId}|{x.TagString}");
+
+        foreach (var group in tagEntries)
+        {
+            var tagPk = group.Key;
+            var tagString = settings.IsLegacy ? group.Key : group.First().TagString;
+            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
+                ? tagString.Split(':')[0]
+                : tagString;
+            var items = group.ToList();
+
+            if (options.UseTransactionalBatchForTags && items.Count <= options.MaxBatchOperations)
+            {
+                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
+
+                foreach (var item in items)
+                {
+                    var cosmosTag = CosmosTag.FromEventTag(
+                        tagString,
+                        tagGroup,
+                        item.Event.SortableUniqueIdValue,
+                        item.Event.Id,
+                        item.Event.EventPayloadName,
+                        serviceId);
+
+                    batch.CreateItem(cosmosTag);
+                }
+
+                var response = await batch.ExecuteAsync().ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new CosmosException(
+                        $"TransactionalBatch failed for tag '{tagString}' with status {response.StatusCode}",
+                        response.StatusCode,
+                        (int)response.StatusCode,
+                        response.ActivityId,
+                        response.RequestCharge);
+                }
+
+                foreach (var item in items)
+                {
+                    tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                }
+            }
+            else
+            {
+                for (var i = 0; i < items.Count; i += options.MaxBatchOperations)
+                {
+                    var batchItems = items.Skip(i).Take(options.MaxBatchOperations).ToList();
+                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
+
+                    foreach (var item in batchItems)
+                    {
+                        var cosmosTag = CosmosTag.FromEventTag(
+                            tagString,
+                            tagGroup,
+                            item.Event.SortableUniqueIdValue,
+                            item.Event.Id,
+                            item.Event.EventPayloadName,
+                            serviceId);
+
+                        batch.CreateItem(cosmosTag);
+                    }
+
+                    var response = await batch.ExecuteAsync().ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new CosmosException(
+                            $"TransactionalBatch failed for tag '{tagString}' (batch {i / options.MaxBatchOperations + 1}) with status {response.StatusCode}",
+                            response.StatusCode,
+                            (int)response.StatusCode,
+                            response.ActivityId,
+                            response.RequestCharge);
+                    }
+
+                    foreach (var item in batchItems)
+                    {
+                        tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                    }
+                }
+            }
+        }
+
+        return tagWriteResults;
+    }
+
+    /// <summary>
+    ///     Attempts to rollback (delete) written serializable events after a failure.
+    /// </summary>
+    private async Task TryRollbackSerializableEventsAsync(
+        List<SerializableEvent> writtenEvents,
+        Container eventsContainer,
+        string serviceId,
+        CosmosContainerSettings settings)
+    {
+        var deleteTasks = writtenEvents.Select(async se =>
+        {
+            try
+            {
+                var eventId = se.Id.ToString();
+                var eventPk = GetEventPartitionKey(eventId, settings, serviceId);
+                await eventsContainer.DeleteItemAsync<CosmosEvent>(
+                    eventId,
+                    new PartitionKey(eventPk)).ConfigureAwait(false);
+                return (se.Id, Success: true, Error: (Exception?)null);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return (se.Id, Success: true, Error: (Exception?)null);
+            }
+            catch (CosmosException ex)
+            {
+                return (se.Id, Success: false, Error: (Exception)ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return (se.Id, Success: false, Error: (Exception)ex);
+            }
+        });
+
+        var results = await Task.WhenAll(deleteTasks).ConfigureAwait(false);
+        var failedDeletes = results.Where(r => !r.Success).ToList();
+
+        if (failedDeletes.Count > 0)
+        {
+            var orphanedIds = string.Join(", ", failedDeletes.Select(f => f.Id));
+            if (_logger != null)
+                LogRollbackFailed(_logger, failedDeletes.Count, orphanedIds);
+        }
+        else
+        {
+            if (_logger != null)
+                LogRollbackSucceeded(_logger, writtenEvents.Count);
+        }
+    }
+
     private string SerializeEventPayload(IEventPayload payload) =>
-        _domainTypes.EventTypes.SerializeEventPayload(payload);
+        _eventTypes.SerializeEventPayload(payload);
 
     private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
     {
         try
         {
-            var payload = _domainTypes.EventTypes.DeserializeEventPayload(eventType, json);
+            var payload = _eventTypes.DeserializeEventPayload(eventType, json);
             if (payload == null)
             {
                 return ResultBox.Error<IEventPayload>(

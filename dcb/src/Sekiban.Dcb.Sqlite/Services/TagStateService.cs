@@ -1,7 +1,9 @@
 using ResultBoxes;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using System.Text.Json;
 
 namespace Sekiban.Dcb.Sqlite.Services;
 
@@ -22,18 +24,26 @@ public record TagStateProjectionResult(
 public class TagStateService
 {
     private readonly IEventStore _eventStore;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagTypes _tagTypes;
+    private readonly ITagProjectorTypes _tagProjectorTypes;
+    private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-    public TagStateService(IEventStore eventStore, DcbDomainTypes domainTypes)
+    public TagStateService(
+        IEventStore eventStore,
+        ITagTypes tagTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        JsonSerializerOptions jsonSerializerOptions)
     {
         _eventStore = eventStore;
-        _domainTypes = domainTypes;
+        _tagTypes = tagTypes;
+        _tagProjectorTypes = tagProjectorTypes;
+        _jsonSerializerOptions = jsonSerializerOptions;
     }
 
     /// <summary>
     ///     Parse a tag string into an ITag instance
     /// </summary>
-    public ITag ParseTag(string tagString) => _domainTypes.TagTypes.GetTag(tagString);
+    public ITag ParseTag(string tagString) => _tagTypes.GetTag(tagString);
 
     /// <summary>
     ///     Get the latest stored tag state from the event store
@@ -83,7 +93,7 @@ public class TagStateService
     public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag)
     {
         var tagGroup = tag.GetTagGroup();
-        var projectorName = _domainTypes.TagProjectorTypes.TryGetProjectorForTagGroup(tagGroup);
+        var projectorName = _tagProjectorTypes.TryGetProjectorForTagGroup(tagGroup);
 
         if (projectorName == null)
         {
@@ -106,14 +116,14 @@ public class TagStateService
     public async Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, string projectorName)
     {
         // Get the projector function
-        var projectorFuncResult = _domainTypes.TagProjectorTypes.GetProjectorFunction(projectorName);
+        var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(projectorName);
         if (!projectorFuncResult.IsSuccess)
         {
             return ResultBox.Error<TagStateProjectionResult>(projectorFuncResult.GetException());
         }
 
         // Get the projector version
-        var projectorVersionResult = _domainTypes.TagProjectorTypes.GetProjectorVersion(projectorName);
+        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(projectorName);
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
 
         // Fetch events for the tag
@@ -151,16 +161,16 @@ public class TagStateService
     ///     Get all registered tag projector names
     /// </summary>
     public IReadOnlyList<string> GetAllTagProjectorNames()
-        => _domainTypes.TagProjectorTypes.GetAllProjectorNames();
+        => _tagProjectorTypes.GetAllProjectorNames();
 
     /// <summary>
     ///     Get all registered tag group names
     /// </summary>
     public IReadOnlyList<string> GetAllTagGroupNames()
-        => _domainTypes.TagTypes.GetAllTagGroupNames();
+        => _tagTypes.GetAllTagGroupNames();
 
     /// <summary>
     ///     Get the JSON serializer options from domain types
     /// </summary>
-    public System.Text.Json.JsonSerializerOptions JsonSerializerOptions => _domainTypes.JsonSerializerOptions;
+    public System.Text.Json.JsonSerializerOptions JsonSerializerOptions => _jsonSerializerOptions;
 }

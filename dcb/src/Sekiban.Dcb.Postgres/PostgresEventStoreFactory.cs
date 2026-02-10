@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
@@ -11,16 +12,16 @@ namespace Sekiban.Dcb.Postgres;
 public sealed class PostgresEventStoreFactory : IEventStoreFactory
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly ILoggerFactory? _loggerFactory;
 
     public PostgresEventStoreFactory(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         ILoggerFactory? loggerFactory = null)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _loggerFactory = loggerFactory;
     }
 
@@ -28,6 +29,6 @@ public sealed class PostgresEventStoreFactory : IEventStoreFactory
     {
         var provider = new FixedServiceIdProvider(serviceId);
         var logger = _loggerFactory?.CreateLogger<PostgresEventStore>();
-        return new PostgresEventStore(_contextFactory, _domainTypes, provider, logger);
+        return new PostgresEventStore(_contextFactory, _eventTypes, provider, logger);
     }
 }

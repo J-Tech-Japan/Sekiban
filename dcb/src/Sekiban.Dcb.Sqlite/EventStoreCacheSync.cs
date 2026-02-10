@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.Sqlite;
@@ -8,6 +9,7 @@ namespace Sekiban.Dcb.Sqlite;
 /// <summary>
 ///     Synchronizes events from any IEventStore to a local SqliteEventStore.
 ///     Works with Cosmos DB, PostgreSQL, or any other IEventStore implementation.
+///     Uses SerializableEvent path (no payload deserialization needed).
 /// </summary>
 public class EventStoreCacheSync
 {
@@ -90,7 +92,7 @@ public class EventStoreCacheSync
             _logger?.LogInformation("Fetching events since {Since} until {Until}",
                 since?.Value ?? "(beginning)", until?.Value ?? "(now)");
 
-            var remoteEventsResult = await _remoteStore.ReadAllEventsAsync(since);
+            var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(since);
             if (!remoteEventsResult.IsSuccess)
             {
                 return CacheSyncResult.Failed(
@@ -114,7 +116,7 @@ public class EventStoreCacheSync
             // 6. Write to local cache
             _logger?.LogInformation("Caching {Count} events...", eventsToCache.Count);
 
-            var writeResult = await _localStore.WriteEventsAsync(eventsToCache);
+            var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
             if (!writeResult.IsSuccess)
             {
                 return CacheSyncResult.Failed(
@@ -194,7 +196,7 @@ public class EventStoreCacheSync
 
         _logger?.LogInformation("Rebuilding cache from scratch...");
 
-        var remoteEventsResult = await _remoteStore.ReadAllEventsAsync();
+        var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync();
         if (!remoteEventsResult.IsSuccess)
         {
             return CacheSyncResult.Failed(
@@ -217,7 +219,7 @@ public class EventStoreCacheSync
 
         _logger?.LogInformation("Caching {Count} events...", eventsToCache.Count);
 
-        var writeResult = await _localStore.WriteEventsAsync(eventsToCache);
+        var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
         if (!writeResult.IsSuccess)
         {
             return CacheSyncResult.Failed(

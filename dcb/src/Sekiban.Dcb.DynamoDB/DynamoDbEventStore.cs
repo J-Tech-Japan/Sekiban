@@ -2,8 +2,8 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
-using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.DynamoDB.Models;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
@@ -30,7 +30,7 @@ public class DynamoDbEventStore : IEventStore
             "DynamoDB read failed: {Message}");
 
     private readonly DynamoDbContext _context;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly ILogger<DynamoDbEventStore>? _logger;
     private readonly DynamoDbEventStoreOptions _options;
     private readonly IAmazonDynamoDB _client;
@@ -41,12 +41,12 @@ public class DynamoDbEventStore : IEventStore
     /// </summary>
     public DynamoDbEventStore(
         DynamoDbContext context,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         IServiceIdProvider serviceIdProvider,
         ILogger<DynamoDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger;
         _options = context.Options;
@@ -878,13 +878,13 @@ public class DynamoDbEventStore : IEventStore
     }
 
     private string SerializeEventPayload(IEventPayload payload) =>
-        _domainTypes.EventTypes.SerializeEventPayload(payload);
+        _eventTypes.SerializeEventPayload(payload);
 
     private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
     {
         try
         {
-            var payload = _domainTypes.EventTypes.DeserializeEventPayload(eventType, json);
+            var payload = _eventTypes.DeserializeEventPayload(eventType, json);
             if (payload == null)
             {
                 return ResultBox.Error<IEventPayload>(
@@ -951,5 +951,246 @@ public class DynamoDbEventStore : IEventStore
         return delay;
     }
 
+    /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization).
+    /// </summary>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            await _context.EnsureTablesAsync().ConfigureAwait(false);
+
+            var serviceId = CurrentServiceId;
+            var shardCount = Math.Max(1, _options.WriteShardCount);
+            var shardKeys = shardCount == 1
+                ? new[] { BuildEventsGsiPartitionKey(serviceId) }
+                : Enumerable.Range(0, shardCount)
+                    .Select(i => BuildEventsGsiPartitionKey(serviceId, i))
+                    .ToArray();
+
+            var allEvents = new List<SerializableEvent>();
+            foreach (var shardKey in shardKeys)
+            {
+                var events = await QuerySerializableEventsByShardAsync(shardKey, since).ConfigureAwait(false);
+                allEvents.AddRange(events);
+            }
+
+            var ordered = allEvents
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .ToList();
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(ordered);
+        }
+        catch (Exception ex)
+        {
+            if (_logger != null)
+                LogReadFailed(_logger, ex.Message, ex);
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Reads events for a given tag as SerializableEvent (no payload deserialization).
+    /// </summary>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+        try
+        {
+            await _context.EnsureTablesAsync().ConfigureAwait(false);
+
+            var serviceId = CurrentServiceId;
+            var tagString = tag.GetTag();
+            var tagPk = BuildTagPk(serviceId, tagString);
+            var tagItems = await QueryTagsAsync(tagPk, since).ConfigureAwait(false);
+
+            if (tagItems.Count == 0)
+                return ResultBox.FromValue<IEnumerable<SerializableEvent>>(Array.Empty<SerializableEvent>());
+
+            var eventIds = tagItems.Select(t => t.EventId).Distinct().ToList();
+            var eventsById = await BatchGetEventsAsync(serviceId, eventIds).ConfigureAwait(false);
+
+            var result = new List<SerializableEvent>(tagItems.Count);
+            foreach (var tagItem in tagItems)
+            {
+                if (!eventsById.TryGetValue(tagItem.EventId, out var dynEvent))
+                {
+                    return ResultBox.Error<IEnumerable<SerializableEvent>>(
+                        new InvalidOperationException($"Event not found for tag entry: {tagItem.EventId}"));
+                }
+
+                result.Add(new SerializableEvent(
+                    Encoding.UTF8.GetBytes(dynEvent.Payload),
+                    dynEvent.SortableUniqueId,
+                    Guid.Parse(dynEvent.EventId),
+                    new EventMetadata(
+                        dynEvent.CausationId ?? string.Empty,
+                        dynEvent.CorrelationId ?? string.Empty,
+                        dynEvent.ExecutedUser ?? string.Empty),
+                    dynEvent.Tags.ToList(),
+                    dynEvent.EventType));
+            }
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(result);
+        }
+        catch (Exception ex)
+        {
+            if (_logger != null)
+                LogReadFailed(_logger, ex.Message, ex);
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Writes pre-serialized events and associated tag records.
+    /// </summary>
+    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        IEnumerable<SerializableEvent> events)
+    {
+        try
+        {
+            await _context.EnsureTablesAsync().ConfigureAwait(false);
+
+            var serviceId = CurrentServiceId;
+            var eventsList = events.ToList();
+            if (eventsList.Count == 0)
+            {
+                return ResultBox.FromValue(
+                    (Events: (IReadOnlyList<SerializableEvent>)Array.Empty<SerializableEvent>(),
+                        TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
+            }
+
+            var eventItems = eventsList.Select(se =>
+            {
+                var serializedPayload = Encoding.UTF8.GetString(se.Payload);
+                var helperEvent = new Event(
+                    SerializableEventPlaceholder.Instance,
+                    se.SortableUniqueIdValue,
+                    se.EventPayloadName,
+                    se.Id,
+                    se.EventMetadata,
+                    se.Tags);
+
+                var dynEvent = DynamoEvent.FromEvent(
+                    helperEvent,
+                    serializedPayload,
+                    GetGsiPartitionKey(se.SortableUniqueIdValue, serviceId),
+                    serviceId);
+
+                var dynamoTags = se.Tags.Select(tagString =>
+                {
+                    var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
+                        ? tagString.Split(':')[0]
+                        : tagString;
+                    var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
+                    return DynamoTag.FromEventTag(
+                        serviceId,
+                        tagString,
+                        storedTagGroup,
+                        se.SortableUniqueIdValue,
+                        se.Id,
+                        se.EventPayloadName);
+                }).ToList();
+
+                return new EventWriteItem(helperEvent, dynEvent, dynamoTags);
+            }).ToList();
+
+            var batches = BuildTransactionBatches(eventItems);
+            if (batches == null)
+            {
+                await WriteEventsWithBatchAsync(eventItems).ConfigureAwait(false);
+            }
+            else
+            {
+                await WriteEventsWithTransactionsAsync(batches).ConfigureAwait(false);
+            }
+
+            var tagWrites = eventsList
+                .SelectMany(e => e.Tags)
+                .Distinct(StringComparer.Ordinal)
+                .Select(tag => new TagWriteResult(tag, 1, DateTimeOffset.UtcNow))
+                .ToList();
+
+            return ResultBox.FromValue((
+                Events: (IReadOnlyList<SerializableEvent>)eventsList,
+                TagWrites: (IReadOnlyList<TagWriteResult>)tagWrites));
+        }
+        catch (Exception ex)
+        {
+            if (_logger != null)
+                LogWriteFailed(_logger, ex.Message, ex);
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
+        }
+    }
+
+    private async Task<List<SerializableEvent>> QuerySerializableEventsByShardAsync(string shardKey, SortableUniqueId? since)
+    {
+        var events = new List<SerializableEvent>();
+        Dictionary<string, AttributeValue>? lastKey = null;
+        var totalRead = 0L;
+        var totalConsumed = 0d;
+
+        do
+        {
+            var request = new QueryRequest
+            {
+                TableName = _context.EventsTableName,
+                IndexName = DynamoDbContext.EventsGsiName,
+                KeyConditionExpression = since == null
+                    ? "gsi1pk = :pk"
+                    : "gsi1pk = :pk AND sortableUniqueId > :since",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":pk"] = new AttributeValue { S = shardKey }
+                },
+                ScanIndexForward = true,
+                Limit = _options.QueryPageSize,
+                ExclusiveStartKey = lastKey,
+                ReturnConsumedCapacity = _options.ReadProgressCallback != null
+                    ? ReturnConsumedCapacity.TOTAL
+                    : ReturnConsumedCapacity.NONE
+            };
+
+            if (since != null)
+            {
+                request.ExpressionAttributeValues[":since"] = new AttributeValue { S = since.Value };
+            }
+
+            var response = await _client.QueryAsync(request).ConfigureAwait(false);
+            foreach (var item in response.Items)
+            {
+                var dynEvent = DynamoEvent.FromAttributeValues(item);
+                events.Add(new SerializableEvent(
+                    Encoding.UTF8.GetBytes(dynEvent.Payload),
+                    dynEvent.SortableUniqueId,
+                    Guid.Parse(dynEvent.EventId),
+                    new EventMetadata(
+                        dynEvent.CausationId ?? string.Empty,
+                        dynEvent.CorrelationId ?? string.Empty,
+                        dynEvent.ExecutedUser ?? string.Empty),
+                    dynEvent.Tags.ToList(),
+                    dynEvent.EventType));
+            }
+
+            totalRead += response.Count ?? 0;
+            if (response.ConsumedCapacity != null)
+                totalConsumed += response.ConsumedCapacity.CapacityUnits ?? 0d;
+
+            _options.ReadProgressCallback?.Invoke(totalRead, totalConsumed);
+            lastKey = response.LastEvaluatedKey;
+        } while (lastKey != null && lastKey.Count > 0);
+
+        return events;
+    }
+
     private sealed record EventWriteItem(Event Event, DynamoEvent DynamoEvent, List<DynamoTag> DynamoTags);
+
+    /// <summary>
+    ///     Placeholder payload used when constructing Event objects for serializable event writes.
+    ///     The actual payload is already serialized in the SerializableEvent.
+    /// </summary>
+    private sealed class SerializableEventPlaceholder : IEventPayload
+    {
+        public static readonly SerializableEventPlaceholder Instance = new();
+    }
 }

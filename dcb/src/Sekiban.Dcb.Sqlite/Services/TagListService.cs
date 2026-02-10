@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ResultBoxes;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.Sqlite.Services;
@@ -29,12 +30,14 @@ public record TagGroupSummary(
 public class TagListService
 {
     private readonly IEventStore _eventStore;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagTypes _tagTypes;
+    private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-    public TagListService(IEventStore eventStore, DcbDomainTypes domainTypes)
+    public TagListService(IEventStore eventStore, ITagTypes tagTypes, JsonSerializerOptions jsonSerializerOptions)
     {
         _eventStore = eventStore;
-        _domainTypes = domainTypes;
+        _tagTypes = tagTypes;
+        _jsonSerializerOptions = jsonSerializerOptions;
     }
 
     /// <summary>
@@ -140,10 +143,10 @@ public class TagListService
     ///     Get all registered tag group names from domain types
     /// </summary>
     public IReadOnlyList<string> GetRegisteredTagGroupNames()
-        => _domainTypes.TagTypes.GetAllTagGroupNames();
+        => _tagTypes.GetAllTagGroupNames();
 
     /// <summary>
     ///     Get the JSON serializer options from domain types
     /// </summary>
-    public JsonSerializerOptions JsonSerializerOptions => _domainTypes.JsonSerializerOptions;
+    public JsonSerializerOptions JsonSerializerOptions => _jsonSerializerOptions;
 }

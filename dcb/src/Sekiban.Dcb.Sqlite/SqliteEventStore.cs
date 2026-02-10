@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -31,7 +33,7 @@ public class SqliteEventStore : IEventStore
     };
     private readonly string _connectionString;
     private readonly string _databasePath;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly SqliteEventStoreOptions _options;
     private readonly ILogger<SqliteEventStore>? _logger;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -39,14 +41,14 @@ public class SqliteEventStore : IEventStore
 
     public SqliteEventStore(
         string databasePath,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         SqliteEventStoreOptions? options = null,
         ILogger<SqliteEventStore>? logger = null,
         IServiceIdProvider? serviceIdProvider = null)
     {
         _databasePath = databasePath;
         _connectionString = $"Data Source={databasePath}";
-        _domainTypes = domainTypes;
+        _eventTypes = eventTypes;
         _options = options ?? new SqliteEventStoreOptions();
         _logger = logger;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
@@ -488,7 +490,7 @@ public class SqliteEventStore : IEventStore
                         VALUES ({ParamServiceId}, @id, @sortableUniqueId, @eventType, @payloadJson, @tagsJson, @timestamp, @causationId, @correlationId, @executedUser)
                         """;
 
-                    var payloadJson = JsonSerializer.Serialize(evt.Payload, evt.Payload.GetType(), _domainTypes.JsonSerializerOptions);
+                    var payloadJson = _eventTypes.SerializeEventPayload(evt.Payload);
                     var tagsJson = JsonSerializer.Serialize(evt.Tags);
 
                     eventCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
@@ -894,7 +896,7 @@ public class SqliteEventStore : IEventStore
             var correlationId = reader.IsDBNull(7) ? null : reader.GetString(7);
             var executedUser = reader.IsDBNull(8) ? null : reader.GetString(8);
 
-            var payload = _domainTypes.EventTypes.DeserializeEventPayload(eventType, payloadJson);
+            var payload = _eventTypes.DeserializeEventPayload(eventType, payloadJson);
             if (payload == null)
             {
                 _logger?.LogWarning("Failed to deserialize event payload: {EventType}", eventType);
@@ -909,6 +911,241 @@ public class SqliteEventStore : IEventStore
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading event from SQLite reader");
+            return null;
+        }
+    }
+
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    {
+        try
+        {
+            var events = new List<SerializableEvent>();
+            var serviceId = CurrentServiceId;
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var cmd = connection.CreateCommand();
+            if (since != null)
+            {
+                cmd.CommandText = $"""
+                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                    FROM dcb_events
+                    WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
+                    ORDER BY SortableUniqueId
+                    """;
+                cmd.Parameters.AddWithValue("@since", since.Value);
+            }
+            else
+            {
+                cmd.CommandText = $"""
+                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                    FROM dcb_events
+                    WHERE ServiceId = {ParamServiceId}
+                    ORDER BY SortableUniqueId
+                    """;
+            }
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var se = ReadSerializableEvent(reader);
+                if (se != null)
+                {
+                    events.Add(se);
+                }
+            }
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error reading all serializable events from SQLite");
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+    {
+        try
+        {
+            var events = new List<SerializableEvent>();
+            var tagString = tag.GetTag();
+            var serviceId = CurrentServiceId;
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var cmd = connection.CreateCommand();
+            if (since != null)
+            {
+                cmd.CommandText = $"""
+                    SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
+                    FROM dcb_events e
+                    INNER JOIN dcb_tags t ON e.Id = t.EventId
+                    WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag AND e.SortableUniqueId > @since
+                    ORDER BY e.SortableUniqueId
+                    """;
+                cmd.Parameters.AddWithValue("@tag", tagString);
+                cmd.Parameters.AddWithValue("@since", since.Value);
+            }
+            else
+            {
+                cmd.CommandText = $"""
+                    SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
+                    FROM dcb_events e
+                    INNER JOIN dcb_tags t ON e.Id = t.EventId
+                    WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag
+                    ORDER BY e.SortableUniqueId
+                    """;
+                cmd.Parameters.AddWithValue("@tag", tagString);
+            }
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var se = ReadSerializableEvent(reader);
+                if (se != null)
+                {
+                    events.Add(se);
+                }
+            }
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error reading serializable events by tag from SQLite: {Tag}", tag.GetTag());
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        IEnumerable<SerializableEvent> events)
+    {
+        var eventList = events.ToList();
+        if (eventList.Count == 0)
+        {
+            return ResultBox.FromValue<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(
+                (Array.Empty<SerializableEvent>(), Array.Empty<TagWriteResult>()));
+        }
+
+        var serviceId = CurrentServiceId;
+
+        await _writeLock.WaitAsync();
+        try
+        {
+            var tagWrites = new List<TagWriteResult>();
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var transaction = await connection.BeginTransactionAsync();
+
+            try
+            {
+                foreach (var se in eventList)
+                {
+                    await using var eventCmd = connection.CreateCommand();
+                    eventCmd.Transaction = (SqliteTransaction)transaction;
+                    eventCmd.CommandText = $"""
+                        INSERT OR REPLACE INTO dcb_events (ServiceId, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser)
+                        VALUES ({ParamServiceId}, @id, @sortableUniqueId, @eventType, @payloadJson, @tagsJson, @timestamp, @causationId, @correlationId, @executedUser)
+                        """;
+
+                    var payloadJson = Encoding.UTF8.GetString(se.Payload);
+                    var tagsJson = JsonSerializer.Serialize(se.Tags);
+
+                    eventCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+                    eventCmd.Parameters.AddWithValue("@id", se.Id.ToString());
+                    eventCmd.Parameters.AddWithValue("@sortableUniqueId", se.SortableUniqueIdValue);
+                    eventCmd.Parameters.AddWithValue("@eventType", se.EventPayloadName);
+                    eventCmd.Parameters.AddWithValue("@payloadJson", payloadJson);
+                    eventCmd.Parameters.AddWithValue("@tagsJson", tagsJson);
+                    eventCmd.Parameters.AddWithValue("@timestamp", new SortableUniqueId(se.SortableUniqueIdValue).GetDateTime().ToString("O"));
+                    eventCmd.Parameters.AddWithValue("@causationId", (object?)se.EventMetadata.CausationId ?? DBNull.Value);
+                    eventCmd.Parameters.AddWithValue("@correlationId", (object?)se.EventMetadata.CorrelationId ?? DBNull.Value);
+                    eventCmd.Parameters.AddWithValue("@executedUser", (object?)se.EventMetadata.ExecutedUser ?? DBNull.Value);
+
+                    await eventCmd.ExecuteNonQueryAsync();
+
+                    foreach (var tagString in se.Tags)
+                    {
+                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+
+                        await using var tagCmd = connection.CreateCommand();
+                        tagCmd.Transaction = (SqliteTransaction)transaction;
+                        tagCmd.CommandText = $"""
+                            INSERT INTO dcb_tags (ServiceId, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt)
+                            VALUES ({ParamServiceId}, @tag, @tagGroup, @sortableUniqueId, @eventId, @eventType, @createdAt)
+                            """;
+                        tagCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+                        tagCmd.Parameters.AddWithValue("@tag", tagString);
+                        tagCmd.Parameters.AddWithValue("@tagGroup", tagGroup);
+                        tagCmd.Parameters.AddWithValue("@sortableUniqueId", se.SortableUniqueIdValue);
+                        tagCmd.Parameters.AddWithValue("@eventId", se.Id.ToString());
+                        tagCmd.Parameters.AddWithValue("@eventType", se.EventPayloadName);
+                        tagCmd.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("O"));
+
+                        await tagCmd.ExecuteNonQueryAsync();
+
+                        tagWrites.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                    }
+                }
+
+                await transaction.CommitAsync();
+
+                return ResultBox.FromValue<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(
+                    (eventList, tagWrites));
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error writing serializable events to SQLite");
+            return ResultBox.Error<(IReadOnlyList<SerializableEvent>, IReadOnlyList<TagWriteResult>)>(ex);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private SerializableEvent? ReadSerializableEvent(SqliteDataReader reader)
+    {
+        try
+        {
+            var id = Guid.Parse(reader.GetString(0));
+            var sortableUniqueId = reader.GetString(1);
+            var eventType = reader.GetString(2);
+            var payloadJson = reader.GetString(3);
+            var tagsJson = reader.IsDBNull(4) ? "[]" : reader.GetString(4);
+            var causationId = reader.IsDBNull(6) ? null : reader.GetString(6);
+            var correlationId = reader.IsDBNull(7) ? null : reader.GetString(7);
+            var executedUser = reader.IsDBNull(8) ? null : reader.GetString(8);
+
+            var tags = JsonSerializer.Deserialize<List<string>>(tagsJson) ?? [];
+            var metadata = new EventMetadata(causationId ?? "", correlationId ?? "", executedUser ?? "");
+
+            return new SerializableEvent(
+                Encoding.UTF8.GetBytes(payloadJson),
+                sortableUniqueId,
+                id,
+                metadata,
+                tags,
+                eventType);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error reading serializable event from SQLite reader");
             return null;
         }
     }

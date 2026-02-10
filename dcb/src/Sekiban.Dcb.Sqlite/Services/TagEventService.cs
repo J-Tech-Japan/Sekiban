@@ -1,8 +1,10 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using System.Text.Json;
 
 namespace Sekiban.Dcb.Sqlite.Services;
 
@@ -12,12 +14,14 @@ namespace Sekiban.Dcb.Sqlite.Services;
 public class TagEventService
 {
     private readonly IEventStore _eventStore;
-    private readonly DcbDomainTypes _domainTypes;
+    private readonly ITagTypes _tagTypes;
+    private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-    public TagEventService(IEventStore eventStore, DcbDomainTypes domainTypes)
+    public TagEventService(IEventStore eventStore, ITagTypes tagTypes, JsonSerializerOptions jsonSerializerOptions)
     {
         _eventStore = eventStore;
-        _domainTypes = domainTypes;
+        _tagTypes = tagTypes;
+        _jsonSerializerOptions = jsonSerializerOptions;
     }
 
     /// <summary>
@@ -25,7 +29,7 @@ public class TagEventService
     /// </summary>
     /// <param name="tagString">Tag string in format 'group:content'</param>
     /// <returns>Parsed tag</returns>
-    public ITag ParseTag(string tagString) => _domainTypes.TagTypes.GetTag(tagString);
+    public ITag ParseTag(string tagString) => _tagTypes.GetTag(tagString);
 
     /// <summary>
     ///     Fetch all events for a specific tag
@@ -51,5 +55,5 @@ public class TagEventService
     /// <summary>
     ///     Get the JSON serializer options from domain types
     /// </summary>
-    public System.Text.Json.JsonSerializerOptions JsonSerializerOptions => _domainTypes.JsonSerializerOptions;
+    public JsonSerializerOptions JsonSerializerOptions => _jsonSerializerOptions;
 }

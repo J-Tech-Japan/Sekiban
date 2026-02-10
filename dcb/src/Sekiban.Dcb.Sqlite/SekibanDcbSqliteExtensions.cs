@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite.Services;
 using Sekiban.Dcb.Storage;
@@ -28,12 +31,13 @@ public static class SekibanDcbSqliteExtensions
 
         services.AddSingleton(options);
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.AddSingleton<IEventStore>(sp =>
         {
-            var domainTypes = sp.GetRequiredService<DcbDomainTypes>();
+            var eventTypes = sp.GetRequiredService<IEventTypes>();
             var logger = sp.GetService<ILogger<SqliteEventStore>>();
             var serviceIdProvider = sp.GetRequiredService<IServiceIdProvider>();
-            return new SqliteEventStore(databasePath, domainTypes, options, logger, serviceIdProvider);
+            return new SqliteEventStore(databasePath, eventTypes, options, logger, serviceIdProvider);
         });
 
         services.AddSingleton<IMultiProjectionStateStore>(sp =>
@@ -53,6 +57,9 @@ public static class SekibanDcbSqliteExtensions
     /// <returns>Service collection for chaining</returns>
     public static IServiceCollection AddSekibanDcbCliServices(this IServiceCollection services)
     {
+        services.TryAddSingleton<ITagTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
+        services.TryAddSingleton<ITagProjectorTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
+        services.TryAddSingleton(sp => sp.GetRequiredService<DcbDomainTypes>().JsonSerializerOptions);
         services.AddSingleton<TagEventService>();
         services.AddSingleton<TagStateService>();
         services.AddSingleton<TagListService>();
@@ -63,17 +70,17 @@ public static class SekibanDcbSqliteExtensions
     ///     Create a SqliteEventStore instance for use as a local cache
     /// </summary>
     /// <param name="databasePath">Path to the SQLite database file</param>
-    /// <param name="domainTypes">Domain types for serialization</param>
+    /// <param name="eventTypes">Event types for serialization</param>
     /// <param name="options">Optional configuration</param>
     /// <param name="logger">Optional logger</param>
     /// <returns>SqliteEventStore instance</returns>
     public static SqliteEventStore CreateSqliteCache(
         string databasePath,
-        DcbDomainTypes domainTypes,
+        IEventTypes eventTypes,
         SqliteEventStoreOptions? options = null,
         ILogger<SqliteEventStore>? logger = null)
     {
-        return new SqliteEventStore(databasePath, domainTypes, options, logger);
+        return new SqliteEventStore(databasePath, eventTypes, options, logger);
     }
 
     /// <summary>
