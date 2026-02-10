@@ -98,6 +98,7 @@ public class DynamoDbEventStore : IEventStore
     /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             await _context.EnsureTablesAsync().ConfigureAwait(false);

@@ -13,6 +13,7 @@ using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
 using System.Text;
@@ -31,6 +32,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
+    private readonly IEventRuntime _eventRuntime;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private string? _grainKey;
     private string? _projectorName;
@@ -102,6 +104,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         DcbDomainTypes domainTypes,
         IEventStore eventStore,
+        IEventRuntime eventRuntime,
         IEventSubscriptionResolver? subscriptionResolver,
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
@@ -111,6 +114,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _eventRuntime = eventRuntime ?? throw new ArgumentNullException(nameof(eventRuntime));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _multiProjectionStateStore = multiProjectionStateStore;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
@@ -497,8 +501,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Phase1: force promotion of buffered events before snapshot
             try
             {
-                var promote = _projectionActor.GetType().GetMethod("ForcePromoteBufferedEvents", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                promote?.Invoke(_projectionActor, Array.Empty<object>());
+                _projectionActor.ForcePromoteBufferedEvents();
             }
             catch { }
 
@@ -869,8 +872,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             try
             {
-                var m = _projectionActor.GetType().GetMethod("ForcePromoteAllBufferedEvents", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                m?.Invoke(_projectionActor, Array.Empty<object>());
+                _projectionActor.ForcePromoteAllBufferedEvents();
             }
             catch { }
         }
@@ -1042,32 +1044,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             DateTime? safeThresholdTime = null;
             int? unsafeVersion = null;
 
-            try
+            if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
             {
-                if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
-                {
-                    safeVersion = safeStateResultBox.GetValue().Version;
-                }
-                else
-                {
-                    var payloadType = state.Payload.GetType();
-                    var safeVersionProp = payloadType.GetProperty("SafeVersion");
-                    if (safeVersionProp != null)
-                    {
-                        safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
-                    }
-                }
-
-                if (_projectionActor != null)
-                {
-                    var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
-                    safeThreshold = actorSafeThreshold.Value;
-                    try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
-                }
-
-                unsafeVersion = state.Version;
+                safeVersion = safeStateResultBox.GetValue().Version;
             }
-            catch { }
+
+            if (_projectionActor != null)
+            {
+                var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
+                safeThreshold = actorSafeThreshold.Value;
+                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+            }
+
+            unsafeVersion = state.Version;
 
             var result = await _domainTypes.QueryTypes.ExecuteQueryAsync(
                 query,
@@ -1166,30 +1155,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             string? safeThreshold = null;
             DateTime? safeThresholdTime = null;
             int? unsafeVersion = null;
-            try
+            if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
             {
-                if (safeStateResultBox != null && safeStateResultBox.IsSuccess)
-                {
-                    safeVersion = safeStateResultBox.GetValue().Version;
-                }
-                else
-                {
-                    var payloadType = state.Payload.GetType();
-                    var safeVersionProp = payloadType.GetProperty("SafeVersion");
-                    if (safeVersionProp != null)
-                    {
-                        safeVersion = safeVersionProp.GetValue(state.Payload) as int?;
-                    }
-                }
-                if (_projectionActor != null)
-                {
-                    var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
-                    safeThreshold = actorSafeThreshold.Value;
-                    try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
-                }
-                unsafeVersion = state.Version;
+                safeVersion = safeStateResultBox.GetValue().Version;
             }
-            catch { }
+            if (_projectionActor != null)
+            {
+                var actorSafeThreshold = _projectionActor.PeekCurrentSafeWindowThreshold();
+                safeThreshold = actorSafeThreshold.Value;
+                try { safeThresholdTime = actorSafeThreshold.GetDateTime(); } catch { }
+            }
+            unsafeVersion = state.Version;
             var result = await _domainTypes.QueryTypes.ExecuteListQueryAsGeneralAsync(
                 listQuery,
                 projectorProvider,
@@ -2667,16 +2643,37 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         private Event? DeserializeEvent(SerializableEvent serializableEvent)
         {
-            var result = serializableEvent.ToEvent(_grain._domainTypes.EventTypes);
-            if (!result.IsSuccess)
+            try
+            {
+                var payloadJson = Encoding.UTF8.GetString(serializableEvent.Payload);
+                var payload = _grain._eventRuntime.DeserializeEventPayload(
+                    serializableEvent.EventPayloadName, payloadJson);
+
+                if (payload == null)
+                {
+                    _grain._logger.LogWarning(
+                        "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event payload of type {EventType}",
+                        _grain.GetProjectorName(),
+                        serializableEvent.EventPayloadName);
+                    return null;
+                }
+
+                return new Event(
+                    payload,
+                    serializableEvent.SortableUniqueIdValue,
+                    serializableEvent.EventPayloadName,
+                    serializableEvent.Id,
+                    serializableEvent.EventMetadata,
+                    serializableEvent.Tags);
+            }
+            catch (Exception ex)
             {
                 _grain._logger.LogWarning(
-                    result.GetException(),
+                    ex,
                     "[StreamBatchObserver-{ProjectorName}] Failed to deserialize event",
                     _grain.GetProjectorName());
                 return null;
             }
-            return result.GetValue();
         }
 
         public Task OnCompletedAsync()

@@ -22,4 +22,12 @@ public interface IDualStateAccessor
         Event evt,
         SortableUniqueId safeWindowThreshold,
         DcbDomainTypes domainTypes);
+
+    /// <summary>
+    ///     Promotes buffered events that have moved past the safe window threshold.
+    ///     Triggers the internal ProcessBufferedEvents logic without reflection.
+    /// </summary>
+    void PromoteBufferedEvents(
+        SortableUniqueId safeWindowThreshold,
+        DcbDomainTypes domainTypes);
 }

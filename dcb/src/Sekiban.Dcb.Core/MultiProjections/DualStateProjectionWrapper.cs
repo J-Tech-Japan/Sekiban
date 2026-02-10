@@ -166,11 +166,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         return this;
     }
 
-    // Legacy getters no longer required by interface; kept if external callers rely
-    public Guid GetLastEventId() => _unsafeLastEventId;
-    public string GetLastSortableUniqueId() => _unsafeLastSortableUniqueId;
-    public int GetVersion() => _unsafeVersion;
-
     // IDualStateAccessor explicit implementation — non-generic access without reflection
     int IDualStateAccessor.UnsafeVersion => _unsafeVersion;
     Guid IDualStateAccessor.UnsafeLastEventId => _unsafeLastEventId;
@@ -184,6 +179,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     {
         ProcessEvent(evt, safeWindowThreshold, domainTypes);
         return this;
+    }
+
+    void IDualStateAccessor.PromoteBufferedEvents(
+        SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    {
+        ProcessBufferedEvents(safeWindowThreshold, domainTypes);
     }
 
     private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)

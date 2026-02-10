@@ -1,5 +1,6 @@
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans.ServiceId;
+using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -14,16 +15,19 @@ public class TagStateGrain : Grain, ITagStateGrain
     private readonly IPersistentState<TagStateCacheState> _cache;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
+    private readonly ITagProjectionRuntime _tagProjectionRuntime;
     private GeneralTagStateActor? _actor;
 
     public TagStateGrain(
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
+        ITagProjectionRuntime tagProjectionRuntime,
         IActorObjectAccessor actorAccessor,
         [PersistentState("tagStateCache", "OrleansStorage")] IPersistentState<TagStateCacheState> cache)
     {
         _eventStore = eventStore;
         _domainTypes = domainTypes;
+        _tagProjectionRuntime = tagProjectionRuntime;
         _actorAccessor = actorAccessor;
         _cache = cache;
     }
@@ -103,7 +107,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         var tagStateId = ServiceIdGrainKey.Strip(this.GetPrimaryKeyString());
 
         // Create the actor instance with Orleans-specific cache persistence
-        var tagStatePersistent = new OrleansTagStatePersistent(_cache, _domainTypes.TagStatePayloadTypes);
+        var tagStatePersistent = new OrleansTagStatePersistent(_cache, _tagProjectionRuntime);
         _actor = new GeneralTagStateActor(
             tagStateId,
             _eventStore,

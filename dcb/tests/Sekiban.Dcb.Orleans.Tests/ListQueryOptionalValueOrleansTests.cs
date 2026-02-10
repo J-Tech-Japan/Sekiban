@@ -135,6 +135,10 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
                     {
                         SafeWindowMs = 20000
                     });
+                    // Runtime abstraction interfaces (Phase 2)
+                    services.AddSingleton<Sekiban.Dcb.Runtime.IEventRuntime, Sekiban.Dcb.Runtime.Native.NativeEventRuntime>();
+                    services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>();
+                    services.AddSingleton<Sekiban.Dcb.Runtime.ITagProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeTagProjectionRuntime>();
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("OrleansStorage")
