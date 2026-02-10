@@ -1109,6 +1109,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             "No state found in external store: {ProjectorName} v{ProjectorVersion}",
                             projectorName,
                             projectorVersion);
+
+                        // Reset integrity guard fields when external snapshot is missing.
+                        // Without this, LastGoodSafeVersion from a previous successful run
+                        // permanently blocks persist because catch-up starts at safeVersion=0.
+                        if (_state.State != null && _state.State.LastGoodSafeVersion > 0)
+                        {
+                            _logger.LogWarning(
+                                "Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snapshot is missing. "
+                                + "This allows catch-up to rebuild and persist a new snapshot. {ProjectorName}",
+                                _state.State.LastGoodSafeVersion,
+                                projectorName);
+                            _state.State.LastGoodSafeVersion = 0;
+                            _state.State.LastGoodPayloadBytes = 0;
+                            _state.State.LastGoodOriginalSizeBytes = 0;
+                            _state.State.LastGoodEventsProcessed = 0;
+                            await _state.WriteStateAsync();
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -1410,6 +1427,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastError = $"OverwritePersistedStateVersion failed: {ex.Message}";
             return false;
         }
+    }
+
+    public async Task<bool> DeleteExternalStateAsync()
+    {
+        if (_multiProjectionStateStore == null || _host == null) return false;
+        var projectorName = GetProjectorName();
+        var projectorVersion = _host.GetProjectorVersion();
+        var result = await _multiProjectionStateStore.DeleteAsync(projectorName, projectorVersion);
+        return result.IsSuccess && result.GetValue();
     }
 
     public async Task SeedEventsAsync(IReadOnlyList<Event> events)
