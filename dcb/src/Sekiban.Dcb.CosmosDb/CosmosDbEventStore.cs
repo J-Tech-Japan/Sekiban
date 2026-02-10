@@ -203,6 +203,7 @@ public partial class CosmosDbEventStore : IEventStore
     /// </summary>
     public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             var tagString = tag.GetTag();
@@ -716,6 +717,7 @@ public partial class CosmosDbEventStore : IEventStore
     /// </summary>
     public async Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             var tagString = tag.GetTag();
@@ -882,6 +884,7 @@ public partial class CosmosDbEventStore : IEventStore
     /// </summary>
     public async Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
+        ArgumentNullException.ThrowIfNull(tag);
         try
         {
             var tagString = tag.GetTag();
