@@ -69,11 +69,11 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         string? initialLastSortableUniqueId,
         bool isRestoredFromSnapshot)
     {
+        _jsonOptions = jsonOptions;
         _safeProjector = initialProjector;
-        _unsafeProjector = CloneProjector(initialProjector);
+        _unsafeProjector = CloneProjector(initialProjector, jsonOptions);
         _projectorName = projectorName;
         _types = types;
-        _jsonOptions = jsonOptions;
         _isRestoredFromSnapshot = isRestoredFromSnapshot;
 
         // Initialize version tracking
@@ -328,11 +328,10 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
     }
 
-    private T CloneProjector(T source)
+    private static T CloneProjector(T source, JsonSerializerOptions options)
     {
-        // Serialize and deserialize to create a deep clone
-        var json = JsonSerializer.Serialize(source, source.GetType(), _jsonOptions);
-        var cloned = JsonSerializer.Deserialize(json, source.GetType(), _jsonOptions);
+        var json = JsonSerializer.Serialize(source, source.GetType(), options);
+        var cloned = JsonSerializer.Deserialize(json, source.GetType(), options);
         return (T)cloned!;
     }
 }
