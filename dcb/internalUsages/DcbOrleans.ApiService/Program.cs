@@ -385,14 +385,8 @@ builder.UseOrleans(config =>
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
-// Register runtime abstraction interfaces (Phase 2)
-builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IEventRuntime, Sekiban.Dcb.Runtime.Native.NativeEventRuntime>();
-builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>();
-builder.Services.AddSingleton<Sekiban.Dcb.Runtime.ITagProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeTagProjectionRuntime>();
-builder.Services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionActorHostFactory, Sekiban.Dcb.Runtime.Native.NativeProjectionActorHostFactory>();
-builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagProjectorTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
-builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
-builder.Services.AddSingleton<Sekiban.Dcb.Domains.ITagStatePayloadTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagStatePayloadTypes);
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
 
 // Configure database storage based on configuration
 if (databaseType == "cosmos")
