@@ -116,4 +116,9 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// </summary>
     [AlwaysInterleave]
     Task<MultiProjectionHealthStatus> GetHealthStatusAsync();
+
+    /// <summary>
+    ///     Testing aid: delete external state to simulate snapshot loss.
+    /// </summary>
+    Task<bool> DeleteExternalStateAsync();
 }

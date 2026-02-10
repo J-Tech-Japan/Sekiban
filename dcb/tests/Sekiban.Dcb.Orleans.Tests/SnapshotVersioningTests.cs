@@ -6,12 +6,10 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
-using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using Xunit;
 
@@ -212,6 +210,44 @@ public class SnapshotVersioningTests : IAsyncLifetime
     private record TestEvt(string Name) : IEventPayload;
 
     // Projector moved to top-level (Support/CounterProjector.cs)
+
+    [Fact]
+    public async Task PersistShould_Succeed_After_External_Snapshot_Loss()
+    {
+        // Given: grain has processed events and persisted a snapshot (LastGoodSafeVersion > 0)
+        var grainId = CounterProjector.MultiProjectorName;
+        var grain = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        var events = Enumerable.Range(0, 5)
+            .Select(i => CreateEvent(new TestEvt($"loss{i}"), DateTime.UtcNow.AddSeconds(-30 + i)))
+            .ToList();
+        await grain.SeedEventsAsync(events);
+        await grain.RefreshAsync();
+
+        var firstPersist = await grain.PersistStateAsync();
+        Assert.True(firstPersist.IsSuccess);
+        Assert.True(firstPersist.GetValue());
+
+        // When: external snapshot is deleted (simulating snapshot loss)
+        var deleted = await grain.DeleteExternalStateAsync();
+        Assert.True(deleted);
+
+        // Deactivate grain to force re-activation
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+
+        // Re-acquire grain reference (new activation)
+        var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+
+        // Wait for catch-up to complete
+        var version = await WaitForSnapshotVersionAsync(grain2, expectedVersion: 5, maxAttempts: 15, delayMs: 200);
+        Assert.Equal(5, version);
+
+        // Then: persist succeeds (integrity guard does not block)
+        var secondPersist = await grain2.PersistStateAsync();
+        Assert.True(secondPersist.IsSuccess, "PersistStateAsync should succeed after external snapshot loss");
+        Assert.True(secondPersist.GetValue(), "PersistStateAsync should return true after external snapshot loss");
+    }
 
     [Fact]
     public async Task SerializeDeserialize_Should_Be_Used_In_Persist_And_Restore()
