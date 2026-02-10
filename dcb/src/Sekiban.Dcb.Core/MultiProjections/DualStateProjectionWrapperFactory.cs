@@ -15,7 +15,10 @@ public static class DualStateProjectionWrapperFactory
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions jsonOptions,
-        bool isRestoredFromSnapshot = false)
+        bool isRestoredFromSnapshot = false,
+        int initialVersion = 0,
+        Guid initialLastEventId = default,
+        string? initialLastSortableUniqueId = null)
     {
         var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
 
@@ -27,9 +30,9 @@ public static class DualStateProjectionWrapperFactory
                 projectorName,
                 multiProjectorTypes,
                 jsonOptions,
-                0,
-                Guid.Empty,
-                (string?)null,
+                initialVersion,
+                initialLastEventId,
+                initialLastSortableUniqueId,
                 true) as IMultiProjectionPayload;
         }
 
@@ -39,8 +42,8 @@ public static class DualStateProjectionWrapperFactory
             projectorName,
             multiProjectorTypes,
             jsonOptions,
-            0,
-            Guid.Empty,
-            (string?)null) as IMultiProjectionPayload;
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId) as IMultiProjectionPayload;
     }
 }

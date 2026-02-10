@@ -1,5 +1,5 @@
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Runtime;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -9,14 +9,14 @@ namespace Sekiban.Dcb.Orleans.Grains;
 public class OrleansTagStatePersistent : ITagStatePersistent
 {
     private readonly IPersistentState<TagStateCacheState> _cache;
-    private readonly ITagStatePayloadTypes _payloadTypes;
+    private readonly ITagProjectionRuntime _tagProjectionRuntime;
 
     public OrleansTagStatePersistent(
         IPersistentState<TagStateCacheState> cache,
-        ITagStatePayloadTypes payloadTypes)
+        ITagProjectionRuntime tagProjectionRuntime)
     {
         _cache = cache;
-        _payloadTypes = payloadTypes;
+        _tagProjectionRuntime = tagProjectionRuntime;
     }
 
     public Task<TagState?> LoadStateAsync()
@@ -26,7 +26,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
             var serializable = _cache.State.CachedState;
 
             // Deserialize payload from SerializableTagState
-            var deserializeResult = _payloadTypes.DeserializePayload(
+            var deserializeResult = _tagProjectionRuntime.DeserializePayload(
                 serializable.TagPayloadName,
                 serializable.Payload);
 
@@ -53,7 +53,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
     public async Task SaveStateAsync(TagState state)
     {
         // Convert TagState to SerializableTagState
-        var serializeResult = _payloadTypes.SerializePayload(state.Payload);
+        var serializeResult = _tagProjectionRuntime.SerializePayload(state.Payload);
         if (!serializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
