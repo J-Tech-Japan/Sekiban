@@ -1,7 +1,5 @@
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Orleans.Grains;
-using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
 using Xunit;
@@ -10,7 +8,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 
 public class OrleansTagStatePersistentTests
 {
-    private readonly ITagProjectionRuntime _tagProjectionRuntime;
+    private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
 
     public OrleansTagStatePersistentTests()
     {
@@ -22,7 +20,7 @@ public class OrleansTagStatePersistentTests
 
         // Register test payload types
         simpleTypes.RegisterPayloadType<TestStatePayload>();
-        _tagProjectionRuntime = new TestTagProjectionRuntime(simpleTypes);
+        _tagStatePayloadTypes = simpleTypes;
     }
 
     [Fact]
@@ -49,7 +47,7 @@ public class OrleansTagStatePersistentTests
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
 
-        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagStatePayloadTypes);
 
         // Act - Save
         await persistent.SaveStateAsync(originalState);
@@ -84,7 +82,7 @@ public class OrleansTagStatePersistentTests
         // Arrange
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
-        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagStatePayloadTypes);
 
         // Act
         var result = await persistent.LoadStateAsync();
@@ -102,7 +100,7 @@ public class OrleansTagStatePersistentTests
 
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
-        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagStatePayloadTypes);
 
         await persistent.SaveStateAsync(state);
         Assert.NotNull(persistentState.State.CachedState);
@@ -130,7 +128,7 @@ public class OrleansTagStatePersistentTests
 
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
-        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagStatePayloadTypes);
 
         // Act
         await persistent.SaveStateAsync(state);
@@ -159,7 +157,7 @@ public class OrleansTagStatePersistentTests
 
         var cacheState = new TagStateCacheState();
         var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
-        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagStatePayloadTypes);
 
         // Act
         await persistent.SaveSerializableStateAsync(serializable);
@@ -208,34 +206,4 @@ public class OrleansTagStatePersistentTests
         public int Value { get; init; }
     }
 
-    /// <summary>
-    ///     Minimal ITagProjectionRuntime for tests — only SerializePayload / DeserializePayload
-    ///     are exercised by OrleansTagStatePersistent.
-    /// </summary>
-    private class TestTagProjectionRuntime : ITagProjectionRuntime
-    {
-        private readonly ITagStatePayloadTypes _payloadTypes;
-
-        public TestTagProjectionRuntime(ITagStatePayloadTypes payloadTypes) =>
-            _payloadTypes = payloadTypes;
-
-        public ResultBox<ITagProjector> GetProjector(string tagProjectorName) =>
-            ResultBox.Error<ITagProjector>(new NotSupportedException());
-
-        public ResultBox<string> GetProjectorVersion(string tagProjectorName) =>
-            ResultBox.Error<string>(new NotSupportedException());
-
-        public IReadOnlyList<string> GetAllProjectorNames() => Array.Empty<string>();
-
-        public string? TryGetProjectorForTagGroup(string tagGroupName) => null;
-
-        public ITag ResolveTag(string tagString) =>
-            throw new NotSupportedException();
-
-        public ResultBox<byte[]> SerializePayload(ITagStatePayload payload) =>
-            _payloadTypes.SerializePayload(payload);
-
-        public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] data) =>
-            _payloadTypes.DeserializePayload(payloadName, data);
-    }
 }
