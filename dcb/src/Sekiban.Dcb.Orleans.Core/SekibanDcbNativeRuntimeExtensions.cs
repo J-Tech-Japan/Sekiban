@@ -15,8 +15,6 @@ public static class SekibanDcbNativeRuntimeExtensions
     /// </summary>
     public static IServiceCollection AddSekibanDcbNativeRuntime(this IServiceCollection services)
     {
-        services.AddSingleton<IEventRuntime, NativeEventRuntime>();
-        services.AddSingleton<IProjectionRuntime, NativeProjectionRuntime>();
         services.AddSingleton<IProjectionActorHostFactory, NativeProjectionActorHostFactory>();
 
         services.TryAddSingleton<ITagProjectorTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
