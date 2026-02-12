@@ -24,35 +24,6 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
         _tagStatePayloadTypes = tagStatePayloadTypes;
     }
 
-    public Task<ResultBox<SerializableTagState>> ProjectAsync(
-        TagStateProjectionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var accumulator = CreateAccumulator(request.TagStateId);
-            if (!accumulator.ApplyState(request.CachedState))
-            {
-                return Task.FromResult(ResultBox.Error<SerializableTagState>(
-                    new InvalidOperationException(
-                        $"Failed to apply cached tag state for {request.TagStateId.GetTagStateId()}")));
-            }
-
-            if (!accumulator.ApplyEvents(request.Events, request.LatestSortableUniqueId, cancellationToken))
-            {
-                return Task.FromResult(ResultBox.Error<SerializableTagState>(
-                    new InvalidOperationException(
-                        $"Failed to apply tag events for {request.TagStateId.GetTagStateId()}")));
-            }
-
-            return Task.FromResult(ResultBox.FromValue(accumulator.GetSerializedState()));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(ResultBox.Error<SerializableTagState>(ex));
-        }
-    }
-
     public ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId)
     {
         var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(tagStateId.TagProjectorName);

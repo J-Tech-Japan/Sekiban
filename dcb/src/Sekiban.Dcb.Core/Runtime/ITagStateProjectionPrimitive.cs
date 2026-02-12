@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Tags;
 
@@ -10,10 +9,6 @@ namespace Sekiban.Dcb.Runtime;
 /// </summary>
 public interface ITagStateProjectionPrimitive
 {
-    Task<ResultBox<SerializableTagState>> ProjectAsync(
-        TagStateProjectionRequest request,
-        CancellationToken cancellationToken = default);
-
     ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId);
 }
 

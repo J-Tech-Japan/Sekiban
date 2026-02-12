@@ -1,9 +1,9 @@
-using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Runtime.Native;
-using Sekiban.Dcb.Tags;
 using Xunit;
 
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -11,20 +11,19 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public class NativeTagStateProjectionPrimitiveTests
 {
     [Fact]
-    public async Task ProjectAsync_ShouldBuildSerializableState_FromSerializedEvents()
+    public void ApplyEvents_ShouldBuildSerializableState_FromScratch()
     {
         var primitive = BuildPrimitive();
         var events = BuildSerializedEvents(1, 2);
-        var request = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            events.Last().SortableUniqueIdValue,
-            CachedState: null,
-            Events: events);
+        var tagStateId = TagStateId.Parse("Counter:sample:CounterProjector");
+        var accumulator = primitive.CreateAccumulator(tagStateId);
 
-        var result = await primitive.ProjectAsync(request);
+        var appliedState = accumulator.ApplyState(null);
+        var appliedEvents = accumulator.ApplyEvents(events, events.Last().SortableUniqueIdValue);
+        var state = accumulator.GetSerializedState();
 
-        Assert.True(result.IsSuccess);
-        var state = result.GetValue();
+        Assert.True(appliedState);
+        Assert.True(appliedEvents);
         Assert.Equal(2, state.Version);
         Assert.Equal("Counter", state.TagGroup);
         Assert.Equal("sample", state.TagContent);
@@ -34,107 +33,40 @@ public class NativeTagStateProjectionPrimitiveTests
     }
 
     [Fact]
-    public async Task ProjectAsync_ShouldApplyIncrementalUpdate_WhenCachedStateProvided()
+    public void ApplyEvents_ShouldApplyIncrementalUpdate_WhenCachedStateProvided()
     {
         var primitive = BuildPrimitive();
         var allEvents = BuildSerializedEvents(1, 2);
         var firstEvents = allEvents.Take(1).ToList();
-        var firstRequest = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            firstEvents.Last().SortableUniqueIdValue,
-            CachedState: null,
-            Events: firstEvents);
-        var firstResult = await primitive.ProjectAsync(firstRequest);
-        Assert.True(firstResult.IsSuccess);
+        var tagStateId = TagStateId.Parse("Counter:sample:CounterProjector");
 
-        var secondRequest = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            allEvents.Last().SortableUniqueIdValue,
-            CachedState: firstResult.GetValue(),
-            Events: allEvents);
+        var firstState = ProjectState(primitive, tagStateId, firstEvents.Last().SortableUniqueIdValue, firstEvents, null);
 
-        var secondResult = await primitive.ProjectAsync(secondRequest);
-
-        Assert.True(secondResult.IsSuccess);
-        var state = secondResult.GetValue();
-        Assert.Equal(2, state.Version);
-        Assert.Equal(allEvents.Last().SortableUniqueIdValue, state.LastSortedUniqueId);
-    }
-
-    [Fact]
-    public async Task ProjectAsync_ShouldReturnCachedState_WhenNoNewEvents()
-    {
-        var primitive = BuildPrimitive();
-        var events = BuildSerializedEvents(1);
-        var initialRequest = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            events.Last().SortableUniqueIdValue,
-            CachedState: null,
-            Events: events);
-        var initialResult = await primitive.ProjectAsync(initialRequest);
-
-        Assert.True(initialResult.IsSuccess);
-        var cached = initialResult.GetValue();
-
-        var secondResult = await primitive.ProjectAsync(new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            events.Last().SortableUniqueIdValue,
-            cached,
-            Events: Array.Empty<SerializableEvent>()));
-
-        Assert.True(secondResult.IsSuccess);
-        var finalState = secondResult.GetValue();
-        Assert.Same(cached, finalState);
-        Assert.Equal(cached.Version, finalState.Version);
-        Assert.Equal(cached.LastSortedUniqueId, finalState.LastSortedUniqueId);
-    }
-
-    [Fact]
-    public async Task CreateAccumulator_ShouldReuseCachedState_WhenNoNewEvents()
-    {
-        var primitive = BuildPrimitive();
-        var events = BuildSerializedEvents(1);
-        var request = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            events.Last().SortableUniqueIdValue,
-            CachedState: null,
-            Events: events);
-        var initialResult = await primitive.ProjectAsync(request);
-
-        Assert.True(initialResult.IsSuccess);
-        var cached = initialResult.GetValue();
-        var accumulator = primitive.CreateAccumulator(TagStateId.Parse("Counter:sample:CounterProjector"));
-
-        var applyStateResult = accumulator.ApplyState(cached);
-        Assert.True(applyStateResult);
-        var applyEventsResult = accumulator.ApplyEvents(Array.Empty<SerializableEvent>(), events.Last().SortableUniqueIdValue);
-        Assert.True(applyEventsResult);
-
-        var state = accumulator.GetSerializedState();
-        Assert.Same(cached, state);
-    }
-
-    [Fact]
-    public async Task CreateAccumulator_ShouldIncrementalProject_WhenEventsAppended()
-    {
-        var primitive = BuildPrimitive();
-        var allEvents = BuildSerializedEvents(1, 2);
-        var firstEvents = allEvents.Take(1).ToList();
-        var firstRequest = new TagStateProjectionRequest(
-            TagStateId.Parse("Counter:sample:CounterProjector"),
-            firstEvents.Last().SortableUniqueIdValue,
-            CachedState: null,
-            Events: firstEvents);
-        var firstResult = await primitive.ProjectAsync(firstRequest);
-        Assert.True(firstResult.IsSuccess);
-
-        var accumulator = primitive.CreateAccumulator(TagStateId.Parse("Counter:sample:CounterProjector"));
-        Assert.True(accumulator.ApplyState(firstResult.GetValue()));
+        var accumulator = primitive.CreateAccumulator(tagStateId);
+        Assert.True(accumulator.ApplyState(firstState));
         Assert.True(accumulator.ApplyEvents(allEvents, allEvents.Last().SortableUniqueIdValue));
 
         var finalState = accumulator.GetSerializedState();
         Assert.Equal(2, finalState.Version);
         Assert.Equal(allEvents.Last().SortableUniqueIdValue, finalState.LastSortedUniqueId);
+    }
+
+    [Fact]
+    public void ApplyEvents_ShouldReuseCachedState_WhenNoNewEvents()
+    {
+        var primitive = BuildPrimitive();
+        var events = BuildSerializedEvents(1);
+        var tagStateId = TagStateId.Parse("Counter:sample:CounterProjector");
+        var cached = ProjectState(primitive, tagStateId, events.Last().SortableUniqueIdValue, events, null);
+
+        var accumulator = primitive.CreateAccumulator(tagStateId);
+        Assert.True(accumulator.ApplyState(cached));
+        Assert.True(accumulator.ApplyEvents(Array.Empty<SerializableEvent>(), events.Last().SortableUniqueIdValue));
+
+        var finalState = accumulator.GetSerializedState();
+        Assert.Same(cached, finalState);
+        Assert.Equal(cached.Version, finalState.Version);
+        Assert.Equal(cached.LastSortedUniqueId, finalState.LastSortedUniqueId);
     }
 
     private static NativeTagStateProjectionPrimitive BuildPrimitive()
@@ -149,6 +81,19 @@ public class NativeTagStateProjectionPrimitiveTests
         payloadTypes.RegisterPayloadType<CounterState>();
 
         return new NativeTagStateProjectionPrimitive(eventTypes, projectorTypes, payloadTypes);
+    }
+
+    private static SerializableTagState ProjectState(
+        NativeTagStateProjectionPrimitive primitive,
+        TagStateId tagStateId,
+        string? latestSortableUniqueId,
+        IReadOnlyList<SerializableEvent> events,
+        SerializableTagState? cachedState)
+    {
+        var accumulator = primitive.CreateAccumulator(tagStateId);
+        Assert.True(accumulator.ApplyState(cachedState));
+        Assert.True(accumulator.ApplyEvents(events, latestSortableUniqueId));
+        return accumulator.GetSerializedState();
     }
 
     private static List<SerializableEvent> BuildSerializedEvents(params int[] increments)
@@ -168,6 +113,7 @@ public class NativeTagStateProjectionPrimitiveTests
                 new List<string> { "Counter:sample" });
             events.Add(ev.ToSerializableEvent(eventTypes));
         }
+
         return events;
     }
 
