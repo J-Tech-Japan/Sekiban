@@ -21,16 +21,19 @@ public class TagStateGrain : Grain, ITagStateGrain
 
     public TagStateGrain(
         IEventStore eventStore,
-        ITagProjectorTypes tagProjectorTypes,
-        ITagTypes tagTypes,
-        ITagStatePayloadTypes tagStatePayloadTypes,
+        DcbDomainTypes domainTypes,
         IActorObjectAccessor actorAccessor,
         [PersistentState("tagStateCache", "OrleansStorage")] IPersistentState<TagStateCacheState> cache)
     {
         _eventStore = eventStore;
-        _tagProjectorTypes = tagProjectorTypes;
-        _tagTypes = tagTypes;
-        _tagStatePayloadTypes = tagStatePayloadTypes;
+        if (domainTypes is null)
+        {
+            throw new ArgumentNullException(nameof(domainTypes));
+        }
+
+        _tagProjectorTypes = domainTypes.TagProjectorTypes;
+        _tagTypes = domainTypes.TagTypes;
+        _tagStatePayloadTypes = domainTypes.TagStatePayloadTypes;
         _actorAccessor = actorAccessor;
         _cache = cache;
     }
