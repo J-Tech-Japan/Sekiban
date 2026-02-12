@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
@@ -135,14 +136,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
                     {
                         SafeWindowMs = 20000
                     });
-                    // Runtime abstraction interfaces (Phase 2)
-                    services.AddSingleton<Sekiban.Dcb.Runtime.IEventRuntime, Sekiban.Dcb.Runtime.Native.NativeEventRuntime>();
-                    services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeProjectionRuntime>();
-                    services.AddSingleton<Sekiban.Dcb.Runtime.ITagProjectionRuntime, Sekiban.Dcb.Runtime.Native.NativeTagProjectionRuntime>();
-                    services.AddSingleton<Sekiban.Dcb.Runtime.IProjectionActorHostFactory, Sekiban.Dcb.Runtime.Native.NativeProjectionActorHostFactory>();
-                    services.AddSingleton<Sekiban.Dcb.Domains.ITagProjectorTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagProjectorTypes);
-                    services.AddSingleton<Sekiban.Dcb.Domains.ITagTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
-                    services.AddSingleton<Sekiban.Dcb.Domains.ITagStatePayloadTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagStatePayloadTypes);
+                    services.AddSekibanDcbNativeRuntime();
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("OrleansStorage")

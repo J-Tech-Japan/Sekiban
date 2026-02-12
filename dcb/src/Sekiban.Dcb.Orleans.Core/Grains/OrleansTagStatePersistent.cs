@@ -1,32 +1,31 @@
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Domains;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
 ///     Orleans-specific implementation of ITagStatePersistent using grain state
 ///     Converts between TagState and SerializableTagState for storage
 /// </summary>
-public class OrleansTagStatePersistent : ITagStatePersistent
+public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagStatePersistent
 {
     private readonly IPersistentState<TagStateCacheState> _cache;
-    private readonly ITagProjectionRuntime _tagProjectionRuntime;
+    private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
 
     public OrleansTagStatePersistent(
         IPersistentState<TagStateCacheState> cache,
-        ITagProjectionRuntime tagProjectionRuntime)
+        ITagStatePayloadTypes tagStatePayloadTypes)
     {
         _cache = cache;
-        _tagProjectionRuntime = tagProjectionRuntime;
+        _tagStatePayloadTypes = tagStatePayloadTypes;
     }
 
     public Task<TagState?> LoadStateAsync()
     {
-        if (_cache.State?.CachedState != null)
+        var serializable = _cache.State?.CachedState;
+        if (serializable != null)
         {
-            var serializable = _cache.State.CachedState;
-
             // Deserialize payload from SerializableTagState
-            var deserializeResult = _tagProjectionRuntime.DeserializePayload(
+            var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
                 serializable.TagPayloadName,
                 serializable.Payload);
 
@@ -53,7 +52,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent
     public async Task SaveStateAsync(TagState state)
     {
         // Convert TagState to SerializableTagState
-        var serializeResult = _tagProjectionRuntime.SerializePayload(state.Payload);
+        var serializeResult = _tagStatePayloadTypes.SerializePayload(state.Payload);
         if (!serializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -71,6 +70,15 @@ public class OrleansTagStatePersistent : ITagStatePersistent
             state.ProjectorVersion);
 
         _cache.State = new TagStateCacheState { CachedState = serializable };
+        await _cache.WriteStateAsync();
+    }
+
+    public Task<SerializableTagState?> LoadSerializableStateAsync() =>
+        Task.FromResult(_cache.State?.CachedState);
+
+    public async Task SaveSerializableStateAsync(SerializableTagState state)
+    {
+        _cache.State = new TagStateCacheState { CachedState = state };
         await _cache.WriteStateAsync();
     }
 
