@@ -100,20 +100,20 @@ public class TagStateGrain : Grain, ITagStateGrain
                 eventsResult.GetException());
         }
 
-        var request = new TagStateProjectionRequest(
-            _tagStateId,
-            latestSortableUniqueId,
-            cachedState,
-            eventsResult.GetValue());
-        var projectedResult = await _tagStateProjectionPrimitive.ProjectAsync(request);
-        if (!projectedResult.IsSuccess)
+        var accumulator = _tagStateProjectionPrimitive.CreateAccumulator(_tagStateId);
+        if (!accumulator.ApplyState(cachedState))
         {
             throw new InvalidOperationException(
-                $"Failed to project serialized tag state: {projectedResult.GetException().Message}",
-                projectedResult.GetException());
+                $"Failed to apply cached state for tag state {_tagStateId.GetTagStateId()}");
         }
 
-        var projectedState = projectedResult.GetValue();
+        if (!accumulator.ApplyEvents(eventsResult.GetValue(), latestSortableUniqueId))
+        {
+            throw new InvalidOperationException(
+                $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+        }
+
+        var projectedState = accumulator.GetSerializedState();
         _cache.State = new TagStateCacheState { CachedState = projectedState };
         await _cache.WriteStateAsync();
         return projectedState;

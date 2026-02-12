@@ -89,6 +89,54 @@ public class NativeTagStateProjectionPrimitiveTests
         Assert.Equal(cached.LastSortedUniqueId, finalState.LastSortedUniqueId);
     }
 
+    [Fact]
+    public async Task CreateAccumulator_ShouldReuseCachedState_WhenNoNewEvents()
+    {
+        var primitive = BuildPrimitive();
+        var events = BuildSerializedEvents(1);
+        var request = new TagStateProjectionRequest(
+            TagStateId.Parse("Counter:sample:CounterProjector"),
+            events.Last().SortableUniqueIdValue,
+            CachedState: null,
+            Events: events);
+        var initialResult = await primitive.ProjectAsync(request);
+
+        Assert.True(initialResult.IsSuccess);
+        var cached = initialResult.GetValue();
+        var accumulator = primitive.CreateAccumulator(TagStateId.Parse("Counter:sample:CounterProjector"));
+
+        var applyStateResult = accumulator.ApplyState(cached);
+        Assert.True(applyStateResult);
+        var applyEventsResult = accumulator.ApplyEvents(Array.Empty<SerializableEvent>(), events.Last().SortableUniqueIdValue);
+        Assert.True(applyEventsResult);
+
+        var state = accumulator.GetSerializedState();
+        Assert.Same(cached, state);
+    }
+
+    [Fact]
+    public async Task CreateAccumulator_ShouldIncrementalProject_WhenEventsAppended()
+    {
+        var primitive = BuildPrimitive();
+        var allEvents = BuildSerializedEvents(1, 2);
+        var firstEvents = allEvents.Take(1).ToList();
+        var firstRequest = new TagStateProjectionRequest(
+            TagStateId.Parse("Counter:sample:CounterProjector"),
+            firstEvents.Last().SortableUniqueIdValue,
+            CachedState: null,
+            Events: firstEvents);
+        var firstResult = await primitive.ProjectAsync(firstRequest);
+        Assert.True(firstResult.IsSuccess);
+
+        var accumulator = primitive.CreateAccumulator(TagStateId.Parse("Counter:sample:CounterProjector"));
+        Assert.True(accumulator.ApplyState(firstResult.GetValue()));
+        Assert.True(accumulator.ApplyEvents(allEvents, allEvents.Last().SortableUniqueIdValue));
+
+        var finalState = accumulator.GetSerializedState();
+        Assert.Equal(2, finalState.Version);
+        Assert.Equal(allEvents.Last().SortableUniqueIdValue, finalState.LastSortedUniqueId);
+    }
+
     private static NativeTagStateProjectionPrimitive BuildPrimitive()
     {
         var eventTypes = new SimpleEventTypes();
