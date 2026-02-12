@@ -43,6 +43,14 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
             var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(request.TagStateId.TagProjectorName);
             var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
 
+            if (request.CachedState is not null &&
+                request.CachedState.ProjectorVersion == projectorVersion &&
+                !string.IsNullOrEmpty(request.CachedState.LastSortedUniqueId) &&
+                string.Compare(request.LatestSortableUniqueId, request.CachedState.LastSortedUniqueId, StringComparison.Ordinal) == 0)
+            {
+                return Task.FromResult(ResultBox.FromValue(request.CachedState));
+            }
+
             if (string.IsNullOrEmpty(request.LatestSortableUniqueId))
             {
                 return Task.FromResult(

@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.ServiceId;
@@ -19,6 +20,7 @@ public class TagStateGrain : Grain, ITagStateGrain
     private readonly IPersistentState<TagStateCacheState> _cache;
     private readonly IEventTypes _eventTypes;
     private readonly ITagTypes _tagTypes;
+    private readonly ITagProjectorTypes _tagProjectorTypes;
     private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
     private readonly ITagStateProjectionPrimitive _tagStateProjectionPrimitive;
     private readonly IEventStore _eventStore;
@@ -38,6 +40,7 @@ public class TagStateGrain : Grain, ITagStateGrain
 
         _eventTypes = domainTypes.EventTypes;
         _tagTypes = domainTypes.TagTypes;
+        _tagProjectorTypes = domainTypes.TagProjectorTypes;
         _tagStatePayloadTypes = domainTypes.TagStatePayloadTypes;
         _tagStateProjectionPrimitive = new NativeTagStateProjectionPrimitive(
             domainTypes.EventTypes,
@@ -75,14 +78,21 @@ public class TagStateGrain : Grain, ITagStateGrain
 
         var latestSortableUniqueId = await GetLatestSortableUniqueIdAsync(_tagStateId);
         var cachedState = _cache.State?.CachedState;
+
+        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
+
         if (cachedState != null &&
+            cachedState.ProjectorVersion == projectorVersion &&
+            !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
             cachedState.LastSortedUniqueId == latestSortableUniqueId)
         {
             return cachedState;
         }
 
+        var since = ResolveSinceForRead(cachedState, projectorVersion, latestSortableUniqueId);
         var eventsResult = await ReadSerializableEventsByTagAsync(
-            _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}"));
+            _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}"), since);
         if (!eventsResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -244,16 +254,49 @@ public class TagStateGrain : Grain, ITagStateGrain
             : null;
     }
 
-    private async Task<ResultBox<IReadOnlyList<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag)
+    private static SortableUniqueId? ResolveSinceForRead(
+        SerializableTagState? cachedState,
+        string projectorVersion,
+        string? latestSortableUniqueId)
     {
-        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag);
+        if (cachedState == null)
+        {
+            return null;
+        }
+
+        if (cachedState.ProjectorVersion != projectorVersion)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(cachedState.LastSortedUniqueId) || string.IsNullOrEmpty(latestSortableUniqueId))
+        {
+            return null;
+        }
+
+        if (!string.Equals(cachedState.LastSortedUniqueId, latestSortableUniqueId, StringComparison.Ordinal) &&
+            string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0)
+        {
+            return SortableUniqueId.TryParse(cachedState.LastSortedUniqueId, out var since)
+                ? since
+                : null;
+        }
+
+        return null;
+    }
+
+    private async Task<ResultBox<IReadOnlyList<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since)
+    {
+        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
         if (serializableResult.IsSuccess)
         {
             return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serializableResult.GetValue().ToList());
         }
 
         // Backward-compatible fallback for stores that don't yet support SerializableEvent path.
-        var typedResult = await _eventStore.ReadEventsByTagAsync(tag);
+        var typedResult = await _eventStore.ReadEventsByTagAsync(tag, since);
         if (!typedResult.IsSuccess)
         {
             return ResultBox.Error<IReadOnlyList<SerializableEvent>>(typedResult.GetException());

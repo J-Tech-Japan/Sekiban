@@ -61,6 +61,34 @@ public class NativeTagStateProjectionPrimitiveTests
         Assert.Equal(allEvents.Last().SortableUniqueIdValue, state.LastSortedUniqueId);
     }
 
+    [Fact]
+    public async Task ProjectAsync_ShouldReturnCachedState_WhenNoNewEvents()
+    {
+        var primitive = BuildPrimitive();
+        var events = BuildSerializedEvents(1);
+        var initialRequest = new TagStateProjectionRequest(
+            TagStateId.Parse("Counter:sample:CounterProjector"),
+            events.Last().SortableUniqueIdValue,
+            CachedState: null,
+            Events: events);
+        var initialResult = await primitive.ProjectAsync(initialRequest);
+
+        Assert.True(initialResult.IsSuccess);
+        var cached = initialResult.GetValue();
+
+        var secondResult = await primitive.ProjectAsync(new TagStateProjectionRequest(
+            TagStateId.Parse("Counter:sample:CounterProjector"),
+            events.Last().SortableUniqueIdValue,
+            cached,
+            Events: Array.Empty<SerializableEvent>()));
+
+        Assert.True(secondResult.IsSuccess);
+        var finalState = secondResult.GetValue();
+        Assert.Same(cached, finalState);
+        Assert.Equal(cached.Version, finalState.Version);
+        Assert.Equal(cached.LastSortedUniqueId, finalState.LastSortedUniqueId);
+    }
+
     private static NativeTagStateProjectionPrimitive BuildPrimitive()
     {
         var eventTypes = new SimpleEventTypes();
