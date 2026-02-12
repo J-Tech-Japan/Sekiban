@@ -1,6 +1,10 @@
+using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.ServiceId;
+using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -13,11 +17,12 @@ public class TagStateGrain : Grain, ITagStateGrain
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly IPersistentState<TagStateCacheState> _cache;
-    private readonly ITagProjectorTypes _tagProjectorTypes;
+    private readonly IEventTypes _eventTypes;
     private readonly ITagTypes _tagTypes;
     private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
+    private readonly ITagStateProjectionPrimitive _tagStateProjectionPrimitive;
     private readonly IEventStore _eventStore;
-    private GeneralTagStateActor? _actor;
+    private TagStateId? _tagStateId;
 
     public TagStateGrain(
         IEventStore eventStore,
@@ -31,99 +36,233 @@ public class TagStateGrain : Grain, ITagStateGrain
             throw new ArgumentNullException(nameof(domainTypes));
         }
 
-        _tagProjectorTypes = domainTypes.TagProjectorTypes;
+        _eventTypes = domainTypes.EventTypes;
         _tagTypes = domainTypes.TagTypes;
         _tagStatePayloadTypes = domainTypes.TagStatePayloadTypes;
+        _tagStateProjectionPrimitive = new NativeTagStateProjectionPrimitive(
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagStatePayloadTypes);
         _actorAccessor = actorAccessor;
         _cache = cache;
     }
 
     public Task<string> GetTagStateActorIdAsync()
     {
-        if (_actor == null)
+        if (_tagStateId == null)
         {
             return Task.FromResult(string.Empty);
         }
 
-        return _actor.GetTagStateActorIdAsync();
+        return Task.FromResult(_tagStateId.GetTagStateId());
     }
 
-    public Task<SerializableTagState> GetStateAsync()
+    public async Task<SerializableTagState> GetStateAsync()
     {
-        if (_actor == null)
+        if (_tagStateId == null)
         {
             // Return empty serializable state
-            return Task.FromResult(
-                new SerializableTagState(
-                    Array.Empty<byte>(),
-                    0,
-                    string.Empty,
-                    string.Empty,
-                    string.Empty,
-                    string.Empty,
-                    nameof(EmptyTagStatePayload),
-                    string.Empty));
+            return new SerializableTagState(
+                Array.Empty<byte>(),
+                0,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                nameof(EmptyTagStatePayload),
+                string.Empty);
         }
 
-        return _actor.GetStateAsync();
+        var latestSortableUniqueId = await GetLatestSortableUniqueIdAsync(_tagStateId);
+        var cachedState = _cache.State?.CachedState;
+        if (cachedState != null &&
+            cachedState.LastSortedUniqueId == latestSortableUniqueId)
+        {
+            return cachedState;
+        }
+
+        var eventsResult = await ReadSerializableEventsByTagAsync(
+            _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}"));
+        if (!eventsResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to read serialized events: {eventsResult.GetException().Message}",
+                eventsResult.GetException());
+        }
+
+        var request = new TagStateProjectionRequest(
+            _tagStateId,
+            latestSortableUniqueId,
+            cachedState,
+            eventsResult.GetValue());
+        var projectedResult = await _tagStateProjectionPrimitive.ProjectAsync(request);
+        if (!projectedResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to project serialized tag state: {projectedResult.GetException().Message}",
+                projectedResult.GetException());
+        }
+
+        var projectedState = projectedResult.GetValue();
+        _cache.State = new TagStateCacheState { CachedState = projectedState };
+        await _cache.WriteStateAsync();
+        return projectedState;
     }
 
-    public Task<TagState> GetTagStateAsync()
+    public async Task<TagState> GetTagStateAsync()
     {
-        if (_actor == null)
+        if (_tagStateId == null)
         {
             // Return empty tag state
-            return Task.FromResult(
-                new TagState(
-                    new EmptyTagStatePayload(),
-                    0,
-                    string.Empty,
-                    string.Empty,
-                    string.Empty,
-                    string.Empty,
-                    string.Empty));
+            return new TagState(
+                new EmptyTagStatePayload(),
+                0,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty);
         }
 
-        return _actor.GetTagStateAsync();
+        var serialized = await GetStateAsync();
+        if (serialized.TagPayloadName == nameof(EmptyTagStatePayload))
+        {
+            return new TagState(
+                new EmptyTagStatePayload(),
+                serialized.Version,
+                serialized.LastSortedUniqueId,
+                serialized.TagGroup,
+                serialized.TagContent,
+                serialized.TagProjector,
+                serialized.ProjectorVersion);
+        }
+
+        var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
+            serialized.TagPayloadName,
+            serialized.Payload);
+        if (!deserializeResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize payload '{serialized.TagPayloadName}': {deserializeResult.GetException().Message}",
+                deserializeResult.GetException());
+        }
+
+        return new TagState(
+            deserializeResult.GetValue(),
+            serialized.Version,
+            serialized.LastSortedUniqueId,
+            serialized.TagGroup,
+            serialized.TagContent,
+            serialized.TagProjector,
+            serialized.ProjectorVersion);
     }
 
-    public Task UpdateStateAsync(TagState newState)
+    public async Task UpdateStateAsync(TagState newState)
     {
-        if (_actor == null)
+        if (_tagStateId == null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return _actor.UpdateStateAsync(newState);
+        if (newState.TagGroup != _tagStateId.TagGroup ||
+            newState.TagContent != _tagStateId.TagContent ||
+            newState.TagProjector != _tagStateId.TagProjectorName)
+        {
+            throw new InvalidOperationException(
+                $"Cannot change tag state identity. Expected {_tagStateId}, but got {newState.TagGroup}:{newState.TagContent}:{newState.TagProjector}");
+        }
+
+        SerializableTagState serialized;
+        if (newState.Payload is EmptyTagStatePayload)
+        {
+            serialized = new SerializableTagState(
+                Array.Empty<byte>(),
+                newState.Version,
+                newState.LastSortedUniqueId,
+                newState.TagGroup,
+                newState.TagContent,
+                newState.TagProjector,
+                nameof(EmptyTagStatePayload),
+                newState.ProjectorVersion);
+        }
+        else
+        {
+            var serializeResult = _tagStatePayloadTypes.SerializePayload(newState.Payload);
+            if (!serializeResult.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to serialize payload: {serializeResult.GetException().Message}",
+                    serializeResult.GetException());
+            }
+
+            serialized = new SerializableTagState(
+                serializeResult.GetValue(),
+                newState.Version,
+                newState.LastSortedUniqueId,
+                newState.TagGroup,
+                newState.TagContent,
+                newState.TagProjector,
+                newState.Payload.GetType().Name,
+                newState.ProjectorVersion);
+        }
+
+        _cache.State = new TagStateCacheState { CachedState = serialized };
+        await _cache.WriteStateAsync();
     }
 
-    public Task ClearCacheAsync()
+    public async Task ClearCacheAsync()
     {
-        if (_actor == null)
+        if (_tagStateId == null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return _actor.ClearCacheAsync();
+        _cache.State = new TagStateCacheState();
+        await _cache.WriteStateAsync();
     }
 
     public override Task OnActivateAsync(CancellationToken cancellationToken)
     {
         // Extract tag state ID from grain key
         var tagStateId = ServiceIdGrainKey.Strip(this.GetPrimaryKeyString());
-
-        // Create the actor instance with Orleans-specific cache persistence
-        var tagStatePersistent = new OrleansTagStatePersistent(_cache, _tagStatePayloadTypes);
-        _actor = new GeneralTagStateActor(
-            tagStateId,
-            _eventStore,
-            _tagProjectorTypes,
-            _tagTypes,
-            _tagStatePayloadTypes,
-            new TagStateOptions(),
-            _actorAccessor,
-            tagStatePersistent);
-
+        _tagStateId = TagStateId.Parse(tagStateId);
         return base.OnActivateAsync(cancellationToken);
+    }
+
+    private async Task<string?> GetLatestSortableUniqueIdAsync(TagStateId tagStateId)
+    {
+        var tagConsistentActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
+        var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        if (!tagConsistentActorResult.IsSuccess)
+        {
+            return null;
+        }
+
+        var latestSortableUniqueIdResult = await tagConsistentActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        return latestSortableUniqueIdResult.IsSuccess
+            ? latestSortableUniqueIdResult.GetValue()
+            : null;
+    }
+
+    private async Task<ResultBox<IReadOnlyList<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag)
+    {
+        var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag);
+        if (serializableResult.IsSuccess)
+        {
+            return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serializableResult.GetValue().ToList());
+        }
+
+        // Backward-compatible fallback for stores that don't yet support SerializableEvent path.
+        var typedResult = await _eventStore.ReadEventsByTagAsync(tag);
+        if (!typedResult.IsSuccess)
+        {
+            return ResultBox.Error<IReadOnlyList<SerializableEvent>>(typedResult.GetException());
+        }
+
+        var serialized = typedResult
+            .GetValue()
+            .Select(e => e.ToSerializableEvent(_eventTypes))
+            .ToList();
+        return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serialized);
     }
 }
