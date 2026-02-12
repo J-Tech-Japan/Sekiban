@@ -143,6 +143,36 @@ public class OrleansTagStatePersistentTests
         Assert.Equal(state.TagGroup, loaded.TagGroup);
     }
 
+    [Fact]
+    public async Task SaveAndLoadSerializableState_DirectPath_ShouldSucceed()
+    {
+        // Arrange
+        var serializable = new SerializableTagState(
+            Payload: System.Text.Encoding.UTF8.GetBytes("{\"count\":1}"),
+            Version: 3,
+            LastSortedUniqueId: "uid-003",
+            TagGroup: "Group",
+            TagContent: "Content",
+            TagProjector: "Projector",
+            TagPayloadName: "WasmJsonTagState",
+            ProjectorVersion: "v1");
+
+        var cacheState = new TagStateCacheState();
+        var persistentState = new TestPersistentState<TagStateCacheState>(cacheState);
+        var persistent = new OrleansTagStatePersistent(persistentState, _tagProjectionRuntime);
+
+        // Act
+        await persistent.SaveSerializableStateAsync(serializable);
+        var loaded = await persistent.LoadSerializableStateAsync();
+
+        // Assert
+        Assert.NotNull(loaded);
+        Assert.Equal(serializable.Version, loaded.Version);
+        Assert.Equal(serializable.LastSortedUniqueId, loaded.LastSortedUniqueId);
+        Assert.Equal(serializable.TagPayloadName, loaded.TagPayloadName);
+        Assert.Equal(serializable.Payload, loaded.Payload);
+    }
+
     // Test helper class
     private class TestPersistentState<T> : IPersistentState<T> where T : new()
     {

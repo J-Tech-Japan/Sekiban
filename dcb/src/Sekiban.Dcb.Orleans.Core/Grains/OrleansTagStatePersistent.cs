@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 ///     Orleans-specific implementation of ITagStatePersistent using grain state
 ///     Converts between TagState and SerializableTagState for storage
 /// </summary>
-public class OrleansTagStatePersistent : ITagStatePersistent
+public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagStatePersistent
 {
     private readonly IPersistentState<TagStateCacheState> _cache;
     private readonly ITagProjectionRuntime _tagProjectionRuntime;
@@ -21,10 +21,9 @@ public class OrleansTagStatePersistent : ITagStatePersistent
 
     public Task<TagState?> LoadStateAsync()
     {
-        if (_cache.State?.CachedState != null)
+        var serializable = _cache.State?.CachedState;
+        if (serializable != null)
         {
-            var serializable = _cache.State.CachedState;
-
             // Deserialize payload from SerializableTagState
             var deserializeResult = _tagProjectionRuntime.DeserializePayload(
                 serializable.TagPayloadName,
@@ -71,6 +70,15 @@ public class OrleansTagStatePersistent : ITagStatePersistent
             state.ProjectorVersion);
 
         _cache.State = new TagStateCacheState { CachedState = serializable };
+        await _cache.WriteStateAsync();
+    }
+
+    public Task<SerializableTagState?> LoadSerializableStateAsync() =>
+        Task.FromResult(_cache.State?.CachedState);
+
+    public async Task SaveSerializableStateAsync(SerializableTagState state)
+    {
+        _cache.State = new TagStateCacheState { CachedState = state };
         await _cache.WriteStateAsync();
     }
 
