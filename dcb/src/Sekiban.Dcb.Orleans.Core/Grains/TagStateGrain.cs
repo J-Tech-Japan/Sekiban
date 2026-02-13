@@ -5,7 +5,6 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Runtime;
-using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -29,6 +28,7 @@ public class TagStateGrain : Grain, ITagStateGrain
     public TagStateGrain(
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
+        ITagStateProjectionPrimitive tagStateProjectionPrimitive,
         IActorObjectAccessor actorAccessor,
         [PersistentState("tagStateCache", "OrleansStorage")] IPersistentState<TagStateCacheState> cache)
     {
@@ -42,10 +42,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         _tagTypes = domainTypes.TagTypes;
         _tagProjectorTypes = domainTypes.TagProjectorTypes;
         _tagStatePayloadTypes = domainTypes.TagStatePayloadTypes;
-        _tagStateProjectionPrimitive = new NativeTagStateProjectionPrimitive(
-            domainTypes.EventTypes,
-            domainTypes.TagProjectorTypes,
-            domainTypes.TagStatePayloadTypes);
+        _tagStateProjectionPrimitive = tagStateProjectionPrimitive ?? throw new ArgumentNullException(nameof(tagStateProjectionPrimitive));
         _actorAccessor = actorAccessor;
         _cache = cache;
     }
