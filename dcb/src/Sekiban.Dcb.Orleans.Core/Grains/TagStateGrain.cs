@@ -90,7 +90,9 @@ public class TagStateGrain : Grain, ITagStateGrain
             return cachedState;
         }
 
-        var since = ResolveSinceForRead(cachedState, projectorVersion, latestSortableUniqueId);
+        var usableCachedState = cachedState?.ProjectorVersion == projectorVersion ? cachedState : null;
+
+        var since = ResolveSinceForRead(usableCachedState, projectorVersion, latestSortableUniqueId);
         var eventsResult = await ReadSerializableEventsByTagAsync(
             _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}"), since);
         if (!eventsResult.IsSuccess)
@@ -101,7 +103,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
 
         var accumulator = _tagStateProjectionPrimitive.CreateAccumulator(_tagStateId);
-        if (!accumulator.ApplyState(cachedState))
+        if (!accumulator.ApplyState(usableCachedState))
         {
             throw new InvalidOperationException(
                 $"Failed to apply cached state for tag state {_tagStateId.GetTagStateId()}");
