@@ -134,7 +134,7 @@ public class CoreGeneralSekibanExecutor
                     }
                 }
 
-                var task = RequestReservationAsync(tag, lastSortableUniqueId, cancellationToken)
+                var task = TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId)
                     .ContinueWith(t => (tag, t.Result), cancellationToken);
                 reservationTasks.Add(task);
             }
@@ -158,7 +158,7 @@ public class CoreGeneralSekibanExecutor
             // If any reservations failed, cancel all successful reservations
             if (failedReservations.Any())
             {
-                await CancelReservationsAsync(reservations, cancellationToken);
+                await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
 
                 var errorMessage = string.Join(
                     "; ",
@@ -170,10 +170,6 @@ public class CoreGeneralSekibanExecutor
             try
             {
                 // Step 5: Write event to EventStore (handles both events and tags)
-                var eventId = Guid.NewGuid();
-                var sortableId = SortableUniqueId.GenerateNew();
-                var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
-
                 // Build Event objects for each collected event payload
                 var events = new List<Event>();
                 foreach (var e in collectedEvents)
@@ -194,17 +190,17 @@ public class CoreGeneralSekibanExecutor
                 var writeResult = await _eventStore.WriteEventsAsync(events);
                 if (!writeResult.IsSuccess)
                 {
-                    await CancelReservationsAsync(reservations, cancellationToken);
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
                     return ResultBox.Error<ExecutionResult>(writeResult.GetException());
                 }
 
                 var (writtenEvents, tagWriteResults) = writeResult.GetValue();
 
                 // Step 6: Confirm reservations with TagConsistentActors
-                await ConfirmReservationsAsync(reservations, cancellationToken);
+                await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
 
                 // Step 6.1: Notify non-consistency tags about the event write
-                await NotifyNonConsistencyTagsAsync(allTags, reservations.Keys, cancellationToken);
+                await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
 
                 var firstEvent = writtenEvents.First();
 
@@ -237,7 +233,7 @@ public class CoreGeneralSekibanExecutor
             catch (Exception)
             {
                 // If anything fails after reservations, cancel them
-                await CancelReservationsAsync(reservations, cancellationToken);
+                await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
                 throw;
             }
         }
@@ -319,6 +315,190 @@ public class CoreGeneralSekibanExecutor
         catch (Exception ex)
         {
             return ResultBox.Error<TagState>(ex);
+        }
+    }
+
+    public async Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId)
+    {
+        try
+        {
+            var validationErrors = SekibanValidator.Validate(tagStateId);
+            if (validationErrors.Count > 0)
+            {
+                return ResultBox.Error<SerializableTagState>(new SekibanValidationException(validationErrors));
+            }
+
+            var tagStateActorId = tagStateId.GetTagStateId();
+            var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+
+            if (!actorResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializableTagState>(actorResult.GetException());
+            }
+
+            var actor = actorResult.GetValue();
+            var state = await actor.GetStateAsync();
+
+            return ResultBox.FromValue(state);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableTagState>(ex);
+        }
+    }
+
+    public async Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            if (request.EventCandidates.Count == 0)
+            {
+                return ResultBox.FromValue(
+                    new SerializedCommitResult(
+                        Array.Empty<SerializableEvent>(),
+                        Array.Empty<TagWriteResult>(),
+                        stopwatch.Elapsed));
+            }
+
+            // Step 1: Collect all tags from event candidates
+            var allTagStrings = new HashSet<string>(
+                request.EventCandidates.SelectMany(e => e.Tags));
+
+            var duplicateConsistencyTags = request.ConsistencyTags
+                .GroupBy(ct => ct.Tag)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+            if (duplicateConsistencyTags.Count > 0)
+            {
+                return ResultBox.Error<SerializedCommitResult>(
+                    new InvalidOperationException(
+                        $"Duplicate consistency tags in request: {string.Join(", ", duplicateConsistencyTags)}"));
+            }
+
+            var unknownConsistencyTags = request.ConsistencyTags
+                .Select(ct => ct.Tag)
+                .Where(tag => !allTagStrings.Contains(tag))
+                .Distinct()
+                .ToList();
+            if (unknownConsistencyTags.Count > 0)
+            {
+                return ResultBox.Error<SerializedCommitResult>(
+                    new InvalidOperationException(
+                        $"Consistency tags must exist in event candidate tags. Unknown tags: {string.Join(", ", unknownConsistencyTags)}"));
+            }
+
+            // Step 2: Build FallbackTag objects for non-consistency tags and reservation
+            var consistencyEntryMap = request.ConsistencyTags.ToDictionary(
+                ct => ct.Tag,
+                ct => ct.LastSortableUniqueId);
+
+            var allTags = new HashSet<ITag>();
+            foreach (var tagString in allTagStrings)
+            {
+                allTags.Add(ParseTag(tagString, consistencyEntryMap.ContainsKey(tagString)));
+            }
+
+            TagValidator.ValidateTagsAndThrow(allTags);
+
+            // Step 3: Reserve consistency tags
+            var reservations = new Dictionary<ITag, TagWriteReservation>();
+            var failedReservations = new List<(ITag Tag, Exception Error)>();
+            foreach (var tag in allTags)
+            {
+                if (!tag.IsConsistencyTag())
+                {
+                    continue;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var lastSortableUniqueId = consistencyEntryMap[tag.GetTag()];
+                var result = await TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId);
+                if (result.IsSuccess)
+                {
+                    reservations[tag] = result.GetValue();
+                }
+                else
+                {
+                    failedReservations.Add((tag, result.GetException()));
+                }
+            }
+
+            if (failedReservations.Any())
+            {
+                await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+
+                var errorMessage = string.Join(
+                    "; ",
+                    failedReservations.Select(f => $"Tag {f.Tag.GetTag()}: {f.Error.Message}"));
+                return ResultBox.Error<SerializedCommitResult>(
+                    new InvalidOperationException($"Failed to reserve tags: {errorMessage}"));
+            }
+
+            var reservationsConfirmed = false;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Step 4: Build SerializableEvent objects with server-generated metadata
+                var serializableEvents = new List<SerializableEvent>();
+                foreach (var candidate in request.EventCandidates)
+                {
+                    var eventId = Guid.CreateVersion7();
+                    var sortableId = SortableUniqueId.GenerateNew();
+                    var metadata = new EventMetadata(eventId.ToString(), "SerializedCommit", "SerializedSekibanExecutor");
+
+                    serializableEvents.Add(new SerializableEvent(
+                        candidate.Payload,
+                        sortableId,
+                        eventId,
+                        metadata,
+                        candidate.Tags.ToList(),
+                        candidate.EventPayloadName));
+                }
+
+                // Step 5: Write serializable events
+                var writeResult = await _eventStore.WriteSerializableEventsAsync(serializableEvents);
+                if (!writeResult.IsSuccess)
+                {
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    return ResultBox.Error<SerializedCommitResult>(writeResult.GetException());
+                }
+
+                var (writtenEvents, tagWriteResults) = writeResult.GetValue();
+
+                // Step 6: Confirm reservations
+                await TagReservationHelper.ConfirmReservationsAsync(_actorAccessor, reservations);
+                reservationsConfirmed = true;
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Step 6.1: Notify non-consistency tags
+                await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
+
+                return ResultBox.FromValue(
+                    new SerializedCommitResult(
+                        writtenEvents,
+                        tagWriteResults,
+                        stopwatch.Elapsed));
+            }
+            catch (Exception)
+            {
+                if (!reservationsConfirmed && reservations.Count > 0)
+                {
+                    await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                }
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializedCommitResult>(ex);
         }
     }
 
@@ -547,133 +727,22 @@ public class CoreGeneralSekibanExecutor
         }
     }
 
-    private async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(
-        ITag tag,
-        string lastSortableUniqueId,
-        CancellationToken cancellationToken)
+    /// <summary>
+    ///     Parses a tag string into an ITag for serialized commit.
+    ///     Consistency tags are wrapped in ConsistencyTag, others in FallbackTag.
+    /// </summary>
+    private static ITag ParseTag(string tagString, bool isConsistency)
     {
-        try
+        var parts = tagString.Split(':', 2);
+        var group = parts[0];
+        var content = parts.Length > 1 ? parts[1] : "";
+        var innerTag = new FallbackTag(group, content);
+
+        if (isConsistency)
         {
-            var tagConsistentActorId = tag.GetTag();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (!actorResult.IsSuccess)
-            {
-                return ResultBox.Error<TagWriteReservation>(actorResult.GetException());
-            }
-
-            var actor = actorResult.GetValue();
-            return await actor.MakeReservationAsync(lastSortableUniqueId);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<TagWriteReservation>(ex);
-        }
-    }
-
-    private async Task CancelReservationsAsync(
-        Dictionary<ITag, TagWriteReservation> reservations,
-        CancellationToken cancellationToken)
-    {
-        var cancelTasks = new List<Task>();
-
-        foreach (var (tag, reservation) in reservations)
-        {
-            var task = CancelReservationAsync(tag, reservation, cancellationToken);
-            cancelTasks.Add(task);
+            return new ConsistencyTag(innerTag);
         }
 
-        await Task.WhenAll(cancelTasks);
-    }
-
-    private async Task CancelReservationAsync(
-        ITag tag,
-        TagWriteReservation reservation,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var tagConsistentActorId = tag.GetTag();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                var actor = actorResult.GetValue();
-                await actor.CancelReservationAsync(reservation);
-            }
-        }
-        catch
-        {
-            // Best effort - log error in production
-        }
-    }
-
-    private async Task ConfirmReservationsAsync(
-        Dictionary<ITag, TagWriteReservation> reservations,
-        CancellationToken cancellationToken)
-    {
-        var confirmTasks = new List<Task>();
-
-        foreach (var (tag, reservation) in reservations)
-        {
-            var task = ConfirmReservationAsync(tag, reservation, cancellationToken);
-            confirmTasks.Add(task);
-        }
-
-        await Task.WhenAll(confirmTasks);
-    }
-
-    private async Task ConfirmReservationAsync(
-        ITag tag,
-        TagWriteReservation reservation,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var tagConsistentActorId = tag.GetTag();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                var actor = actorResult.GetValue();
-                await actor.ConfirmReservationAsync(reservation);
-            }
-        }
-        catch
-        {
-            // Best effort - log error in production
-        }
-    }
-
-    private async Task NotifyNonConsistencyTagsAsync(
-        HashSet<ITag> allTags,
-        IEnumerable<ITag> reservedTags,
-        CancellationToken cancellationToken)
-    {
-        var reservedSet = reservedTags.ToHashSet();
-        var nonConsistencyTags = allTags.Where(t => !reservedSet.Contains(t)).ToList();
-
-        if (nonConsistencyTags.Count == 0) return;
-
-        var notifyTasks = nonConsistencyTags.Select(tag => NotifyTagAsync(tag, cancellationToken));
-        await Task.WhenAll(notifyTasks);
-    }
-
-    private async Task NotifyTagAsync(ITag tag, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var tagConsistentActorId = tag.GetTag();
-            var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
-
-            if (actorResult.IsSuccess)
-            {
-                await actorResult.GetValue().NotifyEventWrittenAsync();
-            }
-        }
-        catch
-        {
-            // Best effort - ignore failures for non-consistency tags
-        }
+        return innerTag;
     }
 }

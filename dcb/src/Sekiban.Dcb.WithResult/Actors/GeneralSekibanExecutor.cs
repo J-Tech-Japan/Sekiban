@@ -12,7 +12,7 @@ namespace Sekiban.Dcb.Actors;
 ///     Wraps CoreGeneralSekibanExecutor to provide the public API
 ///     This implementation uses ResultBox for all error handling
 /// </summary>
-public class GeneralSekibanExecutor : ISekibanExecutor
+public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
 {
     private readonly CoreGeneralSekibanExecutor _core;
     private static readonly AnonymousCommand NoCommandInstance = new();
@@ -95,6 +95,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor
     public Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull =>
         _core.QueryAsync(queryCommon);
+
+    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        _core.GetSerializableTagStateAsync(tagStateId);
+
+    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _core.CommitSerializableEventsAsync(request, cancellationToken);
 
     private sealed record AnonymousCommand : ICommand;
 }

@@ -12,7 +12,7 @@ namespace Sekiban.Dcb.Actors;
 ///     Wraps CoreGeneralSekibanExecutor and unwraps ResultBox, throwing exceptions on errors
 ///     This implementation uses exceptions for all error handling
 /// </summary>
-public class GeneralSekibanExecutor : ISekibanExecutor
+public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
 {
     private readonly CoreGeneralSekibanExecutor _core;
     private static readonly AnonymousCommand NoCommandInstance = new();
@@ -131,6 +131,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor
         var result = await _core.QueryAsync(queryCommon);
         return result.UnwrapBox();
     }
+
+    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        _core.GetSerializableTagStateAsync(tagStateId);
+
+    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _core.CommitSerializableEventsAsync(request, cancellationToken);
 
     private sealed record AnonymousCommand : ICommand;
 }
