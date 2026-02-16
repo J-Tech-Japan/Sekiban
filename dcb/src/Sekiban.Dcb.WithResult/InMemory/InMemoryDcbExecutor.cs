@@ -15,7 +15,7 @@ namespace Sekiban.Dcb.InMemory;
 ///     to execute commands, queries and tag state retrieval without external infrastructure.
 ///     Intended for lightweight tests / prototyping; not thread-safe for high concurrency scenarios.
 /// </summary>
-public class InMemoryDcbExecutor : ISekibanExecutor
+public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
 {
     private readonly GeneralSekibanExecutor _inner;
     private readonly InMemoryObjectAccessor _accessor;
@@ -64,6 +64,14 @@ public class InMemoryDcbExecutor : ISekibanExecutor
     Task<ResultBox<ListQueryResult<TResult>>> ISekibanExecutor.QueryAsync<TResult>(
         IListQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
+
+    Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        _inner.GetSerializableTagStateAsync(tagStateId);
+
+    Task<ResultBox<SerializedCommitResult>> ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken) =>
+        _inner.CommitSerializableEventsAsync(request, cancellationToken);
 
     /// <summary>
     ///     Minimal internal in-memory event store (single process, test support)
@@ -331,6 +339,39 @@ public class InMemoryDcbExecutor : ISekibanExecutor
 
                 return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
             }
+        }
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+            IEnumerable<SerializableEvent> events)
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var adapter = new EventStoreAdapter(state);
+                var result = InMemorySerializableEventWriter.Write(events, adapter);
+                return Task.FromResult(result);
+            }
+        }
+
+        private sealed class EventStoreAdapter : InMemorySerializableEventWriter.IAddableEventStore
+        {
+            private readonly ServiceState _state;
+            public EventStoreAdapter(ServiceState state) => _state = state;
+
+            public void AddSerializableEvent(SerializableEvent ev)
+            {
+                var serializedEvent = new SerializedEventData(
+                    ev.Id,
+                    ev.SortableUniqueIdValue,
+                    ev.EventPayloadName,
+                    Convert.ToBase64String(ev.Payload),
+                    ev.EventMetadata,
+                    ev.Tags);
+                _state.Events.Add(serializedEvent);
+            }
+
+            public int CountEventsWithTag(string tagString) =>
+                _state.Events.Count(e => e.Tags.Contains(tagString));
         }
 
         private string SerializeEvent(Event ev)

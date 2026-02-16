@@ -17,7 +17,7 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of ISekibanExecutor
 ///     Uses Orleans grains for distributed command execution and queries
 /// </summary>
-public class OrleansDcbExecutor : ISekibanExecutor
+public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly IClusterClient _clusterClient;
@@ -238,4 +238,12 @@ public class OrleansDcbExecutor : ISekibanExecutor
 
         return listGeneralBox.GetValue().ToTypedResult<TResult>();
     }
+
+    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+        _generalExecutor.GetSerializableTagStateAsync(tagStateId);
+
+    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+        SerializedCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _generalExecutor.CommitSerializableEventsAsync(request, cancellationToken);
 }
