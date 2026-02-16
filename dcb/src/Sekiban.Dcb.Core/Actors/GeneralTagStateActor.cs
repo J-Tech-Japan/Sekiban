@@ -137,6 +137,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     private async Task<SerializableTagState> GetSerializableStateAsync()
     {
+        var projectorVersion = GetCurrentProjectorVersion();
+
         // Always get the latest sortable unique ID from TagConsistentActor
         string? currentLatestSortableUniqueId = null;
         var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
@@ -157,12 +159,13 @@ public class GeneralTagStateActor : ITagStateActorCommon
         {
             var cachedSerializableState = await serializablePersistent.LoadSerializableStateAsync();
             if (cachedSerializableState != null &&
+                cachedSerializableState.ProjectorVersion == projectorVersion &&
                 cachedSerializableState.LastSortedUniqueId == currentLatestSortableUniqueId)
             {
                 return cachedSerializableState;
             }
 
-            if (cachedSerializableState != null)
+            if (cachedSerializableState != null && cachedSerializableState.ProjectorVersion == projectorVersion)
             {
                 cachedState = DeserializeTagState(cachedSerializableState);
             }
@@ -170,7 +173,10 @@ public class GeneralTagStateActor : ITagStateActorCommon
         else
         {
             cachedState = await _statePersistent.LoadStateAsync();
-            if (cachedState != null && cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
+            if (
+                cachedState != null &&
+                cachedState.ProjectorVersion == projectorVersion &&
+                cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
             {
                 return SerializeTagState(cachedState);
             }
@@ -195,6 +201,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     private async Task<TagState> GetTypedTagStateAsync()
     {
+        var projectorVersion = GetCurrentProjectorVersion();
+
         // Always get the latest sortable unique ID from TagConsistentActor
         string? currentLatestSortableUniqueId = null;
         var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
@@ -214,7 +222,10 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var cachedState = await _statePersistent.LoadStateAsync();
 
         // If cached state exists and is up-to-date, return it
-        if (cachedState != null && cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
+        if (
+            cachedState != null &&
+            cachedState.ProjectorVersion == projectorVersion &&
+            cachedState.LastSortedUniqueId == currentLatestSortableUniqueId)
         {
             return cachedState;
         }
@@ -292,6 +303,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
             state.TagContent,
             state.TagProjector,
             state.ProjectorVersion);
+    }
+
+    private string GetCurrentProjectorVersion()
+    {
+        var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
+        return projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
     }
 
     private async Task<TagState> ComputeStateFromEventsAsync(string? latestSortableUniqueId, TagState? cachedState)
