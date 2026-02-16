@@ -9,8 +9,8 @@ namespace Sekiban.Dcb.Runtime.Native;
 
 /// <summary>
 ///     Native C# implementation of IProjectionActorHost.
-///     Wraps GeneralMultiProjectionActor and hides all domain-specific dependencies
-///     (DcbDomainTypes, JsonSerializerOptions, IServiceProvider) from the Grain.
+///     Uses NativeMultiProjectionProjectionPrimitive to create the underlying actor via the
+///     primitive/accumulator abstraction.
 ///     Query execution and snapshot handling are delegated to focused helper classes.
 /// </summary>
 public class NativeProjectionActorHost : IProjectionActorHost
@@ -24,6 +24,7 @@ public class NativeProjectionActorHost : IProjectionActorHost
     public NativeProjectionActorHost(
         DcbDomainTypes domainTypes,
         IServiceProvider serviceProvider,
+        NativeMultiProjectionProjectionPrimitive primitive,
         string projectorName,
         GeneralMultiProjectionActorOptions? options,
         ILogger? logger)
@@ -33,7 +34,12 @@ public class NativeProjectionActorHost : IProjectionActorHost
         var resolvedLogger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         var jsonOptions = domainTypes.JsonSerializerOptions;
 
-        _actor = new GeneralMultiProjectionActor(domainTypes, projectorName, options, logger);
+        var projectorVersion = domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        var version = projectorVersion.IsSuccess ? projectorVersion.GetValue() : "unknown";
+
+        var accumulator = primitive.CreateNativeAccumulator(projectorName, version, options, logger);
+        _actor = accumulator.GetActor();
+
         _queryExecutor = new NativeProjectionQueryExecutor(domainTypes, jsonOptions, serviceProvider, _actor);
         _snapshotHandler = new NativeProjectionSnapshotHandler(jsonOptions, _actor, resolvedLogger);
     }
