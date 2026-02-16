@@ -99,6 +99,30 @@ public class NativeMultiProjectionProjectionPrimitiveTests
     }
 
     [Fact]
+    public void ApplyEvents_ShouldRespectLatestSortableUniqueIdBoundary()
+    {
+        var domain = BuildDomain();
+        var primitive = new NativeMultiProjectionProjectionPrimitive(domain);
+        var accumulator = primitive.CreateAccumulator(
+            TestMultiProjector.MultiProjectorName,
+            TestMultiProjector.MultiProjectorVersion);
+        accumulator.ApplySnapshot(null);
+
+        var events = BuildSerializableEvents(domain, 3);
+        var latestSortableUniqueId = events[1].SortableUniqueIdValue;
+
+        var applied = accumulator.ApplyEvents(events, latestSortableUniqueId);
+
+        Assert.True(applied);
+
+        var metadataResult = accumulator.GetMetadata();
+        Assert.True(metadataResult.IsSuccess);
+        var metadata = metadataResult.GetValue();
+        Assert.Equal(2, metadata.SafeVersion);
+        Assert.Equal(latestSortableUniqueId, metadata.SafeLastSortableUniqueId);
+    }
+
+    [Fact]
     public void GetSnapshot_ShouldReturnSnapshot_AfterApplyingSnapshotAndEvents()
     {
         var domain = BuildDomain();

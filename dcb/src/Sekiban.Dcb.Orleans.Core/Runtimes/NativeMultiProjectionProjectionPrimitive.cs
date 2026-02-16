@@ -103,9 +103,35 @@ public sealed class NativeMultiProjectionProjectionPrimitive : IMultiProjectionP
 
             try
             {
-                _actor.AddSerializableEventsAsync(events, finishedCatchUp: true)
+                var filtered = events
+                    .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                    .Where(e =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (string.IsNullOrWhiteSpace(latestSortableUniqueId))
+                        {
+                            return true;
+                        }
+
+                        return string.Compare(
+                                   e.SortableUniqueIdValue,
+                                   latestSortableUniqueId,
+                                   StringComparison.Ordinal) <= 0;
+                    })
+                    .ToList();
+
+                if (filtered.Count == 0)
+                {
+                    return true;
+                }
+
+                _actor.AddSerializableEventsAsync(filtered, finishedCatchUp: true)
                     .GetAwaiter().GetResult();
                 return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
             }
             catch (Exception ex)
             {
