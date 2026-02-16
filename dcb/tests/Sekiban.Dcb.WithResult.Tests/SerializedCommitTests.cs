@@ -143,6 +143,52 @@ public class SerializedCommitTests
     }
 
     [Fact]
+    public async Task CommitWithUnknownConsistencyTag_Should_Fail()
+    {
+        // Given
+        var executor = CreateExecutor();
+        var studentId = Guid.NewGuid();
+        var payload = SerializePayload(new StudentCreated(studentId, "Alice", 5));
+        var eventTag = $"Student:{studentId}";
+        var unknownConsistencyTag = $"Student:{Guid.NewGuid()}";
+
+        var request = new SerializedCommitRequest(
+            [new SerializableEventCandidate(payload, nameof(StudentCreated), [eventTag])],
+            [new ConsistencyTagEntry(unknownConsistencyTag, "")]);
+
+        // When
+        var result = await executor.CommitSerializableEventsAsync(request);
+
+        // Then
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Consistency tags must exist in event candidate tags", result.GetException().Message);
+    }
+
+    [Fact]
+    public async Task CommitWithDuplicateConsistencyTags_Should_Fail()
+    {
+        // Given
+        var executor = CreateExecutor();
+        var studentId = Guid.NewGuid();
+        var payload = SerializePayload(new StudentCreated(studentId, "Alice", 5));
+        var eventTag = $"Student:{studentId}";
+
+        var request = new SerializedCommitRequest(
+            [new SerializableEventCandidate(payload, nameof(StudentCreated), [eventTag])],
+            [
+                new ConsistencyTagEntry(eventTag, ""),
+                new ConsistencyTagEntry(eventTag, "")
+            ]);
+
+        // When
+        var result = await executor.CommitSerializableEventsAsync(request);
+
+        // Then
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Duplicate consistency tags in request", result.GetException().Message);
+    }
+
+    [Fact]
     public async Task GetSerializableTagState_Should_ReturnState()
     {
         // Given: Create a student via typed command
