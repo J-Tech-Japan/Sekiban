@@ -76,6 +76,27 @@ public sealed class NativeMultiProjectionProjectionPrimitive : IMultiProjectionP
                 return true;
             }
 
+            if (snapshot.IsOffloaded)
+            {
+                return false;
+            }
+
+            var inline = snapshot.InlineState;
+            if (inline is null)
+            {
+                return false;
+            }
+
+            if (!string.Equals(inline.ProjectorName, _projectorName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!string.Equals(inline.ProjectorVersion, _projectorVersion, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
             try
             {
                 _actor.SetSnapshotAsync(snapshot).GetAwaiter().GetResult();
