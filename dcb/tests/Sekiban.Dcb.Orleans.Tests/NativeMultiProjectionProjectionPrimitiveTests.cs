@@ -172,6 +172,40 @@ public class NativeMultiProjectionProjectionPrimitiveTests
     }
 
     [Fact]
+    public void ApplySnapshot_ShouldReturnFalse_WhenProjectorVersionMismatches()
+    {
+        var envelope = BuildEnvelopeWith(
+            projectorName: TestMultiProjector.MultiProjectorName,
+            projectorVersion: "2.0");
+
+        var primitive = BuildPrimitive();
+        var accumulator = primitive.CreateAccumulator(
+            TestMultiProjector.MultiProjectorName,
+            TestMultiProjector.MultiProjectorVersion);
+
+        var result = accumulator.ApplySnapshot(envelope);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ApplySnapshot_ShouldReturnFalse_WhenProjectorNameMismatches()
+    {
+        var envelope = BuildEnvelopeWith(
+            projectorName: "AnotherProjector",
+            projectorVersion: TestMultiProjector.MultiProjectorVersion);
+
+        var primitive = BuildPrimitive();
+        var accumulator = primitive.CreateAccumulator(
+            TestMultiProjector.MultiProjectorName,
+            TestMultiProjector.MultiProjectorVersion);
+
+        var result = accumulator.ApplySnapshot(envelope);
+
+        Assert.False(result);
+    }
+
+    [Fact]
     public void ApplyEvents_ShouldReturnFalse_WhenEventTypeIsUnregistered()
     {
         var primitive = BuildPrimitive();
@@ -202,6 +236,27 @@ public class NativeMultiProjectionProjectionPrimitiveTests
     private static NativeMultiProjectionProjectionPrimitive BuildPrimitive()
     {
         return new NativeMultiProjectionProjectionPrimitive(BuildDomain());
+    }
+
+    private static SerializableMultiProjectionStateEnvelope BuildEnvelopeWith(
+        string projectorName,
+        string projectorVersion)
+    {
+        var inline = SerializableMultiProjectionState.FromBytes(
+            payload: Encoding.UTF8.GetBytes("{}"),
+            multiProjectionPayloadType: typeof(TestMultiProjector).FullName ?? nameof(TestMultiProjector),
+            projectorName: projectorName,
+            projectorVersion: projectorVersion,
+            lastSortableUniqueId: string.Empty,
+            lastEventId: Guid.Empty,
+            version: 0,
+            isCatchedUp: true,
+            isSafeState: true);
+
+        return new SerializableMultiProjectionStateEnvelope(
+            IsOffloaded: false,
+            InlineState: inline,
+            OffloadedState: null);
     }
 
     private static DcbDomainTypes BuildDomain()
