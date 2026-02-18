@@ -88,7 +88,13 @@ public partial class CosmosDbEventStore : IEventStore
                         .WithParameter(ParamServiceId, serviceId);
             }
             var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
-            if (maxCount.HasValue)
+            if (options.MaxItemCountPerReadAllPage > 0)
+            {
+                queryRequestOptions.MaxItemCount = maxCount.HasValue
+                    ? Math.Min(maxCount.Value, options.MaxItemCountPerReadAllPage)
+                    : options.MaxItemCountPerReadAllPage;
+            }
+            else if (maxCount.HasValue)
             {
                 queryRequestOptions.MaxItemCount = maxCount.Value;
             }

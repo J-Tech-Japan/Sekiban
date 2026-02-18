@@ -101,7 +101,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         }
 
         Assert.True(SharedEventStore.ReadAllEventsCallCount > 0);
-        Assert.All(SharedEventStore.ReadAllEventsMaxCounts, maxCount => Assert.Equal(3000, maxCount));
+        Assert.All(SharedEventStore.ReadAllEventsMaxCounts, maxCount => Assert.Equal(500, maxCount));
     }
 
     [Fact]

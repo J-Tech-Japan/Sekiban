@@ -25,6 +25,12 @@ public class GeneralMultiProjectionActorOptions
     /// </summary>
     public int MaxPendingStreamEvents { get; set; } = 50000;
 
+    /// <summary>
+    ///     Number of events read per catch-up batch from the event store.
+    ///     Lower values reduce peak memory usage during catch-up.
+    /// </summary>
+    public int CatchUpBatchSize { get; set; } = 500;
+
     // Dynamic SafeWindow controls (optional; default OFF)
     public bool EnableDynamicSafeWindow { get; set; } = false;
 
