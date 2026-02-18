@@ -58,7 +58,7 @@ public class DynamoDbEventStore : IEventStore
     /// <summary>
     ///     Reads all events ordered by sortable unique ID.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -82,6 +82,11 @@ public class DynamoDbEventStore : IEventStore
             var ordered = allEvents
                 .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                 .ToList();
+
+            if (maxCount.HasValue)
+            {
+                ordered = ordered.Take(maxCount.Value).ToList();
+            }
 
             return ResultBox.FromValue<IEnumerable<Event>>(ordered);
         }

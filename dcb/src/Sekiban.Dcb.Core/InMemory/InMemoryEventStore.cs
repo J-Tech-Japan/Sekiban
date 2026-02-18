@@ -58,7 +58,7 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         var state = GetState();
         lock (state.Lock)
@@ -72,6 +72,11 @@ public class InMemoryEventStore : IEventStore
                         since.Value,
                         StringComparison.Ordinal) >
                     0);
+            }
+
+            if (maxCount.HasValue)
+            {
+                events = events.Take(maxCount.Value);
             }
 
             return Task.FromResult(ResultBox.FromValue(events));

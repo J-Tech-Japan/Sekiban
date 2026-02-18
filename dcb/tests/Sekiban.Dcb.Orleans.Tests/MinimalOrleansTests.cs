@@ -24,6 +24,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class MinimalOrleansTests : IAsyncLifetime
 {
+    private static readonly CountingInMemoryEventStore SharedEventStore = new();
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
 
@@ -39,6 +40,8 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         _cluster = builder.Build();
         await _cluster.DeployAsync();
+        SharedEventStore.Clear();
+        SharedEventStore.ClearReadAllEventsTracking();
     }
 
     public async Task DisposeAsync()
@@ -68,6 +71,37 @@ public class MinimalOrleansTests : IAsyncLifetime
         Assert.Equal("test-projector", status.ProjectorName);
         Assert.Equal(0, status.EventsProcessed);
         Assert.True(status.IsSubscriptionActive); // Subscription auto-starts on activation
+    }
+
+    [Fact]
+    public async Task Orleans_MultiProjectionCatchUp_Should_Read_With_BatchLimit()
+    {
+        var grain = _client.GetGrain<IMultiProjectionGrain>("test-projector");
+        SharedEventStore.ClearReadAllEventsTracking();
+
+        var baseTick = DateTime.UtcNow.Ticks;
+        var events = Enumerable.Range(0, 3501)
+            .Select(i => new Event(
+                new TestProjectionEvent(i),
+                new SortableUniqueId(
+                    SortableUniqueId.GetTickString(baseTick + i) + SortableUniqueId.GetIdString(Guid.Empty)),
+                nameof(TestProjectionEvent),
+                Guid.CreateVersion7(),
+                new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+                new List<string>()))
+            .ToList();
+
+        await grain.SeedEventsAsync(events);
+        await grain.RefreshAsync();
+
+        var due = DateTime.UtcNow.AddSeconds(8);
+        while (DateTime.UtcNow < due && SharedEventStore.ReadAllEventsCallCount == 0)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.True(SharedEventStore.ReadAllEventsCallCount > 0);
+        Assert.All(SharedEventStore.ReadAllEventsMaxCounts, maxCount => Assert.Equal(3000, maxCount));
     }
 
     [Fact]
@@ -232,7 +266,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     });
 
                     // Add storage
-                    services.AddSingleton<IEventStore, InMemoryEventStore>();
+                    services.AddSingleton<IEventStore>(SharedEventStore);
                     services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
@@ -326,5 +360,77 @@ public class MinimalOrleansTests : IAsyncLifetime
         public static PersistenceTestMulti GenerateInitialPayload() => new();
         public static ResultBox<PersistenceTestMulti>
             Project(PersistenceTestMulti payload, Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
+    }
+
+    private record TestProjectionEvent(int Value) : IEventPayload;
+
+    private class CountingInMemoryEventStore : IEventStore
+    {
+        private readonly InMemoryEventStore _inner = new();
+        private readonly object _lock = new();
+        private readonly List<int?> _readAllEventsMaxCounts = new();
+
+        public int ReadAllEventsCallCount { get; private set; }
+
+        public IReadOnlyList<int?> ReadAllEventsMaxCounts
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _readAllEventsMaxCounts.ToList();
+                }
+            }
+        }
+
+        public void Clear() => _inner.Clear();
+
+        public void ClearReadAllEventsTracking()
+        {
+            lock (_lock)
+            {
+                ReadAllEventsCallCount = 0;
+                _readAllEventsMaxCounts.Clear();
+            }
+        }
+
+        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
+        {
+            lock (_lock)
+            {
+                ReadAllEventsCallCount++;
+                _readAllEventsMaxCounts.Add(maxCount);
+            }
+
+            return _inner.ReadAllEventsAsync(since, maxCount);
+        }
+
+        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+            _inner.ReadEventsByTagAsync(tag, since);
+
+        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
+
+        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
+            IEnumerable<Event> events) => _inner.WriteEventsAsync(events);
+
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
+
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
+
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
+
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
+
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            _inner.ReadAllSerializableEventsAsync(since);
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
     }
 }
