@@ -87,15 +87,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private CatchUpProgress _catchUpProgress = new();
     private IDisposable? _catchUpTimer;
     private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
-    private const int CatchUpBatchSize = 3000; // Optimized batch size after fixing O(n²) issue
+    private const int DefaultCatchUpBatchSize = 500;
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
+    private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1, 1);
 
     // Delegate these to configuration
     private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
     private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
     private int _maxPendingStreamEvents = 50000;
+    private int _catchUpBatchSize = DefaultCatchUpBatchSize;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -976,6 +978,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 SafeWindowMs = baseOptions.SafeWindowMs,
                 MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
                 MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
+                CatchUpBatchSize = baseOptions.CatchUpBatchSize,
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
@@ -983,6 +986,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
+            _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
 
             _host = _actorHostFactory.Create(
                 projectorName,
@@ -1563,6 +1567,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var projectorName = GetProjectorName();
+        var lockAcquired = await CatchUpBatchSemaphore.WaitAsync(TimeSpan.Zero);
+        if (!lockAcquired)
+        {
+            _logger.LogDebug("[{ProjectorName}] Catch-up batch skipped due to global catch-up concurrency limit", projectorName);
+            return;
+        }
 
         try
         {
@@ -1590,6 +1600,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _logger.LogError(ex, "[{ProjectorName}] Catch-up batch error", projectorName);
             // Continue with next timer execution
         }
+        finally
+        {
+            CatchUpBatchSemaphore.Release();
+        }
     }
 
     private async Task<int> ProcessSingleCatchUpBatch()
@@ -1599,7 +1613,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = GetProjectorName();
 
         // Always use small batch size to avoid blocking
-        var batchSize = CatchUpBatchSize;
+        var batchSize = _catchUpBatchSize;
 
         // Read batch of events
         var eventsResult = _catchUpProgress.CurrentPosition == null

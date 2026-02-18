@@ -97,6 +97,13 @@ public class CosmosDbEventStoreOptions
     public int MaxItemCountPerPage { get; set; } = 1000;
 
     /// <summary>
+    ///     Maximum items per page specifically for ReadAllEventsAsync.
+    ///     This is separate from maxCount (total events requested by caller).
+    ///     Default: 500 to keep per-page memory usage low in constrained environments.
+    /// </summary>
+    public int MaxItemCountPerReadAllPage { get; set; } = 500;
+
+    /// <summary>
     ///     Maximum degree of parallelism for cross-partition queries.
     ///     Default: -1 (unlimited, let Cosmos DB SDK decide)
     /// </summary>
@@ -157,6 +164,7 @@ public class CosmosDbEventStoreOptions
         new()
         {
             MaxItemCountPerPage = -1, // Use SDK default (~100)
+            MaxItemCountPerReadAllPage = 100, // Keep pages small in compatibility mode
             MaxConcurrencyForQueries = -1,
             MaxBufferedItemCount = -1, // Use SDK default
             UseDirectConnectionMode = false, // Gateway mode (HTTPS)
