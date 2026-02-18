@@ -6,6 +6,11 @@ namespace Sekiban.Dcb.Sqlite;
 public class CacheSyncOptions
 {
     /// <summary>
+    ///     Number of events to fetch per remote read during cache sync.
+    /// </summary>
+    public int BatchSize { get; set; } = 3000;
+
+    /// <summary>
     ///     Time window to exclude from caching.
     ///     Events within this window are considered "unsafe" and will be fetched from remote.
     /// </summary>

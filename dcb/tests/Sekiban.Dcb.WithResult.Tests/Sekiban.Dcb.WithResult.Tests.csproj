@@ -29,6 +29,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult\Sekiban.Dcb.WithResult.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
     </ItemGroup>
 

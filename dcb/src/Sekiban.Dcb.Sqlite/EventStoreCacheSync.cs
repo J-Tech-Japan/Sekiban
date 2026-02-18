@@ -92,57 +92,83 @@ public class EventStoreCacheSync
             _logger?.LogInformation("Fetching events since {Since} until {Until}",
                 since?.Value ?? "(beginning)", until?.Value ?? "(now)");
 
-            var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(since);
-            if (!remoteEventsResult.IsSuccess)
+            var batchSize = GetEffectiveBatchSize();
+            var totalEventsAdded = 0;
+            var currentSince = since;
+
+            while (true)
             {
-                return CacheSyncResult.Failed(
-                    $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
-                    stopwatch.Elapsed);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize);
+                if (!remoteEventsResult.IsSuccess)
+                {
+                    return CacheSyncResult.Failed(
+                        $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
+                        stopwatch.Elapsed);
+                }
+
+                var remoteEvents = remoteEventsResult.GetValue()
+                    .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                    .ToList();
+
+                if (remoteEvents.Count == 0)
+                {
+                    break;
+                }
+
+                var eventsToCache = until != null
+                    ? remoteEvents.Where(e => new SortableUniqueId(e.SortableUniqueIdValue).IsEarlierThanOrEqual(until)).ToList()
+                    : remoteEvents;
+
+                if (eventsToCache.Count > 0)
+                {
+                    _logger?.LogInformation("Caching batch of {Count} events...", eventsToCache.Count);
+
+                    var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
+                    if (!writeResult.IsSuccess)
+                    {
+                        return CacheSyncResult.Failed(
+                            $"Failed to write events to cache: {writeResult.GetException().Message}",
+                            stopwatch.Elapsed);
+                    }
+
+                    totalEventsAdded += eventsToCache.Count;
+
+                    await _localStore.SetMetadataAsync(new CacheMetadata
+                    {
+                        RemoteEndpoint = _options.RemoteEndpoint,
+                        DatabaseName = _options.DatabaseName,
+                        SchemaVersion = _options.SchemaVersion,
+                        TotalCountAtFetch = remoteCount,
+                        LastCachedSortableUniqueId = eventsToCache.Last().SortableUniqueIdValue,
+                        LastSafeWindowUtc = until?.GetDateTime(),
+                        CreatedUtc = metadata?.CreatedUtc ?? DateTime.UtcNow,
+                        UpdatedUtc = DateTime.UtcNow
+                    });
+                }
+
+                var reachedSafeWindow = until != null && eventsToCache.Count < remoteEvents.Count;
+                if (reachedSafeWindow || remoteEvents.Count < batchSize)
+                {
+                    break;
+                }
+
+                currentSince = new SortableUniqueId(remoteEvents.Last().SortableUniqueIdValue);
             }
 
-            var remoteEvents = remoteEventsResult.GetValue().ToList();
-
-            // Filter by safe window
-            var eventsToCache = until != null
-                ? remoteEvents.Where(e => new SortableUniqueId(e.SortableUniqueIdValue).IsEarlierThanOrEqual(until)).ToList()
-                : remoteEvents;
-
-            if (eventsToCache.Count == 0)
+            if (totalEventsAdded == 0)
             {
                 _logger?.LogInformation("No new events to cache (all within safe window)");
                 return CacheSyncResult.NoChanges(localCount, stopwatch.Elapsed);
             }
 
-            // 6. Write to local cache
-            _logger?.LogInformation("Caching {Count} events...", eventsToCache.Count);
-
-            var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
-            if (!writeResult.IsSuccess)
-            {
-                return CacheSyncResult.Failed(
-                    $"Failed to write events to cache: {writeResult.GetException().Message}",
-                    stopwatch.Elapsed);
-            }
-
-            // 7. Update metadata
-            var newLocalCount = localCount + eventsToCache.Count;
-            await _localStore.SetMetadataAsync(new CacheMetadata
-            {
-                RemoteEndpoint = _options.RemoteEndpoint,
-                DatabaseName = _options.DatabaseName,
-                SchemaVersion = _options.SchemaVersion,
-                TotalCountAtFetch = remoteCount,
-                LastCachedSortableUniqueId = eventsToCache.Last().SortableUniqueIdValue,
-                LastSafeWindowUtc = until?.GetDateTime(),
-                CreatedUtc = metadata?.CreatedUtc ?? DateTime.UtcNow,
-                UpdatedUtc = DateTime.UtcNow
-            });
-
+            var newLocalCount = localCount + totalEventsAdded;
             _logger?.LogInformation("Cache sync completed: {Count} events added, {Total} total",
-                eventsToCache.Count, newLocalCount);
+                totalEventsAdded, newLocalCount);
 
             return CacheSyncResult.Success(
-                eventsToCache.Count,
+                totalEventsAdded,
                 newLocalCount,
                 CacheSyncAction.AppendedNewEvents,
                 stopwatch.Elapsed);
@@ -193,58 +219,83 @@ public class EventStoreCacheSync
         CancellationToken cancellationToken)
     {
         var until = GetSafeWindowThreshold();
+        var batchSize = GetEffectiveBatchSize();
+        SortableUniqueId? currentSince = null;
+        var totalEventsAdded = 0;
 
         _logger?.LogInformation("Rebuilding cache from scratch...");
-
-        var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync();
-        if (!remoteEventsResult.IsSuccess)
+        while (true)
         {
-            return CacheSyncResult.Failed(
-                $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
-                stopwatch.Elapsed);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var remoteEventsResult = await _remoteStore.ReadAllSerializableEventsAsync(currentSince, batchSize);
+            if (!remoteEventsResult.IsSuccess)
+            {
+                return CacheSyncResult.Failed(
+                    $"Failed to read remote events: {remoteEventsResult.GetException().Message}",
+                    stopwatch.Elapsed);
+            }
+
+            var remoteEvents = remoteEventsResult.GetValue()
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .ToList();
+
+            if (remoteEvents.Count == 0)
+            {
+                break;
+            }
+
+            var eventsToCache = until != null
+                ? remoteEvents.Where(e => new SortableUniqueId(e.SortableUniqueIdValue).IsEarlierThanOrEqual(until)).ToList()
+                : remoteEvents;
+
+            if (eventsToCache.Count > 0)
+            {
+                _logger?.LogInformation("Caching batch of {Count} events...", eventsToCache.Count);
+
+                var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
+                if (!writeResult.IsSuccess)
+                {
+                    return CacheSyncResult.Failed(
+                        $"Failed to write events to cache: {writeResult.GetException().Message}",
+                        stopwatch.Elapsed);
+                }
+
+                totalEventsAdded += eventsToCache.Count;
+
+                await _localStore.SetMetadataAsync(new CacheMetadata
+                {
+                    RemoteEndpoint = _options.RemoteEndpoint,
+                    DatabaseName = _options.DatabaseName,
+                    SchemaVersion = _options.SchemaVersion,
+                    TotalCountAtFetch = remoteCount,
+                    LastCachedSortableUniqueId = eventsToCache.Last().SortableUniqueIdValue,
+                    LastSafeWindowUtc = until?.GetDateTime(),
+                    CreatedUtc = DateTime.UtcNow,
+                    UpdatedUtc = DateTime.UtcNow
+                });
+            }
+
+            var reachedSafeWindow = until != null && eventsToCache.Count < remoteEvents.Count;
+            if (reachedSafeWindow || remoteEvents.Count < batchSize)
+            {
+                break;
+            }
+
+            currentSince = new SortableUniqueId(remoteEvents.Last().SortableUniqueIdValue);
         }
 
-        var remoteEvents = remoteEventsResult.GetValue().ToList();
-
-        // Filter by safe window
-        var eventsToCache = until != null
-            ? remoteEvents.Where(e => new SortableUniqueId(e.SortableUniqueIdValue).IsEarlierThanOrEqual(until)).ToList()
-            : remoteEvents;
-
-        if (eventsToCache.Count == 0)
+        if (totalEventsAdded == 0)
         {
             _logger?.LogInformation("No events to cache (all within safe window)");
             return CacheSyncResult.Success(0, 0, CacheSyncAction.RebuiltFromScratch, stopwatch.Elapsed);
         }
 
-        _logger?.LogInformation("Caching {Count} events...", eventsToCache.Count);
-
-        var writeResult = await _localStore.WriteSerializableEventsAsync(eventsToCache);
-        if (!writeResult.IsSuccess)
-        {
-            return CacheSyncResult.Failed(
-                $"Failed to write events to cache: {writeResult.GetException().Message}",
-                stopwatch.Elapsed);
-        }
-
-        // Update metadata
-        await _localStore.SetMetadataAsync(new CacheMetadata
-        {
-            RemoteEndpoint = _options.RemoteEndpoint,
-            DatabaseName = _options.DatabaseName,
-            SchemaVersion = _options.SchemaVersion,
-            TotalCountAtFetch = remoteCount,
-            LastCachedSortableUniqueId = eventsToCache.Last().SortableUniqueIdValue,
-            LastSafeWindowUtc = until?.GetDateTime(),
-            CreatedUtc = DateTime.UtcNow,
-            UpdatedUtc = DateTime.UtcNow
-        });
-
-        _logger?.LogInformation("Cache rebuilt: {Count} events cached", eventsToCache.Count);
+        _logger?.LogInformation("Cache rebuilt: {Count} events cached", totalEventsAdded);
 
         return CacheSyncResult.Success(
-            eventsToCache.Count,
-            eventsToCache.Count,
+            totalEventsAdded,
+            totalEventsAdded,
             CacheSyncAction.RebuiltFromScratch,
             stopwatch.Elapsed);
     }
@@ -296,6 +347,8 @@ public class EventStoreCacheSync
         var threshold = DateTime.UtcNow - _options.SafeWindow;
         return new SortableUniqueId(SortableUniqueId.Generate(threshold, Guid.Empty));
     }
+
+    private int GetEffectiveBatchSize() => _options.BatchSize > 0 ? _options.BatchSize : 3000;
 }
 
 /// <summary>

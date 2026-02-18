@@ -1077,6 +1077,12 @@ public partial class CosmosDbEventStore : IEventStore
     ///     Reads all events as SerializableEvent (no payload deserialization).
     /// </summary>
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        => await ReadAllSerializableEventsAsync(since, null).ConfigureAwait(false);
+
+    /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization).
+    /// </summary>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
     {
         try
         {
@@ -1103,14 +1109,27 @@ public partial class CosmosDbEventStore : IEventStore
                         .WithParameter(ParamServiceId, serviceId);
             }
             var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
+            if (options.MaxItemCountPerReadAllPage > 0)
+            {
+                queryRequestOptions.MaxItemCount = maxCount.HasValue
+                    ? Math.Min(maxCount.Value, options.MaxItemCountPerReadAllPage)
+                    : options.MaxItemCountPerReadAllPage;
+            }
+            else if (maxCount.HasValue)
+            {
+                queryRequestOptions.MaxItemCount = maxCount.Value;
+            }
 
             var events = new List<SerializableEvent>();
+            var totalRuConsumed = 0.0;
+            var totalEventsRead = 0;
 
             using var iterator = container.GetItemQueryIterator<CosmosEvent>(queryDefinition, requestOptions: queryRequestOptions);
 
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                totalRuConsumed += response.RequestCharge;
 
                 foreach (var cosmosEvent in response)
                 {
@@ -1122,9 +1141,22 @@ public partial class CosmosDbEventStore : IEventStore
                             cosmosEvent.CausationId ?? "",
                             cosmosEvent.CorrelationId ?? "",
                             cosmosEvent.ExecutedUser ?? ""),
-                        cosmosEvent.Tags?.ToList() ?? new List<string>(),
+                            cosmosEvent.Tags?.ToList() ?? new List<string>(),
                         cosmosEvent.EventType));
                 }
+                totalEventsRead += response.Count;
+
+                if (maxCount.HasValue && events.Count >= maxCount.Value)
+                {
+                    break;
+                }
+
+                options.ReadProgressCallback?.Invoke(totalEventsRead, totalRuConsumed);
+            }
+
+            if (maxCount.HasValue && events.Count > maxCount.Value)
+            {
+                events = events.Take(maxCount.Value).ToList();
             }
 
             return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
