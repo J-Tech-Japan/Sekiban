@@ -15,7 +15,8 @@ public interface IEventStore
     ///     Reads all events from the event store
     /// </summary>
     /// <param name="since">Optional: Only return events after this ID</param>
-    Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null);
+    /// <param name="maxCount">Optional: Maximum number of events to return</param>
+    Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null);
 
     /// <summary>
     ///     Reads events for a specific tag

@@ -126,6 +126,29 @@ public class InMemoryEventStoreTests
     }
 
     [Fact]
+    public async Task ReadAllEventsAsync_With_MaxCount_Should_Return_Limited_Events()
+    {
+        // Arrange
+        var student1 = new StudentCreated(Guid.NewGuid(), "Student 1");
+        var student2 = new StudentCreated(Guid.NewGuid(), "Student 2");
+        var student3 = new StudentCreated(Guid.NewGuid(), "Student 3");
+
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student1, new StudentTag(student1.StudentId)));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student2, new StudentTag(student2.StudentId)));
+        await _store.WriteEventAsync(EventTestHelper.CreateEvent(student3, new StudentTag(student3.StudentId)));
+
+        // Act
+        var result = await _store.ReadAllEventsAsync(maxCount: 2);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        var events = result.GetValue().ToList();
+        Assert.Equal(2, events.Count);
+        Assert.Equal("Student 1", ((StudentCreated)events[0].Payload).Name);
+        Assert.Equal("Student 2", ((StudentCreated)events[1].Payload).Name);
+    }
+
+    [Fact]
     public async Task ReadEventsByTagAsync_Should_Return_Events_For_Specific_Tag()
     {
         // Arrange

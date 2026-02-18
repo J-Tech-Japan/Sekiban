@@ -342,8 +342,8 @@ public class GeneralTagStateActorPersistenceTests
         private readonly IEventStore _inner = inner;
         public int ReadEventsByTagCallCount { get; private set; }
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null) =>
-            _inner.ReadAllEventsAsync(since);
+        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
+            _inner.ReadAllEventsAsync(since, maxCount);
 
         public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {

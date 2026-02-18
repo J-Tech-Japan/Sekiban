@@ -334,8 +334,8 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
         public void ClearCounts() => ReadEventsByTagCallCount = 0;
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null) =>
-            _inner.ReadAllEventsAsync(since);
+        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
+            _inner.ReadAllEventsAsync(since, maxCount);
 
         public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {

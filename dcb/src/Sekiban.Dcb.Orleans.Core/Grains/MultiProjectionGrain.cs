@@ -1603,8 +1603,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Read batch of events
         var eventsResult = _catchUpProgress.CurrentPosition == null
-            ? await _eventStore.ReadAllEventsAsync(since: null)
-            : await _eventStore.ReadAllEventsAsync(since: _catchUpProgress.CurrentPosition.Value);
+            ? await _eventStore.ReadAllEventsAsync(since: null, maxCount: batchSize)
+            : await _eventStore.ReadAllEventsAsync(since: _catchUpProgress.CurrentPosition.Value, maxCount: batchSize);
 
         if (!eventsResult.IsSuccess)
         {
@@ -1615,23 +1615,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return 0;
         }
 
-        var allEvents = eventsResult.GetValue().ToList();
-        if (allEvents.Count == 0)
+        var events = eventsResult.GetValue().ToList();
+        if (events.Count == 0)
         {
             return 0;
         }
 
         // Update target position dynamically based on latest event in this batch
         // This avoids reading all events upfront just to determine the target
-        var latestInBatch = allEvents.Last();
+        var latestInBatch = events.Last();
         if (_catchUpProgress.TargetPosition == null ||
             string.Compare(latestInBatch.SortableUniqueIdValue, _catchUpProgress.TargetPosition.Value, StringComparison.Ordinal) > 0)
         {
             _catchUpProgress.TargetPosition = new SortableUniqueId(latestInBatch.SortableUniqueIdValue);
         }
-
-        // Limit batch size based on whether this is initial catch-up
-        var events = allEvents.Take(batchSize).ToList();
 
         // Filter out already processed events
         var filtered = new List<Event>();

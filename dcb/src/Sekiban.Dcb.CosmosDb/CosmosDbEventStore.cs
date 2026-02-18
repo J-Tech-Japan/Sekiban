@@ -61,7 +61,7 @@ public partial class CosmosDbEventStore : IEventStore
     ///     Reads all events, optionally after a given sortable unique ID.
     ///     Optimized for high-throughput bulk reads with parallel deserialization.
     /// </summary>
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -88,6 +88,10 @@ public partial class CosmosDbEventStore : IEventStore
                         .WithParameter(ParamServiceId, serviceId);
             }
             var queryRequestOptions = options.CreateOptimizedQueryRequestOptions();
+            if (maxCount.HasValue)
+            {
+                queryRequestOptions.MaxItemCount = maxCount.Value;
+            }
 
             var events = new List<Event>();
             var totalRuConsumed = 0.0;
@@ -113,8 +117,18 @@ public partial class CosmosDbEventStore : IEventStore
                 events.AddRange(pageEvents.GetValue());
                 totalEventsRead += response.Count;
 
+                if (maxCount.HasValue && events.Count >= maxCount.Value)
+                {
+                    break;
+                }
+
                 // Report progress if callback is configured
                 options.ReadProgressCallback?.Invoke(totalEventsRead, totalRuConsumed);
+            }
+
+            if (maxCount.HasValue && events.Count > maxCount.Value)
+            {
+                events = events.Take(maxCount.Value).ToList();
             }
 
             return ResultBox.FromValue<IEnumerable<Event>>(events);

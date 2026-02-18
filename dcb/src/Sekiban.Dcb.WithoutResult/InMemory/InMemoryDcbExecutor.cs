@@ -117,7 +117,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             EventMetadata EventMetadata,
             IReadOnlyList<string> Tags);
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
         {
             var state = GetState();
             lock (state.Lock)
@@ -128,6 +128,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
                 }
                 events = events.OrderBy(e => e.SortableUniqueIdValue);
+                if (maxCount.HasValue)
+                {
+                    events = events.Take(maxCount.Value);
+                }
 
                 // Deserialize events
                 var result = new List<Event>();

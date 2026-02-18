@@ -13,7 +13,7 @@ public class InMemoryEventStore : IEventStore
     private readonly List<Event> _events = new();
     private readonly object _lock = new();
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         lock (_lock)
         {
@@ -29,6 +29,10 @@ public class InMemoryEventStore : IEventStore
             }
 
             events = events.OrderBy(e => e.SortableUniqueIdValue);
+            if (maxCount.HasValue)
+            {
+                events = events.Take(maxCount.Value);
+            }
 
             return Task.FromResult(ResultBox.FromValue(events));
         }

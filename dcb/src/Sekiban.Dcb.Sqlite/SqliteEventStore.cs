@@ -302,7 +302,7 @@ public class SqliteEventStore : IEventStore
         }
     }
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -331,6 +331,11 @@ public class SqliteEventStore : IEventStore
                     WHERE ServiceId = {ParamServiceId}
                     ORDER BY SortableUniqueId
                     """;
+            }
+            if (maxCount.HasValue)
+            {
+                cmd.CommandText += "\nLIMIT @maxCount";
+                cmd.Parameters.AddWithValue("@maxCount", maxCount.Value);
             }
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 

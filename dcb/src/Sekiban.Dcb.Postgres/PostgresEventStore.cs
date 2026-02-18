@@ -34,7 +34,7 @@ public class PostgresEventStore : IEventStore
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null)
+    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try
         {
@@ -48,7 +48,12 @@ public class PostgresEventStore : IEventStore
                 query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
             }
 
-            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+            var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
+            var limitedQuery = maxCount.HasValue
+                ? orderedQuery.Take(maxCount.Value)
+                : orderedQuery;
+
+            var dbEvents = await limitedQuery.ToListAsync();
 
             var events = new List<Event>();
             foreach (var dbEvent in dbEvents)
