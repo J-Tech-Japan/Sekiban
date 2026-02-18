@@ -31,16 +31,24 @@ internal class NativeProjectionSnapshotHandler
 
     public async Task<ResultBox<byte[]>> GetSnapshotBytesAsync(bool canGetUnsafeState = true)
     {
-        var snapshotResult = await _actor.GetSnapshotAsync(canGetUnsafeState);
-        if (!snapshotResult.IsSuccess)
+        try
         {
-            return ResultBox.Error<byte[]>(snapshotResult.GetException());
-        }
+            var snapshotResult = await _actor.GetSnapshotAsync(canGetUnsafeState);
+            if (!snapshotResult.IsSuccess)
+            {
+                return ResultBox.Error<byte[]>(snapshotResult.GetException());
+            }
 
-        var envelope = snapshotResult.GetValue();
-        using var memoryStream = new MemoryStream();
-        await JsonSerializer.SerializeAsync(memoryStream, envelope, _jsonOptions);
-        return ResultBox.FromValue(memoryStream.ToArray());
+            var envelope = snapshotResult.GetValue();
+
+            // Serialize directly into the final byte[] to avoid MemoryStream->ToArray double allocation.
+            var snapshotBytes = JsonSerializer.SerializeToUtf8Bytes(envelope, _jsonOptions);
+            return ResultBox.FromValue(snapshotBytes);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<byte[]>(ex);
+        }
     }
 
     public async Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData)
