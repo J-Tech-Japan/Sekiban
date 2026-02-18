@@ -77,6 +77,16 @@ public interface IEventStore
         => throw new NotSupportedException("SerializableEvent read not implemented");
 
     /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization).
+    /// </summary>
+    /// <param name="since">Optional: Only return events after this ID</param>
+    /// <param name="maxCount">Optional: Maximum number of events to return</param>
+    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
+        => ReadAllSerializableEventsAsync(since);
+
+    /// <summary>
     ///     Reads events for a specific tag as SerializableEvent (no payload deserialization).
     /// </summary>
     /// <param name="tag">The tag to filter events by</param>
