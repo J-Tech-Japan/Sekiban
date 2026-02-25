@@ -48,5 +48,6 @@
     <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj" />
   </Folder>
 </Solution>
