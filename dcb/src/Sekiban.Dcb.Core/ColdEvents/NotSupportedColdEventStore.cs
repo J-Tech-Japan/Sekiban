@@ -3,7 +3,8 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class NotSupportedColdEventStore :
     IColdEventProgressReader,
-    IColdEventExporter
+    IColdEventExporter,
+    IColdEventCatalogReader
 {
     private static readonly ColdFeatureStatus NotConfiguredStatus = new(
         IsSupported: false,
@@ -21,4 +22,7 @@ public sealed class NotSupportedColdEventStore :
 
     public Task<ResultBox<ExportResult>> ExportIncrementalAsync(string serviceId, CancellationToken ct)
         => Task.FromResult(ResultBox.Error<ExportResult>(NotSupportedException));
+
+    public Task<ResultBox<ColdDataRangeSummary>> GetDataRangeSummaryAsync(string serviceId, CancellationToken ct)
+        => Task.FromResult(ResultBox.Error<ColdDataRangeSummary>(NotSupportedException));
 }
