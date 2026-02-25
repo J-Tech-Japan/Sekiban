@@ -39,6 +39,15 @@ public static class ColdControlFileHelper
         string serviceId,
         CancellationToken ct)
     {
+        var result = await LoadCheckpointWithETagAsync(storage, serviceId, ct);
+        return result?.Checkpoint;
+    }
+
+    public static async Task<CheckpointWithETag?> LoadCheckpointWithETagAsync(
+        IColdObjectStorage storage,
+        string serviceId,
+        CancellationToken ct)
+    {
         var path = ColdStoragePaths.CheckpointPath(serviceId);
         var getResult = await storage.GetAsync(path, ct);
         if (!getResult.IsSuccess)
@@ -46,8 +55,15 @@ public static class ColdControlFileHelper
             return null;
         }
 
-        return JsonSerializer.Deserialize<ColdCheckpoint>(getResult.GetValue().Data, ColdEventJsonOptions.Default);
+        var obj = getResult.GetValue();
+        var checkpoint = JsonSerializer.Deserialize<ColdCheckpoint>(obj.Data, ColdEventJsonOptions.Default);
+        if (checkpoint is null)
+        {
+            return null;
+        }
+        return new CheckpointWithETag(checkpoint, obj.ETag);
     }
 
     public sealed record ManifestWithETag(ColdManifest Manifest, string ETag);
+    public sealed record CheckpointWithETag(ColdCheckpoint Checkpoint, string ETag);
 }

@@ -119,7 +119,7 @@ public sealed class HybridEventStore : IEventStore
 
         var merged = coldEvents
             .Concat(hotResult.GetValue())
-            .DistinctBy(e => e.SortableUniqueIdValue)
+            .DistinctBy(e => e.Id)
             .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
 
         IEnumerable<SerializableEvent> result = maxCount.HasValue
