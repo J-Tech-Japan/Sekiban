@@ -14,6 +14,7 @@ public static class SekibanDcbColdEventExtensions
         services.TryAddSingleton<IColdEventStoreFeature>(notSupported);
         services.TryAddSingleton<IColdEventProgressReader>(notSupported);
         services.TryAddSingleton<IColdEventExporter>(notSupported);
+        services.TryAddSingleton<IColdEventCatalogReader>(notSupported);
         return services;
     }
 
@@ -26,6 +27,8 @@ public static class SekibanDcbColdEventExtensions
         services.AddSingleton<IColdEventExporter>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventProgressReader>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventStoreFeature>(sp => sp.GetRequiredService<ColdExporter>());
+        services.AddSingleton<ColdCatalogReader>();
+        services.AddSingleton<IColdEventCatalogReader>(sp => sp.GetRequiredService<ColdCatalogReader>());
         services.AddHostedService<ColdExportBackgroundService>();
         return services;
     }

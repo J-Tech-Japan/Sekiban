@@ -32,4 +32,13 @@ public class NotSupportedColdEventStoreTests
         Assert.False(result.IsSuccess);
         Assert.IsType<NotSupportedException>(result.GetException());
     }
+
+    [Fact]
+    public async Task GetDataRangeSummaryAsync_should_return_error()
+    {
+        var result = await _sut.GetDataRangeSummaryAsync("test-service", CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<NotSupportedException>(result.GetException());
+    }
 }
