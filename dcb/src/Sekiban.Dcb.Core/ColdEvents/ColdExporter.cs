@@ -55,6 +55,12 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
     public async Task<ResultBox<ExportResult>> ExportIncrementalAsync(string serviceId, CancellationToken ct)
     {
+        if (!_options.Enabled)
+        {
+            return ResultBox.Error<ExportResult>(
+                new InvalidOperationException("Cold event store is disabled"));
+        }
+
         var leaseResult = await _leaseManager.AcquireAsync(
             $"cold-export-{serviceId}", _options.PullInterval, ct);
         if (!leaseResult.IsSuccess)
@@ -167,6 +173,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         CancellationToken ct)
     {
         var existingManifest = await ColdControlFileHelper.LoadManifestWithETagAsync(_storage, serviceId, ct);
+        var existingCheckpoint = await ColdControlFileHelper.LoadCheckpointWithETagAsync(_storage, serviceId, ct);
         var existingSegments = existingManifest?.Manifest?.Segments ?? [];
         var allSegments = existingSegments.Concat(newSegmentInfos).ToList();
 
@@ -195,7 +202,15 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             UpdatedAtUtc: DateTimeOffset.UtcNow);
         var checkpointData = JsonSerializer.SerializeToUtf8Bytes(checkpointObj, ColdEventJsonOptions.Default);
         var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
-        await _storage.PutAsync(checkpointPath, checkpointData, expectedETag: null, ct);
+        var checkpointResult = await _storage.PutAsync(
+            checkpointPath,
+            checkpointData,
+            expectedETag: existingCheckpoint?.ETag,
+            ct);
+        if (!checkpointResult.IsSuccess)
+        {
+            return ResultBox.Error<ExportResult>(checkpointResult.GetException());
+        }
 
         return ResultBox.FromValue(new ExportResult(
             ExportedEventCount: allSafeEvents.Count,

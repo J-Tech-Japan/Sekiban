@@ -39,6 +39,11 @@ public class HybridEventStoreTests
     private static SerializableEvent CreateEvent(DateTime timestamp, string name)
     {
         var sortableId = SortableUniqueId.Generate(timestamp, Guid.NewGuid());
+        return CreateEvent(sortableId, name);
+    }
+
+    private static SerializableEvent CreateEvent(string sortableId, string name)
+    {
         return new SerializableEvent(
             Payload: Encoding.UTF8.GetBytes("{\"name\":\"" + name + "\"}"),
             SortableUniqueIdValue: sortableId,
@@ -133,7 +138,7 @@ public class HybridEventStoreTests
 
         var hotTime = coldTime.AddMinutes(5);
         var hotEvent = CreateEvent(hotTime, "HotEvent");
-        var hotStore = new StubSerializableEventStore([hotEvent], latestSafe);
+        var hotStore = new StubSerializableEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore);
 
         // When
@@ -160,7 +165,7 @@ public class HybridEventStoreTests
         await StoreColdManifestAndSegmentsAsync([coldEvent1, coldEvent2], latestSafe);
 
         var hotEvent = CreateEvent(coldTime.AddMinutes(5), "Hot1");
-        var hotStore = new StubSerializableEventStore([hotEvent], latestSafe);
+        var hotStore = new StubSerializableEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore);
 
         // When
@@ -207,15 +212,40 @@ public class HybridEventStoreTests
         Assert.Equal("HotFallback", result.GetValue().First().EventPayloadName);
     }
 
+    [Fact]
+    public async Task Should_not_drop_distinct_events_with_same_sortable_unique_id()
+    {
+        // Given: cold and hot have same sortable unique id but different event ids/payloads
+        var sameSortableId = SortableUniqueId.Generate(new DateTime(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc), Guid.Empty);
+        var coldEvent = CreateEvent(sameSortableId, "ColdEvent");
+        var hotEvent = CreateEvent(sameSortableId, "HotEvent");
+
+        await StoreColdManifestAndSegmentsAsync([coldEvent], sameSortableId);
+        var hotStore = new StubSerializableEventStore([hotEvent], ignoreSinceFilter: true);
+        var hybrid = CreateHybrid(hotStore);
+
+        // When
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: null);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        var events = result.GetValue().ToList();
+        Assert.Equal(2, events.Count);
+        Assert.Contains(events, e => e.EventPayloadName == "ColdEvent");
+        Assert.Contains(events, e => e.EventPayloadName == "HotEvent");
+    }
+
     private sealed class StubSerializableEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;
-        private readonly string? _sinceFilter;
+        private readonly bool _ignoreSinceFilter;
 
-        public StubSerializableEventStore(IReadOnlyList<SerializableEvent> events, string? sinceFilter = null)
+        public StubSerializableEventStore(
+            IReadOnlyList<SerializableEvent> events,
+            bool ignoreSinceFilter = false)
         {
             _events = events;
-            _sinceFilter = sinceFilter;
+            _ignoreSinceFilter = ignoreSinceFilter;
         }
 
         public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
@@ -247,7 +277,7 @@ public class HybridEventStoreTests
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         {
-            IEnumerable<SerializableEvent> filtered = since is null
+            IEnumerable<SerializableEvent> filtered = _ignoreSinceFilter || since is null
                 ? _events
                 : _events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
             return Task.FromResult(ResultBox.FromValue(filtered));
@@ -255,7 +285,7 @@ public class HybridEventStoreTests
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
-            IEnumerable<SerializableEvent> filtered = since is null
+            IEnumerable<SerializableEvent> filtered = _ignoreSinceFilter || since is null
                 ? _events
                 : _events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
             if (maxCount.HasValue)

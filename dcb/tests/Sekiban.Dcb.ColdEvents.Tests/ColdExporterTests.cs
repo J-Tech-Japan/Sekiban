@@ -37,12 +37,16 @@ public class ColdExporterTests
             EventPayloadName: name);
     }
 
-    private ColdExporter CreateExporter(IEventStore hotStore, ColdEventStoreOptions? options = null)
+    private ColdExporter CreateExporter(
+        IEventStore hotStore,
+        ColdEventStoreOptions? options = null,
+        IColdObjectStorage? storage = null,
+        IColdLeaseManager? leaseManager = null)
     {
         return new ColdExporter(
             hotStore,
-            _storage,
-            _leaseManager,
+            storage ?? _storage,
+            leaseManager ?? _leaseManager,
             Options.Create(options ?? EnabledOptions),
             NullLogger<ColdExporter>.Instance);
     }
@@ -88,6 +92,21 @@ public class ColdExporterTests
         // Then
         Assert.True(result.IsSuccess);
         Assert.Equal(0, result.GetValue().ExportedEventCount);
+    }
+
+    [Fact]
+    public async Task ExportIncrementalAsync_should_return_error_when_disabled()
+    {
+        // Given
+        var options = new ColdEventStoreOptions { Enabled = false };
+        var exporter = CreateExporter(new StubEventStore([]), options);
+
+        // When
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        // Then
+        Assert.False(result.IsSuccess);
+        Assert.IsType<InvalidOperationException>(result.GetException());
     }
 
     [Fact]
@@ -146,6 +165,23 @@ public class ColdExporterTests
         var progress = progressResult.GetValue();
         Assert.NotNull(progress.LatestSafeSortableUniqueId);
         Assert.NotNull(progress.NextSinceSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task ExportIncrementalAsync_should_fail_when_checkpoint_write_fails()
+    {
+        // Given
+        var safeTime = DateTime.UtcNow.AddMinutes(-10);
+        var events = new[] { CreateEvent(safeTime, "Event1") };
+        var innerStorage = new InMemoryColdObjectStorage();
+        var failingStorage = new FailingCheckpointStorage(innerStorage, ServiceId);
+        var exporter = CreateExporter(new StubEventStore(events), storage: failingStorage);
+
+        // When
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        // Then
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]
@@ -209,5 +245,36 @@ public class ColdExporterTests
                     string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
             return Task.FromResult(ResultBox.FromValue(result));
         }
+    }
+
+    private sealed class FailingCheckpointStorage : IColdObjectStorage
+    {
+        private readonly IColdObjectStorage _inner;
+        private readonly string _checkpointPath;
+
+        public FailingCheckpointStorage(IColdObjectStorage inner, string serviceId)
+        {
+            _inner = inner;
+            _checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
+        }
+
+        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
+            => _inner.GetAsync(path, ct);
+
+        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+        {
+            if (string.Equals(path, _checkpointPath, StringComparison.Ordinal))
+            {
+                return Task.FromResult(ResultBox.Error<bool>(
+                    new InvalidOperationException("checkpoint write failed")));
+            }
+            return _inner.PutAsync(path, data, expectedETag, ct);
+        }
+
+        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+            => _inner.ListAsync(prefix, ct);
+
+        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+            => _inner.DeleteAsync(path, ct);
     }
 }
