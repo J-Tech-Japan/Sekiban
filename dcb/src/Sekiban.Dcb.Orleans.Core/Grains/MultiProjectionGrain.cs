@@ -31,6 +31,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
+    private readonly IEventStoreFactory? _eventStoreFactory;
     private string? _grainKey;
     private string? _projectorName;
     private string _serviceId = DefaultServiceIdProvider.DefaultServiceId;
@@ -99,6 +100,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private int _maxPendingStreamEvents = 50000;
     private int _catchUpBatchSize = DefaultCatchUpBatchSize;
 
+    private IEventStore? _resolvedCatchUpEventStore;
+    private bool _useSerializableCatchUp = true;
+
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         IProjectionActorHostFactory actorHostFactory,
@@ -107,7 +111,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
         GeneralMultiProjectionActorOptions? actorOptions,
-        ILogger<MultiProjectionGrain>? logger = null)
+        ILogger<MultiProjectionGrain>? logger = null,
+        IEventStoreFactory? eventStoreFactory = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
@@ -117,6 +122,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
+        _eventStoreFactory = eventStoreFactory;
     }
 
     private (string GrainKey, string ProjectorName, string ServiceId) GetIdentity()
@@ -137,6 +143,31 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string GetProjectorName() => GetIdentity().ProjectorName;
 
     private string GetGrainKey() => GetIdentity().GrainKey;
+
+    /// <summary>
+    ///     Returns a ServiceId-scoped event store for catch-up reads.
+    ///     Uses IEventStoreFactory when available, otherwise falls back to the injected IEventStore.
+    /// </summary>
+    private IEventStore GetCatchUpEventStore()
+    {
+        if (_resolvedCatchUpEventStore != null)
+            return _resolvedCatchUpEventStore;
+
+        if (_eventStoreFactory != null)
+        {
+            _resolvedCatchUpEventStore = _eventStoreFactory.CreateForService(_serviceId);
+            _logger.LogDebug(
+                "[{ProjectorName}] Using factory-created event store for catch-up (ServiceId={ServiceId})",
+                GetProjectorName(),
+                _serviceId);
+        }
+        else
+        {
+            _resolvedCatchUpEventStore = _eventStore;
+        }
+
+        return _resolvedCatchUpEventStore;
+    }
 
     public async Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true, bool waitForCatchUp = false)
     {
@@ -1608,106 +1639,196 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<int> ProcessSingleCatchUpBatch()
     {
-        if (_host == null || _eventStore == null) return 0;
+        if (_host == null) return 0;
 
+        if (_useSerializableCatchUp)
+        {
+            var result = await TryProcessSerializableBatch();
+            if (result.HasValue)
+                return result.Value;
+        }
+
+        return await ProcessEventBasedBatch();
+    }
+
+    /// <summary>
+    ///     Attempts catch-up via ReadAllSerializableEventsAsync (cold/hot merge path).
+    ///     Returns null if the store does not support serializable reads,
+    ///     which permanently disables serializable catch-up for this grain lifetime.
+    /// </summary>
+    private async Task<int?> TryProcessSerializableBatch()
+    {
         var projectorName = GetProjectorName();
-
-        // Always use small batch size to avoid blocking
+        var catchUpStore = GetCatchUpEventStore();
         var batchSize = _catchUpBatchSize;
 
-        // Read batch of events
-        var eventsResult = _catchUpProgress.CurrentPosition == null
-            ? await _eventStore.ReadAllEventsAsync(since: null, maxCount: batchSize)
-            : await _eventStore.ReadAllEventsAsync(since: _catchUpProgress.CurrentPosition.Value, maxCount: batchSize);
+        ResultBox<IEnumerable<SerializableEvent>> eventsResult;
+        try
+        {
+            eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
+                _catchUpProgress.CurrentPosition,
+                batchSize);
+        }
+        catch (NotSupportedException)
+        {
+            _useSerializableCatchUp = false;
+            _logger.LogInformation(
+                "[{ProjectorName}] Serializable read not supported, falling back to event-based catch-up",
+                projectorName);
+            return null;
+        }
 
         if (!eventsResult.IsSuccess)
         {
             _logger.LogError(
                 eventsResult.GetException(),
-                "[{ProjectorName}] Failed to read events",
+                "[{ProjectorName}] Failed to read serializable events for catch-up",
                 projectorName);
             return 0;
         }
 
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up using serializable path (cold/hot merge)",
+            projectorName);
+
         var events = eventsResult.GetValue().ToList();
         if (events.Count == 0)
-        {
             return 0;
-        }
 
-        // Update target position dynamically based on latest event in this batch
-        // This avoids reading all events upfront just to determine the target
-        var latestInBatch = events.Last();
-        if (_catchUpProgress.TargetPosition == null ||
-            string.Compare(latestInBatch.SortableUniqueIdValue, _catchUpProgress.TargetPosition.Value, StringComparison.Ordinal) > 0)
-        {
-            _catchUpProgress.TargetPosition = new SortableUniqueId(latestInBatch.SortableUniqueIdValue);
-        }
+        UpdateTargetPosition(events[^1].SortableUniqueIdValue);
 
-        // Filter out already processed events
-        var filtered = new List<Event>();
-        foreach (var ev in events)
-        {
-            // Skip if already processed
-            if (_processedEventIds.Contains(ev.Id.ToString()))
-            {
-                continue;
-            }
-
-            // Skip if before current position
-            if (_catchUpProgress.CurrentPosition != null &&
-                string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
-            {
-                continue;
-            }
-
-            filtered.Add(ev);
-        }
-
+        var filtered = FilterByPositionAndProcessed(events, e => e.Id, e => e.SortableUniqueIdValue);
         if (filtered.Count == 0)
         {
-            // Update position even if no new events
-            if (events.Count > 0)
-            {
-                var lastEvent = events.Last();
-                _catchUpProgress.CurrentPosition = new SortableUniqueId(lastEvent.SortableUniqueIdValue);
-            }
+            _catchUpProgress.CurrentPosition = new SortableUniqueId(events[^1].SortableUniqueIdValue);
             return 0;
         }
 
-        // Pass all filtered events to the host (host handles safe/unsafe separation internally)
-        if (filtered.Count > 0)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up: Processing {EventCount} serializable events",
+            projectorName,
+            filtered.Count);
+        await _host.AddSerializableEventsAsync(filtered, finishedCatchUp: false);
+        sw.Stop();
+
+        await UpdateCatchUpProgressAfterBatch(
+            filtered.Select(e => e.Id.ToString()),
+            filtered[^1].SortableUniqueIdValue,
+            filtered.Count,
+            sw.ElapsedMilliseconds);
+
+        return filtered.Count;
+    }
+
+    /// <summary>
+    ///     Fallback catch-up via ReadAllEventsAsync (hot store only).
+    /// </summary>
+    private async Task<int> ProcessEventBasedBatch()
+    {
+        var projectorName = GetProjectorName();
+        var batchSize = _catchUpBatchSize;
+
+        var eventsResult = await GetCatchUpEventStore().ReadAllEventsAsync(
+            _catchUpProgress.CurrentPosition,
+            batchSize);
+
+        if (!eventsResult.IsSuccess)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            _logger.LogDebug(
-                "[{ProjectorName}] Catch-up: Processing {EventCount} events",
-                projectorName,
-                filtered.Count);
-            await _host.AddEventsFromCatchUpAsync(filtered, false);
-            sw.Stop();
-            _eventsProcessed += filtered.Count;
-
-            if (sw.ElapsedMilliseconds > 1000)
-            {
-                _logger.LogWarning(
-                    "[{ProjectorName}] AddEventsFromCatchUpAsync took {ElapsedMs}ms for {EventCount} events",
-                    projectorName,
-                    sw.ElapsedMilliseconds,
-                    filtered.Count);
-            }
-
-            // Mark as processed
-            foreach (var ev in filtered)
-            {
-                _processedEventIds.Add(ev.Id.ToString());
-            }
+            _logger.LogError(
+                eventsResult.GetException(),
+                "[{ProjectorName}] Failed to read events for catch-up (event-based fallback)",
+                projectorName);
+            return 0;
         }
 
-        // Update position
-        var lastProcessed = filtered.Last();
-        _catchUpProgress.CurrentPosition = new SortableUniqueId(lastProcessed.SortableUniqueIdValue);
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up using event-based path (hot store only)",
+            projectorName);
 
-        // Periodic persistence - only persist every 5000 events during catch-up
+        var events = eventsResult.GetValue().ToList();
+        if (events.Count == 0)
+            return 0;
+
+        UpdateTargetPosition(events[^1].SortableUniqueIdValue);
+
+        var filtered = FilterByPositionAndProcessed(events, e => e.Id, e => e.SortableUniqueIdValue);
+        if (filtered.Count == 0)
+        {
+            _catchUpProgress.CurrentPosition = new SortableUniqueId(events[^1].SortableUniqueIdValue);
+            return 0;
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up: Processing {EventCount} events",
+            projectorName,
+            filtered.Count);
+        await _host.AddEventsFromCatchUpAsync(filtered, false);
+        sw.Stop();
+
+        await UpdateCatchUpProgressAfterBatch(
+            filtered.Select(e => e.Id.ToString()),
+            filtered[^1].SortableUniqueIdValue,
+            filtered.Count,
+            sw.ElapsedMilliseconds);
+
+        return filtered.Count;
+    }
+
+    private List<T> FilterByPositionAndProcessed<T>(
+        List<T> events,
+        Func<T, Guid> idSelector,
+        Func<T, string> sortableIdSelector)
+    {
+        var filtered = new List<T>();
+        foreach (var ev in events)
+        {
+            if (_processedEventIds.Contains(idSelector(ev).ToString()))
+                continue;
+            if (_catchUpProgress.CurrentPosition != null &&
+                string.Compare(sortableIdSelector(ev), _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+                continue;
+            filtered.Add(ev);
+        }
+        return filtered;
+    }
+
+    private void UpdateTargetPosition(string latestSortableUniqueIdValue)
+    {
+        if (_catchUpProgress.TargetPosition == null ||
+            string.Compare(latestSortableUniqueIdValue, _catchUpProgress.TargetPosition.Value, StringComparison.Ordinal) > 0)
+        {
+            _catchUpProgress.TargetPosition = new SortableUniqueId(latestSortableUniqueIdValue);
+        }
+    }
+
+    private async Task UpdateCatchUpProgressAfterBatch(
+        IEnumerable<string> processedIds,
+        string lastSortableUniqueIdValue,
+        int filteredCount,
+        long elapsedMs)
+    {
+        var projectorName = GetProjectorName();
+
+        _eventsProcessed += filteredCount;
+
+        if (elapsedMs > 1000)
+        {
+            _logger.LogWarning(
+                "[{ProjectorName}] Catch-up batch took {ElapsedMs}ms for {EventCount} events",
+                projectorName,
+                elapsedMs,
+                filteredCount);
+        }
+
+        foreach (var id in processedIds)
+        {
+            _processedEventIds.Add(id);
+        }
+
+        _catchUpProgress.CurrentPosition = new SortableUniqueId(lastSortableUniqueIdValue);
+
         if (_eventsProcessed > 0 && _eventsProcessed % 5000 == 0)
         {
             _logger.LogDebug(
@@ -1717,8 +1838,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await PersistStateAsync();
         }
 
-        // Log progress only every 10 batches to reduce log spam
-        if (_catchUpProgress.BatchesProcessed % 10 == 0 || filtered.Count == 0)
+        if (_catchUpProgress.BatchesProcessed % 10 == 0)
         {
             var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
             var eventsPerSecond = _eventsProcessed > 0 && elapsed.TotalSeconds > 0
@@ -1732,8 +1852,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 eventsPerSecond,
                 elapsed.TotalSeconds);
         }
-
-        return filtered.Count;
     }
 
     private async Task CompleteCatchUp()
