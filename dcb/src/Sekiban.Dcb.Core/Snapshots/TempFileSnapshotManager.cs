@@ -135,6 +135,30 @@ public class TempFileSnapshotManager
         return Task.CompletedTask;
     }
 
+    // Path.GetInvalidFileNameChars() on Linux/macOS only returns '\0' and '/'.
+    // We must explicitly include characters that are invalid on Windows (e.g. ':')
+    // to ensure cross-platform compatibility.
+    private static readonly HashSet<char> InvalidFileNameChars =
+        new(Path.GetInvalidFileNameChars().Concat(new[] { ':', '<', '>', '|', '"', '?', '*' }));
+
+    private static string SanitizeFileNameSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unknown";
+        }
+
+        var chars = value.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (InvalidFileNameChars.Contains(chars[i]))
+            {
+                chars[i] = '_';
+            }
+        }
+        return new string(chars);
+    }
+
     private long GetExistingTempFilesTotalSize()
     {
         if (!Directory.Exists(_options.TempDirectory))
@@ -155,20 +179,5 @@ public class TempFileSnapshotManager
             }
         }
         return total;
-    }
-
-    private static string SanitizeFileNameSegment(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "unknown";
-        }
-
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var chars = value
-            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
-            .ToArray();
-
-        return new string(chars);
     }
 }
