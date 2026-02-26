@@ -147,45 +147,66 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var serviceId = CurrentServiceId;
-            var effectiveThreshold = offloadThresholdBytes;
-            if (_options.OffloadThresholdBytes > 0 && _options.OffloadThresholdBytes < effectiveThreshold)
-            {
-                effectiveThreshold = (int)Math.Min(_options.OffloadThresholdBytes, int.MaxValue);
-            }
+            var effectiveThreshold = GetEffectiveThreshold(offloadThresholdBytes);
 
-            var stateData = record.StateData;
-            var isOffloaded = record.IsOffloaded;
-            string? offloadKey = record.OffloadKey;
-            string? offloadProvider = record.OffloadProvider;
-
-            if (stateData != null && stateData.Length > effectiveThreshold && _blobAccessor != null)
-            {
-                offloadKey = await _blobAccessor.WriteAsync(
-                    stateData,
-                    $"{record.ProjectorName}/{record.ProjectorVersion}",
-                    cancellationToken).ConfigureAwait(false);
-                offloadProvider = _blobAccessor.ProviderName;
-                isOffloaded = true;
-                stateData = null;
-            }
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                record.StateData,
+                $"{record.ProjectorName}/{record.ProjectorVersion}",
+                effectiveThreshold,
+                _blobAccessor,
+                cancellationToken).ConfigureAwait(false);
 
             var updatedRecord = record with
             {
-                StateData = stateData,
-                IsOffloaded = isOffloaded,
-                OffloadKey = offloadKey,
-                OffloadProvider = offloadProvider,
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
                 UpdatedAt = DateTime.UtcNow
             };
 
-            var doc = DynamoMultiProjectionState.FromRecord(updatedRecord, serviceId);
+            await PersistRecordToDynamoAsync(updatedRecord, cancellationToken).ConfigureAwait(false);
 
-            await _client.PutItemAsync(new PutItemRequest
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Stream-based upsert with offload via StreamOffloadHelper.
+    /// </summary>
+    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+
+            var effectiveThreshold = GetEffectiveThreshold(offloadThresholdBytes);
+
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                stream,
+                $"{request.ProjectorName}/{request.ProjectorVersion}",
+                effectiveThreshold,
+                _blobAccessor,
+                cancellationToken).ConfigureAwait(false);
+
+            var record = (request with
             {
-                TableName = _context.ProjectionStatesTableName,
-                Item = doc.ToAttributeValues()
-            }, cancellationToken).ConfigureAwait(false);
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+
+            await PersistRecordToDynamoAsync(record, cancellationToken).ConfigureAwait(false);
 
             return ResultBox.FromValue(true);
         }
@@ -320,6 +341,36 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             return ResultBox.Error<int>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Calculates effective offload threshold, taking DynamoDB-specific option override into account.
+    /// </summary>
+    private int GetEffectiveThreshold(int offloadThresholdBytes)
+    {
+        var effectiveThreshold = offloadThresholdBytes;
+        if (_options.OffloadThresholdBytes > 0 && _options.OffloadThresholdBytes < effectiveThreshold)
+        {
+            effectiveThreshold = (int)Math.Min(_options.OffloadThresholdBytes, int.MaxValue);
+        }
+        return effectiveThreshold;
+    }
+
+    /// <summary>
+    ///     Persists a MultiProjectionStateRecord to DynamoDB via PutItem.
+    /// </summary>
+    private async Task PersistRecordToDynamoAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var doc = DynamoMultiProjectionState.FromRecord(record, serviceId);
+
+        await _client.PutItemAsync(new PutItemRequest
+        {
+            TableName = _context.ProjectionStatesTableName,
+            Item = doc.ToAttributeValues()
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<List<DynamoMultiProjectionState>> QueryProjectionItemsAsync(
