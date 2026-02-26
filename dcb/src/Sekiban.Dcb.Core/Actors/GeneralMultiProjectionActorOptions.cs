@@ -55,4 +55,20 @@ public class GeneralMultiProjectionActorOptions
     ///     Enable this for stricter error handling in production environments.
     /// </summary>
     public bool FailOnUnhealthyActivation { get; set; } = false;
+
+    /// <summary>
+    ///     Maximum number of processed event IDs to keep for duplicate suppression.
+    ///     Lower values reduce memory usage; too low may allow rare duplicate re-processing.
+    /// </summary>
+    public int ProcessedEventIdCacheSize { get; set; } = 200000;
+
+    /// <summary>
+    ///     Whether to force a Gen2 GC with LOH compaction after persisting a large snapshot.
+    /// </summary>
+    public bool ForceGcAfterLargeSnapshotPersist { get; set; } = true;
+
+    /// <summary>
+    ///     Snapshot size threshold (bytes) that triggers the optional post-persist GC.
+    /// </summary>
+    public long LargeSnapshotGcThresholdBytes { get; set; } = 10_000_000;
 }
