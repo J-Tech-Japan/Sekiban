@@ -11,24 +11,13 @@ public class MockBlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
 
     public string ProviderName => "MockStorage";
 
-    public Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default)
-    {
-        var key = $"{projectorName}-{Guid.NewGuid():N}";
-        _storage[key] = data;
-        return Task.FromResult(key);
-    }
-
-    public Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default)
-    {
-        _storage.TryGetValue(key, out var data);
-        return Task.FromResult(data ?? Array.Empty<byte>());
-    }
-
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
         using var ms = new MemoryStream();
         await data.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        return await WriteAsync(ms.ToArray(), projectorName, cancellationToken).ConfigureAwait(false);
+        var key = $"{projectorName}-{Guid.NewGuid():N}";
+        _storage[key] = ms.ToArray();
+        return key;
     }
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)

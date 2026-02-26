@@ -13,18 +13,6 @@ public interface IBlobStorageSnapshotAccessor
     string ProviderName { get; }
 
     /// <summary>
-    ///     Writes the snapshot payload bytes and returns a storage key (filename/path) that can be used to retrieve it.
-    /// </summary>
-    [Obsolete("Use WriteAsync(Stream, ...) for streaming persistence to avoid OOM. Will be removed in a future version.")]
-    Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Reads the snapshot payload bytes from storage using the provided key.
-    /// </summary>
-    [Obsolete("Use OpenReadAsync for streaming reads. Will be removed in a future version.")]
-    Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default);
-
-    /// <summary>
     ///     Writes the snapshot payload from a stream and returns a storage key.
     /// </summary>
     Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default);
@@ -34,4 +22,3 @@ public interface IBlobStorageSnapshotAccessor
     /// </summary>
     Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default);
 }
-

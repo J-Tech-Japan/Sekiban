@@ -46,54 +46,6 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
         _logger = logger ?? NullLogger<S3BlobStorageSnapshotAccessor>.Instance;
     }
 
-    public async Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default)
-    {
-        var key = BuildKey(projectorName, Guid.NewGuid().ToString("N"));
-
-        using var ms = new MemoryStream(data, writable: false);
-        var request = new PutObjectRequest
-        {
-            BucketName = _bucketName,
-            Key = key,
-            InputStream = ms,
-            ContentType = "application/octet-stream"
-        };
-
-        if (_enableEncryption)
-        {
-            request.ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256;
-        }
-
-        await _s3Client.PutObjectAsync(request, cancellationToken).ConfigureAwait(false);
-        _logger.LogDebug("S3 write succeeded: {Bucket}/{Key}, Size: {Size} bytes", _bucketName, key, data.Length);
-        return key;
-    }
-
-    public async Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var request = new GetObjectRequest
-            {
-                BucketName = _bucketName,
-                Key = key
-            };
-
-            using var response = await _s3Client.GetObjectAsync(request, cancellationToken).ConfigureAwait(false);
-            using var ms = new MemoryStream();
-            await response.ResponseStream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-            var data = ms.ToArray();
-            _logger.LogDebug("S3 read succeeded: {Bucket}/{Key}, Size: {Size} bytes", _bucketName, key, data.Length);
-            return data;
-        }
-        catch (AmazonS3Exception ex)
-        {
-            _logger.LogError(ex, "S3 read failed: {Bucket}/{Key}, StatusCode: {StatusCode}",
-                _bucketName, key, ex.StatusCode);
-            throw;
-        }
-    }
-
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
         var key = BuildKey(projectorName, Guid.NewGuid().ToString("N"));

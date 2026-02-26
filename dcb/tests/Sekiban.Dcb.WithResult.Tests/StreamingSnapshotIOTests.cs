@@ -52,7 +52,7 @@ public class StreamingSnapshotIOTests
     }
 
     [Fact]
-    public async Task BlobAccessor_Stream_Write_Then_ByteArray_Read_Should_Be_Compatible()
+    public async Task BlobAccessor_Stream_Write_Then_OpenRead_Should_Be_Compatible()
     {
         // Given: data written via stream
         var data = Encoding.UTF8.GetBytes("cross-api-compat-test");
@@ -60,20 +60,21 @@ public class StreamingSnapshotIOTests
         var accessor = new InMemoryBlobStorageSnapshotAccessor();
         var key = await accessor.WriteAsync(writeStream, "compat-projector", CancellationToken.None);
 
-        // When: reading via existing byte[] API
-        var readData = await accessor.ReadAsync(key, CancellationToken.None);
+        // When: reading via stream API
+        var readData = await ReadAllBytesAsync(accessor, key);
 
         // Then: data matches (backward compatibility)
         Assert.Equal(data, readData);
     }
 
     [Fact]
-    public async Task BlobAccessor_ByteArray_Write_Then_Stream_Read_Should_Be_Compatible()
+    public async Task BlobAccessor_Two_Stream_Writes_Then_Stream_Read_Should_Be_Compatible()
     {
-        // Given: data written via existing byte[] API
+        // Given: data written via stream API
         var data = Encoding.UTF8.GetBytes("byte-to-stream-compat");
         var accessor = new InMemoryBlobStorageSnapshotAccessor();
-        var key = await accessor.WriteAsync(data, "compat-projector", CancellationToken.None);
+        using var writeStream = new MemoryStream(data);
+        var key = await accessor.WriteAsync(writeStream, "compat-projector", CancellationToken.None);
 
         // When: reading via new stream API
         using var readStream = await accessor.OpenReadAsync(key, CancellationToken.None);
@@ -108,7 +109,7 @@ public class StreamingSnapshotIOTests
 
         // Then: key is returned, data can be read back
         Assert.False(string.IsNullOrWhiteSpace(key));
-        var readBack = await accessor.ReadAsync(key, CancellationToken.None);
+        var readBack = await ReadAllBytesAsync(accessor, key);
         Assert.Empty(readBack);
     }
 
@@ -125,7 +126,7 @@ public class StreamingSnapshotIOTests
         var key = await accessor.WriteAsync(stream, "large-projector", CancellationToken.None);
 
         // Then: round-trip succeeds
-        var readBack = await accessor.ReadAsync(key, CancellationToken.None);
+        var readBack = await ReadAllBytesAsync(accessor, key);
         Assert.Equal(data, readBack);
     }
 
@@ -271,5 +272,13 @@ public class StreamingSnapshotIOTests
 
         // Then
         Assert.False(options.UseStreamingSnapshotIO);
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(InMemoryBlobStorageSnapshotAccessor accessor, string key)
+    {
+        await using var readStream = await accessor.OpenReadAsync(key, CancellationToken.None);
+        using var ms = new MemoryStream();
+        await readStream.CopyToAsync(ms);
+        return ms.ToArray();
     }
 }

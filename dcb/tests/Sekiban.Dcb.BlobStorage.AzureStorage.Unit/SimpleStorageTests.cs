@@ -34,10 +34,14 @@ public class SimpleStorageTests
         var projector = "unit-projector";
 
         var bytes = Encoding.UTF8.GetBytes("hello world");
-        var key = await accessor.WriteAsync(bytes, projector);
+        using var writeStream = new MemoryStream(bytes);
+        var key = await accessor.WriteAsync(writeStream, projector);
 
         Assert.False(string.IsNullOrWhiteSpace(key));
-        var roundtrip = await accessor.ReadAsync(key);
+        await using var readStream = await accessor.OpenReadAsync(key);
+        using var ms = new MemoryStream();
+        await readStream.CopyToAsync(ms);
+        var roundtrip = ms.ToArray();
         Assert.Equal(bytes, roundtrip);
     }
 

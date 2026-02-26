@@ -372,7 +372,8 @@ public class MultiProjectionStateBuilder
 
         if (record.IsOffloaded && _blobAccessor != null && record.OffloadKey != null)
         {
-            data = await _blobAccessor.ReadAsync(record.OffloadKey, ct);
+            await using var offloadedStream = await _blobAccessor.OpenReadAsync(record.OffloadKey, ct);
+            data = await ReadAllBytesAsync(offloadedStream, ct);
         }
         else if (record.StateData != null)
         {
@@ -411,5 +412,12 @@ public class MultiProjectionStateBuilder
         }
 
         return envelope;
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        return ms.ToArray();
     }
 }

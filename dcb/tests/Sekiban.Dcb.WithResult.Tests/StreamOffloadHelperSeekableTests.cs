@@ -108,7 +108,10 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         // Then: offloaded data can be read back and matches original
         Assert.True(result.IsOffloaded);
         Assert.NotNull(result.OffloadKey);
-        var readBack = await blobAccessor.ReadAsync(result.OffloadKey);
+        await using var readStream = await blobAccessor.OpenReadAsync(result.OffloadKey);
+        using var ms = new MemoryStream();
+        await readStream.CopyToAsync(ms);
+        var readBack = ms.ToArray();
         Assert.Equal(data, readBack);
     }
 

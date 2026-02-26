@@ -70,7 +70,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    stateData = await _blobAccessor.ReadAsync(doc.OffloadKey, cancellationToken).ConfigureAwait(false);
+                    await using var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
+                        .ConfigureAwait(false);
+                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -113,7 +115,9 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    stateData = await _blobAccessor.ReadAsync(latest.OffloadKey, cancellationToken).ConfigureAwait(false);
+                    await using var offloadStream = await _blobAccessor.OpenReadAsync(latest.OffloadKey, cancellationToken)
+                        .ConfigureAwait(false);
+                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -453,4 +457,11 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
 
     private static string BuildProjectorPk(string serviceId, string projectorName) =>
         $"SERVICE#{serviceId}#PROJECTOR#{projectorName}";
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        return ms.ToArray();
+    }
 }
