@@ -71,4 +71,10 @@ public class GeneralMultiProjectionActorOptions
     ///     Snapshot size threshold (bytes) that triggers the optional post-persist GC.
     /// </summary>
     public long LargeSnapshotGcThresholdBytes { get; set; } = 10_000_000;
+
+    /// <summary>
+    ///     When true, uses the stream-based snapshot I/O path for persistence.
+    ///     When false (default), uses the existing byte[] path for backward compatibility.
+    /// </summary>
+    public bool UseStreamingSnapshotIO { get; set; } = false;
 }

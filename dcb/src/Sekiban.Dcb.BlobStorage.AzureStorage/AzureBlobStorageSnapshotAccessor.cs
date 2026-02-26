@@ -88,6 +88,30 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         }
     }
 
+    public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
+    {
+        await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        var key = BuildKey(projectorName, Guid.NewGuid().ToString("N"));
+        var blob = _container.GetBlobClient(key);
+        await blob.UploadAsync(data, overwrite: true, cancellationToken);
+        _logger.LogDebug("Blob stream write succeeded: {Key}", key);
+        return key;
+    }
+
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var blob = _container.GetBlobClient(key);
+            return await blob.OpenReadAsync(cancellationToken: cancellationToken);
+        }
+        catch (RequestFailedException ex)
+        {
+            _logger.LogError(ex, "Blob OpenRead failed: {Key}, Status: {Status}", key, ex.Status);
+            throw;
+        }
+    }
+
     private string BuildKey(string projectorName, string name)
     {
         var folder = string.IsNullOrEmpty(_prefix) ? projectorName : $"{_prefix.TrimEnd('/')}/{projectorName}";

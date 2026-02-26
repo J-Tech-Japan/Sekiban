@@ -135,70 +135,97 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var serviceId = CurrentServiceId;
 
-            var stateData = record.StateData;
-            var isOffloaded = record.IsOffloaded;
-            string? offloadKey = record.OffloadKey;
-            string? offloadProvider = record.OffloadProvider;
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                record.StateData,
+                $"{record.ProjectorName}/{record.ProjectorVersion}",
+                offloadThresholdBytes,
+                _blobAccessor,
+                cancellationToken);
 
-            // Offload if compressed size exceeds threshold
-            if (stateData != null &&
-                stateData.Length > offloadThresholdBytes &&
-                _blobAccessor != null)
+            var updatedRecord = record with
             {
-                // Use projectorName/projectorVersion as path
-                offloadKey = await _blobAccessor.WriteAsync(
-                    stateData,
-                    $"{record.ProjectorName}/{record.ProjectorVersion}",
-                    cancellationToken);
-                offloadProvider = _blobAccessor.ProviderName;
-                isOffloaded = true;
-                stateData = null;
-            }
-
-            var dbRecord = new DbMultiProjectionState
-            {
-                ServiceId = serviceId,
-                ProjectorName = record.ProjectorName,
-                ProjectorVersion = record.ProjectorVersion,
-                PayloadType = record.PayloadType,
-                LastSortableUniqueId = record.LastSortableUniqueId,
-                EventsProcessed = record.EventsProcessed,
-                StateData = stateData,
-                IsOffloaded = isOffloaded,
-                OffloadKey = offloadKey,
-                OffloadProvider = offloadProvider,
-                OriginalSizeBytes = record.OriginalSizeBytes,
-                CompressedSizeBytes = record.CompressedSizeBytes,
-                SafeWindowThreshold = record.SafeWindowThreshold,
-                CreatedAt = record.CreatedAt,
-                UpdatedAt = DateTime.UtcNow,
-                BuildSource = record.BuildSource,
-                BuildHost = record.BuildHost
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
             };
+            var dbRecord = DbMultiProjectionState.FromRecord(updatedRecord, serviceId);
 
-            // Upsert
-            var existing = await ctx.MultiProjectionStates
-                .FirstOrDefaultAsync(s =>
-                    s.ServiceId == serviceId &&
-                    s.ProjectorName == record.ProjectorName &&
-                    s.ProjectorVersion == record.ProjectorVersion, cancellationToken);
-
-            if (existing != null)
-            {
-                ctx.Entry(existing).CurrentValues.SetValues(dbRecord);
-            }
-            else
-            {
-                ctx.MultiProjectionStates.Add(dbRecord);
-            }
-
-            await ctx.SaveChangesAsync(cancellationToken);
+            await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Stream-based upsert with offload via StreamOffloadHelper.
+    /// </summary>
+    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                stream,
+                $"{request.ProjectorName}/{request.ProjectorVersion}",
+                offloadThresholdBytes,
+                _blobAccessor,
+                cancellationToken);
+
+            var record = (request with
+            {
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+
+            var dbRecord = DbMultiProjectionState.FromRecord(record, serviceId);
+
+            await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    private static async Task UpsertDbRecordAsync(
+        SekibanDcbDbContext ctx,
+        string serviceId,
+        string projectorName,
+        string projectorVersion,
+        DbMultiProjectionState dbRecord,
+        CancellationToken cancellationToken)
+    {
+        var existing = await ctx.MultiProjectionStates
+            .FirstOrDefaultAsync(s =>
+                s.ServiceId == serviceId &&
+                s.ProjectorName == projectorName &&
+                s.ProjectorVersion == projectorVersion, cancellationToken);
+
+        if (existing != null)
+        {
+            ctx.Entry(existing).CurrentValues.SetValues(dbRecord);
+        }
+        else
+        {
+            ctx.MultiProjectionStates.Add(dbRecord);
+        }
+
+        await ctx.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(

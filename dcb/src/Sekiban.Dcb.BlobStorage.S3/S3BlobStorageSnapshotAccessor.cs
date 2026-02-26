@@ -94,6 +94,49 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
         }
     }
 
+    public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
+    {
+        var key = BuildKey(projectorName, Guid.NewGuid().ToString("N"));
+
+        var request = new PutObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            InputStream = data,
+            ContentType = "application/octet-stream"
+        };
+
+        if (_enableEncryption)
+        {
+            request.ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256;
+        }
+
+        await _s3Client.PutObjectAsync(request, cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug("S3 stream write succeeded: {Bucket}/{Key}", _bucketName, key);
+        return key;
+    }
+
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var request = new GetObjectRequest
+            {
+                BucketName = _bucketName,
+                Key = key
+            };
+
+            var response = await _s3Client.GetObjectAsync(request, cancellationToken).ConfigureAwait(false);
+            return response.ResponseStream;
+        }
+        catch (AmazonS3Exception ex)
+        {
+            _logger.LogError(ex, "S3 OpenRead failed: {Bucket}/{Key}, StatusCode: {StatusCode}",
+                _bucketName, key, ex.StatusCode);
+            throw;
+        }
+    }
+
     private string BuildKey(string projectorName, string name)
     {
         var folder = string.IsNullOrEmpty(_prefix) ? projectorName : $"{_prefix.TrimEnd('/')}/{projectorName}";

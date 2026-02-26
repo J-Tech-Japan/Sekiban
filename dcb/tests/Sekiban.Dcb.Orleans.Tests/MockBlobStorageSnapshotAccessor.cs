@@ -23,4 +23,20 @@ public class MockBlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
         _storage.TryGetValue(key, out var data);
         return Task.FromResult(data ?? Array.Empty<byte>());
     }
+
+    public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
+    {
+        using var ms = new MemoryStream();
+        await data.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        return await WriteAsync(ms.ToArray(), projectorName, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
+    {
+        if (_storage.TryGetValue(key, out var data))
+        {
+            return Task.FromResult<Stream>(new MemoryStream(data, writable: false));
+        }
+        throw new FileNotFoundException($"Snapshot not found for key: {key}");
+    }
 }

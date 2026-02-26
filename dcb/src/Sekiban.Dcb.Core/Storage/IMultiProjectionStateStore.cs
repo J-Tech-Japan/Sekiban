@@ -33,4 +33,23 @@ public interface IMultiProjectionStateStore
     Task<ResultBox<int>> DeleteAllAsync(
         string? projectorName = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Upserts a projection state from a stream. The default implementation buffers the
+    ///     stream to byte[] and delegates to <see cref="UpsertAsync" />.
+    ///     Cosmos/Postgres/DynamoDB implementations override this for true streaming offload.
+    /// </summary>
+    async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        var data = ms.ToArray();
+        var record = request with { StateData = data };
+        return await UpsertAsync(record.ToRecord(), offloadThresholdBytes, cancellationToken)
+            .ConfigureAwait(false);
+    }
 }

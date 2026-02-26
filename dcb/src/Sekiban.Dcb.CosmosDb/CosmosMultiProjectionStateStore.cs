@@ -233,53 +233,83 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         ArgumentNullException.ThrowIfNull(record);
         try
         {
-            var serviceId = CurrentServiceId;
-            var settings = _containerResolver.ResolveStatesContainer(serviceId);
-            var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
-            var partitionKey = record.GetPartitionKey();
-            var pk = GetPartitionKey(partitionKey, settings, serviceId);
-
-            var stateData = record.StateData;
-            var isOffloaded = record.IsOffloaded;
-            string? offloadKey = record.OffloadKey;
-            string? offloadProvider = record.OffloadProvider;
-
-            // Offload if compressed size exceeds threshold
-            if (stateData != null &&
-                stateData.Length > offloadThresholdBytes &&
-                _blobAccessor != null)
-            {
-                offloadKey = await _blobAccessor.WriteAsync(
-                    stateData,
-                    $"{record.ProjectorName}/{record.ProjectorVersion}",
-                    cancellationToken).ConfigureAwait(false);
-                offloadProvider = _blobAccessor.ProviderName;
-                isOffloaded = true;
-                stateData = null;
-            }
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                record.StateData,
+                $"{record.ProjectorName}/{record.ProjectorVersion}",
+                offloadThresholdBytes,
+                _blobAccessor,
+                cancellationToken).ConfigureAwait(false);
 
             var updatedRecord = record with
             {
-                StateData = stateData,
-                IsOffloaded = isOffloaded,
-                OffloadKey = offloadKey,
-                OffloadProvider = offloadProvider,
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
                 UpdatedAt = DateTime.UtcNow
             };
 
-            var doc = CosmosMultiProjectionState.FromRecord(updatedRecord, serviceId);
-
-            await container.UpsertItemAsync(
-                doc,
-                new PartitionKey(pk),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
+            await PersistRecordToCosmosAsync(updatedRecord, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (CosmosException ex)
         {
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Stream-based upsert with offload via StreamOffloadHelper.
+    /// </summary>
+    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var offloadResult = await StreamOffloadHelper.ProcessAsync(
+                stream,
+                $"{request.ProjectorName}/{request.ProjectorVersion}",
+                offloadThresholdBytes,
+                _blobAccessor,
+                cancellationToken).ConfigureAwait(false);
+
+            var record = (request with
+            {
+                StateData = offloadResult.InlineData,
+                IsOffloaded = offloadResult.IsOffloaded,
+                OffloadKey = offloadResult.OffloadKey,
+                OffloadProvider = offloadResult.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+
+            await PersistRecordToCosmosAsync(record, cancellationToken).ConfigureAwait(false);
+            return ResultBox.FromValue(true);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    private async Task PersistRecordToCosmosAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var settings = _containerResolver.ResolveStatesContainer(serviceId);
+        var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
+        var partitionKey = record.GetPartitionKey();
+        var pk = GetPartitionKey(partitionKey, settings, serviceId);
+
+        var doc = CosmosMultiProjectionState.FromRecord(record, serviceId);
+
+        await container.UpsertItemAsync(
+            doc,
+            new PartitionKey(pk),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
