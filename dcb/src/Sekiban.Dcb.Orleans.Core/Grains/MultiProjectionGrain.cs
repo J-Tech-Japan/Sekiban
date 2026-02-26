@@ -16,6 +16,7 @@ using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
 using System.Text;
+using System.Runtime;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -54,7 +55,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private bool _isInitialized;
     private string? _lastError;
     private long _eventsProcessed;
-    private HashSet<string> _processedEventIds = new(); // Track processed event IDs to prevent double counting
+    private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
+    private readonly Queue<Guid> _processedEventIdOrder = new();
     private DateTime? _lastEventTime;
 
     // Event delivery statistics (debug/no-op selectable)
@@ -98,6 +100,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
     private int _maxPendingStreamEvents = 50000;
     private int _catchUpBatchSize = DefaultCatchUpBatchSize;
+    private int _processedEventIdCacheSize = 200000;
+    private bool _forceGcAfterLargeSnapshotPersist = true;
+    private long _largeSnapshotGcThresholdBytes = LargePayloadThresholdBytes;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -313,7 +318,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStats.RecordCatchUpBatch(events);
 
         // Filter out already processed events to prevent double counting
-        var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
+        var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id)).ToList();
 
         if (newEvents.Count > 0)
         {
@@ -324,7 +329,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Mark events as processed
             foreach (var ev in newEvents)
             {
-                _processedEventIds.Add(ev.Id.ToString());
+                TrackProcessedEventId(ev.Id);
             }
 
             if (newEvents.Count > 0)
@@ -652,6 +657,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 (finishUtc - startUtc).TotalMilliseconds,
                 envelopeSize,
                 _eventsProcessed);
+
+            if (_forceGcAfterLargeSnapshotPersist && envelopeSize >= _largeSnapshotGcThresholdBytes)
+            {
+                TryCompactAfterLargePersist(projectorName, envelopeSize);
+            }
+
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -983,10 +994,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
                 LagDecayPerSecond = baseOptions.LagDecayPerSecond,
-                FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation
+                FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation,
+                ProcessedEventIdCacheSize = baseOptions.ProcessedEventIdCacheSize,
+                ForceGcAfterLargeSnapshotPersist = baseOptions.ForceGcAfterLargeSnapshotPersist,
+                LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
             _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
+            _processedEventIdCacheSize = Math.Max(1000, mergedOptions.ProcessedEventIdCacheSize);
+            _forceGcAfterLargeSnapshotPersist = mergedOptions.ForceGcAfterLargeSnapshotPersist;
+            _largeSnapshotGcThresholdBytes = Math.Max(1_000_000, mergedOptions.LargeSnapshotGcThresholdBytes);
 
             _host = _actorHostFactory.Create(
                 projectorName,
@@ -1060,7 +1077,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             else
                             {
                                 _eventsProcessed = record.EventsProcessed;
-                                _processedEventIds.Clear();
+                                ClearProcessedEventCache();
 
                                 int? postSafeVersion = null;
                                 int? postUnsafeVersion = null;
@@ -1314,7 +1331,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         _eventsProcessed = 0;
-        _processedEventIds.Clear();
+        ClearProcessedEventCache();
         _unsafeEventIds.Clear();
         _eventBuffer.Clear();
         _pendingStreamEvents.Clear();
@@ -1649,7 +1666,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         foreach (var ev in events)
         {
             // Skip if already processed
-            if (_processedEventIds.Contains(ev.Id.ToString()))
+            if (_processedEventIds.Contains(ev.Id))
             {
                 continue;
             }
@@ -1699,7 +1716,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Mark as processed
             foreach (var ev in filtered)
             {
-                _processedEventIds.Add(ev.Id.ToString());
+                TrackProcessedEventId(ev.Id);
             }
         }
 
@@ -1806,7 +1823,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         while (_pendingStreamEvents.Count > 0)
         {
             var ev = _pendingStreamEvents.Dequeue();
-            if (_processedEventIds.Contains(ev.Id.ToString()))
+            if (_processedEventIds.Contains(ev.Id))
             {
                 continue;
             }
@@ -1831,7 +1848,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _eventsProcessed += allEvents.Count;
             foreach (var ev in allEvents)
             {
-                _processedEventIds.Add(ev.Id.ToString());
+                TrackProcessedEventId(ev.Id);
             }
             _lastEventTime = DateTime.UtcNow;
             if (_state.State != null)
@@ -1917,6 +1934,52 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         EnqueuePendingStreamEvents(buffered, currentPosition);
     }
 
+    private void TrackProcessedEventId(Guid eventId)
+    {
+        if (!_processedEventIds.Add(eventId))
+        {
+            return;
+        }
+
+        _processedEventIdOrder.Enqueue(eventId);
+        TrimProcessedEventCacheIfNeeded();
+    }
+
+    private void TrimProcessedEventCacheIfNeeded()
+    {
+        while (_processedEventIdCacheSize > 0 && _processedEventIdOrder.Count > _processedEventIdCacheSize)
+        {
+            var oldest = _processedEventIdOrder.Dequeue();
+            _processedEventIds.Remove(oldest);
+        }
+    }
+
+    private void ClearProcessedEventCache()
+    {
+        _processedEventIds.Clear();
+        _processedEventIdOrder.Clear();
+    }
+
+    private void TryCompactAfterLargePersist(string projectorName, long persistedBytes)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "[{ProjectorName}] Triggering post-persist GC compaction for large snapshot ({PersistedBytes:N0} bytes)",
+                projectorName,
+                persistedBytes);
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "[{ProjectorName}] Post-persist GC compaction failed",
+                projectorName);
+        }
+    }
+
     /// <summary>
     ///     Process a batch of serializable events from the stream
     /// </summary>
@@ -1964,8 +2027,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 // Limit buffer size to prevent memory issues
-                const int MaxPendingEvents = 50000;
-                while (_pendingStreamEvents.Count > MaxPendingEvents)
+                while (_maxPendingStreamEvents > 0 && _pendingStreamEvents.Count > _maxPendingStreamEvents)
                 {
                     _pendingStreamEvents.Dequeue();
                 }
@@ -1974,7 +2036,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // Normal processing mode - filter and process
-            var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
+            var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id)).ToList();
 
             if (newEvents.Count > 0)
             {
@@ -1985,7 +2047,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // Mark all events as processed
                 foreach (var ev in newEvents)
                 {
-                    _processedEventIds.Add(ev.Id.ToString());
+                    TrackProcessedEventId(ev.Id);
                 }
 
                 _lastEventTime = DateTime.UtcNow;
@@ -2082,7 +2144,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             foreach (var ev in events)
             {
-                _processedEventIds.Add(ev.Id.ToString());
+                TrackProcessedEventId(ev.Id);
             }
 
             // Update position
@@ -2184,7 +2246,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        var newEvents = list.Where(e => !_processedEventIds.Contains(e.Id.ToString())).ToList();
+        var newEvents = list.Where(e => !_processedEventIds.Contains(e.Id)).ToList();
         if (newEvents.Count == 0) return;
         list = newEvents;
 
