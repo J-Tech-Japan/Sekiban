@@ -297,6 +297,11 @@ public class InMemoryEventStore : IEventStore
     }
 
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        => ReadAllSerializableEventsAsync(since, maxCount: null);
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
@@ -314,6 +319,11 @@ public class InMemoryEventStore : IEventStore
                         since.Value,
                         StringComparison.Ordinal) >
                     0);
+            }
+
+            if (maxCount.HasValue)
+            {
+                events = events.Take(maxCount.Value);
             }
 
             var serializableEvents = events

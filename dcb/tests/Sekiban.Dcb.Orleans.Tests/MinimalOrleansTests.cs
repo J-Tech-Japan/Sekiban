@@ -24,7 +24,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class MinimalOrleansTests : IAsyncLifetime
 {
-    private static readonly CountingInMemoryEventStore SharedEventStore = new();
+    private static readonly CountingInMemoryEventStore SharedEventStore = new(new SimpleEventTypes());
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
 
@@ -95,13 +95,13 @@ public class MinimalOrleansTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         var due = DateTime.UtcNow.AddSeconds(8);
-        while (DateTime.UtcNow < due && SharedEventStore.ReadAllEventsCallCount == 0)
+        while (DateTime.UtcNow < due && SharedEventStore.ReadAllSerializableEventsCallCount == 0)
         {
             await Task.Delay(100);
         }
 
-        Assert.True(SharedEventStore.ReadAllEventsCallCount > 0);
-        Assert.All(SharedEventStore.ReadAllEventsMaxCounts, maxCount => Assert.Equal(500, maxCount));
+        Assert.True(SharedEventStore.ReadAllSerializableEventsCallCount > 0);
+        Assert.All(SharedEventStore.ReadAllSerializableEventsMaxCounts, maxCount => Assert.Equal(500, maxCount));
     }
 
     [Fact]
@@ -366,11 +366,18 @@ public class MinimalOrleansTests : IAsyncLifetime
 
     private class CountingInMemoryEventStore : IEventStore
     {
-        private readonly InMemoryEventStore _inner = new();
+        private readonly InMemoryEventStore _inner;
         private readonly object _lock = new();
         private readonly List<int?> _readAllEventsMaxCounts = new();
+        private readonly List<int?> _readAllSerializableEventsMaxCounts = new();
+
+        public CountingInMemoryEventStore(IEventTypes eventTypes)
+        {
+            _inner = new InMemoryEventStore(eventTypes);
+        }
 
         public int ReadAllEventsCallCount { get; private set; }
+        public int ReadAllSerializableEventsCallCount { get; private set; }
 
         public IReadOnlyList<int?> ReadAllEventsMaxCounts
         {
@@ -383,6 +390,17 @@ public class MinimalOrleansTests : IAsyncLifetime
             }
         }
 
+        public IReadOnlyList<int?> ReadAllSerializableEventsMaxCounts
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _readAllSerializableEventsMaxCounts.ToList();
+                }
+            }
+        }
+
         public void Clear() => _inner.Clear();
 
         public void ClearReadAllEventsTracking()
@@ -391,6 +409,8 @@ public class MinimalOrleansTests : IAsyncLifetime
             {
                 ReadAllEventsCallCount = 0;
                 _readAllEventsMaxCounts.Clear();
+                ReadAllSerializableEventsCallCount = 0;
+                _readAllSerializableEventsMaxCounts.Clear();
             }
         }
 
@@ -403,6 +423,22 @@ public class MinimalOrleansTests : IAsyncLifetime
             }
 
             return _inner.ReadAllEventsAsync(since, maxCount);
+        }
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+            => ReadAllSerializableEventsAsync(since, maxCount: null);
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+        {
+            lock (_lock)
+            {
+                ReadAllSerializableEventsCallCount++;
+                _readAllSerializableEventsMaxCounts.Add(maxCount);
+            }
+
+            return _inner.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
         public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
@@ -422,9 +458,6 @@ public class MinimalOrleansTests : IAsyncLifetime
         public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
-
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
-            _inner.ReadAllSerializableEventsAsync(since);
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,

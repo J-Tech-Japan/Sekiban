@@ -382,7 +382,12 @@ public class PostgresEventStore : IEventStore
         }
     }
 
-    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        => ReadAllSerializableEventsAsync(since, maxCount: null);
+
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
     {
         try
         {
@@ -396,7 +401,12 @@ public class PostgresEventStore : IEventStore
                 query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
             }
 
-            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+            var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
+            var limitedQuery = maxCount.HasValue
+                ? orderedQuery.Take(maxCount.Value)
+                : orderedQuery;
+
+            var dbEvents = await limitedQuery.ToListAsync();
 
             var events = dbEvents.Select(dbEvent => new SerializableEvent(
                 Encoding.UTF8.GetBytes(dbEvent.Payload),
