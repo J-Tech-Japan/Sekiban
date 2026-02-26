@@ -147,6 +147,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// <summary>
     ///     Returns a ServiceId-scoped event store for catch-up reads.
     ///     Uses IEventStoreFactory when available, otherwise falls back to the injected IEventStore.
+    ///     The result is cached for the grain's lifetime because _serviceId does not change
+    ///     after grain activation.
     /// </summary>
     private IEventStore GetCatchUpEventStore()
     {
@@ -1622,7 +1624,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             else
             {
                 _catchUpProgress.ConsecutiveEmptyBatches = 0;
-                _catchUpProgress.BatchesProcessed++;
+                // BatchesProcessed is now incremented inside UpdateCatchUpProgressAfterBatch
+                // so that progress logging within that method sees the correct batch number.
             }
         }
         catch (Exception ex)
@@ -1811,6 +1814,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var projectorName = GetProjectorName();
 
+        _catchUpProgress.BatchesProcessed++;
         _eventsProcessed += filteredCount;
 
         if (elapsedMs > 1000)

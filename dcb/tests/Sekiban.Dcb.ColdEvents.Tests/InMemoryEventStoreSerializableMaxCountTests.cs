@@ -42,7 +42,6 @@ public class InMemoryEventStoreSerializableMaxCountTests
                 [$"test:{i}"]);
             await _concreteStore.WriteEventAsync(evt);
             sortableIds.Add(sortableId);
-            await Task.Delay(10);
         }
         return sortableIds;
     }
