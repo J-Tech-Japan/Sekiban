@@ -53,7 +53,8 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                    await using var offloadStream = await _blobAccessor.OpenReadAsync(entity.OffloadKey, cancellationToken);
+                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -100,7 +101,8 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    stateData = await _blobAccessor.ReadAsync(entity.OffloadKey, cancellationToken);
+                    await using var offloadStream = await _blobAccessor.OpenReadAsync(entity.OffloadKey, cancellationToken);
+                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -316,5 +318,12 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         {
             return ResultBox.Error<int>(ex);
         }
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken);
+        return ms.ToArray();
     }
 }

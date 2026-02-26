@@ -60,34 +60,6 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         _logger = logger ?? NullLogger<AzureBlobStorageSnapshotAccessor>.Instance;
     }
 
-    public async Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default)
-    {
-        await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
-        var key = BuildKey(projectorName, Guid.NewGuid().ToString("N"));
-        var blob = _container.GetBlobClient(key);
-        using var ms = new MemoryStream(data, writable: false);
-        await blob.UploadAsync(ms, overwrite: true, cancellationToken);
-        _logger.LogDebug("Blob write succeeded: {Key}, Size: {Size} bytes", key, data.Length);
-        return key;
-    }
-
-    public async Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var blob = _container.GetBlobClient(key);
-            var resp = await blob.DownloadContentAsync(cancellationToken);
-            var data = resp.Value.Content.ToArray();
-            _logger.LogDebug("Blob read succeeded: {Key}, Size: {Size} bytes", key, data.Length);
-            return data;
-        }
-        catch (RequestFailedException ex)
-        {
-            _logger.LogError(ex, "Blob read failed after retries: {Key}, Status: {Status}", key, ex.Status);
-            throw;
-        }
-    }
-
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
         await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);

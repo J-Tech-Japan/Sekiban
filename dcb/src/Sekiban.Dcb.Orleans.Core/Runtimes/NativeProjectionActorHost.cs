@@ -105,6 +105,14 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return _snapshotHandler.GetSnapshotBytesAsync(canGetUnsafeState);
     }
 
+    public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        CancellationToken cancellationToken)
+    {
+        return _snapshotHandler.WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
+    }
+
     public Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData)
     {
         return _snapshotHandler.RestoreSnapshotAsync(snapshotData);

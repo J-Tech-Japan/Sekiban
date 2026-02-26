@@ -73,8 +73,8 @@ public class GeneralMultiProjectionActorOptions
     public long LargeSnapshotGcThresholdBytes { get; set; } = 10_000_000;
 
     /// <summary>
-    ///     When true, uses the stream-based snapshot I/O path for persistence.
-    ///     When false (default), uses the existing byte[] path for backward compatibility.
+    ///     When true (default), uses the stream-based snapshot I/O path for persistence.
+    ///     When false, uses the existing byte[] path for backward compatibility.
     /// </summary>
-    public bool UseStreamingSnapshotIO { get; set; } = false;
+    public bool UseStreamingSnapshotIO { get; set; } = true;
 }

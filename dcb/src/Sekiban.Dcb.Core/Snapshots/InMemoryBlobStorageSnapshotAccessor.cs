@@ -13,29 +13,17 @@ public sealed class InMemoryBlobStorageSnapshotAccessor : IBlobStorageSnapshotAc
 
     public string ProviderName => "InMemoryBlobStorage";
 
-    public Task<string> WriteAsync(byte[] data, string projectorName, CancellationToken cancellationToken = default)
-    {
-        // Generate a deterministic-ish key based on projector and content hash
-        var hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
-        var key = $"{Sanitize(projectorName)}/{hash}";
-        _store[key] = data;
-        return Task.FromResult(key);
-    }
-
-    public Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default)
-    {
-        if (_store.TryGetValue(key, out var data))
-        {
-            return Task.FromResult(data);
-        }
-        throw new FileNotFoundException($"Snapshot not found for key: {key}");
-    }
-
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
         using var ms = new MemoryStream();
         await data.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        return await WriteAsync(ms.ToArray(), projectorName, cancellationToken).ConfigureAwait(false);
+        var bytes = ms.ToArray();
+
+        // Generate a deterministic-ish key based on projector and content hash
+        var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var key = $"{Sanitize(projectorName)}/{hash}";
+        _store[key] = bytes;
+        return key;
     }
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
@@ -57,4 +45,3 @@ public sealed class InMemoryBlobStorageSnapshotAccessor : IBlobStorageSnapshotAc
         return sb.ToString();
     }
 }
-

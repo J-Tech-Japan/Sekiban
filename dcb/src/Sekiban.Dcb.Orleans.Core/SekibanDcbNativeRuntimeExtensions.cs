@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Runtime.Native;
+using Sekiban.Dcb.Snapshots;
 
 namespace Sekiban.Dcb.Orleans;
 
@@ -25,6 +26,10 @@ public static class SekibanDcbNativeRuntimeExtensions
         services.TryAddSingleton<ITagTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagTypes);
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.TryAddSingleton<ITagStatePayloadTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().TagStatePayloadTypes);
+
+        // Temp file snapshot persistence
+        services.TryAddSingleton<SnapshotTempFileOptions>();
+        services.TryAddSingleton<TempFileSnapshotManager>();
 
         return services;
     }

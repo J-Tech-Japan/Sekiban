@@ -69,6 +69,30 @@ internal class NativeProjectionSnapshotHandler
         }
     }
 
+    public async Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshotResult = await _actor.GetSnapshotAsync(canGetUnsafeState, cancellationToken);
+            if (!snapshotResult.IsSuccess)
+            {
+                return ResultBox.Error<bool>(snapshotResult.GetException());
+            }
+
+            var envelope = snapshotResult.GetValue();
+            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken)
+                .ConfigureAwait(false);
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
     public long EstimateStateSizeBytes(bool includeUnsafeDetails)
     {
         try
