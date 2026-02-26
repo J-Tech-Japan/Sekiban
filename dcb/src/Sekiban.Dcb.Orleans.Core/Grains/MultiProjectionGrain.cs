@@ -107,6 +107,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private IEventStore? _resolvedCatchUpEventStore;
     private bool _useSerializableCatchUp = true;
+    private bool _useStreamingSnapshotIO;
+    private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -116,6 +118,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IMultiProjectionStateStore? multiProjectionStateStore,
         Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
         GeneralMultiProjectionActorOptions? actorOptions,
+        TempFileSnapshotManager? tempFileSnapshotManager = null,
         ILogger<MultiProjectionGrain>? logger = null,
         IEventStoreFactory? eventStoreFactory = null)
     {
@@ -126,6 +129,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _multiProjectionStateStore = multiProjectionStateStore;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
+        _tempFileSnapshotManager = tempFileSnapshotManager;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
         _eventStoreFactory = eventStoreFactory;
     }
@@ -330,7 +334,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+#pragma warning disable CS0618 // Obsolete: used for JSON snapshot endpoint (read-only, low frequency)
         var rb = await _host.GetSnapshotBytesAsync(canGetUnsafeState);
+#pragma warning restore CS0618
         if (!rb.IsSuccess)
             return ResultBox.Error<string>(rb.GetException());
         // v10 format: byte[] is plain UTF-8 JSON
@@ -442,8 +448,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
 
+            // Use streaming path when enabled and temp file manager is available
+            if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
+            {
+                return await PersistStateStreamingAsync(projectorName).ConfigureAwait(false);
+            }
+
             // Get snapshot as opaque bytes from the host
+#pragma warning disable CS0618 // Obsolete: byte[] path kept as fallback
             var snapshotBytesResult = await _host.GetSnapshotBytesAsync(canGetUnsafeState: false);
+#pragma warning restore CS0618
             if (!snapshotBytesResult.IsSuccess)
             {
                 _lastError = snapshotBytesResult.GetException().Message;
@@ -635,53 +649,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.SafeLastPosition = null;
             _state.State.LastPosition = null;
 
-            // Retry Orleans state write on ETag conflicts (optimistic concurrency)
-            const int maxRetries = 3;
-            for (var retry = 0; retry < maxRetries; retry++)
-            {
-                try
-                {
-                    await _state.WriteStateAsync();
-                    break; // Success
-                }
-                catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
-                {
-                    _logger.LogWarning(
-                        "[{ProjectorName}] ETag conflict on Orleans state write (attempt {Attempt}/{MaxAttempts}), re-reading state...",
-                        projectorName,
-                        retry + 1,
-                        maxRetries);
-                    // Re-read state to get fresh ETag, then re-apply our changes
-                    await _state.ReadStateAsync();
-                    _state.State.ProjectorName = projectorName;
-                    _state.State.ProjectorVersion = projectorVersion;
-                    _state.State.LastSortableUniqueId = safePosition;
-                    _state.State.EventsProcessed = _eventsProcessed;
-                    _state.State.LastPersistTime = DateTime.UtcNow;
-                    // Re-apply LastGood fields when the external store save succeeded.
-                    if (externalStoreSaved)
-                    {
-                        if (safeVersion.HasValue && safeVersion.Value > 0)
-                        {
-                            _state.State.LastGoodSafeVersion = safeVersion.Value;
-                        }
-                        if (envelopeSize > 0)
-                        {
-                            _state.State.LastGoodPayloadBytes = envelopeSize;
-                        }
-                        if (originalSizeBytes > 0)
-                        {
-                            _state.State.LastGoodOriginalSizeBytes = originalSizeBytes;
-                        }
-                        _state.State.LastGoodEventsProcessed = _eventsProcessed;
-                    }
-                    _state.State.SerializedState = null;
-                    _state.State.StateSize = 0;
-                    _state.State.SafeLastPosition = null;
-                    _state.State.LastPosition = null;
-                    await Task.Delay(50 * (retry + 1)); // Brief backoff
-                }
-            }
+            await WriteOrleansStateWithRetryAsync(projectorName, safePosition, projectorVersion, externalStoreSaved, safeVersion, envelopeSize);
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
             _logger.LogDebug(
@@ -703,6 +671,263 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastError = $"Persistence failed: {ex.Message}";
             _logger.LogError(ex, "[{ProjectorName}] Persistence failed", GetProjectorName());
             return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Streaming persist path: writes snapshot to a temp file, then streams to external store.
+    ///     Avoids holding the entire serialized snapshot in a byte[] simultaneously.
+    /// </summary>
+    private async Task<ResultBox<bool>> PersistStateStreamingAsync(string projectorName)
+    {
+        var buildStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
+        string? tempFilePath = null;
+        try
+        {
+            // Step 1: Write snapshot to temp file
+            var (tempStream, filePath) = await _tempFileSnapshotManager!.CreateTempFileStreamAsync(projectorName);
+            tempFilePath = filePath;
+
+            try
+            {
+                var writeResult = await _host!.WriteSnapshotToStreamAsync(
+                    tempStream, canGetUnsafeState: false, CancellationToken.None);
+                if (!writeResult.IsSuccess)
+                {
+                    _lastError = writeResult.GetException().Message;
+                    _logger.LogWarning("[{ProjectorName}] Streaming snapshot write failed: {Error}", projectorName, _lastError);
+                    return ResultBox.FromValue(false);
+                }
+
+                await tempStream.FlushAsync();
+                var tempFileSize = tempStream.Length;
+                await tempStream.DisposeAsync();
+
+                var buildElapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(buildStartMs).TotalMilliseconds;
+
+                // Step 2: Collect metadata
+                var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
+                int? safeVersion = null;
+                if (metadataResult.IsSuccess)
+                {
+                    var metadata = metadataResult.GetValue();
+                    safeVersion = metadata.SafeVersion;
+                }
+
+                var projectorVersion = _host.GetProjectorVersion();
+                var safePosition = await _host.GetSafeLastSortableUniqueIdAsync();
+
+                // Integrity guard
+                var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
+                if (safeVersion.HasValue && lastGoodSafeVersion > 0 && safeVersion.Value < lastGoodSafeVersion)
+                {
+                    _lastError = $"Integrity guard blocked persist: safeVersion {safeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
+                    _logger.LogError(
+                        MultiProjectionLogEvents.IntegrityGuardBlockedPersist,
+                        "BLOCKED persist: {ProjectorName} - safeVersion regression detected. Current={CurrentSafeVersion}, LastGood={LastGoodSafeVersion}.",
+                        projectorName, safeVersion.Value, lastGoodSafeVersion);
+                    _stateRestoreSource = StateRestoreSource.Failed;
+                    return ResultBox.FromValue(false);
+                }
+
+                // Step 3: Stream to external store
+                var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
+                var externalStoreSaved = _multiProjectionStateStore == null;
+                var allowExternalStoreSave = true;
+
+                if (_multiProjectionStateStore is not null)
+                {
+                    var latestResult = await _multiProjectionStateStore
+                        .GetLatestForVersionAsync(projectorName, projectorVersion);
+                    if (!latestResult.IsSuccess)
+                    {
+                        allowExternalStoreSave = false;
+                        _lastError = $"External store read failed: {latestResult.GetException().Message}";
+                        _logger.LogWarning(
+                            "Skip external store save: failed to read latest state for {ProjectorName} v{ProjectorVersion}.",
+                            projectorName,
+                            projectorVersion);
+                    }
+                    else
+                    {
+                        var latestOptional = latestResult.GetValue();
+                        if (latestOptional.HasValue &&
+                            latestOptional.Value is { } latestRecord &&
+                            latestRecord.EventsProcessed > _eventsProcessed)
+                        {
+                            allowExternalStoreSave = false;
+                            _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
+                            _logger.LogWarning(
+                                "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
+                                latestRecord.EventsProcessed,
+                                _eventsProcessed,
+                                projectorName,
+                                projectorVersion);
+                        }
+                    }
+                }
+
+                if (_multiProjectionStateStore is not null && allowExternalStoreSave)
+                {
+                    var writeRequest = new MultiProjectionStateWriteRequest(
+                        ProjectorName: projectorName,
+                        ProjectorVersion: projectorVersion,
+                        PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+                        LastSortableUniqueId: safePosition ?? string.Empty,
+                        EventsProcessed: _eventsProcessed,
+                        StateData: null,
+                        IsOffloaded: false,
+                        OffloadKey: null,
+                        OffloadProvider: null,
+                        OriginalSizeBytes: tempFileSize,
+                        CompressedSizeBytes: tempFileSize,
+                        SafeWindowThreshold: _host.PeekCurrentSafeWindowThreshold(),
+                        CreatedAt: _state.State!.LastPersistTime == default
+                            ? DateTime.UtcNow
+                            : _state.State.LastPersistTime,
+                        UpdatedAt: DateTime.UtcNow,
+                        BuildSource: "GRAIN_STREAM",
+                        BuildHost: Environment.MachineName);
+
+                    using var uploadStream = new FileStream(
+                        filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                        bufferSize: 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+                    var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+                        writeRequest, uploadStream, _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
+                        CancellationToken.None);
+
+                    if (!saveResult.IsSuccess)
+                    {
+                        _lastError = $"External store save failed: {saveResult.GetException().Message}";
+                        _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+                    }
+                    else
+                    {
+                        externalStoreSaved = true;
+                    }
+                }
+                else if (_multiProjectionStateStore is not null && !allowExternalStoreSave)
+                {
+                    _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
+                }
+
+                var uploadElapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds;
+                var peakMemory = GC.GetTotalMemory(forceFullCollection: false);
+
+                // Step 4: Update Orleans state
+                _state.State!.ProjectorName = projectorName;
+                _state.State.ProjectorVersion = projectorVersion;
+                _state.State.LastSortableUniqueId = safePosition;
+                _state.State.EventsProcessed = _eventsProcessed;
+                _state.State.LastPersistTime = DateTime.UtcNow;
+
+                if (externalStoreSaved)
+                {
+                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                        _state.State.LastGoodSafeVersion = safeVersion.Value;
+                    if (tempFileSize > 0)
+                        _state.State.LastGoodPayloadBytes = tempFileSize;
+                    if (tempFileSize > 0)
+                        _state.State.LastGoodOriginalSizeBytes = tempFileSize;
+                    _state.State.LastGoodEventsProcessed = _eventsProcessed;
+                }
+
+                _state.State.SerializedState = null;
+                _state.State.StateSize = 0;
+                _state.State.SafeLastPosition = null;
+                _state.State.LastPosition = null;
+
+                await WriteOrleansStateWithRetryAsync(projectorName, safePosition, projectorVersion, externalStoreSaved, safeVersion, tempFileSize);
+
+                _lastError = null;
+
+                var metrics = new SnapshotPersistMetrics(
+                    SnapshotBuildMs: (long)buildElapsedMs,
+                    SnapshotUploadMs: (long)uploadElapsedMs,
+                    TempFileSizeBytes: tempFileSize,
+                    PeakManagedMemoryBytes: peakMemory);
+                _logger.LogInformation(
+                    MultiProjectionLogEvents.PersistDetails,
+                    "StreamingPersist: {ProjectorName}, BuildMs={BuildMs}, UploadMs={UploadMs}, TempFileBytes={TempFileBytes}, PeakMemory={PeakMemory}, Events={Events}",
+                    projectorName, metrics.SnapshotBuildMs, metrics.SnapshotUploadMs,
+                    metrics.TempFileSizeBytes, metrics.PeakManagedMemoryBytes, _eventsProcessed);
+
+                if (_forceGcAfterLargeSnapshotPersist && tempFileSize >= _largeSnapshotGcThresholdBytes)
+                {
+                    TryCompactAfterLargePersist(projectorName, tempFileSize);
+                }
+
+                return ResultBox.FromValue(true);
+            }
+            catch
+            {
+                // Dispose stream on error path before delete
+                try { tempStream.Dispose(); } catch { }
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Streaming persistence failed: {ex.Message}";
+            _logger.LogError(ex, "[{ProjectorName}] Streaming persistence failed", projectorName);
+            return ResultBox.Error<bool>(ex);
+        }
+        finally
+        {
+            if (tempFilePath is not null)
+            {
+                await _tempFileSnapshotManager!.SafeDeleteAsync(tempFilePath);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Retry Orleans state write on ETag conflicts (optimistic concurrency).
+    /// </summary>
+    private async Task WriteOrleansStateWithRetryAsync(
+        string projectorName,
+        string? safePosition,
+        string projectorVersion,
+        bool externalStoreSaved,
+        int? safeVersion,
+        long envelopeSize)
+    {
+        const int maxRetries = 3;
+        for (var retry = 0; retry < maxRetries; retry++)
+        {
+            try
+            {
+                await _state.WriteStateAsync();
+                break;
+            }
+            catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
+            {
+                _logger.LogWarning(
+                    "[{ProjectorName}] ETag conflict on Orleans state write (attempt {Attempt}/{MaxAttempts}), re-reading state...",
+                    projectorName, retry + 1, maxRetries);
+                await _state.ReadStateAsync();
+                _state.State!.ProjectorName = projectorName;
+                _state.State.ProjectorVersion = projectorVersion;
+                _state.State.LastSortableUniqueId = safePosition;
+                _state.State.EventsProcessed = _eventsProcessed;
+                _state.State.LastPersistTime = DateTime.UtcNow;
+                if (externalStoreSaved)
+                {
+                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                        _state.State.LastGoodSafeVersion = safeVersion.Value;
+                    if (envelopeSize > 0)
+                        _state.State.LastGoodPayloadBytes = envelopeSize;
+                    if (envelopeSize > 0)
+                        _state.State.LastGoodOriginalSizeBytes = envelopeSize;
+                    _state.State.LastGoodEventsProcessed = _eventsProcessed;
+                }
+                _state.State.SerializedState = null;
+                _state.State.StateSize = 0;
+                _state.State.SafeLastPosition = null;
+                _state.State.LastPosition = null;
+                await Task.Delay(50 * (retry + 1));
+            }
         }
     }
 
@@ -1073,13 +1298,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation,
                 ProcessedEventIdCacheSize = baseOptions.ProcessedEventIdCacheSize,
                 ForceGcAfterLargeSnapshotPersist = baseOptions.ForceGcAfterLargeSnapshotPersist,
-                LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes
+                LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes,
+                UseStreamingSnapshotIO = baseOptions.UseStreamingSnapshotIO
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
             _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
             _processedEventIdCacheSize = Math.Max(1000, mergedOptions.ProcessedEventIdCacheSize);
             _forceGcAfterLargeSnapshotPersist = mergedOptions.ForceGcAfterLargeSnapshotPersist;
             _largeSnapshotGcThresholdBytes = Math.Max(1_000_000, mergedOptions.LargeSnapshotGcThresholdBytes);
+            _useStreamingSnapshotIO = mergedOptions.UseStreamingSnapshotIO;
 
             _host = _actorHostFactory.Create(
                 projectorName,
@@ -1137,7 +1364,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         else
                         {
                             // Delegate snapshot restoration to the host (handles format detection, deserialization, validation)
+#pragma warning disable CS0618 // Obsolete: restore path remains byte[] based (next phase)
                             var restoreResult = await _host.RestoreSnapshotAsync(snapshotData);
+#pragma warning restore CS0618
 
                             if (!restoreResult.IsSuccess)
                             {
@@ -1253,6 +1482,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         await base.OnActivateAsync(cancellationToken);
+
+        // Cleanup stale temp files from previous activations
+        if (_tempFileSnapshotManager is not null)
+        {
+            await _tempFileSnapshotManager.CleanupStaleFilesAsync();
+        }
 
         // After activation, start catch-up in background (fire-and-forget).
         // This prevents Orleans activation timeout when catch-up takes longer than 30 seconds.
@@ -1482,7 +1717,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
 
                     // Delegate version rewriting to the host (handles format detection, deserialization, version patching)
+#pragma warning disable CS0618 // Obsolete: version rewrite remains byte[] based (next phase)
                     var modifiedBytes = _host.RewriteSnapshotVersion(record.StateData!, newVersion);
+#pragma warning restore CS0618
 
                     var modifiedRecord = new MultiProjectionStateRecord(
                         record.ProjectorName,

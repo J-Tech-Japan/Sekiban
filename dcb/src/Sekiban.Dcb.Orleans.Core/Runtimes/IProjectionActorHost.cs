@@ -41,11 +41,21 @@ public interface IProjectionActorHost
     /// <summary>
     ///     Get the snapshot as opaque bytes. Format is owned by the implementation.
     /// </summary>
+    [Obsolete("Use WriteSnapshotToStreamAsync for streaming persistence to avoid OOM. Will be removed in a future version.")]
     Task<ResultBox<byte[]>> GetSnapshotBytesAsync(bool canGetUnsafeState = true);
+
+    /// <summary>
+    ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation.
+    /// </summary>
+    Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        CancellationToken cancellationToken);
 
     /// <summary>
     ///     Restore projection state from opaque snapshot bytes.
     /// </summary>
+    [Obsolete("Will be replaced with stream-based restore in a future version.")]
     Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData);
 
     /// <summary>
@@ -109,5 +119,6 @@ public interface IProjectionActorHost
     ///     Rewrite the projector version in a serialized snapshot.
     ///     Returns updated snapshot bytes.
     /// </summary>
+    [Obsolete("Uses byte[] snapshots. Will be replaced with stream-based version in a future version.")]
     byte[] RewriteSnapshotVersion(byte[] snapshotData, string newVersion);
 }

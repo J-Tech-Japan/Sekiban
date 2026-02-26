@@ -254,22 +254,22 @@ public class StreamingSnapshotIOTests
     // --- Feature Flag Tests ---
 
     [Fact]
-    public void UseStreamingSnapshotIO_Should_Default_To_False()
+    public void UseStreamingSnapshotIO_Should_Default_To_True()
     {
         // Given/When
         var options = new GeneralMultiProjectionActorOptions();
 
         // Then
-        Assert.False(options.UseStreamingSnapshotIO);
+        Assert.True(options.UseStreamingSnapshotIO);
     }
 
     [Fact]
-    public void UseStreamingSnapshotIO_Should_Be_Settable_To_True()
+    public void UseStreamingSnapshotIO_Should_Be_Settable_To_False()
     {
         // Given/When
-        var options = new GeneralMultiProjectionActorOptions { UseStreamingSnapshotIO = true };
+        var options = new GeneralMultiProjectionActorOptions { UseStreamingSnapshotIO = false };
 
         // Then
-        Assert.True(options.UseStreamingSnapshotIO);
+        Assert.False(options.UseStreamingSnapshotIO);
     }
 }

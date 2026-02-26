@@ -9,6 +9,8 @@ public static class StreamOffloadHelper
     /// <summary>
     ///     Reads the stream, compares its length to the threshold, and either
     ///     returns inline data or uploads to blob and returns offload metadata.
+    ///     Seekable streams (e.g. FileStream) above threshold are streamed directly
+    ///     to blob without buffering to byte[].
     /// </summary>
     public static async Task<OffloadResult> ProcessAsync(
         Stream stream,
@@ -17,6 +19,19 @@ public static class StreamOffloadHelper
         IBlobStorageSnapshotAccessor? blobAccessor,
         CancellationToken cancellationToken)
     {
+        // Seekable stream optimization: use Length to decide without buffering
+        if (stream.CanSeek && stream.Length > thresholdBytes && blobAccessor is not null)
+        {
+            stream.Position = 0;
+            var key = await blobAccessor.WriteAsync(stream, projectorName, cancellationToken)
+                .ConfigureAwait(false);
+            return new OffloadResult(
+                IsOffloaded: true,
+                InlineData: null,
+                OffloadKey: key,
+                OffloadProvider: blobAccessor.ProviderName);
+        }
+
         var buffer = await BufferStreamAsync(stream, cancellationToken).ConfigureAwait(false);
         return await ProcessAsync(buffer, projectorName, thresholdBytes, blobAccessor, cancellationToken)
             .ConfigureAwait(false);
