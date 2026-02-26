@@ -44,7 +44,8 @@ public class TempFileSnapshotManager
                     "Consider running cleanup or increasing MaxTotalSizeBytes.");
             }
 
-            var fileName = $"{FilePrefix}{projectorName}-{Guid.NewGuid():N}{FileExtension}";
+            var safeProjectorName = SanitizeFileNameSegment(projectorName);
+            var fileName = $"{FilePrefix}{safeProjectorName}-{Guid.NewGuid():N}{FileExtension}";
             var filePath = Path.Combine(_options.TempDirectory, fileName);
 
             var stream = new FileStream(
@@ -154,5 +155,20 @@ public class TempFileSnapshotManager
             }
         }
         return total;
+    }
+
+    private static string SanitizeFileNameSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unknown";
+        }
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var chars = value
+            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+            .ToArray();
+
+        return new string(chars);
     }
 }

@@ -118,6 +118,28 @@ public class TempFileSnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateTempFileStreamAsync_Should_Sanitize_ProjectorName_For_FileSystem()
+    {
+        // When: projector name contains path separator and reserved characters
+        var (stream, filePath) = await _manager.CreateTempFileStreamAsync("svc/default:Projector");
+
+        // Then: generated file name is safe and does not contain directory separators
+        try
+        {
+            var fileName = Path.GetFileName(filePath);
+            Assert.DoesNotContain("/", fileName);
+            Assert.DoesNotContain(":", fileName);
+            Assert.Contains("svc_default_Projector", fileName);
+            Assert.True(File.Exists(filePath));
+        }
+        finally
+        {
+            await stream.DisposeAsync();
+            await _manager.SafeDeleteAsync(filePath);
+        }
+    }
+
+    [Fact]
     public async Task CreateTempFileStreamAsync_Should_Return_Writable_Seekable_FileStream()
     {
         // When
