@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.ColdEvents;
 using System.Text;
 using System.Runtime;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -163,6 +164,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_resolvedCatchUpEventStore != null)
             return _resolvedCatchUpEventStore;
+
+        // When cold-event hybrid read is configured, keep using the injected IEventStore
+        // so catch-up reads can merge cold segments + hot tail in one path.
+        if (_eventStore is HybridEventStore)
+        {
+            _resolvedCatchUpEventStore = _eventStore;
+            _logger.LogDebug(
+                "[{ProjectorName}] Using injected hybrid event store for catch-up (cold + hot)",
+                GetProjectorName());
+            return _resolvedCatchUpEventStore;
+        }
 
         if (_eventStoreFactory != null)
         {
