@@ -70,9 +70,12 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    await using var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
+                    var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
                         .ConfigureAwait(false);
-                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
+                    await using (offloadStream.ConfigureAwait(false))
+                    {
+                        stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -115,9 +118,12 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
             {
                 try
                 {
-                    await using var offloadStream = await _blobAccessor.OpenReadAsync(latest.OffloadKey, cancellationToken)
+                    var offloadStream = await _blobAccessor.OpenReadAsync(latest.OffloadKey, cancellationToken)
                         .ConfigureAwait(false);
-                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
+                    await using (offloadStream.ConfigureAwait(false))
+                    {
+                        stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -188,6 +194,7 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         try
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
