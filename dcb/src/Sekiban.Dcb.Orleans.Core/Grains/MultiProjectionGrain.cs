@@ -2021,7 +2021,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             filtered.Count);
         try
         {
-            await _host.AddSerializableEventsAsync(filtered, finishedCatchUp: false);
+            await _host!.AddSerializableEventsAsync(filtered, finishedCatchUp: false);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
         {
@@ -2086,7 +2086,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             "[{ProjectorName}] Catch-up: Processing {EventCount} events",
             projectorName,
             filtered.Count);
-        await _host.AddEventsFromCatchUpAsync(filtered, false);
+        await _host!.AddEventsFromCatchUpAsync(filtered, false);
         sw.Stop();
 
         await UpdateCatchUpProgressAfterBatch(

@@ -68,7 +68,7 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
         {
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(ct);
-            using var tx = connection.BeginTransaction();
+            await using var tx = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
 
             string? currentEtag = null;
             await using (var read = connection.CreateCommand())
@@ -87,13 +87,13 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             {
                 if (currentEtag is null)
                 {
-                    tx.Rollback();
+                    await tx.RollbackAsync(ct);
                     return ResultBox.Error<bool>(new InvalidOperationException($"Conditional write failed: {path} does not exist"));
                 }
 
                 if (!string.Equals(currentEtag, expectedETag, StringComparison.Ordinal))
                 {
-                    tx.Rollback();
+                    await tx.RollbackAsync(ct);
                     return ResultBox.Error<bool>(new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}, actual={currentEtag}"));
                 }
             }
@@ -114,7 +114,7 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             upsert.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
             await upsert.ExecuteNonQueryAsync(ct);
 
-            tx.Commit();
+            await tx.CommitAsync(ct);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)

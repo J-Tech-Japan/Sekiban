@@ -128,7 +128,7 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
         try
         {
             await using var connection = new DuckDBConnection(_connectionString);
-            connection.Open();
+            await connection.OpenAsync();
             return await action(connection);
         }
         catch (Exception ex)

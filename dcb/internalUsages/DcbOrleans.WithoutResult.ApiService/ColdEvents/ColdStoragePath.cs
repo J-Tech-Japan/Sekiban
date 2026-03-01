@@ -10,7 +10,14 @@ internal static class ColdStoragePath
     public static string ToAbsolute(string basePath, string relative)
     {
         var normalized = Normalize(relative);
-        return Path.GetFullPath(Path.Combine(basePath, normalized));
+        var fullPath = Path.GetFullPath(Path.Combine(basePath, normalized));
+        var normalizedBase = Path.GetFullPath(basePath);
+        if (!fullPath.StartsWith(normalizedBase + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+            !string.Equals(fullPath, normalizedBase, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Path traversal detected: '{relative}' escapes base directory");
+        }
+        return fullPath;
     }
 
     public static string ComputeEtag(byte[] data)
