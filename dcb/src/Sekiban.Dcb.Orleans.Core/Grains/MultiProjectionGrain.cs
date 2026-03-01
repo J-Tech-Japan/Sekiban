@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.ColdEvents;
 using System.Text;
 using System.Runtime;
 namespace Sekiban.Dcb.Orleans.Grains;
@@ -33,6 +34,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private readonly IEventStoreFactory? _eventStoreFactory;
+    private readonly IServiceIdProvider _serviceIdProvider;
     private string? _grainKey;
     private string? _projectorName;
     private string _serviceId = DefaultServiceIdProvider.DefaultServiceId;
@@ -120,7 +122,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         GeneralMultiProjectionActorOptions? actorOptions,
         TempFileSnapshotManager? tempFileSnapshotManager = null,
         ILogger<MultiProjectionGrain>? logger = null,
-        IEventStoreFactory? eventStoreFactory = null)
+        IEventStoreFactory? eventStoreFactory = null,
+        IServiceIdProvider? serviceIdProvider = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
@@ -132,6 +135,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _tempFileSnapshotManager = tempFileSnapshotManager;
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
         _eventStoreFactory = eventStoreFactory;
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
     private (string GrainKey, string ProjectorName, string ServiceId) GetIdentity()
@@ -154,15 +158,56 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string GetGrainKey() => GetIdentity().GrainKey;
 
     /// <summary>
-    ///     Returns a ServiceId-scoped event store for catch-up reads.
-    ///     Uses IEventStoreFactory when available, otherwise falls back to the injected IEventStore.
-    ///     The result is cached for the grain's lifetime because _serviceId does not change
-    ///     after grain activation.
+    ///     Returns the event store used for catch-up reads.
+    ///     Preference order:
+    ///     1) Injected HybridEventStore when ServiceIdProvider matches grain ServiceId
+    ///        (keeps cold + hot merge in one read path).
+    ///     2) IEventStoreFactory-created ServiceId-scoped store when available.
+    ///     3) Injected IEventStore fallback.
+    ///     The result is cached for the grain's lifetime after first resolution.
     /// </summary>
     private IEventStore GetCatchUpEventStore()
     {
         if (_resolvedCatchUpEventStore != null)
             return _resolvedCatchUpEventStore;
+
+        // Ensure _serviceId is parsed from grain key before resolving catch-up store.
+        GetIdentity();
+
+        // When cold-event hybrid read is configured, keep using the injected IEventStore
+        // so catch-up reads can merge cold segments + hot tail in one path.
+        if (_eventStore is HybridEventStore)
+        {
+            var currentServiceId = _serviceIdProvider.GetCurrentServiceId();
+            if (!string.Equals(currentServiceId, _serviceId, StringComparison.Ordinal))
+            {
+                if (_eventStoreFactory != null)
+                {
+                    _resolvedCatchUpEventStore = _eventStoreFactory.CreateForService(_serviceId);
+                    _logger.LogWarning(
+                        "[{ProjectorName}] ServiceIdProvider returned {CurrentServiceId}, but grain ServiceId is {GrainServiceId}. " +
+                        "Using factory-created ServiceId-scoped store for catch-up.",
+                        GetProjectorName(),
+                        currentServiceId,
+                        _serviceId);
+                    return _resolvedCatchUpEventStore;
+                }
+
+                _logger.LogWarning(
+                    "[{ProjectorName}] ServiceIdProvider returned {CurrentServiceId}, but grain ServiceId is {GrainServiceId}. " +
+                    "Falling back to injected hybrid store because no factory is available.",
+                    GetProjectorName(),
+                    currentServiceId,
+                    _serviceId);
+            }
+
+            _resolvedCatchUpEventStore = _eventStore;
+            _logger.LogDebug(
+                "[{ProjectorName}] Using injected hybrid event store for catch-up (cold + hot, ServiceId={ServiceId})",
+                GetProjectorName(),
+                _serviceId);
+            return _resolvedCatchUpEventStore;
+        }
 
         if (_eventStoreFactory != null)
         {

@@ -31,10 +31,10 @@
 
     <ItemGroup>
         <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
-        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.3">
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>

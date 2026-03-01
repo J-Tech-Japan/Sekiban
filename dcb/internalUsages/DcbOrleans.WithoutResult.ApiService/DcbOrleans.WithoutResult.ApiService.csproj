@@ -9,22 +9,22 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.0" />
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.0" />
-        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
-        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.0" />
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.2" />
-        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.2.0" />
-        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.0" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.12" />
-        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.2" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.2" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.2" />
+        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.4" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
@@ -33,8 +33,8 @@
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3"/>
     </ItemGroup>
 
     <ItemGroup>
