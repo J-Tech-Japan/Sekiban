@@ -9,6 +9,7 @@ using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
+using DcbOrleans.WithoutResult.ApiService.ColdEvents;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.ServiceId;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress Azure Storage warnings in development
@@ -391,6 +394,7 @@ builder.Services.AddSingleton(domainTypes);
 
 // Register native runtime abstraction interfaces
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
 
 // Configure database storage based on configuration
 if (databaseType == "cosmos")
@@ -417,6 +421,21 @@ else
     builder.Services.AddSekibanDcbPostgresWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
 }
+
+if (builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enabled"))
+{
+    var coldConfig = builder.Configuration.GetSection("Sekiban:ColdEvent");
+    var storageOptions = coldConfig.GetSection("Storage").Get<ColdStorageOptions>() ?? new ColdStorageOptions();
+    var storageRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), storageOptions.BasePath));
+    Directory.CreateDirectory(storageRoot);
+    builder.Services.AddSingleton(storageOptions);
+    builder.Services.AddSingleton<IColdObjectStorage>(_ =>
+        CreateColdObjectStorage(storageOptions, storageRoot));
+    builder.Services.AddSingleton<IColdLeaseManager, StorageBackedColdLeaseManager>();
+    builder.Services.AddSekibanDcbColdEvents(options => coldConfig.Bind(options));
+    builder.Services.AddSekibanDcbColdEventHybridRead();
+}
+
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
@@ -1004,6 +1023,59 @@ apiRoute
 // Health check endpoint
 apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("HealthCheck");
 
+apiRoute
+    .MapGet(
+        "/cold/status",
+        async ([FromServices] IColdEventStoreFeature feature, CancellationToken ct) =>
+        {
+            var status = await feature.GetStatusAsync(ct);
+            return Results.Ok(status);
+        })
+    .WithOpenApi()
+    .WithName("GetColdStatus");
+
+apiRoute
+    .MapGet(
+        "/cold/progress",
+        async ([FromServices] IColdEventProgressReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await reader.GetProgressAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetColdProgress");
+
+apiRoute
+    .MapGet(
+        "/cold/catalog",
+        async ([FromServices] IColdEventCatalogReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await reader.GetDataRangeSummaryAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetColdCatalog");
+
+apiRoute
+    .MapPost(
+        "/cold/export",
+        async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("RunColdExport");
+
 // Orleans test endpoint
 apiRoute
     .MapGet(
@@ -1029,3 +1101,15 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static IColdObjectStorage CreateColdObjectStorage(ColdStorageOptions options, string storageRoot)
+{
+    var type = (options.Type ?? "jsonl").ToLowerInvariant();
+    return type switch
+    {
+        "sqlite" => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
+        "duckdb" => new DuckDbColdObjectStorage(Path.Combine(storageRoot, options.DuckDbFile)),
+        "jsonl" => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
+        _ => throw new InvalidOperationException($"Unsupported cold storage type: {options.Type}")
+    };
+}

@@ -14,6 +14,7 @@
         <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.0" />
         <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.0" />
         <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.4.2" />
+        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.2.0" />
         <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.0" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.0" />
