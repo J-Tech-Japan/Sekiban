@@ -98,9 +98,20 @@ public sealed class HybridEventStore : IEventStore
         }
 
         var coldBoundary = new SortableUniqueId(manifest.LatestSafeSortableUniqueId);
+        _logger.LogDebug(
+            "Using cold manifest for {ServiceId}: latestSafe={LatestSafe}, segments={SegmentCount}, since={Since}",
+            serviceId,
+            manifest.LatestSafeSortableUniqueId,
+            manifest.Segments.Count,
+            since?.Value);
 
         if (since is not null && since.IsLaterThan(coldBoundary))
         {
+            _logger.LogDebug(
+                "Skipping cold read for {ServiceId} because since={Since} is newer than latestSafe={LatestSafe}",
+                serviceId,
+                since.Value,
+                manifest.LatestSafeSortableUniqueId);
             return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
