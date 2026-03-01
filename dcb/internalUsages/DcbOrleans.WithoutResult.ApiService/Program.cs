@@ -1076,6 +1076,21 @@ apiRoute
     .WithOpenApi()
     .WithName("RunColdExport");
 
+// Backward-compatible alias used by some manual tools/scripts.
+apiRoute
+    .MapPost(
+        "/cold/export-now",
+        async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("RunColdExportNow");
+
 // Orleans test endpoint
 apiRoute
     .MapGet(
