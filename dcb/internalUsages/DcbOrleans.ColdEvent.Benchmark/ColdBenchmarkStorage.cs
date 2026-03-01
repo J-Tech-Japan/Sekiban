@@ -10,11 +10,15 @@ public interface IColdBenchmarkStorage : IDisposable
 public sealed class JsonlColdBenchmarkStorage : IColdBenchmarkStorage
 {
     private readonly string _root;
+    private readonly string _normalizedRoot;
+    private readonly string _rootWithSeparator;
 
     public JsonlColdBenchmarkStorage(string root)
     {
         _root = Path.GetFullPath(root);
         Directory.CreateDirectory(_root);
+        _normalizedRoot = _root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        _rootWithSeparator = _normalizedRoot + Path.DirectorySeparatorChar;
     }
 
     public byte[] Get(string path)
@@ -39,7 +43,18 @@ public sealed class JsonlColdBenchmarkStorage : IColdBenchmarkStorage
     }
 
     private string Resolve(string path)
-        => Path.GetFullPath(Path.Combine(_root, path.Replace('\\', '/').TrimStart('/')));
+    {
+        var normalizedPath = path.Replace('\\', '/').TrimStart('/');
+        var fullPath = Path.GetFullPath(Path.Combine(_root, normalizedPath));
+        var isInRoot =
+            fullPath.Equals(_normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+            fullPath.StartsWith(_rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+        if (!isInRoot)
+        {
+            throw new InvalidOperationException($"Path escapes the storage root: {path}");
+        }
+        return fullPath;
+    }
 }
 
 public sealed class SqliteColdBenchmarkStorage : IColdBenchmarkStorage
@@ -78,7 +93,7 @@ public sealed class SqliteColdBenchmarkStorage : IColdBenchmarkStorage
         command.Parameters.AddWithValue("$path", path);
 
         var result = command.ExecuteScalar();
-        return result as byte[] ?? [];
+        return result as byte[] ?? throw new KeyNotFoundException($"Path not found: {path}");
     }
 
     public void Put(string path, byte[] data)
@@ -130,8 +145,12 @@ public sealed class DuckDbColdBenchmarkStorage : IColdBenchmarkStorage
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT data FROM cold_objects WHERE path = ?";
         command.Parameters.Add(new DuckDBParameter { Value = path });
-        var result = command.ExecuteScalar();
-        return result as byte[] ?? [];
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new KeyNotFoundException($"Path not found: {path}");
+        }
+        return (byte[])reader.GetValue(0);
     }
 
     public void Put(string path, byte[] data)

@@ -8,7 +8,7 @@ BenchmarkDotNet project for comparing Cold Event storage backends (`jsonl`, `sql
 ## Run
 
 ```bash
-dotnet run -c Release --project /Users/tomohisa/dev/GitHub/Sekiban-dcb/dcb/internalUsages/DcbOrleans.ColdEvent.Benchmark/DcbOrleans.ColdEvent.Benchmark.csproj
+dotnet run -c Release --project ./DcbOrleans.ColdEvent.Benchmark.csproj
 ```
 
 ## Notes
