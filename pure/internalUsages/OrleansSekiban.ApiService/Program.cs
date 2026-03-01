@@ -30,10 +30,10 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-builder.AddKeyedAzureTableClient("OrleansSekibanClustering");
-builder.AddKeyedAzureTableClient("OrleansSekibanGrainTable");
-builder.AddKeyedAzureBlobClient("OrleansSekibanGrainState");
-builder.AddKeyedAzureQueueClient("OrleansSekibanQueue");
+builder.AddKeyedAzureTableServiceClient("OrleansSekibanClustering");
+builder.AddKeyedAzureTableServiceClient("OrleansSekibanGrainTable");
+builder.AddKeyedAzureBlobServiceClient("OrleansSekibanGrainState");
+builder.AddKeyedAzureQueueServiceClient("OrleansSekibanQueue");
 builder.UseOrleans(config =>
 {
     if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
@@ -93,7 +93,9 @@ builder.UseOrleans(config =>
                 {
                     cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
                     cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                    cp.ConfigureTableServiceClient(builder.Configuration.GetConnectionString("OrleansSekibanTable"));
+                    cp.TableServiceClient = new TableServiceClient(
+                        builder.Configuration.GetConnectionString("OrleansSekibanTable")
+                            ?? throw new InvalidOperationException("Connection string 'OrleansSekibanTable' is not configured"));
                 }));
             });
         config.AddEventHubStreams(
@@ -114,7 +116,9 @@ builder.UseOrleans(config =>
                 {
                     cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
                     cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
-                    cp.ConfigureTableServiceClient(builder.Configuration.GetConnectionString("OrleansSekibanTable"));
+                    cp.TableServiceClient = new TableServiceClient(
+                        builder.Configuration.GetConnectionString("OrleansSekibanTable")
+                            ?? throw new InvalidOperationException("Connection string 'OrleansSekibanTable' is not configured"));
                 }));
 
                 // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …

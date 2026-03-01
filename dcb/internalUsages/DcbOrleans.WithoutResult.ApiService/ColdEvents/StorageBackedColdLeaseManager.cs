@@ -32,7 +32,11 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
             return ResultBox.Error<bool>(new InvalidOperationException($"Lease {lease.LeaseId} was not found"));
         }
 
-        var (storedLease, _) = DeserializeLease(existing.GetValue().Data, existing.GetValue().ETag, lease.LeaseId);
+        var (storedLease, deserializeError) = DeserializeLease(existing.GetValue().Data, existing.GetValue().ETag, lease.LeaseId);
+        if (deserializeError is not null)
+        {
+            return ResultBox.Error<bool>(deserializeError);
+        }
         if (storedLease is null || storedLease.Token != lease.Token)
         {
             return ResultBox.Error<bool>(new InvalidOperationException($"Lease {lease.LeaseId} is not held by token"));

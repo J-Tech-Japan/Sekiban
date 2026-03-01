@@ -114,6 +114,7 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             var normalizedPrefix = ColdStoragePath.Normalize(prefix);
             var searchRoot = _basePath;
             if (!string.IsNullOrWhiteSpace(normalizedPrefix))
@@ -150,6 +151,7 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
 
     public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
         try
         {

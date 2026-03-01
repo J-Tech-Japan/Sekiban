@@ -45,9 +45,9 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
 
     public abstract SekibanDomainTypes GetDomainTypes();
 
-    private ICommandMetadataProvider _commandMetadataProvider;
-    private ISekibanExecutor _executor;
-    private TestCluster _cluster;
+    private ICommandMetadataProvider _commandMetadataProvider = null!;
+    private ISekibanExecutor _executor = null!;
+    private TestCluster _cluster = null!;
     private Repository _repository = new();
 
     /// <summary>
