@@ -273,7 +273,68 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
         log(`Refresh(${{mode}}) failed: ` + e);
       }}
     }}
+
+    async function coldStatus() {{
+      try {{
+        const r = await fetch('/cold/status');
+        const j = await r.json();
+        document.getElementById('coldStatus').textContent = j.isEnabled ? 'enabled' : 'disabled';
+        document.getElementById('coldReason').textContent = j.reason ?? '';
+        log(`ColdStatus => supported=${{j.isSupported}} enabled=${{j.isEnabled}} reason=${{j.reason ?? ''}}`);
+      }} catch (e) {{
+        log('ColdStatus failed: ' + e);
+      }}
+    }}
+
+    async function coldProgress() {{
+      try {{
+        const r = await fetch('/cold/progress');
+        const t = await r.text();
+        document.getElementById('coldProgress').textContent = t;
+        log(`ColdProgress => ${{r.status}}`);
+      }} catch (e) {{
+        log('ColdProgress failed: ' + e);
+      }}
+    }}
+
+    async function coldCatalog() {{
+      try {{
+        const r = await fetch('/cold/catalog');
+        const t = await r.text();
+        document.getElementById('coldCatalog').textContent = t;
+        log(`ColdCatalog => ${{r.status}}`);
+      }} catch (e) {{
+        log('ColdCatalog failed: ' + e);
+      }}
+    }}
+
+    async function coldExport() {{
+      try {{
+        const r = await fetch('/cold/export', {{ method: 'POST' }});
+        const t = await r.text();
+        log(`ColdExport => ${{r.status}} ${{t}}`);
+      }} catch (e) {{
+        log('ColdExport failed: ' + e);
+      }}
+    }}
   </script>
+  <h3>Cold Event</h3>
+  <div class='row'>
+    <button onclick='coldStatus()'>status</button>
+    <button onclick='coldProgress()'>progress</button>
+    <button onclick='coldCatalog()'>catalog</button>
+    <button onclick='coldExport()'>export now</button>
+  </div>
+  <div class='row'>
+    <div>Status: <strong id='coldStatus'>-</strong></div>
+    <div>Reason: <code id='coldReason'>-</code></div>
+  </div>
+  <div class='row'>
+    <code id='coldProgress' style='white-space:pre-wrap'>-</code>
+  </div>
+  <div class='row'>
+    <code id='coldCatalog' style='white-space:pre-wrap'>-</code>
+  </div>
 </body>
 </html>
 ", "text/html"));
@@ -495,6 +556,78 @@ app.MapPost("/projection/refresh", async (string? mode) =>
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
         return Results.Text(json, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/cold/status", async () =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync("/api/cold/status");
+        var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
+        return Results.Text(txt, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/cold/progress", async () =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync("/api/cold/progress");
+        var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
+        return Results.Text(txt, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/cold/catalog", async () =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.GetAsync("/api/cold/catalog");
+        var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
+        return Results.Text(txt, "application/json");
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/cold/export", async () =>
+{
+    var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        var res = await http.PostAsync("/api/cold/export", null);
+        var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
+        if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
+        return Results.Text(txt, "application/json");
     }
     catch (Exception ex)
     {
