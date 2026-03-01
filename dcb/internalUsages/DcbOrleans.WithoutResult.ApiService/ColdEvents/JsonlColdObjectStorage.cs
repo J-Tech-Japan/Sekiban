@@ -45,20 +45,63 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         {
             if (expectedETag is not null)
             {
-                if (!File.Exists(fullPath))
+                try
                 {
-                    return ResultBox.Error<bool>(new InvalidOperationException($"Conditional write failed: {path} does not exist"));
-                }
+                    await using var stream = new FileStream(
+                        fullPath,
+                        FileMode.Open,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        bufferSize: 4096,
+                        FileOptions.Asynchronous);
 
-                var existing = await File.ReadAllBytesAsync(fullPath, ct);
-                var etag = ColdStoragePath.ComputeEtag(existing);
-                if (!string.Equals(etag, expectedETag, StringComparison.Ordinal))
+                    var existing = await ReadAllAsync(stream, ct);
+                    var etag = ColdStoragePath.ComputeEtag(existing);
+                    if (!string.Equals(etag, expectedETag, StringComparison.Ordinal))
+                    {
+                        return ResultBox.Error<bool>(new InvalidOperationException(
+                            $"ETag mismatch at {path}: expected={expectedETag}, actual={etag}"));
+                    }
+
+                    stream.SetLength(0);
+                    await stream.WriteAsync(data, ct);
+                    await stream.FlushAsync(ct);
+                    return ResultBox.FromValue(true);
+                }
+                catch (FileNotFoundException)
                 {
-                    return ResultBox.Error<bool>(new InvalidOperationException($"ETag mismatch at {path}: expected={expectedETag}, actual={etag}"));
+                    return ResultBox.Error<bool>(new InvalidOperationException(
+                        $"Conditional write failed: {path} does not exist"));
                 }
             }
 
-            await File.WriteAllBytesAsync(fullPath, data, ct);
+            // Create-if-not-exists first to reduce first-write races.
+            try
+            {
+                await using var create = new FileStream(
+                    fullPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 4096,
+                    FileOptions.Asynchronous);
+                await create.WriteAsync(data, ct);
+                await create.FlushAsync(ct);
+                return ResultBox.FromValue(true);
+            }
+            catch (IOException) when (File.Exists(fullPath))
+            {
+                await using var overwrite = new FileStream(
+                    fullPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 4096,
+                    FileOptions.Asynchronous);
+                await overwrite.WriteAsync(data, ct);
+                await overwrite.FlushAsync(ct);
+            }
+
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -72,8 +115,26 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         try
         {
             var normalizedPrefix = ColdStoragePath.Normalize(prefix);
+            var searchRoot = _basePath;
+            if (!string.IsNullOrWhiteSpace(normalizedPrefix))
+            {
+                var firstSeparator = normalizedPrefix.IndexOf('/');
+                var firstSegment = firstSeparator >= 0
+                    ? normalizedPrefix[..firstSeparator]
+                    : normalizedPrefix;
+                if (!string.IsNullOrWhiteSpace(firstSegment))
+                {
+                    var candidate = Path.Combine(_basePath, firstSegment);
+                    if (!Directory.Exists(candidate))
+                    {
+                        return Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>([]));
+                    }
+                    searchRoot = candidate;
+                }
+            }
+
             var result = Directory
-                .EnumerateFiles(_basePath, "*", SearchOption.AllDirectories)
+                .EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories)
                 .Select(file => Path.GetRelativePath(_basePath, file).Replace('\\', '/'))
                 .Where(relative => relative.StartsWith(normalizedPrefix, StringComparison.Ordinal))
                 .OrderBy(x => x, StringComparer.Ordinal)
@@ -104,5 +165,13 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         {
             return Task.FromResult(ResultBox.Error<bool>(ex));
         }
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream stream, CancellationToken ct)
+    {
+        stream.Position = 0;
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        return ms.ToArray();
     }
 }

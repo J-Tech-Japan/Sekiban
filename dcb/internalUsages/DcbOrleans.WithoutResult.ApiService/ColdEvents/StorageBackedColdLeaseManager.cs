@@ -25,6 +25,10 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
         var existing = await _storage.GetAsync(path, ct);
         if (!existing.IsSuccess)
         {
+            if (!IsNotFound(existing.GetException()))
+            {
+                return ResultBox.Error<bool>(existing.GetException());
+            }
             return ResultBox.Error<bool>(new InvalidOperationException($"Lease {lease.LeaseId} was not found"));
         }
 
@@ -72,6 +76,10 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
                 }
             }
         }
+        else if (!IsNotFound(existing.GetException()))
+        {
+            return ResultBox.Error<ColdLease>(existing.GetException());
+        }
         else if (requireOwnership)
         {
             return ResultBox.Error<ColdLease>(new InvalidOperationException($"Lease {leaseId} is not held by token"));
@@ -85,6 +93,27 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
         if (!putResult.IsSuccess)
         {
             return ResultBox.Error<ColdLease>(putResult.GetException());
+        }
+
+        // For first-write acquisition (expectedEtag == null), verify persisted owner token.
+        if (expectedEtag is null && !requireOwnership)
+        {
+            var verify = await _storage.GetAsync(path, ct);
+            if (!verify.IsSuccess)
+            {
+                return ResultBox.Error<ColdLease>(verify.GetException());
+            }
+
+            var (verifiedLease, verifyError) = DeserializeLease(verify.GetValue().Data, verify.GetValue().ETag, leaseId);
+            if (verifyError is not null)
+            {
+                return ResultBox.Error<ColdLease>(verifyError);
+            }
+            if (verifiedLease is null || verifiedLease.Token != lease.Token)
+            {
+                return ResultBox.Error<ColdLease>(new InvalidOperationException(
+                    $"Lease {leaseId} was acquired by another writer"));
+            }
         }
 
         return ResultBox.FromValue(lease);
@@ -110,4 +139,7 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
             return (null, ex);
         }
     }
+
+    private static bool IsNotFound(Exception ex)
+        => ex is FileNotFoundException or DirectoryNotFoundException or KeyNotFoundException;
 }
