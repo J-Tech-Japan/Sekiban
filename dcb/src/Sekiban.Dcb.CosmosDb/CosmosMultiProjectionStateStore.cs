@@ -201,10 +201,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
         try
         {
-            await using var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
+            var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
                 .ConfigureAwait(false);
-            var blobData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
-            return ResultBox.FromValue(OptionalValue.FromValue(blobData));
+            await using (offloadStream.ConfigureAwait(false))
+            {
+                var blobData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
+                return ResultBox.FromValue(OptionalValue.FromValue(blobData));
+            }
         }
         catch (InvalidOperationException blobEx)
         {
@@ -269,6 +272,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         try
         {
             var offloadResult = await StreamOffloadHelper.ProcessAsync(
