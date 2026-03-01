@@ -9,18 +9,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
         <!-- AWS deployment packages (RDS/AdoNet for Orleans) -->
-        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Npgsql" Version="9.0.3" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Npgsql" Version="10.0.1" />
         <!-- Note: Microsoft.Orleans.Streaming.SQS 9.2.1 conflicts with AWS SDK v4 used by DynamoDB -->
         <!-- SQS streaming will be added when Orleans SQS package supports AWS SDK v4 -->
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.12" />
-        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
     </ItemGroup>
 
     <ItemGroup>

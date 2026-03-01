@@ -29,15 +29,15 @@
 
     <ItemGroup>
         <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
-        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.56.0" />
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.9" />
-        <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.9" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
