@@ -1088,8 +1088,8 @@ apiRoute
                 ? Results.Ok(result.GetValue())
                 : Results.BadRequest(new { error = result.GetException().Message });
         })
-    .WithOpenApi()
-    .WithName("RunColdExportNow");
+    .WithName("RunColdExportNow")
+    .ExcludeFromDescription();
 
 // Orleans test endpoint
 apiRoute
