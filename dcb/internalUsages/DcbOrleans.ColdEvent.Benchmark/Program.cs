@@ -1,3 +1,9 @@
 using BenchmarkDotNet.Running;
 
-BenchmarkRunner.Run<ColdEventProjectionBenchmarks>();
+BenchmarkSwitcher
+    .FromTypes([
+        typeof(ColdEventProjectionBenchmarks),
+        typeof(SnapshotMemoryBenchmarks),
+        typeof(SnapshotBuildMemoryBenchmarks)
+    ])
+    .Run(args);

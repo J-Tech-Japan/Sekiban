@@ -972,6 +972,66 @@ public class SqliteEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
+    {
+        try
+        {
+            var events = new List<SerializableEvent>();
+            var serviceId = CurrentServiceId;
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var cmd = connection.CreateCommand();
+            var limitClause = maxCount.HasValue ? "LIMIT @maxCount" : string.Empty;
+            if (since != null)
+            {
+                cmd.CommandText = $"""
+                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                    FROM dcb_events
+                    WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
+                    ORDER BY SortableUniqueId
+                    {limitClause}
+                    """;
+                cmd.Parameters.AddWithValue("@since", since.Value);
+            }
+            else
+            {
+                cmd.CommandText = $"""
+                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                    FROM dcb_events
+                    WHERE ServiceId = {ParamServiceId}
+                    ORDER BY SortableUniqueId
+                    {limitClause}
+                    """;
+            }
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            if (maxCount.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@maxCount", maxCount.Value);
+            }
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var se = ReadSerializableEvent(reader);
+                if (se != null)
+                {
+                    events.Add(se);
+                }
+            }
+
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error reading all serializable events from SQLite with maxCount");
+            return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         try

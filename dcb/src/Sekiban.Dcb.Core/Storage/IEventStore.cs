@@ -73,8 +73,7 @@ public interface IEventStore
     ///     Reads all events as SerializableEvent (no payload deserialization).
     /// </summary>
     /// <param name="since">Optional: Only return events after this ID</param>
-    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
-        => throw new NotSupportedException("SerializableEvent read not implemented");
+    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null);
 
     /// <summary>
     ///     Reads all events as SerializableEvent (no payload deserialization).
@@ -83,16 +82,14 @@ public interface IEventStore
     /// <param name="maxCount">Optional: Maximum number of events to return</param>
     Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
-        int? maxCount)
-        => ReadAllSerializableEventsAsync(since);
+        int? maxCount);
 
     /// <summary>
     ///     Reads events for a specific tag as SerializableEvent (no payload deserialization).
     /// </summary>
     /// <param name="tag">The tag to filter events by</param>
     /// <param name="since">Optional: Only return events after this ID</param>
-    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        => throw new NotSupportedException("SerializableEvent read not implemented");
+    Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null);
 
     /// <summary>
     ///     Writes multiple pre-serialized events to the event store atomically.
@@ -100,8 +97,7 @@ public interface IEventStore
     /// </summary>
     /// <returns>ResultBox containing the written serializable events and tag write results</returns>
     Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
-        IEnumerable<SerializableEvent> events)
-        => throw new NotSupportedException("SerializableEvent write not implemented");
+        IEnumerable<SerializableEvent> events);
 }
 
 /// <summary>

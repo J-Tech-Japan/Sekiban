@@ -32,7 +32,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// </summary>
     /// <param name="events">Events to add</param>
     /// <param name="finishedCatchUp">Whether catch-up is complete</param>
-    Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true);
+    Task AddEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true);
 
     /// <summary>
     ///     Get the status of the grain
@@ -97,7 +97,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <summary>
     ///     Testing aid: seed events into the backing event store to support catch-up tests.
     /// </summary>
-    Task SeedEventsAsync(IReadOnlyList<Event> events);
+    Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events);
 
     /// <summary>
     ///     Get event delivery statistics for debugging duplicate/missing events

@@ -960,6 +960,16 @@ public class DynamoDbEventStore : IEventStore
     ///     Reads all events as SerializableEvent (no payload deserialization).
     /// </summary>
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        => await ReadAllSerializableEventsAsync(since, maxCount: null).ConfigureAwait(false);
+
+    /// <summary>
+    ///     Reads all events as SerializableEvent (no payload deserialization), with optional upper limit.
+    /// </summary>
+    /// <param name="since">Optional: only return events after this ID.</param>
+    /// <param name="maxCount">Optional: maximum number of events to return.</param>
+    public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
     {
         try
         {
@@ -983,6 +993,11 @@ public class DynamoDbEventStore : IEventStore
             var ordered = allEvents
                 .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                 .ToList();
+
+            if (maxCount.HasValue)
+            {
+                ordered = ordered.Take(maxCount.Value).ToList();
+            }
 
             return ResultBox.FromValue<IEnumerable<SerializableEvent>>(ordered);
         }

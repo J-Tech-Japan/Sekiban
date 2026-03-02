@@ -136,7 +136,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
-    private async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> BuildRecordResultAsync(
+    private static Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> BuildRecordResultAsync(
         CosmosMultiProjectionState doc,
         string serviceId,
         string projectorName,
@@ -147,23 +147,9 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         var validationError = ValidateServiceId(doc, serviceId, isLegacy);
         if (validationError != null)
         {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(validationError);
+            return Task.FromResult(ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(validationError));
         }
-
-        var blobResult = await TryLoadOffloadedStateAsync(
-            doc,
-            projectorName,
-            projectorVersion,
-            cancellationToken).ConfigureAwait(false);
-
-        if (!blobResult.IsSuccess)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(blobResult.GetException());
-        }
-
-        var blobDataOpt = blobResult.GetValue();
-        var blobData = blobDataOpt.HasValue ? blobDataOpt.GetValue() : null;
-        return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
+        return Task.FromResult(ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord())));
     }
 
     private static UnauthorizedAccessException? ValidateServiceId(
@@ -188,45 +174,74 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                 $"Projection state does not belong to service {serviceId}.");
     }
 
-    private async Task<ResultBox<OptionalValue<byte[]>>> TryLoadOffloadedStateAsync(
-        CosmosMultiProjectionState doc,
-        string projectorName,
-        string projectorVersion,
-        CancellationToken cancellationToken)
+    /// <summary>
+    ///     Opens snapshot payload stream from offload storage or inline Cosmos document data.
+    /// </summary>
+    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
     {
-        if (!doc.IsOffloaded || _blobAccessor == null || doc.OffloadKey == null)
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.IsOffloaded && _blobAccessor != null && !string.IsNullOrWhiteSpace(record.OffloadKey))
         {
-            return ResultBox.FromValue(OptionalValue<byte[]>.Empty);
-        }
-
-        try
-        {
-            var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
-                .ConfigureAwait(false);
-            await using (offloadStream.ConfigureAwait(false))
+            try
             {
-                var blobData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
-                return ResultBox.FromValue(OptionalValue.FromValue(blobData));
+                var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken)
+                    .ConfigureAwait(false);
+                return ResultBox.FromValue(stream);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
+            }
+            catch (IOException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
             }
         }
-        catch (InvalidOperationException blobEx)
+
+        var metadataResult = await GetLatestForVersionAsync(
+            record.ProjectorName,
+            record.ProjectorVersion,
+            cancellationToken).ConfigureAwait(false);
+        if (!metadataResult.IsSuccess)
         {
-            return ResultBox.Error<OptionalValue<byte[]>>(
-                new InvalidOperationException(
-                    $"Failed to read offloaded state from blob storage. " +
-                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                    $"BlobKey: {doc.OffloadKey}",
-                    blobEx));
+            return ResultBox.Error<Stream>(metadataResult.GetException());
         }
-        catch (System.IO.IOException blobEx)
+
+        if (!metadataResult.GetValue().HasValue)
         {
-            return ResultBox.Error<OptionalValue<byte[]>>(
-                new InvalidOperationException(
-                    $"Failed to read offloaded state from blob storage (IO error). " +
-                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                    $"BlobKey: {doc.OffloadKey}",
-                    blobEx));
+            return ResultBox.Error<Stream>(
+                new KeyNotFoundException(
+                    $"Projection state not found: {record.ProjectorName}/{record.ProjectorVersion}"));
         }
+
+        var serviceId = CurrentServiceId;
+        var settings = _containerResolver.ResolveStatesContainer(serviceId);
+        var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
+        var partitionKey = $"MultiProjectionState_{record.ProjectorName}";
+        var pk = GetPartitionKey(partitionKey, settings, serviceId);
+        var response = await container.ReadItemAsync<CosmosMultiProjectionState>(
+            record.ProjectorVersion,
+            new PartitionKey(pk),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var doc = response.Resource;
+
+        if (!string.IsNullOrWhiteSpace(doc.StateData))
+        {
+            var bytes = Convert.FromBase64String(doc.StateData);
+            return ResultBox.FromValue<Stream>(new MemoryStream(bytes, writable: false));
+        }
+
+        return ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
     }
 
     /// <inheritdoc />
@@ -238,23 +253,16 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         ArgumentNullException.ThrowIfNull(record);
         try
         {
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                record.StateData,
-                $"{record.ProjectorName}/{record.ProjectorVersion}",
-                offloadThresholdBytes,
-                _blobAccessor,
-                cancellationToken).ConfigureAwait(false);
-
-            var updatedRecord = record with
+            if (!record.IsOffloaded)
             {
-                StateData = offloadResult.InlineData,
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            };
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
+            }
 
-            await PersistRecordToCosmosAsync(updatedRecord, cancellationToken).ConfigureAwait(false);
+            var updatedRecord = record with { UpdatedAt = DateTime.UtcNow };
+
+            await PersistRecordToCosmosAsync(updatedRecord, stateData: null, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (CosmosException ex)
@@ -284,14 +292,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
             var record = (request with
             {
-                StateData = offloadResult.InlineData,
                 IsOffloaded = offloadResult.IsOffloaded,
                 OffloadKey = offloadResult.OffloadKey,
                 OffloadProvider = offloadResult.OffloadProvider,
                 UpdatedAt = DateTime.UtcNow
             }).ToRecord();
 
-            await PersistRecordToCosmosAsync(record, cancellationToken).ConfigureAwait(false);
+            await PersistRecordToCosmosAsync(record, offloadResult.InlineData, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (CosmosException ex)
@@ -302,6 +309,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
     private async Task PersistRecordToCosmosAsync(
         MultiProjectionStateRecord record,
+        byte[]? stateData,
         CancellationToken cancellationToken)
     {
         var serviceId = CurrentServiceId;
@@ -310,7 +318,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         var partitionKey = record.GetPartitionKey();
         var pk = GetPartitionKey(partitionKey, settings, serviceId);
 
-        var doc = CosmosMultiProjectionState.FromRecord(record, serviceId);
+        var doc = CosmosMultiProjectionState.FromRecord(record, serviceId, stateData);
 
         await container.UpsertItemAsync(
             doc,

@@ -108,7 +108,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private long _largeSnapshotGcThresholdBytes = LargePayloadThresholdBytes;
 
     private IEventStore? _resolvedCatchUpEventStore;
-    private bool _useSerializableCatchUp = true;
     private bool _useStreamingSnapshotIO;
     private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
 
@@ -379,16 +378,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
-#pragma warning disable CS0618 // Obsolete: used for JSON snapshot endpoint (read-only, low frequency)
-        var rb = await _host.GetSnapshotBytesAsync(canGetUnsafeState);
-#pragma warning restore CS0618
-        if (!rb.IsSuccess)
-            return ResultBox.Error<string>(rb.GetException());
-        // v10 format: byte[] is plain UTF-8 JSON
-        return ResultBox.FromValue(Encoding.UTF8.GetString(rb.GetValue()));
+        await using var snapshotStream = new MemoryStream();
+        var writeResult = await _host.WriteSnapshotToStreamAsync(
+            snapshotStream,
+            canGetUnsafeState,
+            CancellationToken.None);
+        if (!writeResult.IsSuccess)
+            return ResultBox.Error<string>(writeResult.GetException());
+
+        snapshotStream.Position = 0;
+        using var reader = new StreamReader(snapshotStream, Encoding.UTF8, leaveOpen: true);
+        var snapshotJson = await reader.ReadToEndAsync();
+        return ResultBox.FromValue(snapshotJson);
     }
 
-    public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true)
+    public async Task AddEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
     {
         await EnsureInitializedAsync();
 
@@ -397,17 +401,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             throw new InvalidOperationException("Projection host not initialized");
         }
 
-        // Track event deliveries as well for events coming from the EventStore catch-up
-        // so that delivery statistics include both stream and catch-up paths.
-        _eventStats.RecordCatchUpBatch(events);
-
         // Filter out already processed events to prevent double counting
         var newEvents = events.Where(e => !_processedEventIds.Contains(e.Id)).ToList();
 
         if (newEvents.Count > 0)
         {
-            // Delegate to host (Event→SerializableEvent conversion happens internally)
-            await _host.AddEventsFromCatchUpAsync(newEvents, finishedCatchUp);
+            await _host.AddSerializableEventsAsync(newEvents, finishedCatchUp);
             _eventsProcessed += newEvents.Count;
 
             // Mark events as processed
@@ -500,18 +499,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // Get snapshot as opaque bytes from the host
-#pragma warning disable CS0618 // Obsolete: byte[] path kept as fallback
-            var snapshotBytesResult = await _host.GetSnapshotBytesAsync(canGetUnsafeState: false);
-#pragma warning restore CS0618
-            if (!snapshotBytesResult.IsSuccess)
+            await using var snapshotStream = new MemoryStream();
+            var snapshotWriteResult = await _host.WriteSnapshotToStreamAsync(
+                snapshotStream,
+                canGetUnsafeState: false,
+                CancellationToken.None);
+            if (!snapshotWriteResult.IsSuccess)
             {
-                _lastError = snapshotBytesResult.GetException().Message;
+                _lastError = snapshotWriteResult.GetException().Message;
                 _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
                 return ResultBox.FromValue(false);
             }
 
-            var envelopeBytes = snapshotBytesResult.GetValue();
-            var envelopeSize = (long)envelopeBytes.Length;
+            var envelopeSize = snapshotStream.Length;
 
             // Get metadata via host
             int? safeVersion = null;
@@ -625,13 +625,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null && allowExternalStoreSave)
             {
-                var record = new MultiProjectionStateRecord(
+                snapshotStream.Position = 0;
+                var writeRequest = new MultiProjectionStateWriteRequest(
                     ProjectorName: projectorName,
                     ProjectorVersion: projectorVersion,
                     PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                     LastSortableUniqueId: safePosition ?? string.Empty,
                     EventsProcessed: _eventsProcessed,
-                    StateData: envelopeBytes,  // v10: No outer compression
                     IsOffloaded: false,
                     OffloadKey: null,
                     OffloadProvider: null,
@@ -645,7 +645,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     BuildSource: "GRAIN",
                     BuildHost: Environment.MachineName);
 
-                var saveResult = await _multiProjectionStateStore.UpsertAsync(record);
+                var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+                    writeRequest,
+                    snapshotStream,
+                    _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
+                    CancellationToken.None);
                 if (!saveResult.IsSuccess)
                 {
                     _lastError = $"External store save failed: {saveResult.GetException().Message}";
@@ -820,7 +824,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                         LastSortableUniqueId: safePosition ?? string.Empty,
                         EventsProcessed: _eventsProcessed,
-                        StateData: null,
                         IsOffloaded: false,
                         OffloadKey: null,
                         OffloadProvider: null,
@@ -1391,27 +1394,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     else if (stateStoreResult.GetValue().HasValue)
                     {
                         var record = stateStoreResult.GetValue().GetValue();
-                        byte[]? snapshotData = record.StateData;
+                        var stateStreamResult = await _multiProjectionStateStore.OpenStateDataReadStreamAsync(
+                            record,
+                            cancellationToken);
 
-                        if (snapshotData == null)
+                        if (!stateStreamResult.IsSuccess)
                         {
                             var errorMsg = record.IsOffloaded
-                                ? $"Blob read returned null for key: {record.OffloadKey}"
-                                : "StateData is null but not marked as offloaded";
+                                ? $"State stream open failed for offloaded key: {record.OffloadKey}"
+                                : stateStreamResult.GetException().Message;
                             _logger.LogError(
                                 MultiProjectionLogEvents.BlobReadFailed,
-                                "State data is null: {ProjectorName}, IsOffloaded: {IsOffloaded}, OffloadKey: {OffloadKey}",
-                                projectorName, record.IsOffloaded, record.OffloadKey);
+                                stateStreamResult.GetException(),
+                                "State stream open failed: {ProjectorName}, IsOffloaded: {IsOffloaded}, OffloadKey: {OffloadKey}",
+                                projectorName,
+                                record.IsOffloaded,
+                                record.OffloadKey);
                             _stateRestoreSource = StateRestoreSource.Failed;
                             _activationFailureReason = errorMsg;
                             forceFullCatchUp = true;
                         }
                         else
                         {
-                            // Delegate snapshot restoration to the host (handles format detection, deserialization, validation)
-#pragma warning disable CS0618 // Obsolete: restore path remains byte[] based (next phase)
-                            var restoreResult = await _host.RestoreSnapshotAsync(snapshotData);
-#pragma warning restore CS0618
+                            await using var snapshotStream = stateStreamResult.GetValue();
+                            long? restoredSnapshotBytes = null;
+                            if (snapshotStream.CanSeek)
+                            {
+                                restoredSnapshotBytes = snapshotStream.Length;
+                                snapshotStream.Position = 0;
+                            }
+                            var restoreResult = await _host.RestoreSnapshotFromStreamAsync(snapshotStream, cancellationToken);
 
                             if (!restoreResult.IsSuccess)
                             {
@@ -1448,7 +1460,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                     "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
                                     projectorName,
                                     record.EventsProcessed,
-                                    record.StateData?.Length ?? 0,
+                                    restoredSnapshotBytes ?? 0,
                                     record.OriginalSizeBytes,
                                     record.CompressedSizeBytes,
                                     postSafeVersion,
@@ -1761,30 +1773,49 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             $"Legacy format not supported. PayloadType: {record.PayloadType}. Please delete old snapshots and rebuild.");
                     }
 
-                    // Delegate version rewriting to the host (handles format detection, deserialization, version patching)
-#pragma warning disable CS0618 // Obsolete: version rewrite remains byte[] based (next phase)
-                    var modifiedBytes = _host.RewriteSnapshotVersion(record.StateData!, newVersion);
-#pragma warning restore CS0618
+                    var stateStreamResult = await _multiProjectionStateStore.OpenStateDataReadStreamAsync(
+                        record,
+                        CancellationToken.None);
+                    if (!stateStreamResult.IsSuccess)
+                    {
+                        throw stateStreamResult.GetException();
+                    }
 
-                    var modifiedRecord = new MultiProjectionStateRecord(
-                        record.ProjectorName,
+                    await using var sourceStream = stateStreamResult.GetValue();
+                    await using var targetStream = new MemoryStream();
+                    var rewriteResult = await _host.RewriteSnapshotVersionAsync(
+                        sourceStream,
+                        targetStream,
                         newVersion,
-                        typeof(SerializableMultiProjectionStateEnvelope).FullName!,
-                        record.LastSortableUniqueId,
-                        record.EventsProcessed,
-                        modifiedBytes,
-                        record.IsOffloaded,
-                        record.OffloadKey,
-                        record.OffloadProvider,
-                        record.OriginalSizeBytes,
-                        record.CompressedSizeBytes,
-                        record.SafeWindowThreshold,
-                        record.CreatedAt,
-                        DateTime.UtcNow,
-                        record.BuildSource,
-                        record.BuildHost);
+                        CancellationToken.None);
+                    if (!rewriteResult.IsSuccess)
+                    {
+                        throw rewriteResult.GetException();
+                    }
 
-                    var saveResult = await _multiProjectionStateStore.UpsertAsync(modifiedRecord);
+                    targetStream.Position = 0;
+                    var writeRequest = new MultiProjectionStateWriteRequest(
+                        ProjectorName: record.ProjectorName,
+                        ProjectorVersion: newVersion,
+                        PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+                        LastSortableUniqueId: record.LastSortableUniqueId,
+                        EventsProcessed: record.EventsProcessed,
+                        IsOffloaded: false,
+                        OffloadKey: null,
+                        OffloadProvider: null,
+                        OriginalSizeBytes: targetStream.Length,
+                        CompressedSizeBytes: targetStream.Length,
+                        SafeWindowThreshold: record.SafeWindowThreshold,
+                        CreatedAt: record.CreatedAt,
+                        UpdatedAt: DateTime.UtcNow,
+                        BuildSource: record.BuildSource,
+                        BuildHost: record.BuildHost);
+
+                    var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+                        writeRequest,
+                        targetStream,
+                        _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
+                        CancellationToken.None);
                     if (saveResult.IsSuccess)
                     {
                         updated = true;
@@ -1817,10 +1848,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return result.IsSuccess && result.GetValue();
     }
 
-    public async Task SeedEventsAsync(IReadOnlyList<Event> events)
+    public async Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events)
     {
         if (_eventStore == null) return;
-        var result = await _eventStore.WriteEventsAsync(events);
+        var result = await _eventStore.WriteSerializableEventsAsync(events);
         if (!result.IsSuccess)
         {
             throw result.GetException();
@@ -1985,23 +2016,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<int> ProcessSingleCatchUpBatch()
     {
         if (_host == null) return 0;
-
-        if (_useSerializableCatchUp)
-        {
-            var result = await TryProcessSerializableBatch();
-            if (result.HasValue)
-                return result.Value;
-        }
-
-        return await ProcessEventBasedBatch();
+        return await ProcessSerializableBatch();
     }
 
     /// <summary>
-    ///     Attempts catch-up via ReadAllSerializableEventsAsync (cold/hot merge path).
-    ///     Returns null if the store does not support serializable reads,
-    ///     which permanently disables serializable catch-up for this grain lifetime.
+    ///     Catch-up via ReadAllSerializableEventsAsync (cold/hot merge path).
     /// </summary>
-    private async Task<int?> TryProcessSerializableBatch()
+    private async Task<int> ProcessSerializableBatch()
     {
         var projectorName = GetProjectorName();
         var catchUpStore = GetCatchUpEventStore();
@@ -2016,11 +2037,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (NotSupportedException)
         {
-            _useSerializableCatchUp = false;
-            _logger.LogInformation(
-                "[{ProjectorName}] Serializable read not supported, falling back to event-based catch-up",
-                projectorName);
-            return null;
+            throw new InvalidOperationException(
+                $"[{projectorName}] Serializable catch-up is required but the configured event store does not support ReadAllSerializableEventsAsync.");
         }
 
         if (!eventsResult.IsSuccess)
@@ -2028,11 +2046,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var exception = eventsResult.GetException();
             if (exception is NotSupportedException)
             {
-                _useSerializableCatchUp = false;
-                _logger.LogInformation(
-                    "[{ProjectorName}] Serializable read not supported by current store result, falling back to event-based catch-up",
-                    projectorName);
-                return null;
+                throw new InvalidOperationException(
+                    $"[{projectorName}] Serializable catch-up is required but the configured event store returned NotSupported for ReadAllSerializableEventsAsync.",
+                    exception);
             }
 
             _logger.LogError(
@@ -2070,68 +2086,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
         {
-            _useSerializableCatchUp = false;
-            _logger.LogInformation(
-                ex,
-                "[{ProjectorName}] Serializable catch-up contained unknown event type, falling back to event-based catch-up",
-                projectorName);
-            return null;
-        }
-        sw.Stop();
-
-        await UpdateCatchUpProgressAfterBatch(
-            filtered.Select(e => e.Id),
-            filtered[^1].SortableUniqueIdValue,
-            filtered.Count,
-            sw.ElapsedMilliseconds);
-
-        return filtered.Count;
-    }
-
-    /// <summary>
-    ///     Fallback catch-up via ReadAllEventsAsync (hot store only).
-    /// </summary>
-    private async Task<int> ProcessEventBasedBatch()
-    {
-        var projectorName = GetProjectorName();
-        var batchSize = _catchUpBatchSize;
-
-        var eventsResult = await GetCatchUpEventStore().ReadAllEventsAsync(
-            _catchUpProgress.CurrentPosition,
-            batchSize);
-
-        if (!eventsResult.IsSuccess)
-        {
             _logger.LogError(
-                eventsResult.GetException(),
-                "[{ProjectorName}] Failed to read events for catch-up (event-based fallback)",
+                ex,
+                "[{ProjectorName}] Serializable catch-up failed due to unknown event type",
                 projectorName);
-            return 0;
+            throw;
         }
-
-        _logger.LogDebug(
-            "[{ProjectorName}] Catch-up using event-based path (hot store only)",
-            projectorName);
-
-        var events = eventsResult.GetValue().ToList();
-        if (events.Count == 0)
-            return 0;
-
-        UpdateTargetPosition(events[^1].SortableUniqueIdValue);
-
-        var filtered = FilterByPositionAndProcessed(events, e => e.Id, e => e.SortableUniqueIdValue);
-        if (filtered.Count == 0)
-        {
-            _catchUpProgress.CurrentPosition = new SortableUniqueId(events[^1].SortableUniqueIdValue);
-            return 0;
-        }
-
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        _logger.LogDebug(
-            "[{ProjectorName}] Catch-up: Processing {EventCount} events",
-            projectorName,
-            filtered.Count);
-        await _host!.AddEventsFromCatchUpAsync(filtered, false);
         sw.Stop();
 
         await UpdateCatchUpProgressAfterBatch(

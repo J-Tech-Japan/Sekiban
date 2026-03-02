@@ -9,7 +9,6 @@ public sealed record MultiProjectionStateRecord(
     string PayloadType,
     string LastSortableUniqueId,
     long EventsProcessed,
-    byte[]? StateData,
     bool IsOffloaded,
     string? OffloadKey,
     string? OffloadProvider,

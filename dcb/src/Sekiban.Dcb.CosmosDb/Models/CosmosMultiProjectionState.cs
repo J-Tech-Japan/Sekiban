@@ -141,8 +141,12 @@ public class CosmosMultiProjectionState
     /// </summary>
     /// <param name="record">The record to convert.</param>
     /// <param name="serviceId">The ServiceId for tenant isolation.</param>
+    /// <param name="stateData">Optional inline snapshot payload bytes.</param>
     /// <returns>A new CosmosMultiProjectionState instance.</returns>
-    public static CosmosMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId)
+    public static CosmosMultiProjectionState FromRecord(
+        MultiProjectionStateRecord record,
+        string serviceId,
+        byte[]? stateData = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
@@ -158,7 +162,7 @@ public class CosmosMultiProjectionState
             PayloadType = record.PayloadType,
             LastSortableUniqueId = record.LastSortableUniqueId,
             EventsProcessed = record.EventsProcessed,
-            StateData = record.StateData != null ? Convert.ToBase64String(record.StateData) : null,
+            StateData = stateData != null ? Convert.ToBase64String(stateData) : null,
             IsOffloaded = record.IsOffloaded,
             OffloadKey = record.OffloadKey,
             OffloadProvider = record.OffloadProvider,
@@ -175,19 +179,15 @@ public class CosmosMultiProjectionState
     /// <summary>
     ///     Converts this CosmosMultiProjectionState to a MultiProjectionStateRecord.
     /// </summary>
-    /// <param name="overrideStateData">Optional state data to use instead of the stored data.</param>
     /// <returns>A new MultiProjectionStateRecord instance.</returns>
-    public MultiProjectionStateRecord ToRecord(byte[]? overrideStateData = null)
+    public MultiProjectionStateRecord ToRecord()
     {
-        var stateData = overrideStateData ?? (StateData != null ? Convert.FromBase64String(StateData) : null);
-
         return new MultiProjectionStateRecord(
             ProjectorName: ProjectorName,
             ProjectorVersion: ProjectorVersion,
             PayloadType: PayloadType,
             LastSortableUniqueId: LastSortableUniqueId,
             EventsProcessed: EventsProcessed,
-            StateData: stateData,
             IsOffloaded: IsOffloaded,
             OffloadKey: OffloadKey,
             OffloadProvider: OffloadProvider,

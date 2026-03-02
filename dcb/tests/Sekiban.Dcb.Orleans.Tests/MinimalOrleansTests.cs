@@ -15,6 +15,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.InMemory;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -91,7 +92,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                 new List<string>()))
             .ToList();
 
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         var due = DateTime.UtcNow.AddSeconds(8);
@@ -242,6 +243,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     services.AddSingleton<DcbDomainTypes>(provider =>
                     {
                         var eventTypes = new SimpleEventTypes();
+                        eventTypes.RegisterEventType<TestProjectionEvent>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -466,4 +468,15 @@ public class MinimalOrleansTests : IAsyncLifetime
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
     }
+
+    private static IReadOnlyList<SerializableEvent> ToSerializableEvents(IEnumerable<Event> events) =>
+        events
+            .Select(e => new SerializableEvent(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(e.Payload, e.Payload.GetType())),
+                e.SortableUniqueIdValue,
+                e.Id,
+                e.EventMetadata,
+                e.Tags.ToList(),
+                e.EventType))
+            .ToList();
 }

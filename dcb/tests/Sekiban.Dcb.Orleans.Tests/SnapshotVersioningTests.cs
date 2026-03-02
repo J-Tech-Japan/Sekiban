@@ -11,6 +11,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -47,7 +48,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         // Create events in event store via grain helper
         var events = Enumerable.Range(0, 5).Select(i => CreateEvent(new TestEvt($"e{i}"), DateTime.UtcNow.AddSeconds(-30 + i))).ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
 
         // Catch up and persist snapshot
         await grain.RefreshAsync();
@@ -79,7 +80,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         // Create events in event store via grain helper
         var events = Enumerable.Range(0, 7).Select(i => CreateEvent(new TestEvt($"x{i}"), DateTime.UtcNow.AddSeconds(-30 + i))).ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
 
         // Catch up and persist snapshot
         await grain.RefreshAsync();
@@ -112,6 +113,17 @@ public class SnapshotVersioningTests : IAsyncLifetime
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
             new List<string>());
     }
+
+    private static IReadOnlyList<SerializableEvent> ToSerializableEvents(IEnumerable<Event> events) =>
+        events
+            .Select(e => new SerializableEvent(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(e.Payload, e.Payload.GetType())),
+                e.SortableUniqueIdValue,
+                e.Id,
+                e.EventMetadata,
+                e.Tags.ToList(),
+                e.EventType))
+            .ToList();
 
     private static async Task<int> WaitForSnapshotVersionAsync(
         IMultiProjectionGrain grain,
@@ -159,6 +171,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
                     services.AddSingleton<DcbDomainTypes>(provider =>
                     {
                         var eventTypes = new SimpleEventTypes();
+                        eventTypes.RegisterEventType<TestEvt>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -215,7 +228,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var events = Enumerable.Range(0, 5)
             .Select(i => CreateEvent(new TestEvt($"loss{i}"), DateTime.UtcNow.AddSeconds(-30 + i)))
             .ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         var firstPersist = await grain.PersistStateAsync();
@@ -254,7 +267,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
 
         // Seed 3 events
         var events = Enumerable.Range(0, 3).Select(i => CreateEvent(new TestEvt($"s{i}"), DateTime.UtcNow.AddSeconds(-30 + i))).ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         // Persist snapshot -> should invoke custom Serialize

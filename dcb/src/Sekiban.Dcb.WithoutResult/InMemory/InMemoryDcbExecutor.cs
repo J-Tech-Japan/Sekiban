@@ -349,6 +349,47 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             }
         }
 
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            ReadAllSerializableEventsAsync(since, null);
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var events = state.Events.AsEnumerable();
+                if (since != null)
+                {
+                    events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+                }
+                events = events.OrderBy(e => e.SortableUniqueIdValue);
+                if (maxCount.HasValue)
+                {
+                    events = events.Take(maxCount.Value);
+                }
+
+                return Task.FromResult(ResultBox.FromValue(events.Select(ToSerializableEvent).ToList().AsEnumerable()));
+            }
+        }
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var tagString = tag.GetTag();
+                var events = state.Events.Where(e => e.Tags.Contains(tagString));
+                if (since != null)
+                {
+                    events = events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+                }
+                events = events.OrderBy(e => e.SortableUniqueIdValue);
+                return Task.FromResult(ResultBox.FromValue(events.Select(ToSerializableEvent).ToList().AsEnumerable()));
+            }
+        }
+
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)
         {
@@ -386,6 +427,15 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         {
             return _domainTypes.EventTypes.SerializeEventPayload(ev.Payload);
         }
+
+        private static SerializableEvent ToSerializableEvent(SerializedEventData serializedEvent) =>
+            new(
+                Convert.FromBase64String(serializedEvent.SerializedPayload),
+                serializedEvent.SortableUniqueIdValue,
+                serializedEvent.Id,
+                serializedEvent.EventMetadata,
+                serializedEvent.Tags.ToList(),
+                serializedEvent.EventType);
 
         private ResultBox<Event> DeserializeEvent(SerializedEventData serializedEvent)
         {

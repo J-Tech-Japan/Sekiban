@@ -44,8 +44,9 @@ public class ServiceIdIsolationTests
         var provider = new MutableServiceIdProvider("alpha");
         var store = new CoreInMemoryMultiProjectionStateStore(provider);
 
-        var record = CreateRecord("Projector", "v1", 10);
-        var upsert = await store.UpsertAsync(record);
+        var request = CreateWriteRequest("Projector", "v1", 10);
+        await using var stream = new MemoryStream([1, 2, 3]);
+        var upsert = await store.UpsertFromStreamAsync(request, stream, 1_000_000);
         Assert.True(upsert.IsSuccess);
 
         var alphaLatest = await store.GetLatestAnyVersionAsync("Projector");
@@ -63,15 +64,14 @@ public class ServiceIdIsolationTests
         Assert.True(alphaLatestAgain.GetValue().HasValue);
     }
 
-    private static MultiProjectionStateRecord CreateRecord(string projectorName, string projectorVersion, long eventsProcessed)
+    private static MultiProjectionStateWriteRequest CreateWriteRequest(string projectorName, string projectorVersion, long eventsProcessed)
     {
-        return new MultiProjectionStateRecord(
+        return new MultiProjectionStateWriteRequest(
             ProjectorName: projectorName,
             ProjectorVersion: projectorVersion,
             PayloadType: "payload",
             LastSortableUniqueId: SortableUniqueId.GenerateNew(),
             EventsProcessed: eventsProcessed,
-            StateData: null,
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,

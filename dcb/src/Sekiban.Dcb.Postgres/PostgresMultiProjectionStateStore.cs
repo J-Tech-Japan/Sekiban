@@ -47,31 +47,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             if (entity == null)
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
 
-            // Load from blob if offloaded
-            byte[]? stateData = entity.StateData;
-            if (entity.IsOffloaded && _blobAccessor != null && entity.OffloadKey != null)
-            {
-                try
-                {
-                    await using var offloadStream = await _blobAccessor.OpenReadAsync(entity.OffloadKey, cancellationToken);
-                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob: {entity.OffloadKey}", ex));
-                }
-
-                if (stateData == null)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Offloaded state read returned null for key: {entity.OffloadKey}"));
-                }
-            }
-
-            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord(stateData)));
+            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord()));
         }
         catch (Exception ex)
         {
@@ -95,31 +71,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             if (entity == null)
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
 
-            // Load from blob if offloaded
-            byte[]? stateData = entity.StateData;
-            if (entity.IsOffloaded && _blobAccessor != null && entity.OffloadKey != null)
-            {
-                try
-                {
-                    await using var offloadStream = await _blobAccessor.OpenReadAsync(entity.OffloadKey, cancellationToken);
-                    stateData = await ReadAllBytesAsync(offloadStream, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob: {entity.OffloadKey}", ex));
-                }
-
-                if (stateData == null)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Offloaded state read returned null for key: {entity.OffloadKey}"));
-                }
-            }
-
-            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord(stateData)));
+            return ResultBox.FromValue(OptionalValue.FromValue(entity.ToRecord()));
         }
         catch (Exception ex)
         {
@@ -132,27 +84,19 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(record);
         try
         {
+            if (!record.IsOffloaded)
+            {
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
+            }
+
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var serviceId = CurrentServiceId;
-
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                record.StateData,
-                $"{record.ProjectorName}/{record.ProjectorVersion}",
-                offloadThresholdBytes,
-                _blobAccessor,
-                cancellationToken);
-
-            var updatedRecord = record with
-            {
-                StateData = offloadResult.InlineData,
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            };
-            var dbRecord = DbMultiProjectionState.FromRecord(updatedRecord, serviceId);
+            var dbRecord = DbMultiProjectionState.FromRecord(record with { UpdatedAt = DateTime.UtcNow }, serviceId, stateData: null);
 
             await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
             return ResultBox.FromValue(true);
@@ -161,6 +105,52 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         {
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.IsOffloaded && _blobAccessor != null && !string.IsNullOrWhiteSpace(record.OffloadKey))
+        {
+            try
+            {
+                var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken);
+                return ResultBox.FromValue(stream);
+            }
+            catch (IOException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream: {record.OffloadKey}",
+                        ex));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream: {record.OffloadKey}",
+                        ex));
+            }
+        }
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var serviceId = CurrentServiceId;
+        var entity = await ctx.MultiProjectionStates
+            .FirstOrDefaultAsync(s =>
+                s.ServiceId == serviceId &&
+                s.ProjectorName == record.ProjectorName &&
+                s.ProjectorVersion == record.ProjectorVersion, cancellationToken);
+
+        if (entity?.StateData != null)
+        {
+            return ResultBox.FromValue<Stream>(new MemoryStream(entity.StateData, writable: false));
+        }
+
+        return ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
     }
 
     /// <summary>
@@ -180,10 +170,8 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
                 offloadThresholdBytes,
                 _blobAccessor,
                 cancellationToken);
-
             var record = (request with
             {
-                StateData = offloadResult.InlineData,
                 IsOffloaded = offloadResult.IsOffloaded,
                 OffloadKey = offloadResult.OffloadKey,
                 OffloadProvider = offloadResult.OffloadProvider,
@@ -193,7 +181,7 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var serviceId = CurrentServiceId;
 
-            var dbRecord = DbMultiProjectionState.FromRecord(record, serviceId);
+            var dbRecord = DbMultiProjectionState.FromRecord(record, serviceId, offloadResult.InlineData);
 
             await UpsertDbRecordAsync(ctx, serviceId, record.ProjectorName, record.ProjectorVersion, dbRecord, cancellationToken);
             return ResultBox.FromValue(true);

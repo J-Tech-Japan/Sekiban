@@ -35,6 +35,21 @@ public interface IMultiProjectionStateStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Opens a read stream for the snapshot payload represented by <paramref name="record" />.
+    ///     Implementations are expected to resolve payload location from metadata (inline storage or offload key)
+    ///     and return a readable stream.
+    /// </summary>
+    Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(ResultBox.Error<Stream>(
+            new NotSupportedException(
+                $"OpenStateDataReadStreamAsync is not implemented by {GetType().Name}. "
+                + "The store must provide a payload stream implementation for metadata-only records.")));
+    }
+
+    /// <summary>
     ///     Upserts a projection state from a stream. The default implementation buffers the
     ///     stream to byte[] and delegates to <see cref="UpsertAsync" />.
     ///     Cosmos/Postgres/DynamoDB implementations override this for true streaming offload.
@@ -45,11 +60,10 @@ public interface IMultiProjectionStateStore
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        var data = ms.ToArray();
-        var record = request with { StateData = data };
-        return await UpsertAsync(record.ToRecord(), offloadThresholdBytes, cancellationToken)
-            .ConfigureAwait(false);
+        await stream.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
+        return ResultBox.Error<bool>(
+            new NotSupportedException(
+                $"UpsertFromStreamAsync is not implemented by {GetType().Name}. "
+                + "Implement this method in the store to persist snapshot payload streams."));
     }
 }

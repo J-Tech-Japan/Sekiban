@@ -361,6 +361,11 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => _inner.ReadAllSerializableEventsAsync(since);
 
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+            => _inner.ReadAllSerializableEventsAsync(since, maxCount);
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)

@@ -145,7 +145,6 @@ public class StreamingSnapshotIOTests
             PayloadType: "TestPayload",
             LastSortableUniqueId: "20260225T120000Z-00000000-0000-0000-0000-000000000001",
             EventsProcessed: 10,
-            StateData: null,
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,
@@ -170,8 +169,8 @@ public class StreamingSnapshotIOTests
         Assert.Equal("TestProjector", record.ProjectorName);
         Assert.Equal("1.0", record.ProjectorVersion);
         Assert.Equal(10, record.EventsProcessed);
-        Assert.NotNull(record.StateData);
-        Assert.Equal(stateBytes, record.StateData);
+        var storedStateData = await ReadStateDataAsync(store, record);
+        Assert.Equal(stateBytes, storedStateData);
     }
 
     [Fact]
@@ -186,7 +185,6 @@ public class StreamingSnapshotIOTests
             PayloadType: "TestPayload",
             LastSortableUniqueId: "20260225T120000Z-00000000-0000-0000-0000-000000000001",
             EventsProcessed: 0,
-            StateData: null,
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,
@@ -208,8 +206,8 @@ public class StreamingSnapshotIOTests
         var opt = stored.GetValue();
         Assert.True(opt.HasValue);
         var record = opt.GetValue();
-        Assert.NotNull(record.StateData);
-        Assert.Empty(record.StateData);
+        var storedStateData = await ReadStateDataAsync(store, record);
+        Assert.Empty(storedStateData);
     }
 
     [Fact]
@@ -226,7 +224,6 @@ public class StreamingSnapshotIOTests
             PayloadType: "MetadataPayload",
             LastSortableUniqueId: "20260225T100000Z-00000000-0000-0000-0000-000000000002",
             EventsProcessed: 100,
-            StateData: null,
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,
@@ -279,6 +276,16 @@ public class StreamingSnapshotIOTests
         await using var readStream = await accessor.OpenReadAsync(key, CancellationToken.None);
         using var ms = new MemoryStream();
         await readStream.CopyToAsync(ms);
+        return ms.ToArray();
+    }
+
+    private static async Task<byte[]> ReadStateDataAsync(IMultiProjectionStateStore store, MultiProjectionStateRecord record)
+    {
+        var streamResult = await store.OpenStateDataReadStreamAsync(record, CancellationToken.None);
+        Assert.True(streamResult.IsSuccess);
+        await using var stream = streamResult.GetValue();
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
         return ms.ToArray();
     }
 }

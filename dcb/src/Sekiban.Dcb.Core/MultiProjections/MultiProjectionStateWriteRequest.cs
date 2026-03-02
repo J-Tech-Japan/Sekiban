@@ -1,8 +1,7 @@
 namespace Sekiban.Dcb.MultiProjections;
 
 /// <summary>
-///     Request type for stream-based upsert. StateData is nullable to support
-///     offloaded snapshots where data lives in blob storage.
+///     Request type for stream-based upsert with snapshot metadata only.
 /// </summary>
 public sealed record MultiProjectionStateWriteRequest(
     string ProjectorName,
@@ -10,7 +9,6 @@ public sealed record MultiProjectionStateWriteRequest(
     string PayloadType,
     string LastSortableUniqueId,
     long EventsProcessed,
-    byte[]? StateData,
     bool IsOffloaded,
     string? OffloadKey,
     string? OffloadProvider,
@@ -32,7 +30,6 @@ public sealed record MultiProjectionStateWriteRequest(
             PayloadType: PayloadType,
             LastSortableUniqueId: LastSortableUniqueId,
             EventsProcessed: EventsProcessed,
-            StateData: StateData,
             IsOffloaded: IsOffloaded,
             OffloadKey: OffloadKey,
             OffloadProvider: OffloadProvider,
