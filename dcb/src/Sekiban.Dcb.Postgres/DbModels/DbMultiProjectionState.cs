@@ -59,7 +59,10 @@ public class DbMultiProjectionState
     [MaxLength(256)]
     public string? BuildHost { get; set; }
 
-    public static DbMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId) =>
+    public static DbMultiProjectionState FromRecord(
+        MultiProjectionStateRecord record,
+        string serviceId,
+        byte[]? stateData = null) =>
         new()
         {
             ServiceId = serviceId,
@@ -68,7 +71,7 @@ public class DbMultiProjectionState
             PayloadType = record.PayloadType,
             LastSortableUniqueId = record.LastSortableUniqueId,
             EventsProcessed = record.EventsProcessed,
-            StateData = record.StateData,
+            StateData = stateData,
             IsOffloaded = record.IsOffloaded,
             OffloadKey = record.OffloadKey,
             OffloadProvider = record.OffloadProvider,
@@ -81,14 +84,13 @@ public class DbMultiProjectionState
             BuildHost = record.BuildHost
         };
 
-    public MultiProjectionStateRecord ToRecord(byte[]? overrideStateData = null) =>
+    public MultiProjectionStateRecord ToRecord() =>
         new(
             ProjectorName: ProjectorName,
             ProjectorVersion: ProjectorVersion,
             PayloadType: PayloadType,
             LastSortableUniqueId: LastSortableUniqueId,
             EventsProcessed: EventsProcessed,
-            StateData: overrideStateData ?? StateData,
             IsOffloaded: IsOffloaded,
             OffloadKey: OffloadKey,
             OffloadProvider: OffloadProvider,

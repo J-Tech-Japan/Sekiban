@@ -50,8 +50,9 @@ Run migrations with `Sekiban.Dcb.Postgres.MigrationHost` or let Aspire run the i
 
 Package: `Sekiban.Dcb.CosmosDb` (`src/Sekiban.Dcb.CosmosDb`). Containers:
 
-- `events` – partitioned by `/id`
-- `tags` – partitioned by `/tag`
+- `events` – partitioned by `/pk`
+- `tags` – partitioned by `/pk`
+- `multiProjectionStates` – partitioned by `/pk`
 
 ```csharp
 services.AddSekibanDcbCosmosDbWithAspire();

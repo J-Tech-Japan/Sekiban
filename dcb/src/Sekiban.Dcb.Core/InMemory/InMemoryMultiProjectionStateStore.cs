@@ -12,6 +12,7 @@ namespace Sekiban.Dcb.InMemory;
 public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
+    private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();
     private readonly IServiceIdProvider _serviceIdProvider;
 
     public InMemoryMultiProjectionStateStore(IServiceIdProvider? serviceIdProvider = null)
@@ -31,6 +32,7 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
         foreach (var key in keysToRemove)
         {
             _states.TryRemove(key, out _);
+            _stateData.TryRemove(key, out _);
         }
     }
 
@@ -66,10 +68,42 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
+        return Task.FromResult(ResultBox.Error<bool>(
+            new NotSupportedException(
+                "InMemoryMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
+    }
+
+    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        var bytes = ms.ToArray();
+
         var serviceId = CurrentServiceId;
-        var updated = record with { UpdatedAt = DateTime.UtcNow };
-        _states[(serviceId, record.ProjectorName, record.ProjectorVersion)] = updated;
-        return Task.FromResult(ResultBox.FromValue(true));
+        var key = (serviceId, request.ProjectorName, request.ProjectorVersion);
+        _states[key] = request.ToRecord();
+        _stateData[key] = bytes;
+        return ResultBox.FromValue(true);
+    }
+
+    public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceId = CurrentServiceId;
+        var key = (serviceId, record.ProjectorName, record.ProjectorVersion);
+        if (_stateData.TryGetValue(key, out var data))
+        {
+            return Task.FromResult(ResultBox.FromValue<Stream>(new MemoryStream(data, writable: false)));
+        }
+
+        return Task.FromResult(ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"InMemory snapshot payload not found for {record.ProjectorName}/{record.ProjectorVersion}")));
     }
 
     public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
@@ -113,6 +147,7 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
             foreach (var key in keysToRemove)
             {
                 _states.TryRemove(key, out _);
+                _stateData.TryRemove(key, out _);
             }
             var count = keysToRemove.Count;
             return Task.FromResult(ResultBox.FromValue(count));
@@ -126,6 +161,7 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
             foreach (var key in keysToRemove)
             {
                 _states.TryRemove(key, out _);
+                _stateData.TryRemove(key, out _);
             }
 
             return Task.FromResult(ResultBox.FromValue(keysToRemove.Count));

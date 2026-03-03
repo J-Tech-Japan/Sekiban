@@ -29,36 +29,18 @@ internal class NativeProjectionSnapshotHandler
         _logger = logger;
     }
 
-    public async Task<ResultBox<byte[]>> GetSnapshotBytesAsync(bool canGetUnsafeState = true)
+    public async Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(
+        Stream source,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var snapshotResult = await _actor.GetSnapshotAsync(canGetUnsafeState);
-            if (!snapshotResult.IsSuccess)
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
+            if (envelope is null)
             {
-                return ResultBox.Error<byte[]>(snapshotResult.GetException());
+                return ResultBox.Error<bool>(
+                    new InvalidOperationException("Snapshot stream deserialized to null envelope."));
             }
-
-            var envelope = snapshotResult.GetValue();
-
-            // Serialize directly into the final byte[] to avoid MemoryStream->ToArray double allocation.
-            var snapshotBytes = JsonSerializer.SerializeToUtf8Bytes(envelope, _jsonOptions);
-            return ResultBox.FromValue(snapshotBytes);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<byte[]>(ex);
-        }
-    }
-
-    public async Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData)
-    {
-        try
-        {
-            var envelopeJson = DecompressSnapshotData(snapshotData);
-
-            var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-                envelopeJson, _jsonOptions)!;
 
             await _actor.SetSnapshotAsync(envelope);
             return ResultBox.FromValue(true);
@@ -123,55 +105,57 @@ internal class NativeProjectionSnapshotHandler
         }
     }
 
-    public byte[] RewriteSnapshotVersion(byte[] snapshotData, string newVersion)
+    public async Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+        Stream source,
+        Stream target,
+        string newVersion,
+        CancellationToken cancellationToken)
     {
-        var envelopeJson = DecompressSnapshotData(snapshotData);
-
-        var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-            envelopeJson, _jsonOptions)!;
-
-        SerializableMultiProjectionStateEnvelope modified;
-        if (!envelope.IsOffloaded && envelope.InlineState != null)
+        try
         {
-            var s = envelope.InlineState;
-            modified = new SerializableMultiProjectionStateEnvelope(
-                false,
-                SerializableMultiProjectionState.FromBytes(
-                    s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
-                    s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
-                    s.OriginalSizeBytes, s.CompressedSizeBytes),
-                null);
-        }
-        else if (envelope.OffloadedState != null)
-        {
-            var o = envelope.OffloadedState;
-            modified = new SerializableMultiProjectionStateEnvelope(
-                true,
-                null,
-                new SerializableMultiProjectionStateOffloaded(
-                    o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
-                    newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
-                    o.PayloadLength));
-        }
-        else
-        {
-            throw new InvalidOperationException("Cannot rewrite version: envelope has no inline or offloaded state");
-        }
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
+            if (envelope is null)
+            {
+                return ResultBox.Error<bool>(
+                    new InvalidOperationException("Snapshot stream deserialized to null envelope."));
+            }
 
-        var modifiedJson = JsonSerializer.Serialize(modified, _jsonOptions);
-        return Encoding.UTF8.GetBytes(modifiedJson);
-    }
+            SerializableMultiProjectionStateEnvelope modified;
+            if (!envelope.IsOffloaded && envelope.InlineState != null)
+            {
+                var s = envelope.InlineState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    false,
+                    SerializableMultiProjectionState.FromBytes(
+                        s.GetPayloadBytes(), s.MultiProjectionPayloadType, s.ProjectorName, newVersion,
+                        s.LastSortableUniqueId, s.LastEventId, s.Version, s.IsCatchedUp, s.IsSafeState,
+                        s.OriginalSizeBytes, s.CompressedSizeBytes),
+                    null);
+            }
+            else if (envelope.OffloadedState != null)
+            {
+                var o = envelope.OffloadedState;
+                modified = new SerializableMultiProjectionStateEnvelope(
+                    true,
+                    null,
+                    new SerializableMultiProjectionStateOffloaded(
+                        o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
+                        newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
+                        o.PayloadLength));
+            }
+            else
+            {
+                return ResultBox.Error<bool>(
+                    new InvalidOperationException("Cannot rewrite version: envelope has no inline or offloaded state"));
+            }
 
-    /// <summary>
-    ///     Auto-detect snapshot format: v9 (Gzip) or v10 (plain JSON)
-    /// </summary>
-    private static string DecompressSnapshotData(byte[] snapshotData)
-    {
-        if (snapshotData.Length >= 2 && snapshotData[0] == 0x1f && snapshotData[1] == 0x8b)
-        {
-            return GzipCompression.DecompressToString(snapshotData);
+            await JsonSerializer.SerializeAsync(target, modified, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            return ResultBox.FromValue(true);
         }
-        return Encoding.UTF8.GetString(snapshotData);
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
     }
 
     private long EstimateSafeUnsafeProjectionStateSize(object stateObj, bool includeUnsafeDetails)
@@ -211,5 +195,27 @@ internal class NativeProjectionSnapshotHandler
             : new { safeKeys };
         var json = JsonSerializer.Serialize(dto, _jsonOptions);
         return Encoding.UTF8.GetByteCount(json);
+    }
+
+    private async Task<SerializableMultiProjectionStateEnvelope?> DeserializeEnvelopeAsync(
+        Stream source,
+        CancellationToken cancellationToken)
+    {
+        var data = await ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
+
+        if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
+        {
+            var jsonBytes = GzipCompression.Decompress(data);
+            return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(jsonBytes, _jsonOptions);
+        }
+
+        return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(data, _jsonOptions);
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        return ms.ToArray();
     }
 }

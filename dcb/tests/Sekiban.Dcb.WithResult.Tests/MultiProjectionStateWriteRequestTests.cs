@@ -9,7 +9,6 @@ namespace Sekiban.Dcb.Tests;
 public class MultiProjectionStateWriteRequestTests
 {
     private static MultiProjectionStateWriteRequest CreateSampleRequest(
-        byte[]? stateData = null,
         bool isOffloaded = false,
         string? offloadKey = null,
         string? offloadProvider = null) =>
@@ -19,7 +18,6 @@ public class MultiProjectionStateWriteRequestTests
             PayloadType: "TestPayloadType",
             LastSortableUniqueId: "20260225T120000Z-00000000-0000-0000-0000-000000000001",
             EventsProcessed: 42,
-            StateData: stateData,
             IsOffloaded: isOffloaded,
             OffloadKey: offloadKey,
             OffloadProvider: offloadProvider,
@@ -36,7 +34,6 @@ public class MultiProjectionStateWriteRequestTests
     {
         // Given/When
         var request = CreateSampleRequest(
-            stateData: new byte[] { 1, 2, 3 },
             isOffloaded: false);
 
         // Then
@@ -44,8 +41,6 @@ public class MultiProjectionStateWriteRequestTests
         Assert.Equal("1.0", request.ProjectorVersion);
         Assert.Equal("TestPayloadType", request.PayloadType);
         Assert.Equal(42, request.EventsProcessed);
-        Assert.NotNull(request.StateData);
-        Assert.Equal(new byte[] { 1, 2, 3 }, request.StateData);
         Assert.False(request.IsOffloaded);
         Assert.Null(request.OffloadKey);
         Assert.Null(request.OffloadProvider);
@@ -60,13 +55,11 @@ public class MultiProjectionStateWriteRequestTests
     {
         // Given/When
         var request = CreateSampleRequest(
-            stateData: null,
             isOffloaded: true,
             offloadKey: "blob/key/abc",
             offloadProvider: "AzureBlobStorage");
 
         // Then
-        Assert.Null(request.StateData);
         Assert.True(request.IsOffloaded);
         Assert.Equal("blob/key/abc", request.OffloadKey);
         Assert.Equal("AzureBlobStorage", request.OffloadProvider);
@@ -76,8 +69,7 @@ public class MultiProjectionStateWriteRequestTests
     public void ToRecord_Should_Convert_Inline_Request_To_MultiProjectionStateRecord()
     {
         // Given
-        var inlineData = new byte[] { 10, 20, 30, 40 };
-        var request = CreateSampleRequest(stateData: inlineData);
+        var request = CreateSampleRequest();
 
         // When
         var record = request.ToRecord();
@@ -88,7 +80,6 @@ public class MultiProjectionStateWriteRequestTests
         Assert.Equal(request.PayloadType, record.PayloadType);
         Assert.Equal(request.LastSortableUniqueId, record.LastSortableUniqueId);
         Assert.Equal(request.EventsProcessed, record.EventsProcessed);
-        Assert.Equal(inlineData, record.StateData);
         Assert.Equal(request.IsOffloaded, record.IsOffloaded);
         Assert.Equal(request.OffloadKey, record.OffloadKey);
         Assert.Equal(request.OffloadProvider, record.OffloadProvider);
@@ -106,7 +97,6 @@ public class MultiProjectionStateWriteRequestTests
     {
         // Given
         var request = CreateSampleRequest(
-            stateData: null,
             isOffloaded: true,
             offloadKey: "projector/v1/abc123",
             offloadProvider: "InMemoryBlobStorage");
@@ -114,8 +104,7 @@ public class MultiProjectionStateWriteRequestTests
         // When
         var record = request.ToRecord();
 
-        // Then: offload metadata preserved, StateData is null
-        Assert.Null(record.StateData);
+        // Then: offload metadata preserved
         Assert.True(record.IsOffloaded);
         Assert.Equal("projector/v1/abc123", record.OffloadKey);
         Assert.Equal("InMemoryBlobStorage", record.OffloadProvider);

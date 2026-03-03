@@ -10,12 +10,10 @@ public sealed class CosmosContainerSettings
     /// </summary>
     /// <param name="name">Container name.</param>
     /// <param name="partitionKeyPath">Partition key path for the container.</param>
-    /// <param name="isLegacy">Whether the container uses legacy partitioning.</param>
-    public CosmosContainerSettings(string name, string partitionKeyPath, bool isLegacy)
+    public CosmosContainerSettings(string name, string partitionKeyPath)
     {
         Name = name;
         PartitionKeyPath = partitionKeyPath;
-        IsLegacy = isLegacy;
     }
 
     /// <summary>
@@ -28,8 +26,4 @@ public sealed class CosmosContainerSettings
     /// </summary>
     public string PartitionKeyPath { get; }
 
-    /// <summary>
-    ///     Whether the container uses legacy partitioning.
-    /// </summary>
-    public bool IsLegacy { get; }
 }

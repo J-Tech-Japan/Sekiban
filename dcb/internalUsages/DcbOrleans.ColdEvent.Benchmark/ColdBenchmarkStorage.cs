@@ -150,7 +150,14 @@ public sealed class DuckDbColdBenchmarkStorage : IColdBenchmarkStorage
         {
             throw new KeyNotFoundException($"Path not found: {path}");
         }
-        return (byte[])reader.GetValue(0);
+        var value = reader.GetValue(0);
+        return value switch
+        {
+            byte[] bytes => bytes,
+            Stream stream => ReadAllBytes(stream),
+            _ => throw new InvalidDataException(
+                $"Unsupported DuckDB BLOB value type: {value.GetType().FullName}")
+        };
     }
 
     public void Put(string path, byte[] data)
@@ -170,5 +177,17 @@ public sealed class DuckDbColdBenchmarkStorage : IColdBenchmarkStorage
 
     public void Dispose()
     {
+    }
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream is MemoryStream ms && ms.TryGetBuffer(out var segment))
+        {
+            return segment.AsSpan(0, (int)ms.Length).ToArray();
+        }
+
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
     }
 }

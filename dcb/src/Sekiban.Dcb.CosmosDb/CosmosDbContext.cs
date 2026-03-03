@@ -182,13 +182,11 @@ public class CosmosDbContext : IDisposable
 
             if (_logger != null)
             {
-                if (string.Equals(settings.Name, _options.EventsContainerName, StringComparison.Ordinal) ||
-                    string.Equals(settings.Name, _options.LegacyEventsContainerName, StringComparison.Ordinal))
+                if (string.Equals(settings.Name, _options.EventsContainerName, StringComparison.Ordinal))
                 {
                     LogEventsContainerInitialized(_logger, null);
                 }
-                else if (string.Equals(settings.Name, _options.TagsContainerName, StringComparison.Ordinal) ||
-                         string.Equals(settings.Name, _options.LegacyTagsContainerName, StringComparison.Ordinal))
+                else if (string.Equals(settings.Name, _options.TagsContainerName, StringComparison.Ordinal))
                 {
                     LogTagsContainerInitialized(_logger, null);
                 }
@@ -210,14 +208,11 @@ public class CosmosDbContext : IDisposable
             PartitionKeyPath = settings.PartitionKeyPath
         };
 
-        if (!settings.IsLegacy)
+        properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
         {
-            properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
-            {
-                new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
-                new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
-            });
-        }
+            new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
+            new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
+        });
 
         return properties;
     }
@@ -230,15 +225,12 @@ public class CosmosDbContext : IDisposable
             PartitionKeyPath = settings.PartitionKeyPath
         };
 
-        if (!settings.IsLegacy)
+        properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
         {
-            properties.IndexingPolicy.CompositeIndexes.Add(new Collection<CompositePath>
-            {
-                new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
-                new() { Path = "/tag", Order = CompositePathSortOrder.Ascending },
-                new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
-            });
-        }
+            new() { Path = "/serviceId", Order = CompositePathSortOrder.Ascending },
+            new() { Path = "/tag", Order = CompositePathSortOrder.Ascending },
+            new() { Path = "/sortableUniqueId", Order = CompositePathSortOrder.Ascending }
+        });
 
         return properties;
     }

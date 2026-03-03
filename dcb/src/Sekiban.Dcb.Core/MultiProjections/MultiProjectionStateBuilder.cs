@@ -20,7 +20,6 @@ public class MultiProjectionStateBuilder
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private readonly IMultiProjectionStateStore _stateStore;
-    private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly ILogger<MultiProjectionStateBuilder> _logger;
 
     public MultiProjectionStateBuilder(
@@ -33,7 +32,7 @@ public class MultiProjectionStateBuilder
         _domainTypes = domainTypes;
         _eventStore = eventStore;
         _stateStore = stateStore;
-        _blobAccessor = blobAccessor;
+        _ = blobAccessor;
         _logger = logger ?? NullLogger<MultiProjectionStateBuilder>.Instance;
     }
 
@@ -147,10 +146,10 @@ public class MultiProjectionStateBuilder
             var safePosition = await actor.GetSafeLastSortableUniqueIdAsync();
             var safeThreshold = actor.PeekCurrentSafeWindowThreshold();
 
-            // v10: Serialize Envelope to JSON (no outer Gzip - payload already compressed via Custom Serializer or auto Gzip)
-            var envelopeJson = JsonSerializer.Serialize(snapshotEnvelope, _domainTypes.JsonSerializerOptions);
-            var envelopeBytes = Encoding.UTF8.GetBytes(envelopeJson);
-            var envelopeSize = envelopeBytes.LongLength;
+            // v10: Serialize envelope directly to stream (no outer Gzip).
+            await using var envelopeStream = new MemoryStream();
+            await JsonSerializer.SerializeAsync(envelopeStream, snapshotEnvelope, _domainTypes.JsonSerializerOptions, ct);
+            var envelopeSize = envelopeStream.Length;
 
             // Extract original/compressed sizes from the internal state
             long originalSizeBytes = envelopeSize;
@@ -161,16 +160,13 @@ public class MultiProjectionStateBuilder
                 compressedSizeBytes = snapshotEnvelope.InlineState.CompressedSizeBytes;
             }
 
-            // Create record with v10 format
             var totalEventsProcessed = currentEventsProcessed + eventsProcessed;
-
-            var record = new MultiProjectionStateRecord(
+            var writeRequest = new MultiProjectionStateWriteRequest(
                 ProjectorName: projectorName,
                 ProjectorVersion: projectorVersion,
-                PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,  // v10: Envelope type
+                PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                 LastSortableUniqueId: safePosition ?? string.Empty,
                 EventsProcessed: totalEventsProcessed,
-                StateData: envelopeBytes,  // v10: No outer compression
                 IsOffloaded: false,
                 OffloadKey: null,
                 OffloadProvider: null,
@@ -188,8 +184,12 @@ public class MultiProjectionStateBuilder
                 originalSizeBytes,
                 compressedSizeBytes);
 
-            // Save
-            var saveResult = await _stateStore.UpsertAsync(record, options.OffloadThresholdBytes, ct);
+            envelopeStream.Position = 0;
+            var saveResult = await _stateStore.UpsertFromStreamAsync(
+                writeRequest,
+                envelopeStream,
+                options.OffloadThresholdBytes,
+                ct);
             if (!saveResult.IsSuccess)
             {
                 return new ProjectorBuildResult(
@@ -368,21 +368,14 @@ public class MultiProjectionStateBuilder
         MultiProjectionStateRecord record,
         CancellationToken ct)
     {
-        byte[] data;
+        var openResult = await _stateStore.OpenStateDataReadStreamAsync(record, ct);
+        if (!openResult.IsSuccess)
+        {
+            throw openResult.GetException();
+        }
 
-        if (record.IsOffloaded && _blobAccessor != null && record.OffloadKey != null)
-        {
-            await using var offloadedStream = await _blobAccessor.OpenReadAsync(record.OffloadKey, ct);
-            data = await ReadAllBytesAsync(offloadedStream, ct);
-        }
-        else if (record.StateData != null)
-        {
-            data = record.StateData;
-        }
-        else
-        {
-            throw new InvalidOperationException("StateData is null and not offloaded");
-        }
+        await using var dataStream = openResult.GetValue();
+        var data = await ReadAllBytesAsync(dataStream, ct);
 
         if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
         {

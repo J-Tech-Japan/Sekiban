@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Azure.Cosmos;
 using ResultBoxes;
 using Sekiban.Dcb.CosmosDb.Models;
@@ -39,8 +40,8 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
-    private static string GetPartitionKey(string partitionKey, CosmosContainerSettings settings, string serviceId) =>
-        settings.IsLegacy ? partitionKey : $"{serviceId}|{partitionKey}";
+    private static string GetPartitionKey(string partitionKey, string serviceId) =>
+        $"{serviceId}|{partitionKey}";
 
     /// <inheritdoc />
     public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(
@@ -54,7 +55,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             var settings = _containerResolver.ResolveStatesContainer(serviceId);
             var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
             var partitionKey = $"MultiProjectionState_{projectorName}";
-            var pk = GetPartitionKey(partitionKey, settings, serviceId);
+            var pk = GetPartitionKey(partitionKey, serviceId);
 
             var response = await container.ReadItemAsync<CosmosMultiProjectionState>(
                 projectorVersion,
@@ -63,13 +64,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
             var doc = response.Resource;
             if (doc == null)
+            {
                 return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.Empty);
+            }
+
             return await BuildRecordResultAsync(
                 doc,
                 serviceId,
-                projectorName,
-                projectorVersion,
-                settings.IsLegacy,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -89,21 +90,11 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             var settings = _containerResolver.ResolveStatesContainer(serviceId);
             var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
             var partitionKey = $"MultiProjectionState_{projectorName}";
-            var pk = GetPartitionKey(partitionKey, settings, serviceId);
+            var pk = GetPartitionKey(partitionKey, serviceId);
 
-            QueryDefinition query;
-            if (settings.IsLegacy)
-            {
-                query = new QueryDefinition(
-                        "SELECT * FROM c WHERE c.partitionKey = @pk ORDER BY c.eventsProcessed DESC")
-                    .WithParameter("@pk", partitionKey);
-            }
-            else
-            {
-                query = new QueryDefinition(
-                        "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.eventsProcessed DESC")
-                    .WithParameter("@pk", pk);
-            }
+            var query = new QueryDefinition(
+                    "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.eventsProcessed DESC")
+                .WithParameter("@pk", pk);
 
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(
                 query,
@@ -122,9 +113,6 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                 return await BuildRecordResultAsync(
                     doc,
                     serviceId,
-                    projectorName,
-                    doc.ProjectorVersion,
-                    settings.IsLegacy,
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -136,97 +124,98 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
-    private async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> BuildRecordResultAsync(
+    private static Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> BuildRecordResultAsync(
         CosmosMultiProjectionState doc,
         string serviceId,
-        string projectorName,
-        string projectorVersion,
-        bool isLegacy,
-        CancellationToken cancellationToken)
+        CancellationToken _cancellationToken)
     {
-        var validationError = ValidateServiceId(doc, serviceId, isLegacy);
+        var validationError = ValidateServiceId(doc, serviceId);
         if (validationError != null)
         {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(validationError);
+            return Task.FromResult(ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(validationError));
         }
-
-        var blobResult = await TryLoadOffloadedStateAsync(
-            doc,
-            projectorName,
-            projectorVersion,
-            cancellationToken).ConfigureAwait(false);
-
-        if (!blobResult.IsSuccess)
-        {
-            return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(blobResult.GetException());
-        }
-
-        var blobDataOpt = blobResult.GetValue();
-        var blobData = blobDataOpt.HasValue ? blobDataOpt.GetValue() : null;
-        return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(blobData)));
+        return Task.FromResult(ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord())));
     }
 
     private static UnauthorizedAccessException? ValidateServiceId(
         CosmosMultiProjectionState doc,
-        string serviceId,
-        bool isLegacy)
+        string serviceId)
     {
-        if (isLegacy)
-        {
-            if (!string.IsNullOrEmpty(doc.ServiceId) && !string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal))
-            {
-                return new UnauthorizedAccessException(
-                    $"Projection state does not belong to service {serviceId}.");
-            }
-
-            return null;
-        }
-
         return string.Equals(doc.ServiceId, serviceId, StringComparison.Ordinal)
             ? null
             : new UnauthorizedAccessException(
                 $"Projection state does not belong to service {serviceId}.");
     }
 
-    private async Task<ResultBox<OptionalValue<byte[]>>> TryLoadOffloadedStateAsync(
-        CosmosMultiProjectionState doc,
-        string projectorName,
-        string projectorVersion,
-        CancellationToken cancellationToken)
+    /// <summary>
+    ///     Opens snapshot payload stream from offload storage or inline Cosmos document data.
+    /// </summary>
+    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
     {
-        if (!doc.IsOffloaded || _blobAccessor == null || doc.OffloadKey == null)
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.IsOffloaded && _blobAccessor != null && !string.IsNullOrWhiteSpace(record.OffloadKey))
         {
-            return ResultBox.FromValue(OptionalValue<byte[]>.Empty);
-        }
-
-        try
-        {
-            var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
-                .ConfigureAwait(false);
-            await using (offloadStream.ConfigureAwait(false))
+            try
             {
-                var blobData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
-                return ResultBox.FromValue(OptionalValue.FromValue(blobData));
+                var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken)
+                    .ConfigureAwait(false);
+                return ResultBox.FromValue(stream);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
+            }
+            catch (IOException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
             }
         }
-        catch (InvalidOperationException blobEx)
+
+        var serviceId = CurrentServiceId;
+        var settings = _containerResolver.ResolveStatesContainer(serviceId);
+        var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
+        var partitionKey = $"MultiProjectionState_{record.ProjectorName}";
+        var pk = GetPartitionKey(partitionKey, serviceId);
+        CosmosMultiProjectionState doc;
+        try
         {
-            return ResultBox.Error<OptionalValue<byte[]>>(
-                new InvalidOperationException(
-                    $"Failed to read offloaded state from blob storage. " +
-                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                    $"BlobKey: {doc.OffloadKey}",
-                    blobEx));
+            var response = await container.ReadItemAsync<CosmosMultiProjectionState>(
+                record.ProjectorVersion,
+                new PartitionKey(pk),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            doc = response.Resource;
         }
-        catch (System.IO.IOException blobEx)
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            return ResultBox.Error<OptionalValue<byte[]>>(
-                new InvalidOperationException(
-                    $"Failed to read offloaded state from blob storage (IO error). " +
-                    $"Projector: {projectorName}, Version: {projectorVersion}, " +
-                    $"BlobKey: {doc.OffloadKey}",
-                    blobEx));
+            return ResultBox.Error<Stream>(
+                new KeyNotFoundException(
+                    $"Projection state not found: {record.ProjectorName}/{record.ProjectorVersion}",
+                    ex));
         }
+
+        var validationError = ValidateServiceId(doc, serviceId);
+        if (validationError is not null)
+        {
+            return ResultBox.Error<Stream>(validationError);
+        }
+
+        if (!string.IsNullOrWhiteSpace(doc.StateData))
+        {
+            var bytes = Convert.FromBase64String(doc.StateData);
+            return ResultBox.FromValue<Stream>(new MemoryStream(bytes, writable: false));
+        }
+
+        return ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
     }
 
     /// <inheritdoc />
@@ -238,23 +227,16 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         ArgumentNullException.ThrowIfNull(record);
         try
         {
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                record.StateData,
-                $"{record.ProjectorName}/{record.ProjectorVersion}",
-                offloadThresholdBytes,
-                _blobAccessor,
-                cancellationToken).ConfigureAwait(false);
-
-            var updatedRecord = record with
+            if (!record.IsOffloaded)
             {
-                StateData = offloadResult.InlineData,
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            };
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
+            }
 
-            await PersistRecordToCosmosAsync(updatedRecord, cancellationToken).ConfigureAwait(false);
+            var updatedRecord = record with { UpdatedAt = DateTime.UtcNow };
+
+            await PersistRecordToCosmosAsync(updatedRecord, stateData: null, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (CosmosException ex)
@@ -284,14 +266,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
             var record = (request with
             {
-                StateData = offloadResult.InlineData,
                 IsOffloaded = offloadResult.IsOffloaded,
                 OffloadKey = offloadResult.OffloadKey,
                 OffloadProvider = offloadResult.OffloadProvider,
                 UpdatedAt = DateTime.UtcNow
             }).ToRecord();
 
-            await PersistRecordToCosmosAsync(record, cancellationToken).ConfigureAwait(false);
+            await PersistRecordToCosmosAsync(record, offloadResult.InlineData, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (CosmosException ex)
@@ -302,15 +283,16 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
 
     private async Task PersistRecordToCosmosAsync(
         MultiProjectionStateRecord record,
+        byte[]? stateData,
         CancellationToken cancellationToken)
     {
         var serviceId = CurrentServiceId;
         var settings = _containerResolver.ResolveStatesContainer(serviceId);
         var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
         var partitionKey = record.GetPartitionKey();
-        var pk = GetPartitionKey(partitionKey, settings, serviceId);
+        var pk = GetPartitionKey(partitionKey, serviceId);
 
-        var doc = CosmosMultiProjectionState.FromRecord(record, serviceId);
+        var doc = CosmosMultiProjectionState.FromRecord(record, serviceId, stateData);
 
         await container.UpsertItemAsync(
             doc,
@@ -328,10 +310,8 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             var settings = _containerResolver.ResolveStatesContainer(serviceId);
             var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
 
-            var query = settings.IsLegacy
-                ? new QueryDefinition("SELECT * FROM c")
-                : new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
-                    .WithParameter("@serviceId", serviceId);
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
+                .WithParameter("@serviceId", serviceId);
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(query);
 
             var results = new List<ProjectorStateInfo>();
@@ -372,7 +352,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             var settings = _containerResolver.ResolveStatesContainer(serviceId);
             var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
             var partitionKey = $"MultiProjectionState_{projectorName}";
-            var pk = GetPartitionKey(partitionKey, settings, serviceId);
+            var pk = GetPartitionKey(partitionKey, serviceId);
 
             // Note: Offloaded blob cleanup should be handled separately
             // (IBlobStorageSnapshotAccessor does not currently support deletion)
@@ -411,24 +391,14 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             if (!string.IsNullOrEmpty(projectorName))
             {
                 var partitionKey = $"MultiProjectionState_{projectorName}";
-                if (settings.IsLegacy)
-                {
-                    query = new QueryDefinition("SELECT * FROM c WHERE c.partitionKey = @pk")
-                        .WithParameter("@pk", partitionKey);
-                }
-                else
-                {
-                    var pk = GetPartitionKey(partitionKey, settings, serviceId);
-                    query = new QueryDefinition("SELECT * FROM c WHERE c.pk = @pk")
-                        .WithParameter("@pk", pk);
-                }
+                var pk = GetPartitionKey(partitionKey, serviceId);
+                query = new QueryDefinition("SELECT * FROM c WHERE c.pk = @pk")
+                    .WithParameter("@pk", pk);
             }
             else
             {
-                query = settings.IsLegacy
-                    ? new QueryDefinition("SELECT * FROM c")
-                    : new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
-                        .WithParameter("@serviceId", serviceId);
+                query = new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
+                    .WithParameter("@serviceId", serviceId);
             }
 
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(query);
@@ -445,7 +415,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                     // Delete the document
                     await container.DeleteItemAsync<CosmosMultiProjectionState>(
                         doc.Id,
-                        new PartitionKey(settings.IsLegacy ? doc.PartitionKey : doc.Pk),
+                        new PartitionKey(doc.Pk),
                         cancellationToken: cancellationToken).ConfigureAwait(false);
 
                     deletedCount++;

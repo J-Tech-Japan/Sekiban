@@ -65,29 +65,7 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
 
             var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
 
-            byte[]? stateData = null;
-            if (doc.IsOffloaded && _blobAccessor != null && doc.OffloadKey != null)
-            {
-                try
-                {
-                    var offloadStream = await _blobAccessor.OpenReadAsync(doc.OffloadKey, cancellationToken)
-                        .ConfigureAwait(false);
-                    await using (offloadStream.ConfigureAwait(false))
-                    {
-                        stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob storage. " +
-                            $"Projector: {projectorName}, Version: {projectorVersion}, BlobKey: {doc.OffloadKey}",
-                            ex));
-                }
-            }
-
-            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord(stateData)));
+            return ResultBox.FromValue(OptionalValue.FromValue(doc.ToRecord()));
         }
         catch (Exception ex)
         {
@@ -113,29 +91,7 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
 
             var latest = items.OrderByDescending(i => i.EventsProcessed).First();
 
-            byte[]? stateData = null;
-            if (latest.IsOffloaded && _blobAccessor != null && latest.OffloadKey != null)
-            {
-                try
-                {
-                    var offloadStream = await _blobAccessor.OpenReadAsync(latest.OffloadKey, cancellationToken)
-                        .ConfigureAwait(false);
-                    await using (offloadStream.ConfigureAwait(false))
-                    {
-                        stateData = await ReadAllBytesAsync(offloadStream, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    return ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
-                        new InvalidOperationException(
-                            $"Failed to read offloaded state from blob storage. " +
-                            $"Projector: {projectorName}, BlobKey: {latest.OffloadKey}",
-                            ex));
-                }
-            }
-
-            return ResultBox.FromValue(OptionalValue.FromValue(latest.ToRecord(stateData)));
+            return ResultBox.FromValue(OptionalValue.FromValue(latest.ToRecord()));
         }
         catch (Exception ex)
         {
@@ -157,25 +113,15 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
-            var effectiveThreshold = GetEffectiveThreshold(offloadThresholdBytes);
-
-            var offloadResult = await StreamOffloadHelper.ProcessAsync(
-                record.StateData,
-                $"{record.ProjectorName}/{record.ProjectorVersion}",
-                effectiveThreshold,
-                _blobAccessor,
-                cancellationToken).ConfigureAwait(false);
-
-            var updatedRecord = record with
+            if (!record.IsOffloaded)
             {
-                StateData = offloadResult.InlineData,
-                IsOffloaded = offloadResult.IsOffloaded,
-                OffloadKey = offloadResult.OffloadKey,
-                OffloadProvider = offloadResult.OffloadProvider,
-                UpdatedAt = DateTime.UtcNow
-            };
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
+            }
 
-            await PersistRecordToDynamoAsync(updatedRecord, cancellationToken).ConfigureAwait(false);
+            await PersistRecordToDynamoAsync(record with { UpdatedAt = DateTime.UtcNow }, stateData: null, cancellationToken)
+                .ConfigureAwait(false);
 
             return ResultBox.FromValue(true);
         }
@@ -183,6 +129,65 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
         {
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Opens a read stream for snapshot payload bytes either from offload storage or inline DynamoDB data.
+    /// </summary>
+    /// <param name="record">Snapshot metadata record.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.IsOffloaded && _blobAccessor != null && !string.IsNullOrWhiteSpace(record.OffloadKey))
+        {
+            try
+            {
+                var stream = await _blobAccessor.OpenReadAsync(record.OffloadKey, cancellationToken)
+                    .ConfigureAwait(false);
+                return ResultBox.FromValue(stream);
+            }
+            catch (IOException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ResultBox.Error<Stream>(
+                    new InvalidOperationException(
+                        $"Failed to open offloaded state stream. Projector: {record.ProjectorName}, Version: {record.ProjectorVersion}, BlobKey: {record.OffloadKey}",
+                        ex));
+            }
+        }
+
+        await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        var key = BuildProjectionKey(serviceId, record.ProjectorName, record.ProjectorVersion);
+        var response = await _client.GetItemAsync(new GetItemRequest
+        {
+            TableName = _context.ProjectionStatesTableName,
+            Key = key,
+            ConsistentRead = _options.UseConsistentReads
+        }, cancellationToken).ConfigureAwait(false);
+
+        if (response.Item != null && response.Item.Count > 0)
+        {
+            var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
+            if (!string.IsNullOrWhiteSpace(doc.StateData))
+            {
+                var bytes = Convert.FromBase64String(doc.StateData);
+                return ResultBox.FromValue<Stream>(new MemoryStream(bytes, writable: false));
+            }
+        }
+
+        return ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"Projection state has no inline data and no readable offload stream: {record.ProjectorName}/{record.ProjectorVersion}"));
     }
 
     /// <summary>
@@ -210,14 +215,13 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
 
             var record = (request with
             {
-                StateData = offloadResult.InlineData,
                 IsOffloaded = offloadResult.IsOffloaded,
                 OffloadKey = offloadResult.OffloadKey,
                 OffloadProvider = offloadResult.OffloadProvider,
                 UpdatedAt = DateTime.UtcNow
             }).ToRecord();
 
-            await PersistRecordToDynamoAsync(record, cancellationToken).ConfigureAwait(false);
+            await PersistRecordToDynamoAsync(record, offloadResult.InlineData, cancellationToken).ConfigureAwait(false);
 
             return ResultBox.FromValue(true);
         }
@@ -372,10 +376,11 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
     /// </summary>
     private async Task PersistRecordToDynamoAsync(
         MultiProjectionStateRecord record,
+        byte[]? stateData,
         CancellationToken cancellationToken)
     {
         var serviceId = CurrentServiceId;
-        var doc = DynamoMultiProjectionState.FromRecord(record, serviceId);
+        var doc = DynamoMultiProjectionState.FromRecord(record, serviceId, stateData);
 
         await _client.PutItemAsync(new PutItemRequest
         {

@@ -15,6 +15,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.InMemory;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -24,7 +25,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class MinimalOrleansTests : IAsyncLifetime
 {
-    private static readonly CountingInMemoryEventStore SharedEventStore = new(new SimpleEventTypes());
+    private static readonly CountingInMemoryEventStore SharedEventStore = CreateSharedEventStore();
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
 
@@ -91,7 +92,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                 new List<string>()))
             .ToList();
 
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         var due = DateTime.UtcNow.AddSeconds(8);
@@ -242,6 +243,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     services.AddSingleton<DcbDomainTypes>(provider =>
                     {
                         var eventTypes = new SimpleEventTypes();
+                        eventTypes.RegisterEventType<TestProjectionEvent>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -364,6 +366,13 @@ public class MinimalOrleansTests : IAsyncLifetime
 
     private record TestProjectionEvent(int Value) : IEventPayload;
 
+    private static CountingInMemoryEventStore CreateSharedEventStore()
+    {
+        var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<TestProjectionEvent>();
+        return new CountingInMemoryEventStore(eventTypes);
+    }
+
     private class CountingInMemoryEventStore : IEventStore
     {
         private readonly InMemoryEventStore _inner;
@@ -466,4 +475,15 @@ public class MinimalOrleansTests : IAsyncLifetime
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
     }
+
+    private static IReadOnlyList<SerializableEvent> ToSerializableEvents(IEnumerable<Event> events) =>
+        events
+            .Select(e => new SerializableEvent(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(e.Payload, e.Payload.GetType())),
+                e.SortableUniqueIdValue,
+                e.Id,
+                e.EventMetadata,
+                e.Tags.ToList(),
+                e.EventType))
+            .ToList();
 }

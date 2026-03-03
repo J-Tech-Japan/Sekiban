@@ -300,13 +300,36 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
-    public async Task<ResultBox<bool>> UpsertAsync(
+    public Task<ResultBox<bool>> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(record);
+        return Task.FromResult(ResultBox.Error<bool>(
+            new NotSupportedException(
+                "SqliteMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
+    }
+
+    public async Task<ResultBox<bool>> UpsertFromStreamAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
+            if (request.IsOffloaded)
+            {
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "SqliteMultiProjectionStateStore does not support offloaded snapshot metadata. Provide inline stream payload."));
+            }
+
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            var stateData = ms.ToArray();
+
             var serviceId = CurrentServiceId;
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken);
@@ -324,33 +347,63 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
                 """;
 
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
-            cmd.Parameters.AddWithValue("@projectorName", record.ProjectorName);
-            cmd.Parameters.AddWithValue("@projectorVersion", record.ProjectorVersion);
-            cmd.Parameters.AddWithValue("@payloadType", record.PayloadType);
-            cmd.Parameters.AddWithValue("@lastSortableUniqueId", record.LastSortableUniqueId);
-            cmd.Parameters.AddWithValue("@eventsProcessed", record.EventsProcessed);
-            cmd.Parameters.AddWithValue("@stateData", (object?)record.StateData ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@isOffloaded", record.IsOffloaded ? 1 : 0);
-            cmd.Parameters.AddWithValue("@offloadKey", (object?)record.OffloadKey ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@offloadProvider", (object?)record.OffloadProvider ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@originalSizeBytes", record.OriginalSizeBytes);
-            cmd.Parameters.AddWithValue("@compressedSizeBytes", record.CompressedSizeBytes);
-            cmd.Parameters.AddWithValue("@safeWindowThreshold", record.SafeWindowThreshold);
-            cmd.Parameters.AddWithValue("@createdAt", record.CreatedAt.ToString("O"));
-            cmd.Parameters.AddWithValue("@updatedAt", record.UpdatedAt.ToString("O"));
-            cmd.Parameters.AddWithValue("@buildSource", (object?)record.BuildSource ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@buildHost", (object?)record.BuildHost ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@projectorName", request.ProjectorName);
+            cmd.Parameters.AddWithValue("@projectorVersion", request.ProjectorVersion);
+            cmd.Parameters.AddWithValue("@payloadType", request.PayloadType);
+            cmd.Parameters.AddWithValue("@lastSortableUniqueId", request.LastSortableUniqueId);
+            cmd.Parameters.AddWithValue("@eventsProcessed", request.EventsProcessed);
+            cmd.Parameters.AddWithValue("@stateData", stateData);
+            cmd.Parameters.AddWithValue("@isOffloaded", 0);
+            cmd.Parameters.AddWithValue("@offloadKey", DBNull.Value);
+            cmd.Parameters.AddWithValue("@offloadProvider", DBNull.Value);
+            cmd.Parameters.AddWithValue("@originalSizeBytes", request.OriginalSizeBytes);
+            cmd.Parameters.AddWithValue("@compressedSizeBytes", request.CompressedSizeBytes);
+            cmd.Parameters.AddWithValue("@safeWindowThreshold", request.SafeWindowThreshold);
+            cmd.Parameters.AddWithValue("@createdAt", request.CreatedAt.ToString("O"));
+            cmd.Parameters.AddWithValue("@updatedAt", request.UpdatedAt.ToString("O"));
+            cmd.Parameters.AddWithValue("@buildSource", (object?)request.BuildSource ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@buildHost", (object?)request.BuildHost ?? DBNull.Value);
 
-            await cmd.ExecuteNonQueryAsync(cancellationToken);
-
+            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error upserting projection state for {ProjectorName}:{ProjectorVersion}",
-                record.ProjectorName, record.ProjectorVersion);
+            _logger?.LogError(ex, "Error upserting projection state stream for {ProjectorName}:{ProjectorVersion}",
+                request.ProjectorName, request.ProjectorVersion);
             return ResultBox.Error<bool>(ex);
         }
+    }
+
+    public async Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(
+        MultiProjectionStateRecord record,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        var serviceId = CurrentServiceId;
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT StateData
+            FROM dcb_multi_projection_states
+            WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+            """;
+        cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+        cmd.Parameters.AddWithValue("@projectorName", record.ProjectorName);
+        cmd.Parameters.AddWithValue("@projectorVersion", record.ProjectorVersion);
+
+        var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        if (result is byte[] data)
+        {
+            return ResultBox.FromValue<Stream>(new MemoryStream(data, writable: false));
+        }
+
+        return ResultBox.Error<Stream>(
+            new InvalidOperationException(
+                $"StateData not found for {record.ProjectorName}/{record.ProjectorVersion} in sqlite store."));
     }
 
     public async Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(
@@ -479,7 +532,6 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             PayloadType: reader.GetString(2),
             LastSortableUniqueId: reader.GetString(3),
             EventsProcessed: reader.GetInt64(4),
-            StateData: reader.IsDBNull(5) ? null : (byte[])reader.GetValue(5),
             IsOffloaded: reader.GetInt32(6) == 1,
             OffloadKey: reader.IsDBNull(7) ? null : reader.GetString(7),
             OffloadProvider: reader.IsDBNull(8) ? null : reader.GetString(8),

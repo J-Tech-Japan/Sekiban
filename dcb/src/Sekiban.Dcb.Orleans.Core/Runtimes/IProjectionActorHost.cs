@@ -7,7 +7,7 @@ namespace Sekiban.Dcb.Runtime;
 
 /// <summary>
 ///     Grain-facing projection host abstraction.
-///     Engine-agnostic: operates on SerializableEvent, SerializableQuery*, byte[] snapshots,
+///     Engine-agnostic: operates on SerializableEvent, SerializableQuery*, and streamed snapshots,
 ///     and primitive metadata only. No DcbDomainTypes, JsonSerializerOptions, or IServiceProvider.
 /// </summary>
 public interface IProjectionActorHost
@@ -17,14 +17,6 @@ public interface IProjectionActorHost
     /// </summary>
     Task AddSerializableEventsAsync(
         IReadOnlyList<SerializableEvent> events,
-        bool finishedCatchUp = true);
-
-    /// <summary>
-    ///     Ingest a batch of deserialized events (e.g. from EventStore catch-up).
-    ///     The host converts them internally; the Grain does not need DcbDomainTypes.
-    /// </summary>
-    Task AddEventsFromCatchUpAsync(
-        IReadOnlyList<Event> events,
         bool finishedCatchUp = true);
 
     /// <summary>
@@ -39,24 +31,17 @@ public interface IProjectionActorHost
     Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
 
     /// <summary>
-    ///     Get the snapshot as opaque bytes. Format is owned by the implementation.
-    /// </summary>
-    [Obsolete("Use WriteSnapshotToStreamAsync for streaming persistence to avoid OOM. Will be removed in a future version.")]
-    Task<ResultBox<byte[]>> GetSnapshotBytesAsync(bool canGetUnsafeState = true);
-
-    /// <summary>
-    ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation.
-    /// </summary>
+     ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation.
+     /// </summary>
     Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Restore projection state from opaque snapshot bytes.
-    /// </summary>
-    [Obsolete("Will be replaced with stream-based restore in a future version.")]
-    Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData);
+    ///     Restore projection state from snapshot stream.
+     /// </summary>
+    Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Execute a single-result query. The host deserializes the query and
@@ -116,9 +101,11 @@ public interface IProjectionActorHost
     string GetProjectorVersion();
 
     /// <summary>
-    ///     Rewrite the projector version in a serialized snapshot.
-    ///     Returns updated snapshot bytes.
+    ///     Rewrite projector version in a serialized snapshot stream and write to target stream.
     /// </summary>
-    [Obsolete("Uses byte[] snapshots. Will be replaced with stream-based version in a future version.")]
-    byte[] RewriteSnapshotVersion(byte[] snapshotData, string newVersion);
+    Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+        Stream source,
+        Stream target,
+        string newVersion,
+        CancellationToken cancellationToken);
 }

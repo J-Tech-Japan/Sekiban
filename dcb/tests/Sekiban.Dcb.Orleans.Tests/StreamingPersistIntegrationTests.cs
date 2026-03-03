@@ -12,6 +12,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using System.Text;
 using Xunit;
 
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -54,7 +55,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         var events = Enumerable.Range(0, 5)
             .Select(i => CreateEvent(new StreamingTestEvt($"evt{i}"), DateTime.UtcNow.AddSeconds(-30 + i)))
             .ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         // When: persisting with streaming IO enabled
@@ -75,7 +76,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         var events = Enumerable.Range(0, 7)
             .Select(i => CreateEvent(new StreamingTestEvt($"s{i}"), DateTime.UtcNow.AddSeconds(-30 + i)))
             .ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         var persistResult = await grain.PersistStateAsync();
@@ -112,7 +113,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         var events = Enumerable.Range(0, 3)
             .Select(i => CreateEvent(new StreamingTestEvt($"int{i}"), DateTime.UtcNow.AddSeconds(-30 + i)))
             .ToList();
-        await grain.SeedEventsAsync(events);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
         await grain.RefreshAsync();
 
         // Get pre-persist snapshot
@@ -165,6 +166,17 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
             new List<string>());
     }
 
+    private static IReadOnlyList<SerializableEvent> ToSerializableEvents(IEnumerable<Event> events) =>
+        events
+            .Select(e => new SerializableEvent(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(e.Payload, e.Payload.GetType())),
+                e.SortableUniqueIdValue,
+                e.Id,
+                e.EventMetadata,
+                e.Tags.ToList(),
+                e.EventType))
+            .ToList();
+
     private record StreamingTestEvt(string Name) : IEventPayload;
 
     /// <summary>
@@ -180,6 +192,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                     services.AddSingleton<DcbDomainTypes>(provider =>
                     {
                         var eventTypes = new SimpleEventTypes();
+                        eventTypes.RegisterEventType<StreamingTestEvt>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();

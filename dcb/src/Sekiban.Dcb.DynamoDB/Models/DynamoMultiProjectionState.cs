@@ -172,7 +172,10 @@ public class DynamoMultiProjectionState
     /// <summary>
     ///     Creates from a MultiProjectionStateRecord.
     /// </summary>
-    public static DynamoMultiProjectionState FromRecord(MultiProjectionStateRecord record, string serviceId)
+    public static DynamoMultiProjectionState FromRecord(
+        MultiProjectionStateRecord record,
+        string serviceId,
+        byte[]? stateData = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         return new DynamoMultiProjectionState
@@ -185,7 +188,7 @@ public class DynamoMultiProjectionState
             PayloadType = record.PayloadType,
             LastSortableUniqueId = record.LastSortableUniqueId,
             EventsProcessed = record.EventsProcessed,
-            StateData = record.StateData != null ? Convert.ToBase64String(record.StateData) : null,
+            StateData = stateData != null ? Convert.ToBase64String(stateData) : null,
             IsOffloaded = record.IsOffloaded,
             OffloadKey = record.OffloadKey,
             OffloadProvider = record.OffloadProvider,
@@ -202,9 +205,8 @@ public class DynamoMultiProjectionState
     /// <summary>
     ///     Converts to a MultiProjectionStateRecord.
     /// </summary>
-    public MultiProjectionStateRecord ToRecord(byte[]? overrideStateData = null)
+    public MultiProjectionStateRecord ToRecord()
     {
-        var stateData = overrideStateData ?? (StateData != null ? Convert.FromBase64String(StateData) : null);
         var createdAt = DateTime.TryParse(CreatedAt, out var created) ? created : DateTime.UtcNow;
         var updatedAt = DateTime.TryParse(UpdatedAt, out var updated) ? updated : DateTime.UtcNow;
 
@@ -214,7 +216,6 @@ public class DynamoMultiProjectionState
             PayloadType: PayloadType,
             LastSortableUniqueId: LastSortableUniqueId,
             EventsProcessed: EventsProcessed,
-            StateData: stateData,
             IsOffloaded: IsOffloaded,
             OffloadKey: OffloadKey,
             OffloadProvider: OffloadProvider,

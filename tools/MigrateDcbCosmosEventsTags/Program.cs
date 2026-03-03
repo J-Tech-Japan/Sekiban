@@ -33,6 +33,7 @@ Directory.CreateDirectory(settings.OutputDir);
 var timestampSuffix = DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
 var eventsBackupPath = Path.Combine(settings.OutputDir, $"events-{timestampSuffix}.jsonl");
 var tagsBackupPath = Path.Combine(settings.OutputDir, $"tags-{timestampSuffix}.jsonl");
+var statesBackupPath = Path.Combine(settings.OutputDir, $"states-{timestampSuffix}.jsonl");
 
 var clientOptions = new CosmosClientOptions
 {
@@ -47,7 +48,8 @@ LogSettings(settings);
 Console.WriteLine("\nStep 1/4: Export legacy data to JSONL...");
 var eventsExported = await ExportContainerAsync(database, settings.EventsContainerName, eventsBackupPath);
 var tagsExported = await ExportContainerAsync(database, settings.TagsContainerName, tagsBackupPath);
-Console.WriteLine($"Export completed. events={eventsExported}, tags={tagsExported}");
+var statesExported = await ExportContainerAsync(database, settings.StatesContainerName, statesBackupPath);
+Console.WriteLine($"Export completed. events={eventsExported}, tags={tagsExported}, states={statesExported}");
 
 if (!settings.Confirm)
 {
@@ -58,14 +60,17 @@ if (!settings.Confirm)
 Console.WriteLine("\nStep 2/4: Delete containers...");
 await DeleteContainerIfExistsAsync(database, settings.EventsContainerName);
 await DeleteContainerIfExistsAsync(database, settings.TagsContainerName);
+await DeleteContainerIfExistsAsync(database, settings.StatesContainerName);
 
 Console.WriteLine("\nStep 3/4: Recreate containers with /pk partition key...");
 await CreateContainerAsync(database, settings.EventsContainerName, settings.Throughput, settings.AutoscaleMaxThroughput);
 await CreateContainerAsync(database, settings.TagsContainerName, settings.Throughput, settings.AutoscaleMaxThroughput);
+await CreateContainerAsync(database, settings.StatesContainerName, settings.Throughput, settings.AutoscaleMaxThroughput);
 
 Console.WriteLine("\nStep 4/4: Convert and upload data...");
 var eventsContainer = database.GetContainer(settings.EventsContainerName);
 var tagsContainer = database.GetContainer(settings.TagsContainerName);
+var statesContainer = database.GetContainer(settings.StatesContainerName);
 
 var eventsUploaded = await ImportJsonlAsync(
     eventsContainer,
@@ -79,7 +84,13 @@ var tagsUploaded = await ImportJsonlAsync(
     line => ConvertTag(line, settings.ServiceId),
     settings.MaxConcurrency);
 
-Console.WriteLine($"Import completed. events={eventsUploaded}, tags={tagsUploaded}");
+var statesUploaded = await ImportJsonlAsync(
+    statesContainer,
+    statesBackupPath,
+    line => ConvertState(line, settings.ServiceId),
+    settings.MaxConcurrency);
+
+Console.WriteLine($"Import completed. events={eventsUploaded}, tags={tagsUploaded}, states={statesUploaded}");
 
 static async Task<int> ExportContainerAsync(Database database, string containerName, string outputPath)
 {
@@ -320,6 +331,86 @@ static JObject? ConvertTag(string jsonLine, string defaultServiceId)
     return dest;
 }
 
+static JObject? ConvertState(string jsonLine, string defaultServiceId)
+{
+    JObject source;
+    try
+    {
+        source = JObject.Parse(jsonLine);
+    }
+    catch (JsonException)
+    {
+        return null;
+    }
+
+    var projectorName = GetString(source, "projectorName", "ProjectorName");
+    if (string.IsNullOrWhiteSpace(projectorName))
+    {
+        return null;
+    }
+
+    var projectorVersion = GetString(source, "projectorVersion", "ProjectorVersion")
+        ?? GetString(source, "id", "Id");
+    if (string.IsNullOrWhiteSpace(projectorVersion))
+    {
+        return null;
+    }
+
+    var serviceId = GetString(source, MigrationFields.ServiceId, "ServiceId") ?? defaultServiceId;
+    var partitionKey = GetString(source, "partitionKey", "PartitionKey") ?? $"MultiProjectionState_{projectorName}";
+    var pk = GetString(source, "pk", "Pk") ?? $"{serviceId}|{partitionKey}";
+
+    var dest = new JObject
+    {
+        ["pk"] = pk,
+        [MigrationFields.ServiceId] = serviceId,
+        ["id"] = projectorVersion,
+        ["partitionKey"] = partitionKey,
+        ["projectorName"] = projectorName,
+        ["projectorVersion"] = projectorVersion,
+        ["payloadType"] = GetString(source, "payloadType", "PayloadType") ?? string.Empty,
+        ["lastSortableUniqueId"] = GetString(source, "lastSortableUniqueId", "LastSortableUniqueId") ?? string.Empty,
+        ["eventsProcessed"] = GetLong(source, "eventsProcessed", "EventsProcessed") ?? 0,
+        ["isOffloaded"] = GetBool(source, "isOffloaded", "IsOffloaded") ?? false,
+        ["originalSizeBytes"] = GetLong(source, "originalSizeBytes", "OriginalSizeBytes") ?? 0,
+        ["compressedSizeBytes"] = GetLong(source, "compressedSizeBytes", "CompressedSizeBytes") ?? 0,
+        ["safeWindowThreshold"] = GetString(source, "safeWindowThreshold", "SafeWindowThreshold") ?? string.Empty,
+        ["createdAt"] = GetToken(source, "createdAt", "CreatedAt")
+            ?? ConvertUnixTimestamp(source["_ts"])
+            ?? JValue.CreateString(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
+        ["updatedAt"] = GetToken(source, "updatedAt", "UpdatedAt")
+            ?? ConvertUnixTimestamp(source["_ts"])
+            ?? JValue.CreateString(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
+        ["buildSource"] = GetString(source, "buildSource", "BuildSource") ?? string.Empty
+    };
+
+    var stateData = GetToken(source, "stateData", "StateData");
+    if (stateData is not null)
+    {
+        dest["stateData"] = stateData;
+    }
+
+    var offloadKey = GetString(source, "offloadKey", "OffloadKey");
+    if (!string.IsNullOrWhiteSpace(offloadKey))
+    {
+        dest["offloadKey"] = offloadKey;
+    }
+
+    var offloadProvider = GetString(source, "offloadProvider", "OffloadProvider");
+    if (!string.IsNullOrWhiteSpace(offloadProvider))
+    {
+        dest["offloadProvider"] = offloadProvider;
+    }
+
+    var buildHost = GetString(source, "buildHost", "BuildHost");
+    if (!string.IsNullOrWhiteSpace(buildHost))
+    {
+        dest["buildHost"] = buildHost;
+    }
+
+    return dest;
+}
+
 static JArray NormalizeTags(JToken? token)
 {
     if (token == null || token.Type == JTokenType.Null)
@@ -397,6 +488,10 @@ static MigrationSettings ResolveSettings(IConfiguration config, CliOptions optio
         ?? config["CosmosDb:TagsContainerName"]
         ?? "tags";
 
+    var statesContainerName = options.StatesContainerName
+        ?? config["CosmosDb:StatesContainerName"]
+        ?? "multiProjectionStates";
+
     var serviceId = options.ServiceId
         ?? config["CosmosDb:ServiceId"]
         ?? "default";
@@ -422,6 +517,7 @@ static MigrationSettings ResolveSettings(IConfiguration config, CliOptions optio
         databaseName,
         eventsContainerName,
         tagsContainerName,
+        statesContainerName,
         serviceId,
         outputDir,
         maxConcurrency,
@@ -435,6 +531,7 @@ static void LogSettings(MigrationSettings settings)
     Console.WriteLine($"Cosmos DB: {settings.DatabaseName}");
     Console.WriteLine($"Events Container: {settings.EventsContainerName}");
     Console.WriteLine($"Tags Container: {settings.TagsContainerName}");
+    Console.WriteLine($"States Container: {settings.StatesContainerName}");
     Console.WriteLine($"ServiceId (default for legacy rows): {settings.ServiceId}");
     Console.WriteLine($"Backup directory: {Path.GetFullPath(settings.OutputDir)}");
     Console.WriteLine($"Max concurrency: {settings.MaxConcurrency}");
@@ -476,6 +573,32 @@ static JToken? GetToken(JObject source, params string[] names)
     return null;
 }
 
+static long? GetLong(JObject source, params string[] names)
+{
+    var token = GetToken(source, names);
+    if (token == null)
+    {
+        return null;
+    }
+
+    return long.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+        ? value
+        : null;
+}
+
+static bool? GetBool(JObject source, params string[] names)
+{
+    var token = GetToken(source, names);
+    if (token == null)
+    {
+        return null;
+    }
+
+    return bool.TryParse(token.ToString(), out var value)
+        ? value
+        : null;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("Usage:");
@@ -485,6 +608,7 @@ static void PrintUsage()
     Console.WriteLine("  --database <value>            Cosmos database name (default: SekibanDcb)");
     Console.WriteLine("  --events-container <value>    Events container name (default: events)");
     Console.WriteLine("  --tags-container <value>      Tags container name (default: tags)");
+    Console.WriteLine("  --states-container <value>    Multi projection states container name (default: multiProjectionStates)");
     Console.WriteLine("  --service-id <value>          ServiceId to use when missing (default: default)");
     Console.WriteLine("  --output-dir <value>          Backup output directory (default: ./cosmos-backup)");
     Console.WriteLine("  --max-concurrency <value>     Max concurrent upserts (default: 20)");
@@ -511,6 +635,7 @@ namespace Sekiban.Dcb.Tools.CosmosMigration
         string DatabaseName,
         string EventsContainerName,
         string TagsContainerName,
+        string StatesContainerName,
         string ServiceId,
         string OutputDir,
         int MaxConcurrency,
@@ -531,6 +656,7 @@ namespace Sekiban.Dcb.Tools.CosmosMigration
         public string? DatabaseName { get; init; }
         public string? EventsContainerName { get; init; }
         public string? TagsContainerName { get; init; }
+        public string? StatesContainerName { get; init; }
         public string? ServiceId { get; init; }
         public string? OutputDir { get; init; }
         public int? MaxConcurrency { get; init; }
@@ -581,6 +707,7 @@ namespace Sekiban.Dcb.Tools.CosmosMigration
                 DatabaseName = Get(values, "database"),
                 EventsContainerName = Get(values, "events-container"),
                 TagsContainerName = Get(values, "tags-container"),
+                StatesContainerName = Get(values, "states-container"),
                 ServiceId = Get(values, "service-id"),
                 OutputDir = Get(values, "output-dir"),
                 MaxConcurrency = ParseInt(values, "max-concurrency"),

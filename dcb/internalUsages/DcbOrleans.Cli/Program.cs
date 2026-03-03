@@ -989,6 +989,20 @@ static string FormatBytes(long bytes)
     return $"{len:0.##} {sizes[order]}";
 }
 
+static async Task<byte[]?> TryReadStateDataAsync(IMultiProjectionStateStore stateStore, MultiProjectionStateRecord state)
+{
+    var streamResult = await stateStore.OpenStateDataReadStreamAsync(state).ConfigureAwait(false);
+    if (!streamResult.IsSuccess)
+    {
+        return null;
+    }
+
+    await using var stateStream = streamResult.GetValue();
+    using var ms = new MemoryStream();
+    await stateStream.CopyToAsync(ms).ConfigureAwait(false);
+    return ms.ToArray();
+}
+
 static async Task SaveStateJsonAsync(string connectionString, string databaseType, string cosmosDatabaseName, string? projectorName, string outputDir)
 {
     Console.WriteLine("=== Save Projection State JSON ===\n");
@@ -1063,34 +1077,35 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
         Console.WriteLine($"  Metadata: {metadataFileName}");
 
         // Save decompressed state data
-        if (state.StateData != null)
+        var stateData = await TryReadStateDataAsync(stateStore, state);
+        if (stateData != null)
         {
             var stateFileName = $"{state.ProjectorName}_{timestamp}_state.json";
             var statePath = Path.Combine(outputDir, stateFileName);
 
             try
             {
-                // v10 format: StateData is plain JSON (UTF-8), not Gzip compressed at outer level
+                // v10 format: state bytes are plain JSON (UTF-8), not Gzip compressed at outer level
                 // The inner payload may be compressed via custom serializer
                 string jsonContent;
 
                 // Auto-detect: Gzip (v9) or plain JSON (v10)
-                if (state.StateData.Length >= 2 && state.StateData[0] == 0x1f && state.StateData[1] == 0x8b)
+                if (stateData.Length >= 2 && stateData[0] == 0x1f && stateData[1] == 0x8b)
                 {
                     // v9 format: Gzip compressed
-                    jsonContent = GzipCompression.DecompressToString(state.StateData);
+                    jsonContent = GzipCompression.DecompressToString(stateData);
                 }
                 else
                 {
                     // v10 format: Plain UTF-8 JSON
-                    jsonContent = System.Text.Encoding.UTF8.GetString(state.StateData);
+                    jsonContent = System.Text.Encoding.UTF8.GetString(stateData);
                 }
 
                 // Pretty print the JSON
                 var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);
                 var prettyJson = System.Text.Json.JsonSerializer.Serialize(jsonDoc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(statePath, prettyJson);
-                Console.WriteLine($"  State: {stateFileName} ({FormatBytes(state.StateData.LongLength)})");
+                Console.WriteLine($"  State: {stateFileName} ({FormatBytes(stateData.LongLength)})");
             }
             catch (Exception ex)
             {
@@ -1098,7 +1113,7 @@ static async Task SaveStateJsonAsync(string connectionString, string databaseTyp
                 // Save raw bytes as fallback
                 var rawFileName = $"{state.ProjectorName}_{timestamp}_state.bin";
                 var rawPath = Path.Combine(outputDir, rawFileName);
-                await File.WriteAllBytesAsync(rawPath, state.StateData);
+                await File.WriteAllBytesAsync(rawPath, stateData);
                 Console.WriteLine($"  Raw state saved: {rawFileName}");
             }
         }
@@ -1354,7 +1369,8 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
         Console.WriteLine($"  Build Host: {state.BuildHost}");
         Console.WriteLine($"  Is Offloaded: {state.IsOffloaded}");
 
-        if (state.StateData != null)
+        var stateData = await TryReadStateDataAsync(stateStore, state);
+        if (stateData != null)
         {
             try
             {
@@ -1362,13 +1378,13 @@ static async Task ShowProjectionAsync(string connectionString, string databaseTy
                 string jsonContent;
 
                 // Auto-detect format
-                if (state.StateData.Length >= 2 && state.StateData[0] == 0x1f && state.StateData[1] == 0x8b)
+                if (stateData.Length >= 2 && stateData[0] == 0x1f && stateData[1] == 0x8b)
                 {
-                    jsonContent = GzipCompression.DecompressToString(state.StateData);
+                    jsonContent = GzipCompression.DecompressToString(stateData);
                 }
                 else
                 {
-                    jsonContent = System.Text.Encoding.UTF8.GetString(state.StateData);
+                    jsonContent = System.Text.Encoding.UTF8.GetString(stateData);
                 }
 
                 var jsonDoc = System.Text.Json.JsonDocument.Parse(jsonContent);

@@ -3,6 +3,8 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using System.Text;
+using System.Text.Json;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -218,5 +220,78 @@ public class InMemoryEventStore : IEventStore
 
             return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
         }
+    }
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        ReadAllSerializableEventsAsync(since, null);
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount)
+    {
+        lock (_lock)
+        {
+            var events = _events.AsEnumerable();
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                    e.SortableUniqueIdValue,
+                    since.Value,
+                    StringComparison.Ordinal) > 0);
+            }
+
+            events = events.OrderBy(e => e.SortableUniqueIdValue);
+            if (maxCount.HasValue)
+            {
+                events = events.Take(maxCount.Value);
+            }
+
+            var serializable = events.Select(ToSerializableEvent).ToList();
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializable));
+        }
+    }
+
+    public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since = null)
+    {
+        lock (_lock)
+        {
+            var tagString = tag.GetTag();
+            var events = _events.Where(e => e.Tags.Contains(tagString));
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                    e.SortableUniqueIdValue,
+                    since.Value,
+                    StringComparison.Ordinal) > 0);
+            }
+
+            var serializable = events
+                .OrderBy(e => e.SortableUniqueIdValue)
+                .Select(ToSerializableEvent)
+                .ToList();
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializable));
+        }
+    }
+
+    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+        IEnumerable<SerializableEvent> events)
+    {
+        return Task.FromResult(
+            ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                new NotSupportedException("InMemoryEventStore test double does not support WriteSerializableEventsAsync.")));
+    }
+
+    private static SerializableEvent ToSerializableEvent(Event ev)
+    {
+        var payloadJson = JsonSerializer.Serialize(ev.Payload, ev.Payload.GetType());
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(payloadJson),
+            ev.SortableUniqueIdValue,
+            ev.Id,
+            ev.EventMetadata,
+            ev.Tags.ToList(),
+            ev.EventType);
     }
 }

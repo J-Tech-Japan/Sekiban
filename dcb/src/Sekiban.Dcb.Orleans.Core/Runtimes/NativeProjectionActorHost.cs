@@ -51,13 +51,6 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return _actor.AddSerializableEventsAsync(events, finishedCatchUp);
     }
 
-    public Task AddEventsFromCatchUpAsync(
-        IReadOnlyList<Event> events,
-        bool finishedCatchUp = true)
-    {
-        return _actor.AddEventsAsync(events, finishedCatchUp, EventSource.CatchUp);
-    }
-
     public async Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true)
     {
         var unsafeResult = await _actor.GetStateAsync(canGetUnsafeState: true);
@@ -100,11 +93,6 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return _actor.GetStateAsync(canGetUnsafeState);
     }
 
-    public Task<ResultBox<byte[]>> GetSnapshotBytesAsync(bool canGetUnsafeState = true)
-    {
-        return _snapshotHandler.GetSnapshotBytesAsync(canGetUnsafeState);
-    }
-
     public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,
@@ -113,9 +101,9 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return _snapshotHandler.WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
     }
 
-    public Task<ResultBox<bool>> RestoreSnapshotAsync(byte[] snapshotData)
+    public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
     {
-        return _snapshotHandler.RestoreSnapshotAsync(snapshotData);
+        return _snapshotHandler.RestoreSnapshotFromStreamAsync(source, cancellationToken);
     }
 
     public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
@@ -174,8 +162,12 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
     }
 
-    public byte[] RewriteSnapshotVersion(byte[] snapshotData, string newVersion)
+    public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+        Stream source,
+        Stream target,
+        string newVersion,
+        CancellationToken cancellationToken)
     {
-        return _snapshotHandler.RewriteSnapshotVersion(snapshotData, newVersion);
+        return _snapshotHandler.RewriteSnapshotVersionAsync(source, target, newVersion, cancellationToken);
     }
 }
