@@ -66,27 +66,6 @@ public class CosmosDbEventStoreOptions
     /// </summary>
     public string MultiProjectionStatesContainerName { get; set; } = "multiProjectionStates";
 
-    /// <summary>
-    ///     Legacy container name for events.
-    /// </summary>
-    public string LegacyEventsContainerName { get; set; } = "events";
-
-    /// <summary>
-    ///     Legacy container name for tags.
-    /// </summary>
-    public string LegacyTagsContainerName { get; set; } = "tags";
-
-    /// <summary>
-    ///     Legacy container name for multi projection states.
-    /// </summary>
-    public string LegacyMultiProjectionStatesContainerName { get; set; } = "multiProjectionStates";
-
-    /// <summary>
-    ///     Whether to use legacy partition key paths (/id, /tag, /partitionKey) for default tenant.
-    ///     Default: false (uses /pk).
-    /// </summary>
-    public bool UseLegacyPartitionKeyPaths { get; set; }
-
     // ========== Read Optimization Options ==========
 
     /// <summary>

@@ -1,9 +1,7 @@
-using Sekiban.Dcb.ServiceId;
-
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
-///     Default resolver that routes "default" tenant to legacy containers when enabled.
+///     Default resolver for Cosmos container settings.
 /// </summary>
 public sealed class DefaultCosmosContainerResolver : ICosmosContainerResolver
 {
@@ -19,44 +17,22 @@ public sealed class DefaultCosmosContainerResolver : ICosmosContainerResolver
 
     /// <inheritdoc />
     public CosmosContainerSettings ResolveEventsContainer(string serviceId) =>
-        ResolveContainer(
-            serviceId,
-            _options.EventsContainerName,
-            _options.LegacyEventsContainerName,
-            legacyPartitionKeyPath: "/id");
+        ResolveContainer(serviceId, _options.EventsContainerName);
 
     /// <inheritdoc />
     public CosmosContainerSettings ResolveTagsContainer(string serviceId) =>
-        ResolveContainer(
-            serviceId,
-            _options.TagsContainerName,
-            _options.LegacyTagsContainerName,
-            legacyPartitionKeyPath: "/tag");
+        ResolveContainer(serviceId, _options.TagsContainerName);
 
     /// <inheritdoc />
     public CosmosContainerSettings ResolveStatesContainer(string serviceId) =>
-        ResolveContainer(
-            serviceId,
-            _options.MultiProjectionStatesContainerName,
-            _options.LegacyMultiProjectionStatesContainerName,
-            legacyPartitionKeyPath: "/partitionKey");
+        ResolveContainer(serviceId, _options.MultiProjectionStatesContainerName);
 
-    private CosmosContainerSettings ResolveContainer(
+    private static CosmosContainerSettings ResolveContainer(
         string serviceId,
-        string v2Name,
-        string legacyName,
-        string legacyPartitionKeyPath)
+        string containerName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
 
-        var isDefault = string.Equals(serviceId, DefaultServiceIdProvider.DefaultServiceId, StringComparison.Ordinal);
-        var useLegacy = _options.UseLegacyPartitionKeyPaths && isDefault;
-
-        if (useLegacy)
-        {
-            return new CosmosContainerSettings(legacyName, legacyPartitionKeyPath, isLegacy: true);
-        }
-
-        return new CosmosContainerSettings(v2Name, "/pk", isLegacy: false);
+        return new CosmosContainerSettings(containerName, "/pk");
     }
 }

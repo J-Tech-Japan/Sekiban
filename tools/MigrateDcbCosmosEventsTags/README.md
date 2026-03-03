@@ -1,6 +1,6 @@
-# Migrate DCB CosmosDB Events/Tags (Legacy -> /pk)
+# Migrate DCB CosmosDB (Legacy -> /pk)
 
-This tool exports legacy CosmosDB `events` and `tags` data to JSONL, deletes and recreates the containers with `/pk` partition key, then converts and uploads the data to the new format.
+This tool exports legacy CosmosDB `events`, `tags`, and `multiProjectionStates` data to JSONL, deletes and recreates the containers with `/pk` partition key, then converts and uploads the data to the latest format.
 
 ## Requirements
 - Stop Orleans or any writers before running.
@@ -13,6 +13,7 @@ dotnet run --project tools/MigrateDcbCosmosEventsTags -- \
   --database "SekibanDcb" \
   --events-container "events" \
   --tags-container "tags" \
+  --states-container "multiProjectionStates" \
   --service-id "default" \
   --output-dir "./cosmos-backup" \
   --confirm

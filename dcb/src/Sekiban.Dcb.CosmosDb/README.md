@@ -18,13 +18,18 @@ Azure Cosmos DB storage implementation for Sekiban DCB Event Sourcing Framework.
 
 #### Events Container
 - Name: `events`
-- Partition Key: `/id`
+- Partition Key: `/pk`
 - Stores all events with their metadata
 
 #### Tags Container
 - Name: `tags`
-- Partition Key: `/tag`
+- Partition Key: `/pk`
 - Stores tag-to-event mappings for efficient tag-based queries
+
+#### Multi Projection States Container
+- Name: `multiProjectionStates`
+- Partition Key: `/pk`
+- Stores multi-projection snapshots and metadata
 
 ## Configuration
 
@@ -101,8 +106,11 @@ The system will automatically:
 
 ## Partitioning Strategy
 
-- **Events Container**: Partitioned by event ID for even distribution and optimal write performance
-- **Tags Container**: Partitioned by tag for efficient tag-based queries
+- **Events Container**: `pk = {serviceId}|{eventId}`
+- **Tags Container**: `pk = {serviceId}|{tag}`
+- **States Container**: `pk = {serviceId}|MultiProjectionState_{projectorName}`
+
+Runtime compatibility for legacy Cosmos schemas has been removed. Migrate existing data with `tools/MigrateDcbCosmosEventsTags` before deploying this version.
 
 ## Query Patterns
 
