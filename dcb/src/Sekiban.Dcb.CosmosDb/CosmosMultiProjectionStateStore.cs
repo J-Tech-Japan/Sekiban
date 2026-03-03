@@ -229,7 +229,7 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
                     ex));
         }
 
-        var validationError = ValidateServiceId(doc, serviceId, settings.EnableLegacyDocumentCompatibility);
+        var validationError = ValidateServiceId(doc, serviceId, settings.IsLegacy);
         if (validationError is not null)
         {
             return ResultBox.Error<Stream>(validationError);
