@@ -95,7 +95,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private const int DefaultCatchUpBatchSize = 500;
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
+    private TimeSpan _catchUpDeactivationDelay = TimeSpan.FromMinutes(10);
+    private int _catchUpMaxConsecutiveFailures = 120;
+    private TimeSpan _catchUpMaxFailureDuration = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1, 1);
+    private bool _catchUpDeactivationDelayActive;
+    private int _catchUpConsecutiveFailureCount;
+    private DateTime? _catchUpFailureWindowStartUtc;
 
     // Delegate these to configuration
     private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
@@ -1272,6 +1278,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             StartTime = DateTime.UtcNow,
             LastAttempt = DateTime.MinValue
         };
+        ResetCatchUpFailureTracking();
 
         MoveBufferedStreamEventsToPending(currentPosition);
 
@@ -1336,6 +1343,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
                 MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
                 CatchUpBatchSize = baseOptions.CatchUpBatchSize,
+                CatchUpDeactivationDelayMinutes = baseOptions.CatchUpDeactivationDelayMinutes,
+                CatchUpMaxConsecutiveFailures = baseOptions.CatchUpMaxConsecutiveFailures,
+                CatchUpMaxFailureDurationSeconds = baseOptions.CatchUpMaxFailureDurationSeconds,
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
@@ -1348,6 +1358,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
             _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
+            _catchUpDeactivationDelay = TimeSpan.FromMinutes(Math.Max(1, mergedOptions.CatchUpDeactivationDelayMinutes));
+            _catchUpMaxConsecutiveFailures = Math.Max(1, mergedOptions.CatchUpMaxConsecutiveFailures);
+            _catchUpMaxFailureDuration = TimeSpan.FromSeconds(Math.Max(10, mergedOptions.CatchUpMaxFailureDurationSeconds));
             _processedEventIdCacheSize = Math.Max(1000, mergedOptions.ProcessedEventIdCacheSize);
             _forceGcAfterLargeSnapshotPersist = mergedOptions.ForceGcAfterLargeSnapshotPersist;
             _largeSnapshotGcThresholdBytes = Math.Max(1_000_000, mergedOptions.LargeSnapshotGcThresholdBytes);
@@ -1589,6 +1602,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
         }
+        ResetCatchUpFailureTracking();
+        EndCatchUpDeactivationDelay();
 
         // Persist state before deactivation
         try
@@ -1732,8 +1747,75 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public Task RequestDeactivationAsync()
     {
+        EndCatchUpDeactivationDelay();
         DeactivateOnIdle();
         return Task.CompletedTask;
+    }
+
+    private void BeginCatchUpDeactivationDelay()
+    {
+        DelayDeactivation(_catchUpDeactivationDelay);
+        _catchUpDeactivationDelayActive = true;
+    }
+
+    private void RenewCatchUpDeactivationDelay()
+    {
+        if (!_catchUpDeactivationDelayActive)
+        {
+            return;
+        }
+        DelayDeactivation(_catchUpDeactivationDelay);
+    }
+
+    private void EndCatchUpDeactivationDelay()
+    {
+        if (!_catchUpDeactivationDelayActive)
+        {
+            return;
+        }
+        DelayDeactivation(TimeSpan.Zero);
+        _catchUpDeactivationDelayActive = false;
+    }
+
+    private void ResetCatchUpFailureTracking()
+    {
+        _catchUpConsecutiveFailureCount = 0;
+        _catchUpFailureWindowStartUtc = null;
+    }
+
+    private void HandleCatchUpBatchFailure(Exception ex, string projectorName)
+    {
+        _catchUpConsecutiveFailureCount++;
+        _catchUpFailureWindowStartUtc ??= DateTime.UtcNow;
+
+        var failureElapsed = DateTime.UtcNow - _catchUpFailureWindowStartUtc.Value;
+        var shouldAbort =
+            _catchUpConsecutiveFailureCount >= _catchUpMaxConsecutiveFailures ||
+            failureElapsed >= _catchUpMaxFailureDuration;
+
+        _lastError = $"Catch-up batch failed: {ex.Message}";
+        _logger.LogError(
+            ex,
+            "[{ProjectorName}] Catch-up batch error (consecutive failures: {FailureCount}, elapsed: {FailureElapsedSeconds:F1}s)",
+            projectorName,
+            _catchUpConsecutiveFailureCount,
+            failureElapsed.TotalSeconds);
+
+        if (!shouldAbort)
+        {
+            return;
+        }
+
+        _catchUpProgress.IsActive = false;
+        _catchUpTimer?.Dispose();
+        _catchUpTimer = null;
+        EndCatchUpDeactivationDelay();
+
+        _logger.LogWarning(
+            "[{ProjectorName}] Catch-up stopped after repeated failures (consecutive failures: {FailureCount}, elapsed: {FailureElapsedSeconds:F1}s)",
+            projectorName,
+            _catchUpConsecutiveFailureCount,
+            failureElapsed.TotalSeconds);
     }
 
     public async Task<bool> OverwritePersistedStateVersionAsync(string newVersion)
@@ -1871,6 +1953,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            BeginCatchUpDeactivationDelay();
+
             // Get current position (fast operation - reads from local state)
             SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
 
@@ -1890,6 +1974,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 StartTime = DateTime.UtcNow,
                 LastAttempt = DateTime.MinValue
             };
+            ResetCatchUpFailureTracking();
 
             MoveBufferedStreamEventsToPending(currentPosition);
 
@@ -1905,6 +1990,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogError(ex, "[{ProjectorName}] Error during catch-up initiation", projectorName);
             _catchUpProgress.IsActive = false;
+            EndCatchUpDeactivationDelay();
             throw;
         }
     }
@@ -1938,8 +2024,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
+            EndCatchUpDeactivationDelay();
             return;
         }
+
+        RenewCatchUpDeactivationDelay();
 
         var projectorName = GetProjectorName();
         var lockAcquired = await CatchUpBatchSemaphore.WaitAsync(TimeSpan.Zero);
@@ -1953,6 +2042,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             // Process one batch
             var processed = await ProcessSingleCatchUpBatch();
+            ResetCatchUpFailureTracking();
 
             if (processed == 0)
             {
@@ -1972,9 +2062,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            _lastError = $"Catch-up batch failed: {ex.Message}";
-            _logger.LogError(ex, "[{ProjectorName}] Catch-up batch error", projectorName);
-            // Continue with next timer execution
+            HandleCatchUpBatchFailure(ex, projectorName);
         }
         finally
         {
@@ -2226,31 +2314,40 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var projectorName = GetProjectorName();
 
-        // Stop timer
-        _catchUpTimer?.Dispose();
-        _catchUpTimer = null;
+        try
+        {
+            // Stop timer
+            _catchUpTimer?.Dispose();
+            _catchUpTimer = null;
 
-        // Process all buffered events first
-        await FlushEventBufferAsync();
+            // Process all buffered events first
+            await FlushEventBufferAsync();
 
-        // Force promotion of any events that are now safe
-        await TriggerSafePromotion();
+            // Force promotion of any events that are now safe
+            await TriggerSafePromotion();
 
-        // Final persistence
-        await PersistStateAsync();
+            // Final persistence
+            await PersistStateAsync();
 
-        // Process any pending stream events
-        await ProcessPendingStreamEvents();
+            // Process any pending stream events
+            await ProcessPendingStreamEvents();
 
-        _catchUpProgress.IsActive = false;
+            _catchUpProgress.IsActive = false;
 
-        var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
-        _logger.LogDebug(
-            "[{ProjectorName}] Catch-up completed: {BatchCount} batches, {EventsProcessed:N0} events, elapsed: {ElapsedSeconds:F1}s",
-            projectorName,
-            _catchUpProgress.BatchesProcessed,
-            _eventsProcessed,
-            elapsed.TotalSeconds);
+            var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
+            _logger.LogDebug(
+                "[{ProjectorName}] Catch-up completed: {BatchCount} batches, {EventsProcessed:N0} events, elapsed: {ElapsedSeconds:F1}s",
+                projectorName,
+                _catchUpProgress.BatchesProcessed,
+                _eventsProcessed,
+                elapsed.TotalSeconds);
+        }
+        finally
+        {
+            _catchUpProgress.IsActive = false;
+            ResetCatchUpFailureTracking();
+            EndCatchUpDeactivationDelay();
+        }
     }
 
     private async Task TriggerSafePromotion()
