@@ -31,6 +31,23 @@ public class GeneralMultiProjectionActorOptions
     /// </summary>
     public int CatchUpBatchSize { get; set; } = 500;
 
+    /// <summary>
+    ///     Delay deactivation window while catch-up is active.
+    ///     The delay is renewed for each catch-up batch.
+    /// </summary>
+    public int CatchUpDeactivationDelayMinutes { get; set; } = 10;
+
+    /// <summary>
+    ///     Maximum consecutive catch-up batch failures before stopping catch-up.
+    /// </summary>
+    public int CatchUpMaxConsecutiveFailures { get; set; } = 120;
+
+    /// <summary>
+    ///     Maximum failure window in seconds while catch-up keeps failing.
+    ///     Once exceeded, catch-up is stopped to avoid permanent active loops.
+    /// </summary>
+    public int CatchUpMaxFailureDurationSeconds { get; set; } = 300;
+
     // Dynamic SafeWindow controls (optional; default OFF)
     public bool EnableDynamicSafeWindow { get; set; } = false;
 
