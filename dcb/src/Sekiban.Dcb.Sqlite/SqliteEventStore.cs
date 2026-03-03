@@ -985,27 +985,40 @@ public class SqliteEventStore : IEventStore
             await connection.OpenAsync();
 
             await using var cmd = connection.CreateCommand();
-            var limitClause = maxCount.HasValue ? "LIMIT @maxCount" : string.Empty;
             if (since != null)
             {
-                cmd.CommandText = $"""
-                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
-                    FROM dcb_events
-                    WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
-                    ORDER BY SortableUniqueId
-                    {limitClause}
-                    """;
+                cmd.CommandText = maxCount.HasValue
+                    ? $"""
+                        SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                        FROM dcb_events
+                        WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
+                        ORDER BY SortableUniqueId
+                        LIMIT @maxCount
+                        """
+                    : $"""
+                        SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                        FROM dcb_events
+                        WHERE ServiceId = {ParamServiceId} AND SortableUniqueId > @since
+                        ORDER BY SortableUniqueId
+                        """;
                 cmd.Parameters.AddWithValue("@since", since.Value);
             }
             else
             {
-                cmd.CommandText = $"""
-                    SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
-                    FROM dcb_events
-                    WHERE ServiceId = {ParamServiceId}
-                    ORDER BY SortableUniqueId
-                    {limitClause}
-                    """;
+                cmd.CommandText = maxCount.HasValue
+                    ? $"""
+                        SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                        FROM dcb_events
+                        WHERE ServiceId = {ParamServiceId}
+                        ORDER BY SortableUniqueId
+                        LIMIT @maxCount
+                        """
+                    : $"""
+                        SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+                        FROM dcb_events
+                        WHERE ServiceId = {ParamServiceId}
+                        ORDER BY SortableUniqueId
+                        """;
             }
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
             if (maxCount.HasValue)
