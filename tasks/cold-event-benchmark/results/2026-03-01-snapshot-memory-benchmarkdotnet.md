@@ -2,7 +2,7 @@
 
 ## Context
 
-- Source intent doc: `/Users/tomohisa/dev/GitHub/MyTasksManager/concepts/products/sekiban/memory-optimization-and-benchmarking.md`
+- Source intent doc: `concepts/products/sekiban/memory-optimization-and-benchmarking.md`
 - Goal: quantify memory/GC/runtime for snapshot read/write paths, especially around:
   - 10MB snapshot payload (binary)
   - 100MB snapshot JSON read/write path ("10MB snapshot may correspond to ~100MB JSON" scenario)

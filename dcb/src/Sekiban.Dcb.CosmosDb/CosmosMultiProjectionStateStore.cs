@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Azure.Cosmos;
 using ResultBoxes;
 using Sekiban.Dcb.CosmosDb.Models;
@@ -206,32 +207,33 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
             }
         }
 
-        var metadataResult = await GetLatestForVersionAsync(
-            record.ProjectorName,
-            record.ProjectorVersion,
-            cancellationToken).ConfigureAwait(false);
-        if (!metadataResult.IsSuccess)
-        {
-            return ResultBox.Error<Stream>(metadataResult.GetException());
-        }
-
-        if (!metadataResult.GetValue().HasValue)
-        {
-            return ResultBox.Error<Stream>(
-                new KeyNotFoundException(
-                    $"Projection state not found: {record.ProjectorName}/{record.ProjectorVersion}"));
-        }
-
         var serviceId = CurrentServiceId;
         var settings = _containerResolver.ResolveStatesContainer(serviceId);
         var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
         var partitionKey = $"MultiProjectionState_{record.ProjectorName}";
         var pk = GetPartitionKey(partitionKey, settings, serviceId);
-        var response = await container.ReadItemAsync<CosmosMultiProjectionState>(
-            record.ProjectorVersion,
-            new PartitionKey(pk),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var doc = response.Resource;
+        CosmosMultiProjectionState doc;
+        try
+        {
+            var response = await container.ReadItemAsync<CosmosMultiProjectionState>(
+                record.ProjectorVersion,
+                new PartitionKey(pk),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            doc = response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return ResultBox.Error<Stream>(
+                new KeyNotFoundException(
+                    $"Projection state not found: {record.ProjectorName}/{record.ProjectorVersion}",
+                    ex));
+        }
+
+        var validationError = ValidateServiceId(doc, serviceId, settings.EnableLegacyDocumentCompatibility);
+        if (validationError is not null)
+        {
+            return ResultBox.Error<Stream>(validationError);
+        }
 
         if (!string.IsNullOrWhiteSpace(doc.StateData))
         {

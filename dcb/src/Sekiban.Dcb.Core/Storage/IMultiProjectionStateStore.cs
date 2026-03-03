@@ -50,20 +50,18 @@ public interface IMultiProjectionStateStore
     }
 
     /// <summary>
-    ///     Upserts a projection state from a stream. The default implementation buffers the
-    ///     stream to byte[] and delegates to <see cref="UpsertAsync" />.
-    ///     Cosmos/Postgres/DynamoDB implementations override this for true streaming offload.
+    ///     Upserts a projection state from a stream.
+    ///     The default implementation is not supported and must be overridden by concrete stores.
     /// </summary>
-    async Task<ResultBox<bool>> UpsertFromStreamAsync(
+    Task<ResultBox<bool>> UpsertFromStreamAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
-        await stream.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
-        return ResultBox.Error<bool>(
+        return Task.FromResult(ResultBox.Error<bool>(
             new NotSupportedException(
                 $"UpsertFromStreamAsync is not implemented by {GetType().Name}. "
-                + "Implement this method in the store to persist snapshot payload streams."));
+                + "Implement this method in the store to persist snapshot payload streams.")));
     }
 }

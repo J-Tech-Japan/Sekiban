@@ -35,10 +35,7 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var envelope = await JsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
-                source,
-                _jsonOptions,
-                cancellationToken).ConfigureAwait(false);
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
             if (envelope is null)
             {
                 return ResultBox.Error<bool>(
@@ -116,10 +113,7 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var envelope = await JsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
-                source,
-                _jsonOptions,
-                cancellationToken).ConfigureAwait(false);
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
             if (envelope is null)
             {
                 return ResultBox.Error<bool>(
@@ -201,5 +195,27 @@ internal class NativeProjectionSnapshotHandler
             : new { safeKeys };
         var json = JsonSerializer.Serialize(dto, _jsonOptions);
         return Encoding.UTF8.GetByteCount(json);
+    }
+
+    private async Task<SerializableMultiProjectionStateEnvelope?> DeserializeEnvelopeAsync(
+        Stream source,
+        CancellationToken cancellationToken)
+    {
+        var data = await ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
+
+        if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
+        {
+            var jsonBytes = GzipCompression.Decompress(data);
+            return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(jsonBytes, _jsonOptions);
+        }
+
+        return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(data, _jsonOptions);
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+        return ms.ToArray();
     }
 }

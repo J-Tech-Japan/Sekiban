@@ -68,19 +68,9 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
-        if (!record.IsOffloaded)
-        {
-            return Task.FromResult(ResultBox.Error<bool>(
-                new NotSupportedException(
-                    "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync.")));
-        }
-
-        var serviceId = CurrentServiceId;
-        var updated = record with { UpdatedAt = DateTime.UtcNow };
-        var key = (serviceId, record.ProjectorName, record.ProjectorVersion);
-        _states[key] = updated;
-        _stateData.TryRemove(key, out _);
-        return Task.FromResult(ResultBox.FromValue(true));
+        return Task.FromResult(ResultBox.Error<bool>(
+            new NotSupportedException(
+                "InMemoryMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
     }
 
     public async Task<ResultBox<bool>> UpsertFromStreamAsync(

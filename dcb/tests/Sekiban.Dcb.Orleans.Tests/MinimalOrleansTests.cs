@@ -25,7 +25,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class MinimalOrleansTests : IAsyncLifetime
 {
-    private static readonly CountingInMemoryEventStore SharedEventStore = new(new SimpleEventTypes());
+    private static readonly CountingInMemoryEventStore SharedEventStore = CreateSharedEventStore();
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
 
@@ -365,6 +365,13 @@ public class MinimalOrleansTests : IAsyncLifetime
     }
 
     private record TestProjectionEvent(int Value) : IEventPayload;
+
+    private static CountingInMemoryEventStore CreateSharedEventStore()
+    {
+        var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<TestProjectionEvent>();
+        return new CountingInMemoryEventStore(eventTypes);
+    }
 
     private class CountingInMemoryEventStore : IEventStore
     {

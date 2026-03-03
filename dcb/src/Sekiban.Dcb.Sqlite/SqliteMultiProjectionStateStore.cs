@@ -300,65 +300,15 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
-    public async Task<ResultBox<bool>> UpsertAsync(
+    public Task<ResultBox<bool>> UpsertAsync(
         MultiProjectionStateRecord record,
         int offloadThresholdBytes = 1_000_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
-        try
-        {
-            if (!record.IsOffloaded)
-            {
-                return ResultBox.Error<bool>(
-                    new NotSupportedException(
-                        "UpsertAsync without payload stream is not supported for non-offloaded snapshots. Use UpsertFromStreamAsync."));
-            }
-
-            var serviceId = CurrentServiceId;
-            await using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"""
-                INSERT OR REPLACE INTO dcb_multi_projection_states
-                (ServiceId, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
-                 StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
-                 SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost)
-                VALUES
-                ({ParamServiceId}, @projectorName, @projectorVersion, @payloadType, @lastSortableUniqueId, @eventsProcessed,
-                 @stateData, @isOffloaded, @offloadKey, @offloadProvider, @originalSizeBytes, @compressedSizeBytes,
-                 @safeWindowThreshold, @createdAt, @updatedAt, @buildSource, @buildHost)
-                """;
-
-            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
-            cmd.Parameters.AddWithValue("@projectorName", record.ProjectorName);
-            cmd.Parameters.AddWithValue("@projectorVersion", record.ProjectorVersion);
-            cmd.Parameters.AddWithValue("@payloadType", record.PayloadType);
-            cmd.Parameters.AddWithValue("@lastSortableUniqueId", record.LastSortableUniqueId);
-            cmd.Parameters.AddWithValue("@eventsProcessed", record.EventsProcessed);
-            cmd.Parameters.AddWithValue("@stateData", DBNull.Value);
-            cmd.Parameters.AddWithValue("@isOffloaded", record.IsOffloaded ? 1 : 0);
-            cmd.Parameters.AddWithValue("@offloadKey", (object?)record.OffloadKey ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@offloadProvider", (object?)record.OffloadProvider ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@originalSizeBytes", record.OriginalSizeBytes);
-            cmd.Parameters.AddWithValue("@compressedSizeBytes", record.CompressedSizeBytes);
-            cmd.Parameters.AddWithValue("@safeWindowThreshold", record.SafeWindowThreshold);
-            cmd.Parameters.AddWithValue("@createdAt", record.CreatedAt.ToString("O"));
-            cmd.Parameters.AddWithValue("@updatedAt", record.UpdatedAt.ToString("O"));
-            cmd.Parameters.AddWithValue("@buildSource", (object?)record.BuildSource ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@buildHost", (object?)record.BuildHost ?? DBNull.Value);
-
-            await cmd.ExecuteNonQueryAsync(cancellationToken);
-
-            return ResultBox.FromValue(true);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Error upserting projection state for {ProjectorName}:{ProjectorVersion}",
-                record.ProjectorName, record.ProjectorVersion);
-            return ResultBox.Error<bool>(ex);
-        }
+        return Task.FromResult(ResultBox.Error<bool>(
+            new NotSupportedException(
+                "SqliteMultiProjectionStateStore requires payload stream upsert. Use UpsertFromStreamAsync.")));
     }
 
     public async Task<ResultBox<bool>> UpsertFromStreamAsync(
@@ -369,6 +319,13 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
     {
         try
         {
+            if (request.IsOffloaded)
+            {
+                return ResultBox.Error<bool>(
+                    new NotSupportedException(
+                        "SqliteMultiProjectionStateStore does not support offloaded snapshot metadata. Provide inline stream payload."));
+            }
+
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
             var stateData = ms.ToArray();
@@ -396,9 +353,9 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
             cmd.Parameters.AddWithValue("@lastSortableUniqueId", request.LastSortableUniqueId);
             cmd.Parameters.AddWithValue("@eventsProcessed", request.EventsProcessed);
             cmd.Parameters.AddWithValue("@stateData", stateData);
-            cmd.Parameters.AddWithValue("@isOffloaded", request.IsOffloaded ? 1 : 0);
-            cmd.Parameters.AddWithValue("@offloadKey", (object?)request.OffloadKey ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@offloadProvider", (object?)request.OffloadProvider ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@isOffloaded", 0);
+            cmd.Parameters.AddWithValue("@offloadKey", DBNull.Value);
+            cmd.Parameters.AddWithValue("@offloadProvider", DBNull.Value);
             cmd.Parameters.AddWithValue("@originalSizeBytes", request.OriginalSizeBytes);
             cmd.Parameters.AddWithValue("@compressedSizeBytes", request.CompressedSizeBytes);
             cmd.Parameters.AddWithValue("@safeWindowThreshold", request.SafeWindowThreshold);
