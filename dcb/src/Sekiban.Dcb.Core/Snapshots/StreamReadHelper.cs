@@ -11,6 +11,7 @@ public static class StreamReadHelper
         CancellationToken cancellationToken = default)
     {
         if (stream is MemoryStream memoryStream &&
+            memoryStream.Position == 0 &&
             memoryStream.TryGetBuffer(out var segment) &&
             segment.Offset == 0 &&
             segment.Count == memoryStream.Length)
