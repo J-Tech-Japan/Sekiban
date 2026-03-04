@@ -1,6 +1,7 @@
 using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
+var benchHttpPort = GetEnvInt("BENCH_HTTP_PORT", 5411);
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
@@ -58,7 +59,7 @@ var bench = builder
     .WithEnvironment("ApiBaseUrl", apiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
     .WithEnvironment("BENCH_CONCURRENCY", "32")
-    .WithHttpEndpoint();
+    .WithHttpEndpoint(port: benchHttpPort);
 
 #else
 
@@ -85,7 +86,7 @@ var bench = builder
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
     .WithEnvironment("BENCH_CONCURRENCY", "32")
-    .WithHttpEndpoint();
+    .WithHttpEndpoint(port: benchHttpPort);
 
 #endif
 
@@ -120,3 +121,6 @@ builder
     .WithExplicitStart();
 
 builder.Build().Run();
+
+static int GetEnvInt(string name, int defaultValue)
+    => int.TryParse(Environment.GetEnvironmentVariable(name), out var parsed) ? parsed : defaultValue;

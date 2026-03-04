@@ -348,7 +348,7 @@ app.MapGet("/status", async () =>
     {
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/')) };
+            using var http = CreateApiClient(Environment.GetEnvironmentVariable("ApiBaseUrl")!.TrimEnd('/'));
 
             // Get event delivery statistics only (does not execute projection)
             var mode = state.Mode ?? "standard";
@@ -421,7 +421,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
     // Use the Count endpoint so it aligns with the UI’s projection section
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var countPath = state.Mode switch
         {
             "single" => "/api/weatherforecastsingle/count",
@@ -445,7 +445,7 @@ app.MapGet("/projection/count", async (string? mode) =>
     var path = m == "single" ? "/api/weatherforecastsingle/count" : m == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync(path);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
         var json = await res.Content.ReadAsStringAsync();
@@ -466,7 +466,7 @@ app.MapGet("/projection/status", async (string? mode) =>
     var path = m == "single" ? "/api/weatherforecastsingle/status" : m == "generic" ? "/api/weatherforecastgeneric/status" : "/api/weatherforecast/status";
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync(path);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = await res.Content.ReadAsStringAsync() });
         var json = await res.Content.ReadAsStringAsync();
@@ -487,7 +487,7 @@ app.MapPost("/projection/persist", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/persist?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -508,7 +508,7 @@ app.MapPost("/projection/deactivate", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/deactivate?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -530,7 +530,7 @@ app.MapGet("/projection/snapshot", async (string? mode, bool? unsafeState) =>
     var unsafeFlag = unsafeState ?? true;
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync($"/api/projections/snapshot?name={Uri.EscapeDataString(name)}&unsafeState={(unsafeFlag ? "true" : "false")}");
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -551,7 +551,7 @@ app.MapPost("/projection/refresh", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/refresh?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -569,7 +569,7 @@ app.MapGet("/cold/status", async () =>
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync("/api/cold/status");
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -587,7 +587,7 @@ app.MapGet("/cold/progress", async () =>
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync("/api/cold/progress");
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -605,7 +605,7 @@ app.MapGet("/cold/catalog", async () =>
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.GetAsync("/api/cold/catalog");
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -623,7 +623,7 @@ app.MapPost("/cold/export", async () =>
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     try
     {
-        using var http = new HttpClient { BaseAddress = new Uri(apiBase!) };
+        using var http = CreateApiClient(apiBase!);
         var res = await http.PostAsync("/api/cold/export", null);
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -641,6 +641,13 @@ return;
 static int GetEnvInt(string name, int def)
     => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) ? v : def;
 
+static HttpClient CreateApiClient(string apiBase)
+    => new()
+    {
+        BaseAddress = new Uri(apiBase),
+        Timeout = TimeSpan.FromSeconds(15)
+    };
+
 static string GetProjectorName(string mode)
     => mode == "single" ? "WeatherForecastProjectorWithTagStateProjector"
        : mode == "generic" ? "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"
@@ -651,7 +658,7 @@ static async Task RunAsync(string apiBase, BenchState state)
     try
     {
         state.IsRunning = true;
-        var http = new HttpClient { BaseAddress = new Uri(apiBase) };
+        var http = CreateApiClient(apiBase);
         var health = await http.GetAsync("/api/health");
         health.EnsureSuccessStatusCode();
 
