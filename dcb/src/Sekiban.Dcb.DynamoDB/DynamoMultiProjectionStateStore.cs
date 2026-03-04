@@ -470,10 +470,6 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
     private static string BuildProjectorPk(string serviceId, string projectorName) =>
         $"SERVICE#{serviceId}#PROJECTOR#{projectorName}";
 
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        return ms.ToArray();
-    }
+    private static Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken) =>
+        StreamReadHelper.ReadAllBytesAsync(stream, cancellationToken);
 }

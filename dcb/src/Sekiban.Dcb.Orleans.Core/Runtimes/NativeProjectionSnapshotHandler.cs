@@ -201,7 +201,7 @@ internal class NativeProjectionSnapshotHandler
         Stream source,
         CancellationToken cancellationToken)
     {
-        var data = await ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
+        var data = await StreamReadHelper.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
 
         if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
         {
@@ -210,12 +210,5 @@ internal class NativeProjectionSnapshotHandler
         }
 
         return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(data, _jsonOptions);
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        return ms.ToArray();
     }
 }

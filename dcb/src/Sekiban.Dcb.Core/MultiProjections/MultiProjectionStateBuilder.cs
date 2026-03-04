@@ -375,7 +375,7 @@ public class MultiProjectionStateBuilder
         }
 
         await using var dataStream = openResult.GetValue();
-        var data = await ReadAllBytesAsync(dataStream, ct);
+        var data = await StreamReadHelper.ReadAllBytesAsync(dataStream, ct);
 
         if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
         {
@@ -384,20 +384,20 @@ public class MultiProjectionStateBuilder
         }
 
         // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
-        string envelopeJson;
+        byte[] envelopeData;
         if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
         {
             // v9 format: Gzip compressed
-            envelopeJson = GzipCompression.DecompressToString(data);
+            envelopeData = GzipCompression.Decompress(data);
         }
         else
         {
             // v10 format: Plain UTF-8 JSON
-            envelopeJson = Encoding.UTF8.GetString(data);
+            envelopeData = data;
         }
 
         var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-            envelopeJson, _domainTypes.JsonSerializerOptions);
+            envelopeData, _domainTypes.JsonSerializerOptions);
 
         if (envelope == null)
         {
@@ -407,10 +407,4 @@ public class MultiProjectionStateBuilder
         return envelope;
     }
 
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct);
-        return ms.ToArray();
-    }
 }

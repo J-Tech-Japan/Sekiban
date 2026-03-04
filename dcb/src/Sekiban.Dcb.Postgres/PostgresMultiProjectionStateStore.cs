@@ -308,10 +308,4 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
         }
     }
 
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken);
-        return ms.ToArray();
-    }
 }
