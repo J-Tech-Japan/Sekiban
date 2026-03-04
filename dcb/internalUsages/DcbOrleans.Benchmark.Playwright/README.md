@@ -34,4 +34,7 @@ npm test
 
 - `BENCH_BASE_URL` (default: `http://127.0.0.1:5411`)
 - `DCB_APPHOST_PROJECT_PATH` (default: `../DcbOrleans.AppHost/DcbOrleans.AppHost.csproj`)
-- `BENCH_HTTP_PORT` (used by AppHost, default set by tests to `5411`)
+- `BENCH_HTTP_PORT` (used by AppHost, auto-derived from `BENCH_BASE_URL` if omitted)
+- `PW_ASSERT_SINGLE_PROJECTION` (default: `false`, set `true` to fail if `mode=single` status endpoint is not OK)
+- `BENCH_API_TIMEOUT_SECONDS` (default: `15`, benchmark proxy API timeout)
+- `BENCH_COLD_EXPORT_TIMEOUT_SECONDS` (default: `120`, timeout only for cold export endpoint)

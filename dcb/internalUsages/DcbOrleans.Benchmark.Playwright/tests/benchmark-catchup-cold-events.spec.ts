@@ -30,6 +30,7 @@ const runPlan: Array<{ mode: ProjectionMode; total: number; concurrency: number 
   { mode: "standard", total: 10000, concurrency: 32 },
   { mode: "generic", total: 20000, concurrency: 32 }
 ];
+const strictSingleProjectionCheck = (process.env.PW_ASSERT_SINGLE_PROJECTION ?? "false").toLowerCase() === "true";
 
 test.describe("DCB heavy E2E (catch-up + cold events)", () => {
   test("run benchmark at 10k/20k and validate projections/catch-up/cold-event APIs", async ({ page, request }) => {
@@ -182,6 +183,9 @@ async function verifyColdEventSurface(page: Page, request: APIRequestContext): P
 async function verifySingleProjectionSurface(request: APIRequestContext): Promise<void> {
   const response = await request.get("/projection/status?mode=single", { timeout: 20_000 });
   if (!response.ok()) {
+    if (strictSingleProjectionCheck) {
+      expect(response.ok()).toBeTruthy();
+    }
     return;
   }
 

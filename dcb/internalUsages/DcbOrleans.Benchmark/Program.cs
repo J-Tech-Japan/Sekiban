@@ -623,7 +623,7 @@ app.MapPost("/cold/export", async () =>
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     try
     {
-        using var http = CreateApiClient(apiBase!);
+        using var http = CreateApiClient(apiBase!, GetEnvInt("BENCH_COLD_EXPORT_TIMEOUT_SECONDS", 120));
         var res = await http.PostAsync("/api/cold/export", null);
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -641,11 +641,11 @@ return;
 static int GetEnvInt(string name, int def)
     => int.TryParse(Environment.GetEnvironmentVariable(name), out var v) ? v : def;
 
-static HttpClient CreateApiClient(string apiBase)
+static HttpClient CreateApiClient(string apiBase, int? timeoutSeconds = null)
     => new()
     {
         BaseAddress = new Uri(apiBase),
-        Timeout = TimeSpan.FromSeconds(15)
+        Timeout = TimeSpan.FromSeconds(timeoutSeconds ?? GetEnvInt("BENCH_API_TIMEOUT_SECONDS", 15))
     };
 
 static string GetProjectorName(string mode)
@@ -658,7 +658,7 @@ static async Task RunAsync(string apiBase, BenchState state)
     try
     {
         state.IsRunning = true;
-        var http = CreateApiClient(apiBase);
+        using var http = CreateApiClient(apiBase);
         var health = await http.GetAsync("/api/health");
         health.EnsureSuccessStatusCode();
 
