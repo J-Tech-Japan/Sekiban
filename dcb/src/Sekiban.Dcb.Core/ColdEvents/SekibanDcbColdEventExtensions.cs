@@ -23,6 +23,21 @@ public static class SekibanDcbColdEventExtensions
         Action<ColdEventStoreOptions> configureOptions)
     {
         services.Configure(configureOptions);
+        RegisterColdEventCoreServices(services);
+        return services;
+    }
+
+    public static IServiceCollection AddSekibanDcbColdEvents(
+        this IServiceCollection services,
+        ColdEventStoreOptions options)
+    {
+        services.AddSingleton<IOptions<ColdEventStoreOptions>>(Options.Create(options));
+        RegisterColdEventCoreServices(services);
+        return services;
+    }
+
+    private static void RegisterColdEventCoreServices(IServiceCollection services)
+    {
         services.AddSingleton<ColdExporter>();
         services.AddSingleton<IColdEventExporter>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventProgressReader>(sp => sp.GetRequiredService<ColdExporter>());
@@ -30,7 +45,6 @@ public static class SekibanDcbColdEventExtensions
         services.AddSingleton<ColdCatalogReader>();
         services.AddSingleton<IColdEventCatalogReader>(sp => sp.GetRequiredService<ColdCatalogReader>());
         services.AddHostedService<ColdExportBackgroundService>();
-        return services;
     }
 
     public static IServiceCollection AddSekibanDcbColdEventHybridRead(

@@ -31,22 +31,65 @@ public sealed class ColdExportBackgroundService : BackgroundService
             return;
         }
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await RunExportCycleAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error in cold event export cycle");
-            }
+        var cycleBudget = _options.ExportCycleBudget;
+        _logger.LogInformation(
+            "Cold event export background service started. Interval={PullInterval}, CycleBudget={CycleBudget}",
+            _options.PullInterval,
+            cycleBudget);
 
-            await Task.Delay(_options.PullInterval, stoppingToken);
+        using var timer = new PeriodicTimer(_options.PullInterval);
+
+        if (_options.RunOnStartup)
+        {
+            await RunExportCycleWithBudgetAsync(cycleBudget, stoppingToken);
+        }
+
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            await RunExportCycleWithBudgetAsync(cycleBudget, stoppingToken);
+        }
+    }
+
+    private async Task RunExportCycleWithBudgetAsync(
+        TimeSpan? cycleBudget,
+        CancellationToken stoppingToken)
+    {
+        if (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (cycleBudget is { } configuredBudget && configuredBudget <= TimeSpan.Zero)
+        {
+            _logger.LogWarning(
+                "Cold event export cycle skipped because CycleBudget is non-positive: {CycleBudget}",
+                configuredBudget);
+            return;
+        }
+
+        using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        if (cycleBudget is { } positiveBudget)
+        {
+            cycleCts.CancelAfter(positiveBudget);
+        }
+
+        try
+        {
+            await RunExportCycleAsync(cycleCts.Token);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException) when (cycleBudget is { } timedBudget)
+        {
+            _logger.LogWarning(
+                "Cold event export cycle timed out after {CycleBudget}. Processing will continue on next interval.",
+                timedBudget);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in cold event export cycle");
         }
     }
 
@@ -57,19 +100,17 @@ public sealed class ColdExportBackgroundService : BackgroundService
 
         var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
 
-        if (result.IsSuccess)
+        if (!result.IsSuccess)
         {
-            var value = result.GetValue();
-            _logger.LogInformation(
-                "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} new segments",
-                serviceId, value.ExportedEventCount, value.NewSegments.Count);
+            _logger.LogError(result.GetException(), "Cold event export failed for {ServiceId}", serviceId);
+            return;
         }
-        else
-        {
-            _logger.LogError(
-                result.GetException(),
-                "Cold event export failed for {ServiceId}",
-                serviceId);
-        }
+
+        var value = result.GetValue();
+        _logger.LogInformation(
+            "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} written/updated segments",
+            serviceId,
+            value.ExportedEventCount,
+            value.NewSegments.Count);
     }
 }

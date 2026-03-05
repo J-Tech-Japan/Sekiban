@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
+namespace Sekiban.Dcb.ColdEvents;
 
 internal static class ColdStoragePath
 {
@@ -17,12 +17,10 @@ internal static class ColdStoragePath
         {
             throw new InvalidOperationException($"Path traversal detected: '{relative}' escapes base directory");
         }
+
         return fullPath;
     }
 
     public static string ComputeEtag(byte[] data)
         => Convert.ToHexStringLower(SHA256.HashData(data));
-
-    public static string ComputeLeaseToken()
-        => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 }

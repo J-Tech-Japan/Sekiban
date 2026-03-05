@@ -1,11 +1,11 @@
 using Microsoft.Data.Sqlite;
 using ResultBoxes;
-using Sekiban.Dcb.ColdEvents;
 
-namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
+namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class SqliteColdObjectStorage : IColdObjectStorage
 {
+    private const string PathParameter = "$path";
     private readonly string _connectionString;
 
     public SqliteColdObjectStorage(string databasePath)
@@ -41,8 +41,8 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             await connection.OpenAsync(ct);
 
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT data, etag FROM cold_objects WHERE path = $path";
-            command.Parameters.AddWithValue("$path", ColdStoragePath.Normalize(path));
+            command.CommandText = $"SELECT data, etag FROM cold_objects WHERE path = {PathParameter}";
+            command.Parameters.AddWithValue(PathParameter, ColdStoragePath.Normalize(path));
 
             await using var reader = await command.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct))
@@ -74,8 +74,8 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             await using (var read = connection.CreateCommand())
             {
                 read.Transaction = tx;
-                read.CommandText = "SELECT etag FROM cold_objects WHERE path = $path";
-                read.Parameters.AddWithValue("$path", normalizedPath);
+                read.CommandText = $"SELECT etag FROM cold_objects WHERE path = {PathParameter}";
+                read.Parameters.AddWithValue(PathParameter, normalizedPath);
                 var scalar = await read.ExecuteScalarAsync(ct);
                 if (scalar is not null && scalar is not DBNull)
                 {
@@ -108,7 +108,7 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
                                      etag = excluded.etag,
                                      updated_at = excluded.updated_at;
                                  """;
-            upsert.Parameters.AddWithValue("$path", normalizedPath);
+            upsert.Parameters.AddWithValue(PathParameter, normalizedPath);
             upsert.Parameters.AddWithValue("$data", data);
             upsert.Parameters.AddWithValue("$etag", ColdStoragePath.ComputeEtag(data));
             upsert.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
@@ -140,6 +140,7 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             {
                 list.Add(reader.GetString(0));
             }
+
             return ResultBox.FromValue<IReadOnlyList<string>>(list);
         }
         catch (Exception ex)
@@ -155,8 +156,8 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(ct);
             await using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM cold_objects WHERE path = $path";
-            command.Parameters.AddWithValue("$path", ColdStoragePath.Normalize(path));
+            command.CommandText = $"DELETE FROM cold_objects WHERE path = {PathParameter}";
+            command.Parameters.AddWithValue(PathParameter, ColdStoragePath.Normalize(path));
             var affected = await command.ExecuteNonQueryAsync(ct);
             return ResultBox.FromValue(affected > 0);
         }

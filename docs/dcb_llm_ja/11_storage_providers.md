@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [コールドイベントとキャッチアップ](19_cold_events.md)
 
 DCB は複数のストレージプロバイダーをサポートしています。
 
@@ -163,3 +164,7 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 ## 今後の予定
 
 DCB の Dapr 版は開発中です。現時点では Orleans ベースの実行環境をご利用ください。
+
+## 関連資料
+
+現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

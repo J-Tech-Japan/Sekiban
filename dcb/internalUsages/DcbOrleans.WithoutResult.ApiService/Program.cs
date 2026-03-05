@@ -10,7 +10,6 @@ using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
-using DcbOrleans.WithoutResult.ApiService.ColdEvents;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
@@ -427,15 +426,10 @@ if (builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enable
 {
     var coldConfig = builder.Configuration.GetSection("Sekiban:ColdEvent");
     var storageOptions = coldConfig.GetSection("Storage").Get<ColdStorageOptions>() ?? new ColdStorageOptions();
-    var storageRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), storageOptions.BasePath));
-    var type = (storageOptions.Type ?? "jsonl").ToLowerInvariant();
-    if (type is "sqlite" or "duckdb" or "jsonl")
-    {
-        Directory.CreateDirectory(storageRoot);
-    }
+    var storageRoot = ColdObjectStorageFactory.ResolveStorageRoot(storageOptions, Directory.GetCurrentDirectory());
     builder.Services.AddSingleton(storageOptions);
     builder.Services.AddSingleton<IColdObjectStorage>(sp =>
-        CreateColdObjectStorage(storageOptions, storageRoot, sp));
+        ColdObjectStorageFactory.Create(storageOptions, storageRoot, sp));
     builder.Services.AddSingleton<IColdLeaseManager, StorageBackedColdLeaseManager>();
     builder.Services.AddSekibanDcbColdEvents(options => coldConfig.Bind(options));
     builder.Services.AddSekibanDcbColdEventHybridRead();
@@ -1193,22 +1187,3 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
-
-static IColdObjectStorage CreateColdObjectStorage(
-    ColdStorageOptions options,
-    string storageRoot,
-    IServiceProvider services)
-{
-    var type = (options.Type ?? "jsonl").ToLowerInvariant();
-    return type switch
-    {
-        "sqlite" => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
-        "duckdb" => new DuckDbColdObjectStorage(Path.Combine(storageRoot, options.DuckDbFile)),
-        "jsonl" => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
-        "azureblob" => new AzureBlobColdObjectStorage(
-            services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
-            options.AzureContainerName,
-            options.AzurePrefix),
-        _ => throw new InvalidOperationException($"Unsupported cold storage type: {options.Type}")
-    };
-}

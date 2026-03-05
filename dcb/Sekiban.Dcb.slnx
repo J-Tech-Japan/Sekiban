@@ -36,6 +36,7 @@
     <Project Path="internalUsages/DcbOrleans.AppHost/DcbOrleans.AppHost.csproj" />
     <Project Path="internalUsages/DcbOrleansDynamoDB.AppHost/DcbOrleansDynamoDB.AppHost.csproj" />
     <Project Path="internalUsages/DcbOrleans.Benchmark/DcbOrleans.Benchmark.csproj" />
+    <Project Path="internalUsages/DcbOrleans.Catchup.Functions/DcbOrleans.Catchup.Functions.csproj" />
     <Project Path="internalUsages/DcbOrleans.ServiceDefaults/DcbOrleans.ServiceDefaults.csproj" />
     <Project Path="internalUsages/DcbOrleans.Web/DcbOrleans.Web.csproj" />
     <Project Path="internalUsages/DcbOrleans.WithoutResult.ApiService/DcbOrleans.WithoutResult.ApiService.csproj" />
