@@ -168,6 +168,64 @@ public class ColdExporterTests
     }
 
     [Fact]
+    public async Task ExportIncrementalAsync_should_append_to_latest_segment_until_max_events()
+    {
+        // Given
+        var options = EnabledOptions with { SegmentMaxEvents = 3, SegmentMaxBytes = long.MaxValue };
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var e1 = CreateEvent(t0, "Event1");
+        var e2 = CreateEvent(t0.AddSeconds(1), "Event2");
+        var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
+
+        var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
+
+        // When: first export creates one segment with 2 events
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        // Then
+        Assert.True(first.IsSuccess);
+        Assert.Single(first.GetValue().NewSegments);
+        var firstPath = first.GetValue().NewSegments[0].Path;
+
+        var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        Assert.True(second.IsSuccess);
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
+        Assert.NotNull(manifest);
+        Assert.Single(manifest!.Segments);
+        Assert.Equal(firstPath, manifest.Segments[0].Path);
+        Assert.Equal(3, manifest.Segments[0].EventCount);
+        Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[0].ToSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task ExportIncrementalAsync_should_rotate_to_new_segment_when_latest_is_full()
+    {
+        // Given
+        var options = EnabledOptions with { SegmentMaxEvents = 2, SegmentMaxBytes = long.MaxValue };
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var e1 = CreateEvent(t0, "Event1");
+        var e2 = CreateEvent(t0.AddSeconds(1), "Event2");
+        var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
+
+        var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(first.IsSuccess);
+
+        var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(second.IsSuccess);
+
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
+        Assert.NotNull(manifest);
+        Assert.Equal(2, manifest!.Segments.Count);
+        Assert.Equal(2, manifest.Segments[0].EventCount);
+        Assert.Equal(1, manifest.Segments[1].EventCount);
+        Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[1].ToSortableUniqueId);
+    }
+
+    [Fact]
     public async Task ExportIncrementalAsync_should_fail_when_checkpoint_write_fails()
     {
         // Given

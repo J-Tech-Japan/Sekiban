@@ -176,47 +176,17 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 Reason: ReasonNoSafeEvents));
         }
 
-        var segments = ColdSegmentSplitter.Split(
-            safeEvents, _options.SegmentMaxEvents, _options.SegmentMaxBytes);
-
-        return await UploadAndUpdateManifestAsync(serviceId, segments, safeEvents, ct);
+        return await UploadAndUpdateManifestAsync(serviceId, safeEvents, ct);
     }
 
     private async Task<ResultBox<ExportResult>> UploadAndUpdateManifestAsync(
         string serviceId,
-        IReadOnlyList<IReadOnlyList<SerializableEvent>> segments,
         IReadOnlyList<SerializableEvent> allSafeEvents,
         CancellationToken ct)
     {
-        var newSegmentInfos = new List<ColdSegmentInfo>();
-
-        foreach (var segment in segments)
-        {
-            var segmentData = JsonlSegmentWriter.Write(segment);
-            var sha256 = ComputeSha256(segmentData);
-            var segmentPath = ColdStoragePaths.SegmentPath(
-                serviceId, segment[0].SortableUniqueIdValue, segment[^1].SortableUniqueIdValue);
-
-            var putResult = await _storage.PutAsync(segmentPath, segmentData, expectedETag: null, ct);
-            if (!putResult.IsSuccess)
-            {
-                return ResultBox.Error<ExportResult>(putResult.GetException());
-            }
-
-            newSegmentInfos.Add(new ColdSegmentInfo(
-                Path: segmentPath,
-                FromSortableUniqueId: segment[0].SortableUniqueIdValue,
-                ToSortableUniqueId: segment[^1].SortableUniqueIdValue,
-                EventCount: segment.Count,
-                SizeBytes: segmentData.Length,
-                Sha256: sha256,
-                CreatedAtUtc: DateTimeOffset.UtcNow));
-        }
-
         for (var attempt = 0; attempt < MaxManifestRetries; attempt++)
         {
-            var updateResult = await TryUpdateManifestAndCheckpointAsync(
-                serviceId, newSegmentInfos, allSafeEvents, ct);
+            var updateResult = await TryUpdateManifestAndCheckpointAsync(serviceId, allSafeEvents, ct);
 
             if (updateResult.IsSuccess)
             {
@@ -234,14 +204,28 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
     private async Task<ResultBox<ExportResult>> TryUpdateManifestAndCheckpointAsync(
         string serviceId,
-        List<ColdSegmentInfo> newSegmentInfos,
         IReadOnlyList<SerializableEvent> allSafeEvents,
         CancellationToken ct)
     {
         var existingManifest = await ColdControlFileHelper.LoadManifestWithETagAsync(_storage, serviceId, ct);
         var existingCheckpoint = await ColdControlFileHelper.LoadCheckpointWithETagAsync(_storage, serviceId, ct);
-        var existingSegments = existingManifest?.Manifest?.Segments ?? [];
-        var allSegments = existingSegments.Concat(newSegmentInfos).ToList();
+        var existingSegments = (existingManifest?.Manifest?.Segments ?? []).ToList();
+
+        var buildResult = await BuildSegmentWritePlanAsync(serviceId, existingSegments, allSafeEvents, ct);
+        if (!buildResult.IsSuccess)
+        {
+            return ResultBox.Error<ExportResult>(buildResult.GetException());
+        }
+
+        var plan = buildResult.GetValue();
+        foreach (var write in plan.Writes)
+        {
+            var putResult = await _storage.PutAsync(write.Path, write.Data, write.ExpectedETag, ct);
+            if (!putResult.IsSuccess)
+            {
+                return ResultBox.Error<ExportResult>(putResult.GetException());
+            }
+        }
 
         var lastSafe = allSafeEvents[^1].SortableUniqueIdValue;
         var newVersion = Guid.NewGuid().ToString();
@@ -249,7 +233,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ServiceId: serviceId,
             ManifestVersion: newVersion,
             LatestSafeSortableUniqueId: lastSafe,
-            Segments: allSegments,
+            Segments: plan.UpdatedSegments,
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, ColdEventJsonOptions.Default);
@@ -280,9 +264,133 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         return ResultBox.FromValue(new ExportResult(
             ExportedEventCount: allSafeEvents.Count,
-            NewSegments: newSegmentInfos,
+            NewSegments: plan.WrittenSegments,
             UpdatedManifestVersion: newVersion,
             Reason: ReasonExported));
+    }
+
+    private async Task<ResultBox<SegmentWritePlan>> BuildSegmentWritePlanAsync(
+        string serviceId,
+        List<ColdSegmentInfo> existingSegments,
+        IReadOnlyList<SerializableEvent> allSafeEvents,
+        CancellationToken ct)
+    {
+        var writes = new List<SegmentWrite>();
+        var writtenSegments = new List<ColdSegmentInfo>();
+        var eventsConsumed = 0;
+
+        if (existingSegments.Count > 0)
+        {
+            var lastSegment = existingSegments[^1];
+            var lastSegmentObject = await _storage.GetAsync(lastSegment.Path, ct);
+            if (!lastSegmentObject.IsSuccess)
+            {
+                return ResultBox.Error<SegmentWritePlan>(lastSegmentObject.GetException());
+            }
+
+            var existingEventsResult = ParseSegmentEvents(lastSegmentObject.GetValue().Data);
+            if (!existingEventsResult.IsSuccess)
+            {
+                return ResultBox.Error<SegmentWritePlan>(existingEventsResult.GetException());
+            }
+
+            var existingEvents = existingEventsResult.GetValue();
+            var currentPayloadBytes = existingEvents.Sum(e => (long)e.Payload.Length);
+
+            var appendCount = 0;
+            while (eventsConsumed + appendCount < allSafeEvents.Count
+                   && lastSegment.EventCount + appendCount < _options.SegmentMaxEvents)
+            {
+                var candidate = allSafeEvents[eventsConsumed + appendCount];
+                var nextPayloadBytes = currentPayloadBytes + candidate.Payload.Length;
+                if (nextPayloadBytes > _options.SegmentMaxBytes)
+                {
+                    break;
+                }
+
+                currentPayloadBytes = nextPayloadBytes;
+                appendCount++;
+            }
+
+            if (appendCount > 0)
+            {
+                var appended = allSafeEvents.Take(appendCount).ToList();
+                var mergedEvents = existingEvents.Concat(appended).ToList();
+                var mergedData = JsonlSegmentWriter.Write(mergedEvents);
+                var updatedLast = new ColdSegmentInfo(
+                    Path: lastSegment.Path,
+                    FromSortableUniqueId: lastSegment.FromSortableUniqueId,
+                    ToSortableUniqueId: mergedEvents[^1].SortableUniqueIdValue,
+                    EventCount: mergedEvents.Count,
+                    SizeBytes: mergedData.Length,
+                    Sha256: ComputeSha256(mergedData),
+                    CreatedAtUtc: lastSegment.CreatedAtUtc);
+
+                existingSegments[^1] = updatedLast;
+                writes.Add(new SegmentWrite(lastSegment.Path, mergedData, lastSegmentObject.GetValue().ETag));
+                writtenSegments.Add(updatedLast);
+                eventsConsumed += appendCount;
+            }
+        }
+
+        var remaining = allSafeEvents.Skip(eventsConsumed).ToList();
+        if (remaining.Count > 0)
+        {
+            var newSegments = ColdSegmentSplitter.Split(remaining, _options.SegmentMaxEvents, _options.SegmentMaxBytes);
+            foreach (var segment in newSegments)
+            {
+                var segmentData = JsonlSegmentWriter.Write(segment);
+                var segmentPath = ColdStoragePaths.SegmentPath(
+                    serviceId, segment[0].SortableUniqueIdValue, segment[^1].SortableUniqueIdValue);
+                var segmentInfo = new ColdSegmentInfo(
+                    Path: segmentPath,
+                    FromSortableUniqueId: segment[0].SortableUniqueIdValue,
+                    ToSortableUniqueId: segment[^1].SortableUniqueIdValue,
+                    EventCount: segment.Count,
+                    SizeBytes: segmentData.Length,
+                    Sha256: ComputeSha256(segmentData),
+                    CreatedAtUtc: DateTimeOffset.UtcNow);
+
+                existingSegments.Add(segmentInfo);
+                writes.Add(new SegmentWrite(segmentPath, segmentData, ExpectedETag: null));
+                writtenSegments.Add(segmentInfo);
+            }
+        }
+
+        return ResultBox.FromValue(new SegmentWritePlan(existingSegments, writes, writtenSegments));
+    }
+
+    private static ResultBox<IReadOnlyList<SerializableEvent>> ParseSegmentEvents(byte[] data)
+    {
+        try
+        {
+            var text = System.Text.Encoding.UTF8.GetString(data);
+            var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var events = new List<SerializableEvent>(lines.Length);
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+
+                var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
+                if (evt is null)
+                {
+                    return ResultBox.Error<IReadOnlyList<SerializableEvent>>(
+                        new InvalidDataException("Failed to deserialize cold segment line."));
+                }
+
+                events.Add(evt);
+            }
+
+            return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(events);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IReadOnlyList<SerializableEvent>>(ex);
+        }
     }
 
     private static string? GetLatestExportedId(ColdManifest? manifest)
@@ -299,4 +407,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var hash = SHA256.HashData(data);
         return Convert.ToHexStringLower(hash);
     }
+
+    private sealed record SegmentWrite(string Path, byte[] Data, string? ExpectedETag);
+    private sealed record SegmentWritePlan(
+        IReadOnlyList<ColdSegmentInfo> UpdatedSegments,
+        IReadOnlyList<SegmentWrite> Writes,
+        IReadOnlyList<ColdSegmentInfo> WrittenSegments);
 }
