@@ -1,10 +1,9 @@
 using System.Net.Http.Headers;
-using System.Diagnostics;
 using System.Text.Json;
 
 public sealed class ColdExportTimerService : BackgroundService
 {
-    private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DefaultCycleBudget = TimeSpan.FromMinutes(3);
 
@@ -52,34 +51,28 @@ public sealed class ColdExportTimerService : BackgroundService
         TimeSpan cycleBudget,
         CancellationToken ct)
     {
-        var sw = Stopwatch.StartNew();
-        var attempts = 0;
-        var totalExported = 0;
-
-        while (!ct.IsCancellationRequested && sw.Elapsed < cycleBudget)
+        if (ct.IsCancellationRequested)
         {
-            var remaining = cycleBudget - sw.Elapsed;
-            var timeout = remaining < requestTimeout ? remaining : requestTimeout;
-            if (timeout <= TimeSpan.Zero)
-            {
-                break;
-            }
-
-            var result = await TriggerExportAsync(apiBaseUrl, timeout, ct);
-            attempts++;
-            totalExported += result.ExportedEventCount;
-
-            if (!result.IsSuccess || result.ExportedEventCount <= 0)
-            {
-                break;
-            }
+            return;
         }
 
+        var timeout = requestTimeout < cycleBudget ? requestTimeout : cycleBudget;
+        if (timeout <= TimeSpan.Zero)
+        {
+            _logger.LogWarning(
+                "Cold export cycle skipped because timeout resolved to non-positive. RequestTimeout={RequestTimeout}, CycleBudget={CycleBudget}",
+                requestTimeout,
+                cycleBudget);
+            return;
+        }
+
+        var result = await TriggerExportAsync(apiBaseUrl, timeout, ct);
+
         _logger.LogInformation(
-            "Cold export cycle finished. Attempts={Attempts}, ExportedEvents={ExportedEvents}, Elapsed={Elapsed}",
-            attempts,
-            totalExported,
-            sw.Elapsed);
+            "Cold export cycle finished. Attempts=1, Success={Success}, ExportedEvents={ExportedEvents}, Timeout={Timeout}",
+            result.IsSuccess,
+            result.ExportedEventCount,
+            timeout);
     }
 
     private async Task<ExportCallResult> TriggerExportAsync(string apiBaseUrl, TimeSpan requestTimeout, CancellationToken ct)

@@ -75,7 +75,7 @@ builder
     .AddProject<DcbOrleans_Catchup_Functions>("cold-catchup-timer")
     .WithReference(withoutResultApiService, "apiservice")
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
-    .WithEnvironment("ColdExport:Interval", "00:03:00")
+    .WithEnvironment("ColdExport:Interval", "00:05:00")
     .WithEnvironment("ColdExport:RequestTimeout", "00:05:00")
     .WithEnvironment("ColdExport:CycleBudget", "00:03:00")
     .WaitFor(withoutResultApiService);
