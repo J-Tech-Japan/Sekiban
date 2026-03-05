@@ -52,16 +52,20 @@ public static class ColdObjectStorageFactory
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
                 options.AzurePrefix),
-            ("azureblob", "sqlite") => new AzureBlobSqliteColdObjectStorage(
+            ("azureblob", "sqlite") => new AzureBlobDatabaseColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
                 options.AzurePrefix,
-                options.SqliteFile),
-            ("azureblob", "duckdb") => new AzureBlobDuckDbColdObjectStorage(
+                options.SqliteFile,
+                static path => new SqliteColdObjectStorage(path),
+                "sqlite"),
+            ("azureblob", "duckdb") => new AzureBlobDatabaseColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
                 options.AzurePrefix,
-                options.DuckDbFile),
+                options.DuckDbFile,
+                static path => new DuckDbColdObjectStorage(path),
+                "duckdb"),
             _ => throw new InvalidOperationException(
                 $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };

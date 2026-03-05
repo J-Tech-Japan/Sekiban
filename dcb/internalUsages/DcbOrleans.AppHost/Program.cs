@@ -71,6 +71,13 @@ var withoutResultApiService = builder
     .WithReference(multiProjectionOffload)
     .WaitFor(postgres);
 
+builder
+    .AddProject<DcbOrleans_Catchup_Functions>("cold-catchup-timer")
+    .WithReference(withoutResultApiService, "apiservice")
+    .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
+    .WithEnvironment("ColdExport:Interval", "00:03:00")
+    .WaitFor(withoutResultApiService);
+
 // Add the Web frontend
 builder
     .AddProject<DcbOrleans_Web>("webfrontend")

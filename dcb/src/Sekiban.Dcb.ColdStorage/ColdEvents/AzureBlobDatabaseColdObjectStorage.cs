@@ -5,87 +5,60 @@ using ResultBoxes;
 
 namespace Sekiban.Dcb.ColdEvents;
 
-public sealed class AzureBlobSqliteColdObjectStorage : IColdObjectStorage
+public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
 {
     private readonly BlobContainerClient _container;
     private readonly string _blobName;
+    private readonly Func<string, IColdObjectStorage> _createInnerStorage;
+    private readonly string _storageKind;
     private readonly SemaphoreSlim _mutex = new(1, 1);
 
-    public AzureBlobSqliteColdObjectStorage(
+    public AzureBlobDatabaseColdObjectStorage(
         BlobServiceClient blobServiceClient,
         string containerName,
         string? prefix,
-        string databaseFileName)
+        string databaseFileName,
+        Func<string, IColdObjectStorage> createInnerStorage,
+        string storageKind)
     {
         _container = blobServiceClient.GetBlobContainerClient(containerName);
         _blobName = BuildBlobName(prefix, databaseFileName);
+        _createInnerStorage = createInnerStorage;
+        _storageKind = storageKind;
     }
 
     public async Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct)
-    {
-        await _mutex.WaitAsync(ct);
-        try
-        {
-            var state = await DownloadDbAsync(ct);
-            await using var cleanup = state;
-            var inner = new SqliteColdObjectStorage(state.LocalPath);
-            return await inner.GetAsync(path, ct);
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<ColdStorageObject>(ex);
-        }
-        finally
-        {
-            _mutex.Release();
-        }
-    }
+        => await ExecuteAsync(path, ct, (inner, innerPath, innerCt) => inner.GetAsync(innerPath, innerCt));
 
     public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
-    {
-        await _mutex.WaitAsync(ct);
-        try
-        {
-            var state = await DownloadDbAsync(ct);
-            await using var cleanup = state;
-            var inner = new SqliteColdObjectStorage(state.LocalPath);
-            var put = await inner.PutAsync(path, data, expectedETag, ct);
-            if (!put.IsSuccess)
-            {
-                return put;
-            }
-
-            await UploadDbAsync(state, ct);
-            return put;
-        }
-        catch (RequestFailedException ex) when (ex.Status == 412)
-        {
-            return ResultBox.Error<bool>(new InvalidOperationException(
-                "Concurrent update detected while writing sqlite cold storage blob", ex));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<bool>(ex);
-        }
-        finally
-        {
-            _mutex.Release();
-        }
-    }
+        => await ExecuteAndPersistAsync(
+            path,
+            ct,
+            (inner, innerPath, innerCt) => inner.PutAsync(innerPath, data, expectedETag, innerCt));
 
     public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
+        => await ExecuteAsync(prefix, ct, (inner, innerPrefix, innerCt) => inner.ListAsync(innerPrefix, innerCt));
+
+    public async Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+        => await ExecuteAndPersistAsync(path, ct, (inner, innerPath, innerCt) => inner.DeleteAsync(innerPath, innerCt));
+
+    private async Task<ResultBox<T>> ExecuteAsync<T>(
+        string input,
+        CancellationToken ct,
+        Func<IColdObjectStorage, string, CancellationToken, Task<ResultBox<T>>> action)
+        where T : notnull
     {
         await _mutex.WaitAsync(ct);
         try
         {
             var state = await DownloadDbAsync(ct);
             await using var cleanup = state;
-            var inner = new SqliteColdObjectStorage(state.LocalPath);
-            return await inner.ListAsync(prefix, ct);
+            var inner = _createInnerStorage(state.LocalPath);
+            return await action(inner, input, ct);
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<IReadOnlyList<string>>(ex);
+            return ResultBox.Error<T>(ex);
         }
         finally
         {
@@ -93,32 +66,30 @@ public sealed class AzureBlobSqliteColdObjectStorage : IColdObjectStorage
         }
     }
 
-    public async Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
+    private async Task<ResultBox<bool>> ExecuteAndPersistAsync(
+        string input,
+        CancellationToken ct,
+        Func<IColdObjectStorage, string, CancellationToken, Task<ResultBox<bool>>> action)
     {
         await _mutex.WaitAsync(ct);
         try
         {
             var state = await DownloadDbAsync(ct);
             await using var cleanup = state;
-            var inner = new SqliteColdObjectStorage(state.LocalPath);
-            var deleted = await inner.DeleteAsync(path, ct);
-            if (!deleted.IsSuccess)
+            var inner = _createInnerStorage(state.LocalPath);
+            var result = await action(inner, input, ct);
+            if (!result.IsSuccess || !result.GetValue())
             {
-                return deleted;
-            }
-
-            if (!deleted.GetValue())
-            {
-                return deleted;
+                return result;
             }
 
             await UploadDbAsync(state, ct);
-            return deleted;
+            return result;
         }
         catch (RequestFailedException ex) when (ex.Status == 412)
         {
             return ResultBox.Error<bool>(new InvalidOperationException(
-                "Concurrent update detected while deleting from sqlite cold storage blob", ex));
+                $"Concurrent update detected while writing {_storageKind} cold storage blob", ex));
         }
         catch (Exception ex)
         {
@@ -132,7 +103,7 @@ public sealed class AzureBlobSqliteColdObjectStorage : IColdObjectStorage
 
     private async Task<DbSnapshot> DownloadDbAsync(CancellationToken ct)
     {
-        var localPath = Path.Combine(Path.GetTempPath(), $"sekiban-cold-sqlite-{Guid.NewGuid():N}.db");
+        var localPath = Path.Combine(Path.GetTempPath(), $"sekiban-cold-{_storageKind}-{Guid.NewGuid():N}.db");
         var blob = _container.GetBlobClient(_blobName);
 
         try
