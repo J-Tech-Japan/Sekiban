@@ -368,13 +368,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
 
         var existingEvents = existingEventsResult.GetValue();
-        var appendCount = CountAppendableEvents(lastSegment, existingEvents, allSafeEvents);
+        var appendableEvents = FilterAlreadyAppendedEvents(existingEvents, allSafeEvents);
+        var appendCount = CountAppendableEvents(existingEvents, appendableEvents);
         if (appendCount <= 0)
         {
             return ResultBox.FromValue(0);
         }
 
-        var appended = allSafeEvents.Take(appendCount).ToList();
+        var appended = appendableEvents.Take(appendCount).ToList();
         var mergedEvents = existingEvents.Concat(appended).ToList();
         var mergedData = JsonlSegmentWriter.Write(mergedEvents);
         var updatedLast = new ColdSegmentInfo(
@@ -392,8 +393,22 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         return ResultBox.FromValue(appendCount);
     }
 
+    private static IReadOnlyList<SerializableEvent> FilterAlreadyAppendedEvents(
+        IReadOnlyList<SerializableEvent> existingEvents,
+        IReadOnlyList<SerializableEvent> incomingEvents)
+    {
+        if (existingEvents.Count == 0)
+        {
+            return incomingEvents;
+        }
+
+        var lastExistingId = existingEvents[^1].SortableUniqueIdValue;
+        return incomingEvents
+            .Where(e => string.CompareOrdinal(e.SortableUniqueIdValue, lastExistingId) > 0)
+            .ToList();
+    }
+
     private int CountAppendableEvents(
-        ColdSegmentInfo lastSegment,
         IReadOnlyList<SerializableEvent> existingEvents,
         IReadOnlyList<SerializableEvent> incomingEvents)
     {
@@ -401,7 +416,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var appendCount = 0;
 
         while (appendCount < incomingEvents.Count
-               && lastSegment.EventCount + appendCount < _options.SegmentMaxEvents)
+               && existingEvents.Count + appendCount < _options.SegmentMaxEvents)
         {
             var nextPayloadBytes = payloadBytes + incomingEvents[appendCount].Payload.Length;
             if (nextPayloadBytes > _options.SegmentMaxBytes)
@@ -420,10 +435,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         try
         {
-            var text = System.Text.Encoding.UTF8.GetString(data);
-            var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var events = new List<SerializableEvent>(lines.Length);
-            foreach (var raw in lines)
+            using var stream = new MemoryStream(data, writable: false);
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var events = new List<SerializableEvent>();
+            while (reader.ReadLine() is { } raw)
             {
                 var line = raw.Trim();
                 if (line.Length == 0)

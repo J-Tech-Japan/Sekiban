@@ -1,3 +1,4 @@
+using System.Globalization;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +16,14 @@ public static class SekibanDcbColdExportExtensions
     {
         var coldConfig = configuration.GetSection(coldEventSectionPath);
         var configuredColdOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
+        var enabled = ResolveEnabled(coldConfig, configuredColdOptions);
 
         var exportInterval = ParsePositiveTimeSpan(configuration["ColdExport:Interval"]);
         var cycleBudget = ParsePositiveTimeSpan(configuration["ColdExport:CycleBudget"]);
 
         var coldOptions = configuredColdOptions with
         {
-            Enabled = true,
+            Enabled = enabled,
             PullInterval = exportInterval ?? configuredColdOptions.PullInterval,
             ExportCycleBudget = cycleBudget ?? configuredColdOptions.ExportCycleBudget
         };
@@ -60,8 +62,15 @@ public static class SekibanDcbColdExportExtensions
         => string.Equals(options.Provider, "azureblob", StringComparison.OrdinalIgnoreCase)
            || string.Equals(options.Type, "azureblob", StringComparison.OrdinalIgnoreCase);
 
+    private static bool ResolveEnabled(IConfigurationSection coldConfig, ColdEventStoreOptions configuredColdOptions)
+        => string.IsNullOrWhiteSpace(coldConfig["Enabled"])
+            ? true
+            : configuredColdOptions.Enabled;
+
     private static TimeSpan? ParsePositiveTimeSpan(string? raw)
-        => !string.IsNullOrWhiteSpace(raw) && TimeSpan.TryParse(raw, out var parsed) && parsed > TimeSpan.Zero
+        => !string.IsNullOrWhiteSpace(raw)
+           && TimeSpan.TryParse(raw, CultureInfo.InvariantCulture, out var parsed)
+           && parsed > TimeSpan.Zero
             ? parsed
             : null;
 }

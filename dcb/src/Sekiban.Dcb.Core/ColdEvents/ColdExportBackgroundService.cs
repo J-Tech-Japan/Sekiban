@@ -79,6 +79,7 @@ public sealed class ColdExportBackgroundService : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+            return;
         }
         catch (OperationCanceledException) when (cycleBudget is { } timedBudget)
         {
@@ -107,7 +108,7 @@ public sealed class ColdExportBackgroundService : BackgroundService
 
         var value = result.GetValue();
         _logger.LogInformation(
-            "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} new segments",
+            "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} written/updated segments",
             serviceId,
             value.ExportedEventCount,
             value.NewSegments.Count);

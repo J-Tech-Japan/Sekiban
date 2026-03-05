@@ -56,73 +56,119 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
     {
         var path = LeasePath(leaseId);
         var now = DateTimeOffset.UtcNow;
-
-        var existing = await _storage.GetAsync(path, ct);
-        string? expectedEtag = null;
-        if (existing.IsSuccess)
+        var existingLeaseResult = await LoadExistingLeaseAsync(path, leaseId, ct);
+        if (!existingLeaseResult.IsSuccess)
         {
-            var objectValue = existing.GetValue();
-            expectedEtag = objectValue.ETag;
-            var (storedLease, error) = DeserializeLease(objectValue.Data, objectValue.ETag, leaseId);
-            if (error is not null)
-            {
-                return ResultBox.Error<ColdLease>(error);
-            }
-
-            if (storedLease is not null)
-            {
-                if (requireOwnership && !string.Equals(storedLease.Token, expectedToken, StringComparison.Ordinal))
-                {
-                    return ResultBox.Error<ColdLease>(new InvalidOperationException($"Lease {leaseId} is not held by token"));
-                }
-
-                if (!requireOwnership && storedLease.ExpiresAt > now)
-                {
-                    return ResultBox.Error<ColdLease>(new InvalidOperationException($"Lease {leaseId} is already held"));
-                }
-            }
+            return ResultBox.Error<ColdLease>(existingLeaseResult.GetException());
         }
-        else if (!IsNotFound(existing.GetException()))
+
+        var existingLease = existingLeaseResult.GetValue();
+        var validateError = ValidateExistingLease(existingLease.Lease, leaseId, expectedToken, requireOwnership, now);
+        if (validateError is not null)
         {
-            return ResultBox.Error<ColdLease>(existing.GetException());
-        }
-        else if (requireOwnership)
-        {
-            return ResultBox.Error<ColdLease>(new InvalidOperationException($"Lease {leaseId} is not held by token"));
+            return ResultBox.Error<ColdLease>(validateError);
         }
 
         var token = expectedToken ?? ComputeLeaseToken();
         var lease = new ColdLease(leaseId, token, now.Add(duration));
         var payload = JsonSerializer.SerializeToUtf8Bytes(lease);
 
-        var putResult = await _storage.PutAsync(path, payload, expectedEtag, ct);
+        var putResult = await _storage.PutAsync(path, payload, existingLease.ETag, ct);
         if (!putResult.IsSuccess)
         {
             return ResultBox.Error<ColdLease>(putResult.GetException());
         }
 
-        if (expectedEtag is null && !requireOwnership)
+        if (existingLease.ETag is null && !requireOwnership)
         {
-            var verify = await _storage.GetAsync(path, ct);
-            if (!verify.IsSuccess)
+            var verifyResult = await VerifyAcquiredLeaseAsync(path, leaseId, lease.Token, ct);
+            if (!verifyResult.IsSuccess)
             {
-                return ResultBox.Error<ColdLease>(verify.GetException());
-            }
-
-            var (verifiedLease, verifyError) = DeserializeLease(verify.GetValue().Data, verify.GetValue().ETag, leaseId);
-            if (verifyError is not null)
-            {
-                return ResultBox.Error<ColdLease>(verifyError);
-            }
-
-            if (verifiedLease is null || verifiedLease.Token != lease.Token)
-            {
-                return ResultBox.Error<ColdLease>(new InvalidOperationException(
-                    $"Lease {leaseId} was acquired by another writer"));
+                return ResultBox.Error<ColdLease>(verifyResult.GetException());
             }
         }
 
         return ResultBox.FromValue(lease);
+    }
+
+    private async Task<ResultBox<StoredLeaseState>> LoadExistingLeaseAsync(
+        string path,
+        string leaseId,
+        CancellationToken ct)
+    {
+        var existing = await _storage.GetAsync(path, ct);
+        if (existing.IsSuccess)
+        {
+            var objectValue = existing.GetValue();
+            var (storedLease, error) = DeserializeLease(objectValue.Data, objectValue.ETag, leaseId);
+            if (error is not null)
+            {
+                return ResultBox.Error<StoredLeaseState>(error);
+            }
+
+            return ResultBox.FromValue(new StoredLeaseState(storedLease, objectValue.ETag));
+        }
+
+        if (IsNotFound(existing.GetException()))
+        {
+            return ResultBox.FromValue(new StoredLeaseState(null, null));
+        }
+
+        return ResultBox.Error<StoredLeaseState>(existing.GetException());
+    }
+
+    private static Exception? ValidateExistingLease(
+        ColdLease? storedLease,
+        string leaseId,
+        string? expectedToken,
+        bool requireOwnership,
+        DateTimeOffset now)
+    {
+        if (storedLease is null)
+        {
+            return requireOwnership
+                ? new InvalidOperationException($"Lease {leaseId} is not held by token")
+                : null;
+        }
+
+        if (requireOwnership && !string.Equals(storedLease.Token, expectedToken, StringComparison.Ordinal))
+        {
+            return new InvalidOperationException($"Lease {leaseId} is not held by token");
+        }
+
+        if (!requireOwnership && storedLease.ExpiresAt > now)
+        {
+            return new InvalidOperationException($"Lease {leaseId} is already held");
+        }
+
+        return null;
+    }
+
+    private async Task<ResultBox<bool>> VerifyAcquiredLeaseAsync(
+        string path,
+        string leaseId,
+        string expectedToken,
+        CancellationToken ct)
+    {
+        var verify = await _storage.GetAsync(path, ct);
+        if (!verify.IsSuccess)
+        {
+            return ResultBox.Error<bool>(verify.GetException());
+        }
+
+        var (verifiedLease, verifyError) = DeserializeLease(verify.GetValue().Data, verify.GetValue().ETag, leaseId);
+        if (verifyError is not null)
+        {
+            return ResultBox.Error<bool>(verifyError);
+        }
+
+        if (verifiedLease is null || verifiedLease.Token != expectedToken)
+        {
+            return ResultBox.Error<bool>(new InvalidOperationException(
+                $"Lease {leaseId} was acquired by another writer"));
+        }
+
+        return ResultBox.FromValue(true);
     }
 
     private static string LeasePath(string leaseId)
@@ -151,4 +197,6 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
 
     private static string ComputeLeaseToken()
         => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+
+    private sealed record StoredLeaseState(ColdLease? Lease, string? ETag);
 }
