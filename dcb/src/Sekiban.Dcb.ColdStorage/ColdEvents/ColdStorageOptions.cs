@@ -2,7 +2,17 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed record ColdStorageOptions
 {
+    // Legacy single-field selector. Supported values:
+    // jsonl/sqlite/duckdb/azureblob
     public string Type { get; init; } = "jsonl";
+
+    // Preferred selector for storage location. Supported values:
+    // local/azureblob
+    public string? Provider { get; init; }
+
+    // Preferred selector for storage format. Supported values:
+    // jsonl/sqlite/duckdb
+    public string? Format { get; init; }
 
     // Relative paths are resolved against the application's current directory.
     public string BasePath { get; init; } = ColdObjectStorageFactory.DefaultBasePath;

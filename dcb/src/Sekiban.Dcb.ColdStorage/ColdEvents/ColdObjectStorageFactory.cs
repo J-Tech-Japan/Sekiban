@@ -7,6 +7,8 @@ namespace Sekiban.Dcb.ColdEvents;
 public static class ColdObjectStorageFactory
 {
     public const string DefaultBasePath = ".cold-events";
+    private const string DefaultProvider = "local";
+    private const string DefaultFormat = "jsonl";
 
     public static string ResolveStorageRoot(
         ColdStorageOptions options,
@@ -35,22 +37,57 @@ public static class ColdObjectStorageFactory
         string storageRoot,
         IServiceProvider services)
     {
-        var type = (options.Type ?? "jsonl").ToLowerInvariant();
-        if (type is "sqlite" or "duckdb" or "jsonl")
+        var (provider, format) = ResolveProviderAndFormat(options);
+        if (provider == "local" && format is "sqlite" or "duckdb" or "jsonl")
         {
             Directory.CreateDirectory(storageRoot);
         }
 
-        return type switch
+        return (provider, format) switch
         {
-            "sqlite" => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
-            "duckdb" => new DuckDbColdObjectStorage(Path.Combine(storageRoot, options.DuckDbFile)),
-            "jsonl" => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
-            "azureblob" => new AzureBlobColdObjectStorage(
+            ("local", "sqlite") => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
+            ("local", "duckdb") => new DuckDbColdObjectStorage(Path.Combine(storageRoot, options.DuckDbFile)),
+            ("local", "jsonl") => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
+            ("azureblob", "jsonl") => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
                 options.AzurePrefix),
-            _ => throw new InvalidOperationException($"Unsupported cold storage type: {options.Type}")
+            ("azureblob", "sqlite") => new AzureBlobSqliteColdObjectStorage(
+                services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
+                options.AzureContainerName,
+                options.AzurePrefix,
+                options.SqliteFile),
+            ("azureblob", "duckdb") => new AzureBlobDuckDbColdObjectStorage(
+                services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
+                options.AzureContainerName,
+                options.AzurePrefix,
+                options.DuckDbFile),
+            _ => throw new InvalidOperationException(
+                $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };
+    }
+
+    private static (string Provider, string Format) ResolveProviderAndFormat(ColdStorageOptions options)
+    {
+        var type = (options.Type ?? DefaultFormat).ToLowerInvariant();
+        var provider = (options.Provider ?? string.Empty).Trim().ToLowerInvariant();
+        var format = (options.Format ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            provider = type == "azureblob" ? "azureblob" : DefaultProvider;
+        }
+
+        if (string.IsNullOrWhiteSpace(format))
+        {
+            format = type switch
+            {
+                "sqlite" => "sqlite",
+                "duckdb" => "duckdb",
+                _ => DefaultFormat
+            };
+        }
+
+        return (provider, format);
     }
 }
