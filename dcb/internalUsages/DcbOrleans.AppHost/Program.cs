@@ -54,7 +54,6 @@ builder
 // Add benchmark project (load generator)
 var bench = builder
     .AddProject<DcbOrleans_Benchmark>("bench")
-    .WithReference(apiService, "apiservice")
     .WaitFor(apiService)
     .WithEnvironment("ApiBaseUrl", apiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
@@ -96,7 +95,6 @@ builder
 // Add benchmark project (load generator)
 var bench = builder
     .AddProject<DcbOrleans_Benchmark>("bench")
-    .WithReference(withoutResultApiService, "apiservice")
     .WaitFor(withoutResultApiService)
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
