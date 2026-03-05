@@ -1,8 +1,7 @@
 using Microsoft.Data.Sqlite;
 using ResultBoxes;
-using Sekiban.Dcb.ColdEvents;
 
-namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
+namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class SqliteColdObjectStorage : IColdObjectStorage
 {
@@ -140,6 +139,7 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
             {
                 list.Add(reader.GetString(0));
             }
+
             return ResultBox.FromValue<IReadOnlyList<string>>(list);
         }
         catch (Exception ex)

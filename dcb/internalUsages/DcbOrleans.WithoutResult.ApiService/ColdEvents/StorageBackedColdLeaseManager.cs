@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
 
@@ -89,7 +90,7 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
             return ResultBox.Error<ColdLease>(new InvalidOperationException($"Lease {leaseId} is not held by token"));
         }
 
-        var token = expectedToken ?? ColdStoragePath.ComputeLeaseToken();
+        var token = expectedToken ?? ComputeLeaseToken();
         var lease = new ColdLease(leaseId, token, now.Add(duration));
         var payload = JsonSerializer.SerializeToUtf8Bytes(lease);
 
@@ -146,4 +147,7 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
 
     private static bool IsNotFound(Exception ex)
         => ex is FileNotFoundException or DirectoryNotFoundException or KeyNotFoundException;
+
+    private static string ComputeLeaseToken()
+        => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 }

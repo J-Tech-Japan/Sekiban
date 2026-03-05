@@ -1,7 +1,6 @@
 using ResultBoxes;
-using Sekiban.Dcb.ColdEvents;
 
-namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
+namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class JsonlColdObjectStorage : IColdObjectStorage
 {
@@ -75,7 +74,6 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                 }
             }
 
-            // Create-if-not-exists first to reduce first-write races.
             try
             {
                 await using var create = new FileStream(
@@ -130,6 +128,7 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                     {
                         return Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>([]));
                     }
+
                     searchRoot = candidate;
                 }
             }

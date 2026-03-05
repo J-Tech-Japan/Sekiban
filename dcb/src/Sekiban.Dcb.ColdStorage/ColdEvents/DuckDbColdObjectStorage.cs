@@ -1,9 +1,7 @@
 using DuckDB.NET.Data;
 using ResultBoxes;
-using Sekiban.Dcb.ColdEvents;
-using System.IO;
 
-namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
+namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class DuckDbColdObjectStorage : IColdObjectStorage
 {
@@ -129,8 +127,6 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
             command.Parameters.Add(new DuckDBParameter { Value = normalizedPath });
             await command.ExecuteNonQueryAsync(ct);
 
-            // DuckDB .NET ExecuteNonQueryAsync can return a driver-specific value;
-            // verify deletion by checking row absence instead of relying on affected count.
             await using var verify = connection.CreateCommand();
             verify.CommandText = "SELECT COUNT(*) FROM cold_objects WHERE path = ?";
             verify.Parameters.Add(new DuckDBParameter { Value = normalizedPath });
@@ -160,6 +156,7 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
         {
             stream.Position = 0;
         }
+
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms, ct);
         return ms.ToArray();
