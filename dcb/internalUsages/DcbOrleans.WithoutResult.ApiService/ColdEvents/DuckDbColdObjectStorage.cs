@@ -115,11 +115,20 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
     public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
         => ExecuteAsync(async connection =>
         {
+            var normalizedPath = ColdStoragePath.Normalize(path);
             await using var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM cold_objects WHERE path = ?";
-            command.Parameters.Add(new DuckDBParameter { Value = ColdStoragePath.Normalize(path) });
-            var affected = await command.ExecuteNonQueryAsync(ct);
-            return ResultBox.FromValue(affected > 0);
+            command.Parameters.Add(new DuckDBParameter { Value = normalizedPath });
+            await command.ExecuteNonQueryAsync(ct);
+
+            // DuckDB .NET ExecuteNonQueryAsync can return a driver-specific value;
+            // verify deletion by checking row absence instead of relying on affected count.
+            await using var verify = connection.CreateCommand();
+            verify.CommandText = "SELECT COUNT(*) FROM cold_objects WHERE path = ?";
+            verify.Parameters.Add(new DuckDBParameter { Value = normalizedPath });
+            var remaining = await verify.ExecuteScalarAsync(ct);
+            var count = remaining is null or DBNull ? 0L : Convert.ToInt64(remaining);
+            return ResultBox.FromValue(count == 0);
         });
 
     private async Task<ResultBox<T>> ExecuteAsync<T>(Func<DuckDBConnection, Task<ResultBox<T>>> action)

@@ -245,6 +245,20 @@ public class ColdExporterTests
                     string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
             return Task.FromResult(ResultBox.FromValue(result));
         }
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+            => throw new NotSupportedException();
     }
 
     private sealed class FailingCheckpointStorage : IColdObjectStorage

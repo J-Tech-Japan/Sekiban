@@ -294,5 +294,14 @@ public class HybridEventStoreTests
             }
             return Task.FromResult(ResultBox.FromValue(filtered));
         }
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+            => throw new NotSupportedException();
     }
 }
