@@ -281,56 +281,18 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
         if (existingSegments.Count > 0)
         {
-            var lastSegment = existingSegments[^1];
-            var lastSegmentObject = await _storage.GetAsync(lastSegment.Path, ct);
-            if (!lastSegmentObject.IsSuccess)
+            var appendResult = await AppendToLatestSegmentIfPossibleAsync(
+                existingSegments,
+                allSafeEvents,
+                writes,
+                writtenSegments,
+                ct);
+            if (!appendResult.IsSuccess)
             {
-                return ResultBox.Error<SegmentWritePlan>(lastSegmentObject.GetException());
+                return ResultBox.Error<SegmentWritePlan>(appendResult.GetException());
             }
 
-            var existingEventsResult = ParseSegmentEvents(lastSegmentObject.GetValue().Data);
-            if (!existingEventsResult.IsSuccess)
-            {
-                return ResultBox.Error<SegmentWritePlan>(existingEventsResult.GetException());
-            }
-
-            var existingEvents = existingEventsResult.GetValue();
-            var currentPayloadBytes = existingEvents.Sum(e => (long)e.Payload.Length);
-
-            var appendCount = 0;
-            while (eventsConsumed + appendCount < allSafeEvents.Count
-                   && lastSegment.EventCount + appendCount < _options.SegmentMaxEvents)
-            {
-                var candidate = allSafeEvents[eventsConsumed + appendCount];
-                var nextPayloadBytes = currentPayloadBytes + candidate.Payload.Length;
-                if (nextPayloadBytes > _options.SegmentMaxBytes)
-                {
-                    break;
-                }
-
-                currentPayloadBytes = nextPayloadBytes;
-                appendCount++;
-            }
-
-            if (appendCount > 0)
-            {
-                var appended = allSafeEvents.Take(appendCount).ToList();
-                var mergedEvents = existingEvents.Concat(appended).ToList();
-                var mergedData = JsonlSegmentWriter.Write(mergedEvents);
-                var updatedLast = new ColdSegmentInfo(
-                    Path: lastSegment.Path,
-                    FromSortableUniqueId: lastSegment.FromSortableUniqueId,
-                    ToSortableUniqueId: mergedEvents[^1].SortableUniqueIdValue,
-                    EventCount: mergedEvents.Count,
-                    SizeBytes: mergedData.Length,
-                    Sha256: ComputeSha256(mergedData),
-                    CreatedAtUtc: lastSegment.CreatedAtUtc);
-
-                existingSegments[^1] = updatedLast;
-                writes.Add(new SegmentWrite(lastSegment.Path, mergedData, lastSegmentObject.GetValue().ETag));
-                writtenSegments.Add(updatedLast);
-                eventsConsumed += appendCount;
-            }
+            eventsConsumed = appendResult.GetValue();
         }
 
         var remaining = allSafeEvents.Skip(eventsConsumed).ToList();
@@ -358,6 +320,75 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
 
         return ResultBox.FromValue(new SegmentWritePlan(existingSegments, writes, writtenSegments));
+    }
+
+    private async Task<ResultBox<int>> AppendToLatestSegmentIfPossibleAsync(
+        List<ColdSegmentInfo> existingSegments,
+        IReadOnlyList<SerializableEvent> allSafeEvents,
+        List<SegmentWrite> writes,
+        List<ColdSegmentInfo> writtenSegments,
+        CancellationToken ct)
+    {
+        var lastSegment = existingSegments[^1];
+        var lastSegmentObject = await _storage.GetAsync(lastSegment.Path, ct);
+        if (!lastSegmentObject.IsSuccess)
+        {
+            return ResultBox.Error<int>(lastSegmentObject.GetException());
+        }
+
+        var existingEventsResult = ParseSegmentEvents(lastSegmentObject.GetValue().Data);
+        if (!existingEventsResult.IsSuccess)
+        {
+            return ResultBox.Error<int>(existingEventsResult.GetException());
+        }
+
+        var existingEvents = existingEventsResult.GetValue();
+        var appendCount = CountAppendableEvents(lastSegment, existingEvents, allSafeEvents);
+        if (appendCount <= 0)
+        {
+            return ResultBox.FromValue(0);
+        }
+
+        var appended = allSafeEvents.Take(appendCount).ToList();
+        var mergedEvents = existingEvents.Concat(appended).ToList();
+        var mergedData = JsonlSegmentWriter.Write(mergedEvents);
+        var updatedLast = new ColdSegmentInfo(
+            Path: lastSegment.Path,
+            FromSortableUniqueId: lastSegment.FromSortableUniqueId,
+            ToSortableUniqueId: mergedEvents[^1].SortableUniqueIdValue,
+            EventCount: mergedEvents.Count,
+            SizeBytes: mergedData.Length,
+            Sha256: ComputeSha256(mergedData),
+            CreatedAtUtc: lastSegment.CreatedAtUtc);
+
+        existingSegments[^1] = updatedLast;
+        writes.Add(new SegmentWrite(lastSegment.Path, mergedData, lastSegmentObject.GetValue().ETag));
+        writtenSegments.Add(updatedLast);
+        return ResultBox.FromValue(appendCount);
+    }
+
+    private int CountAppendableEvents(
+        ColdSegmentInfo lastSegment,
+        IReadOnlyList<SerializableEvent> existingEvents,
+        IReadOnlyList<SerializableEvent> incomingEvents)
+    {
+        var payloadBytes = existingEvents.Sum(e => (long)e.Payload.Length);
+        var appendCount = 0;
+
+        while (appendCount < incomingEvents.Count
+               && lastSegment.EventCount + appendCount < _options.SegmentMaxEvents)
+        {
+            var nextPayloadBytes = payloadBytes + incomingEvents[appendCount].Payload.Length;
+            if (nextPayloadBytes > _options.SegmentMaxBytes)
+            {
+                break;
+            }
+
+            payloadBytes = nextPayloadBytes;
+            appendCount++;
+        }
+
+        return appendCount;
     }
 
     private static ResultBox<IReadOnlyList<SerializableEvent>> ParseSegmentEvents(byte[] data)

@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 
+namespace DcbOrleans.Catchup.Functions;
+
 public sealed class ColdExportTimerService : BackgroundService
 {
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(5);
@@ -150,7 +152,7 @@ public sealed class ColdExportTimerService : BackgroundService
             return EnsureTrailingSlash(configured);
         }
 
-        return "http://withoutresultapiservice/";
+        return "https://withoutresultapiservice/";
     }
 
     private static string EnsureTrailingSlash(string baseUrl)
