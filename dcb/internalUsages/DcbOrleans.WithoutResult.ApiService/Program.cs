@@ -1096,83 +1096,77 @@ apiRoute
     .WithName("RunColdExportNow")
     .ExcludeFromDescription();
 
-// Diagnostic endpoint for cold export lock troubleshooting.
-apiRoute
-    .MapGet(
-        "/cold/debug",
-        async (
-            [FromServices] IColdObjectStorage storage,
-            [FromServices] IServiceIdProvider serviceIdProvider,
-            CancellationToken ct) =>
-        {
-            var serviceId = serviceIdProvider.GetCurrentServiceId();
-            var leasePath = $"control/cold-export-{serviceId}/lease.json";
-            var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
-            var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
-
-            string? leaseJson = null;
-            string? leaseReadError = null;
-            string? manifestReadError = null;
-            string? checkpointReadError = null;
-
-            var leaseObject = await storage.GetAsync(leasePath, ct);
-            if (leaseObject.IsSuccess)
+if (app.Environment.IsDevelopment())
+{
+    // Diagnostic endpoint for cold export lock troubleshooting.
+    apiRoute
+        .MapGet(
+            "/cold/debug",
+            async (
+                [FromServices] IColdObjectStorage storage,
+                [FromServices] IServiceIdProvider serviceIdProvider,
+                CancellationToken ct) =>
             {
-                leaseJson = Encoding.UTF8.GetString(leaseObject.GetValue().Data);
-            }
-            else
-            {
-                leaseReadError = leaseObject.GetException().Message;
-            }
+                var serviceId = serviceIdProvider.GetCurrentServiceId();
+                var leasePath = $"control/cold-export-{serviceId}/lease.json";
+                var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
+                var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
 
-            var manifestObject = await storage.GetAsync(manifestPath, ct);
-            if (!manifestObject.IsSuccess)
-            {
-                manifestReadError = manifestObject.GetException().Message;
-            }
+                string? leaseReadError = null;
+                string? manifestReadError = null;
+                string? checkpointReadError = null;
 
-            var checkpointObject = await storage.GetAsync(checkpointPath, ct);
-            if (!checkpointObject.IsSuccess)
-            {
-                checkpointReadError = checkpointObject.GetException().Message;
-            }
-
-            var controlList = await storage.ListAsync("control/", ct);
-            var segmentList = await storage.ListAsync("segments/", ct);
-
-            return Results.Ok(new
-            {
-                process = new
+                var leaseObject = await storage.GetAsync(leasePath, ct);
+                if (!leaseObject.IsSuccess)
                 {
-                    pid = Environment.ProcessId,
-                    currentDirectory = Directory.GetCurrentDirectory(),
-                    machine = Environment.MachineName
-                },
-                serviceId,
-                lease = new
+                    leaseReadError = leaseObject.GetException().Message;
+                }
+
+                var manifestObject = await storage.GetAsync(manifestPath, ct);
+                if (!manifestObject.IsSuccess)
                 {
-                    path = leasePath,
-                    json = leaseJson,
-                    error = leaseReadError
-                },
-                manifest = new
+                    manifestReadError = manifestObject.GetException().Message;
+                }
+
+                var checkpointObject = await storage.GetAsync(checkpointPath, ct);
+                if (!checkpointObject.IsSuccess)
                 {
-                    path = manifestPath,
-                    exists = manifestObject.IsSuccess,
-                    error = manifestReadError
-                },
-                checkpoint = new
+                    checkpointReadError = checkpointObject.GetException().Message;
+                }
+
+                var segmentList = await storage.ListAsync("segments/", ct);
+
+                return Results.Ok(new
                 {
-                    path = checkpointPath,
-                    exists = checkpointObject.IsSuccess,
-                    error = checkpointReadError
-                },
-                controlPaths = controlList.IsSuccess ? controlList.GetValue() : [],
-                segmentPathCount = segmentList.IsSuccess ? segmentList.GetValue().Count : -1
-            });
-        })
-    .WithName("ColdDebug")
-    .ExcludeFromDescription();
+                    process = new
+                    {
+                        pid = Environment.ProcessId
+                    },
+                    serviceId,
+                    lease = new
+                    {
+                        path = leasePath,
+                        exists = leaseObject.IsSuccess,
+                        error = leaseReadError
+                    },
+                    manifest = new
+                    {
+                        path = manifestPath,
+                        exists = manifestObject.IsSuccess,
+                        error = manifestReadError
+                    },
+                    checkpoint = new
+                    {
+                        path = checkpointPath,
+                        exists = checkpointObject.IsSuccess,
+                        error = checkpointReadError
+                    },
+                    segmentPathCount = segmentList.IsSuccess ? segmentList.GetValue().Count : -1
+                });
+            })
+        .WithName("ColdDebug")
+        .ExcludeFromDescription();
+}
 
 // Orleans test endpoint
 apiRoute

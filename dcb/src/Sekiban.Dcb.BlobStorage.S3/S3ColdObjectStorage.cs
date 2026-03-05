@@ -65,17 +65,11 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
             var key = BuildKey(path);
             if (expectedETag is not null)
             {
-                var metaResult = await GetObjectMetadataSafeAsync(key, ct).ConfigureAwait(false);
-                if (metaResult is null)
-                {
-                    return ResultBox.Error<bool>(new InvalidOperationException($"Conditional write failed: {path} does not exist"));
-                }
-
-                if (!string.Equals(NormalizeEtag(metaResult.ETag), NormalizeEtag(expectedETag), StringComparison.Ordinal))
-                {
-                    return ResultBox.Error<bool>(new InvalidOperationException(
-                        $"ETag mismatch at {path}: expected={expectedETag}, actual={metaResult.ETag}"));
-                }
+                // S3 PutObject does not provide atomic destination If-Match semantics.
+                // Returning NotSupported avoids false safety from non-atomic check-then-put.
+                return ResultBox.Error<bool>(new NotSupportedException(
+                    "S3ColdObjectStorage does not support atomic expectedETag writes. " +
+                    "Use AzureBlobColdObjectStorage for optimistic concurrency paths."));
             }
 
             using var ms = new MemoryStream(data);
@@ -156,22 +150,6 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
         }
     }
 
-    private async Task<GetObjectMetadataResponse?> GetObjectMetadataSafeAsync(string key, CancellationToken ct)
-    {
-        try
-        {
-            return await _s3Client.GetObjectMetadataAsync(new GetObjectMetadataRequest
-            {
-                BucketName = _bucketName,
-                Key = key
-            }, ct).ConfigureAwait(false);
-        }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-    }
-
     private string BuildKey(string path)
     {
         var normalizedPath = NormalizePath(path);
@@ -222,6 +200,4 @@ public sealed class S3ColdObjectStorage : IColdObjectStorage
     private static string NormalizePath(string path)
         => path.Replace('\\', '/').TrimStart('/');
 
-    private static string NormalizeEtag(string etag)
-        => etag.Trim().Trim('"');
 }

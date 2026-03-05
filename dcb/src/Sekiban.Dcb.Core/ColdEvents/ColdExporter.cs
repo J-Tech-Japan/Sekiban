@@ -74,6 +74,14 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         if (!leaseResult.IsSuccess)
         {
             var leaseException = leaseResult.GetException();
+            if (leaseException is OperationCanceledException || ct.IsCancellationRequested)
+            {
+                return ResultBox.Error<ExportResult>(
+                    leaseException is OperationCanceledException
+                        ? leaseException
+                        : new OperationCanceledException(ct));
+            }
+
             var leaseHeld = leaseException is InvalidOperationException &&
                             leaseException.Message.Contains("already held", StringComparison.OrdinalIgnoreCase);
             if (leaseHeld)

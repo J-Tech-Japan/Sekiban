@@ -2,7 +2,9 @@ using Amazon.Extensions.NETCore.Setup;
 using Amazon.S3;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Snapshots;
 
@@ -22,36 +24,13 @@ public static class SekibanDcbS3Extensions
     {
         services.Configure<S3BlobStorageOptions>(options =>
             configuration.GetSection("S3BlobStorage").Bind(options));
+        AddConfiguredS3ClientIfMissing(services);
 
         services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<S3BlobStorageOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<S3BlobStorageOptions>>().Value;
             var logger = sp.GetService<ILogger<S3BlobStorageSnapshotAccessor>>();
-
-            var s3Client = sp.GetService<IAmazonS3>();
-            if (s3Client != null)
-            {
-                return new S3BlobStorageSnapshotAccessor(
-                    s3Client,
-                    options.BucketName,
-                    options.Prefix,
-                    options.EnableEncryption,
-                    logger);
-            }
-
-            var config = new AmazonS3Config();
-            if (!string.IsNullOrEmpty(options.Region))
-            {
-                config.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(options.Region);
-            }
-
-            if (!string.IsNullOrEmpty(options.ServiceUrl))
-            {
-                config.ServiceURL = options.ServiceUrl;
-                config.ForcePathStyle = options.ForcePathStyle;
-            }
-
-            var client = new AmazonS3Client(config);
+            var client = sp.GetRequiredService<IAmazonS3>();
             return new S3BlobStorageSnapshotAccessor(
                 client,
                 options.BucketName,
@@ -119,36 +98,13 @@ public static class SekibanDcbS3Extensions
     {
         services.Configure<S3BlobStorageOptions>(options =>
             configuration.GetSection("S3BlobStorage").Bind(options));
+        AddConfiguredS3ClientIfMissing(services);
 
         services.AddSingleton<IColdObjectStorage>(sp =>
         {
-            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<S3BlobStorageOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<S3BlobStorageOptions>>().Value;
             var logger = sp.GetService<ILogger<S3ColdObjectStorage>>();
-
-            var s3Client = sp.GetService<IAmazonS3>();
-            if (s3Client != null)
-            {
-                return new S3ColdObjectStorage(
-                    s3Client,
-                    options.BucketName,
-                    options.Prefix,
-                    options.EnableEncryption,
-                    logger);
-            }
-
-            var config = new AmazonS3Config();
-            if (!string.IsNullOrEmpty(options.Region))
-            {
-                config.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(options.Region);
-            }
-
-            if (!string.IsNullOrEmpty(options.ServiceUrl))
-            {
-                config.ServiceURL = options.ServiceUrl;
-                config.ForcePathStyle = options.ForcePathStyle;
-            }
-
-            var client = new AmazonS3Client(config);
+            var client = sp.GetRequiredService<IAmazonS3>();
             return new S3ColdObjectStorage(
                 client,
                 options.BucketName,
@@ -205,5 +161,27 @@ public static class SekibanDcbS3Extensions
                 logger);
         });
         return services;
+    }
+
+    private static void AddConfiguredS3ClientIfMissing(IServiceCollection services)
+    {
+        services.TryAddSingleton<IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<S3BlobStorageOptions>>().Value;
+            var config = new AmazonS3Config();
+
+            if (!string.IsNullOrEmpty(options.Region))
+            {
+                config.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(options.Region);
+            }
+
+            if (!string.IsNullOrEmpty(options.ServiceUrl))
+            {
+                config.ServiceURL = options.ServiceUrl;
+                config.ForcePathStyle = options.ForcePathStyle;
+            }
+
+            return new AmazonS3Client(config);
+        });
     }
 }
