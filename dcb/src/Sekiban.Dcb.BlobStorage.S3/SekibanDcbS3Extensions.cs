@@ -3,6 +3,7 @@ using Amazon.S3;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Snapshots;
 
 namespace Sekiban.Dcb.BlobStorage.S3;
@@ -100,6 +101,103 @@ public static class SekibanDcbS3Extensions
             var s3Client = sp.GetRequiredService<IAmazonS3>();
             var logger = sp.GetService<ILogger<S3BlobStorageSnapshotAccessor>>();
             return new S3BlobStorageSnapshotAccessor(
+                s3Client,
+                bucketName,
+                prefix,
+                enableEncryption,
+                logger);
+        });
+        return services;
+    }
+
+    /// <summary>
+    ///     Adds S3-backed IColdObjectStorage using configuration section "S3BlobStorage".
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbS3ColdObjectStorage(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<S3BlobStorageOptions>(options =>
+            configuration.GetSection("S3BlobStorage").Bind(options));
+
+        services.AddSingleton<IColdObjectStorage>(sp =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<S3BlobStorageOptions>>().Value;
+            var logger = sp.GetService<ILogger<S3ColdObjectStorage>>();
+
+            var s3Client = sp.GetService<IAmazonS3>();
+            if (s3Client != null)
+            {
+                return new S3ColdObjectStorage(
+                    s3Client,
+                    options.BucketName,
+                    options.Prefix,
+                    options.EnableEncryption,
+                    logger);
+            }
+
+            var config = new AmazonS3Config();
+            if (!string.IsNullOrEmpty(options.Region))
+            {
+                config.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(options.Region);
+            }
+
+            if (!string.IsNullOrEmpty(options.ServiceUrl))
+            {
+                config.ServiceURL = options.ServiceUrl;
+                config.ForcePathStyle = options.ForcePathStyle;
+            }
+
+            var client = new AmazonS3Client(config);
+            return new S3ColdObjectStorage(
+                client,
+                options.BucketName,
+                options.Prefix,
+                options.EnableEncryption,
+                logger);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    ///     Adds S3-backed IColdObjectStorage with explicit bucket configuration.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbS3ColdObjectStorage(
+        this IServiceCollection services,
+        string bucketName,
+        string? prefix = null,
+        bool enableEncryption = true)
+    {
+        services.AddAWSService<IAmazonS3>();
+        services.AddSingleton<IColdObjectStorage>(sp =>
+        {
+            var s3Client = sp.GetRequiredService<IAmazonS3>();
+            var logger = sp.GetService<ILogger<S3ColdObjectStorage>>();
+            return new S3ColdObjectStorage(
+                s3Client,
+                bucketName,
+                prefix,
+                enableEncryption,
+                logger);
+        });
+        return services;
+    }
+
+    /// <summary>
+    ///     Adds S3-backed IColdObjectStorage using Aspire-provided S3 client.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbS3ColdObjectStorageWithAspire(
+        this IServiceCollection services,
+        string bucketName,
+        string? prefix = null,
+        bool enableEncryption = true)
+    {
+        services.AddSingleton<IColdObjectStorage>(sp =>
+        {
+            var s3Client = sp.GetRequiredService<IAmazonS3>();
+            var logger = sp.GetService<ILogger<S3ColdObjectStorage>>();
+            return new S3ColdObjectStorage(
                 s3Client,
                 bucketName,
                 prefix,

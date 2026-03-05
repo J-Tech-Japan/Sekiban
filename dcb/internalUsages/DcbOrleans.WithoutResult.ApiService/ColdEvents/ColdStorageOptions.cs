@@ -7,4 +7,7 @@ public sealed record ColdStorageOptions
     public string JsonlDirectory { get; init; } = "jsonl";
     public string SqliteFile { get; init; } = "cold-events.sqlite";
     public string DuckDbFile { get; init; } = "cold-events.duckdb";
+    public string AzureBlobClientName { get; init; } = "MultiProjectionOffload";
+    public string AzureContainerName { get; init; } = "multiprojection-cold-events";
+    public string? AzurePrefix { get; init; }
 }

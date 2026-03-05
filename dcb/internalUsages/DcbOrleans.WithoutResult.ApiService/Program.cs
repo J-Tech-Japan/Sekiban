@@ -1,6 +1,7 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
@@ -427,10 +428,14 @@ if (builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enable
     var coldConfig = builder.Configuration.GetSection("Sekiban:ColdEvent");
     var storageOptions = coldConfig.GetSection("Storage").Get<ColdStorageOptions>() ?? new ColdStorageOptions();
     var storageRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), storageOptions.BasePath));
-    Directory.CreateDirectory(storageRoot);
+    var type = (storageOptions.Type ?? "jsonl").ToLowerInvariant();
+    if (type is "sqlite" or "duckdb" or "jsonl")
+    {
+        Directory.CreateDirectory(storageRoot);
+    }
     builder.Services.AddSingleton(storageOptions);
-    builder.Services.AddSingleton<IColdObjectStorage>(_ =>
-        CreateColdObjectStorage(storageOptions, storageRoot));
+    builder.Services.AddSingleton<IColdObjectStorage>(sp =>
+        CreateColdObjectStorage(storageOptions, storageRoot, sp));
     builder.Services.AddSingleton<IColdLeaseManager, StorageBackedColdLeaseManager>();
     builder.Services.AddSekibanDcbColdEvents(options => coldConfig.Bind(options));
     builder.Services.AddSekibanDcbColdEventHybridRead();
@@ -1091,6 +1096,84 @@ apiRoute
     .WithName("RunColdExportNow")
     .ExcludeFromDescription();
 
+// Diagnostic endpoint for cold export lock troubleshooting.
+apiRoute
+    .MapGet(
+        "/cold/debug",
+        async (
+            [FromServices] IColdObjectStorage storage,
+            [FromServices] IServiceIdProvider serviceIdProvider,
+            CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var leasePath = $"control/cold-export-{serviceId}/lease.json";
+            var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
+            var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
+
+            string? leaseJson = null;
+            string? leaseReadError = null;
+            string? manifestReadError = null;
+            string? checkpointReadError = null;
+
+            var leaseObject = await storage.GetAsync(leasePath, ct);
+            if (leaseObject.IsSuccess)
+            {
+                leaseJson = Encoding.UTF8.GetString(leaseObject.GetValue().Data);
+            }
+            else
+            {
+                leaseReadError = leaseObject.GetException().Message;
+            }
+
+            var manifestObject = await storage.GetAsync(manifestPath, ct);
+            if (!manifestObject.IsSuccess)
+            {
+                manifestReadError = manifestObject.GetException().Message;
+            }
+
+            var checkpointObject = await storage.GetAsync(checkpointPath, ct);
+            if (!checkpointObject.IsSuccess)
+            {
+                checkpointReadError = checkpointObject.GetException().Message;
+            }
+
+            var controlList = await storage.ListAsync("control/", ct);
+            var segmentList = await storage.ListAsync("segments/", ct);
+
+            return Results.Ok(new
+            {
+                process = new
+                {
+                    pid = Environment.ProcessId,
+                    currentDirectory = Directory.GetCurrentDirectory(),
+                    machine = Environment.MachineName
+                },
+                serviceId,
+                lease = new
+                {
+                    path = leasePath,
+                    json = leaseJson,
+                    error = leaseReadError
+                },
+                manifest = new
+                {
+                    path = manifestPath,
+                    exists = manifestObject.IsSuccess,
+                    error = manifestReadError
+                },
+                checkpoint = new
+                {
+                    path = checkpointPath,
+                    exists = checkpointObject.IsSuccess,
+                    error = checkpointReadError
+                },
+                controlPaths = controlList.IsSuccess ? controlList.GetValue() : [],
+                segmentPathCount = segmentList.IsSuccess ? segmentList.GetValue().Count : -1
+            });
+        })
+    .WithName("ColdDebug")
+    .ExcludeFromDescription();
+
 // Orleans test endpoint
 apiRoute
     .MapGet(
@@ -1117,7 +1200,10 @@ app.MapDefaultEndpoints();
 
 app.Run();
 
-static IColdObjectStorage CreateColdObjectStorage(ColdStorageOptions options, string storageRoot)
+static IColdObjectStorage CreateColdObjectStorage(
+    ColdStorageOptions options,
+    string storageRoot,
+    IServiceProvider services)
 {
     var type = (options.Type ?? "jsonl").ToLowerInvariant();
     return type switch
@@ -1125,6 +1211,10 @@ static IColdObjectStorage CreateColdObjectStorage(ColdStorageOptions options, st
         "sqlite" => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
         "duckdb" => new DuckDbColdObjectStorage(Path.Combine(storageRoot, options.DuckDbFile)),
         "jsonl" => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
+        "azureblob" => new AzureBlobColdObjectStorage(
+            services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
+            options.AzureContainerName,
+            options.AzurePrefix),
         _ => throw new InvalidOperationException($"Unsupported cold storage type: {options.Type}")
     };
 }
