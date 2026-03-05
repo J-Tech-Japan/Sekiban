@@ -9,7 +9,6 @@ using Dcb.Domain.WithoutResult.Enrollment;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
-using DcbOrleans.WithoutResult.ApiService.ColdEvents;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
