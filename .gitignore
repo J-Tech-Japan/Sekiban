@@ -418,6 +418,7 @@ dcb/internalUsages/DcbOrleansDynamoDB.Infrastructure/config/dev2.json
 
 # Local configuration files
 *.local.json
+dcb/.aspire/
 .claude/settings.local.json
 .worktrees/
 
