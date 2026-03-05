@@ -7,12 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj" />
     <ProjectReference Include="..\DcbOrleans.ServiceDefaults\DcbOrleans.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj" />
+    <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
   </ItemGroup>
 
 </Project>
