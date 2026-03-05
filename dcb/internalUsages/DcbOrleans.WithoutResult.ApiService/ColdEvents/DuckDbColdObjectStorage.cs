@@ -1,6 +1,7 @@
 using DuckDB.NET.Data;
 using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
+using System.IO;
 
 namespace DcbOrleans.WithoutResult.ApiService.ColdEvents;
 
@@ -40,7 +41,14 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
                 return ResultBox.Error<ColdStorageObject>(new KeyNotFoundException($"Cold object not found: {path}"));
             }
 
-            var data = (byte[])reader.GetValue(0);
+            var raw = reader.GetValue(0);
+            var data = raw switch
+            {
+                byte[] bytes => bytes,
+                Stream stream => await ReadAllBytesAsync(stream, ct),
+                _ => throw new InvalidDataException(
+                    $"Unsupported DuckDB BLOB value type: {raw.GetType().FullName}")
+            };
             var etag = reader.GetString(1);
             return ResultBox.FromValue(new ColdStorageObject(data, etag));
         });
@@ -144,5 +152,16 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
         {
             return ResultBox.Error<T>(ex);
         }
+    }
+
+    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
+    {
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        return ms.ToArray();
     }
 }

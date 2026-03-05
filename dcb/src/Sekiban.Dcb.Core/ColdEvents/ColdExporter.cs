@@ -12,6 +12,12 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 {
     private const int MaxManifestRetries = 3;
     private const string InitialManifestVersion = "0";
+    private static readonly TimeSpan MaxLeaseDuration = TimeSpan.FromMinutes(2);
+    private const string ReasonLeaseNotAcquired = "lease_not_acquired";
+    private const string ReasonLeaseAcquireFailed = "lease_acquire_failed";
+    private const string ReasonNoEventsSinceCheckpoint = "no_events_since_checkpoint";
+    private const string ReasonNoSafeEvents = "no_safe_events_in_window";
+    private const string ReasonExported = "exported";
 
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _storage;
@@ -61,12 +67,40 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 new InvalidOperationException("Cold event store is disabled"));
         }
 
+        // Keep lease short so stale leases do not block manual exports for the full pull interval.
+        var leaseDuration = _options.PullInterval < MaxLeaseDuration ? _options.PullInterval : MaxLeaseDuration;
         var leaseResult = await _leaseManager.AcquireAsync(
-            $"cold-export-{serviceId}", _options.PullInterval, ct);
+            $"cold-export-{serviceId}", leaseDuration, ct);
         if (!leaseResult.IsSuccess)
         {
-            _logger.LogInformation("Skipping export for {ServiceId}: lease not acquired", serviceId);
-            return ResultBox.FromValue(new ExportResult(0, [], InitialManifestVersion));
+            var leaseException = leaseResult.GetException();
+            if (leaseException is OperationCanceledException || ct.IsCancellationRequested)
+            {
+                return ResultBox.Error<ExportResult>(
+                    leaseException is OperationCanceledException
+                        ? leaseException
+                        : new OperationCanceledException(ct));
+            }
+
+            var leaseHeld = leaseException is InvalidOperationException &&
+                            leaseException.Message.Contains("already held", StringComparison.OrdinalIgnoreCase);
+            if (leaseHeld)
+            {
+                _logger.LogInformation("Skipping export for {ServiceId}: lease not acquired ({Message})",
+                    serviceId, leaseException.Message);
+            }
+            else
+            {
+                _logger.LogWarning(leaseException,
+                    "Skipping export for {ServiceId}: failed to acquire lease due to unexpected error",
+                    serviceId);
+            }
+            return ResultBox.FromValue(new ExportResult(
+                ExportedEventCount: 0,
+                NewSegments: [],
+                UpdatedManifestVersion: InitialManifestVersion,
+                Reason: leaseHeld ? ReasonLeaseNotAcquired : ReasonLeaseAcquireFailed,
+                ReasonDetail: leaseException.Message));
         }
 
         var lease = leaseResult.GetValue();
@@ -77,7 +111,31 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
         finally
         {
-            await _leaseManager.ReleaseAsync(lease, ct);
+            // Cleanup should run even when the request is canceled.
+            var releaseResult = await _leaseManager.ReleaseAsync(lease, CancellationToken.None);
+            if (!releaseResult.IsSuccess)
+            {
+                _logger.LogWarning(
+                    releaseResult.GetException(),
+                    "Failed to release cold export lease for {ServiceId} (LeaseId: {LeaseId}). Trying to expire lease immediately.",
+                    serviceId,
+                    lease.LeaseId);
+
+                // Best-effort fallback: keep ownership but force expiration now to avoid long lock stalls.
+                var expireResult = await _leaseManager.RenewAsync(
+                    lease,
+                    TimeSpan.Zero,
+                    CancellationToken.None);
+
+                if (!expireResult.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        expireResult.GetException(),
+                        "Failed to force-expire cold export lease for {ServiceId} (LeaseId: {LeaseId}).",
+                        serviceId,
+                        lease.LeaseId);
+                }
+            }
         }
     }
 
@@ -100,14 +158,22 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var allEvents = readResult.GetValue().ToList();
         if (allEvents.Count == 0)
         {
-            return ResultBox.FromValue(new ExportResult(0, [], InitialManifestVersion));
+            return ResultBox.FromValue(new ExportResult(
+                ExportedEventCount: 0,
+                NewSegments: [],
+                UpdatedManifestVersion: InitialManifestVersion,
+                Reason: ReasonNoEventsSinceCheckpoint));
         }
 
         var cutoff = DateTime.UtcNow - _options.SafeWindow;
         var safeEvents = SafeWindowFilter.Apply(allEvents, cutoff);
         if (safeEvents.Count == 0)
         {
-            return ResultBox.FromValue(new ExportResult(0, [], InitialManifestVersion));
+            return ResultBox.FromValue(new ExportResult(
+                ExportedEventCount: 0,
+                NewSegments: [],
+                UpdatedManifestVersion: InitialManifestVersion,
+                Reason: ReasonNoSafeEvents));
         }
 
         var segments = ColdSegmentSplitter.Split(
@@ -215,7 +281,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         return ResultBox.FromValue(new ExportResult(
             ExportedEventCount: allSafeEvents.Count,
             NewSegments: newSegmentInfos,
-            UpdatedManifestVersion: newVersion));
+            UpdatedManifestVersion: newVersion,
+            Reason: ReasonExported));
     }
 
     private static string? GetLatestExportedId(ColdManifest? manifest)
