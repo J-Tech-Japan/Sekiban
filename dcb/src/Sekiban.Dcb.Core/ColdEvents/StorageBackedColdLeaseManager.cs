@@ -1,9 +1,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using ResultBoxes;
-using Sekiban.Dcb.ColdEvents;
 
-namespace DcbOrleans.Catchup.Functions;
+namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
 {
