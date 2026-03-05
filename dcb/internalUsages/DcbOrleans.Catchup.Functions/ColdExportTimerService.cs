@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 public sealed class ColdExportTimerService : BackgroundService
 {
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromMinutes(5);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -22,26 +23,28 @@ public sealed class ColdExportTimerService : BackgroundService
     {
         var interval = ResolveInterval();
         var apiBaseUrl = ResolveApiBaseUrl();
+        var requestTimeout = ResolveRequestTimeout();
 
         _logger.LogInformation(
-            "Cold export timer started. Target={Target}, Interval={Interval}",
+            "Cold export timer started. Target={Target}, Interval={Interval}, RequestTimeout={RequestTimeout}",
             apiBaseUrl,
-            interval);
+            interval,
+            requestTimeout);
 
         using var timer = new PeriodicTimer(interval);
 
-        await TriggerExportAsync(apiBaseUrl, stoppingToken);
+        await TriggerExportAsync(apiBaseUrl, requestTimeout, stoppingToken);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            await TriggerExportAsync(apiBaseUrl, stoppingToken);
+            await TriggerExportAsync(apiBaseUrl, requestTimeout, stoppingToken);
         }
     }
 
-    private async Task TriggerExportAsync(string apiBaseUrl, CancellationToken ct)
+    private async Task TriggerExportAsync(string apiBaseUrl, TimeSpan requestTimeout, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(30);
+        client.Timeout = requestTimeout;
 
         var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(apiBaseUrl), "/api/cold/export-now"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -77,6 +80,17 @@ public sealed class ColdExportTimerService : BackgroundService
         }
 
         return DefaultInterval;
+    }
+
+    private TimeSpan ResolveRequestTimeout()
+    {
+        var raw = _configuration["ColdExport:RequestTimeout"];
+        if (!string.IsNullOrWhiteSpace(raw) && TimeSpan.TryParse(raw, out var parsed) && parsed > TimeSpan.Zero)
+        {
+            return parsed;
+        }
+
+        return DefaultRequestTimeout;
     }
 
     private string ResolveApiBaseUrl()
