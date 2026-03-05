@@ -1,15 +1,6 @@
 name: Deploy Sekiban DynamoDB to AWS ECS
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'dcb/src/Sekiban.Dcb.DynamoDB/**'
-      - 'dcb/src/Sekiban.Dcb.BlobStorage.S3/**'
-      - 'dcb/internalUsages/DcbOrleansDynamoDB.*/**'
-      - 'dcb/internalUsages/DcbOrleans.Web/**'
-      - '.github/workflows/deploy_dynamodb_to_aws.yml'
   workflow_dispatch:
     inputs:
       environment:
