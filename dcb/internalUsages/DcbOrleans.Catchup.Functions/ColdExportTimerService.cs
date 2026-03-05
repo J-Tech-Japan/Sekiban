@@ -1,9 +1,12 @@
 using System.Net.Http.Headers;
+using System.Diagnostics;
+using System.Text.Json;
 
 public sealed class ColdExportTimerService : BackgroundService
 {
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DefaultCycleBudget = TimeSpan.FromMinutes(3);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -24,24 +27,62 @@ public sealed class ColdExportTimerService : BackgroundService
         var interval = ResolveInterval();
         var apiBaseUrl = ResolveApiBaseUrl();
         var requestTimeout = ResolveRequestTimeout();
+        var cycleBudget = ResolveCycleBudget();
 
         _logger.LogInformation(
-            "Cold export timer started. Target={Target}, Interval={Interval}, RequestTimeout={RequestTimeout}",
+            "Cold export timer started. Target={Target}, Interval={Interval}, RequestTimeout={RequestTimeout}, CycleBudget={CycleBudget}",
             apiBaseUrl,
             interval,
-            requestTimeout);
+            requestTimeout,
+            cycleBudget);
 
         using var timer = new PeriodicTimer(interval);
 
-        await TriggerExportAsync(apiBaseUrl, requestTimeout, stoppingToken);
+        await RunCycleAsync(apiBaseUrl, requestTimeout, cycleBudget, stoppingToken);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            await TriggerExportAsync(apiBaseUrl, requestTimeout, stoppingToken);
+            await RunCycleAsync(apiBaseUrl, requestTimeout, cycleBudget, stoppingToken);
         }
     }
 
-    private async Task TriggerExportAsync(string apiBaseUrl, TimeSpan requestTimeout, CancellationToken ct)
+    private async Task RunCycleAsync(
+        string apiBaseUrl,
+        TimeSpan requestTimeout,
+        TimeSpan cycleBudget,
+        CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        var attempts = 0;
+        var totalExported = 0;
+
+        while (!ct.IsCancellationRequested && sw.Elapsed < cycleBudget)
+        {
+            var remaining = cycleBudget - sw.Elapsed;
+            var timeout = remaining < requestTimeout ? remaining : requestTimeout;
+            if (timeout <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            var result = await TriggerExportAsync(apiBaseUrl, timeout, ct);
+            attempts++;
+            totalExported += result.ExportedEventCount;
+
+            if (!result.IsSuccess || result.ExportedEventCount <= 0)
+            {
+                break;
+            }
+        }
+
+        _logger.LogInformation(
+            "Cold export cycle finished. Attempts={Attempts}, ExportedEvents={ExportedEvents}, Elapsed={Elapsed}",
+            attempts,
+            totalExported,
+            sw.Elapsed);
+    }
+
+    private async Task<ExportCallResult> TriggerExportAsync(string apiBaseUrl, TimeSpan requestTimeout, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient();
         client.Timeout = requestTimeout;
@@ -56,18 +97,22 @@ public sealed class ColdExportTimerService : BackgroundService
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("Cold export succeeded: {StatusCode} {Body}", (int)response.StatusCode, body);
-                return;
+                var parsed = ParseExportedEventCount(body);
+                return new ExportCallResult(true, parsed);
             }
 
             _logger.LogWarning("Cold export failed: {StatusCode} {Body}", (int)response.StatusCode, body);
+            return new ExportCallResult(false, 0);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             // Graceful shutdown.
+            return new ExportCallResult(false, 0);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Cold export timer execution failed");
+            return new ExportCallResult(false, 0);
         }
     }
 
@@ -93,6 +138,17 @@ public sealed class ColdExportTimerService : BackgroundService
         return DefaultRequestTimeout;
     }
 
+    private TimeSpan ResolveCycleBudget()
+    {
+        var raw = _configuration["ColdExport:CycleBudget"];
+        if (!string.IsNullOrWhiteSpace(raw) && TimeSpan.TryParse(raw, out var parsed) && parsed > TimeSpan.Zero)
+        {
+            return parsed;
+        }
+
+        return DefaultCycleBudget;
+    }
+
     private string ResolveApiBaseUrl()
     {
         var configured = _configuration["ApiBaseUrl"];
@@ -106,4 +162,25 @@ public sealed class ColdExportTimerService : BackgroundService
 
     private static string EnsureTrailingSlash(string baseUrl)
         => baseUrl.EndsWith("/", StringComparison.Ordinal) ? baseUrl : baseUrl + "/";
+
+    private static int ParseExportedEventCount(string body)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            if (json.RootElement.TryGetProperty("exportedEventCount", out var countElement)
+                && countElement.TryGetInt32(out var count))
+            {
+                return count;
+            }
+        }
+        catch
+        {
+            // Ignore parse errors and treat as non-exporting response.
+        }
+
+        return 0;
+    }
+
+    private readonly record struct ExportCallResult(bool IsSuccess, int ExportedEventCount);
 }
