@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Cold Events and Catch-up](19_cold_events.md)
 
 DCB supports multiple cloud platforms for event persistence and projection snapshots. This guide covers configuration for both Azure and AWS.
 
@@ -139,3 +140,7 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 | Cosmos DB | `Sekiban.Dcb.CosmosDb` | `Sekiban.Dcb.BlobStorage.AzureStorage` | Production |
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Production |
 | SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
+
+## Related
+
+For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).
