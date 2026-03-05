@@ -307,7 +307,18 @@ public class ColdExporterTests
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount)
-            => throw new NotSupportedException();
+        {
+            IEnumerable<SerializableEvent> result = since is null
+                ? _events
+                : _events.Where(e =>
+                    string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+            if (maxCount is > 0)
+            {
+                result = result.Take(maxCount.Value);
+            }
+
+            return Task.FromResult(ResultBox.FromValue(result));
+        }
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,

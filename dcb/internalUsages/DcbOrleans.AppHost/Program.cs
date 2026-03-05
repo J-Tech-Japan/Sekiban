@@ -76,8 +76,8 @@ builder
     .WithReference(withoutResultApiService, "apiservice")
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
     .WithEnvironment("ColdExport:Interval", "00:05:00")
-    .WithEnvironment("ColdExport:RequestTimeout", "00:05:00")
-    .WithEnvironment("ColdExport:CycleBudget", "00:03:00")
+    .WithEnvironment("ColdExport:RequestTimeout", "00:10:00")
+    .WithEnvironment("ColdExport:CycleBudget", "00:10:00")
     .WaitFor(withoutResultApiService);
 
 // Add the Web frontend

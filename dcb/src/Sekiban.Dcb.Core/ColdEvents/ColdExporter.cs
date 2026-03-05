@@ -149,7 +149,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ? new SortableUniqueId(checkpoint.NextSinceSortableUniqueId)
             : (SortableUniqueId?)null;
 
-        var readResult = await _hotStore.ReadAllSerializableEventsAsync(since);
+        var readResult = await ReadExportCandidatesAsync(since);
         if (!readResult.IsSuccess)
         {
             return ResultBox.Error<ExportResult>(readResult.GetException());
@@ -320,6 +320,31 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
 
         return ResultBox.FromValue(new SegmentWritePlan(existingSegments, writes, writtenSegments));
+    }
+
+    private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadExportCandidatesAsync(SortableUniqueId? since)
+    {
+        var limit = _options.ExportMaxEventsPerRun;
+        if (limit > 0)
+        {
+            var limited = await _hotStore.ReadAllSerializableEventsAsync(since, limit);
+            if (limited.IsSuccess)
+            {
+                return limited;
+            }
+
+            var ex = limited.GetException();
+            if (ex is not NotSupportedException)
+            {
+                return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+            }
+
+            _logger.LogDebug(
+                "Falling back to unbounded cold export read because max-count overload is not supported by {StoreType}",
+                _hotStore.GetType().Name);
+        }
+
+        return await _hotStore.ReadAllSerializableEventsAsync(since);
     }
 
     private async Task<ResultBox<int>> AppendToLatestSegmentIfPossibleAsync(
