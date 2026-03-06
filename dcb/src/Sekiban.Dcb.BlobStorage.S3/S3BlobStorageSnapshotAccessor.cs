@@ -3,8 +3,6 @@ using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sekiban.Dcb.Snapshots;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Sekiban.Dcb.BlobStorage.S3;
 
@@ -20,6 +18,7 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
     private readonly bool _enableEncryption;
     private readonly ILogger<S3BlobStorageSnapshotAccessor> _logger;
     private readonly string _localCacheDirectory;
+    private readonly string _cacheNamespace;
 
     public string ProviderName => "AwsS3";
 
@@ -36,6 +35,7 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
         _prefix = prefix ?? string.Empty;
         _enableEncryption = enableEncryption;
         _localCacheDirectory = localCacheDirectory ?? Path.Combine(Path.GetTempPath(), DefaultLocalCacheFolderName);
+        _cacheNamespace = BuildCacheNamespace(_bucketName, _prefix);
         _logger = logger ?? NullLogger<S3BlobStorageSnapshotAccessor>.Instance;
     }
 
@@ -51,6 +51,7 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
         _prefix = prefix ?? string.Empty;
         _enableEncryption = enableEncryption;
         _localCacheDirectory = localCacheDirectory ?? Path.Combine(Path.GetTempPath(), DefaultLocalCacheFolderName);
+        _cacheNamespace = BuildCacheNamespace(_bucketName, _prefix);
         _logger = logger ?? NullLogger<S3BlobStorageSnapshotAccessor>.Instance;
     }
 
@@ -100,7 +101,7 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
                 Key = key
             };
 
-            Directory.CreateDirectory(_localCacheDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
             var tempPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
@@ -139,9 +140,14 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
     }
 
     private string BuildCachePath(string key)
+        => SnapshotLocalCachePath.Build(_localCacheDirectory, ProviderName, _cacheNamespace, key);
+
+    private static string BuildCacheNamespace(string bucketName, string prefix)
     {
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
-        return Path.Combine(_localCacheDirectory, hash + ".bin");
+        var normalizedPrefix = prefix.Replace('\\', '/').Trim('/');
+        return string.IsNullOrEmpty(normalizedPrefix)
+            ? bucketName
+            : $"{bucketName}|{normalizedPrefix}";
     }
 
     private static FileStream OpenCachedFile(string cachePath)

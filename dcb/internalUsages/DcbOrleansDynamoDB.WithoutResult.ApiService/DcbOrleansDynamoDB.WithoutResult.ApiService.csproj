@@ -9,26 +9,31 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.1.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.1.2" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.1.2" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.2" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.2" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.1" />
         <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
         <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
-        <!-- AWS deployment packages (RDS/AdoNet for Orleans) -->
-        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
-        <PackageReference Include="Npgsql" Version="10.0.1" />
-        <!-- Note: Microsoft.Orleans.Streaming.SQS 9.2.1 conflicts with AWS SDK v4 used by DynamoDB -->
-        <!-- SQS streaming will be added when Orleans SQS package supports AWS SDK v4 -->
+        <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
         <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.8" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.11"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -39,8 +44,11 @@
         <ProjectReference Include="..\DcbOrleans.ServiceDefaults\DcbOrleans.ServiceDefaults.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.DynamoDB\Sekiban.Dcb.DynamoDB.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.BlobStorage.S3\Sekiban.Dcb.BlobStorage.S3.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
     </ItemGroup>
 

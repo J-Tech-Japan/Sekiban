@@ -4,8 +4,6 @@ using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sekiban.Dcb.Snapshots;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Sekiban.Dcb.BlobStorage.AzureStorage;
 
@@ -20,6 +18,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
     private readonly string _prefix;
     private readonly ILogger<AzureBlobStorageSnapshotAccessor> _logger;
     private readonly string _localCacheDirectory;
+    private readonly string _cacheNamespace;
 
     public string ProviderName => "AzureBlobStorage";
 
@@ -52,6 +51,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         _container = new BlobContainerClient(connectionString, containerName, options);
         _prefix = prefix ?? string.Empty;
         _localCacheDirectory = localCacheDirectory ?? Path.Combine(Path.GetTempPath(), DefaultLocalCacheFolderName);
+        _cacheNamespace = BuildCacheNamespace(_container.Uri, _prefix);
         _logger = logger ?? NullLogger<AzureBlobStorageSnapshotAccessor>.Instance;
     }
 
@@ -65,6 +65,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         _container = blobServiceClient.GetBlobContainerClient(containerName);
         _prefix = prefix ?? string.Empty;
         _localCacheDirectory = localCacheDirectory ?? Path.Combine(Path.GetTempPath(), DefaultLocalCacheFolderName);
+        _cacheNamespace = BuildCacheNamespace(_container.Uri, _prefix);
         _logger = logger ?? NullLogger<AzureBlobStorageSnapshotAccessor>.Instance;
     }
 
@@ -97,7 +98,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
             }
 
             var blob = _container.GetBlobClient(key);
-            Directory.CreateDirectory(_localCacheDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
             var tempPath = cachePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
@@ -124,9 +125,15 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
     }
 
     private string BuildCachePath(string key)
+        => SnapshotLocalCachePath.Build(_localCacheDirectory, ProviderName, _cacheNamespace, key);
+
+    private static string BuildCacheNamespace(Uri containerUri, string prefix)
     {
-        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
-        return Path.Combine(_localCacheDirectory, hash + ".bin");
+        var normalizedPrefix = prefix.Replace('\\', '/').Trim('/');
+        var containerPath = containerUri.GetLeftPart(UriPartial.Path);
+        return string.IsNullOrEmpty(normalizedPrefix)
+            ? containerPath
+            : $"{containerPath}|{normalizedPrefix}";
     }
 
     private static FileStream OpenCachedFile(string cachePath)

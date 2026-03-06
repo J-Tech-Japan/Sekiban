@@ -9,8 +9,11 @@ COPY src/Sekiban.Dcb.Core.Model/*.csproj src/Sekiban.Dcb.Core.Model/
 COPY src/Sekiban.Dcb.WithoutResult/*.csproj src/Sekiban.Dcb.WithoutResult/
 COPY src/Sekiban.Dcb.Orleans.Core/*.csproj src/Sekiban.Dcb.Orleans.Core/
 COPY src/Sekiban.Dcb.Orleans.WithoutResult/*.csproj src/Sekiban.Dcb.Orleans.WithoutResult/
-COPY src/Sekiban.Dcb.DynamoDB/*.csproj src/Sekiban.Dcb.DynamoDB/
-COPY src/Sekiban.Dcb.BlobStorage.S3/*.csproj src/Sekiban.Dcb.BlobStorage.S3/
+COPY src/Sekiban.Dcb.BlobStorage.AzureStorage/*.csproj src/Sekiban.Dcb.BlobStorage.AzureStorage/
+COPY src/Sekiban.Dcb.ColdStorage/*.csproj src/Sekiban.Dcb.ColdStorage/
+COPY src/Sekiban.Dcb.CosmosDb/*.csproj src/Sekiban.Dcb.CosmosDb/
+COPY src/Sekiban.Dcb.Postgres/*.csproj src/Sekiban.Dcb.Postgres/
+COPY src/Sekiban.Dcb.Sqlite/*.csproj src/Sekiban.Dcb.Sqlite/
 
 COPY internalUsages/DcbOrleans.ServiceDefaults/*.csproj internalUsages/DcbOrleans.ServiceDefaults/
 COPY internalUsages/Dcb.Domain.WithoutResult/*.csproj internalUsages/Dcb.Domain.WithoutResult/
