@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,6 +12,7 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class HybridEventStore : IEventStore
 {
+    private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -67,7 +69,23 @@ public sealed class HybridEventStore : IEventStore
     {
         if (!_options.Enabled)
         {
-            return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            var startedAtUtc = DateTimeOffset.UtcNow;
+            var stopwatch = Stopwatch.StartNew();
+            var hotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                _serviceIdProvider.GetCurrentServiceId(),
+                since,
+                maxCount,
+                source: "hot_only_cold_disabled",
+                coldEventsRead: 0,
+                hotEventsRead: hotResult.IsSuccess ? hotResult.GetValue().Count() : 0,
+                coldBoundary: null,
+                segmentCount: 0,
+                hotResult.IsSuccess);
+            return hotResult;
         }
 
         return await ReadHybridSerializableEventsAsync(since, maxCount);
@@ -78,12 +96,28 @@ public sealed class HybridEventStore : IEventStore
         int? maxCount)
     {
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        var startedAtUtc = DateTimeOffset.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_coldStorage, serviceId, CancellationToken.None);
 
         if (manifest is null || manifest.LatestSafeSortableUniqueId is null)
         {
             _logger.LogDebug("No cold manifest found for {ServiceId}, falling back to hot store", serviceId);
-            return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            var noManifestHotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                serviceId,
+                since,
+                maxCount,
+                source: "hot_only_no_manifest",
+                coldEventsRead: 0,
+                hotEventsRead: noManifestHotResult.IsSuccess ? noManifestHotResult.GetValue().Count() : 0,
+                coldBoundary: null,
+                segmentCount: 0,
+                noManifestHotResult.IsSuccess);
+            return noManifestHotResult;
         }
 
         var coldBoundary = new SortableUniqueId(manifest.LatestSafeSortableUniqueId);
@@ -101,7 +135,21 @@ public sealed class HybridEventStore : IEventStore
                 serviceId,
                 since.Value,
                 manifest.LatestSafeSortableUniqueId);
-            return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            var afterBoundaryHotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                serviceId,
+                since,
+                maxCount,
+                source: "hot_only_since_after_cold_boundary",
+                coldEventsRead: 0,
+                hotEventsRead: afterBoundaryHotResult.IsSuccess ? afterBoundaryHotResult.GetValue().Count() : 0,
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count,
+                afterBoundaryHotResult.IsSuccess);
+            return afterBoundaryHotResult;
         }
 
         var events = new List<SerializableEvent>(maxCount.GetValueOrDefault());
@@ -109,25 +157,111 @@ public sealed class HybridEventStore : IEventStore
         if (!coldResult.IsSuccess)
         {
             _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", serviceId);
-            return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            var coldFailureHotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                serviceId,
+                since,
+                maxCount,
+                source: "hot_only_cold_read_failed",
+                coldEventsRead: 0,
+                hotEventsRead: coldFailureHotResult.IsSuccess ? coldFailureHotResult.GetValue().Count() : 0,
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count,
+                coldFailureHotResult.IsSuccess);
+            return coldFailureHotResult;
         }
 
+        var coldEventsRead = events.Count;
         var remainingCount = maxCount.HasValue
             ? Math.Max(maxCount.Value - events.Count, 0)
             : (int?)null;
         if (remainingCount == 0)
         {
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                serviceId,
+                since,
+                maxCount,
+                source: "cold_only",
+                coldEventsRead,
+                hotEventsRead: 0,
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count,
+                succeeded: true);
             return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
         }
 
         var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, remainingCount);
         if (!hotResult.IsSuccess)
         {
+            LogHybridReadOutcome(
+                call: ReadAllSerializableEventsCall,
+                startedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                serviceId,
+                since,
+                maxCount,
+                source: coldEventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
+                coldEventsRead,
+                hotEventsRead: 0,
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count,
+                succeeded: false);
             return hotResult;
         }
 
-        events.AddRange(hotResult.GetValue());
+        var hotEvents = hotResult.GetValue().ToList();
+        events.AddRange(hotEvents);
+        LogHybridReadOutcome(
+            call: ReadAllSerializableEventsCall,
+            startedAtUtc,
+            stopwatch.ElapsedMilliseconds,
+            serviceId,
+            since,
+            maxCount,
+            source: hotEvents.Count > 0 && coldEventsRead > 0 ? "cold_plus_hot" : "cold_only",
+            coldEventsRead,
+            hotEventsRead: hotEvents.Count,
+            coldBoundary: coldBoundary.Value,
+            segmentCount: manifest.Segments.Count,
+            succeeded: true);
         return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+    }
+
+    private void LogHybridReadOutcome(
+        string call,
+        DateTimeOffset startedAtUtc,
+        long elapsedMs,
+        string serviceId,
+        SortableUniqueId? since,
+        int? maxCount,
+        string source,
+        int coldEventsRead,
+        int hotEventsRead,
+        string? coldBoundary,
+        int segmentCount,
+        bool succeeded)
+    {
+        _logger.LogInformation(
+            "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",
+            call,
+            startedAtUtc,
+            serviceId,
+            since?.Value ?? "beginning",
+            maxCount?.ToString() ?? "all",
+            source,
+            coldEventsRead,
+            hotEventsRead,
+            coldBoundary ?? "none",
+            segmentCount,
+            _hotStore.GetType().Name,
+            succeeded,
+            elapsedMs);
     }
 
     private async Task<ResultBox<bool>> ReadFromColdSegmentsAsync(
