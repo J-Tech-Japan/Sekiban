@@ -30,6 +30,16 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 
 var builder = WebApplication.CreateBuilder(args);
+const string BlobGrainDefaultType = "blob";
+const string CosmosType = "cosmos";
+const string PostgresType = "postgres";
+const string SqliteType = "sqlite";
+const string OrleansCosmosConnectionName = "OrleansCosmos";
+const string OrleansClusteringTableName = "DcbOrleansClusteringTable";
+const string OrleansGrainTableName = "DcbOrleansGrainTable";
+const string OrleansGrainStateName = "DcbOrleansGrainState";
+const string MultiProjectionOffloadName = "MultiProjectionOffload";
+const string OrleansQueueName = "DcbOrleansQueue";
 
 // Configure logging to suppress Azure Storage warnings in development
 if (builder.Environment.IsDevelopment())
@@ -53,21 +63,27 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-builder.AddKeyedAzureTableClient("DcbOrleansClusteringTable");
-builder.AddKeyedAzureTableClient("DcbOrleansGrainTable");
-builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
-builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
-builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
+builder.AddKeyedAzureTableClient(OrleansClusteringTableName);
+builder.AddKeyedAzureTableClient(OrleansGrainTableName);
+builder.AddKeyedAzureBlobClient(OrleansGrainStateName);
+builder.AddKeyedAzureBlobClient(MultiProjectionOffloadName);
+builder.AddKeyedAzureQueueClient(OrleansQueueName);
 
-if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos" ||
-    (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
+var clusteringType = NormalizeConfigValue(builder.Configuration["ORLEANS_CLUSTERING_TYPE"]);
+if (clusteringType == CosmosType ||
+    NormalizeConfigValue(builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]) == CosmosType)
 {
-    builder.AddAzureCosmosClient("OrleansCosmos");
+    builder.AddAzureCosmosClient(OrleansCosmosConnectionName);
 }
 
-var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
-var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "sqlite";
-var coldEventEnabled = builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enabled");
+var cfgGrainDefault = NormalizeConfigValue(builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]);
+if (string.IsNullOrWhiteSpace(cfgGrainDefault))
+{
+    cfgGrainDefault = BlobGrainDefaultType;
+}
+
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? SqliteType;
+var coldEventEnabled = ResolveColdEventEnabled(builder.Configuration);
 
 // Configure Orleans
 builder.UseOrleans(config =>
@@ -78,13 +94,23 @@ builder.UseOrleans(config =>
     }
     else
     {
-        if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
+        if (clusteringType == CosmosType)
         {
-            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+            var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                    throw new InvalidOperationException();
             config.UseCosmosClustering(options =>
             {
                 options.ConfigureCosmosClient(connectionString);
+            });
+        }
+        else
+        {
+            config.UseAzureStorageClustering(options =>
+            {
+                options.Configure<IServiceProvider>((clusteringOptions, sp) =>
+                {
+                    clusteringOptions.TableServiceClient = sp.GetRequiredKeyedService<TableServiceClient>(OrleansClusteringTableName);
+                });
             });
         }
     }
@@ -106,7 +132,7 @@ builder.UseOrleans(config =>
             });
         });
 
-        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
+        config.AddMemoryStreams(OrleansQueueName, configurator =>
         {
             configurator.ConfigurePartitioning(8);
             configurator.ConfigurePullingAgent(options =>
@@ -131,7 +157,7 @@ builder.UseOrleans(config =>
                 {
                     options.Configure<IServiceProvider>((queueOptions, sp) =>
                     {
-                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>(OrleansQueueName);
                         queueOptions.QueueNames =
                         [
                             "dcborleans-eventstreamprovider-0",
@@ -152,14 +178,14 @@ builder.UseOrleans(config =>
             });
 
         config.AddAzureQueueStreams(
-            "DcbOrleansQueue",
+            OrleansQueueName,
             configurator =>
             {
                 configurator.ConfigureAzureQueue(options =>
                 {
                     options.Configure<IServiceProvider>((queueOptions, sp) =>
                     {
-                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>(OrleansQueueName);
                         queueOptions.QueueNames =
                         [
                             "dcborleans-queue-0",
@@ -181,11 +207,11 @@ builder.UseOrleans(config =>
     }
 
     Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
-    if (cfgGrainDefault == "cosmos")
+    if (cfgGrainDefault == CosmosType)
     {
         config.AddCosmosGrainStorageAsDefault(options =>
         {
-            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+            var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                    throw new InvalidOperationException();
             options.ConfigureCosmosClient(connectionString);
             options.IsResourceCreationEnabled = true;
@@ -197,19 +223,19 @@ builder.UseOrleans(config =>
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>(OrleansGrainStateName);
                 opt.ContainerName = "sekiban-grainstate";
             });
         });
     }
 
-    if (cfgGrainDefault == "cosmos")
+    if (cfgGrainDefault == CosmosType)
     {
         config.AddCosmosGrainStorage(
             "OrleansStorage",
             options =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                        throw new InvalidOperationException();
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
@@ -223,19 +249,19 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>(OrleansGrainStateName);
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
     }
 
-    if (cfgGrainDefault == "cosmos")
+    if (cfgGrainDefault == CosmosType)
     {
         config.AddCosmosGrainStorage(
             "dcb-orleans-queue",
             options =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                        throw new InvalidOperationException();
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
@@ -249,19 +275,19 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>(OrleansGrainStateName);
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
     }
 
-    if (cfgGrainDefault == "cosmos")
+    if (cfgGrainDefault == CosmosType)
     {
         config.AddCosmosGrainStorage(
-            "DcbOrleansGrainTable",
+            OrleansGrainTableName,
             options =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                        throw new InvalidOperationException();
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
@@ -270,25 +296,25 @@ builder.UseOrleans(config =>
     else
     {
         config.AddAzureTableGrainStorage(
-            "DcbOrleansGrainTable",
+            OrleansGrainTableName,
             options =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>(OrleansGrainTableName);
                 });
             });
     }
 
     if (!useInMemoryStreams)
     {
-        if (cfgGrainDefault == "cosmos")
+        if (cfgGrainDefault == CosmosType)
         {
             config.AddCosmosGrainStorage(
                 "PubSubStore",
                 options =>
                 {
-                    var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                    var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                            throw new InvalidOperationException();
                     options.ConfigureCosmosClient(connectionString);
                     options.IsResourceCreationEnabled = true;
@@ -302,7 +328,7 @@ builder.UseOrleans(config =>
                 {
                     options.Configure<IServiceProvider>((opt, sp) =>
                     {
-                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>(OrleansGrainTableName);
                         opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
                     });
                     options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
@@ -310,13 +336,13 @@ builder.UseOrleans(config =>
         }
     }
 
-    if (cfgGrainDefault == "cosmos")
+    if (cfgGrainDefault == CosmosType)
     {
         config.AddCosmosGrainStorage(
             "EventStreamProvider",
             options =>
             {
-                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                var connectionString = builder.Configuration.GetConnectionString(OrleansCosmosConnectionName) ??
                                        throw new InvalidOperationException();
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
@@ -330,7 +356,7 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>(OrleansGrainTableName);
                     opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
                 });
                 options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
@@ -351,8 +377,8 @@ builder.UseOrleans(config =>
 
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
-            SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
-            EnableDynamicSafeWindow = databaseType != "sqlite" &&
+            SafeWindowMs = databaseType == SqliteType ? 5000 : 20000,
+            EnableDynamicSafeWindow = databaseType != SqliteType &&
                                       !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
@@ -368,12 +394,12 @@ builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 
-if (databaseType == "cosmos")
+if (databaseType == CosmosType)
 {
     builder.Services.AddSekibanDcbCosmosDbWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 }
-else if (databaseType == "sqlite")
+else if (databaseType == SqliteType)
 {
     var sqliteCacheDir = builder.Configuration.GetValue<string>("Sekiban:SqliteCachePath") ??
                          Directory.GetCurrentDirectory();
@@ -381,7 +407,7 @@ else if (databaseType == "sqlite")
     Console.WriteLine($"Using SQLite database: {sqliteCachePath}");
     builder.Services.AddSekibanDcbSqlite(sqliteCachePath);
 }
-else if (databaseType == "postgres")
+else if (databaseType == PostgresType)
 {
     builder.Services.AddSekibanDcbPostgresWithAspire("DcbPostgres");
     builder.Services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
@@ -410,7 +436,7 @@ builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 {
-    var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
+    var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>(MultiProjectionOffloadName);
     return new AzureBlobStorageSnapshotAccessor(blobServiceClient, "multiprojection-snapshot-offload");
 });
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
@@ -1137,3 +1163,12 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static string NormalizeConfigValue(string? value) => value?.ToLowerInvariant() ?? string.Empty;
+
+static bool ResolveColdEventEnabled(IConfiguration configuration)
+{
+    var coldConfig = configuration.GetSection("Sekiban:ColdEvent");
+    var configuredOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
+    return string.IsNullOrWhiteSpace(coldConfig["Enabled"]) || configuredOptions.Enabled;
+}

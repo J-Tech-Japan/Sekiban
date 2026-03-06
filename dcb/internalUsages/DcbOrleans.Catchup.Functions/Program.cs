@@ -13,7 +13,7 @@ var host = new HostBuilder()
     {
         var domainTypes = DomainType.GetDomainTypes();
         var databaseType = context.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "postgres";
-        var coldEventEnabled = context.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enabled");
+        var coldEventEnabled = ResolveColdEventEnabled(context.Configuration);
 
         services.AddSingleton(domainTypes);
 
@@ -50,3 +50,10 @@ var host = new HostBuilder()
     .Build();
 
 host.Run();
+
+static bool ResolveColdEventEnabled(IConfiguration configuration)
+{
+    var coldConfig = configuration.GetSection("Sekiban:ColdEvent");
+    var configuredOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
+    return string.IsNullOrWhiteSpace(coldConfig["Enabled"]) || configuredOptions.Enabled;
+}

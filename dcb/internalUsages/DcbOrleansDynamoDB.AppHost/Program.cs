@@ -1,6 +1,7 @@
 using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
+const string AzureBlobProvider = "azureblob";
 var benchHttpPort = GetEnvInt("BENCH_HTTP_PORT", 5411);
 
 var storage = builder
@@ -32,9 +33,9 @@ var apiService = builder
     .WithReference(multiProjectionOffload)
     .WithEnvironment("Sekiban__Database", "postgres")
     .WithEnvironment("Sekiban__ColdEvent__Enabled", "true")
-    .WithEnvironment("Sekiban__ColdEvent__Storage__Provider", "azureblob")
+    .WithEnvironment("Sekiban__ColdEvent__Storage__Provider", AzureBlobProvider)
     .WithEnvironment("Sekiban__ColdEvent__Storage__Format", "jsonl")
-    .WithEnvironment("Sekiban__ColdEvent__Storage__Type", "azureblob")
+    .WithEnvironment("Sekiban__ColdEvent__Storage__Type", AzureBlobProvider)
     .WithEnvironment("Sekiban__ColdEvent__Storage__AzureBlobClientName", "MultiProjectionOffload")
     .WithEnvironment("Sekiban__ColdEvent__Storage__AzureContainerName", "multiprojection-cold-events")
     .WaitFor(postgres);
@@ -51,9 +52,9 @@ builder
     .WithEnvironment("Sekiban__ColdEvent__Enabled", "true")
     .WithEnvironment("Sekiban__ColdEvent__SegmentMaxEvents", "30000")
     .WithEnvironment("Sekiban__ColdEvent__ExportMaxEventsPerRun", "30000")
-    .WithEnvironment("Sekiban__ColdEvent__Storage__Provider", "azureblob")
+    .WithEnvironment("Sekiban__ColdEvent__Storage__Provider", AzureBlobProvider)
     .WithEnvironment("Sekiban__ColdEvent__Storage__Format", "jsonl")
-    .WithEnvironment("Sekiban__ColdEvent__Storage__Type", "azureblob")
+    .WithEnvironment("Sekiban__ColdEvent__Storage__Type", AzureBlobProvider)
     .WithEnvironment("Sekiban__ColdEvent__Storage__AzureBlobClientName", "MultiProjectionOffload")
     .WithEnvironment("Sekiban__ColdEvent__Storage__AzureContainerName", "multiprojection-cold-events")
     .WaitFor(postgres);
