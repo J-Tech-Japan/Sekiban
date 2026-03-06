@@ -17,6 +17,7 @@
     <Project Path="src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />
     <Project Path="src/Sekiban.Dcb.Postgres.MigrationHost/Sekiban.Dcb.Postgres.MigrationHost.csproj" />
     <Project Path="src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
+    <Project Path="src/Sekiban.Dcb.ColdStorage/Sekiban.Dcb.ColdStorage.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
     <Project Path="src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj" />
     <Project Path="src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj" />
