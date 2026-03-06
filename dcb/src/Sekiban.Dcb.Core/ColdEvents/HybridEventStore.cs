@@ -81,7 +81,7 @@ public sealed class HybridEventStore : IEventStore
                 maxCount,
                 source: "hot_only_cold_disabled",
                 coldEventsRead: 0,
-                hotEventsRead: hotResult.IsSuccess ? hotResult.GetValue().Count() : 0,
+                hotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
                 coldBoundary: null,
                 segmentCount: 0,
                 hotResult.IsSuccess);
@@ -113,7 +113,7 @@ public sealed class HybridEventStore : IEventStore
                 maxCount,
                 source: "hot_only_no_manifest",
                 coldEventsRead: 0,
-                hotEventsRead: noManifestHotResult.IsSuccess ? noManifestHotResult.GetValue().Count() : 0,
+                hotEventsRead: noManifestHotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(noManifestHotResult.GetValue()) : null,
                 coldBoundary: null,
                 segmentCount: 0,
                 noManifestHotResult.IsSuccess);
@@ -145,7 +145,7 @@ public sealed class HybridEventStore : IEventStore
                 maxCount,
                 source: "hot_only_since_after_cold_boundary",
                 coldEventsRead: 0,
-                hotEventsRead: afterBoundaryHotResult.IsSuccess ? afterBoundaryHotResult.GetValue().Count() : 0,
+                hotEventsRead: afterBoundaryHotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(afterBoundaryHotResult.GetValue()) : null,
                 coldBoundary: coldBoundary.Value,
                 segmentCount: manifest.Segments.Count,
                 afterBoundaryHotResult.IsSuccess);
@@ -167,7 +167,7 @@ public sealed class HybridEventStore : IEventStore
                 maxCount,
                 source: "hot_only_cold_read_failed",
                 coldEventsRead: 0,
-                hotEventsRead: coldFailureHotResult.IsSuccess ? coldFailureHotResult.GetValue().Count() : 0,
+                hotEventsRead: coldFailureHotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(coldFailureHotResult.GetValue()) : null,
                 coldBoundary: coldBoundary.Value,
                 segmentCount: manifest.Segments.Count,
                 coldFailureHotResult.IsSuccess);
@@ -224,7 +224,7 @@ public sealed class HybridEventStore : IEventStore
             serviceId,
             since,
             maxCount,
-            source: hotEvents.Count > 0 && coldEventsRead > 0 ? "cold_plus_hot" : "cold_only",
+            source: ClassifyHybridReadSource(coldEventsRead, hotEvents.Count),
             coldEventsRead,
             hotEventsRead: hotEvents.Count,
             coldBoundary: coldBoundary.Value,
@@ -232,6 +232,18 @@ public sealed class HybridEventStore : IEventStore
             succeeded: true);
         return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
     }
+
+    private static int? TryGetEventCountWithoutEnumeration(IEnumerable<SerializableEvent> events)
+        => events.TryGetNonEnumeratedCount(out var count) ? count : null;
+
+    private static string ClassifyHybridReadSource(int coldEventsRead, int hotEventsRead)
+        => (coldEventsRead, hotEventsRead) switch
+        {
+            (> 0, > 0) => "cold_plus_hot",
+            (> 0, 0) => "cold_only",
+            (0, > 0) => "hot_only",
+            _ => "empty"
+        };
 
     private void LogHybridReadOutcome(
         string call,
@@ -242,7 +254,7 @@ public sealed class HybridEventStore : IEventStore
         int? maxCount,
         string source,
         int coldEventsRead,
-        int hotEventsRead,
+        int? hotEventsRead,
         string? coldBoundary,
         int segmentCount,
         bool succeeded)

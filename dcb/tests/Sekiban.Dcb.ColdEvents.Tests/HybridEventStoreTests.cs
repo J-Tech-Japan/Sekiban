@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
@@ -53,14 +54,17 @@ public class HybridEventStoreTests
             EventPayloadName: name);
     }
 
-    private HybridEventStore CreateHybrid(IEventStore hotStore, ColdEventStoreOptions? options = null)
+    private HybridEventStore CreateHybrid(
+        IEventStore hotStore,
+        ColdEventStoreOptions? options = null,
+        ILogger<HybridEventStore>? logger = null)
     {
         return new HybridEventStore(
             hotStore,
             _coldStorage,
             new DefaultServiceIdProvider(),
             Options.Create(options ?? EnabledOptions),
-            NullLogger<HybridEventStore>.Instance);
+            logger ?? NullLogger<HybridEventStore>.Instance);
     }
 
     private async Task StoreColdManifestAndSegmentsAsync(
@@ -99,6 +103,22 @@ public class HybridEventStoreTests
         // Given
         var hotEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-5), "HotEvent");
         var hotStore = new StubSerializableEventStore([hotEvent]);
+        var hybrid = CreateHybrid(hotStore, DisabledOptions);
+
+        // When
+        var result = await hybrid.ReadAllSerializableEventsAsync();
+
+        // Then
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.GetValue());
+    }
+
+    [Fact]
+    public async Task Should_not_enumerate_hot_events_for_logging_when_disabled()
+    {
+        // Given
+        var hotEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-5), "HotEvent");
+        var hotStore = new SingleUseSerializableEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore, DisabledOptions);
 
         // When
@@ -235,6 +255,28 @@ public class HybridEventStoreTests
         Assert.Contains(events, e => e.EventPayloadName == "HotEvent");
     }
 
+    [Fact]
+    public async Task Should_log_hot_only_when_cold_read_returns_no_events_but_hot_does()
+    {
+        // Given
+        var coldTime = new DateTime(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var coldEvent = CreateEvent(coldTime, "ColdEvent");
+        await StoreColdManifestAndSegmentsAsync([coldEvent], coldEvent.SortableUniqueIdValue);
+
+        var hotEvent = CreateEvent(coldTime.AddMinutes(5), "HotEvent");
+        var hotStore = new StubSerializableEventStore([hotEvent]);
+        var logger = new ListLogger<HybridEventStore>();
+        var hybrid = CreateHybrid(hotStore, logger: logger);
+
+        // When
+        var result = await hybrid.ReadAllSerializableEventsAsync(new SortableUniqueId(coldEvent.SortableUniqueIdValue));
+
+        // Then
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.GetValue());
+        Assert.Contains(logger.Messages, message => message.Contains("Source=hot_only", StringComparison.Ordinal));
+    }
+
     private sealed class StubSerializableEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;
@@ -299,5 +341,112 @@ public class HybridEventStoreTests
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
+    }
+
+    private sealed class SingleUseSerializableEventStore : IEventStore
+    {
+        private readonly IReadOnlyList<SerializableEvent> _events;
+
+        public SingleUseSerializableEventStore(IReadOnlyList<SerializableEvent> events)
+        {
+            _events = events;
+        }
+
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+            => ReadAllSerializableEventsAsync(since, maxCount: null);
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        {
+            IEnumerable<SerializableEvent> filtered = since is null
+                ? _events
+                : _events.Where(e => string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+            if (maxCount.HasValue)
+            {
+                filtered = filtered.Take(maxCount.Value);
+            }
+
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(new SingleUseEnumerable(filtered)));
+        }
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class SingleUseEnumerable : IEnumerable<SerializableEvent>
+    {
+        private readonly IEnumerable<SerializableEvent> _events;
+        private bool _enumerated;
+
+        public SingleUseEnumerable(IEnumerable<SerializableEvent> events)
+        {
+            _events = events;
+        }
+
+        public IEnumerator<SerializableEvent> GetEnumerator()
+        {
+            if (_enumerated)
+            {
+                throw new InvalidOperationException("Enumerable was enumerated more than once.");
+            }
+
+            _enumerated = true;
+            return _events.GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+            => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 }
