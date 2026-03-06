@@ -1,3 +1,7 @@
+using Azure.Data.Tables;
+using Azure.Storage.Blobs;
+using Azure.Storage.Queues;
+using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
@@ -6,27 +10,33 @@ using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
 using DcbOrleansDynamoDB.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
+using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
 using Orleans.Storage;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
-using Sekiban.Dcb.BlobStorage.S3;
-using Sekiban.Dcb.DynamoDB;
+using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using DcbOrleansDynamoDB.WithoutResult.ApiService;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure logging to suppress noisy AWS SDK logs in development
+// Configure logging to suppress Azure Storage warnings in development
 if (builder.Environment.IsDevelopment())
 {
-    builder.Logging.AddFilter("Amazon", LogLevel.Error);
-    builder.Logging.AddFilter("Amazon.Runtime", LogLevel.Error);
+    builder.Logging.AddFilter("Azure.Core", LogLevel.Error);
+    builder.Logging.AddFilter("Azure.Storage", LogLevel.Error);
+    builder.Logging.AddFilter("Orleans.AzureUtils", LogLevel.Error);
 }
 
 // Add service defaults & Aspire client integrations.
@@ -43,159 +53,295 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "dynamodb";
-var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams", true);
+builder.AddKeyedAzureTableClient("DcbOrleansClusteringTable");
+builder.AddKeyedAzureTableClient("DcbOrleansGrainTable");
+builder.AddKeyedAzureBlobClient("DcbOrleansGrainState");
+builder.AddKeyedAzureBlobClient("MultiProjectionOffload");
+builder.AddKeyedAzureQueueClient("DcbOrleansQueue");
 
-// Determine if running locally (Aspire/LocalStack) vs in AWS
-// Only check DynamoDb:ServiceUrl - this is set when using LocalStack
-// Do NOT rely on IsDevelopment() as AWS "dev" environments still use ASPNETCORE_ENVIRONMENT=Development
-var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]);
-
-// In AWS deployment, we use RDS for Orleans (SQS streams not yet available due to SDK version conflict)
-// In local development, we use in-memory everything
-if (!isLocalDevelopment && !useInMemoryStreams)
+if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos" ||
+    (builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"] ?? "").ToLower() == "cosmos")
 {
-    // AWS Deployment mode - will use RDS for Orleans clustering/state
-    // Note: SQS streaming is not yet available, so we still use in-memory streams
-    // This is valid for production deployment
-}
-else if (isLocalDevelopment && !useInMemoryStreams)
-{
-    // Local mode but trying to use non-memory streams - not supported
-    throw new InvalidOperationException(
-        "Orleans:UseInMemoryStreams must be true for local development (LocalStack).");
+    builder.AddAzureCosmosClient("OrleansCosmos");
 }
 
-// Build RDS connection string early (needed for schema init and Orleans config)
-string? rdsConnectionString = null;
-if (!isLocalDevelopment)
-{
-    var rdsHost = builder.Configuration["RDS_HOST"];
-    var rdsPort = builder.Configuration["RDS_PORT"] ?? "5432";
-    var rdsUsername = builder.Configuration["RDS_USERNAME"];
-    var rdsPassword = builder.Configuration["RDS_PASSWORD"];
-    var rdsDatabase = builder.Configuration["RDS_DATABASE"];
-
-    if (!string.IsNullOrEmpty(rdsHost) && !string.IsNullOrEmpty(rdsUsername))
-    {
-        rdsConnectionString = $"Host={rdsHost};Port={rdsPort};Database={rdsDatabase};Username={rdsUsername};Password={rdsPassword}";
-    }
-    else
-    {
-        rdsConnectionString = builder.Configuration["RdsConnectionString"] ??
-                              builder.Configuration.GetConnectionString("Orleans");
-    }
-
-    // Initialize Orleans schema if RDS is configured
-    if (!string.IsNullOrEmpty(rdsConnectionString))
-    {
-        Console.WriteLine("Initializing Orleans PostgreSQL schema...");
-        var schemaInitializer = new OrleansSchemaInitializer(
-            LoggerFactory.Create(b => b.AddConsole()).CreateLogger<OrleansSchemaInitializer>());
-        schemaInitializer.InitializeAsync(rdsConnectionString).GetAwaiter().GetResult();
-    }
-}
+var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
+var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower() ?? "sqlite";
+var coldEventEnabled = builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enabled");
 
 // Configure Orleans
 builder.UseOrleans(config =>
 {
-    if (isLocalDevelopment)
+    if (builder.Environment.IsDevelopment())
     {
-        // Local development: use localhost clustering
         config.UseLocalhostClustering();
     }
     else
     {
-        // AWS deployment: use AdoNet clustering with RDS PostgreSQL
+        if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
         {
-            config.UseAdoNetClustering(options =>
+            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                   throw new InvalidOperationException();
+            config.UseCosmosClustering(options =>
             {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
-            });
-
-            config.AddAdoNetGrainStorage("OrleansStorage", options =>
-            {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
-            });
-
-            config.AddAdoNetGrainStorage("PubSubStore", options =>
-            {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
-            });
-
-            config.UseAdoNetReminderService(options =>
-            {
-                options.ConnectionString = rdsConnectionString;
-                options.Invariant = "Npgsql";
+                options.ConfigureCosmosClient(connectionString);
             });
         }
-
-        // Configure Orleans endpoint for ECS
-        var siloPort = builder.Configuration.GetValue<int>("Orleans:SiloPort", 11111);
-        var gatewayPort = builder.Configuration.GetValue<int>("Orleans:GatewayPort", 30000);
-
-        config.Configure<Orleans.Configuration.EndpointOptions>(options =>
-        {
-            options.SiloPort = siloPort;
-            options.GatewayPort = gatewayPort;
-            // In ECS Fargate, we need to get the private IP
-            options.AdvertisedIPAddress = GetPrivateIpAddress();
-        });
     }
 
-    // Configure streams
-    // Note: SQS streaming is not yet available due to AWS SDK version conflict
-    // (Orleans SQS 9.2.1 requires AWS SDK v3, but Sekiban DynamoDB uses AWS SDK v4)
-    // For now, use in-memory streams for both local and AWS deployment
-    // TODO: Add SQS support when Orleans SQS package supports AWS SDK v4
-    config.AddMemoryStreams("EventStreamProvider", configurator =>
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+
+    if (useInMemoryStreams)
     {
-        configurator.ConfigurePartitioning(8);
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
 
-    config.AddMemoryStreams("DcbOrleansQueue", configurator =>
-    {
-        configurator.ConfigurePartitioning(8);
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
 
-    // Memory grain storage (used for both local and AWS until SQS is available)
-    if (isLocalDevelopment || useInMemoryStreams)
-    {
-        config.AddMemoryGrainStorageAsDefault();
-        config.AddMemoryGrainStorage("OrleansStorage");
-        config.AddMemoryGrainStorage("dcb-orleans-queue");
-        config.AddMemoryGrainStorage("DcbOrleansGrainTable");
-        config.AddMemoryGrainStorage("EventStreamProvider");
         config.AddMemoryGrainStorage("PubSubStore");
     }
+    else
+    {
+        config.AddAzureQueueStreams(
+            "EventStreamProvider",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
 
-    // Orleans will automatically discover grains in the same assembly
+        config.AddAzureQueueStreams(
+            "DcbOrleansQueue",
+            configurator =>
+            {
+                configurator.ConfigureAzureQueue(options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+                configurator.Configure<HashRingStreamQueueMapperOptions>(ob => ob.Configure(o => o.TotalQueueCount = 3));
+                configurator.ConfigurePullingAgent(ob => ob.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                    opt.BatchContainerBatchSize = 256;
+                    opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                }));
+                configurator.ConfigureCacheSize(8192);
+            });
+    }
+
+    Console.WriteLine($"UseOrleans: ORLEANS_GRAIN_DEFAULT_TYPE={cfgGrainDefault}");
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorageAsDefault(options =>
+        {
+            var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                   throw new InvalidOperationException();
+            options.ConfigureCosmosClient(connectionString);
+            options.IsResourceCreationEnabled = true;
+        });
+    }
+    else
+    {
+        config.AddAzureBlobGrainStorageAsDefault(options =>
+        {
+            options.Configure<IServiceProvider>((opt, sp) =>
+            {
+                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.ContainerName = "sekiban-grainstate";
+            });
+        });
+    }
+
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "OrleansStorage",
+            options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+    }
+    else
+    {
+        config.AddAzureBlobGrainStorage(
+            "OrleansStorage",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.ContainerName = "sekiban-grainstate";
+                });
+            });
+    }
+
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "dcb-orleans-queue",
+            options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+    }
+    else
+    {
+        config.AddAzureBlobGrainStorage(
+            "dcb-orleans-queue",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.ContainerName = "sekiban-grainstate";
+                });
+            });
+    }
+
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "DcbOrleansGrainTable",
+            options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+    }
+    else
+    {
+        config.AddAzureTableGrainStorage(
+            "DcbOrleansGrainTable",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                });
+            });
+    }
+
+    if (!useInMemoryStreams)
+    {
+        if (cfgGrainDefault == "cosmos")
+        {
+            config.AddCosmosGrainStorage(
+                "PubSubStore",
+                options =>
+                {
+                    var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                           throw new InvalidOperationException();
+                    options.ConfigureCosmosClient(connectionString);
+                    options.IsResourceCreationEnabled = true;
+                });
+        }
+        else
+        {
+            config.AddAzureTableGrainStorage(
+                "PubSubStore",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((opt, sp) =>
+                    {
+                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                        opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                    });
+                    options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
+                });
+        }
+    }
+
+    if (cfgGrainDefault == "cosmos")
+    {
+        config.AddCosmosGrainStorage(
+            "EventStreamProvider",
+            options =>
+            {
+                var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
+                                       throw new InvalidOperationException();
+                options.ConfigureCosmosClient(connectionString);
+                options.IsResourceCreationEnabled = true;
+            });
+    }
+    else
+    {
+        config.AddAzureTableGrainStorage(
+            "EventStreamProvider",
+            options =>
+            {
+                options.Configure<IServiceProvider>((opt, sp) =>
+                {
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
+                });
+                options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
+            });
+    }
+
     config.ConfigureServices(services =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
-        // Event delivery statistics: enable detailed recording only in Development
         if (builder.Environment.IsDevelopment())
         {
-            // Per-grain (per-activation) instance for stats to keep instances isolated
             services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.RecordingMultiProjectionEventStatistics>();
         }
         else
@@ -203,40 +349,57 @@ builder.UseOrleans(config =>
             services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics, Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
         }
 
-        // GeneralMultiProjectionActor options: enable dynamic safe window when not using in-memory streams
-        // SQLite uses 5s safe window, others use 20s baseline. Dynamic adds observed stream lag up to 30s.
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
-            EnableDynamicSafeWindow = databaseType != "sqlite" && !useInMemoryStreams,
+            EnableDynamicSafeWindow = databaseType != "sqlite" &&
+                                      !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
         };
-        // Per-activation scope is appropriate; Orleans constructs grains per activation
         services.AddTransient<GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
     });
-
-    // Orleans will automatically discover and use the EventSurrogate
 });
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
 
-// Register native runtime abstraction interfaces
 builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
 
-// Configure database storage based on configuration
-if (databaseType != "dynamodb")
+if (databaseType == "cosmos")
+{
+    builder.Services.AddSekibanDcbCosmosDbWithAspire();
+    builder.Services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
+}
+else if (databaseType == "sqlite")
+{
+    var sqliteCacheDir = builder.Configuration.GetValue<string>("Sekiban:SqliteCachePath") ??
+                         Directory.GetCurrentDirectory();
+    var sqliteCachePath = Path.Combine(sqliteCacheDir, "events.db");
+    Console.WriteLine($"Using SQLite database: {sqliteCachePath}");
+    builder.Services.AddSekibanDcbSqlite(sqliteCachePath);
+}
+else if (databaseType == "postgres")
+{
+    builder.Services.AddSekibanDcbPostgresWithAspire("DcbPostgres");
+    builder.Services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+}
+else
 {
     throw new InvalidOperationException(
-        $"Unsupported Sekiban:Database '{databaseType}'. " +
-        "This AWS-focused ApiService only supports 'dynamodb'.");
+        $"Unsupported Sekiban:Database '{databaseType}'. Supported values are sqlite, cosmos, postgres.");
 }
 
-builder.Services.AddSekibanDcbDynamoDbWithAspire();
-builder.Services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
-builder.Services.AddSekibanDcbS3BlobStorage(builder.Configuration);
+if (coldEventEnabled)
+{
+    builder.Services.AddSekibanDcbColdExport(
+        builder.Configuration,
+        builder.Environment.ContentRootPath,
+        addBackgroundService: false);
+    builder.Services.AddSekibanDcbColdEventHybridRead();
+}
 
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
@@ -245,16 +408,16 @@ builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
-// Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
+builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
+{
+    var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
+    return new AzureBlobStorageSnapshotAccessor(blobServiceClient, "multiprojection-snapshot-offload");
+});
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
-// Note: TagStatePersistent is not needed when using Orleans as Orleans grains have their own persistence
-// IEventStore is already registered via AddSekibanDcbDynamoDbWithAspire
-
 if (builder.Environment.IsDevelopment())
 {
-    // Add CORS services
     builder.Services.AddCors(options =>
     {
         options.AddDefaultPolicy(policy =>
@@ -266,18 +429,14 @@ if (builder.Environment.IsDevelopment())
 }
 var app = builder.Build();
 
-// DynamoDB tables will be created automatically by DynamoDbInitializer
-
 var apiRoute = app.MapGroup("/api");
 
-// Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
-    // Use CORS middleware only in Development (matches AddCors registration)
     app.UseCors();
 }
 
@@ -815,6 +974,144 @@ apiRoute
 // Health check endpoint
 apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("HealthCheck");
 
+apiRoute
+    .MapGet(
+        "/cold/status",
+        async ([FromServices] IColdEventStoreFeature feature, CancellationToken ct) =>
+        {
+            var status = await feature.GetStatusAsync(ct);
+            return Results.Ok(status);
+        })
+    .WithOpenApi()
+    .WithName("GetColdStatus");
+
+apiRoute
+    .MapGet(
+        "/cold/progress",
+        async ([FromServices] IColdEventProgressReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await reader.GetProgressAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetColdProgress");
+
+apiRoute
+    .MapGet(
+        "/cold/catalog",
+        async ([FromServices] IColdEventCatalogReader reader, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await reader.GetDataRangeSummaryAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("GetColdCatalog");
+
+apiRoute
+    .MapPost(
+        "/cold/export",
+        async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithOpenApi()
+    .WithName("RunColdExport");
+
+apiRoute
+    .MapPost(
+        "/cold/export-now",
+        async ([FromServices] IColdEventExporter exporter, [FromServices] IServiceIdProvider serviceIdProvider, CancellationToken ct) =>
+        {
+            var serviceId = serviceIdProvider.GetCurrentServiceId();
+            var result = await exporter.ExportIncrementalAsync(serviceId, ct);
+            return result.IsSuccess
+                ? Results.Ok(result.GetValue())
+                : Results.BadRequest(new { error = result.GetException().Message });
+        })
+    .WithName("RunColdExportNow")
+    .ExcludeFromDescription();
+
+if (app.Environment.IsDevelopment() && coldEventEnabled)
+{
+    apiRoute
+        .MapGet(
+            "/cold/debug",
+            async (
+                [FromServices] IColdObjectStorage storage,
+                [FromServices] IServiceIdProvider serviceIdProvider,
+                CancellationToken ct) =>
+            {
+                var serviceId = serviceIdProvider.GetCurrentServiceId();
+                var leasePath = $"control/cold-export-{serviceId}/lease.json";
+                var manifestPath = ColdStoragePaths.ManifestPath(serviceId);
+                var checkpointPath = ColdStoragePaths.CheckpointPath(serviceId);
+
+                string? leaseReadError = null;
+                string? manifestReadError = null;
+                string? checkpointReadError = null;
+
+                var leaseObject = await storage.GetAsync(leasePath, ct);
+                if (!leaseObject.IsSuccess)
+                {
+                    leaseReadError = leaseObject.GetException().Message;
+                }
+
+                var manifestObject = await storage.GetAsync(manifestPath, ct);
+                if (!manifestObject.IsSuccess)
+                {
+                    manifestReadError = manifestObject.GetException().Message;
+                }
+
+                var checkpointObject = await storage.GetAsync(checkpointPath, ct);
+                if (!checkpointObject.IsSuccess)
+                {
+                    checkpointReadError = checkpointObject.GetException().Message;
+                }
+
+                var segmentList = await storage.ListAsync("segments/", ct);
+
+                return Results.Ok(new
+                {
+                    process = new
+                    {
+                        pid = Environment.ProcessId
+                    },
+                    serviceId,
+                    lease = new
+                    {
+                        path = leasePath,
+                        exists = leaseObject.IsSuccess,
+                        error = leaseReadError
+                    },
+                    manifest = new
+                    {
+                        path = manifestPath,
+                        exists = manifestObject.IsSuccess,
+                        error = manifestReadError
+                    },
+                    checkpoint = new
+                    {
+                        path = checkpointPath,
+                        exists = checkpointObject.IsSuccess,
+                        error = checkpointReadError
+                    },
+                    segmentPathCount = segmentList.IsSuccess ? segmentList.GetValue().Count : -1
+                });
+            })
+        .WithName("ColdDebug")
+        .ExcludeFromDescription();
+}
+
 // Orleans test endpoint
 apiRoute
     .MapGet(
@@ -840,40 +1137,3 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
-
-// Helper method to get private IP address for ECS Fargate
-static System.Net.IPAddress GetPrivateIpAddress()
-{
-    // In ECS Fargate, the task gets a private IP from the VPC
-    // We can use ECS metadata endpoint or enumerate network interfaces
-    var ecsMetadataUri = Environment.GetEnvironmentVariable("ECS_CONTAINER_METADATA_URI_V4");
-
-    if (!string.IsNullOrEmpty(ecsMetadataUri))
-    {
-        try
-        {
-            using var client = new System.Net.Http.HttpClient();
-            var response = client.GetStringAsync($"{ecsMetadataUri}/task").Result;
-            // Parse the response to get the IP address
-            // For simplicity, fall back to DNS-based resolution
-        }
-        catch
-        {
-            // Fall through to DNS-based resolution
-        }
-    }
-
-    // Fall back to getting the first non-loopback IPv4 address
-    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
-    foreach (var ip in host.AddressList)
-    {
-        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
-            !System.Net.IPAddress.IsLoopback(ip))
-        {
-            return ip;
-        }
-    }
-
-    // Last resort: return loopback
-    return System.Net.IPAddress.Loopback;
-}
