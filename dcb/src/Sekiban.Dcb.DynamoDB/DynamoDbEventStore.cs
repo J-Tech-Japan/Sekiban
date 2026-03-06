@@ -1061,9 +1061,12 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    /// <summary>
+    ///     Reads a single event as <see cref="SerializableEvent" /> without exposing typed payload conversion to callers.
+    /// </summary>
     public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
     {
-        var typedResult = await ReadEventAsync(eventId);
+        var typedResult = await ReadEventAsync(eventId).ConfigureAwait(false);
         if (!typedResult.IsSuccess)
         {
             return ResultBox.Error<SerializableEvent>(typedResult.GetException());

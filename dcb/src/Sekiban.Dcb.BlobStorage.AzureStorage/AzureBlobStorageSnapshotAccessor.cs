@@ -142,10 +142,18 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
     {
         if (File.Exists(cachePath))
         {
+            SafeDelete(tempPath);
             return;
         }
 
-        File.Move(tempPath, cachePath);
+        try
+        {
+            File.Move(tempPath, cachePath);
+        }
+        catch (IOException) when (File.Exists(cachePath))
+        {
+            SafeDelete(tempPath);
+        }
     }
 
     private static void SafeDelete(string path)

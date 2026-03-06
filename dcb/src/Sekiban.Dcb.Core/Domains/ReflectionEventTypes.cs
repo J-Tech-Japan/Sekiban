@@ -1,6 +1,8 @@
 using Sekiban.Dcb.Events;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
+using System.Threading;
 using System.Text.Json;
 
 namespace Sekiban.Dcb.Domains;
@@ -10,6 +12,7 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public sealed class ReflectionEventTypes : IEventTypes
 {
+    private static int _fallbackWarningLogged;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -29,8 +32,15 @@ public sealed class ReflectionEventTypes : IEventTypes
             : JsonSerializer.Deserialize(json, eventType, JsonOptions) as IEventPayload;
     }
 
-    public Type? GetEventType(string eventTypeName) =>
-        _cache.GetOrAdd(eventTypeName, static name =>
+    public Type? GetEventType(string eventTypeName)
+    {
+        if (Interlocked.Exchange(ref _fallbackWarningLogged, 1) == 0)
+        {
+            Trace.TraceWarning(
+                "ReflectionEventTypes fallback is in use. Explicit event type registration is recommended to avoid ambiguous or missing event payload resolution.");
+        }
+
+        return _cache.GetOrAdd(eventTypeName, static name =>
             AppDomain.CurrentDomain
                 .GetAssemblies()
                 .Where(a => !a.IsDynamic)
@@ -49,4 +59,5 @@ public sealed class ReflectionEventTypes : IEventTypes
                     t is not null &&
                     typeof(IEventPayload).IsAssignableFrom(t) &&
                     string.Equals(t.Name, name, StringComparison.Ordinal)));
+    }
 }

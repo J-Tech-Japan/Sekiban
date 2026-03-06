@@ -348,23 +348,7 @@ public class GeneralTagStateActorPersistenceTests
     private class CountingEventStore(IEventStore inner) : IEventStore
     {
         private readonly IEventStore _inner = inner;
-        private readonly IEventTypes _eventTypes = BuildDomainTypes().EventTypes;
         public int ReadEventsByTagCallCount { get; private set; }
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
-            _inner.ReadAllEventsAsync(_eventTypes, since, maxCount);
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        {
-            ReadEventsByTagCallCount++;
-            return _inner.ReadEventsByTagAsync(tag, _eventTypes, since);
-        }
-
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId, _eventTypes);
-
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
-            IEnumerable<Event> events)
-            => _inner.WriteEventsAsync(events, _eventTypes);
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
 
