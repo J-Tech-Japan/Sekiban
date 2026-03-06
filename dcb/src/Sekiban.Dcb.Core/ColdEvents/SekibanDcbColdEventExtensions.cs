@@ -12,10 +12,14 @@ public static class SekibanDcbColdEventExtensions
     public static IServiceCollection AddSekibanDcbColdEventDefaults(this IServiceCollection services)
     {
         var notSupported = new NotSupportedColdEventStore();
+        services.TryAddSingleton<IOptions<ColdEventStoreOptions>>(
+            Options.Create(new ColdEventStoreOptions { Enabled = false }));
+        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IColdEventStoreFeature>(notSupported);
         services.TryAddSingleton<IColdEventProgressReader>(notSupported);
         services.TryAddSingleton<IColdEventExporter>(notSupported);
         services.TryAddSingleton<IColdEventCatalogReader>(notSupported);
+        services.TryAddSingleton<ColdExportCycleRunner>();
         return services;
     }
 
@@ -41,7 +45,7 @@ public static class SekibanDcbColdEventExtensions
 
     private static void RegisterColdEventCoreServices(IServiceCollection services, bool addBackgroundService)
     {
-        services.AddSingleton<ColdExportCycleRunner>();
+        services.TryAddSingleton<ColdExportCycleRunner>();
         services.AddSingleton<ColdExporter>();
         services.AddSingleton<IColdEventExporter>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventProgressReader>(sp => sp.GetRequiredService<ColdExporter>());
