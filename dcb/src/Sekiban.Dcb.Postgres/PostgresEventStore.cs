@@ -386,36 +386,6 @@ public class PostgresEventStore : IEventStore, ISerializableEventStreamReader
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
-    {
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
-                e.ServiceId == serviceId &&
-                e.Id == eventId);
-
-            if (dbEvent == null)
-            {
-                return ResultBox.Error<SerializableEvent>(new Exception($"Event with ID {eventId} not found"));
-            }
-
-            return ResultBox.FromValue(new SerializableEvent(
-                Encoding.UTF8.GetBytes(dbEvent.Payload),
-                dbEvent.SortableUniqueId,
-                dbEvent.Id,
-                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
-                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
-                dbEvent.EventType));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializableEvent>(ex);
-        }
-    }
-
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
@@ -452,6 +422,36 @@ public class PostgresEventStore : IEventStore, ISerializableEventStreamReader
         catch (Exception ex)
         {
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
+                e.ServiceId == serviceId &&
+                e.Id == eventId);
+
+            if (dbEvent == null)
+            {
+                return ResultBox.Error<SerializableEvent>(new Exception($"Event with ID {eventId} not found"));
+            }
+
+            return ResultBox.FromValue(new SerializableEvent(
+                Encoding.UTF8.GetBytes(dbEvent.Payload),
+                dbEvent.SortableUniqueId,
+                dbEvent.Id,
+                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                dbEvent.EventType));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableEvent>(ex);
         }
     }
 

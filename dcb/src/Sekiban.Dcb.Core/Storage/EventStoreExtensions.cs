@@ -128,7 +128,7 @@ public static class EventStoreExtensions
             return ResultBox.Error<Event>(result.GetException());
         }
 
-        return ResultBox.FromValue(result.GetValue().Events.First());
+        return ResultBox.FromValue(result.GetValue().Events[0]);
     }
 
     private static ResultBox<IEnumerable<Event>> DeserializeEvents(

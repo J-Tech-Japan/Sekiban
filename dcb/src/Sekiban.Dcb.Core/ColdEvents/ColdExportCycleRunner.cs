@@ -64,6 +64,7 @@ public sealed class ColdExportCycleRunner
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+            _logger.LogDebug("Cold event export cycle cancelled by host shutdown.");
         }
         catch (OperationCanceledException) when (_options.ExportCycleBudget is { } timedBudget)
         {

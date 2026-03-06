@@ -17,7 +17,6 @@ public class TagStateGrain : Grain, ITagStateGrain
 {
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly IPersistentState<TagStateCacheState> _cache;
-    private readonly IEventTypes _eventTypes;
     private readonly ITagTypes _tagTypes;
     private readonly ITagProjectorTypes _tagProjectorTypes;
     private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
@@ -38,7 +37,6 @@ public class TagStateGrain : Grain, ITagStateGrain
             throw new ArgumentNullException(nameof(domainTypes));
         }
 
-        _eventTypes = domainTypes.EventTypes;
         _tagTypes = domainTypes.TagTypes;
         _tagProjectorTypes = domainTypes.TagProjectorTypes;
         _tagStatePayloadTypes = domainTypes.TagStatePayloadTypes;

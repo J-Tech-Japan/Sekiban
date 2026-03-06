@@ -13,7 +13,7 @@ namespace Sekiban.Dcb.Domains;
 public sealed class ReflectionEventTypes : IEventTypes
 {
     private static int _fallbackWarningLogged;
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false
@@ -22,14 +22,14 @@ public sealed class ReflectionEventTypes : IEventTypes
     private readonly ConcurrentDictionary<string, Type?> _cache = new(StringComparer.Ordinal);
 
     public string SerializeEventPayload(IEventPayload payload) =>
-        JsonSerializer.Serialize(payload, payload.GetType(), JsonOptions);
+        JsonSerializer.Serialize(payload, payload.GetType(), _jsonOptions);
 
     public IEventPayload? DeserializeEventPayload(string eventTypeName, string json)
     {
         var eventType = GetEventType(eventTypeName);
         return eventType is null
             ? null
-            : JsonSerializer.Deserialize(json, eventType, JsonOptions) as IEventPayload;
+            : JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEventPayload;
     }
 
     public Type? GetEventType(string eventTypeName)

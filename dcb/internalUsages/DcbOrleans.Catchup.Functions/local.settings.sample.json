@@ -11,7 +11,7 @@
     "Sekiban__ColdEvent__Storage__Format": "jsonl",
     "Sekiban__ColdEvent__Storage__AzureBlobClientName": "MultiProjectionOffload",
     "Sekiban__ColdEvent__Storage__AzureContainerName": "multiprojection-cold-events",
-    "DcbPostgres": "Host=localhost;Port=5432;Database=DcbPostgres;Username=postgres;Password=postgres",
+    "DcbPostgres": "Host=localhost;Port=5432;Database=DcbPostgres;Username=postgres;Password=",
     "MultiProjectionOffload": "UseDevelopmentStorage=true"
   }
 }

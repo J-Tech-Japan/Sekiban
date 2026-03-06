@@ -15,6 +15,8 @@ namespace Sekiban.Dcb.InMemory;
 /// </summary>
 public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
 {
+    private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";
+
     private sealed class ServiceState
     {
         public object Lock { get; } = new();
@@ -313,33 +315,13 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 
-    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
-    {
-        if (_eventTypes == null)
-        {
-            return Task.FromResult(ResultBox.Error<SerializableEvent>(
-                new InvalidOperationException("IEventTypes is required for SerializableEvent operations")));
-        }
-
-        var state = GetState();
-        lock (state.Lock)
-        {
-            if (!state.Events.TryGetValue(eventId, out var evt))
-            {
-                return Task.FromResult(ResultBox.Error<SerializableEvent>(new Exception($"Event {eventId} not found")));
-            }
-
-            return Task.FromResult(ResultBox.FromValue(evt.ToSerializableEvent(_eventTypes)));
-        }
-    }
-
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)
@@ -368,6 +350,26 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         }
     }
 
+    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        if (_eventTypes == null)
+        {
+            return Task.FromResult(ResultBox.Error<SerializableEvent>(
+                new InvalidOperationException(EventTypesRequiredMessage)));
+        }
+
+        var state = GetState();
+        lock (state.Lock)
+        {
+            if (!state.Events.TryGetValue(eventId, out var evt))
+            {
+                return Task.FromResult(ResultBox.Error<SerializableEvent>(new Exception($"Event {eventId} not found")));
+            }
+
+            return Task.FromResult(ResultBox.FromValue(evt.ToSerializableEvent(_eventTypes)));
+        }
+    }
+
     public async IAsyncEnumerable<SerializableEvent> StreamAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount,
@@ -375,7 +377,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
     {
         if (_eventTypes == null)
         {
-            throw new NotSupportedException("IEventTypes is required for SerializableEvent operations");
+            throw new NotSupportedException(EventTypesRequiredMessage);
         }
 
         List<SerializableEvent> snapshot;
@@ -415,7 +417,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)
@@ -445,7 +447,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)

@@ -195,7 +195,6 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var sawAnyEvents = false;
         var sawSafeEvents = false;
         string? lastSafeSortableUniqueId = null;
-        var exportedEventCount = 0;
 
         try
         {
@@ -210,21 +209,12 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 sawSafeEvents = true;
                 lastSafeSortableUniqueId = evt.SortableUniqueIdValue;
 
-                if (currentSegment is null || !currentSegment.CanAppend(evt, _options))
-                {
-                    if (currentSegment is not null)
-                    {
-                        stagedSegments.Add(await currentSegment.CompleteAsync(serviceId, ct));
-                    }
-
-                    currentSegment = await SegmentFileBuilder.CreateAsync(evt, ct);
-                }
-                else
-                {
-                    await currentSegment.AppendAsync(evt, ct);
-                }
-
-                exportedEventCount++;
+                currentSegment = await StartOrAppendSegmentAsync(
+                    currentSegment,
+                    stagedSegments,
+                    evt,
+                    serviceId,
+                    ct);
             }
 
             if (currentSegment is not null)
@@ -234,26 +224,12 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
             if (!sawAnyEvents)
             {
-                return ResultBox.FromValue(new StagedExportResult(
-                    new ExportResult(
-                        ExportedEventCount: 0,
-                        NewSegments: [],
-                        UpdatedManifestVersion: InitialManifestVersion,
-                        Reason: ReasonNoEventsSinceCheckpoint),
-                    [],
-                    null));
+                return CreateImmediateStageResult(ReasonNoEventsSinceCheckpoint);
             }
 
             if (!sawSafeEvents || lastSafeSortableUniqueId is null)
             {
-                return ResultBox.FromValue(new StagedExportResult(
-                    new ExportResult(
-                        ExportedEventCount: 0,
-                        NewSegments: [],
-                        UpdatedManifestVersion: InitialManifestVersion,
-                        Reason: ReasonNoSafeEvents),
-                    [],
-                    null));
+                return CreateImmediateStageResult(ReasonNoSafeEvents);
             }
 
             return ResultBox.FromValue(new StagedExportResult(
@@ -263,17 +239,55 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
         catch (Exception ex)
         {
-            foreach (var staged in stagedSegments)
-            {
-                await staged.DisposeAsync();
-            }
-
-            if (currentSegment is not null)
-            {
-                await currentSegment.DisposeAsync();
-            }
-
+            await DisposeStagedResourcesAsync(stagedSegments, currentSegment);
             return ResultBox.Error<StagedExportResult>(ex);
+        }
+    }
+
+    private async Task<SegmentFileBuilder> StartOrAppendSegmentAsync(
+        SegmentFileBuilder? currentSegment,
+        List<StagedSegment> stagedSegments,
+        SerializableEvent evt,
+        string serviceId,
+        CancellationToken ct)
+    {
+        if (currentSegment is null)
+        {
+            return await SegmentFileBuilder.CreateAsync(evt, ct);
+        }
+
+        if (currentSegment.CanAppend(evt, _options))
+        {
+            await currentSegment.AppendAsync(evt, ct);
+            return currentSegment;
+        }
+
+        stagedSegments.Add(await currentSegment.CompleteAsync(serviceId, ct));
+        return await SegmentFileBuilder.CreateAsync(evt, ct);
+    }
+
+    private static ResultBox<StagedExportResult> CreateImmediateStageResult(string reason) =>
+        ResultBox.FromValue(new StagedExportResult(
+            new ExportResult(
+                ExportedEventCount: 0,
+                NewSegments: [],
+                UpdatedManifestVersion: InitialManifestVersion,
+                Reason: reason),
+            [],
+            null));
+
+    private static async Task DisposeStagedResourcesAsync(
+        IEnumerable<StagedSegment> stagedSegments,
+        SegmentFileBuilder? currentSegment)
+    {
+        foreach (var staged in stagedSegments)
+        {
+            await staged.DisposeAsync();
+        }
+
+        if (currentSegment is not null)
+        {
+            await currentSegment.DisposeAsync();
         }
     }
 
@@ -524,10 +538,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             }
 
             _completed = true;
-            await _writer.FlushAsync(ct);
-            await _stream.FlushAsync(ct);
-            _writer.Dispose();
-            await _stream.DisposeAsync();
+            await CloseOpenHandlesAsync(ct);
 
             var sizeBytes = new FileInfo(_filePath).Length;
             var sha256 = await ComputeSha256Async(_filePath, ct);
@@ -547,8 +558,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         {
             if (!_completed)
             {
-                _writer.Dispose();
-                await _stream.DisposeAsync();
+                await CloseOpenHandlesAsync(CancellationToken.None);
             }
 
             try
@@ -563,18 +573,26 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 // Best effort cleanup.
             }
         }
-    }
 
-    private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct)
-    {
-        await using var stream = new FileStream(
-            filePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 81920,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var hash = await SHA256.HashDataAsync(stream, ct);
-        return Convert.ToHexStringLower(hash);
+        private async Task CloseOpenHandlesAsync(CancellationToken ct)
+        {
+            await _writer.FlushAsync(ct);
+            await _stream.FlushAsync(ct);
+            await _writer.DisposeAsync();
+            await _stream.DisposeAsync();
+        }
+
+        private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct)
+        {
+            await using var stream = new FileStream(
+                filePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var hash = await SHA256.HashDataAsync(stream, ct);
+            return Convert.ToHexStringLower(hash);
+        }
     }
 }
