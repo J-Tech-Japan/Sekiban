@@ -114,7 +114,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private long _largeSnapshotGcThresholdBytes = LargePayloadThresholdBytes;
 
     private IEventStore? _resolvedCatchUpEventStore;
-    private ISerializableEventBatchCursor? _catchUpCursor;
     private bool _useStreamingSnapshotIO;
     private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
     private bool _hybridCatchUpCheckLogged;
@@ -169,15 +168,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         _hybridCatchUpCheckLogged = false;
         _hybridCatchUpFirstBatchLogged = false;
-    }
-
-    private async Task ResetCatchUpCursorAsync()
-    {
-        if (_catchUpCursor is not null)
-        {
-            await _catchUpCursor.DisposeAsync().ConfigureAwait(false);
-            _catchUpCursor = null;
-        }
     }
 
     /// <summary>
@@ -1633,7 +1623,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
         }
-        await ResetCatchUpCursorAsync();
         ResetCatchUpFailureTracking();
         EndCatchUpDeactivationDelay();
 
@@ -2025,7 +2014,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 StartTime = DateTime.UtcNow,
                 LastAttempt = DateTime.MinValue
             };
-            await ResetCatchUpCursorAsync();
             ResetHybridCatchUpLogging();
             ResetCatchUpFailureTracking();
 
@@ -2115,7 +2103,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            await ResetCatchUpCursorAsync();
             HandleCatchUpBatchFailure(ex, projectorName);
         }
         finally
@@ -2155,42 +2142,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         try
         {
-            if (catchUpStore is ISerializableEventCursorStore cursorStore)
-            {
-                if (_catchUpCursor is null)
-                {
-                    var openCursorResult = await cursorStore.OpenSerializableEventBatchCursorAsync(
-                        _catchUpProgress.CurrentPosition,
-                        CancellationToken.None).ConfigureAwait(false);
-                    if (!openCursorResult.IsSuccess)
-                    {
-                        eventsResult = ResultBox.Error<IEnumerable<SerializableEvent>>(openCursorResult.GetException());
-                    }
-                    else
-                    {
-                        _catchUpCursor = openCursorResult.GetValue();
-                        var cursorResult = await _catchUpCursor.ReadNextBatchAsync(batchSize, CancellationToken.None)
-                            .ConfigureAwait(false);
-                        eventsResult = cursorResult.IsSuccess
-                            ? ResultBox.FromValue<IEnumerable<SerializableEvent>>(cursorResult.GetValue())
-                            : ResultBox.Error<IEnumerable<SerializableEvent>>(cursorResult.GetException());
-                    }
-                }
-                else
-                {
-                    var cursorResult = await _catchUpCursor.ReadNextBatchAsync(batchSize, CancellationToken.None)
-                        .ConfigureAwait(false);
-                    eventsResult = cursorResult.IsSuccess
-                        ? ResultBox.FromValue<IEnumerable<SerializableEvent>>(cursorResult.GetValue())
-                        : ResultBox.Error<IEnumerable<SerializableEvent>>(cursorResult.GetException());
-                }
-            }
-            else
-            {
-                eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
-                    _catchUpProgress.CurrentPosition,
-                    batchSize);
-            }
+            eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
+                _catchUpProgress.CurrentPosition,
+                batchSize);
         }
         catch (NotSupportedException)
         {
@@ -2383,7 +2337,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         finally
         {
-            await ResetCatchUpCursorAsync();
             _catchUpProgress.IsActive = false;
             ResetCatchUpFailureTracking();
             EndCatchUpDeactivationDelay();
