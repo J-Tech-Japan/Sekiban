@@ -48,6 +48,7 @@ jobs:
         run: |
           dotnet pack dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.ColdStorage/Sekiban.Dcb.ColdStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithResult.Model/Sekiban.Dcb.WithResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
@@ -63,7 +64,7 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
       - name: Push to NuGet.org
-        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
