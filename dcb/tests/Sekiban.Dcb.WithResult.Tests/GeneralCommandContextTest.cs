@@ -9,6 +9,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralCommandContextTest
@@ -16,12 +17,12 @@ public class GeneralCommandContextTest
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly GeneralCommandContext _commandContext;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public GeneralCommandContextTest()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = CreateTestDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _commandContext = new GeneralCommandContext(_actorAccessor, _domainTypes);
     }
@@ -30,8 +31,11 @@ public class GeneralCommandContextTest
     {
         // Create test-specific type managers
         var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<TestEvent>();
 
         var tagTypes = new SimpleTagTypes();
+        tagTypes.RegisterTagGroupType<TestTag>();
+        tagTypes.RegisterTagGroupType<TestTag2>();
 
         var tagProjectorTypes = new SimpleTagProjectorTypes();
         tagProjectorTypes.RegisterProjector<TestProjector>();
@@ -115,7 +119,9 @@ public class GeneralCommandContextTest
         var tag = new TestTag();
 
         // Add an event to the store
-        await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(new TestEvent("Test"), tag));
+        await _eventStore.WriteEventAsync(
+            EventTestHelper.CreateEvent(new TestEvent("Test"), tag),
+            _domainTypes.EventTypes);
 
         // Create and catchup TagConsistentActor
         var tagConsistentActorId = tag.GetTag();
@@ -152,7 +158,7 @@ public class GeneralCommandContextTest
         // Add an event to the store
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
         var sortableUniqueId = testEvent.SortableUniqueIdValue;
-        await _eventStore.WriteEventAsync(testEvent);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
 
         // Get TagConsistentActor (this will trigger catchup)
         var tagConsistentActorId = tag.GetTag();
@@ -273,7 +279,7 @@ public class GeneralCommandContextTest
         var tag = new TestTag();
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
         var sortableUniqueId = testEvent.SortableUniqueIdValue;
-        await _eventStore.WriteEventAsync(testEvent);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
 
         // Act - Access state (only GetStateAsync tracks the full state)
         await _commandContext.GetStateAsync<TestProjector>(tag);
@@ -308,7 +314,7 @@ public class GeneralCommandContextTest
 
         // Add an event to store and access state
         var testEvent = EventTestHelper.CreateEvent(new TestEvent("Test"), tag);
-        await _eventStore.WriteEventAsync(testEvent);
+        await _eventStore.WriteEventAsync(testEvent, _domainTypes.EventTypes);
         await _commandContext.GetStateAsync<TestProjector>(tag);
 
         // Append an event
@@ -336,8 +342,8 @@ public class GeneralCommandContextTest
         // Add events for both tags
         var testEvent1 = EventTestHelper.CreateEvent(new TestEvent("Test1"), tag1);
         var testEvent2 = EventTestHelper.CreateEvent(new TestEvent("Test2"), tag2);
-        await _eventStore.WriteEventAsync(testEvent1);
-        await _eventStore.WriteEventAsync(testEvent2);
+        await _eventStore.WriteEventAsync(testEvent1, _domainTypes.EventTypes);
+        await _eventStore.WriteEventAsync(testEvent2, _domainTypes.EventTypes);
 
         // Act - Access states for both tags
         await _commandContext.GetStateAsync<TestProjector>(tag1);
@@ -356,18 +362,20 @@ public class GeneralCommandContextTest
 
     // Test event and tag types
     private record TestEvent(string Name) : IEventPayload;
-    private record TestTag : ITag
+    private record TestTag : IStringTagGroup<TestTag>
     {
+        public static string TagGroupName => "TestGroup";
+        public static TestTag FromContent(string _) => new();
         public bool IsConsistencyTag() => true;
-        public string GetTagContent() => "Test123";
-        public string GetTagGroup() => "TestGroup";
+        public string GetId() => "Test123";
     }
 
-    private record TestTag2 : ITag
+    private record TestTag2 : IStringTagGroup<TestTag2>
     {
+        public static string TagGroupName => "TestGroup2";
+        public static TestTag2 FromContent(string _) => new();
         public bool IsConsistencyTag() => true;
-        public string GetTagContent() => "Test456";
-        public string GetTagGroup() => "TestGroup2";
+        public string GetId() => "Test456";
     }
 
     private class TestProjector : ITagProjector<TestProjector>

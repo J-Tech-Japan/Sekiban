@@ -472,6 +472,9 @@ public class MinimalOrleansTests : IAsyncLifetime
             ITag tag,
             SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
 
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+            => _inner.ReadSerializableEventAsync(eventId);
+
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => _inner.WriteSerializableEventsAsync(events);
     }

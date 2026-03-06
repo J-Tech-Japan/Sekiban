@@ -44,6 +44,27 @@ public class OrleansEventSubscription : IEventSubscription
     /// <summary>
     ///     Subscribe to all events from the beginning
     /// </summary>
+    public async Task<IEventSubscriptionHandle> SubscribeSerializableAsync(
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        subscriptionId ??= Guid.NewGuid().ToString();
+
+        var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes);
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
+
+        var handle = new OrleansEventSubscriptionHandleSimple(
+            subscriptionId,
+            orleansHandle,
+            () => _subscriptions.TryRemove(subscriptionId, out _));
+
+        _subscriptions[subscriptionId] = handle;
+        return handle;
+    }
+
     public async Task<IEventSubscriptionHandle> SubscribeAsync(
         Func<Event, Task> onEventReceived,
         string? subscriptionId = null,
@@ -74,6 +95,29 @@ public class OrleansEventSubscription : IEventSubscription
     /// <summary>
     ///     Subscribe to events starting from a specific position
     /// </summary>
+    public async Task<IEventSubscriptionHandle> SubscribeSerializableFromAsync(
+        string fromPosition,
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        subscriptionId ??= Guid.NewGuid().ToString();
+
+        var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes);
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
+
+        var handle = new OrleansEventSubscriptionHandleSimple(
+            subscriptionId,
+            orleansHandle,
+            () => _subscriptions.TryRemove(subscriptionId, out _));
+
+        handle.UpdatePosition(fromPosition);
+        _subscriptions[subscriptionId] = handle;
+        return handle;
+    }
+
     public async Task<IEventSubscriptionHandle> SubscribeFromAsync(
         string fromPosition,
         Func<Event, Task> onEventReceived,
@@ -109,6 +153,31 @@ public class OrleansEventSubscription : IEventSubscription
     /// <summary>
     ///     Subscribe to events with filtering
     /// </summary>
+    public async Task<IEventSubscriptionHandle> SubscribeSerializableWithFilterAsync(
+        IEventFilter filter,
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        if (filter == null)
+            throw new ArgumentNullException(nameof(filter));
+
+        subscriptionId ??= Guid.NewGuid().ToString();
+
+        var observer = new EventStreamObserver(subscriptionId, onEventReceived, _domainTypes, filter);
+        var orleansHandle = await _stream.SubscribeAsync(observer, null);
+
+        var handle = new OrleansEventSubscriptionHandleSimple(
+            subscriptionId,
+            orleansHandle,
+            () => _subscriptions.TryRemove(subscriptionId, out _));
+
+        _subscriptions[subscriptionId] = handle;
+        return handle;
+    }
+
     public async Task<IEventSubscriptionHandle> SubscribeWithFilterAsync(
         IEventFilter filter,
         Func<Event, Task> onEventReceived,

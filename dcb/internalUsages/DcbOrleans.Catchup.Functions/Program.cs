@@ -1,16 +1,22 @@
 using Dcb.Domain.WithoutResult;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Postgres;
 
-var builder = Host.CreateApplicationBuilder(args);
-builder.AddServiceDefaults();
+var host = new HostBuilder()
+    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureServices((context, services) =>
+    {
+        var domainTypes = DomainType.GetDomainTypes();
 
-var domainTypes = DomainType.GetDomainTypes();
-builder.Services.AddSingleton(domainTypes);
-builder.Services.AddSekibanDcbPostgresWithAspire();
-builder.Services.AddSekibanDcbColdExport(
-    builder.Configuration,
-    builder.Environment.ContentRootPath);
+        services.AddSingleton(domainTypes);
+        services.AddSekibanDcbPostgresWithAspire();
+        services.AddSekibanDcbColdExport(
+            context.Configuration,
+            context.HostingEnvironment.ContentRootPath,
+            addBackgroundService: false);
+    })
+    .Build();
 
-var app = builder.Build();
-app.Run();
+host.Run();

@@ -146,64 +146,96 @@ public class MultiProjectionStateBuilder
             var safePosition = await actor.GetSafeLastSortableUniqueIdAsync();
             var safeThreshold = actor.PeekCurrentSafeWindowThreshold();
 
-            // v10: Serialize envelope directly to stream (no outer Gzip).
-            await using var envelopeStream = new MemoryStream();
-            await JsonSerializer.SerializeAsync(envelopeStream, snapshotEnvelope, _domainTypes.JsonSerializerOptions, ct);
-            var envelopeSize = envelopeStream.Length;
+            // Serialize to a temp file so large projector states do not require a second in-memory copy.
+            var tempEnvelopePath = Path.Combine(
+                Path.GetTempPath(),
+                $"sekiban-builder-envelope-{Guid.NewGuid():N}.json");
 
-            // Extract original/compressed sizes from the internal state
-            long originalSizeBytes = envelopeSize;
-            long compressedSizeBytes = envelopeSize;
-            if (snapshotEnvelope.InlineState != null)
+            try
             {
-                originalSizeBytes = snapshotEnvelope.InlineState.OriginalSizeBytes;
-                compressedSizeBytes = snapshotEnvelope.InlineState.CompressedSizeBytes;
-            }
+                await using var envelopeStream = new FileStream(
+                    tempEnvelopePath,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 81920,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await JsonSerializer.SerializeAsync(
+                    envelopeStream,
+                    snapshotEnvelope,
+                    _domainTypes.JsonSerializerOptions,
+                    ct);
+                await envelopeStream.FlushAsync(ct);
+                var envelopeSize = envelopeStream.Length;
 
-            var totalEventsProcessed = currentEventsProcessed + eventsProcessed;
-            var writeRequest = new MultiProjectionStateWriteRequest(
-                ProjectorName: projectorName,
-                ProjectorVersion: projectorVersion,
-                PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
-                LastSortableUniqueId: safePosition ?? string.Empty,
-                EventsProcessed: totalEventsProcessed,
-                IsOffloaded: false,
-                OffloadKey: null,
-                OffloadProvider: null,
-                OriginalSizeBytes: originalSizeBytes,
-                CompressedSizeBytes: compressedSizeBytes,
-                SafeWindowThreshold: safeThreshold.Value,
-                CreatedAt: currentState?.CreatedAt ?? DateTime.UtcNow,
-                UpdatedAt: DateTime.UtcNow,
-                BuildSource: "CLI",
-                BuildHost: Environment.MachineName);
+                // Extract original/compressed sizes from the internal state
+                long originalSizeBytes = envelopeSize;
+                long compressedSizeBytes = envelopeSize;
+                if (snapshotEnvelope.InlineState != null)
+                {
+                    originalSizeBytes = snapshotEnvelope.InlineState.OriginalSizeBytes;
+                    compressedSizeBytes = snapshotEnvelope.InlineState.CompressedSizeBytes;
+                }
 
-            _logger.LogDebug(
-                "  v10: Envelope JSON size: {EnvelopeSize} bytes, payload: original={OriginalSize} compressed={CompressedSize}",
-                envelopeSize,
-                originalSizeBytes,
-                compressedSizeBytes);
+                var totalEventsProcessed = currentEventsProcessed + eventsProcessed;
+                var writeRequest = new MultiProjectionStateWriteRequest(
+                    ProjectorName: projectorName,
+                    ProjectorVersion: projectorVersion,
+                    PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+                    LastSortableUniqueId: safePosition ?? string.Empty,
+                    EventsProcessed: totalEventsProcessed,
+                    IsOffloaded: false,
+                    OffloadKey: null,
+                    OffloadProvider: null,
+                    OriginalSizeBytes: originalSizeBytes,
+                    CompressedSizeBytes: compressedSizeBytes,
+                    SafeWindowThreshold: safeThreshold.Value,
+                    CreatedAt: currentState?.CreatedAt ?? DateTime.UtcNow,
+                    UpdatedAt: DateTime.UtcNow,
+                    BuildSource: "CLI",
+                    BuildHost: Environment.MachineName);
 
-            envelopeStream.Position = 0;
-            var saveResult = await _stateStore.UpsertFromStreamAsync(
-                writeRequest,
-                envelopeStream,
-                options.OffloadThresholdBytes,
-                ct);
-            if (!saveResult.IsSuccess)
-            {
+                _logger.LogDebug(
+                    "  v10: Envelope JSON size: {EnvelopeSize} bytes, payload: original={OriginalSize} compressed={CompressedSize}",
+                    envelopeSize,
+                    originalSizeBytes,
+                    compressedSizeBytes);
+
+                envelopeStream.Position = 0;
+                var saveResult = await _stateStore.UpsertFromStreamAsync(
+                    writeRequest,
+                    envelopeStream,
+                    options.OffloadThresholdBytes,
+                    ct);
+                if (!saveResult.IsSuccess)
+                {
+                    return new ProjectorBuildResult(
+                        projectorName, projectorVersion, BuildStatus.Failed,
+                        saveResult.GetException().Message, 0);
+                }
+
+                _logger.LogDebug(
+                    "  Saved: +{EventsProcessed} events, total {TotalEventsProcessed}",
+                    eventsProcessed,
+                    totalEventsProcessed);
+
                 return new ProjectorBuildResult(
-                    projectorName, projectorVersion, BuildStatus.Failed,
-                    saveResult.GetException().Message, 0);
+                    projectorName, projectorVersion, BuildStatus.Success, reason, eventsProcessed);
             }
-
-            _logger.LogDebug(
-                "  Saved: +{EventsProcessed} events, total {TotalEventsProcessed}",
-                eventsProcessed,
-                totalEventsProcessed);
-
-            return new ProjectorBuildResult(
-                projectorName, projectorVersion, BuildStatus.Success, reason, eventsProcessed);
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempEnvelopePath))
+                    {
+                        File.Delete(tempEnvelopePath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete temporary builder snapshot file: {Path}", tempEnvelopePath);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -309,7 +341,7 @@ public class MultiProjectionStateBuilder
         {
             ct.ThrowIfCancellationRequested();
 
-            var eventsResult = await _eventStore.ReadAllEventsAsync(since);
+            var eventsResult = await _eventStore.ReadAllSerializableEventsAsync(since, batchSize);
             if (!eventsResult.IsSuccess)
             {
                 _logger.LogError(
@@ -318,14 +350,11 @@ public class MultiProjectionStateBuilder
                 break;
             }
 
-            var allEvents = eventsResult.GetValue().ToList();
-            if (allEvents.Count == 0)
+            var events = eventsResult.GetValue().ToList();
+            if (events.Count == 0)
             {
                 break;
             }
-
-            // Limit batch size
-            var events = allEvents.Take(batchSize).ToList();
 
             // Filter to safe window
             var safeThreshold = actor.PeekCurrentSafeWindowThreshold();
@@ -340,7 +369,7 @@ public class MultiProjectionStateBuilder
                 break;
             }
 
-            await actor.AddEventsAsync(safeEvents, finishedCatchUp: false);
+            await actor.AddSerializableEventsAsync(safeEvents, finishedCatchUp: false);
             processed += safeEvents.Count;
 
             _logger.LogDebug(
@@ -375,7 +404,6 @@ public class MultiProjectionStateBuilder
         }
 
         await using var dataStream = openResult.GetValue();
-        var data = await StreamReadHelper.ReadAllBytesAsync(dataStream, ct);
 
         if (record.PayloadType != typeof(SerializableMultiProjectionStateEnvelope).FullName)
         {
@@ -383,21 +411,10 @@ public class MultiProjectionStateBuilder
                 $"Legacy format not supported. PayloadType: {record.PayloadType}. Please delete old snapshots and rebuild.");
         }
 
-        // Auto-detect format: v9 (Gzip) or v10 (plain JSON)
-        byte[] envelopeData;
-        if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
-        {
-            // v9 format: Gzip compressed
-            envelopeData = GzipCompression.Decompress(data);
-        }
-        else
-        {
-            // v10 format: Plain UTF-8 JSON
-            envelopeData = data;
-        }
-
-        var envelope = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(
-            envelopeData, _domainTypes.JsonSerializerOptions);
+        var envelope = await PossiblyGzippedJsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
+            dataStream,
+            _domainTypes.JsonSerializerOptions,
+            ct);
 
         if (envelope == null)
         {

@@ -1,0 +1,11 @@
+{
+  "version": "2.0",
+  "functionTimeout": "00:08:00",
+  "logging": {
+    "logLevel": {
+      "default": "Information",
+      "Host.Results": "Information",
+      "Function": "Information"
+    }
+  }
+}

@@ -12,7 +12,8 @@ public static class SekibanDcbColdExportExtensions
         this IServiceCollection services,
         IConfiguration configuration,
         string? contentRoot = null,
-        string coldEventSectionPath = "Sekiban:ColdEvent")
+        string coldEventSectionPath = "Sekiban:ColdEvent",
+        bool addBackgroundService = true)
     {
         var coldConfig = configuration.GetSection(coldEventSectionPath);
         var configuredColdOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
@@ -28,7 +29,7 @@ public static class SekibanDcbColdExportExtensions
             ExportCycleBudget = cycleBudget ?? configuredColdOptions.ExportCycleBudget
         };
 
-        services.AddSekibanDcbColdEvents(coldOptions);
+        services.AddSekibanDcbColdEvents(coldOptions, addBackgroundService);
 
         var storageOptions = coldConfig.GetSection("Storage").Get<ColdStorageOptions>() ?? new ColdStorageOptions();
         var storageRoot = ColdObjectStorageFactory.ResolveStorageRoot(
@@ -44,7 +45,7 @@ public static class SekibanDcbColdExportExtensions
         {
             services.AddKeyedSingleton<BlobServiceClient>(storageOptions.AzureBlobClientName, (_, _) =>
             {
-                var connectionString = configuration.GetConnectionString(storageOptions.AzureBlobClientName);
+                var connectionString = ResolveConnectionString(configuration, storageOptions.AzureBlobClientName);
                 if (string.IsNullOrWhiteSpace(connectionString))
                 {
                     throw new InvalidOperationException(
@@ -61,6 +62,11 @@ public static class SekibanDcbColdExportExtensions
     private static bool UsesAzureBlobProvider(ColdStorageOptions options)
         => string.Equals(options.Provider, "azureblob", StringComparison.OrdinalIgnoreCase)
            || string.Equals(options.Type, "azureblob", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ResolveConnectionString(IConfiguration configuration, string connectionName)
+        => configuration.GetConnectionString(connectionName)
+           ?? configuration[connectionName]
+           ?? configuration[$"{connectionName}:ConnectionString"];
 
     private static bool ResolveEnabled(IConfigurationSection coldConfig, ColdEventStoreOptions configuredColdOptions)
         => string.IsNullOrWhiteSpace(coldConfig["Enabled"])

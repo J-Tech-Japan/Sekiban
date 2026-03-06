@@ -2,6 +2,7 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 namespace Sekiban.Dcb.Postgres.Tests;

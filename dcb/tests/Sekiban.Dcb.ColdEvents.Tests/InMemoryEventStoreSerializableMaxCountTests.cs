@@ -14,6 +14,7 @@ namespace Sekiban.Dcb.ColdEvents.Tests;
 /// </summary>
 public class InMemoryEventStoreSerializableMaxCountTests
 {
+    private readonly IEventTypes _eventTypes;
     private readonly IEventStore _store;
     private readonly InMemoryEventStore _concreteStore;
 
@@ -21,6 +22,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
     {
         var eventTypes = new SimpleEventTypes();
         eventTypes.RegisterEventType<TestPayload>();
+        _eventTypes = eventTypes;
         _concreteStore = new InMemoryEventStore(eventTypes);
         _store = _concreteStore;
     }
@@ -40,7 +42,7 @@ public class InMemoryEventStoreSerializableMaxCountTests
                 eventId,
                 new EventMetadata("cause", "corr", "user"),
                 [$"test:{i}"]);
-            await _concreteStore.WriteEventAsync(evt);
+            await _concreteStore.WriteEventAsync(evt, _eventTypes);
             sortableIds.Add(sortableId);
         }
         return sortableIds;

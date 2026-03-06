@@ -1102,6 +1102,17 @@ public class SqliteEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        var typedResult = await ReadEventAsync(eventId);
+        if (!typedResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
+        }
+
+        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
+    }
+
     public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
         IEnumerable<SerializableEvent> events)
     {

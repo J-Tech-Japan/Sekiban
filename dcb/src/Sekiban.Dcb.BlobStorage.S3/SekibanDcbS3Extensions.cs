@@ -36,7 +36,7 @@ public static class SekibanDcbS3Extensions
                 options.BucketName,
                 options.Prefix,
                 options.EnableEncryption,
-                logger);
+                logger: logger);
         });
 
         return services;
@@ -61,7 +61,7 @@ public static class SekibanDcbS3Extensions
                 bucketName,
                 prefix,
                 enableEncryption,
-                logger);
+                logger: logger);
         });
         return services;
     }
@@ -84,7 +84,7 @@ public static class SekibanDcbS3Extensions
                 bucketName,
                 prefix,
                 enableEncryption,
-                logger);
+                logger: logger);
         });
         return services;
     }

@@ -36,6 +36,12 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
             ct,
             (inner, innerPath, innerCt) => inner.PutAsync(innerPath, data, expectedETag, innerCt));
 
+    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+        => await ExecuteAndPersistAsync(
+            path,
+            ct,
+            (inner, innerPath, innerCt) => inner.PutAsync(innerPath, data, expectedETag, innerCt));
+
     public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
         => await ExecuteAsync(prefix, ct, (inner, innerPrefix, innerCt) => inner.ListAsync(innerPrefix, innerCt));
 
@@ -123,7 +129,6 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
         await _container.CreateIfNotExistsAsync(cancellationToken: ct);
 
         var blob = _container.GetBlobClient(_blobName);
-        var payload = await File.ReadAllBytesAsync(snapshot.LocalPath, ct);
         var conditions = new BlobRequestConditions();
         if (snapshot.Exists && snapshot.ETag.HasValue)
         {
@@ -134,8 +139,15 @@ public sealed class AzureBlobDatabaseColdObjectStorage : IColdObjectStorage
             conditions.IfNoneMatch = new ETag("*");
         }
 
+        await using var payload = new FileStream(
+            snapshot.LocalPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
         await blob.UploadAsync(
-            BinaryData.FromBytes(payload),
+            payload,
             new BlobUploadOptions { Conditions = conditions },
             ct);
     }

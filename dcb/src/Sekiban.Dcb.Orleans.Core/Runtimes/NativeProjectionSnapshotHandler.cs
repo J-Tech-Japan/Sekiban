@@ -201,14 +201,9 @@ internal class NativeProjectionSnapshotHandler
         Stream source,
         CancellationToken cancellationToken)
     {
-        var data = await StreamReadHelper.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
-
-        if (data.Length >= 2 && data[0] == 0x1f && data[1] == 0x8b)
-        {
-            var jsonBytes = GzipCompression.Decompress(data);
-            return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(jsonBytes, _jsonOptions);
-        }
-
-        return JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(data, _jsonOptions);
+        return await PossiblyGzippedJsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
+            source,
+            _jsonOptions,
+            cancellationToken).ConfigureAwait(false);
     }
 }

@@ -3,9 +3,12 @@ using Dcb.Domain.Weather;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -18,15 +21,24 @@ public class ConsistencyReservationRulesTest
 {
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _executor;
 
     public ConsistencyReservationRulesTest()
     {
-        _eventStore = new InMemoryEventStore();
-        _domainTypes = DomainType.GetDomainTypes();
+        _domainTypes = BuildDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _executor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
+    }
+
+    private static DcbDomainTypes BuildDomainTypes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<DummyEvent>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<BaseTag>();
+        ((SimpleTagProjectorTypes)domainTypes.TagProjectorTypes).RegisterProjector<DummyProjector>();
+        return domainTypes;
     }
 
     [Fact]
@@ -160,11 +172,12 @@ public class ConsistencyReservationRulesTest
     }
 
     private record DummyEvent(string Name) : IEventPayload;
-    private record BaseTag(string Id) : ITag
+    private record BaseTag(string Id) : IStringTagGroup<BaseTag>
     {
+        public static string TagGroupName => "Base";
+        public static BaseTag FromContent(string content) => new(content);
         public bool IsConsistencyTag() => true;
-        public string GetTagGroup() => "Base";
-        public string GetTagContent() => Id;
+        public string GetId() => Id;
     }
 
     private record SimpleCommand : ICommand;

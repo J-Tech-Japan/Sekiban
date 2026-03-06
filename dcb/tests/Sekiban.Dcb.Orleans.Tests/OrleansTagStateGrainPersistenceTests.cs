@@ -109,7 +109,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(first.TagProjector, second.TagProjector);
         Assert.Equal(first.ProjectorVersion, second.ProjectorVersion);
         Assert.Equal(first.Payload, second.Payload);
-        Assert.Equal(0, SharedEventStore.ReadEventsByTagCallCount);
+        Assert.Equal(0, SharedEventStore.ReadSerializableEventsByTagCallCount);
         Assert.Equal(1, second.Version);
     }
 
@@ -142,7 +142,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.NotSame(original, rebuilt);
         Assert.Equal("1.0", rebuilt.ProjectorVersion);
         Assert.Equal(1, rebuilt.Version);
-        Assert.Equal(1, SharedEventStore.ReadEventsByTagCallCount);
+        Assert.Equal(1, SharedEventStore.ReadSerializableEventsByTagCallCount);
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
         Assert.Equal(1, second.Version);
         Assert.Equal("CounterState", second.TagPayloadName);
-        Assert.Equal(0, SharedEventStore.ReadEventsByTagCallCount);
+        Assert.Equal(0, SharedEventStore.ReadSerializableEventsByTagCallCount);
     }
 
     private ITagStateGrain GetTagStateGrain(TagStateId id) =>
@@ -327,19 +327,25 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
     private class CountingEventStore : IEventStore
     {
-        private readonly InMemoryEventStore _inner = new();
+        private readonly InMemoryEventStore _inner = CreateInnerStore();
 
         public void Clear() => _inner.Clear();
-        public int ReadEventsByTagCallCount { get; private set; }
+        public int ReadSerializableEventsByTagCallCount { get; private set; }
 
-        public void ClearCounts() => ReadEventsByTagCallCount = 0;
+        public void ClearCounts() => ReadSerializableEventsByTagCallCount = 0;
+
+        private static InMemoryEventStore CreateInnerStore()
+        {
+            var eventTypes = new SimpleEventTypes();
+            eventTypes.RegisterEventType<CounterIncremented>();
+            return new InMemoryEventStore(eventTypes);
+        }
 
         public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
             _inner.ReadAllEventsAsync(since, maxCount);
 
         public async Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {
-            ReadEventsByTagCallCount++;
             return await _inner.ReadEventsByTagAsync(tag, since);
         }
 
@@ -369,7 +375,13 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
-            => _inner.ReadSerializableEventsByTagAsync(tag, since);
+        {
+            ReadSerializableEventsByTagCallCount++;
+            return _inner.ReadSerializableEventsByTagAsync(tag, since);
+        }
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+            => _inner.ReadSerializableEventAsync(eventId);
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)

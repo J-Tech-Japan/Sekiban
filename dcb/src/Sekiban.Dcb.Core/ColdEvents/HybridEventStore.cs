@@ -31,10 +31,6 @@ public sealed class HybridEventStore : IEventStore
         _logger = logger;
     }
 
-    public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
-        IEnumerable<Event> events)
-        => _hotStore.WriteEventsAsync(events);
-
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
         => _hotStore.ReadTagsAsync(tag);
 
@@ -50,23 +46,16 @@ public sealed class HybridEventStore : IEventStore
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
         => _hotStore.GetAllTagsAsync(tagGroup);
 
-    public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        => _hotStore.ReadEventsByTagAsync(tag, since);
-
-    public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
-        => _hotStore.ReadEventAsync(eventId);
-
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
         ITag tag, SortableUniqueId? since = null)
         => _hotStore.ReadSerializableEventsByTagAsync(tag, since);
 
+    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        => _hotStore.ReadSerializableEventAsync(eventId);
+
     public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
         => _hotStore.WriteSerializableEventsAsync(events);
-
-    public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(
-        SortableUniqueId? since = null, int? maxCount = null)
-        => await _hotStore.ReadAllEventsAsync(since, maxCount);
 
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since = null)
@@ -115,38 +104,39 @@ public sealed class HybridEventStore : IEventStore
             return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
-        var coldEvents = await ReadFromColdSegmentsAsync(manifest, since);
-        if (coldEvents is null)
+        var events = new List<SerializableEvent>(maxCount.GetValueOrDefault());
+        var coldResult = await ReadFromColdSegmentsAsync(manifest, since, maxCount, events);
+        if (!coldResult.IsSuccess)
         {
             _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", serviceId);
             return await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
         }
 
-        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, maxCount: null);
+        var remainingCount = maxCount.HasValue
+            ? Math.Max(maxCount.Value - events.Count, 0)
+            : (int?)null;
+        if (remainingCount == 0)
+        {
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+        }
+
+        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, remainingCount);
         if (!hotResult.IsSuccess)
         {
             return hotResult;
         }
 
-        var merged = coldEvents
-            .Concat(hotResult.GetValue())
-            .DistinctBy(e => e.Id)
-            .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
-
-        IEnumerable<SerializableEvent> result = maxCount.HasValue
-            ? merged.Take(maxCount.Value)
-            : merged;
-
-        return ResultBox.FromValue(result);
+        events.AddRange(hotResult.GetValue());
+        return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
     }
 
-    private async Task<List<SerializableEvent>?> ReadFromColdSegmentsAsync(
+    private async Task<ResultBox<bool>> ReadFromColdSegmentsAsync(
         ColdManifest manifest,
-        SortableUniqueId? since)
+        SortableUniqueId? since,
+        int? maxCount,
+        List<SerializableEvent> destination)
     {
-        var events = new List<SerializableEvent>();
-
-        foreach (var segment in manifest.Segments)
+        foreach (var segment in manifest.Segments.OrderBy(s => s.FromSortableUniqueId, StringComparer.Ordinal))
         {
             if (since is not null
                 && string.Compare(segment.ToSortableUniqueId, since.Value, StringComparison.Ordinal) <= 0)
@@ -154,51 +144,64 @@ public sealed class HybridEventStore : IEventStore
                 continue;
             }
 
-            var getResult = await _coldStorage.GetAsync(segment.Path, CancellationToken.None);
-            if (!getResult.IsSuccess)
+            var streamResult = await _coldStorage.OpenReadAsync(segment.Path, CancellationToken.None);
+            if (!streamResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to read cold segment {Path}", segment.Path);
-                return null;
+                return ResultBox.Error<bool>(streamResult.GetException());
             }
 
-            var segmentEvents = ParseJsonlSegment(getResult.GetValue().Data);
-            if (segmentEvents is null)
+            await using var stream = streamResult.GetValue();
+            var parseResult = await AppendJsonlSegmentAsync(stream, since, maxCount, destination);
+            if (!parseResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
-                return null;
+                return parseResult;
             }
 
-            foreach (var e in segmentEvents)
+            if (maxCount.HasValue && destination.Count >= maxCount.Value)
             {
-                if (since is not null
-                    && string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
-                {
-                    continue;
-                }
-                events.Add(e);
+                break;
             }
         }
 
-        return events;
+        return ResultBox.FromValue(true);
     }
 
-    private static List<SerializableEvent>? ParseJsonlSegment(byte[] data)
+    private static async Task<ResultBox<bool>> AppendJsonlSegmentAsync(
+        Stream data,
+        SortableUniqueId? since,
+        int? maxCount,
+        List<SerializableEvent> destination)
     {
-        var text = System.Text.Encoding.UTF8.GetString(data);
-        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var events = new List<SerializableEvent>(lines.Length);
-
-        foreach (var line in lines)
+        using var reader = new StreamReader(data, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
         {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
             var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
             if (evt is null)
             {
-                return null;
+                return ResultBox.Error<bool>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
             }
-            events.Add(evt);
+
+            if (since is not null
+                && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            destination.Add(evt);
+            if (maxCount.HasValue && destination.Count >= maxCount.Value)
+            {
+                break;
+            }
         }
 
-        return events;
+        return ResultBox.FromValue(true);
     }
 
 }

@@ -1124,6 +1124,20 @@ public partial class CosmosDbEventStore : IEventStore
     }
 
     /// <summary>
+    ///     Reads a single event as <see cref="SerializableEvent" /> without exposing typed payload conversion to callers.
+    /// </summary>
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        var typedResult = await ReadEventAsync(eventId).ConfigureAwait(false);
+        if (!typedResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
+        }
+
+        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
+    }
+
+    /// <summary>
     ///     Fetches events by IDs and returns them as SerializableEvent (no deserialization).
     /// </summary>
     private static async Task<ResultBox<IEnumerable<SerializableEvent>>> FetchSerializableEventsByIdsAsync(

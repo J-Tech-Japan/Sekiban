@@ -9,7 +9,8 @@ namespace Sekiban.Dcb.Orleans.Streams;
 public class EventStreamObserver : IAsyncObserver<SerializableEvent>
 {
     private readonly IEventFilter? _filter;
-    private readonly Func<Event, Task> _onEvent;
+    private readonly Func<Event, Task>? _onEvent;
+    private readonly Func<SerializableEvent, Task>? _onSerializableEvent;
     private readonly string _subscriptionId;
     private readonly DcbDomainTypes _domainTypes;
 
@@ -25,9 +26,36 @@ public class EventStreamObserver : IAsyncObserver<SerializableEvent>
         _filter = filter;
     }
 
+    public EventStreamObserver(
+        string subscriptionId,
+        Func<SerializableEvent, Task> onEvent,
+        DcbDomainTypes domainTypes,
+        IEventFilter? filter = null)
+    {
+        _subscriptionId = subscriptionId;
+        _onSerializableEvent = onEvent;
+        _domainTypes = domainTypes;
+        _filter = filter;
+    }
+
     public async Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
     {
-        // Deserialize SerializableEvent to Event
+        if (_filter != null && !_filter.ShouldInclude(item, _domainTypes))
+        {
+            return;
+        }
+
+        if (_onSerializableEvent != null)
+        {
+            await _onSerializableEvent(item);
+            return;
+        }
+
+        if (_onEvent == null)
+        {
+            return;
+        }
+
         var eventResult = item.ToEvent(_domainTypes.EventTypes);
         if (!eventResult.IsSuccess)
         {
@@ -35,13 +63,6 @@ public class EventStreamObserver : IAsyncObserver<SerializableEvent>
         }
 
         var evt = eventResult.GetValue();
-
-        // Apply filter if configured
-        if (_filter != null && !_filter.ShouldInclude(evt))
-        {
-            return;
-        }
-
         await _onEvent(evt);
     }
 

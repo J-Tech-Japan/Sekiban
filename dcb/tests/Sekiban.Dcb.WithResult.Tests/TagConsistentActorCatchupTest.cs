@@ -5,6 +5,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -13,12 +14,12 @@ namespace Sekiban.Dcb.Tests;
 public class TagConsistentActorCatchupTest
 {
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public TagConsistentActorCatchupTest()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
     }
 
     [Fact]
@@ -32,15 +33,15 @@ public class TagConsistentActorCatchupTest
 
         // Write multiple events
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Test Student"), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         var classRoomId1 = Guid.NewGuid();
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         var classRoomId2 = Guid.NewGuid();
         var event3 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag);
-        await _eventStore.WriteEventAsync(event3);
+        await _eventStore.WriteEventAsync(event3, _domainTypes.EventTypes);
 
         // Create TagConsistentActor without event store (so it won't catch up)
         var tagConsistentActor = new GeneralTagConsistentActor(
@@ -77,11 +78,11 @@ public class TagConsistentActorCatchupTest
 
         // Write events before creating TagConsistentActor
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Test Student"), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         var classRoomId1 = Guid.NewGuid();
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         // Create accessor and get TagConsistentActor (should trigger catchup)
         var accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
@@ -107,11 +108,11 @@ public class TagConsistentActorCatchupTest
 
         // Write events
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Test Student"), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         var classRoomId1 = Guid.NewGuid();
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         // Create accessor
         var accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);

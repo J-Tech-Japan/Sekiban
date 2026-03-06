@@ -71,9 +71,11 @@ var withoutResultApiService = builder
     .WaitFor(postgres);
 
 builder
-    .AddProject<DcbOrleans_Catchup_Functions>("cold-catchup-timer")
+    .AddAzureFunctionsProject<DcbOrleans_Catchup_Functions>("cold-catchup-timer")
+    .WithHostStorage(storage)
     .WithReference(postgres)
     .WithReference(multiProjectionOffload)
+    .WithEnvironment("ColdExportTimerSchedule", "0 */10 * * * *")
     .WithEnvironment("Sekiban:ColdEvent:Enabled", "true")
     .WithEnvironment("Sekiban:ColdEvent:SegmentMaxEvents", "30000")
     .WithEnvironment("Sekiban:ColdEvent:ExportMaxEventsPerRun", "30000")
@@ -81,8 +83,8 @@ builder
     .WithEnvironment("Sekiban:ColdEvent:Storage:Format", "jsonl")
     .WithEnvironment("Sekiban:ColdEvent:Storage:AzureBlobClientName", "MultiProjectionOffload")
     .WithEnvironment("Sekiban:ColdEvent:Storage:AzureContainerName", "multiprojection-cold-events")
-    .WithEnvironment("ColdExport:Interval", "00:05:00")
-    .WithEnvironment("ColdExport:CycleBudget", "00:03:00")
+    .WithEnvironment("ColdExport:Interval", "00:10:00")
+    .WithEnvironment("ColdExport:CycleBudget", "00:08:00")
     .WaitFor(postgres);
 
 // Add the Web frontend

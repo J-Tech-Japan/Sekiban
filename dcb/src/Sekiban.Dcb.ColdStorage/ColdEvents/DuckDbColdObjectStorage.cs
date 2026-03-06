@@ -101,6 +101,18 @@ public sealed class DuckDbColdObjectStorage : IColdObjectStorage
             return ResultBox.FromValue(true);
         });
 
+    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        if (data.CanSeek)
+        {
+            data.Position = 0;
+        }
+
+        await data.CopyToAsync(ms, ct);
+        return await PutAsync(path, ms.ToArray(), expectedETag, ct);
+    }
+
     public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
         => ExecuteAsync(async connection =>
         {

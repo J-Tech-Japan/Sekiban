@@ -21,6 +21,18 @@ public sealed class InMemoryColdObjectStorage : IColdObjectStorage
             ResultBox.FromValue(new ColdStorageObject(blob.Data, blob.ETag)));
     }
 
+    public Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    {
+        if (!_blobs.TryGetValue(path, out var blob))
+        {
+            return Task.FromResult(
+                ResultBox.Error<Stream>(new KeyNotFoundException($"Object not found: {path}")));
+        }
+
+        Stream stream = new MemoryStream(blob.Data, writable: false);
+        return Task.FromResult(ResultBox.FromValue(stream));
+    }
+
     public Task<ResultBox<bool>> PutAsync(
         string path,
         byte[] data,
@@ -46,6 +58,22 @@ public sealed class InMemoryColdObjectStorage : IColdObjectStorage
         var newETag = ComputeETag(data);
         _blobs[path] = new StoredBlob(data, newETag);
         return Task.FromResult(ResultBox.FromValue(true));
+    }
+
+    public async Task<ResultBox<bool>> PutAsync(
+        string path,
+        Stream data,
+        string? expectedETag,
+        CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        if (data.CanSeek)
+        {
+            data.Position = 0;
+        }
+
+        await data.CopyToAsync(ms, ct);
+        return await PutAsync(path, ms.ToArray(), expectedETag, ct);
     }
 
     public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)

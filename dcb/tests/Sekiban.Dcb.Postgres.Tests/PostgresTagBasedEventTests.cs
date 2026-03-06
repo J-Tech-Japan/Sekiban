@@ -3,6 +3,7 @@ using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 namespace Sekiban.Dcb.Postgres.Tests;

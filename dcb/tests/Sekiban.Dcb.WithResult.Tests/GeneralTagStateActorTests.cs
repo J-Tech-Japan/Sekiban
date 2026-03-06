@@ -7,6 +7,7 @@ using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -16,12 +17,12 @@ public class GeneralTagStateActorTests
 {
     private readonly InMemoryObjectAccessor _accessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public GeneralTagStateActorTests()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
     }
 
@@ -35,7 +36,7 @@ public class GeneralTagStateActorTests
 
         // Add StudentCreated event
         var studentCreatedEvent = new StudentCreated(studentId, "John Doe");
-        await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag));
+        await _eventStore.WriteEventAsync(EventTestHelper.CreateEvent(studentCreatedEvent, studentTag), _domainTypes.EventTypes);
 
         // Act
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
@@ -69,13 +70,16 @@ public class GeneralTagStateActorTests
 
         // Add multiple events
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Smith", 3), studentTag));
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Smith", 3), studentTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag));
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId1), studentTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag));
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId2), studentTag),
+            _domainTypes.EventTypes);
 
         // Act
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
@@ -103,13 +107,16 @@ public class GeneralTagStateActorTests
 
         // Add ClassRoom events
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new ClassRoomCreated(classRoomId, "Math 101"), classRoomTag));
+            EventTestHelper.CreateEvent(new ClassRoomCreated(classRoomId, "Math 101"), classRoomTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId1, classRoomId), classRoomTag));
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId1, classRoomId), classRoomTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag));
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId2, classRoomId), classRoomTag),
+            _domainTypes.EventTypes);
 
         // Act
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
@@ -139,13 +146,16 @@ public class GeneralTagStateActorTests
 
         // Add events
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Alice Johnson"), studentTag));
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Alice Johnson"), studentTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag));
+            EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag),
+            _domainTypes.EventTypes);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag));
+            EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag),
+            _domainTypes.EventTypes);
 
         // Act
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
@@ -189,7 +199,8 @@ public class GeneralTagStateActorTests
         var tagStateId = TagStateId.FromProjector<StudentProjector>(studentTag);
 
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag));
+            EventTestHelper.CreateEvent(new StudentCreated(studentId, "Carol Davis", 2), studentTag),
+            _domainTypes.EventTypes);
 
         var actor = new GeneralTagStateActor(tagStateId.GetTagStateId(), _eventStore, _domainTypes.TagProjectorTypes, _domainTypes.TagTypes, _domainTypes.TagStatePayloadTypes, _accessor);
 

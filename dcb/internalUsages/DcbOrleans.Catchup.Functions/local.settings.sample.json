@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "ColdExportTimerSchedule": "0 */10 * * * *",
+    "ColdExport__Interval": "00:10:00",
+    "ColdExport__CycleBudget": "00:08:00",
+    "Sekiban__ColdEvent__Enabled": "true",
+    "Sekiban__ColdEvent__Storage__Provider": "azureblob",
+    "Sekiban__ColdEvent__Storage__Format": "jsonl",
+    "Sekiban__ColdEvent__Storage__AzureBlobClientName": "MultiProjectionOffload",
+    "Sekiban__ColdEvent__Storage__AzureContainerName": "multiprojection-cold-events",
+    "DcbPostgres": "Host=localhost;Port=5432;Database=DcbPostgres;Username=postgres;Password=",
+    "MultiProjectionOffload": "UseDevelopmentStorage=true"
+  }
+}

@@ -187,7 +187,7 @@ public class CoreGeneralSekibanExecutor
                             e.Tags.Select(t => t.GetTag()).ToList()));
                 }
 
-                var writeResult = await _eventStore.WriteEventsAsync(events);
+                var writeResult = await _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes);
                 if (!writeResult.IsSuccess)
                 {
                     await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);

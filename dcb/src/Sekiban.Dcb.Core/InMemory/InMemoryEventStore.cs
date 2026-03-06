@@ -6,14 +6,17 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
 ///     In-memory implementation of IEventStore for testing and development
 ///     Stores events and tag streams only - no tag state management
 /// </summary>
-public class InMemoryEventStore : IEventStore
+public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
 {
+    private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";
+
     private sealed class ServiceState
     {
         public object Lock { get; } = new();
@@ -28,7 +31,7 @@ public class InMemoryEventStore : IEventStore
 
     public InMemoryEventStore(IServiceIdProvider? serviceIdProvider = null)
     {
-        _eventTypes = null;
+        _eventTypes = new ReflectionEventTypes();
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
@@ -43,6 +46,8 @@ public class InMemoryEventStore : IEventStore
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
         return _states.GetOrAdd(serviceId, _ => new ServiceState());
     }
+
+    public IEventTypes? EventTypes => _eventTypes;
 
     /// <summary>
     ///     Clear all events and tag streams. Used for test isolation.
@@ -187,6 +192,17 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<Event>> WriteEventAsync(Event evt)
+    {
+        var result = await WriteEventsAsync(new[] { evt });
+        if (!result.IsSuccess)
+        {
+            return ResultBox.Error<Event>(result.GetException());
+        }
+
+        return ResultBox.FromValue(result.GetValue().Events[0]);
+    }
+
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
         var tagString = tag.GetTag();
@@ -305,7 +321,7 @@ public class InMemoryEventStore : IEventStore
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)
@@ -334,11 +350,74 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
+    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        if (_eventTypes == null)
+        {
+            return Task.FromResult(ResultBox.Error<SerializableEvent>(
+                new InvalidOperationException(EventTypesRequiredMessage)));
+        }
+
+        var state = GetState();
+        lock (state.Lock)
+        {
+            if (!state.Events.TryGetValue(eventId, out var evt))
+            {
+                return Task.FromResult(ResultBox.Error<SerializableEvent>(new Exception($"Event {eventId} not found")));
+            }
+
+            return Task.FromResult(ResultBox.FromValue(evt.ToSerializableEvent(_eventTypes)));
+        }
+    }
+
+    public async IAsyncEnumerable<SerializableEvent> StreamAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (_eventTypes == null)
+        {
+            throw new NotSupportedException(EventTypesRequiredMessage);
+        }
+
+        List<SerializableEvent> snapshot;
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var events = state.EventOrder.AsEnumerable();
+
+            if (since != null)
+            {
+                events = events.Where(e => string.Compare(
+                        e.SortableUniqueIdValue,
+                        since.Value,
+                        StringComparison.Ordinal) >
+                    0);
+            }
+
+            if (maxCount.HasValue)
+            {
+                events = events.Take(maxCount.Value);
+            }
+
+            snapshot = events
+                .Select(e => e.ToSerializableEvent(_eventTypes))
+                .ToList();
+        }
+
+        foreach (var e in snapshot)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return e;
+            await Task.Yield();
+        }
+    }
+
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)
@@ -368,7 +447,7 @@ public class InMemoryEventStore : IEventStore
     {
         if (_eventTypes == null)
             return Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
-                new NotSupportedException("IEventTypes is required for SerializableEvent operations")));
+                new NotSupportedException(EventTypesRequiredMessage)));
 
         var state = GetState();
         lock (state.Lock)

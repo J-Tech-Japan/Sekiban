@@ -5,6 +5,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -14,12 +15,12 @@ public class ActorRecreationTests
 {
     private readonly InMemoryObjectAccessor _accessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public ActorRecreationTests()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
     }
 
@@ -38,10 +39,10 @@ public class ActorRecreationTests
 
         // Write some events to establish tag state
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "John Doe"), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         // Make a reservation to update the latest sortable unique ID
         var reservationResult = await actor1.MakeReservationAsync(event2.SortableUniqueIdValue);
@@ -85,11 +86,11 @@ public class ActorRecreationTests
 
         // Step 1: Write events first (before creating actor)
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Jane Smith", 3), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         var classRoomId = Guid.NewGuid();
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, classRoomId), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         // Step 2: Create actor and verify it computes state from events
         var actorResult1 = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
@@ -107,7 +108,7 @@ public class ActorRecreationTests
 
         // Step 4: Add more events while actor is removed
         var event3 = EventTestHelper.CreateEvent(new StudentDroppedFromClassRoom(studentId, classRoomId), studentTag);
-        await _eventStore.WriteEventAsync(event3);
+        await _eventStore.WriteEventAsync(event3, _domainTypes.EventTypes);
 
         // Step 5: Recreate actor
         var actorResult2 = await _accessor.GetActorAsync<ITagStateActorCommon>(actorId);
@@ -141,9 +142,11 @@ public class ActorRecreationTests
 
         // Write events for both students
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentCreated(studentId1, "Student 1"), studentTag1));
+            EventTestHelper.CreateEvent(new StudentCreated(studentId1, "Student 1"), studentTag1),
+            _domainTypes.EventTypes);
         await _eventStore.WriteEventAsync(
-            EventTestHelper.CreateEvent(new StudentCreated(studentId2, "Student 2", 4), studentTag2));
+            EventTestHelper.CreateEvent(new StudentCreated(studentId2, "Student 2", 4), studentTag2),
+            _domainTypes.EventTypes);
 
         // Create and remove first actor
         var actor1Result = await _accessor.GetActorAsync<ITagConsistentActorCommon>(actorId1);
@@ -215,7 +218,7 @@ public class ActorRecreationTests
 
         // Write initial events
         var event1 = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Test Student"), studentTag);
-        await _eventStore.WriteEventAsync(event1);
+        await _eventStore.WriteEventAsync(event1, _domainTypes.EventTypes);
 
         // Create both actors
         var consistentActor1
@@ -235,7 +238,7 @@ public class ActorRecreationTests
 
         // Add another event while actors are removed
         var event2 = EventTestHelper.CreateEvent(new StudentEnrolledInClassRoom(studentId, Guid.NewGuid()), studentTag);
-        await _eventStore.WriteEventAsync(event2);
+        await _eventStore.WriteEventAsync(event2, _domainTypes.EventTypes);
 
         // Recreate TagConsistentActor
         var consistentActor2

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -12,11 +13,8 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 /// <summary>
-///     Tests that validate the behavioral difference between ReadAllEventsAsync
-///     and ReadAllSerializableEventsAsync in HybridEventStore, specifically for
-///     catch-up scenarios where cold event access is critical.
-///     These tests document why MultiProjectionGrain catch-up must prefer
-///     ReadAllSerializableEventsAsync over ReadAllEventsAsync.
+///     Tests for HybridEventStore catch-up behavior after the interface became
+///     SerializableEvent-first.
 /// </summary>
 public class HybridEventStoreCatchUpPathTests
 {
@@ -91,7 +89,7 @@ public class HybridEventStoreCatchUpPathTests
     }
 
     [Fact]
-    public async Task ReadAllEventsAsync_should_only_return_hot_events_when_cold_events_exist()
+    public async Task Explicit_deserialization_after_read_should_return_cold_and_hot_events()
     {
         // Given: cold events exist in storage and hot store has only recent events
         var coldTime = new DateTime(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc);
@@ -104,16 +102,26 @@ public class HybridEventStoreCatchUpPathTests
         var hotStore = new TrackingEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore);
 
-        // When: catch-up reads via ReadAllEventsAsync (the current grain behavior)
-        var result = await hybrid.ReadAllEventsAsync(since: null, maxCount: 500);
+        // When: callers explicitly deserialize after the serializable read
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500);
 
-        // Then: only hot events are returned — cold events are missed
+        // Then: all events are present after explicit caller-side conversion
         Assert.True(result.IsSuccess);
-        var events = result.GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("HotEvent", events[0].EventType);
-        Assert.True(hotStore.ReadAllEventsAsyncCalled);
-        Assert.False(hotStore.ReadAllSerializableEventsAsyncCalled);
+        var events = result
+            .GetValue()
+            .Select(se => new Event(
+                new StubPayload(se.EventPayloadName),
+                se.SortableUniqueIdValue,
+                se.EventPayloadName,
+                se.Id,
+                se.EventMetadata,
+                se.Tags))
+            .ToList();
+        Assert.Equal(3, events.Count);
+        Assert.Equal("ColdEvent1", events[0].EventType);
+        Assert.Equal("ColdEvent2", events[1].EventType);
+        Assert.Equal("HotEvent", events[2].EventType);
+        Assert.True(hotStore.ReadAllSerializableEventsAsyncCalled);
     }
 
     [Fact]
@@ -225,67 +233,33 @@ public class HybridEventStoreCatchUpPathTests
     }
 
     [Fact]
-    public async Task ReadAllEventsAsync_should_not_call_serializable_path()
+    public async Task ReadAllSerializableEventsAsync_should_call_serializable_path()
     {
         // Given: hot store with events
         var hotEvent = CreateSerializableEvent(DateTime.UtcNow.AddMinutes(-5), "Event1");
         var hotStore = new TrackingEventStore([hotEvent]);
         var hybrid = CreateHybrid(hotStore);
 
-        // When: ReadAllEventsAsync is called
-        await hybrid.ReadAllEventsAsync(since: null, maxCount: 100);
+        // When: ReadAllSerializableEventsAsync is called
+        await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 100);
 
-        // Then: only ReadAllEventsAsync was called on hot store, not serializable path
-        Assert.True(hotStore.ReadAllEventsAsyncCalled);
-        Assert.False(hotStore.ReadAllSerializableEventsAsyncCalled);
+        // Then: serializable hot path was used
+        Assert.True(hotStore.ReadAllSerializableEventsAsyncCalled);
     }
 
     /// <summary>
-    ///     Stub IEventStore that tracks which read methods were called
-    ///     and supports both Event and SerializableEvent paths.
+    ///     Stub IEventStore that tracks serializable read usage.
     /// </summary>
     private sealed class TrackingEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _serializableEvents;
 
-        public bool ReadAllEventsAsyncCalled { get; private set; }
         public bool ReadAllSerializableEventsAsyncCalled { get; private set; }
 
         public TrackingEventStore(IReadOnlyList<SerializableEvent> events)
         {
             _serializableEvents = events;
         }
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(
-            SortableUniqueId? since = null, int? maxCount = null)
-        {
-            ReadAllEventsAsyncCalled = true;
-            IEnumerable<SerializableEvent> filtered = since is null
-                ? _serializableEvents
-                : _serializableEvents.Where(e =>
-                    string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
-            if (maxCount.HasValue)
-                filtered = filtered.Take(maxCount.Value);
-
-            var events = filtered.Select(se => new Event(
-                new StubPayload(se.EventPayloadName),
-                se.SortableUniqueIdValue,
-                se.EventPayloadName,
-                se.Id,
-                se.EventMetadata,
-                se.Tags)).ToList();
-            return Task.FromResult(ResultBox.FromValue<IEnumerable<Event>>(events));
-        }
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
-            IEnumerable<Event> events)
-            => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
@@ -298,6 +272,14 @@ public class HybridEventStoreCatchUpPathTests
 
         public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
             => throw new NotSupportedException();
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var result = _serializableEvents.FirstOrDefault(e => e.Id == eventId);
+            return result == null
+                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
+                : Task.FromResult(ResultBox.FromValue(result));
+        }
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();

@@ -3,6 +3,7 @@ using Dcb.Domain.Student;
 using Microsoft.EntityFrameworkCore;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 using Xunit.Abstractions;
