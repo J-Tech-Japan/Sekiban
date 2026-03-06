@@ -31,7 +31,39 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
         }
     }
 
+    public Task<ResultBox<Stream>> OpenReadAsync(string path, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
+        if (!File.Exists(fullPath))
+        {
+            return Task.FromResult(ResultBox.Error<Stream>(new FileNotFoundException($"Cold object not found: {path}")));
+        }
+
+        try
+        {
+            Stream stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            return Task.FromResult(ResultBox.FromValue(stream));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(ResultBox.Error<Stream>(ex));
+        }
+    }
+
     public async Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct)
+    {
+        await using var stream = new MemoryStream(data, writable: false);
+        return await PutAsync(path, stream, expectedETag, ct);
+    }
+
+    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
     {
         var fullPath = ColdStoragePath.ToAbsolute(_basePath, path);
         var directory = Path.GetDirectoryName(fullPath);
@@ -63,7 +95,12 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                     }
 
                     stream.SetLength(0);
-                    await stream.WriteAsync(data, ct);
+                    if (data.CanSeek)
+                    {
+                        data.Position = 0;
+                    }
+
+                    await data.CopyToAsync(stream, ct);
                     await stream.FlushAsync(ct);
                     return ResultBox.FromValue(true);
                 }
@@ -83,7 +120,12 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                     FileShare.None,
                     bufferSize: 4096,
                     FileOptions.Asynchronous);
-                await create.WriteAsync(data, ct);
+                if (data.CanSeek)
+                {
+                    data.Position = 0;
+                }
+
+                await data.CopyToAsync(create, ct);
                 await create.FlushAsync(ct);
                 return ResultBox.FromValue(true);
             }
@@ -96,7 +138,12 @@ public sealed class JsonlColdObjectStorage : IColdObjectStorage
                     FileShare.None,
                     bufferSize: 4096,
                     FileOptions.Asynchronous);
-                await overwrite.WriteAsync(data, ct);
+                if (data.CanSeek)
+                {
+                    data.Position = 0;
+                }
+
+                await data.CopyToAsync(overwrite, ct);
                 await overwrite.FlushAsync(ct);
             }
 

@@ -185,6 +185,14 @@ public class EventStoreCacheSyncTests
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
 
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var result = _events.FirstOrDefault(e => e.Id == eventId);
+            return result is null
+                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
+                : Task.FromResult(ResultBox.FromValue(result));
+        }
+
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
     }

@@ -9,11 +9,12 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
-public class PostgresEventStore : IEventStore
+public class PostgresEventStore : IEventStore, ISerializableEventStreamReader
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;
@@ -385,6 +386,36 @@ public class PostgresEventStore : IEventStore
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            var dbEvent = await context.Events.FirstOrDefaultAsync(e =>
+                e.ServiceId == serviceId &&
+                e.Id == eventId);
+
+            if (dbEvent == null)
+            {
+                return ResultBox.Error<SerializableEvent>(new Exception($"Event with ID {eventId} not found"));
+            }
+
+            return ResultBox.FromValue(new SerializableEvent(
+                Encoding.UTF8.GetBytes(dbEvent.Payload),
+                dbEvent.SortableUniqueId,
+                dbEvent.Id,
+                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                dbEvent.EventType));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableEvent>(ex);
+        }
+    }
+
     public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
@@ -421,6 +452,40 @@ public class PostgresEventStore : IEventStore
         catch (Exception ex)
         {
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    public async IAsyncEnumerable<SerializableEvent> StreamAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var serviceId = CurrentServiceId;
+
+        var query = context.Events
+            .AsNoTracking()
+            .Where(e => e.ServiceId == serviceId);
+
+        if (since != null)
+        {
+            query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+        }
+
+        var orderedQuery = query.OrderBy(e => e.SortableUniqueId);
+        var limitedQuery = maxCount.HasValue
+            ? orderedQuery.Take(maxCount.Value)
+            : orderedQuery;
+
+        await foreach (var dbEvent in limitedQuery.AsAsyncEnumerable().WithCancellation(ct))
+        {
+            yield return new SerializableEvent(
+                Encoding.UTF8.GetBytes(dbEvent.Payload),
+                dbEvent.SortableUniqueId,
+                dbEvent.Id,
+                new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                dbEvent.EventType);
         }
     }
 

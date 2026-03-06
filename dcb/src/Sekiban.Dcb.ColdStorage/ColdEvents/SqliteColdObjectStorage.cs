@@ -123,6 +123,18 @@ public sealed class SqliteColdObjectStorage : IColdObjectStorage
         }
     }
 
+    public async Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        if (data.CanSeek)
+        {
+            data.Position = 0;
+        }
+
+        await data.CopyToAsync(ms, ct);
+        return await PutAsync(path, ms.ToArray(), expectedETag, ct);
+    }
+
     public async Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
     {
         try

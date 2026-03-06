@@ -2,7 +2,9 @@ using Dcb.Domain;
 using Dcb.Domain.Weather;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -13,13 +15,13 @@ public class WeatherForecastCommandTests
 {
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _executor;
 
     public WeatherForecastCommandTests()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = DomainType.GetDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _executor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
@@ -54,7 +56,7 @@ public class WeatherForecastCommandTests
         Assert.True(tagExists.GetValue());
 
         // Verify the event
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as WeatherForecastCreated;
@@ -99,7 +101,7 @@ public class WeatherForecastCommandTests
 
         // Verify the event was written
         var forecastTag = new WeatherForecastTag(forecastId);
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Equal(2, eventsList.Count); // Create + Change events
 
@@ -186,7 +188,7 @@ public class WeatherForecastCommandTests
 
         // Verify only one event exists (the create event)
         var forecastTag = new WeatherForecastTag(forecastId);
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
     }
@@ -341,7 +343,7 @@ public class WeatherForecastCommandTests
         Assert.Equal("Heavy snow", payload.Summary); // Updated summary
 
         // Verify all events
-        var events = await _eventStore.ReadEventsByTagAsync(forecastTag);
+        var events = await _eventStore.ReadEventsByTagAsync(forecastTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Equal(3, eventsList.Count); // Create + Update + ChangeLocation
     }

@@ -19,8 +19,19 @@ public static class JsonlSegmentWriter
         using var writer = new StreamWriter(stream, Utf8NoBom, leaveOpen: true);
         foreach (var e in events)
         {
-            var line = JsonSerializer.Serialize(e, ColdEventJsonOptions.Default);
-            writer.WriteLine(line);
+            WriteEvent(e, writer);
         }
+    }
+
+    public static void WriteEvent(SerializableEvent e, TextWriter writer)
+    {
+        var line = JsonSerializer.Serialize(e, ColdEventJsonOptions.Default);
+        writer.WriteLine(line);
+    }
+
+    public static async Task WriteEventAsync(SerializableEvent e, TextWriter writer)
+    {
+        var line = JsonSerializer.Serialize(e, ColdEventJsonOptions.Default);
+        await writer.WriteLineAsync(line);
     }
 }

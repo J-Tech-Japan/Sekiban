@@ -7,6 +7,38 @@ namespace Sekiban.Dcb.Actors;
 public interface IEventSubscription : IDisposable
 {
     /// <summary>
+    ///     Subscribe to serialized events with a callback.
+    /// </summary>
+    Task<IEventSubscriptionHandle> SubscribeSerializableAsync(
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+        => Task.FromException<IEventSubscriptionHandle>(
+            new NotSupportedException($"{GetType().Name} does not support serialized event subscriptions."));
+
+    /// <summary>
+    ///     Subscribe to serialized events starting from a specific position.
+    /// </summary>
+    Task<IEventSubscriptionHandle> SubscribeSerializableFromAsync(
+        string fromPosition,
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+        => Task.FromException<IEventSubscriptionHandle>(
+            new NotSupportedException($"{GetType().Name} does not support serialized event subscriptions."));
+
+    /// <summary>
+    ///     Subscribe to serialized events with filtering.
+    /// </summary>
+    Task<IEventSubscriptionHandle> SubscribeSerializableWithFilterAsync(
+        IEventFilter filter,
+        Func<SerializableEvent, Task> onEventReceived,
+        string? subscriptionId = null,
+        CancellationToken cancellationToken = default)
+        => Task.FromException<IEventSubscriptionHandle>(
+            new NotSupportedException($"{GetType().Name} does not support serialized event subscriptions."));
+
+    /// <summary>
     ///     Subscribe to events with a callback
     /// </summary>
     /// <param name="onEventReceived">Callback when an event is received</param>

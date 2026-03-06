@@ -1123,6 +1123,17 @@ public partial class CosmosDbEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        var typedResult = await ReadEventAsync(eventId);
+        if (!typedResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
+        }
+
+        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
+    }
+
     /// <summary>
     ///     Fetches events by IDs and returns them as SerializableEvent (no deserialization).
     /// </summary>

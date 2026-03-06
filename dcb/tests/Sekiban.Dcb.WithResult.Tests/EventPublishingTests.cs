@@ -2,29 +2,40 @@ using Dcb.Domain;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class EventPublishingTests
 {
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _executor;
     private readonly InMemoryEventPublisher _publisher;
     private readonly InMemorySekibanStream _stream;
 
     public EventPublishingTests()
     {
-        _eventStore = new InMemoryEventStore();
-        _domainTypes = DomainType.GetDomainTypes();
+        _domainTypes = BuildDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _stream = new InMemorySekibanStream("test.topic");
         var resolver = new InMemoryStreamDestinationResolver(_stream);
         _publisher = new InMemoryEventPublisher(resolver);
         _executor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes, _publisher);
+    }
+
+    private static DcbDomainTypes BuildDomainTypes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<TestPublishEvent>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<TestPublishTag>();
+        return domainTypes;
     }
 
     [Fact]
@@ -66,11 +77,12 @@ public class EventPublishingTests
 
     private record TestPublishCommand(string Name) : ICommand;
     private record TestPublishEvent(string Name) : IEventPayload;
-    private record TestPublishTag : ITag
+    private record TestPublishTag : IStringTagGroup<TestPublishTag>
     {
+        public static string TagGroupName => "PubTest";
+        public static TestPublishTag FromContent(string _) => new();
         public bool IsConsistencyTag() => true;
-        public string GetTagGroup() => "PubTest";
-        public string GetTagContent() => "One";
+        public string GetId() => "One";
     }
 
     private class TestPublishHandler : ICommandHandler<TestPublishCommand>

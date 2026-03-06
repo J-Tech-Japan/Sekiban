@@ -5,9 +5,12 @@ using Dcb.Domain.Student;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -19,14 +22,22 @@ public class GeneralSekibanExecutorDomainTests
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly GeneralSekibanExecutor _commandExecutor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public GeneralSekibanExecutorDomainTests()
     {
-        _eventStore = new InMemoryEventStore();
-        _domainTypes = DomainType.GetDomainTypes();
+        _domainTypes = BuildDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
+    }
+
+    private static DcbDomainTypes BuildDomainTypes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<TeacherCreated>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<TeacherTag>();
+        return domainTypes;
     }
 
     [Fact]
@@ -52,7 +63,7 @@ public class GeneralSekibanExecutorDomainTests
         Assert.True(tagExists.GetValue());
 
         // Verify event was written
-        var events = await _eventStore.ReadEventsByTagAsync(teacherTag);
+        var events = await _eventStore.ReadEventsByTagAsync(teacherTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as TeacherCreated;
@@ -85,7 +96,7 @@ public class GeneralSekibanExecutorDomainTests
         Assert.True(tagExists.GetValue());
 
         // Verify the event
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as StudentCreated;
@@ -173,7 +184,7 @@ public class GeneralSekibanExecutorDomainTests
         Assert.True(tagExists.GetValue());
 
         // Verify events
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Single(eventsList);
         var payload = eventsList[0].Payload as StudentCreated;
@@ -250,7 +261,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify the enrollment event exists
         var studentTag = new StudentTag(studentId);
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Equal(2, eventsList.Count); // StudentCreated + StudentEnrolledInClassRoom
 
@@ -402,7 +413,7 @@ public class GeneralSekibanExecutorDomainTests
 
         // Verify the drop event
         var studentTag = new StudentTag(studentId);
-        var events = await _eventStore.ReadEventsByTagAsync(studentTag);
+        var events = await _eventStore.ReadEventsByTagAsync(studentTag, _domainTypes.EventTypes);
         var eventsList = events.GetValue().ToList();
         Assert.Equal(3, eventsList.Count); // Created + Enrolled + Dropped
 
@@ -473,11 +484,11 @@ public class GeneralSekibanExecutorDomainTests
             EnrollStudentInClassRoomHandler.HandleAsync);
 
         // Verify all enrollments succeeded
-        var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1));
+        var mathEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom1), _domainTypes.EventTypes);
         var mathEventsList = mathEvents.GetValue().ToList();
         Assert.Equal(3, mathEventsList.Count); // Created + 2 enrollments
 
-        var scienceEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom2));
+        var scienceEvents = await _eventStore.ReadEventsByTagAsync(new ClassRoomTag(classRoom2), _domainTypes.EventTypes);
         var scienceEventsList = scienceEvents.GetValue().ToList();
         Assert.Equal(3, scienceEventsList.Count); // Created + 2 enrollments
 
@@ -486,7 +497,7 @@ public class GeneralSekibanExecutorDomainTests
             new DropStudentFromClassRoom(student1, classRoom1),
             DropStudentFromClassRoomHandler.HandleAsync);
 
-        var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1));
+        var aliceEvents = await _eventStore.ReadEventsByTagAsync(new StudentTag(student1), _domainTypes.EventTypes);
         var aliceEventsList = aliceEvents.GetValue().ToList();
         Assert.Equal(4, aliceEventsList.Count); // Created + 2 enrollments + 1 drop
     }
@@ -564,11 +575,12 @@ public class GeneralSekibanExecutorDomainTests
     }
 
     // Supporting types for the test
-    public record TeacherTag(Guid TeacherId) : ITag
+    public record TeacherTag(Guid TeacherId) : IGuidTagGroup<TeacherTag>
     {
+        public static string TagGroupName => "Teacher";
+        public static TeacherTag FromContent(string content) => new(Guid.Parse(content));
         public bool IsConsistencyTag() => true;
-        public string GetTagGroup() => "Teacher";
-        public string GetTagContent() => TeacherId.ToString();
+        public Guid GetId() => TeacherId;
     }
 
     public record TeacherCreated(Guid TeacherId, string Name, string Subject) : IEventPayload;

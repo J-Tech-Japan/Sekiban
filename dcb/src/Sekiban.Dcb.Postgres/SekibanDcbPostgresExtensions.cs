@@ -19,7 +19,7 @@ public static class SekibanDcbPostgresExtensions
         IConfiguration configuration,
         string connectionStringName = "SekibanDcbConnection")
     {
-        var connectionString = configuration.GetConnectionString(connectionStringName) ??
+        var connectionString = ResolveConnectionString(configuration, connectionStringName) ??
             throw new InvalidOperationException($"Connection string '{connectionStringName}' not found.");
 
         return services.AddSekibanDcbPostgres(connectionString);
@@ -61,7 +61,7 @@ public static class SekibanDcbPostgresExtensions
         services.AddDbContextFactory<SekibanDcbDbContext>((sp, options) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();
-            var connectionString = configuration.GetConnectionString(connectionName);
+            var connectionString = ResolveConnectionString(configuration, connectionName);
 
             options.UseNpgsql(connectionString);
 
@@ -109,7 +109,7 @@ public static class SekibanDcbPostgresExtensions
         services.AddDbContextFactory<SekibanDcbDbContext>((sp, options) =>
         {
             var configuration = sp.GetRequiredService<IConfiguration>();
-            var connectionString = configuration.GetConnectionString(connectionName);
+            var connectionString = ResolveConnectionString(configuration, connectionName);
             options.UseNpgsql(connectionString);
         });
 
@@ -333,6 +333,11 @@ public static class SekibanDcbPostgresExtensions
             }
         }
     }
+
+    private static string? ResolveConnectionString(IConfiguration configuration, string connectionName)
+        => configuration.GetConnectionString(connectionName)
+           ?? configuration[connectionName]
+           ?? configuration[$"{connectionName}:ConnectionString"];
 
     /// <summary>
     ///     Background service to ensure database tables exist without using migrations

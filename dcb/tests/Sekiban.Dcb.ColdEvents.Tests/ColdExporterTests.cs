@@ -168,7 +168,7 @@ public class ColdExporterTests
     }
 
     [Fact]
-    public async Task ExportIncrementalAsync_should_append_to_latest_segment_until_max_events()
+    public async Task ExportIncrementalAsync_should_create_new_segment_without_reloading_previous_segment()
     {
         // Given
         var options = EnabledOptions with { SegmentMaxEvents = 3, SegmentMaxBytes = long.MaxValue };
@@ -193,10 +193,11 @@ public class ColdExporterTests
         Assert.True(second.IsSuccess);
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
         Assert.NotNull(manifest);
-        Assert.Single(manifest!.Segments);
+        Assert.Equal(2, manifest!.Segments.Count);
         Assert.Equal(firstPath, manifest.Segments[0].Path);
-        Assert.Equal(3, manifest.Segments[0].EventCount);
-        Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[0].ToSortableUniqueId);
+        Assert.Equal(2, manifest.Segments[0].EventCount);
+        Assert.Equal(1, manifest.Segments[1].EventCount);
+        Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[1].ToSortableUniqueId);
     }
 
     [Fact]
@@ -243,6 +244,24 @@ public class ColdExporterTests
     }
 
     [Fact]
+    public async Task ExportIncrementalAsync_should_use_stream_reader_when_available()
+    {
+        var safeTime = DateTime.UtcNow.AddMinutes(-10);
+        var events = new[]
+        {
+            CreateEvent(safeTime, "Event1"),
+            CreateEvent(safeTime.AddSeconds(1), "Event2")
+        };
+        var exporter = CreateExporter(new StreamOnlyStubEventStore(events));
+
+        var result = await exporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.GetValue().ExportedEventCount);
+        Assert.Single(result.GetValue().NewSegments);
+    }
+
+    [Fact]
     public async Task GetProgressAsync_should_return_default_when_no_manifest()
     {
         // Given
@@ -267,18 +286,6 @@ public class ColdExporterTests
         {
             _events = events;
         }
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
-            => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
@@ -320,6 +327,14 @@ public class ColdExporterTests
             return Task.FromResult(ResultBox.FromValue(result));
         }
 
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var result = _events.FirstOrDefault(e => e.Id == eventId);
+            return result == null
+                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
+                : Task.FromResult(ResultBox.FromValue(result));
+        }
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
@@ -354,10 +369,100 @@ public class ColdExporterTests
             return _inner.PutAsync(path, data, expectedETag, ct);
         }
 
+        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct)
+        {
+            if (string.Equals(path, _checkpointPath, StringComparison.Ordinal))
+            {
+                return Task.FromResult(ResultBox.Error<bool>(
+                    new InvalidOperationException("checkpoint write failed")));
+            }
+
+            return _inner.PutAsync(path, data, expectedETag, ct);
+        }
+
         public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct)
             => _inner.ListAsync(prefix, ct);
 
         public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
             => _inner.DeleteAsync(path, ct);
+    }
+
+    private sealed class StreamOnlyStubEventStore : IEventStore, ISerializableEventStreamReader
+    {
+        private readonly IReadOnlyList<SerializableEvent> _events;
+
+        public StreamOnlyStubEventStore(IReadOnlyList<SerializableEvent> events)
+        {
+            _events = events;
+        }
+
+        public IAsyncEnumerable<SerializableEvent> StreamAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount,
+            CancellationToken ct = default)
+            => ReadAsync(since, maxCount, ct);
+
+        private async IAsyncEnumerable<SerializableEvent> ReadAsync(
+            SortableUniqueId? since,
+            int? maxCount,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            IEnumerable<SerializableEvent> result = since is null
+                ? _events
+                : _events.Where(e =>
+                    string.Compare(e.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+
+            if (maxCount is > 0)
+            {
+                result = result.Take(maxCount.Value);
+            }
+
+            foreach (var evt in result)
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return evt;
+                await Task.Yield();
+            }
+        }
+
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+            => throw new NotSupportedException("stream path should be used");
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+            => throw new NotSupportedException("stream path should be used");
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var result = _events.FirstOrDefault(e => e.Id == eventId);
+            return result == null
+                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
+                : Task.FromResult(ResultBox.FromValue(result));
+        }
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+            => throw new NotSupportedException();
     }
 }

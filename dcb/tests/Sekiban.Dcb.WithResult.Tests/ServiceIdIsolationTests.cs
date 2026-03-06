@@ -1,7 +1,9 @@
+using Dcb.Domain;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 using CoreInMemoryMultiProjectionStateStore = Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore;
@@ -14,27 +16,28 @@ public class ServiceIdIsolationTests
     public async Task InMemoryEventStore_Isolates_By_ServiceId()
     {
         var provider = new MutableServiceIdProvider("alpha");
-        var store = new CoreInMemoryEventStore(provider);
+        var domainTypes = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domainTypes.EventTypes, provider);
 
         var studentId = Guid.NewGuid();
         var evt = EventTestHelper.CreateEvent(new StudentCreated(studentId, "Alice"), new StudentTag(studentId));
-        var writeResult = await store.WriteEventsAsync([evt]);
+        var writeResult = await store.WriteEventsAsync([evt], domainTypes.EventTypes);
         Assert.True(writeResult.IsSuccess);
 
-        var readAlpha = await store.ReadAllEventsAsync();
+        var readAlpha = await store.ReadAllEventsAsync(domainTypes.EventTypes);
         Assert.True(readAlpha.IsSuccess);
         Assert.Single(readAlpha.GetValue());
 
         provider.ServiceId = "beta";
-        var readBeta = await store.ReadAllEventsAsync();
+        var readBeta = await store.ReadAllEventsAsync(domainTypes.EventTypes);
         Assert.True(readBeta.IsSuccess);
         Assert.Empty(readBeta.GetValue());
 
-        var readEventBeta = await store.ReadEventAsync(evt.Id);
+        var readEventBeta = await store.ReadEventAsync(evt.Id, domainTypes.EventTypes);
         Assert.False(readEventBeta.IsSuccess);
 
         provider.ServiceId = "alpha";
-        var readEventAlpha = await store.ReadEventAsync(evt.Id);
+        var readEventAlpha = await store.ReadEventAsync(evt.Id, domainTypes.EventTypes);
         Assert.True(readEventAlpha.IsSuccess);
     }
 

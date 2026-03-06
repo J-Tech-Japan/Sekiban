@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using System.Collections.Concurrent;
@@ -28,11 +29,41 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
     }
 
+    public DcbDomainTypes DomainTypes => _domainTypes;
+
     /// <summary>
     /// Simple IServiceProvider implementation. For now we don't resolve external services,
     /// but query execution path requires a non-null provider; return null for any service type.
     /// </summary>
-    public object? GetService(Type serviceType) => null;
+    public object? GetService(Type serviceType)
+    {
+        if (serviceType == typeof(DcbDomainTypes))
+        {
+            return _domainTypes;
+        }
+
+        if (serviceType == typeof(IEventTypes))
+        {
+            return _domainTypes.EventTypes;
+        }
+
+        if (serviceType == typeof(ITagProjectorTypes))
+        {
+            return _domainTypes.TagProjectorTypes;
+        }
+
+        if (serviceType == typeof(ITagTypes))
+        {
+            return _domainTypes.TagTypes;
+        }
+
+        if (serviceType == typeof(ITagStatePayloadTypes))
+        {
+            return _domainTypes.TagStatePayloadTypes;
+        }
+
+        return null;
+    }
 
     public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
     {
@@ -125,6 +156,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
             return new GeneralTagStateActor(
                 actorId,
                 _eventStore,
+                _domainTypes.EventTypes,
                 _domainTypes.TagProjectorTypes,
                 _domainTypes.TagTypes,
                 _domainTypes.TagStatePayloadTypes,
@@ -143,7 +175,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
             try
             {
                 // Initial catch-up: feed all existing events
-                var eventsRb = _eventStore.ReadAllEventsAsync();
+                var eventsRb = _eventStore.ReadAllSerializableEventsAsync();
                 eventsRb.Wait();
                 if (eventsRb.Result.IsSuccess)
                 {
@@ -152,7 +184,7 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
                     {
                         // Synchronously apply (API is async but we can Wait in this limited in-memory context)
                         // Initial replay is a catch-up phase
-                        actor.AddEventsAsync(events, finishedCatchUp: true, EventSource.CatchUp).Wait();
+                        actor.AddSerializableEventsAsync(events, finishedCatchUp: true).Wait();
                     }
                 }
             }

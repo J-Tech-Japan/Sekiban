@@ -15,6 +15,7 @@ namespace Sekiban.Dcb.Actors;
 public class GeneralTagStateActor : ITagStateActorCommon
 {
     private readonly IActorObjectAccessor _actorAccessor;
+    private readonly IEventTypes _eventTypes;
     private readonly ITagProjectorTypes _tagProjectorTypes;
     private readonly ITagTypes _tagTypes;
     private readonly ITagStatePayloadTypes _tagStatePayloadTypes;
@@ -34,6 +35,27 @@ public class GeneralTagStateActor : ITagStateActorCommon
         ILogger<GeneralTagStateActor>? logger = null) : this(
         tagStateId,
         eventStore,
+        ResolveEventTypes(eventStore, actorAccessor),
+        tagProjectorTypes,
+        tagTypes,
+        tagStatePayloadTypes,
+        actorAccessor,
+        logger)
+    {
+    }
+
+    public GeneralTagStateActor(
+        string tagStateId,
+        IEventStore eventStore,
+        IEventTypes eventTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
+        IActorObjectAccessor actorAccessor,
+        ILogger<GeneralTagStateActor>? logger = null) : this(
+        tagStateId,
+        eventStore,
+        eventTypes,
         tagProjectorTypes,
         tagTypes,
         tagStatePayloadTypes,
@@ -55,6 +77,29 @@ public class GeneralTagStateActor : ITagStateActorCommon
         ILogger<GeneralTagStateActor>? logger = null) : this(
         tagStateId,
         eventStore,
+        ResolveEventTypes(eventStore, actorAccessor),
+        tagProjectorTypes,
+        tagTypes,
+        tagStatePayloadTypes,
+        options,
+        actorAccessor,
+        logger)
+    {
+    }
+
+    public GeneralTagStateActor(
+        string tagStateId,
+        IEventStore eventStore,
+        IEventTypes eventTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
+        TagStateOptions options,
+        IActorObjectAccessor actorAccessor,
+        ILogger<GeneralTagStateActor>? logger = null) : this(
+        tagStateId,
+        eventStore,
+        eventTypes,
         tagProjectorTypes,
         tagTypes,
         tagStatePayloadTypes,
@@ -74,6 +119,30 @@ public class GeneralTagStateActor : ITagStateActorCommon
         TagStateOptions options,
         IActorObjectAccessor actorAccessor,
         ITagStatePersistent statePersistent,
+        ILogger<GeneralTagStateActor>? logger = null) : this(
+        tagStateId,
+        eventStore,
+        ResolveEventTypes(eventStore, actorAccessor),
+        tagProjectorTypes,
+        tagTypes,
+        tagStatePayloadTypes,
+        options,
+        actorAccessor,
+        statePersistent,
+        logger)
+    {
+    }
+
+    public GeneralTagStateActor(
+        string tagStateId,
+        IEventStore eventStore,
+        IEventTypes eventTypes,
+        ITagProjectorTypes tagProjectorTypes,
+        ITagTypes tagTypes,
+        ITagStatePayloadTypes tagStatePayloadTypes,
+        TagStateOptions options,
+        IActorObjectAccessor actorAccessor,
+        ITagStatePersistent statePersistent,
         ILogger<GeneralTagStateActor>? logger = null)
     {
         if (string.IsNullOrWhiteSpace(tagStateId))
@@ -81,6 +150,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         _tagStateId = TagStateId.Parse(tagStateId);
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _tagProjectorTypes = tagProjectorTypes ?? throw new ArgumentNullException(nameof(tagProjectorTypes));
         _tagTypes = tagTypes ?? throw new ArgumentNullException(nameof(tagTypes));
         _tagStatePayloadTypes = tagStatePayloadTypes ?? throw new ArgumentNullException(nameof(tagStatePayloadTypes));
@@ -88,6 +158,29 @@ public class GeneralTagStateActor : ITagStateActorCommon
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _statePersistent = statePersistent ?? throw new ArgumentNullException(nameof(statePersistent));
         _logger = logger ?? NullLogger<GeneralTagStateActor>.Instance;
+    }
+
+    private static IEventTypes ResolveEventTypes(IEventStore eventStore, IActorObjectAccessor actorAccessor)
+    {
+        if (eventStore is InMemoryEventStore inMemoryEventStore && inMemoryEventStore.EventTypes is not null)
+        {
+            return inMemoryEventStore.EventTypes;
+        }
+
+        if (actorAccessor is IServiceProvider serviceProvider)
+        {
+            if (serviceProvider.GetService(typeof(IEventTypes)) is IEventTypes eventTypes)
+            {
+                return eventTypes;
+            }
+
+            if (serviceProvider.GetService(typeof(DcbDomainTypes)) is DcbDomainTypes domainTypes)
+            {
+                return domainTypes.EventTypes;
+            }
+        }
+
+        return new ReflectionEventTypes();
     }
 
     public Task<string> GetTagStateActorIdAsync() => Task.FromResult(_tagStateId.GetTagStateId());
@@ -356,7 +449,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             lastSortedUniqueId = cachedState.LastSortedUniqueId;
 
             // Read only new events (after cached state's last sortable unique ID)
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
             if (!eventsResult.IsSuccess)
             {
                 // Log the error and throw exception instead of silently returning cached state
@@ -392,7 +485,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         else
         {
             // Full rebuild: projector version changed or no valid cache
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
             if (!eventsResult.IsSuccess)
             {
                 // Log the error for debugging

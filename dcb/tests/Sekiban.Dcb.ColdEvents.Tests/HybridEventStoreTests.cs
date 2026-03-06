@@ -248,18 +248,6 @@ public class HybridEventStoreTests
             _ignoreSinceFilter = ignoreSinceFilter;
         }
 
-        public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId)
-            => throw new NotSupportedException();
-
-        public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
-            => throw new NotSupportedException();
-
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
             => throw new NotSupportedException();
 
@@ -293,6 +281,14 @@ public class HybridEventStoreTests
                 filtered = filtered.Take(maxCount.Value);
             }
             return Task.FromResult(ResultBox.FromValue(filtered));
+        }
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var result = _events.FirstOrDefault(e => e.Id == eventId);
+            return result == null
+                ? Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")))
+                : Task.FromResult(ResultBox.FromValue(result));
         }
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(

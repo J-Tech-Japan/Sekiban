@@ -2,9 +2,12 @@ using Dcb.Domain;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralSekibanExecutorTest
@@ -12,14 +15,24 @@ public class GeneralSekibanExecutorTest
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly GeneralSekibanExecutor _commandExecutor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public GeneralSekibanExecutorTest()
     {
-        _eventStore = new InMemoryEventStore();
-        _domainTypes = DomainType.GetDomainTypes();
+        _domainTypes = BuildDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
+    }
+
+    private static DcbDomainTypes BuildDomainTypes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<TestEvent>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<TestTag>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<TestTag2>();
+        ((SimpleTagProjectorTypes)domainTypes.TagProjectorTypes).RegisterProjector<TestProjector>();
+        return domainTypes;
     }
 
     [Fact]
@@ -40,7 +53,7 @@ public class GeneralSekibanExecutorTest
 
         // Verify event was written
         var testTag = new TestTag();
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(testTag, _domainTypes.EventTypes);
         Assert.True(eventsResult.IsSuccess);
         var events = eventsResult.GetValue().ToList();
         Assert.Single(events);
@@ -189,11 +202,12 @@ public class GeneralSekibanExecutorTest
     // Test types
     private record TestEvent(string Name, int Value) : IEventPayload;
 
-    private record TestTag : ITag
+    private record TestTag : IStringTagGroup<TestTag>
     {
+        public static string TagGroupName => "TestGroup";
+        public static TestTag FromContent(string _) => new();
         public bool IsConsistencyTag() => true;
-        public string GetTagContent() => "Test123";
-        public string GetTagGroup() => "TestGroup";
+        public string GetId() => "Test123";
     }
 
     private class TestProjector : ITagProjector<TestProjector>
@@ -227,10 +241,11 @@ public class GeneralSekibanExecutorTest
                 .ToTask();
     }
 
-    private record TestTag2 : ITag
+    private record TestTag2 : IStringTagGroup<TestTag2>
     {
+        public static string TagGroupName => "TestGroup2";
+        public static TestTag2 FromContent(string _) => new();
         public bool IsConsistencyTag() => true;
-        public string GetTagContent() => "Test456";
-        public string GetTagGroup() => "TestGroup2";
+        public string GetId() => "Test456";
     }
 }

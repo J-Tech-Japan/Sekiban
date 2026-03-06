@@ -23,17 +23,20 @@ public record TagStateProjectionResult(
 public class TagStateService
 {
     private readonly IEventStore _eventStore;
+    private readonly IEventTypes _eventTypes;
     private readonly ITagTypes _tagTypes;
     private readonly ITagProjectorTypes _tagProjectorTypes;
     private readonly JsonSerializerOptions _jsonSerializerOptions;
 
     public TagStateService(
         IEventStore eventStore,
+        IEventTypes eventTypes,
         ITagTypes tagTypes,
         ITagProjectorTypes tagProjectorTypes,
         JsonSerializerOptions jsonSerializerOptions)
     {
         _eventStore = eventStore;
+        _eventTypes = eventTypes;
         _tagTypes = tagTypes;
         _tagProjectorTypes = tagProjectorTypes;
         _jsonSerializerOptions = jsonSerializerOptions;
@@ -126,7 +129,7 @@ public class TagStateService
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
 
         // Fetch events for the tag
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag);
+        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
         if (!eventsResult.IsSuccess)
         {
             return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());

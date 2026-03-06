@@ -199,6 +199,21 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             }
         }
 
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var serializedEvent = state.Events.FirstOrDefault(e => e.Id == eventId);
+                if (serializedEvent == null)
+                {
+                    return Task.FromResult(ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")));
+                }
+
+                return Task.FromResult(ResultBox.FromValue(ToSerializableEvent(serializedEvent)));
+            }
+        }
+
         public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(IEnumerable<Event> events)
         {
             var state = GetState();

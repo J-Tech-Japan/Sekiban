@@ -1221,7 +1221,7 @@ static async Task FetchTagEventsAsync(
 
     // Fetch events for the tag
     Console.WriteLine("Fetching events...");
-    var eventsResult = await eventStore.ReadEventsByTagAsync(tag);
+    var eventsResult = await eventStore.ReadEventsByTagAsync(tag, domainTypes.EventTypes);
     if (!eventsResult.IsSuccess)
     {
         Console.WriteLine($"Error fetching events: {eventsResult.GetException().Message}");

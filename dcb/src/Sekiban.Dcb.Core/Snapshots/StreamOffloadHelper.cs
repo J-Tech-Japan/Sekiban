@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Sekiban.Dcb.Snapshots;
 
 /// <summary>
@@ -81,5 +83,28 @@ public static class StreamOffloadHelper
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
         return buffer.ToArray();
+    }
+
+    public static string ComputeDeterministicKey(string projectorName, string contentHash)
+    {
+        var normalized = projectorName.Replace('\\', '/').Trim('/');
+        return $"{normalized}/{contentHash}.bin";
+    }
+
+    public static async Task<string> ComputeContentHashAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        return Convert.ToHexStringLower(hash);
     }
 }

@@ -294,17 +294,6 @@ public class TagStateGrain : Grain, ITagStateGrain
             return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serializableResult.GetValue().ToList());
         }
 
-        // Backward-compatible fallback for stores that don't yet support SerializableEvent path.
-        var typedResult = await _eventStore.ReadEventsByTagAsync(tag, since);
-        if (!typedResult.IsSuccess)
-        {
-            return ResultBox.Error<IReadOnlyList<SerializableEvent>>(typedResult.GetException());
-        }
-
-        var serialized = typedResult
-            .GetValue()
-            .Select(e => e.ToSerializableEvent(_eventTypes))
-            .ToList();
-        return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serialized);
+        return ResultBox.Error<IReadOnlyList<SerializableEvent>>(serializableResult.GetException());
     }
 }

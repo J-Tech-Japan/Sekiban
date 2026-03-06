@@ -9,35 +9,6 @@ namespace Sekiban.Dcb.Storage;
 /// </summary>
 public interface IEventStore
 {
-    // Event operations
-
-    /// <summary>
-    ///     Reads all events from the event store
-    /// </summary>
-    /// <param name="since">Optional: Only return events after this ID</param>
-    /// <param name="maxCount">Optional: Maximum number of events to return</param>
-    Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null);
-
-    /// <summary>
-    ///     Reads events for a specific tag
-    /// </summary>
-    /// <param name="tag">The tag to filter events by</param>
-    /// <param name="since">Optional: Only return events after this ID</param>
-    Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null);
-
-    /// <summary>
-    ///     Reads a specific event by ID
-    /// </summary>
-    Task<ResultBox<Event>> ReadEventAsync(Guid eventId);
-
-    /// <summary>
-    ///     Writes multiple events to the event store atomically
-    ///     Also updates tag states for all affected tags
-    /// </summary>
-    /// <returns>ResultBox containing the written events and tag write results</returns>
-    Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
-        IEnumerable<Event> events);
-
     // Tag operations
 
     /// <summary>
@@ -67,7 +38,7 @@ public interface IEventStore
     /// <returns>List of unique tag information</returns>
     Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null);
 
-    // SerializableEvent operations (no deserialization needed - payload stays as byte[])
+    // SerializableEvent operations (payload stays serialized until an explicit caller-side conversion)
 
     /// <summary>
     ///     Reads all events as SerializableEvent (no payload deserialization).
@@ -83,6 +54,11 @@ public interface IEventStore
     Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount);
+
+    /// <summary>
+    ///     Reads a specific event as SerializableEvent.
+    /// </summary>
+    Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId);
 
     /// <summary>
     ///     Reads events for a specific tag as SerializableEvent (no payload deserialization).

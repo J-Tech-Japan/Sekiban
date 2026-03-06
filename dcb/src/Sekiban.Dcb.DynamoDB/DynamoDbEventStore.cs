@@ -1061,6 +1061,17 @@ public class DynamoDbEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        var typedResult = await ReadEventAsync(eventId);
+        if (!typedResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableEvent>(typedResult.GetException());
+        }
+
+        return ResultBox.FromValue(typedResult.GetValue().ToSerializableEvent(_eventTypes));
+    }
+
     /// <summary>
     ///     Writes pre-serialized events and associated tag records.
     /// </summary>

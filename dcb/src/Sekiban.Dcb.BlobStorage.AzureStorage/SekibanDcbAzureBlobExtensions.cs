@@ -25,10 +25,18 @@ public static class SekibanDcbAzureBlobExtensions
             var blobServiceClient = sp.GetService<BlobServiceClient>();
             if (blobServiceClient is not null)
             {
-                return new AzureBlobStorageSnapshotAccessor(blobServiceClient, options.ContainerName, options.Prefix, logger);
+                return new AzureBlobStorageSnapshotAccessor(
+                    blobServiceClient,
+                    options.ContainerName,
+                    options.Prefix,
+                    logger: logger);
             }
 
-            return new AzureBlobStorageSnapshotAccessor(options.ConnectionString, options.ContainerName, options.Prefix, logger);
+            return new AzureBlobStorageSnapshotAccessor(
+                options.ConnectionString,
+                options.ContainerName,
+                options.Prefix,
+                logger: logger);
         });
 
         return services;
@@ -43,7 +51,11 @@ public static class SekibanDcbAzureBlobExtensions
         services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
         {
             var logger = sp.GetService<ILogger<AzureBlobStorageSnapshotAccessor>>();
-            return new AzureBlobStorageSnapshotAccessor(connectionString, containerName, prefix, logger);
+            return new AzureBlobStorageSnapshotAccessor(
+                connectionString,
+                containerName,
+                prefix,
+                logger: logger);
         });
         return services;
     }
@@ -57,7 +69,11 @@ public static class SekibanDcbAzureBlobExtensions
         {
             var blobServiceClient = sp.GetRequiredService<BlobServiceClient>();
             var logger = sp.GetService<ILogger<AzureBlobStorageSnapshotAccessor>>();
-            return new AzureBlobStorageSnapshotAccessor(blobServiceClient, containerName, prefix, logger);
+            return new AzureBlobStorageSnapshotAccessor(
+                blobServiceClient,
+                containerName,
+                prefix,
+                logger: logger);
         });
         return services;
     }

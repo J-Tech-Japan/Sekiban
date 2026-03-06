@@ -8,6 +8,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
@@ -22,8 +23,6 @@ public class GeneralTagStateActorIncrementalTests
 
     public GeneralTagStateActorIncrementalTests()
     {
-        _eventStore = new InMemoryEventStore();
-
         // Setup domain types
         var eventTypes = new SimpleEventTypes();
         eventTypes.RegisterEventType<TestEvent>();
@@ -49,6 +48,7 @@ public class GeneralTagStateActorIncrementalTests
             queryTypes,
             new JsonSerializerOptions());
 
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new TestActorAccessor();
         _statePersistent = new InMemoryTagStatePersistent();
     }
@@ -73,7 +73,7 @@ public class GeneralTagStateActorIncrementalTests
         var event1 = CreateEvent(new TestEvent { Value = 10 }, tag, "001");
         var event2 = CreateEvent(new IncrementEvent { Increment = 5 }, tag, "002");
 
-        await _eventStore.WriteEventsAsync(new[] { event1, event2 });
+        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes);
 
         // Set up tag consistent actor to return sortable unique ID
         var tagConsistentActor = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>("TestTag:123");
@@ -90,7 +90,7 @@ public class GeneralTagStateActorIncrementalTests
             // Add more events
             var event3 = CreateEvent(new IncrementEvent { Increment = 7 }, tag, "003");
             var event4 = CreateEvent(new IncrementEvent { Increment = 3 }, tag, "004");
-            await _eventStore.WriteEventsAsync(new[] { event3, event4 });
+            await _eventStore.WriteEventsAsync(new[] { event3, event4 }, _domainTypes.EventTypes);
 
             // Second state computation should use incremental update
             var state2 = await actor.GetTagStateAsync();
@@ -123,7 +123,7 @@ public class GeneralTagStateActorIncrementalTests
         var event1 = CreateEvent(new TestEvent { Value = 20 }, tag, "010");
         var event2 = CreateEvent(new IncrementEvent { Increment = 10 }, tag, "011");
 
-        await _eventStore.WriteEventsAsync(new[] { event1, event2 });
+        await _eventStore.WriteEventsAsync(new[] { event1, event2 }, _domainTypes.EventTypes);
 
         // First state computation
         var state1 = await actor.GetTagStateAsync();
@@ -171,7 +171,7 @@ public class GeneralTagStateActorIncrementalTests
         var tag = new TestTag("789");
         var event1 = CreateEvent(new TestEvent { Value = 100 }, tag, "020");
 
-        await _eventStore.WriteEventsAsync(new[] { event1 });
+        await _eventStore.WriteEventsAsync(new[] { event1 }, _domainTypes.EventTypes);
 
         // First call - computes state
         var state1 = await actor.GetTagStateAsync();
@@ -219,7 +219,7 @@ public class GeneralTagStateActorIncrementalTests
         return new Event(
             payload,
             new SortableUniqueId(sortableId),
-            "TestAggregate",
+            payload.GetType().Name,
             eventId,
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             new List<string> { tag.GetTag() });

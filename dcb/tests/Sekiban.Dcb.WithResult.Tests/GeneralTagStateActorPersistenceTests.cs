@@ -8,6 +8,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -16,8 +17,8 @@ public class GeneralTagStateActorPersistenceTests
     [Fact]
     public async Task Should_Initialize_Empty_State()
     {
-        var eventStore = new InMemoryEventStore();
         var domainTypes = BuildDomainTypes();
+        var eventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
         var actorAccessor = new TestActorAccessor();
         actorAccessor.SetLatestSortableUniqueId("TestTag:empty", string.Empty);
 
@@ -41,8 +42,8 @@ public class GeneralTagStateActorPersistenceTests
     [Fact]
     public async Task Should_Catchup_By_Reading_Only_New_Events_After_Cached_State()
     {
-        var eventStore = new InMemoryEventStore();
         var domainTypes = BuildDomainTypes();
+        var eventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
         var actorAccessor = new TestActorAccessor();
         actorAccessor.SetLatestSortableUniqueId("TestTag:c1", "004");
 
@@ -62,7 +63,8 @@ public class GeneralTagStateActorPersistenceTests
             {
                 CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
                 CreateEvent(new IncrementEvent { Increment = 4 }, tag, "002")
-            });
+            },
+            domainTypes.EventTypes);
 
         var initial = await actor.GetTagStateAsync();
         Assert.Equal(14, ((TestIncrementalState)initial.Payload).Total);
@@ -72,7 +74,8 @@ public class GeneralTagStateActorPersistenceTests
             {
                 CreateEvent(new IncrementEvent { Increment = 3 }, tag, "003"),
                 CreateEvent(new IncrementEvent { Increment = 5 }, tag, "004")
-            });
+            },
+            domainTypes.EventTypes);
 
         var updated = await actor.GetTagStateAsync();
         Assert.Equal(22, ((TestIncrementalState)updated.Payload).Total);
@@ -82,8 +85,8 @@ public class GeneralTagStateActorPersistenceTests
     [Fact]
     public async Task Should_Restore_From_Persistence_When_Version_Is_Unchanged()
     {
-        var baseEventStore = new InMemoryEventStore();
         var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
         var actorAccessor = new TestActorAccessor();
         actorAccessor.SetLatestSortableUniqueId("TestTag:r1", "014");
 
@@ -95,7 +98,8 @@ public class GeneralTagStateActorPersistenceTests
             {
                 CreateEvent(new TestEvent { Value = 6 }, tag, "012"),
                 CreateEvent(new IncrementEvent { Increment = 8 }, tag, "014")
-            });
+            },
+            domainTypes.EventTypes);
 
         var firstActor = new GeneralTagStateActor(
             "TestTag:r1:TestIncrementalProjector",
@@ -115,6 +119,7 @@ public class GeneralTagStateActorPersistenceTests
         var secondActor = new GeneralTagStateActor(
             "TestTag:r1:TestIncrementalProjector",
             spyStore,
+            domainTypes.EventTypes,
             domainTypes.TagProjectorTypes,
             domainTypes.TagTypes,
             domainTypes.TagStatePayloadTypes,
@@ -131,9 +136,9 @@ public class GeneralTagStateActorPersistenceTests
     [Fact]
     public async Task Should_Rebuild_When_Projector_Version_Changes_After_Restore()
     {
-        var baseEventStore = new InMemoryEventStore();
         var domainTypesV1 = BuildDomainTypes();
         var domainTypesV2 = BuildDomainTypes(useVersionTwoSameName: true);
+        var baseEventStore = new CoreInMemoryEventStore(domainTypesV1.EventTypes);
         var actorAccessor = new TestActorAccessor();
         actorAccessor.SetLatestSortableUniqueId("TestTag:r2", "009");
 
@@ -145,7 +150,8 @@ public class GeneralTagStateActorPersistenceTests
             {
                 CreateEvent(new TestEvent { Value = 3 }, tag, "007"),
                 CreateEvent(new IncrementEvent { Increment = 6 }, tag, "009")
-            });
+            },
+            domainTypesV1.EventTypes);
 
         var actorV1 = new GeneralTagStateActor(
             "TestTag:r2:TestIncrementalProjector",
@@ -165,6 +171,7 @@ public class GeneralTagStateActorPersistenceTests
         var actorV2 = new GeneralTagStateActor(
             "TestTag:r2:TestIncrementalProjector",
             spyStore,
+            domainTypesV2.EventTypes,
             domainTypesV2.TagProjectorTypes,
             domainTypesV2.TagTypes,
             domainTypesV2.TagStatePayloadTypes,
@@ -181,11 +188,11 @@ public class GeneralTagStateActorPersistenceTests
     [Fact]
     public async Task Should_Serialize_TagState_Only_When_Persisting_State()
     {
-        var eventStore = new InMemoryEventStore();
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
         tagStatePayloadTypes.RegisterPayloadType<TestIncrementalState>();
         var payloadTypes = new CountingTagStatePayloadTypes(tagStatePayloadTypes);
         var domainTypes = BuildDomainTypes(tagStatePayloadTypes: payloadTypes);
+        var eventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
         var actorAccessor = new TestActorAccessor();
         actorAccessor.SetLatestSortableUniqueId("TestTag:s1", "001");
 
@@ -203,7 +210,8 @@ public class GeneralTagStateActorPersistenceTests
 
         var tag = new TestTag("s1");
         await eventStore.WriteEventsAsync(
-            new[] { CreateEvent(new TestEvent { Value = 4 }, tag, "001") });
+            new[] { CreateEvent(new TestEvent { Value = 4 }, tag, "001") },
+            domainTypes.EventTypes);
 
         var first = await actor.GetTagStateAsync();
         Assert.NotNull(first);
@@ -225,7 +233,7 @@ public class GeneralTagStateActorPersistenceTests
         return new Event(
             payload,
             new SortableUniqueId(sortableId),
-            "TestAggregate",
+            payload.GetType().Name,
             eventId,
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             new List<string> { tag.GetTag() });
@@ -340,22 +348,23 @@ public class GeneralTagStateActorPersistenceTests
     private class CountingEventStore(IEventStore inner) : IEventStore
     {
         private readonly IEventStore _inner = inner;
+        private readonly IEventTypes _eventTypes = BuildDomainTypes().EventTypes;
         public int ReadEventsByTagCallCount { get; private set; }
 
         public Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null) =>
-            _inner.ReadAllEventsAsync(since, maxCount);
+            _inner.ReadAllEventsAsync(_eventTypes, since, maxCount);
 
         public Task<ResultBox<IEnumerable<Event>>> ReadEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
         {
             ReadEventsByTagCallCount++;
-            return _inner.ReadEventsByTagAsync(tag, since);
+            return _inner.ReadEventsByTagAsync(tag, _eventTypes, since);
         }
 
-        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId);
+        public Task<ResultBox<Event>> ReadEventAsync(Guid eventId) => _inner.ReadEventAsync(eventId, _eventTypes);
 
         public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteEventsAsync(
             IEnumerable<Event> events)
-            => _inner.WriteEventsAsync(events);
+            => _inner.WriteEventsAsync(events, _eventTypes);
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
 
@@ -378,7 +387,13 @@ public class GeneralTagStateActorPersistenceTests
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null)
-            => _inner.ReadSerializableEventsByTagAsync(tag, since);
+        {
+            ReadEventsByTagCallCount++;
+            return _inner.ReadSerializableEventsByTagAsync(tag, since);
+        }
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+            => _inner.ReadSerializableEventAsync(eventId);
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)

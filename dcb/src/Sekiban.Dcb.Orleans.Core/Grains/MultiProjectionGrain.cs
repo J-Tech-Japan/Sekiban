@@ -116,6 +116,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IEventStore? _resolvedCatchUpEventStore;
     private bool _useStreamingSnapshotIO;
     private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
+    private bool _hybridCatchUpCheckLogged;
+    private bool _hybridCatchUpFirstBatchLogged;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -161,6 +163,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string GetProjectorName() => GetIdentity().ProjectorName;
 
     private string GetGrainKey() => GetIdentity().GrainKey;
+
+    private void ResetHybridCatchUpLogging()
+    {
+        _hybridCatchUpCheckLogged = false;
+        _hybridCatchUpFirstBatchLogged = false;
+    }
 
     /// <summary>
     ///     Returns the event store used for catch-up reads.
@@ -1281,6 +1289,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             StartTime = DateTime.UtcNow,
             LastAttempt = DateTime.MinValue
         };
+        ResetHybridCatchUpLogging();
         ResetCatchUpFailureTracking();
 
         MoveBufferedStreamEventsToPending(currentPosition);
@@ -2005,6 +2014,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 StartTime = DateTime.UtcNow,
                 LastAttempt = DateTime.MinValue
             };
+            ResetHybridCatchUpLogging();
             ResetCatchUpFailureTracking();
 
             MoveBufferedStreamEventsToPending(currentPosition);
@@ -2115,6 +2125,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = GetProjectorName();
         var catchUpStore = GetCatchUpEventStore();
         var batchSize = _catchUpBatchSize;
+        var isHybridCatchUp = catchUpStore is HybridEventStore;
+        var startPosition = _catchUpProgress.CurrentPosition?.Value ?? "beginning";
+
+        if (isHybridCatchUp && !_hybridCatchUpCheckLogged)
+        {
+            _logger.LogInformation(
+                "[{ProjectorName}] Catch-up is checking cold storage via hybrid event store (ServiceId={ServiceId}, StartPosition={StartPosition}, RequestedMaxEvents={RequestedMaxEvents})",
+                projectorName,
+                _serviceId,
+                startPosition,
+                batchSize);
+            _hybridCatchUpCheckLogged = true;
+        }
 
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         try
@@ -2151,6 +2174,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             projectorName);
 
         var events = eventsResult.GetValue().ToList();
+        if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
+        {
+            _logger.LogInformation(
+                "[{ProjectorName}] Catch-up hybrid read fetched {FetchedEvents} events (RequestedMaxEvents={RequestedMaxEvents}, StartPosition={StartPosition})",
+                projectorName,
+                events.Count,
+                batchSize,
+                startPosition);
+            _hybridCatchUpFirstBatchLogged = true;
+        }
         if (events.Count == 0)
             return 0;
 

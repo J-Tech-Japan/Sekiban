@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ServiceId;
@@ -20,31 +21,38 @@ public static class SekibanDcbColdEventExtensions
 
     public static IServiceCollection AddSekibanDcbColdEvents(
         this IServiceCollection services,
-        Action<ColdEventStoreOptions> configureOptions)
+        Action<ColdEventStoreOptions> configureOptions,
+        bool addBackgroundService = true)
     {
         services.Configure(configureOptions);
-        RegisterColdEventCoreServices(services);
+        RegisterColdEventCoreServices(services, addBackgroundService);
         return services;
     }
 
     public static IServiceCollection AddSekibanDcbColdEvents(
         this IServiceCollection services,
-        ColdEventStoreOptions options)
+        ColdEventStoreOptions options,
+        bool addBackgroundService = true)
     {
         services.AddSingleton<IOptions<ColdEventStoreOptions>>(Options.Create(options));
-        RegisterColdEventCoreServices(services);
+        RegisterColdEventCoreServices(services, addBackgroundService);
         return services;
     }
 
-    private static void RegisterColdEventCoreServices(IServiceCollection services)
+    private static void RegisterColdEventCoreServices(IServiceCollection services, bool addBackgroundService)
     {
+        services.AddSingleton<ColdExportCycleRunner>();
         services.AddSingleton<ColdExporter>();
         services.AddSingleton<IColdEventExporter>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventProgressReader>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<IColdEventStoreFeature>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<ColdCatalogReader>();
         services.AddSingleton<IColdEventCatalogReader>(sp => sp.GetRequiredService<ColdCatalogReader>());
-        services.AddHostedService<ColdExportBackgroundService>();
+        if (addBackgroundService)
+        {
+            services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IHostedService, ColdExportBackgroundService>());
+        }
     }
 
     public static IServiceCollection AddSekibanDcbColdEventHybridRead(

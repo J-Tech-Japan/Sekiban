@@ -106,6 +106,17 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
+    public async Task<ResultBox<Event>> WriteEventAsync(Event evt)
+    {
+        var result = await WriteEventsAsync(new[] { evt });
+        if (!result.IsSuccess)
+        {
+            return ResultBox.Error<Event>(result.GetException());
+        }
+
+        return ResultBox.FromValue(result.GetValue().Events[0]);
+    }
+
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
     {
         lock (_lock)
@@ -272,6 +283,21 @@ public class InMemoryEventStore : IEventStore
                 .Select(ToSerializableEvent)
                 .ToList();
             return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializable));
+        }
+    }
+
+    public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
+    {
+        lock (_lock)
+        {
+            var evt = _events.FirstOrDefault(e => e.Id == eventId);
+            if (evt is null)
+            {
+                return Task.FromResult(
+                    ResultBox.Error<SerializableEvent>(new KeyNotFoundException($"Event {eventId} not found")));
+            }
+
+            return Task.FromResult(ResultBox.FromValue(ToSerializableEvent(evt)));
         }
     }
 

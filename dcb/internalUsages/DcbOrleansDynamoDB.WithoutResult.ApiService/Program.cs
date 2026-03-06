@@ -444,9 +444,9 @@ apiRoute
         "/debug/events",
         async ([FromServices] IEventStore eventStore) =>
         {
-            var result = await eventStore.ReadAllEventsAsync();
+            var result = await eventStore.ReadAllSerializableEventsAsync();
             var events = result.GetValue().ToList();
-            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+            Console.WriteLine($"[Debug] ReadAllSerializableEventsAsync returned {events.Count} events");
             return Results.Ok(
                 new
                 {
@@ -454,7 +454,7 @@ apiRoute
                     events = events.Select(e => new
                     {
                         id = e.Id,
-                        type = e.EventType,
+                        type = e.EventPayloadName,
                         sortableId = e.SortableUniqueIdValue,
                         tags = e.Tags
                     })

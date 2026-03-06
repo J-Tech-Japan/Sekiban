@@ -6,8 +6,10 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class OptimisticLockingTest
@@ -15,12 +17,12 @@ public class OptimisticLockingTest
     private readonly InMemoryObjectAccessor _actorAccessor;
     private readonly GeneralSekibanExecutor _commandExecutor;
     private readonly DcbDomainTypes _domainTypes;
-    private readonly InMemoryEventStore _eventStore;
+    private readonly IEventStore _eventStore;
 
     public OptimisticLockingTest()
     {
-        _eventStore = new InMemoryEventStore();
         _domainTypes = CreateTestDomainTypes();
+        _eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         _actorAccessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         _commandExecutor = new GeneralSekibanExecutor(_eventStore, _actorAccessor, _domainTypes);
     }
@@ -274,8 +276,10 @@ public class OptimisticLockingTest
     {
         // Create test-specific type managers
         var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<TestEvent>();
 
         var tagTypes = new SimpleTagTypes();
+        tagTypes.RegisterTagGroupType<TestTag>();
 
         var tagProjectorTypes = new SimpleTagProjectorTypes();
         tagProjectorTypes.RegisterProjector<TestProjector>();
@@ -301,11 +305,12 @@ public class OptimisticLockingTest
     }
 
     // Test-specific types
-    private record TestTag(string Id) : ITag
+    private record TestTag(string Id) : IStringTagGroup<TestTag>
     {
+        public static string TagGroupName => "Test";
+        public static TestTag FromContent(string content) => new(content);
         public bool IsConsistencyTag() => true;
-        public string GetTagContent() => Id;
-        public string GetTagGroup() => "Test";
+        public string GetId() => Id;
     }
 
     private record TestEvent(string Name, int Version) : IEventPayload;

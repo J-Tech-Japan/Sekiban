@@ -14,12 +14,18 @@ namespace Sekiban.Dcb.Sqlite.Services;
 public class TagEventService
 {
     private readonly IEventStore _eventStore;
+    private readonly IEventTypes _eventTypes;
     private readonly ITagTypes _tagTypes;
     private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-    public TagEventService(IEventStore eventStore, ITagTypes tagTypes, JsonSerializerOptions jsonSerializerOptions)
+    public TagEventService(
+        IEventStore eventStore,
+        IEventTypes eventTypes,
+        ITagTypes tagTypes,
+        JsonSerializerOptions jsonSerializerOptions)
     {
         _eventStore = eventStore;
+        _eventTypes = eventTypes;
         _tagTypes = tagTypes;
         _jsonSerializerOptions = jsonSerializerOptions;
     }
@@ -38,7 +44,7 @@ public class TagEventService
     /// <param name="since">Optional: Only return events after this ID</param>
     /// <returns>List of events for the tag</returns>
     public Task<ResultBox<IEnumerable<Event>>> GetEventsByTagAsync(ITag tag, SortableUniqueId? since = null)
-        => _eventStore.ReadEventsByTagAsync(tag, since);
+        => _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
 
     /// <summary>
     ///     Fetch all events for a tag specified by string
