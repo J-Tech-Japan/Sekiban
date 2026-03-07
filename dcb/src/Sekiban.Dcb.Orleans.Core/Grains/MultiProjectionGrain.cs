@@ -2428,17 +2428,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         Func<T, string> sortableIdSelector)
     {
         List<T>? filtered = null;
-        foreach (var ev in events)
+        for (var index = 0; index < events.Count; index++)
         {
+            var ev = events[index];
             if (_processedEventIds.Contains(idSelector(ev)))
             {
-                filtered ??= new List<T>(events.Count);
+                if (filtered == null)
+                {
+                    filtered = new List<T>(events.Count);
+                    for (var copyIndex = 0; copyIndex < index; copyIndex++)
+                    {
+                        filtered.Add(events[copyIndex]);
+                    }
+                }
                 continue;
             }
             if (_catchUpProgress.CurrentPosition != null &&
                 string.Compare(sortableIdSelector(ev), _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
             {
-                filtered ??= new List<T>(events.Count);
+                if (filtered == null)
+                {
+                    filtered = new List<T>(events.Count);
+                    for (var copyIndex = 0; copyIndex < index; copyIndex++)
+                    {
+                        filtered.Add(events[copyIndex]);
+                    }
+                }
                 continue;
             }
             filtered?.Add(ev);

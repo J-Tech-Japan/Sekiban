@@ -73,12 +73,16 @@ public static class GzipCompression
         JsonTypeInfo<T> typeInfo)
     {
         using var output = new MemoryStream();
-        using var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true);
-        using var counting = new CountingWriteStream(gzip);
-        JsonSerializer.Serialize(counting, value, typeInfo);
-        counting.Flush();
-        gzip.Flush();
-        return (output.ToArray(), counting.BytesWritten);
+        long originalSizeBytes;
+        using (var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true))
+        using (var counting = new CountingWriteStream(gzip))
+        {
+            JsonSerializer.Serialize(counting, value, typeInfo);
+            counting.Flush();
+            gzip.Flush();
+            originalSizeBytes = counting.BytesWritten;
+        }
+        return (output.ToArray(), originalSizeBytes);
     }
 
     /// <summary>
