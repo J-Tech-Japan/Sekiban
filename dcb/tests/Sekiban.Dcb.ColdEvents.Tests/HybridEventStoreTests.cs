@@ -300,6 +300,79 @@ public class HybridEventStoreTests
             message => message.Contains("ProjectionName=orders-summary", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Should_stop_after_single_cold_segment_when_projection_context_is_present()
+    {
+        // Given
+        var baseTime = new DateTime(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var segmentOneEvents = new[]
+        {
+            CreateEvent(baseTime, "ColdEvent1"),
+            CreateEvent(baseTime.AddMinutes(1), "ColdEvent2"),
+            CreateEvent(baseTime.AddMinutes(2), "ColdEvent3")
+        };
+        var segmentTwoEvents = new[]
+        {
+            CreateEvent(baseTime.AddMinutes(3), "ColdEvent4"),
+            CreateEvent(baseTime.AddMinutes(4), "ColdEvent5")
+        };
+
+        var segmentOneData = JsonlSegmentWriter.Write(segmentOneEvents);
+        var segmentTwoData = JsonlSegmentWriter.Write(segmentTwoEvents);
+        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-1.jsonl", segmentOneData, expectedETag: null, CancellationToken.None);
+        await _coldStorage.PutAsync($"segments/{TestServiceId}/segment-2.jsonl", segmentTwoData, expectedETag: null, CancellationToken.None);
+
+        var manifest = new ColdManifest(
+            ServiceId: TestServiceId,
+            ManifestVersion: "v1",
+            LatestSafeSortableUniqueId: segmentTwoEvents[^1].SortableUniqueIdValue,
+            Segments:
+            [
+                new ColdSegmentInfo(
+                    Path: $"segments/{TestServiceId}/segment-1.jsonl",
+                    FromSortableUniqueId: segmentOneEvents[0].SortableUniqueIdValue,
+                    ToSortableUniqueId: segmentOneEvents[^1].SortableUniqueIdValue,
+                    EventCount: segmentOneEvents.Length,
+                    SizeBytes: segmentOneData.Length,
+                    Sha256: "segment1",
+                    CreatedAtUtc: DateTimeOffset.UtcNow),
+                new ColdSegmentInfo(
+                    Path: $"segments/{TestServiceId}/segment-2.jsonl",
+                    FromSortableUniqueId: segmentTwoEvents[0].SortableUniqueIdValue,
+                    ToSortableUniqueId: segmentTwoEvents[^1].SortableUniqueIdValue,
+                    EventCount: segmentTwoEvents.Length,
+                    SizeBytes: segmentTwoData.Length,
+                    Sha256: "segment2",
+                    CreatedAtUtc: DateTimeOffset.UtcNow)
+            ],
+            UpdatedAtUtc: DateTimeOffset.UtcNow);
+
+        var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
+        await _coldStorage.PutAsync($"control/{TestServiceId}/manifest.json", manifestData, expectedETag: null, CancellationToken.None);
+
+        var hybrid = CreateHybrid(new StubSerializableEventStore([]));
+
+        // When
+        IReadOnlyList<SerializableEvent> events;
+        HybridReadBatchMetadata? metadata;
+        using (HybridReadProjectionContext.Push("kanyusha-list"))
+        {
+            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 100_000);
+            Assert.True(result.IsSuccess);
+            events = result.GetValue().ToList();
+            metadata = HybridReadProjectionContext.BatchMetadata;
+        }
+
+        // Then
+        Assert.Equal(3, events.Count);
+        Assert.Equal(["ColdEvent1", "ColdEvent2", "ColdEvent3"], events.Select(x => x.EventPayloadName));
+        Assert.NotNull(metadata);
+        Assert.True(metadata!.UsedCold);
+        Assert.False(metadata.UsedHot);
+        Assert.True(metadata.ReachedColdSegmentBoundary);
+        Assert.Equal(3, metadata.ColdEventsRead);
+    }
+
     private sealed class StubSerializableEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;
