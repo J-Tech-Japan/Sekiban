@@ -17,7 +17,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     // Keep track of safe events until the next persisted safe snapshot boundary.
     private readonly Dictionary<Guid, Event> _allSafeEvents = new();
 
-    // Keep a lightweight duplicate guard even after safe history compaction.
+    // Keep duplicate detection across the current in-memory history until the next compaction boundary.
     private readonly HashSet<Guid> _processedEventIds = new();
 
     // Buffer for events within SafeWindow (using Dictionary to handle duplicates)
@@ -191,6 +191,8 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     void IDualStateAccessor.CompactSafeHistory()
     {
         _allSafeEvents.Clear();
+        _allSafeEvents.TrimExcess();
+        RebuildProcessedEventIdsFromBufferedEvents();
         _useIncrementalSafePromotion = true;
     }
 
@@ -237,6 +239,18 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
             _safeVersion += eventsToProcess.Count;
         }
+    }
+
+    private void RebuildProcessedEventIdsFromBufferedEvents()
+    {
+        _processedEventIds.Clear();
+
+        foreach (var bufferedEventId in _bufferedEvents.Keys)
+        {
+            _processedEventIds.Add(bufferedEventId);
+        }
+
+        _processedEventIds.TrimExcess();
     }
 
     private void RebuildSafeState(DcbDomainTypes domainTypes)
