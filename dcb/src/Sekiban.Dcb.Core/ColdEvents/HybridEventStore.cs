@@ -248,15 +248,22 @@ public sealed class HybridEventStore : IEventStore
         string serviceId,
         SortableUniqueId? since,
         int? maxCount)
-        => new(serviceId, since, maxCount, DateTimeOffset.UtcNow, Stopwatch.StartNew());
+        => new(
+            serviceId,
+            HybridReadProjectionContext.ProjectionName,
+            since,
+            maxCount,
+            DateTimeOffset.UtcNow,
+            Stopwatch.StartNew());
 
     private void LogHybridReadOutcome(HybridReadLogContext context, HybridReadOutcome outcome)
     {
         _logger.LogInformation(
-            "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",
+            "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, ProjectionName={ProjectionName}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",
             ReadAllSerializableEventsCall,
             context.StartedAtUtc,
             context.ServiceId,
+            context.ProjectionName ?? "unknown",
             context.Since?.Value ?? "beginning",
             context.MaxCount?.ToString() ?? "all",
             outcome.Source,
@@ -271,6 +278,7 @@ public sealed class HybridEventStore : IEventStore
 
     private sealed record HybridReadLogContext(
         string ServiceId,
+        string? ProjectionName,
         SortableUniqueId? Since,
         int? MaxCount,
         DateTimeOffset StartedAtUtc,
