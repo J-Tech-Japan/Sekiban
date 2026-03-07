@@ -277,6 +277,29 @@ public class HybridEventStoreTests
         Assert.Contains(logger.Messages, message => message.Contains("Source=hot_only", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Should_include_projection_name_in_hybrid_read_log_when_context_is_present()
+    {
+        // Given
+        var coldEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-10), "ColdEvent");
+        await StoreColdManifestAndSegmentsAsync([coldEvent], coldEvent.SortableUniqueIdValue);
+
+        var logger = new ListLogger<HybridEventStore>();
+        var hybrid = CreateHybrid(new StubSerializableEventStore([]), logger: logger);
+
+        // When
+        using (HybridReadProjectionContext.Push("orders-summary"))
+        {
+            var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500);
+            Assert.True(result.IsSuccess);
+        }
+
+        // Then
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("ProjectionName=orders-summary", StringComparison.Ordinal));
+    }
+
     private sealed class StubSerializableEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;

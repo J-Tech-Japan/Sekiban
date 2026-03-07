@@ -2153,6 +2153,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         try
         {
+            using var projectionContext = HybridReadProjectionContext.Push(projectorName);
             eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
                 _catchUpProgress.CurrentPosition,
                 batchSize);
