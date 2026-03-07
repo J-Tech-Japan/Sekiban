@@ -30,4 +30,10 @@ public interface IDualStateAccessor
     void PromoteBufferedEvents(
         SortableUniqueId safeWindowThreshold,
         DcbDomainTypes domainTypes);
+
+    /// <summary>
+    ///     Drops retained safe-event history after a safe snapshot has been persisted.
+    ///     The current safe projector remains the new baseline.
+    /// </summary>
+    void CompactSafeHistory();
 }

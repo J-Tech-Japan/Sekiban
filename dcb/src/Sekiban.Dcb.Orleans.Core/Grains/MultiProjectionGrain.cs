@@ -713,6 +713,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _state.State.LastPosition = null;
 
             await WriteOrleansStateWithRetryAsync(projectorName, safePosition, projectorVersion, externalStoreSaved, safeVersion, envelopeSize);
+            if (externalStoreSaved)
+            {
+                _host.CompactSafeHistory();
+            }
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
             _logger.LogDebug(
@@ -901,6 +905,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _state.State.LastPosition = null;
 
                 await WriteOrleansStateWithRetryAsync(projectorName, safePosition, projectorVersion, externalStoreSaved, safeVersion, tempFileSize);
+                if (externalStoreSaved)
+                {
+                    _host.CompactSafeHistory();
+                }
 
                 _lastError = null;
 
