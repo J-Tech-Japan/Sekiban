@@ -2324,7 +2324,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (shouldPersist)
         {
             _logger.LogDebug(
-                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events (ColdSource={ColdSource}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary})",
+                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events (UsedCold={UsedCold}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary})",
                 projectorName,
                 _eventsProcessed,
                 hybridReadBatchMetadata?.UsedCold ?? false,

@@ -291,15 +291,18 @@ public sealed class HybridEventStore : IEventStore
 
     private void LogHybridReadOutcome(HybridReadLogContext context, HybridReadOutcome outcome)
     {
-        HybridReadProjectionContext.SetBatchMetadata(
-            new HybridReadBatchMetadata(
-                outcome.Source,
-                UsedCold: outcome.ColdEventsRead > 0,
-                UsedHot: outcome.HotEventsRead.GetValueOrDefault() > 0,
-                outcome.ReachedColdSegmentBoundary,
-                outcome.ColdEventsRead,
-                outcome.HotEventsRead ?? 0,
-                outcome.SegmentCount));
+        if (!string.IsNullOrWhiteSpace(HybridReadProjectionContext.ProjectionName))
+        {
+            HybridReadProjectionContext.SetBatchMetadata(
+                new HybridReadBatchMetadata(
+                    outcome.Source,
+                    UsedCold: outcome.ColdEventsRead > 0,
+                    UsedHot: outcome.HotEventsRead.GetValueOrDefault() > 0,
+                    outcome.ReachedColdSegmentBoundary,
+                    outcome.ColdEventsRead,
+                    outcome.HotEventsRead ?? 0,
+                    outcome.SegmentCount));
+        }
 
         _logger.LogInformation(
             "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, ProjectionName={ProjectionName}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",

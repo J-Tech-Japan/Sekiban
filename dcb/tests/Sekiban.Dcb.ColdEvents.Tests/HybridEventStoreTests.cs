@@ -301,6 +301,22 @@ public class HybridEventStoreTests
     }
 
     [Fact]
+    public async Task Should_not_leave_batch_metadata_when_projection_context_is_absent()
+    {
+        // Given
+        var coldEvent = CreateEvent(DateTime.UtcNow.AddMinutes(-10), "ColdEvent");
+        await StoreColdManifestAndSegmentsAsync([coldEvent], coldEvent.SortableUniqueIdValue);
+        var hybrid = CreateHybrid(new StubSerializableEventStore([]));
+
+        // When
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 500);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        Assert.Null(HybridReadProjectionContext.BatchMetadata);
+    }
+
+    [Fact]
     public async Task Should_stop_after_single_cold_segment_when_projection_context_is_present()
     {
         // Given

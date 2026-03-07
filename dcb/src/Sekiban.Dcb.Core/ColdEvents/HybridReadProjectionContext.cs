@@ -8,30 +8,35 @@ namespace Sekiban.Dcb.ColdEvents;
 public static class HybridReadProjectionContext
 {
     private static readonly AsyncLocal<string?> CurrentProjectionName = new();
-    private static readonly AsyncLocal<HybridReadBatchMetadata?> CurrentBatchMetadata = new();
+    private static readonly AsyncLocal<BatchMetadataHolder?> CurrentBatchMetadata = new();
 
     public static string? ProjectionName => CurrentProjectionName.Value;
-    public static HybridReadBatchMetadata? BatchMetadata => CurrentBatchMetadata.Value;
+    public static HybridReadBatchMetadata? BatchMetadata => CurrentBatchMetadata.Value?.Metadata;
 
     public static IDisposable Push(string? projectionName)
     {
         var previous = CurrentProjectionName.Value;
         var previousBatchMetadata = CurrentBatchMetadata.Value;
         CurrentProjectionName.Value = projectionName;
-        CurrentBatchMetadata.Value = null;
+        CurrentBatchMetadata.Value = new BatchMetadataHolder();
         return new RestoreScope(previous, previousBatchMetadata);
     }
 
     internal static void SetBatchMetadata(HybridReadBatchMetadata? metadata)
-        => CurrentBatchMetadata.Value = metadata;
+    {
+        if (CurrentBatchMetadata.Value is { } holder)
+        {
+            holder.Metadata = metadata;
+        }
+    }
 
     private sealed class RestoreScope : IDisposable
     {
         private readonly string? _previous;
-        private readonly HybridReadBatchMetadata? _previousBatchMetadata;
+        private readonly BatchMetadataHolder? _previousBatchMetadata;
         private bool _disposed;
 
-        public RestoreScope(string? previous, HybridReadBatchMetadata? previousBatchMetadata)
+        public RestoreScope(string? previous, BatchMetadataHolder? previousBatchMetadata)
         {
             _previous = previous;
             _previousBatchMetadata = previousBatchMetadata;
@@ -48,6 +53,11 @@ public static class HybridReadProjectionContext
             CurrentBatchMetadata.Value = _previousBatchMetadata;
             _disposed = true;
         }
+    }
+
+    private sealed class BatchMetadataHolder
+    {
+        public HybridReadBatchMetadata? Metadata { get; set; }
     }
 }
 
