@@ -35,7 +35,7 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
             if (envelope is null)
             {
                 return ResultBox.Error<bool>(
@@ -65,8 +65,7 @@ internal class NativeProjectionSnapshotHandler
             }
 
             var envelope = snapshotResult.GetValue();
-            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken)
-                .ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -113,7 +112,7 @@ internal class NativeProjectionSnapshotHandler
     {
         try
         {
-            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken).ConfigureAwait(false);
+            var envelope = await DeserializeEnvelopeAsync(source, cancellationToken);
             if (envelope is null)
             {
                 return ResultBox.Error<bool>(
@@ -149,7 +148,7 @@ internal class NativeProjectionSnapshotHandler
                     new InvalidOperationException("Cannot rewrite version: envelope has no inline or offloaded state"));
             }
 
-            await JsonSerializer.SerializeAsync(target, modified, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            await JsonSerializer.SerializeAsync(target, modified, _jsonOptions, cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -204,6 +203,6 @@ internal class NativeProjectionSnapshotHandler
         return await PossiblyGzippedJsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
             source,
             _jsonOptions,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 }

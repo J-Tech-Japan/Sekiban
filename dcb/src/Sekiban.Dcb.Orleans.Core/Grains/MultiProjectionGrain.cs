@@ -83,6 +83,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         public SortableUniqueId? CurrentPosition { get; set; }
         public SortableUniqueId? TargetPosition { get; set; }
         public bool IsActive { get; set; }
+        public bool HadNewEvents { get; set; }
         public int ConsecutiveEmptyBatches { get; set; }
         public DateTime LastAttempt { get; set; }
         public int BatchesProcessed { get; set; }
@@ -513,7 +514,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName).ConfigureAwait(false);
+                return await PersistStateStreamingAsync(projectorName);
             }
 
             // Get snapshot as opaque bytes from the host
@@ -1287,6 +1288,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
+        if (_catchUpProgress.IsActive)
+        {
+            _logger.LogDebug(
+                "[{ProjectorName}] Refresh skipped because catch-up is already active",
+                projectorName);
+            return;
+        }
+
         // Refresh is expected to complete catch-up before returning.
         // Use an in-call batch loop instead of timer-driven background catch-up.
         _catchUpTimer?.Dispose();
@@ -1298,6 +1307,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             CurrentPosition = currentPosition,
             TargetPosition = null,
             IsActive = true,
+            HadNewEvents = false,
             ConsecutiveEmptyBatches = 0,
             BatchesProcessed = 0,
             StartTime = DateTime.UtcNow,
@@ -1966,10 +1976,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task FallbackEventCheckAsync()
     {
+        if (_catchUpProgress.IsActive)
+        {
+            _logger.LogDebug(
+                "[{ProjectorName}] Fallback check skipped because catch-up is already active",
+                GetProjectorName());
+            return;
+        }
+
         // Only run fallback if we haven't received events recently
         if (_lastEventTime == null || DateTime.UtcNow - _lastEventTime > TimeSpan.FromMinutes(1))
         {
-            _logger.LogWarning(
+            _logger.LogDebug(
                 "[{ProjectorName}] Fallback: No stream events for over 1 minute, checking event store",
                 GetProjectorName());
             await RefreshAsync();
@@ -2024,6 +2042,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CurrentPosition = currentPosition,
                 TargetPosition = null, // Will be determined during catch-up
                 IsActive = true,
+                HadNewEvents = false,
                 ConsecutiveEmptyBatches = 0,
                 BatchesProcessed = 0,
                 StartTime = DateTime.UtcNow,
@@ -2194,7 +2213,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             "[{ProjectorName}] Catch-up using serializable path (cold/hot merge)",
             projectorName);
 
-        var events = eventsResult.GetValue().ToList();
+        var eventsEnumerable = eventsResult.GetValue();
+        var events = eventsEnumerable as IReadOnlyList<SerializableEvent> ?? eventsEnumerable.ToList();
         if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
         {
             _logger.LogInformation(
@@ -2262,22 +2282,28 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return _catchUpBatchSize;
     }
 
-    private List<T> FilterByPositionAndProcessed<T>(
-        List<T> events,
+    private IReadOnlyList<T> FilterByPositionAndProcessed<T>(
+        IReadOnlyList<T> events,
         Func<T, Guid> idSelector,
         Func<T, string> sortableIdSelector)
     {
-        var filtered = new List<T>();
+        List<T>? filtered = null;
         foreach (var ev in events)
         {
             if (_processedEventIds.Contains(idSelector(ev)))
+            {
+                filtered ??= new List<T>(events.Count);
                 continue;
+            }
             if (_catchUpProgress.CurrentPosition != null &&
                 string.Compare(sortableIdSelector(ev), _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+            {
+                filtered ??= new List<T>(events.Count);
                 continue;
-            filtered.Add(ev);
+            }
+            filtered?.Add(ev);
         }
-        return filtered;
+        return filtered ?? events;
     }
 
     private void UpdateTargetPosition(string latestSortableUniqueIdValue)
@@ -2300,6 +2326,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = GetProjectorName();
 
         _catchUpProgress.BatchesProcessed++;
+        _catchUpProgress.HadNewEvents = true;
         _eventsProcessed += filteredCount;
         _eventsProcessedSinceLastCatchUpPersist += filteredCount;
         _lastHybridReadBatchMetadata = hybridReadBatchMetadata;
@@ -2381,6 +2408,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task CompleteCatchUp()
     {
         var projectorName = GetProjectorName();
+        var shouldPersist = _catchUpProgress.HadNewEvents;
 
         try
         {
@@ -2391,11 +2419,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Process all buffered events first
             await FlushEventBufferAsync();
 
-            // Force promotion of any events that are now safe
-            await TriggerSafePromotion();
+            if (shouldPersist)
+            {
+                // Force promotion of any events that are now safe
+                await TriggerSafePromotion();
 
-            // Final persistence
-            await PersistStateAsync();
+                // Final persistence
+                await PersistStateAsync();
+            }
 
             // Process any pending stream events
             await ProcessPendingStreamEvents();
