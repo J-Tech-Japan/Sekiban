@@ -118,6 +118,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
     private bool _hybridCatchUpCheckLogged;
     private bool _hybridCatchUpFirstBatchLogged;
+    private HybridReadBatchMetadata? _lastHybridReadBatchMetadata;
+    private long _eventsProcessedSinceLastCatchUpPersist;
+    private DateTime _lastCatchUpPersistUtc = DateTime.UtcNow;
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -168,6 +171,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         _hybridCatchUpCheckLogged = false;
         _hybridCatchUpFirstBatchLogged = false;
+        _lastHybridReadBatchMetadata = null;
     }
 
     /// <summary>
@@ -2027,6 +2031,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             ResetHybridCatchUpLogging();
             ResetCatchUpFailureTracking();
+            _eventsProcessedSinceLastCatchUpPersist = 0;
+            _lastCatchUpPersistUtc = DateTime.UtcNow;
 
             MoveBufferedStreamEventsToPending(currentPosition);
 
@@ -2135,8 +2141,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var projectorName = GetProjectorName();
         var catchUpStore = GetCatchUpEventStore();
-        var batchSize = _catchUpBatchSize;
-        var isHybridCatchUp = catchUpStore is HybridEventStore;
+        var hybridCatchUpStore = catchUpStore as HybridEventStore;
+        var isHybridCatchUp = hybridCatchUpStore is not null;
+        var batchSize = ResolveCatchUpBatchSize(hybridCatchUpStore);
         var startPosition = _catchUpProgress.CurrentPosition?.Value ?? "beginning";
 
         if (isHybridCatchUp && !_hybridCatchUpCheckLogged)
@@ -2151,12 +2158,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
+        HybridReadBatchMetadata? hybridReadBatchMetadata = null;
         try
         {
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
             eventsResult = await catchUpStore.ReadAllSerializableEventsAsync(
                 _catchUpProgress.CurrentPosition,
                 batchSize);
+            hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
         }
         catch (NotSupportedException)
         {
@@ -2231,9 +2240,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             filtered.Select(e => e.Id),
             filtered[^1].SortableUniqueIdValue,
             filtered.Count,
-            sw.ElapsedMilliseconds);
+            sw.ElapsedMilliseconds,
+            hybridCatchUpStore,
+            hybridReadBatchMetadata);
 
         return filtered.Count;
+    }
+
+    private int ResolveCatchUpBatchSize(HybridEventStore? hybridCatchUpStore)
+    {
+        if (hybridCatchUpStore is null)
+        {
+            return _catchUpBatchSize;
+        }
+
+        if (_lastHybridReadBatchMetadata?.UsedCold == true)
+        {
+            return Math.Max(_catchUpBatchSize, hybridCatchUpStore.GetPreferredCatchUpBatchSize());
+        }
+
+        return _catchUpBatchSize;
     }
 
     private List<T> FilterByPositionAndProcessed<T>(
@@ -2267,12 +2293,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IEnumerable<Guid> processedIds,
         string lastSortableUniqueIdValue,
         int filteredCount,
-        long elapsedMs)
+        long elapsedMs,
+        HybridEventStore? hybridCatchUpStore,
+        HybridReadBatchMetadata? hybridReadBatchMetadata)
     {
         var projectorName = GetProjectorName();
 
         _catchUpProgress.BatchesProcessed++;
         _eventsProcessed += filteredCount;
+        _eventsProcessedSinceLastCatchUpPersist += filteredCount;
+        _lastHybridReadBatchMetadata = hybridReadBatchMetadata;
 
         if (elapsedMs > 1000)
         {
@@ -2290,13 +2320,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         _catchUpProgress.CurrentPosition = new SortableUniqueId(lastSortableUniqueIdValue);
 
-        if (_eventsProcessed > 0 && _eventsProcessed % 5000 == 0)
+        var shouldPersist = ShouldPersistAfterCatchUpBatch(hybridCatchUpStore, hybridReadBatchMetadata);
+        if (shouldPersist)
         {
             _logger.LogDebug(
-                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events",
+                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events (UsedCold={UsedCold}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary})",
                 projectorName,
-                _eventsProcessed);
+                _eventsProcessed,
+                hybridReadBatchMetadata?.UsedCold ?? false,
+                hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false);
             await PersistStateAsync();
+            _eventsProcessedSinceLastCatchUpPersist = 0;
+            _lastCatchUpPersistUtc = DateTime.UtcNow;
         }
 
         if (_catchUpProgress.BatchesProcessed % 10 == 0)
@@ -2313,6 +2348,34 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 eventsPerSecond,
                 elapsed.TotalSeconds);
         }
+    }
+
+    private bool ShouldPersistAfterCatchUpBatch(
+        HybridEventStore? hybridCatchUpStore,
+        HybridReadBatchMetadata? hybridReadBatchMetadata)
+    {
+        if (hybridCatchUpStore is not null && hybridReadBatchMetadata?.UsedCold == true)
+        {
+            if (hybridCatchUpStore.ShouldPersistSnapshotOnColdSegmentBoundary()
+                && hybridReadBatchMetadata.ReachedColdSegmentBoundary)
+            {
+                return true;
+            }
+
+            if (_eventsProcessedSinceLastCatchUpPersist >= hybridCatchUpStore.GetCatchUpPersistMaxEventsWithoutSnapshot())
+            {
+                return true;
+            }
+
+            if (DateTime.UtcNow - _lastCatchUpPersistUtc >= hybridCatchUpStore.GetCatchUpPersistMaxInterval())
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return _eventsProcessed > 0 && _eventsProcessed % 5000 == 0;
     }
 
     private async Task CompleteCatchUp()

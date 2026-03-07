@@ -33,6 +33,20 @@ public sealed class HybridEventStore : IEventStore
         _logger = logger;
     }
 
+    public int GetPreferredCatchUpBatchSize()
+        => Math.Max(1, _options.ColdCatchUpBatchSize);
+
+    public bool ShouldPersistSnapshotOnColdSegmentBoundary()
+        => _options.PersistSnapshotOnColdSegmentBoundary;
+
+    public int GetCatchUpPersistMaxEventsWithoutSnapshot()
+        => Math.Max(1, _options.CatchUpPersistMaxEventsWithoutSnapshot);
+
+    public TimeSpan GetCatchUpPersistMaxInterval()
+        => _options.CatchUpPersistMaxInterval > TimeSpan.Zero
+            ? _options.CatchUpPersistMaxInterval
+            : TimeSpan.FromMinutes(5);
+
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag)
         => _hotStore.ReadTagsAsync(tag);
 
@@ -79,6 +93,7 @@ public sealed class HybridEventStore : IEventStore
                     HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
                     ColdBoundary: null,
                     SegmentCount: 0,
+                    ReachedColdSegmentBoundary: false,
                     Succeeded: hotResult.IsSuccess));
             return hotResult;
         }
@@ -127,6 +142,7 @@ public sealed class HybridEventStore : IEventStore
                 HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
                 ColdBoundary: null,
                 SegmentCount: 0,
+                ReachedColdSegmentBoundary: false,
                 Succeeded: hotResult.IsSuccess));
         return hotResult;
     }
@@ -150,6 +166,7 @@ public sealed class HybridEventStore : IEventStore
                 HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
                 ColdBoundary: coldBoundary.Value,
                 SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: false,
                 Succeeded: hotResult.IsSuccess));
         return hotResult;
     }
@@ -160,17 +177,25 @@ public sealed class HybridEventStore : IEventStore
         SortableUniqueId coldBoundary)
     {
         var events = new List<SerializableEvent>(context.MaxCount.GetValueOrDefault());
-        var coldResult = await ReadFromColdSegmentsAsync(manifest, context.Since, context.MaxCount, events);
+        var alignToSegmentBoundary = ShouldAlignCatchUpReadsToSegmentBoundary();
+        var coldResult = await ReadFromColdSegmentsAsync(
+            manifest,
+            context.Since,
+            context.MaxCount,
+            events,
+            alignToSegmentBoundary);
         if (!coldResult.IsSuccess)
         {
             return await ReadHotAfterColdReadFailureAsync(context, manifest, coldBoundary);
         }
 
-        var coldEventsRead = events.Count;
+        var coldRead = coldResult.GetValue();
+        var coldEventsRead = coldRead.ColdEventsRead;
         var remainingCount = context.MaxCount.HasValue
             ? Math.Max(context.MaxCount.Value - events.Count, 0)
             : (int?)null;
-        if (remainingCount == 0)
+        var stopAtColdBoundary = alignToSegmentBoundary && coldRead.ColdEventsRead > 0;
+        if (remainingCount == 0 || stopAtColdBoundary)
         {
             LogHybridReadOutcome(
                 context,
@@ -180,6 +205,7 @@ public sealed class HybridEventStore : IEventStore
                     HotEventsRead: 0,
                     ColdBoundary: coldBoundary.Value,
                     SegmentCount: manifest.Segments.Count,
+                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                     Succeeded: true));
             return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
         }
@@ -195,6 +221,7 @@ public sealed class HybridEventStore : IEventStore
                     HotEventsRead: 0,
                     ColdBoundary: coldBoundary.Value,
                     SegmentCount: manifest.Segments.Count,
+                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                     Succeeded: false));
             return hotResult;
         }
@@ -209,6 +236,7 @@ public sealed class HybridEventStore : IEventStore
                 HotEventsRead: hotEvents.Count,
                 ColdBoundary: coldBoundary.Value,
                 SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
                 Succeeded: true));
         return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
     }
@@ -228,6 +256,7 @@ public sealed class HybridEventStore : IEventStore
                 HotEventsRead: hotResult.IsSuccess ? TryGetEventCountWithoutEnumeration(hotResult.GetValue()) : null,
                 ColdBoundary: coldBoundary.Value,
                 SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: false,
                 Succeeded: hotResult.IsSuccess));
         return hotResult;
     }
@@ -244,6 +273,10 @@ public sealed class HybridEventStore : IEventStore
             _ => "empty"
         };
 
+    private bool ShouldAlignCatchUpReadsToSegmentBoundary()
+        => _options.AlignCatchUpReadsToSegmentBoundary
+           && !string.IsNullOrWhiteSpace(HybridReadProjectionContext.ProjectionName);
+
     private static HybridReadLogContext StartHybridReadLogContext(
         string serviceId,
         SortableUniqueId? since,
@@ -258,8 +291,21 @@ public sealed class HybridEventStore : IEventStore
 
     private void LogHybridReadOutcome(HybridReadLogContext context, HybridReadOutcome outcome)
     {
+        if (!string.IsNullOrWhiteSpace(HybridReadProjectionContext.ProjectionName))
+        {
+            HybridReadProjectionContext.SetBatchMetadata(
+                new HybridReadBatchMetadata(
+                    outcome.Source,
+                    UsedCold: outcome.ColdEventsRead > 0,
+                    UsedHot: outcome.HotEventsRead.GetValueOrDefault() > 0,
+                    outcome.ReachedColdSegmentBoundary,
+                    outcome.ColdEventsRead,
+                    outcome.HotEventsRead ?? 0,
+                    outcome.SegmentCount));
+        }
+
         _logger.LogInformation(
-            "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, ProjectionName={ProjectionName}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",
+            "Hybrid read completed. Call={Call}, StartedAtUtc={StartedAtUtc}, ServiceId={ServiceId}, ProjectionName={ProjectionName}, Since={Since}, MaxCount={MaxCount}, Source={Source}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ColdBoundary={ColdBoundary}, SegmentCount={SegmentCount}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary}, HotStoreType={HotStoreType}, Succeeded={Succeeded}, ElapsedMs={ElapsedMs}",
             ReadAllSerializableEventsCall,
             context.StartedAtUtc,
             context.ServiceId,
@@ -271,6 +317,7 @@ public sealed class HybridEventStore : IEventStore
             outcome.HotEventsRead,
             outcome.ColdBoundary ?? "none",
             outcome.SegmentCount,
+            outcome.ReachedColdSegmentBoundary,
             _hotStore.GetType().Name,
             outcome.Succeeded,
             context.Stopwatch.ElapsedMilliseconds);
@@ -290,13 +337,15 @@ public sealed class HybridEventStore : IEventStore
         int? HotEventsRead,
         string? ColdBoundary,
         int SegmentCount,
+        bool ReachedColdSegmentBoundary,
         bool Succeeded);
 
-    private async Task<ResultBox<bool>> ReadFromColdSegmentsAsync(
+    private async Task<ResultBox<ColdReadResult>> ReadFromColdSegmentsAsync(
         ColdManifest manifest,
         SortableUniqueId? since,
         int? maxCount,
-        List<SerializableEvent> destination)
+        List<SerializableEvent> destination,
+        bool alignToSegmentBoundary)
     {
         foreach (var segment in manifest.Segments.OrderBy(s => s.FromSortableUniqueId, StringComparer.Ordinal))
         {
@@ -310,7 +359,7 @@ public sealed class HybridEventStore : IEventStore
             if (!streamResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to read cold segment {Path}", segment.Path);
-                return ResultBox.Error<bool>(streamResult.GetException());
+                return ResultBox.Error<ColdReadResult>(streamResult.GetException());
             }
 
             await using var stream = streamResult.GetValue();
@@ -318,25 +367,47 @@ public sealed class HybridEventStore : IEventStore
             if (!parseResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
-                return parseResult;
+                return ResultBox.Error<ColdReadResult>(parseResult.GetException());
+            }
+
+            var appendResult = parseResult.GetValue();
+            if (appendResult.EventsAdded == 0)
+            {
+                continue;
             }
 
             if (maxCount.HasValue && destination.Count >= maxCount.Value)
             {
-                break;
+                return ResultBox.FromValue(
+                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfStream));
+            }
+
+            if (alignToSegmentBoundary)
+            {
+                return ResultBox.FromValue(
+                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfStream));
             }
         }
 
-        return ResultBox.FromValue(true);
+        return ResultBox.FromValue(new ColdReadResult(destination.Count, ReachedColdSegmentBoundary: false));
     }
 
-    private static async Task<ResultBox<bool>> AppendJsonlSegmentAsync(
+    private sealed record ColdReadResult(
+        int ColdEventsRead,
+        bool ReachedColdSegmentBoundary);
+
+    private sealed record JsonlAppendResult(
+        int EventsAdded,
+        bool ReachedEndOfStream);
+
+    private static async Task<ResultBox<JsonlAppendResult>> AppendJsonlSegmentAsync(
         Stream data,
         SortableUniqueId? since,
         int? maxCount,
         List<SerializableEvent> destination)
     {
         using var reader = new StreamReader(data, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        var initialCount = destination.Count;
         while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -347,7 +418,7 @@ public sealed class HybridEventStore : IEventStore
             var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
             if (evt is null)
             {
-                return ResultBox.Error<bool>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                return ResultBox.Error<JsonlAppendResult>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
             }
 
             if (since is not null
@@ -359,11 +430,11 @@ public sealed class HybridEventStore : IEventStore
             destination.Add(evt);
             if (maxCount.HasValue && destination.Count >= maxCount.Value)
             {
-                break;
+                return ResultBox.FromValue(new JsonlAppendResult(destination.Count - initialCount, ReachedEndOfStream: false));
             }
         }
 
-        return ResultBox.FromValue(true);
+        return ResultBox.FromValue(new JsonlAppendResult(destination.Count - initialCount, ReachedEndOfStream: true));
     }
 
 }
