@@ -717,6 +717,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _host.CompactSafeHistory();
             }
+            CompactRetainedCollections();
             _lastError = null;
             var finishUtc = DateTime.UtcNow;
             _logger.LogDebug(
@@ -909,6 +910,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     _host.CompactSafeHistory();
                 }
+                CompactRetainedCollections();
 
                 _lastError = null;
 
@@ -1735,6 +1737,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _unsafeEventIds.Clear();
         _eventBuffer.Clear();
         _pendingStreamEvents.Clear();
+        CompactRetainedCollections();
     }
 
     private async Task EnsureInitializedAsync()
@@ -2332,6 +2335,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Process any pending stream events
             await ProcessPendingStreamEvents();
+            CompactRetainedCollections();
 
             _catchUpProgress.IsActive = false;
 
@@ -2524,7 +2528,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private void ClearProcessedEventCache()
     {
         _processedEventIds.Clear();
+        _processedEventIds.TrimExcess();
         _processedEventIdOrder.Clear();
+        _processedEventIdOrder.TrimExcess();
+    }
+
+    private void CompactRetainedCollections()
+    {
+        _processedEventIds.TrimExcess();
+        _processedEventIdOrder.TrimExcess();
+
+        lock (_eventBuffer)
+        {
+            _eventBuffer.TrimExcess();
+        }
+
+        _unsafeEventIds.TrimExcess();
+        _pendingStreamEvents.TrimExcess();
     }
 
     private void TryCompactAfterLargePersist(string projectorName, long persistedBytes)
