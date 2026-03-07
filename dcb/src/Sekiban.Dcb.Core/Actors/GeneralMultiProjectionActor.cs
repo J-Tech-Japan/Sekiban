@@ -85,8 +85,11 @@ public class GeneralMultiProjectionActor
 
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
     {
-        var list = new List<Event>(events.Count);
-        foreach (var se in events)
+        InitializeProjectorsIfNeeded();
+        _isCatchedUp = finishedCatchUp;
+
+        var safeWindowThreshold = GetSafeWindowThreshold();
+        foreach (var se in EnumerateOrderedDistinctSerializableEvents(events))
         {
             var payload
                 = _domain.EventTypes.DeserializeEventPayload(
@@ -100,9 +103,11 @@ public class GeneralMultiProjectionActor
                 se.Id,
                 se.EventMetadata,
                 se.Tags);
-            list.Add(ev);
+
+            ApplyEventToSingleState(ev, safeWindowThreshold);
         }
-        await AddEventsAsync(list, finishedCatchUp);
+
+        await Task.CompletedTask;
     }
 
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
@@ -338,31 +343,36 @@ public class GeneralMultiProjectionActor
 
     private void AddEventsWithSingleState(IReadOnlyList<Event> events, SortableUniqueId safeWindowThreshold)
     {
+        foreach (var ev in events)
+        {
+            ApplyEventToSingleState(ev, safeWindowThreshold);
+        }
+    }
+
+    private void ApplyEventToSingleState(Event ev, SortableUniqueId safeWindowThreshold)
+    {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
             // Use IDualStateAccessor for type-safe event processing without reflection
-            foreach (var ev in events)
+            try
             {
-                try
-                {
-                    dualAccessor = dualAccessor.ProcessEventAs(ev, safeWindowThreshold, _domain);
+                dualAccessor = dualAccessor.ProcessEventAs(ev, safeWindowThreshold, _domain);
 
-                    // Update tracking
-                    _unsafeLastEventId = ev.Id;
-                    if (string.IsNullOrEmpty(_unsafeLastSortableUniqueId) ||
-                        string.Compare(ev.SortableUniqueIdValue, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0)
-                    {
-                        _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
-                    }
-                    _unsafeVersion++;
-                }
-                catch (Exception ex)
+                // Update tracking
+                _unsafeLastEventId = ev.Id;
+                if (string.IsNullOrEmpty(_unsafeLastSortableUniqueId) ||
+                    string.Compare(ev.SortableUniqueIdValue, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0)
                 {
-                    var innerEx = ex.InnerException ?? ex;
-                    throw new InvalidOperationException(
-                        $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
-                        innerEx);
+                    _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
                 }
+                _unsafeVersion++;
+            }
+            catch (Exception ex)
+            {
+                var innerEx = ex.InnerException ?? ex;
+                throw new InvalidOperationException(
+                    $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
+                    innerEx);
             }
 
             // The accessor may return 'this' (same instance) or a new instance
@@ -382,42 +392,71 @@ public class GeneralMultiProjectionActor
                 throw new InvalidOperationException($"ProcessEvent method not found on {accessorType.Name} for projector {_projectorName}");
             }
 
-            foreach (var ev in events)
+            try
             {
-                try
-                {
-                    var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
+                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
 
-                    if (result is IMultiProjectionPayload payload)
-                    {
-                        _singleStateAccessor = payload;
-                    }
-                    else if (result == null)
-                    {
-                        throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
-                    }
-
-                    _unsafeLastEventId = ev.Id;
-                    if (string.IsNullOrEmpty(_unsafeLastSortableUniqueId) ||
-                        string.Compare(ev.SortableUniqueIdValue, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0)
-                    {
-                        _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
-                    }
-                    _unsafeVersion++;
-                }
-                catch (Exception ex)
+                if (result is IMultiProjectionPayload payload)
                 {
-                    var innerEx = ex.InnerException ?? ex;
-                    throw new InvalidOperationException(
-                        $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
-                        innerEx);
+                    _singleStateAccessor = payload;
                 }
+                else if (result == null)
+                {
+                    throw new InvalidOperationException($"ProcessEvent returned null for projector {_projectorName}");
+                }
+                else
+                {
+                    throw new InvalidOperationException($"ProcessEvent returned incompatible type for projector {_projectorName}: {result.GetType().FullName}");
+                }
+
+                _unsafeLastEventId = ev.Id;
+                if (string.IsNullOrEmpty(_unsafeLastSortableUniqueId) ||
+                    string.Compare(ev.SortableUniqueIdValue, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    _unsafeLastSortableUniqueId = ev.SortableUniqueIdValue;
+                }
+                _unsafeVersion++;
+            }
+            catch (Exception ex)
+            {
+                var innerEx = ex.InnerException ?? ex;
+                throw new InvalidOperationException(
+                    $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
+                    innerEx);
             }
         }
+    }
+
+    private static IEnumerable<SerializableEvent> EnumerateOrderedDistinctSerializableEvents(
+        IReadOnlyList<SerializableEvent> events)
+    {
+        if (events.Count <= 1)
+        {
+            return events;
+        }
+
+        var seenIds = new HashSet<Guid>();
+        var previousSortableUniqueId = events[0].SortableUniqueIdValue;
+        var alreadyOrderedDistinct = true;
+
+        foreach (var ev in events)
+        {
+            if (!seenIds.Add(ev.Id) ||
+                string.Compare(ev.SortableUniqueIdValue, previousSortableUniqueId, StringComparison.Ordinal) < 0)
+            {
+                alreadyOrderedDistinct = false;
+                break;
+            }
+
+            previousSortableUniqueId = ev.SortableUniqueIdValue;
+        }
+
+        return alreadyOrderedDistinct
+            ? events
+            : events
+                .GroupBy(e => e.Id)
+                .Select(g => g.First())
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
     }
 
     public void ForcePromoteBufferedEvents()

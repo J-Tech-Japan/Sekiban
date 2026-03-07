@@ -26,6 +26,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// </summary>
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
+    private const int StreamingCatchUpApplyChunkSize = 1024;
     private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
@@ -83,6 +84,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         public SortableUniqueId? CurrentPosition { get; set; }
         public SortableUniqueId? TargetPosition { get; set; }
         public bool IsActive { get; set; }
+        public bool HadNewEvents { get; set; }
         public int ConsecutiveEmptyBatches { get; set; }
         public DateTime LastAttempt { get; set; }
         public int BatchesProcessed { get; set; }
@@ -513,7 +515,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName).ConfigureAwait(false);
+                return await PersistStateStreamingAsync(projectorName);
             }
 
             // Get snapshot as opaque bytes from the host
@@ -1287,6 +1289,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
+        if (_catchUpProgress.IsActive)
+        {
+            _logger.LogDebug(
+                "[{ProjectorName}] Refresh skipped because catch-up is already active",
+                projectorName);
+            return;
+        }
+
         // Refresh is expected to complete catch-up before returning.
         // Use an in-call batch loop instead of timer-driven background catch-up.
         _catchUpTimer?.Dispose();
@@ -1298,6 +1308,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             CurrentPosition = currentPosition,
             TargetPosition = null,
             IsActive = true,
+            HadNewEvents = false,
             ConsecutiveEmptyBatches = 0,
             BatchesProcessed = 0,
             StartTime = DateTime.UtcNow,
@@ -1966,10 +1977,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task FallbackEventCheckAsync()
     {
+        if (_catchUpProgress.IsActive)
+        {
+            _logger.LogDebug(
+                "[{ProjectorName}] Fallback check skipped because catch-up is already active",
+                GetProjectorName());
+            return;
+        }
+
         // Only run fallback if we haven't received events recently
         if (_lastEventTime == null || DateTime.UtcNow - _lastEventTime > TimeSpan.FromMinutes(1))
         {
-            _logger.LogWarning(
+            _logger.LogDebug(
                 "[{ProjectorName}] Fallback: No stream events for over 1 minute, checking event store",
                 GetProjectorName());
             await RefreshAsync();
@@ -2024,6 +2043,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CurrentPosition = currentPosition,
                 TargetPosition = null, // Will be determined during catch-up
                 IsActive = true,
+                HadNewEvents = false,
                 ConsecutiveEmptyBatches = 0,
                 BatchesProcessed = 0,
                 StartTime = DateTime.UtcNow,
@@ -2157,6 +2177,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _hybridCatchUpCheckLogged = true;
         }
 
+        if (catchUpStore is IStreamingSerializableEventStore streamingCatchUpStore)
+        {
+            return await ProcessStreamingSerializableBatch(
+                streamingCatchUpStore,
+                hybridCatchUpStore,
+                isHybridCatchUp,
+                batchSize,
+                startPosition,
+                projectorName);
+        }
+
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         HybridReadBatchMetadata? hybridReadBatchMetadata = null;
         try
@@ -2194,7 +2225,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             "[{ProjectorName}] Catch-up using serializable path (cold/hot merge)",
             projectorName);
 
-        var events = eventsResult.GetValue().ToList();
+        var eventsEnumerable = eventsResult.GetValue();
+        var events = eventsEnumerable as IReadOnlyList<SerializableEvent> ?? eventsEnumerable.ToList();
         if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
         {
             _logger.LogInformation(
@@ -2247,6 +2279,134 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return filtered.Count;
     }
 
+    private async Task<int> ProcessStreamingSerializableBatch(
+        IStreamingSerializableEventStore streamingCatchUpStore,
+        HybridEventStore? hybridCatchUpStore,
+        bool isHybridCatchUp,
+        int batchSize,
+        string startPosition,
+        string projectorName)
+    {
+        if (_host == null)
+        {
+            return 0;
+        }
+
+        var processedIds = new List<Guid>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize * 2));
+        var buffer = new List<SerializableEvent>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize));
+        string? lastFetchedSortableUniqueId = null;
+        string? lastProcessedSortableUniqueId = null;
+        var fetchedCount = 0;
+        var filteredCount = 0;
+        long applyElapsedMs = 0;
+        HybridReadBatchMetadata? hybridReadBatchMetadata = null;
+
+        async Task FlushBufferAsync()
+        {
+            if (buffer.Count == 0)
+            {
+                return;
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await _host.AddSerializableEventsAsync(buffer, finishedCatchUp: false);
+            sw.Stop();
+            applyElapsedMs += sw.ElapsedMilliseconds;
+
+            foreach (var item in buffer)
+            {
+                processedIds.Add(item.Id);
+            }
+
+            filteredCount += buffer.Count;
+            lastProcessedSortableUniqueId = buffer[^1].SortableUniqueIdValue;
+            buffer.Clear();
+        }
+
+        try
+        {
+            using var projectionContext = HybridReadProjectionContext.Push(projectorName);
+            var streamResult = await streamingCatchUpStore.StreamAllSerializableEventsAsync(
+                _catchUpProgress.CurrentPosition,
+                batchSize,
+                async ev =>
+                {
+                    fetchedCount++;
+                    lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
+                    UpdateTargetPosition(ev.SortableUniqueIdValue);
+
+                    if (_processedEventIds.Contains(ev.Id))
+                    {
+                        return;
+                    }
+
+                    if (_catchUpProgress.CurrentPosition != null &&
+                        string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+                    {
+                        return;
+                    }
+
+                    buffer.Add(ev);
+                    if (buffer.Count >= StreamingCatchUpApplyChunkSize)
+                    {
+                        await FlushBufferAsync();
+                    }
+                });
+            hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
+
+            if (!streamResult.IsSuccess)
+            {
+                var exception = streamResult.GetException();
+                _logger.LogError(
+                    exception,
+                    "[{ProjectorName}] Failed to stream serializable events for catch-up",
+                    projectorName);
+                return 0;
+            }
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
+        {
+            _logger.LogError(
+                ex,
+                "[{ProjectorName}] Serializable catch-up failed due to unknown event type",
+                projectorName);
+            throw;
+        }
+
+        if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
+        {
+            _logger.LogInformation(
+                "[{ProjectorName}] Catch-up hybrid read fetched {FetchedEvents} events (RequestedMaxEvents={RequestedMaxEvents}, StartPosition={StartPosition})",
+                projectorName,
+                fetchedCount,
+                batchSize,
+                startPosition);
+            _hybridCatchUpFirstBatchLogged = true;
+        }
+
+        if (fetchedCount == 0)
+        {
+            return 0;
+        }
+
+        await FlushBufferAsync();
+        if (filteredCount == 0)
+        {
+            _catchUpProgress.CurrentPosition = new SortableUniqueId(lastFetchedSortableUniqueId!);
+            return 0;
+        }
+
+        await UpdateCatchUpProgressAfterBatch(
+            processedIds,
+            lastProcessedSortableUniqueId!,
+            filteredCount,
+            applyElapsedMs,
+            hybridCatchUpStore,
+            hybridReadBatchMetadata);
+
+        return filteredCount;
+    }
+
     private int ResolveCatchUpBatchSize(HybridEventStore? hybridCatchUpStore)
     {
         if (hybridCatchUpStore is null)
@@ -2262,22 +2422,43 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return _catchUpBatchSize;
     }
 
-    private List<T> FilterByPositionAndProcessed<T>(
-        List<T> events,
+    private IReadOnlyList<T> FilterByPositionAndProcessed<T>(
+        IReadOnlyList<T> events,
         Func<T, Guid> idSelector,
         Func<T, string> sortableIdSelector)
     {
-        var filtered = new List<T>();
-        foreach (var ev in events)
+        List<T>? filtered = null;
+        for (var index = 0; index < events.Count; index++)
         {
+            var ev = events[index];
             if (_processedEventIds.Contains(idSelector(ev)))
+            {
+                if (filtered == null)
+                {
+                    filtered = new List<T>(events.Count);
+                    for (var copyIndex = 0; copyIndex < index; copyIndex++)
+                    {
+                        filtered.Add(events[copyIndex]);
+                    }
+                }
                 continue;
+            }
             if (_catchUpProgress.CurrentPosition != null &&
                 string.Compare(sortableIdSelector(ev), _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+            {
+                if (filtered == null)
+                {
+                    filtered = new List<T>(events.Count);
+                    for (var copyIndex = 0; copyIndex < index; copyIndex++)
+                    {
+                        filtered.Add(events[copyIndex]);
+                    }
+                }
                 continue;
-            filtered.Add(ev);
+            }
+            filtered?.Add(ev);
         }
-        return filtered;
+        return filtered ?? events;
     }
 
     private void UpdateTargetPosition(string latestSortableUniqueIdValue)
@@ -2300,6 +2481,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var projectorName = GetProjectorName();
 
         _catchUpProgress.BatchesProcessed++;
+        _catchUpProgress.HadNewEvents = true;
         _eventsProcessed += filteredCount;
         _eventsProcessedSinceLastCatchUpPersist += filteredCount;
         _lastHybridReadBatchMetadata = hybridReadBatchMetadata;
@@ -2381,6 +2563,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task CompleteCatchUp()
     {
         var projectorName = GetProjectorName();
+        var shouldPersist = _catchUpProgress.HadNewEvents;
 
         try
         {
@@ -2391,11 +2574,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Process all buffered events first
             await FlushEventBufferAsync();
 
-            // Force promotion of any events that are now safe
-            await TriggerSafePromotion();
+            if (shouldPersist)
+            {
+                // Force promotion of any events that are now safe
+                await TriggerSafePromotion();
 
-            // Final persistence
-            await PersistStateAsync();
+                // Final persistence
+                await PersistStateAsync();
+            }
 
             // Process any pending stream events
             await ProcessPendingStreamEvents();

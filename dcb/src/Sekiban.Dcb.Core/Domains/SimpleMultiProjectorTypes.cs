@@ -254,11 +254,11 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
 
-            // Fallback: JSON serialize + Gzip compression
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
-            var rawBytes = Encoding.UTF8.GetBytes(json);
-            var originalSize = rawBytes.LongLength;
-            var compressed = GzipCompression.Compress(rawBytes);
+            // Fallback: stream JSON directly into GZip to avoid holding json string + raw bytes + gzip bytes at once.
+            var (compressed, originalSize) = GzipCompression.CompressJson(
+                payload,
+                payload.GetType(),
+                domainTypes.JsonSerializerOptions);
             var compressedSize = compressed.LongLength;
 
             return ResultBox.FromValue(new SerializationResult(
