@@ -26,6 +26,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// </summary>
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
+    private const int StreamingCatchUpApplyChunkSize = 1024;
     private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
@@ -2176,6 +2177,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _hybridCatchUpCheckLogged = true;
         }
 
+        if (catchUpStore is IStreamingSerializableEventStore streamingCatchUpStore)
+        {
+            return await ProcessStreamingSerializableBatch(
+                streamingCatchUpStore,
+                hybridCatchUpStore,
+                isHybridCatchUp,
+                batchSize,
+                startPosition,
+                projectorName);
+        }
+
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         HybridReadBatchMetadata? hybridReadBatchMetadata = null;
         try
@@ -2265,6 +2277,134 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             hybridReadBatchMetadata);
 
         return filtered.Count;
+    }
+
+    private async Task<int> ProcessStreamingSerializableBatch(
+        IStreamingSerializableEventStore streamingCatchUpStore,
+        HybridEventStore? hybridCatchUpStore,
+        bool isHybridCatchUp,
+        int batchSize,
+        string startPosition,
+        string projectorName)
+    {
+        if (_host == null)
+        {
+            return 0;
+        }
+
+        var processedIds = new List<Guid>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize * 2));
+        var buffer = new List<SerializableEvent>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize));
+        string? lastFetchedSortableUniqueId = null;
+        string? lastProcessedSortableUniqueId = null;
+        var fetchedCount = 0;
+        var filteredCount = 0;
+        long applyElapsedMs = 0;
+        HybridReadBatchMetadata? hybridReadBatchMetadata = null;
+
+        async Task FlushBufferAsync()
+        {
+            if (buffer.Count == 0)
+            {
+                return;
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await _host.AddSerializableEventsAsync(buffer, finishedCatchUp: false);
+            sw.Stop();
+            applyElapsedMs += sw.ElapsedMilliseconds;
+
+            foreach (var item in buffer)
+            {
+                processedIds.Add(item.Id);
+            }
+
+            filteredCount += buffer.Count;
+            lastProcessedSortableUniqueId = buffer[^1].SortableUniqueIdValue;
+            buffer.Clear();
+        }
+
+        try
+        {
+            using var projectionContext = HybridReadProjectionContext.Push(projectorName);
+            var streamResult = await streamingCatchUpStore.StreamAllSerializableEventsAsync(
+                _catchUpProgress.CurrentPosition,
+                batchSize,
+                async ev =>
+                {
+                    fetchedCount++;
+                    lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
+                    UpdateTargetPosition(ev.SortableUniqueIdValue);
+
+                    if (_processedEventIds.Contains(ev.Id))
+                    {
+                        return;
+                    }
+
+                    if (_catchUpProgress.CurrentPosition != null &&
+                        string.Compare(ev.SortableUniqueIdValue, _catchUpProgress.CurrentPosition.Value, StringComparison.Ordinal) <= 0)
+                    {
+                        return;
+                    }
+
+                    buffer.Add(ev);
+                    if (buffer.Count >= StreamingCatchUpApplyChunkSize)
+                    {
+                        await FlushBufferAsync();
+                    }
+                });
+            hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
+
+            if (!streamResult.IsSuccess)
+            {
+                var exception = streamResult.GetException();
+                _logger.LogError(
+                    exception,
+                    "[{ProjectorName}] Failed to stream serializable events for catch-up",
+                    projectorName);
+                return 0;
+            }
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
+        {
+            _logger.LogError(
+                ex,
+                "[{ProjectorName}] Serializable catch-up failed due to unknown event type",
+                projectorName);
+            throw;
+        }
+
+        if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
+        {
+            _logger.LogInformation(
+                "[{ProjectorName}] Catch-up hybrid read fetched {FetchedEvents} events (RequestedMaxEvents={RequestedMaxEvents}, StartPosition={StartPosition})",
+                projectorName,
+                fetchedCount,
+                batchSize,
+                startPosition);
+            _hybridCatchUpFirstBatchLogged = true;
+        }
+
+        if (fetchedCount == 0)
+        {
+            return 0;
+        }
+
+        await FlushBufferAsync();
+        if (filteredCount == 0)
+        {
+            _catchUpProgress.CurrentPosition = new SortableUniqueId(lastFetchedSortableUniqueId!);
+            return 0;
+        }
+
+        await UpdateCatchUpProgressAfterBatch(
+            processedIds,
+            lastProcessedSortableUniqueId!,
+            filteredCount,
+            applyElapsedMs,
+            hybridCatchUpStore,
+            hybridReadBatchMetadata);
+
+        return filteredCount;
     }
 
     private int ResolveCatchUpBatchSize(HybridEventStore? hybridCatchUpStore)

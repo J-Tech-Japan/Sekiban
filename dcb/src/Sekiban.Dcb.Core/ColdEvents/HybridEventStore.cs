@@ -10,7 +10,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents;
 
-public sealed class HybridEventStore : IEventStore
+public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
     private readonly IEventStore _hotStore;
@@ -101,6 +101,29 @@ public sealed class HybridEventStore : IEventStore
         return await ReadHybridSerializableEventsAsync(since, maxCount);
     }
 
+    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.Enabled)
+        {
+            var context = StartHybridReadLogContext(_serviceIdProvider.GetCurrentServiceId(), since, maxCount);
+            return await StreamHotOnlyAsync(
+                context,
+                since,
+                maxCount,
+                onEvent,
+                cancellationToken,
+                source: "hot_only_cold_disabled",
+                coldBoundary: null,
+                segmentCount: 0);
+        }
+
+        return await StreamHybridSerializableEventsAsync(since, maxCount, onEvent, cancellationToken);
+    }
+
     private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHybridSerializableEventsAsync(
         SortableUniqueId? since,
         int? maxCount)
@@ -130,6 +153,58 @@ public sealed class HybridEventStore : IEventStore
         return await ReadColdAndHotEventsAsync(context, manifest, coldBoundary);
     }
 
+    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHybridSerializableEventsAsync(
+        SortableUniqueId? since,
+        int? maxCount,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        var context = StartHybridReadLogContext(serviceId, since, maxCount);
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_coldStorage, serviceId, cancellationToken);
+
+        if (manifest is null || manifest.LatestSafeSortableUniqueId is null)
+        {
+            return await StreamHotOnlyAsync(
+                context,
+                since,
+                maxCount,
+                onEvent,
+                cancellationToken,
+                source: "hot_only_no_manifest",
+                coldBoundary: null,
+                segmentCount: 0);
+        }
+
+        var coldBoundary = new SortableUniqueId(manifest.LatestSafeSortableUniqueId);
+        _logger.LogDebug(
+            "Using cold manifest for {ServiceId}: latestSafe={LatestSafe}, segments={SegmentCount}, since={Since}",
+            serviceId,
+            manifest.LatestSafeSortableUniqueId,
+            manifest.Segments.Count,
+            since?.Value);
+
+        if (since is not null && since.IsLaterThan(coldBoundary))
+        {
+            return await StreamHotOnlyAsync(
+                context,
+                since,
+                maxCount,
+                onEvent,
+                cancellationToken,
+                source: "hot_only_since_after_cold_boundary",
+                coldBoundary: coldBoundary.Value,
+                segmentCount: manifest.Segments.Count);
+        }
+
+        return await StreamColdAndHotEventsAsync(
+            context,
+            manifest,
+            coldBoundary,
+            onEvent,
+            cancellationToken);
+    }
+
     private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotWithoutManifestAsync(HybridReadLogContext context)
     {
         _logger.LogDebug("No cold manifest found for {ServiceId}, falling back to hot store", context.ServiceId);
@@ -145,6 +220,62 @@ public sealed class HybridEventStore : IEventStore
                 ReachedColdSegmentBoundary: false,
                 Succeeded: hotResult.IsSuccess));
         return hotResult;
+    }
+
+    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHotOnlyAsync(
+        HybridReadLogContext context,
+        SortableUniqueId? since,
+        int? maxCount,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken,
+        string source,
+        string? coldBoundary,
+        int segmentCount)
+    {
+        if (source == "hot_only_no_manifest")
+        {
+            _logger.LogDebug("No cold manifest found for {ServiceId}, falling back to hot store", context.ServiceId);
+        }
+        else if (source == "hot_only_since_after_cold_boundary" && coldBoundary is not null)
+        {
+            _logger.LogDebug(
+                "Skipping cold read for {ServiceId} because since={Since} is newer than latestSafe={LatestSafe}",
+                context.ServiceId,
+                since!.Value,
+                coldBoundary);
+        }
+
+        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(since, maxCount);
+        if (!hotResult.IsSuccess)
+        {
+            LogHybridReadOutcome(
+                context,
+                new HybridReadOutcome(
+                    Source: source,
+                    ColdEventsRead: 0,
+                    HotEventsRead: null,
+                    ColdBoundary: coldBoundary,
+                    SegmentCount: segmentCount,
+                    ReachedColdSegmentBoundary: false,
+                    Succeeded: false));
+            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
+        }
+
+        var streamResult = await StreamEnumerableAsync(
+            hotResult.GetValue(),
+            onEvent,
+            cancellationToken);
+        LogHybridReadOutcome(
+            context,
+            new HybridReadOutcome(
+                Source: source,
+                ColdEventsRead: 0,
+                HotEventsRead: streamResult.EventsRead,
+                ColdBoundary: coldBoundary,
+                SegmentCount: segmentCount,
+                ReachedColdSegmentBoundary: false,
+                Succeeded: true));
+        return ResultBox.FromValue(streamResult);
     }
 
     private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotAfterColdBoundaryAsync(
@@ -241,6 +372,91 @@ public sealed class HybridEventStore : IEventStore
         return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
     }
 
+    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamColdAndHotEventsAsync(
+        HybridReadLogContext context,
+        ColdManifest manifest,
+        SortableUniqueId coldBoundary,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken)
+    {
+        var alignToSegmentBoundary = ShouldAlignCatchUpReadsToSegmentBoundary();
+        var coldResult = await StreamFromColdSegmentsAsync(
+            manifest,
+            context.Since,
+            context.MaxCount,
+            onEvent,
+            cancellationToken,
+            alignToSegmentBoundary);
+        if (!coldResult.IsSuccess)
+        {
+            return await StreamHotAfterColdReadFailureAsync(
+                context,
+                manifest,
+                coldBoundary,
+                onEvent,
+                cancellationToken);
+        }
+
+        var coldRead = coldResult.GetValue();
+        var remainingCount = context.MaxCount.HasValue
+            ? Math.Max(context.MaxCount.Value - coldRead.EventsRead, 0)
+            : (int?)null;
+        var stopAtColdBoundary = alignToSegmentBoundary && coldRead.EventsRead > 0;
+        if (remainingCount == 0 || stopAtColdBoundary)
+        {
+            LogHybridReadOutcome(
+                context,
+                new HybridReadOutcome(
+                    Source: "cold_only",
+                    ColdEventsRead: coldRead.EventsRead,
+                    HotEventsRead: 0,
+                    ColdBoundary: coldBoundary.Value,
+                    SegmentCount: manifest.Segments.Count,
+                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
+                    Succeeded: true));
+            return ResultBox.FromValue(
+                new SerializableEventStreamReadResult(
+                    coldRead.EventsRead,
+                    coldRead.LastSortableUniqueId));
+        }
+
+        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(coldBoundary, remainingCount);
+        if (!hotResult.IsSuccess)
+        {
+            LogHybridReadOutcome(
+                context,
+                new HybridReadOutcome(
+                    Source: coldRead.EventsRead > 0 ? "cold_then_hot_failed" : "hot_only_hot_failed",
+                    ColdEventsRead: coldRead.EventsRead,
+                    HotEventsRead: 0,
+                    ColdBoundary: coldBoundary.Value,
+                    SegmentCount: manifest.Segments.Count,
+                    ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
+                    Succeeded: false));
+            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
+        }
+
+        var hotStreamResult = await StreamEnumerableAsync(
+            hotResult.GetValue(),
+            onEvent,
+            cancellationToken);
+        var totalEventsRead = coldRead.EventsRead + hotStreamResult.EventsRead;
+        LogHybridReadOutcome(
+            context,
+            new HybridReadOutcome(
+                Source: ClassifyHybridReadSource(coldRead.EventsRead, hotStreamResult.EventsRead),
+                ColdEventsRead: coldRead.EventsRead,
+                HotEventsRead: hotStreamResult.EventsRead,
+                ColdBoundary: coldBoundary.Value,
+                SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: coldRead.ReachedColdSegmentBoundary,
+                Succeeded: true));
+        return ResultBox.FromValue(
+            new SerializableEventStreamReadResult(
+                totalEventsRead,
+                hotStreamResult.LastSortableUniqueId ?? coldRead.LastSortableUniqueId));
+    }
+
     private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadHotAfterColdReadFailureAsync(
         HybridReadLogContext context,
         ColdManifest manifest,
@@ -261,8 +477,67 @@ public sealed class HybridEventStore : IEventStore
         return hotResult;
     }
 
+    private async Task<ResultBox<SerializableEventStreamReadResult>> StreamHotAfterColdReadFailureAsync(
+        HybridReadLogContext context,
+        ColdManifest manifest,
+        SortableUniqueId coldBoundary,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("Cold read failed for {ServiceId}, falling back to hot store", context.ServiceId);
+        var hotResult = await _hotStore.ReadAllSerializableEventsAsync(context.Since, context.MaxCount);
+        if (!hotResult.IsSuccess)
+        {
+            LogHybridReadOutcome(
+                context,
+                new HybridReadOutcome(
+                    Source: "hot_only_cold_read_failed",
+                    ColdEventsRead: 0,
+                    HotEventsRead: null,
+                    ColdBoundary: coldBoundary.Value,
+                    SegmentCount: manifest.Segments.Count,
+                    ReachedColdSegmentBoundary: false,
+                    Succeeded: false));
+            return ResultBox.Error<SerializableEventStreamReadResult>(hotResult.GetException());
+        }
+
+        var streamResult = await StreamEnumerableAsync(
+            hotResult.GetValue(),
+            onEvent,
+            cancellationToken);
+        LogHybridReadOutcome(
+            context,
+            new HybridReadOutcome(
+                Source: "hot_only_cold_read_failed",
+                ColdEventsRead: 0,
+                HotEventsRead: streamResult.EventsRead,
+                ColdBoundary: coldBoundary.Value,
+                SegmentCount: manifest.Segments.Count,
+                ReachedColdSegmentBoundary: false,
+                Succeeded: true));
+        return ResultBox.FromValue(streamResult);
+    }
+
     private static int? TryGetEventCountWithoutEnumeration(IEnumerable<SerializableEvent> events)
         => events.TryGetNonEnumeratedCount(out var count) ? count : null;
+
+    private static async Task<SerializableEventStreamReadResult> StreamEnumerableAsync(
+        IEnumerable<SerializableEvent> events,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken)
+    {
+        var count = 0;
+        string? lastSortableUniqueId = null;
+        foreach (var evt in events)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await onEvent(evt);
+            count++;
+            lastSortableUniqueId = evt.SortableUniqueIdValue;
+        }
+
+        return new SerializableEventStreamReadResult(count, lastSortableUniqueId);
+    }
 
     private static string ClassifyHybridReadSource(int coldEventsRead, int hotEventsRead)
         => (coldEventsRead, hotEventsRead) switch
@@ -396,6 +671,11 @@ public sealed class HybridEventStore : IEventStore
         int ColdEventsRead,
         bool ReachedColdSegmentBoundary);
 
+    private sealed record ColdStreamReadResult(
+        int EventsRead,
+        string? LastSortableUniqueId,
+        bool ReachedColdSegmentBoundary);
+
     private sealed record JsonlAppendResult(
         int EventsAdded,
         bool ReachedEndOfStream);
@@ -435,6 +715,128 @@ public sealed class HybridEventStore : IEventStore
         }
 
         return ResultBox.FromValue(new JsonlAppendResult(destination.Count - initialCount, ReachedEndOfStream: true));
+    }
+
+    private async Task<ResultBox<ColdStreamReadResult>> StreamFromColdSegmentsAsync(
+        ColdManifest manifest,
+        SortableUniqueId? since,
+        int? maxCount,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken,
+        bool alignToSegmentBoundary)
+    {
+        var totalEventsRead = 0;
+        string? lastSortableUniqueId = null;
+        foreach (var segment in manifest.Segments.OrderBy(s => s.FromSortableUniqueId, StringComparer.Ordinal))
+        {
+            if (since is not null
+                && string.Compare(segment.ToSortableUniqueId, since.Value, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            var streamResult = await _coldStorage.OpenReadAsync(segment.Path, cancellationToken);
+            if (!streamResult.IsSuccess)
+            {
+                _logger.LogWarning("Failed to read cold segment {Path}", segment.Path);
+                return ResultBox.Error<ColdStreamReadResult>(streamResult.GetException());
+            }
+
+            await using var stream = streamResult.GetValue();
+            var remainingCount = maxCount.HasValue
+                ? Math.Max(maxCount.Value - totalEventsRead, 0)
+                : (int?)null;
+            var parseResult = await StreamJsonlSegmentAsync(
+                stream,
+                since,
+                remainingCount,
+                onEvent,
+                cancellationToken);
+            if (!parseResult.IsSuccess)
+            {
+                _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
+                return ResultBox.Error<ColdStreamReadResult>(parseResult.GetException());
+            }
+
+            var appendResult = parseResult.GetValue();
+            if (appendResult.EventsAdded == 0)
+            {
+                continue;
+            }
+
+            totalEventsRead += appendResult.EventsAdded;
+            lastSortableUniqueId = appendResult.LastSortableUniqueId ?? lastSortableUniqueId;
+            if (maxCount.HasValue && totalEventsRead >= maxCount.Value)
+            {
+                return ResultBox.FromValue(
+                    new ColdStreamReadResult(
+                        totalEventsRead,
+                        lastSortableUniqueId,
+                        appendResult.ReachedEndOfStream));
+            }
+
+            if (alignToSegmentBoundary)
+            {
+                return ResultBox.FromValue(
+                    new ColdStreamReadResult(
+                        totalEventsRead,
+                        lastSortableUniqueId,
+                        appendResult.ReachedEndOfStream));
+            }
+        }
+
+        return ResultBox.FromValue(
+            new ColdStreamReadResult(
+                totalEventsRead,
+                lastSortableUniqueId,
+                ReachedColdSegmentBoundary: false));
+    }
+
+    private sealed record JsonlStreamResult(
+        int EventsAdded,
+        string? LastSortableUniqueId,
+        bool ReachedEndOfStream);
+
+    private static async Task<ResultBox<JsonlStreamResult>> StreamJsonlSegmentAsync(
+        Stream data,
+        SortableUniqueId? since,
+        int? maxCount,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(data, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        var count = 0;
+        string? lastSortableUniqueId = null;
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
+            if (evt is null)
+            {
+                return ResultBox.Error<JsonlStreamResult>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
+            }
+
+            if (since is not null
+                && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            await onEvent(evt);
+            count++;
+            lastSortableUniqueId = evt.SortableUniqueIdValue;
+            if (maxCount.HasValue && count >= maxCount.Value)
+            {
+                return ResultBox.FromValue(new JsonlStreamResult(count, lastSortableUniqueId, ReachedEndOfStream: false));
+            }
+        }
+
+        return ResultBox.FromValue(new JsonlStreamResult(count, lastSortableUniqueId, ReachedEndOfStream: true));
     }
 
 }
