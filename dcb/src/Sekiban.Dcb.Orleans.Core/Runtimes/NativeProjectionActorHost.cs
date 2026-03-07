@@ -131,6 +131,11 @@ public class NativeProjectionActorHost : IProjectionActorHost
         _actor.ForcePromoteBufferedEvents();
     }
 
+    public void CompactSafeHistory()
+    {
+        _actor.CompactSafeHistory();
+    }
+
     public void ForcePromoteAllBufferedEvents()
     {
         _actor.ForcePromoteAllBufferedEvents();

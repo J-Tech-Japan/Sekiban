@@ -447,6 +447,14 @@ public class GeneralMultiProjectionActor
         }
     }
 
+    public void CompactSafeHistory()
+    {
+        if (_singleStateAccessor is IDualStateAccessor dualAccessor)
+        {
+            dualAccessor.CompactSafeHistory();
+        }
+    }
+
     public void ForcePromoteAllBufferedEvents()
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)

@@ -71,6 +71,11 @@ public interface IProjectionActorHost
     void ForcePromoteBufferedEvents();
 
     /// <summary>
+    ///     Compacts retained safe-event history after a safe snapshot has been persisted.
+    /// </summary>
+    void CompactSafeHistory();
+
+    /// <summary>
     ///     Force promotion of ALL buffered events regardless of window.
     /// </summary>
     void ForcePromoteAllBufferedEvents();

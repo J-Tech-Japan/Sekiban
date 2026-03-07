@@ -14,8 +14,11 @@ namespace Sekiban.Dcb.MultiProjections;
 public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload, IDualStateAccessor
     where T : IMultiProjectionPayload
 {
-    // Keep track of all safe events for proper rebuilding
+    // Keep track of safe events until the next persisted safe snapshot boundary.
     private readonly Dictionary<Guid, Event> _allSafeEvents = new();
+
+    // Keep duplicate detection across the current in-memory history until the next compaction boundary.
+    private readonly HashSet<Guid> _processedEventIds = new();
 
     // Buffer for events within SafeWindow (using Dictionary to handle duplicates)
     private readonly Dictionary<Guid, Event> _bufferedEvents = new();
@@ -23,7 +26,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     private readonly string _projectorName;
     private readonly ICoreMultiProjectorTypes _types;
     private readonly JsonSerializerOptions _jsonOptions;
-    private readonly bool _isRestoredFromSnapshot;
+    private bool _useIncrementalSafePromotion;
 
     // Safe state - events older than SafeWindow
     private T _safeProjector;
@@ -74,7 +77,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         _unsafeProjector = CloneProjector(initialProjector, jsonOptions);
         _projectorName = projectorName;
         _types = types;
-        _isRestoredFromSnapshot = isRestoredFromSnapshot;
+        _useIncrementalSafePromotion = isRestoredFromSnapshot;
 
         // Initialize version tracking
         _safeVersion = initialVersion;
@@ -105,8 +108,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
         // Debug logging removed to avoid noisy console output.
 
-        // Check if event already exists in either safe events or buffered events
-        if (_allSafeEvents.ContainsKey(evt.Id) || _bufferedEvents.ContainsKey(evt.Id))
+        if (_processedEventIds.Contains(evt.Id))
         {
             // Event already processed, skip it
             return this;
@@ -132,6 +134,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         _unsafeLastEventId = evt.Id;
         _unsafeLastSortableUniqueId = evt.SortableUniqueIdValue;
         _unsafeVersion++;
+        _processedEventIds.Add(evt.Id);
 
         // Store event based on safe window
         if (isInSafeWindow)
@@ -141,11 +144,9 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
         else
         {
-            // Add to safe events collection
             _allSafeEvents[evt.Id] = evt;
 
-            // Incremental update of safe state instead of full rebuild
-            // Process just this new event through the safe projector
+            // Process the new safe event directly on the current safe projector.
             var safeProjected = _types.Project(
                 _projectorName,
                 _safeProjector,
@@ -187,6 +188,14 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         ProcessBufferedEvents(safeWindowThreshold, domainTypes);
     }
 
+    void IDualStateAccessor.CompactSafeHistory()
+    {
+        _allSafeEvents.Clear();
+        _allSafeEvents.TrimExcess();
+        RebuildProcessedEventIdsFromBufferedEvents();
+        _useIncrementalSafePromotion = true;
+    }
+
     private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
         var eventsToProcess = new List<Event>();
@@ -214,15 +223,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         // Add newly safe events to our collection and rebuild
         if (eventsToProcess.Count > 0)
         {
-            // Increment safe version for each promoted event
-            var promotedCount = eventsToProcess.Count;
-
             foreach (var ev in eventsToProcess)
             {
                 _allSafeEvents[ev.Id] = ev;
             }
 
-            if (_isRestoredFromSnapshot)
+            if (_useIncrementalSafePromotion)
             {
                 ApplyEventsIncrementally(eventsToProcess, domainTypes);
             }
@@ -231,30 +237,35 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
                 RebuildSafeState(domainTypes);
             }
 
-            // After rebuild, increment the safe version by the number of promoted events
-            _safeVersion += promotedCount;
+            _safeVersion += eventsToProcess.Count;
         }
+    }
+
+    private void RebuildProcessedEventIdsFromBufferedEvents()
+    {
+        _processedEventIds.Clear();
+
+        foreach (var bufferedEventId in _bufferedEvents.Keys)
+        {
+            _processedEventIds.Add(bufferedEventId);
+        }
+
+        _processedEventIds.TrimExcess();
     }
 
     private void RebuildSafeState(DcbDomainTypes domainTypes)
     {
-        // Guard: Skip rebuild if _allSafeEvents is empty.
-        // This is critical after snapshot restore where _allSafeEvents is not serialized
-        // and remains empty. Without this guard, RebuildSafeState would overwrite the
-        // restored _safeProjector with an empty initial state, causing data loss.
         if (_allSafeEvents.Count == 0)
         {
             return;
         }
 
-        // Get all safe events and sort them by SortableUniqueId
         var allEvents = _allSafeEvents.Values.ToList();
         allEvents.Sort((a, b) => string.Compare(
             a.SortableUniqueIdValue,
             b.SortableUniqueIdValue,
             StringComparison.Ordinal));
 
-        // Rebuild safe state from scratch
         var rebuiltProjector = _types.GenerateInitialPayload(_projectorName);
         if (!rebuiltProjector.IsSuccess)
         {
@@ -262,19 +273,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         }
 
         var newSafeProjector = (T)rebuiltProjector.GetValue();
-        // IMPORTANT: Don't reset the version to 0. The version should reflect the total
-        // number of events processed as safe. When this is called after restoring from
-        // a snapshot, _allSafeEvents only contains new events from catch-up, not all
-        // historical events. We should preserve the base version count.
-        // The safe version has already been incremented for each event in ProcessEvent,
-        // so we don't need to recalculate it here.
         var newSafeLastEventId = Guid.Empty;
         var newSafeLastSortableId = string.Empty;
 
         foreach (var ev in allEvents)
         {
             var tags = ev.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
-            // Safe rebuild uses minimum threshold since all events are already safe
             var projected = _types.Project(
                 _projectorName,
                 newSafeProjector,
@@ -296,7 +300,6 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         _safeProjector = newSafeProjector;
         _safeLastEventId = newSafeLastEventId;
         _safeLastSortableUniqueId = newSafeLastSortableId;
-        // Don't update _safeVersion here - it's updated in ProcessBufferedEvents
     }
 
     private void ApplyEventsIncrementally(List<Event> events, DcbDomainTypes domainTypes)
