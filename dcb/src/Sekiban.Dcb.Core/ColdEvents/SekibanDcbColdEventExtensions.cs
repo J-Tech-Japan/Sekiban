@@ -19,6 +19,7 @@ public static class SekibanDcbColdEventExtensions
         services.TryAddSingleton<IColdEventProgressReader>(notSupported);
         services.TryAddSingleton<IColdEventExporter>(notSupported);
         services.TryAddSingleton<IColdEventCatalogReader>(notSupported);
+        services.TryAddSingleton<IColdSegmentFormatHandler, JsonlColdSegmentFormatHandler>();
         services.TryAddSingleton<ColdExportCycleRunner>();
         return services;
     }
@@ -52,6 +53,7 @@ public static class SekibanDcbColdEventExtensions
         services.AddSingleton<IColdEventStoreFeature>(sp => sp.GetRequiredService<ColdExporter>());
         services.AddSingleton<ColdCatalogReader>();
         services.AddSingleton<IColdEventCatalogReader>(sp => sp.GetRequiredService<ColdCatalogReader>());
+        services.TryAddSingleton<IColdSegmentFormatHandler, JsonlColdSegmentFormatHandler>();
         if (addBackgroundService)
         {
             services.TryAddEnumerable(
@@ -75,6 +77,7 @@ public static class SekibanDcbColdEventExtensions
             return new HybridEventStore(
                 hotStore,
                 sp.GetRequiredService<IColdObjectStorage>(),
+                sp.GetRequiredService<IColdSegmentFormatHandler>(),
                 sp.GetRequiredService<IServiceIdProvider>(),
                 sp.GetRequiredService<IOptions<ColdEventStoreOptions>>(),
                 sp.GetRequiredService<ILogger<HybridEventStore>>());

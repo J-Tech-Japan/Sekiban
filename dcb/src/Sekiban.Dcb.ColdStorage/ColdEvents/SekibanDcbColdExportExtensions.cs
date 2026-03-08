@@ -40,6 +40,11 @@ public static class SekibanDcbColdExportExtensions
         services.TryAddSingleton<IColdLeaseManager, StorageBackedColdLeaseManager>();
         services.TryAddSingleton<IColdObjectStorage>(sp =>
             ColdObjectStorageFactory.Create(storageOptions, storageRoot, sp));
+        if (string.Equals(storageOptions.Format, "duckdb", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(storageOptions.Type, "duckdb", StringComparison.OrdinalIgnoreCase))
+        {
+            services.Replace(ServiceDescriptor.Singleton<IColdSegmentFormatHandler, DuckDbColdSegmentFormatHandler>());
+        }
 
         if (UsesAzureBlobProvider(storageOptions))
         {

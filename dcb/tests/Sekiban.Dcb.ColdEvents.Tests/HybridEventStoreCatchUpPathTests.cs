@@ -35,6 +35,7 @@ public class HybridEventStoreCatchUpPathTests
     };
 
     private readonly InMemoryColdObjectStorage _coldStorage = new();
+    private readonly IColdSegmentFormatHandler _segmentFormatHandler = new JsonlColdSegmentFormatHandler();
 
     private static SerializableEvent CreateSerializableEvent(DateTime timestamp, string name)
     {
@@ -53,6 +54,7 @@ public class HybridEventStoreCatchUpPathTests
         return new HybridEventStore(
             hotStore,
             _coldStorage,
+            _segmentFormatHandler,
             new DefaultServiceIdProvider(),
             Options.Create(EnabledOptions),
             NullLogger<HybridEventStore>.Instance);
