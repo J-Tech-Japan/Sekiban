@@ -24,6 +24,7 @@ public class ColdExporterTests
 
     private readonly InMemoryColdObjectStorage _storage = new();
     private readonly InMemoryColdLeaseManager _leaseManager = new();
+    private readonly IColdSegmentFormatHandler _segmentFormatHandler = new JsonlColdSegmentFormatHandler();
 
     private static SerializableEvent CreateEvent(DateTime timestamp, string name)
     {
@@ -46,6 +47,7 @@ public class ColdExporterTests
         return new ColdExporter(
             hotStore,
             storage ?? _storage,
+            _segmentFormatHandler,
             leaseManager ?? _leaseManager,
             Options.Create(options ?? EnabledOptions),
             NullLogger<ColdExporter>.Instance);

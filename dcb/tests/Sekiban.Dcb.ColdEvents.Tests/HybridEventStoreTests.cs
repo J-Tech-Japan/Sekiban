@@ -36,6 +36,7 @@ public class HybridEventStoreTests
     };
 
     private readonly InMemoryColdObjectStorage _coldStorage = new();
+    private readonly IColdSegmentFormatHandler _segmentFormatHandler = new JsonlColdSegmentFormatHandler();
 
     private static SerializableEvent CreateEvent(DateTime timestamp, string name)
     {
@@ -62,6 +63,7 @@ public class HybridEventStoreTests
         return new HybridEventStore(
             hotStore,
             _coldStorage,
+            _segmentFormatHandler,
             new DefaultServiceIdProvider(),
             Options.Create(options ?? EnabledOptions),
             logger ?? NullLogger<HybridEventStore>.Instance);

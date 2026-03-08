@@ -652,7 +652,10 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 CancellationToken.None);
             if (!parseResult.IsSuccess)
             {
-                _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
+                _logger.LogWarning(
+                    parseResult.GetException(),
+                    "Failed to parse cold segment {Path}",
+                    segment.Path);
                 return ResultBox.Error<ColdReadResult>(parseResult.GetException());
             }
 
@@ -724,7 +727,10 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 cancellationToken);
             if (!parseResult.IsSuccess)
             {
-                _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
+                _logger.LogWarning(
+                    parseResult.GetException(),
+                    "Failed to parse cold segment {Path}",
+                    segment.Path);
                 return ResultBox.Error<ColdStreamReadResult>(parseResult.GetException());
             }
 

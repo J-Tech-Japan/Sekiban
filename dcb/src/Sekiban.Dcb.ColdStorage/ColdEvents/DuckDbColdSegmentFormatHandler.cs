@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using DuckDB.NET.Data;
 using ResultBoxes;
@@ -49,9 +51,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             await using var connection = new DuckDBConnection($"Data Source={tempPath}");
             await connection.OpenAsync(ct);
             await using var command = connection.CreateCommand();
-            command.CommandText =
-                """
-                SELECT sortable_unique_id, event_json
+            command.CommandText = """
+                SELECT sortable_unique_id, event_json_gzip
                 FROM cold_events
                 WHERE (? IS NULL OR sortable_unique_id > ?)
                 ORDER BY sortable_unique_id
@@ -68,7 +69,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             while (await reader.ReadAsync(ct))
             {
                 var sortableUniqueId = reader.GetString(0);
-                var eventJson = reader.GetString(1);
+                var eventJson = ReadStoredEventJson(reader.GetValue(1));
                 var evt = JsonSerializer.Deserialize<SerializableEvent>(eventJson, JsonOptions);
                 if (evt is null)
                 {
@@ -104,11 +105,58 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
     }
 
+    private static byte[] CompressJson(string eventJson)
+    {
+        var utf8 = Encoding.UTF8.GetBytes(eventJson);
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            gzip.Write(utf8, 0, utf8.Length);
+        }
+
+        return output.ToArray();
+    }
+
+    private static string ReadStoredEventJson(object value) =>
+        value switch
+        {
+            byte[] bytes => DecompressJson(bytes),
+            ReadOnlyMemory<byte> memory => DecompressJson(memory.ToArray()),
+            Memory<byte> memory => DecompressJson(memory.ToArray()),
+            UnmanagedMemoryStream stream => DecompressJson(ReadAllBytes(stream)),
+            MemoryStream stream => DecompressJson(stream.ToArray()),
+            Stream stream => DecompressJson(ReadAllBytes(stream)),
+            string text when text.StartsWith("{", StringComparison.Ordinal) => text,
+            string text => DecompressJson(Convert.FromBase64String(text)),
+            _ => throw new InvalidDataException(
+                $"Unsupported DuckDB event_json_gzip value type: {value.GetType().FullName}")
+        };
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream.CanSeek)
+        {
+            stream.Position = 0;
+        }
+
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
+
+    private static string DecompressJson(byte[] compressedJson)
+    {
+        using var input = new MemoryStream(compressedJson);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        gzip.CopyTo(output);
+        return Encoding.UTF8.GetString(output.ToArray());
+    }
+
     private sealed class DuckDbColdSegmentFileBuilder : IColdSegmentFileBuilder
     {
         private readonly DuckDbColdSegmentFormatHandler _owner;
         private readonly string _filePath;
-        private readonly string _connectionString;
         private readonly DuckDBConnection _connection;
         private long _payloadBytes;
         private bool _completed;
@@ -120,7 +168,6 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         {
             _owner = owner;
             _filePath = filePath;
-            _connectionString = $"Data Source={filePath}";
             _connection = connection;
         }
 
@@ -142,7 +189,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                     """
                     CREATE TABLE cold_events (
                         sortable_unique_id VARCHAR PRIMARY KEY,
-                        event_json VARCHAR NOT NULL
+                        event_json_gzip BLOB NOT NULL
                     );
                     """;
                 await command.ExecuteNonQueryAsync(ct);
@@ -160,14 +207,15 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         public async Task AppendAsync(SerializableEvent evt, CancellationToken ct)
         {
             var eventJson = JsonSerializer.Serialize(evt, JsonOptions);
+            var compressedJson = DuckDbColdSegmentFormatHandler.CompressJson(eventJson);
             await using var command = _connection.CreateCommand();
             command.CommandText =
                 """
-                INSERT INTO cold_events(sortable_unique_id, event_json)
+                INSERT INTO cold_events(sortable_unique_id, event_json_gzip)
                 VALUES (?, ?);
                 """;
             command.Parameters.Add(new DuckDBParameter { Value = evt.SortableUniqueIdValue });
-            command.Parameters.Add(new DuckDBParameter { Value = eventJson });
+            command.Parameters.Add(new DuckDBParameter { Value = compressedJson });
             await command.ExecuteNonQueryAsync(ct);
 
             EventCount++;
