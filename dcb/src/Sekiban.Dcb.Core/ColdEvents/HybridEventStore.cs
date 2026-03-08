@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
@@ -15,6 +14,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;
+    private readonly IColdSegmentFormatHandler _segmentFormatHandler;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ColdEventStoreOptions _options;
     private readonly ILogger<HybridEventStore> _logger;
@@ -22,12 +22,14 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     public HybridEventStore(
         IEventStore hotStore,
         IColdObjectStorage coldStorage,
+        IColdSegmentFormatHandler segmentFormatHandler,
         IServiceIdProvider serviceIdProvider,
         IOptions<ColdEventStoreOptions> options,
         ILogger<HybridEventStore> logger)
     {
         _hotStore = hotStore;
         _coldStorage = coldStorage;
+        _segmentFormatHandler = segmentFormatHandler;
         _serviceIdProvider = serviceIdProvider;
         _options = options.Value;
         _logger = logger;
@@ -638,7 +640,16 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             }
 
             await using var stream = streamResult.GetValue();
-            var parseResult = await AppendJsonlSegmentAsync(stream, since, maxCount, destination);
+            var parseResult = await _segmentFormatHandler.StreamSegmentAsync(
+                stream,
+                since,
+                maxCount,
+                evt =>
+                {
+                    destination.Add(evt);
+                    return ValueTask.CompletedTask;
+                },
+                CancellationToken.None);
             if (!parseResult.IsSuccess)
             {
                 _logger.LogWarning("Failed to parse cold segment {Path}", segment.Path);
@@ -646,7 +657,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             }
 
             var appendResult = parseResult.GetValue();
-            if (appendResult.EventsAdded == 0)
+            if (appendResult.EventsRead == 0)
             {
                 continue;
             }
@@ -654,13 +665,13 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             if (maxCount.HasValue && destination.Count >= maxCount.Value)
             {
                 return ResultBox.FromValue(
-                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfStream));
+                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfSegment));
             }
 
             if (alignToSegmentBoundary)
             {
                 return ResultBox.FromValue(
-                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfStream));
+                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfSegment));
             }
         }
 
@@ -675,47 +686,6 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         int EventsRead,
         string? LastSortableUniqueId,
         bool ReachedColdSegmentBoundary);
-
-    private sealed record JsonlAppendResult(
-        int EventsAdded,
-        bool ReachedEndOfStream);
-
-    private static async Task<ResultBox<JsonlAppendResult>> AppendJsonlSegmentAsync(
-        Stream data,
-        SortableUniqueId? since,
-        int? maxCount,
-        List<SerializableEvent> destination)
-    {
-        using var reader = new StreamReader(data, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-        var initialCount = destination.Count;
-        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
-            if (evt is null)
-            {
-                return ResultBox.Error<JsonlAppendResult>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
-            }
-
-            if (since is not null
-                && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
-            {
-                continue;
-            }
-
-            destination.Add(evt);
-            if (maxCount.HasValue && destination.Count >= maxCount.Value)
-            {
-                return ResultBox.FromValue(new JsonlAppendResult(destination.Count - initialCount, ReachedEndOfStream: false));
-            }
-        }
-
-        return ResultBox.FromValue(new JsonlAppendResult(destination.Count - initialCount, ReachedEndOfStream: true));
-    }
 
     private async Task<ResultBox<ColdStreamReadResult>> StreamFromColdSegmentsAsync(
         ColdManifest manifest,
@@ -746,7 +716,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             var remainingCount = maxCount.HasValue
                 ? Math.Max(maxCount.Value - totalEventsRead, 0)
                 : (int?)null;
-            var parseResult = await StreamJsonlSegmentAsync(
+            var parseResult = await _segmentFormatHandler.StreamSegmentAsync(
                 stream,
                 since,
                 remainingCount,
@@ -759,12 +729,12 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             }
 
             var appendResult = parseResult.GetValue();
-            if (appendResult.EventsAdded == 0)
+            if (appendResult.EventsRead == 0)
             {
                 continue;
             }
 
-            totalEventsRead += appendResult.EventsAdded;
+            totalEventsRead += appendResult.EventsRead;
             lastSortableUniqueId = appendResult.LastSortableUniqueId ?? lastSortableUniqueId;
             if (maxCount.HasValue && totalEventsRead >= maxCount.Value)
             {
@@ -772,7 +742,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     new ColdStreamReadResult(
                         totalEventsRead,
                         lastSortableUniqueId,
-                        appendResult.ReachedEndOfStream));
+                        appendResult.ReachedEndOfSegment));
             }
 
             if (alignToSegmentBoundary)
@@ -781,7 +751,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     new ColdStreamReadResult(
                         totalEventsRead,
                         lastSortableUniqueId,
-                        appendResult.ReachedEndOfStream));
+                        appendResult.ReachedEndOfSegment));
             }
         }
 
@@ -790,53 +760,6 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 totalEventsRead,
                 lastSortableUniqueId,
                 ReachedColdSegmentBoundary: false));
-    }
-
-    private sealed record JsonlStreamResult(
-        int EventsAdded,
-        string? LastSortableUniqueId,
-        bool ReachedEndOfStream);
-
-    private static async Task<ResultBox<JsonlStreamResult>> StreamJsonlSegmentAsync(
-        Stream data,
-        SortableUniqueId? since,
-        int? maxCount,
-        Func<SerializableEvent, ValueTask> onEvent,
-        CancellationToken cancellationToken)
-    {
-        using var reader = new StreamReader(data, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-        var count = 0;
-        string? lastSortableUniqueId = null;
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
-            if (evt is null)
-            {
-                return ResultBox.Error<JsonlStreamResult>(new InvalidDataException("Cold JSONL segment line deserialized to null."));
-            }
-
-            if (since is not null
-                && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
-            {
-                continue;
-            }
-
-            await onEvent(evt);
-            count++;
-            lastSortableUniqueId = evt.SortableUniqueIdValue;
-            if (maxCount.HasValue && count >= maxCount.Value)
-            {
-                return ResultBox.FromValue(new JsonlStreamResult(count, lastSortableUniqueId, ReachedEndOfStream: false));
-            }
-        }
-
-        return ResultBox.FromValue(new JsonlStreamResult(count, lastSortableUniqueId, ReachedEndOfStream: true));
     }
 
 }

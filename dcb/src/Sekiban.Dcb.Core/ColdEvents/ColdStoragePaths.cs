@@ -9,6 +9,11 @@ public static class ColdStoragePaths
     public static string CheckpointPath(string serviceId) =>
         $"control/{serviceId}/checkpoint.json";
 
-    public static string SegmentPath(string serviceId, string from, string to) =>
-        $"segments/{serviceId}/{from}_{to}.jsonl";
+    public static string SegmentPath(string serviceId, string from, string to, string extension = ".jsonl") =>
+        $"segments/{serviceId}/{from}_{to}{NormalizeExtension(extension)}";
+
+    private static string NormalizeExtension(string extension)
+        => string.IsNullOrWhiteSpace(extension)
+            ? ".jsonl"
+            : extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
 }
