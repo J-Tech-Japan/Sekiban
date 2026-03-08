@@ -45,6 +45,11 @@ public static class SekibanDcbColdExportExtensions
         {
             services.Replace(ServiceDescriptor.Singleton<IColdSegmentFormatHandler, DuckDbColdSegmentFormatHandler>());
         }
+        else if (string.Equals(storageOptions.Format, "sqlite", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(storageOptions.Type, "sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            services.Replace(ServiceDescriptor.Singleton<IColdSegmentFormatHandler, SqliteColdSegmentFormatHandler>());
+        }
 
         if (UsesAzureBlobProvider(storageOptions))
         {
