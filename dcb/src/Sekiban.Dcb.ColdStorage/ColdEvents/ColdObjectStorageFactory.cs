@@ -49,8 +49,10 @@ public static class ColdObjectStorageFactory
 
         return (provider, format) switch
         {
-            (ProviderLocal, FormatSqlite) => new JsonlColdObjectStorage(storageRoot),
-            (ProviderLocal, FormatDuckDb) => new JsonlColdObjectStorage(storageRoot),
+            (ProviderLocal, FormatSqlite) => new JsonlColdObjectStorage(
+                Path.Combine(storageRoot, options.SqliteFile)),
+            (ProviderLocal, FormatDuckDb) => new JsonlColdObjectStorage(
+                Path.Combine(storageRoot, options.DuckDbFile)),
             (ProviderLocal, DefaultFormat) => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
             (ProviderAzureBlob, DefaultFormat) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
@@ -59,15 +61,34 @@ public static class ColdObjectStorageFactory
             (ProviderAzureBlob, FormatSqlite) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                options.AzurePrefix),
+                CombineAzurePrefix(options.AzurePrefix, options.SqliteFile)),
             (ProviderAzureBlob, FormatDuckDb) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                options.AzurePrefix),
+                CombineAzurePrefix(options.AzurePrefix, options.DuckDbFile)),
             _ => throw new InvalidOperationException(
                 $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };
     }
+
+    private static string? CombineAzurePrefix(string? prefix, string scope)
+    {
+        var normalizedPrefix = NormalizePathSegment(prefix);
+        var normalizedScope = NormalizePathSegment(scope);
+
+        return (normalizedPrefix, normalizedScope) switch
+        {
+            ("", "") => null,
+            ("", _) => normalizedScope,
+            (_, "") => normalizedPrefix,
+            _ => $"{normalizedPrefix}/{normalizedScope}"
+        };
+    }
+
+    private static string NormalizePathSegment(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Replace('\\', '/').Trim('/');
 
     private static (string Provider, string Format) ResolveProviderAndFormat(ColdStorageOptions options)
     {
