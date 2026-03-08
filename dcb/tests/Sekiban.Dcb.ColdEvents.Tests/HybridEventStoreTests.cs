@@ -72,17 +72,21 @@ public class HybridEventStoreTests
     private async Task StoreColdManifestAndSegmentsAsync(
         IReadOnlyList<SerializableEvent> coldEvents,
         string latestSafe)
-    {
-        var segmentData = JsonlSegmentWriter.Write(coldEvents);
-        var segmentPath = $"segments/{TestServiceId}/cold_segment.jsonl";
-        await _coldStorage.PutAsync(segmentPath, segmentData, expectedETag: null, CancellationToken.None);
+        => await StoreColdManifestAndSegmentsAsync([coldEvents], latestSafe);
 
-        var manifest = new ColdManifest(
-            ServiceId: TestServiceId,
-            ManifestVersion: "v1",
-            LatestSafeSortableUniqueId: latestSafe,
-            Segments:
-            [
+    private async Task StoreColdManifestAndSegmentsAsync(
+        IReadOnlyList<IReadOnlyList<SerializableEvent>> coldSegments,
+        string latestSafe)
+    {
+        var segments = new List<ColdSegmentInfo>();
+        for (var index = 0; index < coldSegments.Count; index++)
+        {
+            var coldEvents = coldSegments[index];
+            var segmentData = JsonlSegmentWriter.Write(coldEvents);
+            var segmentPath = $"segments/{TestServiceId}/cold_segment_{index}.jsonl";
+            await _coldStorage.PutAsync(segmentPath, segmentData, expectedETag: null, CancellationToken.None);
+
+            segments.Add(
                 new ColdSegmentInfo(
                     Path: segmentPath,
                     FromSortableUniqueId: coldEvents[0].SortableUniqueIdValue,
@@ -90,8 +94,14 @@ public class HybridEventStoreTests
                     EventCount: coldEvents.Count,
                     SizeBytes: segmentData.Length,
                     Sha256: "test",
-                    CreatedAtUtc: DateTimeOffset.UtcNow)
-            ],
+                    CreatedAtUtc: DateTimeOffset.UtcNow));
+        }
+
+        var manifest = new ColdManifest(
+            ServiceId: TestServiceId,
+            ManifestVersion: "v1",
+            LatestSafeSortableUniqueId: latestSafe,
+            Segments: segments,
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
         var manifestData = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
@@ -196,6 +206,35 @@ public class HybridEventStoreTests
         // Then
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.GetValue().Count());
+    }
+
+    [Fact]
+    public async Task Should_respect_maxCount_across_multiple_cold_segments()
+    {
+        // Given: 4 cold events across 2 segments
+        var coldTime = new DateTime(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var coldEvent1 = CreateEvent(coldTime, "Cold1");
+        var coldEvent2 = CreateEvent(coldTime.AddMinutes(1), "Cold2");
+        var coldEvent3 = CreateEvent(coldTime.AddMinutes(2), "Cold3");
+        var coldEvent4 = CreateEvent(coldTime.AddMinutes(3), "Cold4");
+        await StoreColdManifestAndSegmentsAsync(
+            [
+                [coldEvent1, coldEvent2],
+                [coldEvent3, coldEvent4]
+            ],
+            coldEvent4.SortableUniqueIdValue);
+
+        var hotStore = new StubSerializableEventStore([]);
+        var hybrid = CreateHybrid(hotStore);
+
+        // When
+        var result = await hybrid.ReadAllSerializableEventsAsync(since: null, maxCount: 3);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        var events = result.GetValue().ToList();
+        Assert.Equal(3, events.Count);
+        Assert.Equal(["Cold1", "Cold2", "Cold3"], events.Select(x => x.EventPayloadName).ToArray());
     }
 
     [Fact]

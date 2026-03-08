@@ -632,6 +632,15 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 continue;
             }
 
+            var remainingCount = maxCount.HasValue
+                ? Math.Max(maxCount.Value - destination.Count, 0)
+                : (int?)null;
+            if (remainingCount == 0)
+            {
+                return ResultBox.FromValue(
+                    new ColdReadResult(destination.Count, ReachedColdSegmentBoundary: false));
+            }
+
             var streamResult = await _coldStorage.OpenReadAsync(segment.Path, CancellationToken.None);
             if (!streamResult.IsSuccess)
             {
@@ -643,7 +652,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             var parseResult = await _segmentFormatHandler.StreamSegmentAsync(
                 stream,
                 since,
-                maxCount,
+                remainingCount,
                 evt =>
                 {
                     destination.Add(evt);
