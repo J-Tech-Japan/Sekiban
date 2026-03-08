@@ -49,20 +49,17 @@ public static class ColdObjectStorageFactory
 
         return (provider, format) switch
         {
-            (ProviderLocal, FormatSqlite) => new SqliteColdObjectStorage(Path.Combine(storageRoot, options.SqliteFile)),
+            (ProviderLocal, FormatSqlite) => new JsonlColdObjectStorage(storageRoot),
             (ProviderLocal, FormatDuckDb) => new JsonlColdObjectStorage(storageRoot),
             (ProviderLocal, DefaultFormat) => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
             (ProviderAzureBlob, DefaultFormat) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
                 options.AzurePrefix),
-            (ProviderAzureBlob, FormatSqlite) => new AzureBlobDatabaseColdObjectStorage(
+            (ProviderAzureBlob, FormatSqlite) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                options.AzurePrefix,
-                options.SqliteFile,
-                static path => new SqliteColdObjectStorage(path),
-                FormatSqlite),
+                options.AzurePrefix),
             (ProviderAzureBlob, FormatDuckDb) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
