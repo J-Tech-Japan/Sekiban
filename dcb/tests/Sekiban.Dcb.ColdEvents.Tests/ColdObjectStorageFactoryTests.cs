@@ -86,9 +86,9 @@ public sealed class ColdObjectStorageFactoryTests
     }
 
     [Theory]
-    [InlineData("jsonl", "jsonl")]
-    [InlineData("sqlite", "cold-events.sqlite")]
-    [InlineData("duckdb", "cold-events.duckdb")]
+    [InlineData("jsonl", "JSONL")]
+    [InlineData("sqlite", "SQLite")]
+    [InlineData("duckdb", "DuckDB")]
     public void Azure_blob_storage_should_scope_prefix_by_format(
         string format,
         string expectedScope)
