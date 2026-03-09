@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 
 namespace Sekiban.Dcb.ColdEvents.Tests;
@@ -82,6 +83,31 @@ public sealed class ColdObjectStorageFactoryTests
                 Directory.Delete(storageRoot, recursive: true);
             }
         }
+    }
+
+    [Theory]
+    [InlineData("jsonl", "jsonl")]
+    [InlineData("sqlite", "cold-events.sqlite")]
+    [InlineData("duckdb", "cold-events.duckdb")]
+    public void Azure_blob_storage_should_scope_prefix_by_format(
+        string format,
+        string expectedScope)
+    {
+        var options = new ColdStorageOptions
+        {
+            Format = format,
+            AzurePrefix = "MultiProjectionColdStorage"
+        };
+
+        var scopeMethod = typeof(ColdObjectStorageFactory).GetMethod("GetStorageScope", BindingFlags.Static | BindingFlags.NonPublic);
+        var prefixMethod = typeof(ColdObjectStorageFactory).GetMethod("CombineAzurePrefix", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(scopeMethod);
+        Assert.NotNull(prefixMethod);
+        var scope = Assert.IsType<string>(scopeMethod!.Invoke(null, [options, format]));
+        Assert.Equal(
+            $"MultiProjectionColdStorage/{expectedScope}",
+            Assert.IsType<string>(prefixMethod!.Invoke(null, [options.AzurePrefix, scope])));
     }
 
     private sealed class NullServiceProvider : IServiceProvider
