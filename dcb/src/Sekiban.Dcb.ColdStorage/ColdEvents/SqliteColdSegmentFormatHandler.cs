@@ -98,7 +98,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
         finally
         {
-            DeleteFileIfExists(tempPath);
+            DeleteTempFileIfExists(tempPath);
         }
     }
 
@@ -123,25 +123,24 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
         return memory.ToArray();
     }
 
-    private static bool DeleteFileIfExists(string path)
+    private static void DeleteTempFileIfExists(string filePath)
     {
+        if (!File.Exists(filePath))
+        {
+            return;
+        }
+
         try
         {
-            if (!File.Exists(path))
-            {
-                return false;
-            }
-
-            File.Delete(path);
-            return true;
+            File.Delete(filePath);
         }
         catch (IOException)
         {
-            return false;
+            // Temp SQLite cleanup is best-effort; ignore files that are already gone or still locked.
         }
         catch (UnauthorizedAccessException)
         {
-            return false;
+            // Temp SQLite cleanup is best-effort; ignore files that are still owned by another handle.
         }
     }
 
@@ -262,7 +261,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
                 await CloseOpenHandlesAsync(commit: false, CancellationToken.None);
             }
 
-            DeleteFileIfExists(_filePath);
+            DeleteTempFileIfExists(_filePath);
         }
 
         private async Task CloseOpenHandlesAsync(bool commit, CancellationToken ct)
