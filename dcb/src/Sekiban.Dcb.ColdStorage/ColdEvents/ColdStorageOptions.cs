@@ -17,13 +17,13 @@ public sealed record ColdStorageOptions
     // Relative paths are resolved against the application's current directory.
     public string BasePath { get; init; } = ColdObjectStorageFactory.DefaultBasePath;
 
-    public string JsonlDirectory { get; init; } = "jsonl";
+    public string JsonlDirectory { get; init; } = "JSONL";
 
     // For segmented sqlite storage, this becomes the artifact scope directory/prefix.
-    public string SqliteFile { get; init; } = "cold-events.sqlite";
+    public string SqliteFile { get; init; } = "SQLite";
 
     // For segmented duckdb storage, this becomes the artifact scope directory/prefix.
-    public string DuckDbFile { get; init; } = "cold-events.duckdb";
+    public string DuckDbFile { get; init; } = "DuckDB";
 
     public string AzureBlobClientName { get; init; } = "MultiProjectionOffload";
 

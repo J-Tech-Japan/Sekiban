@@ -84,6 +84,26 @@ public sealed class ColdObjectStorageFactoryTests
         }
     }
 
+    [Theory]
+    [InlineData("jsonl", "JSONL")]
+    [InlineData("sqlite", "SQLite")]
+    [InlineData("duckdb", "DuckDB")]
+    public void Azure_blob_storage_should_scope_prefix_by_format(
+        string format,
+        string expectedScope)
+    {
+        var options = new ColdStorageOptions
+        {
+            Format = format,
+            AzurePrefix = "MultiProjectionColdStorage"
+        };
+
+        var scope = ColdObjectStorageFactory.GetStorageScope(options, format);
+        Assert.Equal(
+            $"MultiProjectionColdStorage/{expectedScope}",
+            ColdObjectStorageFactory.CombineAzurePrefix(options.AzurePrefix, scope));
+    }
+
     private sealed class NullServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;

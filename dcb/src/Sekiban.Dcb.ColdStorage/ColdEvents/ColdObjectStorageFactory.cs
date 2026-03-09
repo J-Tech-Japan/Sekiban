@@ -50,26 +50,35 @@ public static class ColdObjectStorageFactory
         return (provider, format) switch
         {
             (ProviderLocal, FormatSqlite) => new JsonlColdObjectStorage(
-                GetScopedLocalStoragePath(storageRoot, options.SqliteFile, FormatSqlite)),
+                GetScopedLocalStoragePath(storageRoot, GetStorageScope(options, FormatSqlite), FormatSqlite)),
             (ProviderLocal, FormatDuckDb) => new JsonlColdObjectStorage(
-                GetScopedLocalStoragePath(storageRoot, options.DuckDbFile, FormatDuckDb)),
-            (ProviderLocal, DefaultFormat) => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
+                GetScopedLocalStoragePath(storageRoot, GetStorageScope(options, FormatDuckDb), FormatDuckDb)),
+            (ProviderLocal, DefaultFormat) => new JsonlColdObjectStorage(
+                GetScopedLocalStoragePath(storageRoot, GetStorageScope(options, DefaultFormat), DefaultFormat)),
             (ProviderAzureBlob, DefaultFormat) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                options.AzurePrefix),
+                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, DefaultFormat))),
             (ProviderAzureBlob, FormatSqlite) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                CombineAzurePrefix(options.AzurePrefix, options.SqliteFile)),
+                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, FormatSqlite))),
             (ProviderAzureBlob, FormatDuckDb) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                CombineAzurePrefix(options.AzurePrefix, options.DuckDbFile)),
+                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, FormatDuckDb))),
             _ => throw new InvalidOperationException(
                 $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };
     }
+
+    internal static string GetStorageScope(ColdStorageOptions options, string format)
+        => format switch
+        {
+            FormatSqlite => options.SqliteFile,
+            FormatDuckDb => options.DuckDbFile,
+            _ => options.JsonlDirectory
+        };
 
     private static string GetScopedLocalStoragePath(string storageRoot, string configuredScope, string format)
     {
@@ -85,7 +94,7 @@ public static class ColdObjectStorageFactory
             "Move or remove the legacy database file before starting with the segmented storage layout.");
     }
 
-    private static string? CombineAzurePrefix(string? prefix, string scope)
+    internal static string? CombineAzurePrefix(string? prefix, string scope)
     {
         var normalizedPrefix = NormalizePathSegment(prefix);
         var normalizedScope = NormalizePathSegment(scope);
