@@ -50,9 +50,9 @@ public static class ColdObjectStorageFactory
         return (provider, format) switch
         {
             (ProviderLocal, FormatSqlite) => new JsonlColdObjectStorage(
-                Path.Combine(storageRoot, options.SqliteFile)),
+                GetScopedLocalStoragePath(storageRoot, options.SqliteFile, FormatSqlite)),
             (ProviderLocal, FormatDuckDb) => new JsonlColdObjectStorage(
-                Path.Combine(storageRoot, options.DuckDbFile)),
+                GetScopedLocalStoragePath(storageRoot, options.DuckDbFile, FormatDuckDb)),
             (ProviderLocal, DefaultFormat) => new JsonlColdObjectStorage(Path.Combine(storageRoot, options.JsonlDirectory)),
             (ProviderAzureBlob, DefaultFormat) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
@@ -69,6 +69,20 @@ public static class ColdObjectStorageFactory
             _ => throw new InvalidOperationException(
                 $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };
+    }
+
+    private static string GetScopedLocalStoragePath(string storageRoot, string configuredScope, string format)
+    {
+        var scopedPath = Path.Combine(storageRoot, configuredScope);
+        if (!File.Exists(scopedPath))
+        {
+            return scopedPath;
+        }
+
+        throw new InvalidOperationException(
+            $"Cold storage format '{format}' now stores segmented artifacts under a directory scope. " +
+            $"Found an existing file at '{scopedPath}' for configured scope '{configuredScope}'. " +
+            "Move or remove the legacy database file before starting with the segmented storage layout.");
     }
 
     private static string? CombineAzurePrefix(string? prefix, string scope)

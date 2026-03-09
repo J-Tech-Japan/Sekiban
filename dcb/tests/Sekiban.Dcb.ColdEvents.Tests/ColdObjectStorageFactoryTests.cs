@@ -46,6 +46,44 @@ public sealed class ColdObjectStorageFactoryTests
         }
     }
 
+    [Theory]
+    [InlineData("sqlite", "legacy-sqlite.db")]
+    [InlineData("duckdb", "legacy-duckdb.db")]
+    public void Create_should_fail_with_guidance_when_legacy_database_file_blocks_scoped_storage(
+        string format,
+        string fileName)
+    {
+        var storageRoot = Path.Combine(Path.GetTempPath(), $"sekiban-cold-storage-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(storageRoot);
+        var legacyFile = Path.Combine(storageRoot, fileName);
+        File.WriteAllBytes(legacyFile, [1, 2, 3]);
+
+        try
+        {
+            var options = new ColdStorageOptions
+            {
+                Format = format,
+                SqliteFile = format == "sqlite" ? fileName : "cold-events.sqlite",
+                DuckDbFile = format == "duckdb" ? fileName : "cold-events.duckdb"
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => ColdObjectStorageFactory.Create(
+                options,
+                storageRoot,
+                new NullServiceProvider()));
+
+            Assert.Contains("directory scope", ex.Message);
+            Assert.Contains(legacyFile, ex.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(storageRoot))
+            {
+                Directory.Delete(storageRoot, recursive: true);
+            }
+        }
+    }
+
     private sealed class NullServiceProvider : IServiceProvider
     {
         public object? GetService(Type serviceType) => null;

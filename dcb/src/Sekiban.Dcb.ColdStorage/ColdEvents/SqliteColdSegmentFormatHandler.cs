@@ -75,7 +75,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
             {
                 var sortableUniqueId = reader.GetString(0);
                 await using var compressedStream = reader.GetStream(1);
-                var eventJson = DecompressJson(await ReadAllBytesAsync(compressedStream, ct));
+                var eventJson = await DecompressJsonAsync(compressedStream, ct);
                 var evt = JsonSerializer.Deserialize<SerializableEvent>(eventJson, JsonOptions);
                 if (evt is null)
                 {
@@ -102,25 +102,16 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
     }
 
-    private static string DecompressJson(byte[] compressedJson)
+    private static async Task<string> DecompressJsonAsync(Stream compressedJson, CancellationToken ct)
     {
-        using var input = new MemoryStream(compressedJson);
-        using var gzip = new GZipStream(input, CompressionMode.Decompress);
-        using var output = new MemoryStream();
-        gzip.CopyTo(output);
-        return Encoding.UTF8.GetString(output.ToArray());
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
-    {
-        if (stream.CanSeek)
+        if (compressedJson.CanSeek)
         {
-            stream.Position = 0;
+            compressedJson.Position = 0;
         }
 
-        using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory, ct);
-        return memory.ToArray();
+        await using var gzip = new GZipStream(compressedJson, CompressionMode.Decompress, leaveOpen: true);
+        using var reader = new StreamReader(gzip, Encoding.UTF8, detectEncodingFromByteOrderMarks: false);
+        return await reader.ReadToEndAsync(ct);
     }
 
     private static void DeleteTempFileIfExists(string filePath)
