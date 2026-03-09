@@ -92,16 +92,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-            catch
-            {
-            }
+            DeleteTempFileIfExists(tempPath);
         }
     }
 
@@ -153,12 +144,33 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         return Encoding.UTF8.GetString(output.ToArray());
     }
 
+    private static void DeleteTempFileIfExists(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(filePath);
+        }
+        catch (IOException)
+        {
+            // Temp DuckDB cleanup is best-effort; ignore files that are already gone or still locked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Temp DuckDB cleanup is best-effort; ignore files that are still owned by another handle.
+        }
+    }
+
     private sealed class DuckDbColdSegmentFileBuilder : IColdSegmentFileBuilder
     {
         private readonly DuckDbColdSegmentFormatHandler _owner;
         private readonly string _filePath;
-        private readonly DuckDBConnection _connection;
-        private readonly DuckDBAppender _appender;
+        private DuckDBConnection? _connection;
+        private DuckDBAppender? _appender;
         private long _payloadBytes;
         private bool _completed;
 
@@ -209,11 +221,12 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             => EventCount < options.SegmentMaxEvents
                && _payloadBytes + evt.Payload.Length <= options.SegmentMaxBytes;
 
-        public async Task AppendAsync(SerializableEvent evt, CancellationToken ct)
+        public Task AppendAsync(SerializableEvent evt, CancellationToken ct)
         {
+            var appender = _appender ?? throw new ObjectDisposedException(nameof(DuckDbColdSegmentFileBuilder));
             var eventJson = JsonSerializer.Serialize(evt, JsonOptions);
             var compressedJson = DuckDbColdSegmentFormatHandler.CompressJson(eventJson);
-            _appender
+            appender
                 .CreateRow()
                 .AppendValue(evt.SortableUniqueIdValue)
                 .AppendValue(compressedJson)
@@ -224,6 +237,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             _payloadBytes += evt.Payload.Length;
             FromSortableUniqueId ??= evt.SortableUniqueIdValue;
             ToSortableUniqueId = evt.SortableUniqueIdValue;
+            return Task.CompletedTask;
         }
 
         public async Task<ColdSegmentArtifact> CompleteAsync(string serviceId, CancellationToken ct)
@@ -233,10 +247,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                 throw new InvalidOperationException("Segment builder is already completed.");
             }
 
+            await ReleaseHandlesAsync(closeAppender: true);
             _completed = true;
-            _appender.Close();
-            await _connection.CloseAsync();
-            await _connection.DisposeAsync();
 
             var sizeBytes = new FileInfo(_filePath).Length;
             var sha256 = await ComputeSha256Async(_filePath, ct);
@@ -254,23 +266,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
 
         public async ValueTask DisposeAsync()
         {
-            if (!_completed)
-            {
-                _appender.Dispose();
-                await _connection.CloseAsync();
-                await _connection.DisposeAsync();
-            }
-
-            try
-            {
-                if (File.Exists(_filePath))
-                {
-                    File.Delete(_filePath);
-                }
-            }
-            catch
-            {
-            }
+            await ReleaseHandlesAsync(closeAppender: !_completed);
+            DeleteTempFileIfExists(_filePath);
         }
 
         private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct)
@@ -284,6 +281,65 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             var hash = await SHA256.HashDataAsync(stream, ct);
             return Convert.ToHexStringLower(hash);
+        }
+
+        private async Task ReleaseHandlesAsync(bool closeAppender)
+        {
+            Exception? cleanupException = null;
+
+            var appender = _appender;
+            _appender = null;
+            if (appender is not null)
+            {
+                if (closeAppender)
+                {
+                    try
+                    {
+                        appender.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        cleanupException ??= ex;
+                    }
+                }
+
+                try
+                {
+                    appender.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+            }
+
+            var connection = _connection;
+            _connection = null;
+            if (connection is not null)
+            {
+                try
+                {
+                    await connection.CloseAsync();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+
+                try
+                {
+                    await connection.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+            }
+
+            if (cleanupException is not null)
+            {
+                throw cleanupException;
+            }
         }
     }
 }
