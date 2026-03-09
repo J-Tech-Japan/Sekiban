@@ -44,4 +44,10 @@
         <ProjectReference Include="..\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.ColdEvents.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
 </Project>

@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 
 namespace Sekiban.Dcb.ColdEvents.Tests;
@@ -99,15 +98,10 @@ public sealed class ColdObjectStorageFactoryTests
             AzurePrefix = "MultiProjectionColdStorage"
         };
 
-        var scopeMethod = typeof(ColdObjectStorageFactory).GetMethod("GetStorageScope", BindingFlags.Static | BindingFlags.NonPublic);
-        var prefixMethod = typeof(ColdObjectStorageFactory).GetMethod("CombineAzurePrefix", BindingFlags.Static | BindingFlags.NonPublic);
-
-        Assert.NotNull(scopeMethod);
-        Assert.NotNull(prefixMethod);
-        var scope = Assert.IsType<string>(scopeMethod!.Invoke(null, [options, format]));
+        var scope = ColdObjectStorageFactory.GetStorageScope(options, format);
         Assert.Equal(
             $"MultiProjectionColdStorage/{expectedScope}",
-            Assert.IsType<string>(prefixMethod!.Invoke(null, [options.AzurePrefix, scope])));
+            ColdObjectStorageFactory.CombineAzurePrefix(options.AzurePrefix, scope));
     }
 
     private sealed class NullServiceProvider : IServiceProvider

@@ -72,7 +72,7 @@ public static class ColdObjectStorageFactory
         };
     }
 
-    private static string GetStorageScope(ColdStorageOptions options, string format)
+    internal static string GetStorageScope(ColdStorageOptions options, string format)
         => format switch
         {
             FormatSqlite => options.SqliteFile,
@@ -94,7 +94,7 @@ public static class ColdObjectStorageFactory
             "Move or remove the legacy database file before starting with the segmented storage layout.");
     }
 
-    private static string? CombineAzurePrefix(string? prefix, string scope)
+    internal static string? CombineAzurePrefix(string? prefix, string scope)
     {
         var normalizedPrefix = NormalizePathSegment(prefix);
         var normalizedScope = NormalizePathSegment(scope);
