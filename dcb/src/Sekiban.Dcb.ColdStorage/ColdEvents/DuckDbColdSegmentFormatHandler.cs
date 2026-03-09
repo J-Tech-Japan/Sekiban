@@ -92,16 +92,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-            catch
-            {
-            }
+            DeleteTempFileIfExists(tempPath);
         }
     }
 
@@ -153,22 +144,46 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
         return Encoding.UTF8.GetString(output.ToArray());
     }
 
+    private static void DeleteTempFileIfExists(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(filePath);
+        }
+        catch (IOException)
+        {
+            // Temp DuckDB cleanup is best-effort; ignore files that are already gone or still locked.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Temp DuckDB cleanup is best-effort; ignore files that are still owned by another handle.
+        }
+    }
+
     private sealed class DuckDbColdSegmentFileBuilder : IColdSegmentFileBuilder
     {
         private readonly DuckDbColdSegmentFormatHandler _owner;
         private readonly string _filePath;
-        private readonly DuckDBConnection _connection;
+        private DuckDBConnection? _connection;
+        private DuckDBAppender? _appender;
         private long _payloadBytes;
         private bool _completed;
 
         private DuckDbColdSegmentFileBuilder(
             DuckDbColdSegmentFormatHandler owner,
             string filePath,
-            DuckDBConnection connection)
+            DuckDBConnection connection,
+            DuckDBAppender appender)
         {
             _owner = owner;
             _filePath = filePath;
             _connection = connection;
+            _appender = appender;
         }
 
         public int EventCount { get; private set; }
@@ -187,6 +202,7 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             {
                 command.CommandText =
                     """
+                    PRAGMA preserve_insertion_order=false;
                     CREATE TABLE cold_events (
                         sortable_unique_id VARCHAR PRIMARY KEY,
                         event_json_gzip BLOB NOT NULL
@@ -195,7 +211,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                 await command.ExecuteNonQueryAsync(ct);
             }
 
-            var builder = new DuckDbColdSegmentFileBuilder(owner, filePath, connection);
+            var appender = connection.CreateAppender("cold_events");
+            var builder = new DuckDbColdSegmentFileBuilder(owner, filePath, connection, appender);
             await builder.AppendAsync(firstEvent, ct);
             return builder;
         }
@@ -204,24 +221,23 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
             => EventCount < options.SegmentMaxEvents
                && _payloadBytes + evt.Payload.Length <= options.SegmentMaxBytes;
 
-        public async Task AppendAsync(SerializableEvent evt, CancellationToken ct)
+        public Task AppendAsync(SerializableEvent evt, CancellationToken ct)
         {
+            var appender = _appender ?? throw new ObjectDisposedException(nameof(DuckDbColdSegmentFileBuilder));
             var eventJson = JsonSerializer.Serialize(evt, JsonOptions);
             var compressedJson = DuckDbColdSegmentFormatHandler.CompressJson(eventJson);
-            await using var command = _connection.CreateCommand();
-            command.CommandText =
-                """
-                INSERT INTO cold_events(sortable_unique_id, event_json_gzip)
-                VALUES (?, ?);
-                """;
-            command.Parameters.Add(new DuckDBParameter { Value = evt.SortableUniqueIdValue });
-            command.Parameters.Add(new DuckDBParameter { Value = compressedJson });
-            await command.ExecuteNonQueryAsync(ct);
+            appender
+                .CreateRow()
+                .AppendValue(evt.SortableUniqueIdValue)
+                .AppendValue(compressedJson)
+                .EndRow();
+            ct.ThrowIfCancellationRequested();
 
             EventCount++;
             _payloadBytes += evt.Payload.Length;
             FromSortableUniqueId ??= evt.SortableUniqueIdValue;
             ToSortableUniqueId = evt.SortableUniqueIdValue;
+            return Task.CompletedTask;
         }
 
         public async Task<ColdSegmentArtifact> CompleteAsync(string serviceId, CancellationToken ct)
@@ -231,9 +247,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                 throw new InvalidOperationException("Segment builder is already completed.");
             }
 
+            await ReleaseHandlesAsync(closeAppender: true);
             _completed = true;
-            await _connection.CloseAsync();
-            await _connection.DisposeAsync();
 
             var sizeBytes = new FileInfo(_filePath).Length;
             var sha256 = await ComputeSha256Async(_filePath, ct);
@@ -251,22 +266,8 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
 
         public async ValueTask DisposeAsync()
         {
-            if (!_completed)
-            {
-                await _connection.CloseAsync();
-                await _connection.DisposeAsync();
-            }
-
-            try
-            {
-                if (File.Exists(_filePath))
-                {
-                    File.Delete(_filePath);
-                }
-            }
-            catch
-            {
-            }
+            await ReleaseHandlesAsync(closeAppender: !_completed);
+            DeleteTempFileIfExists(_filePath);
         }
 
         private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct)
@@ -280,6 +281,65 @@ public sealed class DuckDbColdSegmentFormatHandler : IColdSegmentFormatHandler
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             var hash = await SHA256.HashDataAsync(stream, ct);
             return Convert.ToHexStringLower(hash);
+        }
+
+        private async Task ReleaseHandlesAsync(bool closeAppender)
+        {
+            Exception? cleanupException = null;
+
+            var appender = _appender;
+            _appender = null;
+            if (appender is not null)
+            {
+                if (closeAppender)
+                {
+                    try
+                    {
+                        appender.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        cleanupException ??= ex;
+                    }
+                }
+
+                try
+                {
+                    appender.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+            }
+
+            var connection = _connection;
+            _connection = null;
+            if (connection is not null)
+            {
+                try
+                {
+                    await connection.CloseAsync();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+
+                try
+                {
+                    await connection.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    cleanupException ??= ex;
+                }
+            }
+
+            if (cleanupException is not null)
+            {
+                throw cleanupException;
+            }
         }
     }
 }
