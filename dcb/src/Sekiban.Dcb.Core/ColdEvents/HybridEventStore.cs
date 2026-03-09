@@ -626,68 +626,86 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     {
         foreach (var segment in manifest.Segments.OrderBy(s => s.FromSortableUniqueId, StringComparer.Ordinal))
         {
-            if (since is not null
-                && string.Compare(segment.ToSortableUniqueId, since.Value, StringComparison.Ordinal) <= 0)
+            if (ShouldSkipColdSegment(segment, since))
             {
                 continue;
             }
 
-            var remainingCount = maxCount.HasValue
-                ? Math.Max(maxCount.Value - destination.Count, 0)
-                : (int?)null;
+            var remainingCount = GetRemainingColdReadCount(maxCount, destination.Count);
             if (remainingCount == 0)
             {
                 return ResultBox.FromValue(
                     new ColdReadResult(destination.Count, ReachedColdSegmentBoundary: false));
             }
 
-            var streamResult = await _coldStorage.OpenReadAsync(segment.Path, CancellationToken.None);
-            if (!streamResult.IsSuccess)
+            var appendResult = await TryAppendColdSegmentAsync(segment, since, remainingCount, destination);
+            if (!appendResult.IsSuccess)
             {
-                _logger.LogWarning("Failed to read cold segment {Path}", segment.Path);
-                return ResultBox.Error<ColdReadResult>(streamResult.GetException());
+                return ResultBox.Error<ColdReadResult>(appendResult.GetException());
             }
 
-            await using var stream = streamResult.GetValue();
-            var parseResult = await _segmentFormatHandler.StreamSegmentAsync(
-                stream,
-                since,
-                remainingCount,
-                evt =>
-                {
-                    destination.Add(evt);
-                    return ValueTask.CompletedTask;
-                },
-                CancellationToken.None);
-            if (!parseResult.IsSuccess)
-            {
-                _logger.LogWarning(
-                    parseResult.GetException(),
-                    "Failed to parse cold segment {Path}",
-                    segment.Path);
-                return ResultBox.Error<ColdReadResult>(parseResult.GetException());
-            }
-
-            var appendResult = parseResult.GetValue();
-            if (appendResult.EventsRead == 0)
+            var coldSegmentResult = appendResult.GetValue();
+            if (coldSegmentResult.EventsRead == 0)
             {
                 continue;
             }
 
-            if (maxCount.HasValue && destination.Count >= maxCount.Value)
+            if (ShouldStopReadingColdSegments(maxCount, destination.Count, alignToSegmentBoundary))
             {
                 return ResultBox.FromValue(
-                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfSegment));
-            }
-
-            if (alignToSegmentBoundary)
-            {
-                return ResultBox.FromValue(
-                    new ColdReadResult(destination.Count, appendResult.ReachedEndOfSegment));
+                    new ColdReadResult(destination.Count, coldSegmentResult.ReachedEndOfSegment));
             }
         }
 
         return ResultBox.FromValue(new ColdReadResult(destination.Count, ReachedColdSegmentBoundary: false));
+    }
+
+    private static bool ShouldSkipColdSegment(ColdSegmentInfo segment, SortableUniqueId? since)
+        => since is not null
+           && string.Compare(segment.ToSortableUniqueId, since.Value, StringComparison.Ordinal) <= 0;
+
+    private static int? GetRemainingColdReadCount(int? maxCount, int currentCount)
+        => maxCount.HasValue
+            ? Math.Max(maxCount.Value - currentCount, 0)
+            : null;
+
+    private static bool ShouldStopReadingColdSegments(int? maxCount, int currentCount, bool alignToSegmentBoundary)
+        => alignToSegmentBoundary || (maxCount.HasValue && currentCount >= maxCount.Value);
+
+    private async Task<ResultBox<ColdSegmentStreamResult>> TryAppendColdSegmentAsync(
+        ColdSegmentInfo segment,
+        SortableUniqueId? since,
+        int? remainingCount,
+        List<SerializableEvent> destination)
+    {
+        var streamResult = await _coldStorage.OpenReadAsync(segment.Path, CancellationToken.None);
+        if (!streamResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to read cold segment {Path}", segment.Path);
+            return ResultBox.Error<ColdSegmentStreamResult>(streamResult.GetException());
+        }
+
+        await using var stream = streamResult.GetValue();
+        var parseResult = await _segmentFormatHandler.StreamSegmentAsync(
+            stream,
+            since,
+            remainingCount,
+            evt =>
+            {
+                destination.Add(evt);
+                return ValueTask.CompletedTask;
+            },
+            CancellationToken.None);
+        if (!parseResult.IsSuccess)
+        {
+            _logger.LogWarning(
+                parseResult.GetException(),
+                "Failed to parse cold segment {Path}",
+                segment.Path);
+            return ResultBox.Error<ColdSegmentStreamResult>(parseResult.GetException());
+        }
+
+        return ResultBox.FromValue(parseResult.GetValue());
     }
 
     private sealed record ColdReadResult(

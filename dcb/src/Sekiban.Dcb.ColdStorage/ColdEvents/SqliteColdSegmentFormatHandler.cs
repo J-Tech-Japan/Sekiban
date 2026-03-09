@@ -98,29 +98,8 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
-            catch
-            {
-            }
+            DeleteFileIfExists(tempPath);
         }
-    }
-
-    private static byte[] CompressJson(string eventJson)
-    {
-        var utf8 = Encoding.UTF8.GetBytes(eventJson);
-        using var output = new MemoryStream();
-        using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
-        {
-            gzip.Write(utf8, 0, utf8.Length);
-        }
-
-        return output.ToArray();
     }
 
     private static string DecompressJson(byte[] compressedJson)
@@ -142,6 +121,28 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, ct);
         return memory.ToArray();
+    }
+
+    private static bool DeleteFileIfExists(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private sealed class SqliteColdSegmentFileBuilder : IColdSegmentFileBuilder
@@ -261,16 +262,7 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
                 await CloseOpenHandlesAsync(commit: false, CancellationToken.None);
             }
 
-            try
-            {
-                if (File.Exists(_filePath))
-                {
-                    File.Delete(_filePath);
-                }
-            }
-            catch
-            {
-            }
+            DeleteFileIfExists(_filePath);
         }
 
         private async Task CloseOpenHandlesAsync(bool commit, CancellationToken ct)
@@ -300,6 +292,18 @@ public sealed class SqliteColdSegmentFormatHandler : IColdSegmentFormatHandler
             using var sha = SHA256.Create();
             var hash = await sha.ComputeHashAsync(stream, ct);
             return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
+        private static byte[] CompressJson(string eventJson)
+        {
+            var utf8 = Encoding.UTF8.GetBytes(eventJson);
+            using var output = new MemoryStream();
+            using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+            {
+                gzip.Write(utf8, 0, utf8.Length);
+            }
+
+            return output.ToArray();
         }
     }
 }
