@@ -94,6 +94,19 @@ public class DualStateProjectionWrapperCompactionTests
         Assert.Equal(versionBeforeDuplicate, ((IDualStateAccessor)wrapper).UnsafeVersion);
     }
 
+    [Fact]
+    public void CompactSafeHistory_ShouldNotThrow_WhenSafeAndBufferedHistoryAreEmpty()
+    {
+        var wrapper = CreateWrapper();
+
+        var exception = Record.Exception(() => ((IDualStateAccessor)wrapper).CompactSafeHistory());
+
+        Assert.Null(exception);
+        Assert.Equal(0, GetPrivateCount(wrapper, "_allSafeEvents"));
+        Assert.Equal(0, GetPrivateCount(wrapper, "_bufferedEvents"));
+        Assert.Equal(0, GetPrivateCount(wrapper, "_processedEventIds"));
+    }
+
     private DualStateProjectionWrapper<CountingProjector> CreateWrapper() =>
         new(
             CountingProjector.GenerateInitialPayload(),
