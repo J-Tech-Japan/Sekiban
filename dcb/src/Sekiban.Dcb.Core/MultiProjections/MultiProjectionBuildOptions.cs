@@ -6,6 +6,7 @@ namespace Sekiban.Dcb.MultiProjections;
 public sealed record MultiProjectionBuildOptions
 {
     public int MinEventThreshold { get; init; } = 3000;
+    public int BatchSize { get; init; } = 3000;
     public int SafeWindowMs { get; init; } = 20000;
     public int OffloadThresholdBytes { get; init; } = 1_000_000;
     public bool Force { get; init; }
