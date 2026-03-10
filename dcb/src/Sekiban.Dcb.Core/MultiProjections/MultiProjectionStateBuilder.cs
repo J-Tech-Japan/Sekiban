@@ -335,7 +335,7 @@ public class MultiProjectionStateBuilder
     {
         long processed = 0;
         var since = startPosition != null ? new SortableUniqueId(startPosition) : (SortableUniqueId?)null;
-        const int batchSize = 3000;
+        int batchSize = Math.Max(1, options.BatchSize);
 
         while (true)
         {
