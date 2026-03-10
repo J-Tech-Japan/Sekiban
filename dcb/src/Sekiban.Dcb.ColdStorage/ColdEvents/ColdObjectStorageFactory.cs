@@ -94,7 +94,6 @@ public static class ColdObjectStorageFactory
 
         return CombineAzurePrefix(options.AzurePrefix, scope);
     }
-
     private static string GetScopedLocalStoragePath(string storageRoot, string configuredScope, string format)
     {
         var scopedPath = Path.Combine(storageRoot, configuredScope);
