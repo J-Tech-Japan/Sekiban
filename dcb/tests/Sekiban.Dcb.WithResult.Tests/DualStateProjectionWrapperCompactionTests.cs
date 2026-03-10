@@ -107,6 +107,27 @@ public class DualStateProjectionWrapperCompactionTests
         Assert.Equal(0, GetPrivateCount(wrapper, "_processedEventIds"));
     }
 
+    [Fact]
+    public void CompactSafeHistory_ShouldTrimSafeHistoryCapacity_WhenSafeHistoryHadEntries()
+    {
+        var wrapper = CreateWrapper();
+        var futureThreshold = SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(5), Guid.Empty);
+        var now = DateTime.UtcNow;
+
+        for (var i = 0; i < 32; i++)
+        {
+            wrapper.ProcessEvent(CreateEvent(new CountedEvent(1), now.AddSeconds(i)), futureThreshold, _domainTypes);
+        }
+
+        var capacityBefore = GetPrivateCapacity(wrapper, "_allSafeEvents");
+        Assert.True(capacityBefore > 0);
+
+        ((IDualStateAccessor)wrapper).CompactSafeHistory();
+
+        Assert.Equal(0, GetPrivateCount(wrapper, "_allSafeEvents"));
+        Assert.True(GetPrivateCapacity(wrapper, "_allSafeEvents") < capacityBefore);
+    }
+
     private DualStateProjectionWrapper<CountingProjector> CreateWrapper() =>
         new(
             CountingProjector.GenerateInitialPayload(),
@@ -138,6 +159,20 @@ public class DualStateProjectionWrapperCompactionTests
         Assert.NotNull(countProperty);
 
         return (int)countProperty!.GetValue(value)!;
+    }
+
+    private static int GetPrivateCapacity(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+
+        var value = field!.GetValue(target);
+        Assert.NotNull(value);
+
+        var entriesField = value!.GetType().GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(entriesField);
+
+        return (entriesField!.GetValue(value) as Array)?.Length ?? 0;
     }
 
     public record CountedEvent(int Amount) : IEventPayload;

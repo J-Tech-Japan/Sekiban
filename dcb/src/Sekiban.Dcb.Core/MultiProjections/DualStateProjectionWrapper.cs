@@ -190,8 +190,9 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
     void IDualStateAccessor.CompactSafeHistory()
     {
+        var hadSafeEvents = _allSafeEvents.Count > 0;
         _allSafeEvents.Clear();
-        if (_allSafeEvents.Count > 0)
+        if (hadSafeEvents)
         {
             _allSafeEvents.TrimExcess();
         }
