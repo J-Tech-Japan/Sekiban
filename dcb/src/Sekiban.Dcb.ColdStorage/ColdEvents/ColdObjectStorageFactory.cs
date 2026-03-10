@@ -58,15 +58,15 @@ public static class ColdObjectStorageFactory
             (ProviderAzureBlob, DefaultFormat) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, DefaultFormat))),
+                GetAzureStoragePrefix(options, DefaultFormat)),
             (ProviderAzureBlob, FormatSqlite) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, FormatSqlite))),
+                GetAzureStoragePrefix(options, FormatSqlite)),
             (ProviderAzureBlob, FormatDuckDb) => new AzureBlobColdObjectStorage(
                 services.GetRequiredKeyedService<BlobServiceClient>(options.AzureBlobClientName),
                 options.AzureContainerName,
-                CombineAzurePrefix(options.AzurePrefix, GetStorageScope(options, FormatDuckDb))),
+                GetAzureStoragePrefix(options, FormatDuckDb)),
             _ => throw new InvalidOperationException(
                 $"Unsupported cold storage provider/format: provider={provider}, format={format}, type={options.Type}")
         };
@@ -79,6 +79,21 @@ public static class ColdObjectStorageFactory
             FormatDuckDb => options.DuckDbFile,
             _ => options.JsonlDirectory
         };
+
+    internal static string? GetAzureStoragePrefix(ColdStorageOptions options, string format)
+    {
+        var scope = GetStorageScope(options, format);
+        if (format == DefaultFormat && HasLegacyJsonlScope(scope))
+        {
+            return NormalizePathSegment(options.AzurePrefix) switch
+            {
+                "" => null,
+                var prefix => prefix
+            };
+        }
+
+        return CombineAzurePrefix(options.AzurePrefix, scope);
+    }
 
     private static string GetScopedLocalStoragePath(string storageRoot, string configuredScope, string format)
     {
@@ -112,6 +127,12 @@ public static class ColdObjectStorageFactory
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
             : value.Replace('\\', '/').Trim('/');
+
+    private static bool HasLegacyJsonlScope(string scope)
+        => string.Equals(
+            NormalizePathSegment(scope),
+            NormalizePathSegment(new ColdStorageOptions().JsonlDirectory),
+            StringComparison.Ordinal);
 
     private static (string Provider, string Format) ResolveProviderAndFormat(ColdStorageOptions options)
     {

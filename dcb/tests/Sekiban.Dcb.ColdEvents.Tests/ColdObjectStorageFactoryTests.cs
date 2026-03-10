@@ -84,13 +84,41 @@ public sealed class ColdObjectStorageFactoryTests
         }
     }
 
+    [Fact]
+    public void Azure_blob_storage_should_preserve_legacy_jsonl_prefix_by_default()
+    {
+        var options = new ColdStorageOptions
+        {
+            Format = "jsonl",
+            AzurePrefix = "MultiProjectionColdStorage"
+        };
+
+        Assert.Equal(
+            "MultiProjectionColdStorage",
+            ColdObjectStorageFactory.GetAzureStoragePrefix(options, "jsonl"));
+    }
+
+    [Fact]
+    public void Azure_blob_storage_should_scope_custom_jsonl_prefix()
+    {
+        var options = new ColdStorageOptions
+        {
+            Format = "jsonl",
+            AzurePrefix = "MultiProjectionColdStorage",
+            JsonlDirectory = "JSONL"
+        };
+
+        Assert.Equal(
+            "MultiProjectionColdStorage/JSONL",
+            ColdObjectStorageFactory.GetAzureStoragePrefix(options, "jsonl"));
+    }
+
     [Theory]
-    [InlineData("jsonl", "JSONL")]
-    [InlineData("sqlite", "SQLite")]
-    [InlineData("duckdb", "DuckDB")]
-    public void Azure_blob_storage_should_scope_prefix_by_format(
+    [InlineData("sqlite", "cold-events.sqlite")]
+    [InlineData("duckdb", "cold-events.duckdb")]
+    public void Azure_blob_storage_should_scope_segment_formats_using_configured_scope(
         string format,
-        string expectedScope)
+        string scope)
     {
         var options = new ColdStorageOptions
         {
@@ -98,10 +126,9 @@ public sealed class ColdObjectStorageFactoryTests
             AzurePrefix = "MultiProjectionColdStorage"
         };
 
-        var scope = ColdObjectStorageFactory.GetStorageScope(options, format);
         Assert.Equal(
-            $"MultiProjectionColdStorage/{expectedScope}",
-            ColdObjectStorageFactory.CombineAzurePrefix(options.AzurePrefix, scope));
+            $"MultiProjectionColdStorage/{scope}",
+            ColdObjectStorageFactory.GetAzureStoragePrefix(options, format));
     }
 
     private sealed class NullServiceProvider : IServiceProvider
