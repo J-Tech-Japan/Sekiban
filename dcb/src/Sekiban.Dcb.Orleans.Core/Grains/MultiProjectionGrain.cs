@@ -452,8 +452,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         DateTime? safeThresholdTime = null;
         try
         {
-            safeThresholdValue = _host!.PeekCurrentSafeWindowThreshold();
-            var safeThresholdId = new SortableUniqueId(safeThresholdValue);
+            var candidateSafeThreshold = _host!.PeekCurrentSafeWindowThreshold();
+            var safeThresholdId = new SortableUniqueId(candidateSafeThreshold);
+            safeThresholdValue = candidateSafeThreshold;
             safeThresholdTime = safeThresholdId.GetDateTime();
         }
         catch
@@ -495,7 +496,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return _state.State.LastGoodSafeVersion > 0 && safeVersion.Value == _state.State.LastGoodSafeVersion;
         }
 
-        return _state.State.LastGoodSafeVersion <= 0;
+        return true;
     }
 
     private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)

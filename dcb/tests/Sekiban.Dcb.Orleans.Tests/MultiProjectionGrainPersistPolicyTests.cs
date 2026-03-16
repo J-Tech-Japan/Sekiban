@@ -108,6 +108,27 @@ public class MultiProjectionGrainPersistPolicyTests
     }
 
     [Fact]
+    public void ShouldSkipPersistForUnchangedSafeCheckpoint_ShouldReturnTrue_WhenSafeVersionIsUnavailableButCheckpointMatches()
+    {
+        var grain = CreateGrain(
+            new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = true },
+            new MultiProjectionGrainState
+            {
+                ProjectorVersion = "v1",
+                LastSortableUniqueId = "safe-001",
+                LastGoodSafeVersion = 10
+            });
+
+        var result = Assert.IsType<bool>(
+            InvokePrivate(
+                grain,
+                "ShouldSkipPersistForUnchangedSafeCheckpoint",
+                ["v1", "safe-001", null]));
+
+        Assert.True(result);
+    }
+
+    [Fact]
     public void ShouldSkipPersistForUnchangedSafeCheckpoint_ShouldReturnFalse_WhenSkipDisabledOrCheckpointChanged()
     {
         var disabledGrain = CreateGrain(
