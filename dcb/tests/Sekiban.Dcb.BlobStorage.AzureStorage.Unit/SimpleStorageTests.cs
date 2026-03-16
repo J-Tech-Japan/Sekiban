@@ -50,17 +50,58 @@ public class SimpleStorageTests
     {
         var container = $"snapshots-unit-{Guid.NewGuid():N}";
         var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, container);
+        var containerClient = new BlobServiceClient(_fixture.ConnectionString).GetBlobContainerClient(container);
         var payloads = Enumerable.Range(0, 8)
             .Select(i => Encoding.UTF8.GetBytes($"hello-{i}"))
             .ToArray();
 
-        var keys = await Task.WhenAll(payloads.Select(async payload =>
+        try
         {
-            await using var stream = new MemoryStream(payload);
-            return await accessor.WriteAsync(stream, "concurrent-projector");
-        }));
+            var keys = await Task.WhenAll(payloads.Select(async payload =>
+            {
+                await using var stream = new MemoryStream(payload);
+                return await accessor.WriteAsync(stream, "concurrent-projector");
+            }));
 
-        Assert.Equal(payloads.Length, keys.Distinct().Count());
+            Assert.Equal(payloads.Length, keys.Distinct().Count());
+        }
+        finally
+        {
+            await containerClient.DeleteIfExistsAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AzureBlobAccessor_Recreates_Container_When_Removed_After_Ensure()
+    {
+        var container = $"snapshots-unit-{Guid.NewGuid():N}";
+        var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, container);
+        var containerClient = new BlobServiceClient(_fixture.ConnectionString).GetBlobContainerClient(container);
+
+        try
+        {
+            await using (var firstStream = new MemoryStream(Encoding.UTF8.GetBytes("before-delete")))
+            {
+                await accessor.WriteAsync(firstStream, "recovery-projector");
+            }
+
+            await containerClient.DeleteIfExistsAsync();
+
+            var expected = Encoding.UTF8.GetBytes("after-delete");
+            await using (var secondStream = new MemoryStream(expected))
+            {
+                var key = await accessor.WriteAsync(secondStream, "recovery-projector");
+
+                await using var readStream = await accessor.OpenReadAsync(key);
+                using var ms = new MemoryStream();
+                await readStream.CopyToAsync(ms);
+                Assert.Equal(expected, ms.ToArray());
+            }
+        }
+        finally
+        {
+            await containerClient.DeleteIfExistsAsync();
+        }
     }
 
     [Fact]
