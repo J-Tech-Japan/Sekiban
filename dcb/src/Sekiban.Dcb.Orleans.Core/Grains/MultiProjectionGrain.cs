@@ -95,8 +95,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IDisposable? _catchUpTimer;
     private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
     private const int DefaultCatchUpBatchSize = 500;
-    private const int DefaultPersistBatchSize = 1000;
-    private const int DefaultPersistIntervalSeconds = 5 * 60;
+    private const int DefaultPersistBatchSize = 10_000;
+    private const int DefaultPersistIntervalSeconds = 60 * 60;
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
     private TimeSpan _catchUpDeactivationDelay = TimeSpan.FromMinutes(10);

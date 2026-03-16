@@ -52,13 +52,13 @@ public class GeneralMultiProjectionActorOptions
     ///     Number of events in a live stream batch that triggers snapshot persistence.
     ///     Set to 0 or negative to disable batch-triggered persistence.
     /// </summary>
-    public int PersistBatchSize { get; set; } = 1000;
+    public int PersistBatchSize { get; set; } = 10_000;
 
     /// <summary>
     ///     Periodic persistence interval in seconds.
     ///     Set to 0 or negative to disable the periodic persistence timer.
     /// </summary>
-    public int PersistIntervalSeconds { get; set; } = 5 * 60;
+    public int PersistIntervalSeconds { get; set; } = 60 * 60;
 
     /// <summary>
     ///     When true (default), skips persistence when the safe checkpoint has not

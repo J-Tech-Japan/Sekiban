@@ -19,6 +19,22 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public class MultiProjectionGrainPersistPolicyTests
 {
     [Fact]
+    public void ResolvePersistPolicySettings_ShouldUseStorageFriendlyDefaults()
+    {
+        var grain = CreateGrain();
+
+        var settings = InvokePrivate(
+            grain,
+            "ResolvePersistPolicySettings",
+            ["DefaultProjection"]);
+        Assert.NotNull(settings);
+
+        Assert.Equal(10_000, GetProperty<int>(settings!, "PersistBatchSize"));
+        Assert.Equal(TimeSpan.FromHours(1), GetProperty<TimeSpan>(settings!, "PersistInterval"));
+        Assert.True(GetProperty<bool>(settings!, "SkipPersistWhenSafeCheckpointUnchanged"));
+    }
+
+    [Fact]
     public void ResolvePersistPolicySettings_ShouldApplyProjectorOverride()
     {
         var options = new GeneralMultiProjectionActorOptions
