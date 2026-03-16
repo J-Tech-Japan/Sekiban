@@ -95,6 +95,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IDisposable? _catchUpTimer;
     private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
     private const int DefaultCatchUpBatchSize = 500;
+    private const int DefaultPersistBatchSize = 1000;
+    private const int DefaultPersistIntervalSeconds = 5 * 60;
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
     private TimeSpan _catchUpDeactivationDelay = TimeSpan.FromMinutes(10);
@@ -106,8 +108,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private DateTime? _catchUpFailureWindowStartUtc;
 
     // Delegate these to configuration
-    private readonly int _persistBatchSize = 1000; // Persist less frequently to avoid blocking deliveries
-    private readonly TimeSpan _persistInterval = TimeSpan.FromMinutes(5);
+    private int _persistBatchSize = DefaultPersistBatchSize; // Persist less frequently to avoid blocking deliveries
+    private TimeSpan _persistInterval = TimeSpan.FromSeconds(DefaultPersistIntervalSeconds);
+    private bool _skipPersistWhenSafeCheckpointUnchanged = true;
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
     private int _maxPendingStreamEvents = 50000;
     private int _catchUpBatchSize = DefaultCatchUpBatchSize;
@@ -123,6 +126,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private HybridReadBatchMetadata? _lastHybridReadBatchMetadata;
     private long _eventsProcessedSinceLastCatchUpPersist;
     private DateTime _lastCatchUpPersistUtc = DateTime.UtcNow;
+
+    private sealed record PersistPolicySettings(
+        int PersistBatchSize,
+        TimeSpan PersistInterval,
+        bool SkipPersistWhenSafeCheckpointUnchanged);
+
+    private sealed record PersistCheckpoint(
+        string ProjectorVersion,
+        string? SafePosition,
+        int? SafeVersion,
+        int? UnsafeVersion,
+        string? SafeThresholdValue,
+        DateTime? SafeThresholdTime);
 
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
@@ -148,6 +164,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
         _eventStoreFactory = eventStoreFactory;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+
+        if (_injectedActorOptions is not null)
+        {
+            _persistBatchSize = Math.Max(0, _injectedActorOptions.PersistBatchSize);
+            _persistInterval = _injectedActorOptions.PersistIntervalSeconds > 0
+                ? TimeSpan.FromSeconds(_injectedActorOptions.PersistIntervalSeconds)
+                : TimeSpan.Zero;
+            _skipPersistWhenSafeCheckpointUnchanged = _injectedActorOptions.SkipPersistWhenSafeCheckpointUnchanged;
+        }
     }
 
     private (string GrainKey, string ProjectorName, string ServiceId) GetIdentity()
@@ -168,6 +193,52 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string GetProjectorName() => GetIdentity().ProjectorName;
 
     private string GetGrainKey() => GetIdentity().GrainKey;
+
+    private PersistPolicySettings ResolvePersistPolicySettings(string projectorName)
+    {
+        var options = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+
+        var persistBatchSize = options.PersistBatchSize;
+        var persistIntervalSeconds = options.PersistIntervalSeconds;
+        var skipPersistWhenUnchanged = options.SkipPersistWhenSafeCheckpointUnchanged;
+
+        if (options.ProjectorPersistenceOverrides != null &&
+            options.ProjectorPersistenceOverrides.TryGetValue(projectorName, out var projectorOverride))
+        {
+            if (projectorOverride.PersistBatchSize.HasValue)
+            {
+                persistBatchSize = projectorOverride.PersistBatchSize.Value;
+            }
+
+            if (projectorOverride.PersistIntervalSeconds.HasValue)
+            {
+                persistIntervalSeconds = projectorOverride.PersistIntervalSeconds.Value;
+            }
+
+            if (projectorOverride.SkipPersistWhenSafeCheckpointUnchanged.HasValue)
+            {
+                skipPersistWhenUnchanged = projectorOverride.SkipPersistWhenSafeCheckpointUnchanged.Value;
+            }
+        }
+
+        persistBatchSize = Math.Max(0, persistBatchSize);
+        persistIntervalSeconds = Math.Max(0, persistIntervalSeconds);
+
+        return new PersistPolicySettings(
+            PersistBatchSize: persistBatchSize,
+            PersistInterval: persistIntervalSeconds > 0
+                ? TimeSpan.FromSeconds(persistIntervalSeconds)
+                : TimeSpan.Zero,
+            SkipPersistWhenSafeCheckpointUnchanged: skipPersistWhenUnchanged);
+    }
+
+    private void ApplyPersistPolicySettings(string projectorName)
+    {
+        var settings = ResolvePersistPolicySettings(projectorName);
+        _persistBatchSize = settings.PersistBatchSize;
+        _persistInterval = settings.PersistInterval;
+        _skipPersistWhenSafeCheckpointUnchanged = settings.SkipPersistWhenSafeCheckpointUnchanged;
+    }
 
     private void ResetHybridCatchUpLogging()
     {
@@ -347,6 +418,120 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return Task.FromResult(stats);
     }
 
+    private async Task<PersistCheckpoint> CapturePersistCheckpointAsync(string projectorName)
+    {
+        int? safeVersion = null;
+        int? unsafeVersion = null;
+        try
+        {
+            var metadataResult = await _host!.GetStateMetadataAsync(includeUnsafe: true);
+            if (metadataResult.IsSuccess)
+            {
+                var metadata = metadataResult.GetValue();
+                safeVersion = metadata.SafeVersion;
+                unsafeVersion = metadata.UnsafeVersion;
+                var safeLastId = metadata.SafeLastSortableUniqueId ?? string.Empty;
+                if (safeLastId.Length >= 20) safeLastId = safeLastId.Substring(0, 20);
+                var unsafeLastId = metadata.UnsafeLastSortableUniqueId ?? string.Empty;
+                if (unsafeLastId.Length >= 20) unsafeLastId = unsafeLastId.Substring(0, 20);
+                _logger.LogDebug(
+                    "[{ProjectorName}] Snapshot state - Safe: {SafeVersion} events @ {SafeLastId}, Unsafe: {UnsafeVersion} events @ {UnsafeLastId}",
+                    projectorName,
+                    metadata.SafeVersion,
+                    safeLastId.Length > 0 ? safeLastId : "empty",
+                    metadata.UnsafeVersion,
+                    unsafeLastId.Length > 0 ? unsafeLastId : "empty");
+            }
+        }
+        catch
+        {
+            // Metadata is best-effort for diagnostics and skip detection.
+        }
+
+        string? safeThresholdValue = null;
+        DateTime? safeThresholdTime = null;
+        try
+        {
+            safeThresholdValue = _host!.PeekCurrentSafeWindowThreshold();
+            var safeThresholdId = new SortableUniqueId(safeThresholdValue);
+            safeThresholdTime = safeThresholdId.GetDateTime();
+        }
+        catch
+        {
+            // Safe-threshold diagnostics are optional.
+        }
+
+        return new PersistCheckpoint(
+            ProjectorVersion: _host!.GetProjectorVersion(),
+            SafePosition: await _host.GetSafeLastSortableUniqueIdAsync(),
+            SafeVersion: safeVersion,
+            UnsafeVersion: unsafeVersion,
+            SafeThresholdValue: safeThresholdValue,
+            SafeThresholdTime: safeThresholdTime);
+    }
+
+    private bool ShouldSkipPersistForUnchangedSafeCheckpoint(
+        string projectorVersion,
+        string? safePosition,
+        int? safeVersion)
+    {
+        if (!_skipPersistWhenSafeCheckpointUnchanged || _state.State == null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(_state.State.ProjectorVersion, projectorVersion, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!string.Equals(_state.State.LastSortableUniqueId ?? string.Empty, safePosition ?? string.Empty, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (safeVersion.HasValue)
+        {
+            return _state.State.LastGoodSafeVersion > 0 && safeVersion.Value == _state.State.LastGoodSafeVersion;
+        }
+
+        return _state.State.LastGoodSafeVersion <= 0;
+    }
+
+    private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)
+    {
+        var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
+        if (checkpoint.SafeVersion.HasValue && lastGoodSafeVersion > 0 && checkpoint.SafeVersion.Value < lastGoodSafeVersion)
+        {
+            _lastError = $"Integrity guard blocked persist: safeVersion {checkpoint.SafeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
+            _logger.LogError(
+                MultiProjectionLogEvents.IntegrityGuardBlockedPersist,
+                "BLOCKED persist: {ProjectorName} - safeVersion regression detected. Current={CurrentSafeVersion}, LastGood={LastGoodSafeVersion}. State will NOT be saved.",
+                projectorName,
+                checkpoint.SafeVersion.Value,
+                lastGoodSafeVersion);
+            _stateRestoreSource = StateRestoreSource.Failed;
+            return ResultBox.FromValue(false);
+        }
+
+        if (!ShouldSkipPersistForUnchangedSafeCheckpoint(
+                checkpoint.ProjectorVersion,
+                checkpoint.SafePosition,
+                checkpoint.SafeVersion))
+        {
+            return null;
+        }
+
+        _lastError = null;
+        _logger.LogDebug(
+            "[{ProjectorName}] Skipping persistence because the safe checkpoint is unchanged (ProjectorVersion={ProjectorVersion}, SafeVersion={SafeVersion}, SafePosition={SafePosition})",
+            projectorName,
+            checkpoint.ProjectorVersion,
+            checkpoint.SafeVersion,
+            checkpoint.SafePosition ?? "empty");
+        return ResultBox.FromValue(true);
+    }
+
     public Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync()
     {
         var status = new MultiProjectionCatchUpStatus(
@@ -512,10 +697,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             catch { }
 
+            var checkpoint = await CapturePersistCheckpointAsync(projectorName);
+            var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint);
+            if (shortCircuit is not null)
+            {
+                return shortCircuit;
+            }
+
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName);
+                return await PersistStateStreamingAsync(projectorName, checkpoint);
             }
 
             // Get snapshot as opaque bytes from the host
@@ -534,47 +726,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var envelopeSize = snapshotStream.Length;
 
             // Get metadata via host
-            int? safeVersion = null;
-            int? unsafeVersion = null;
+            var safeVersion = checkpoint.SafeVersion;
+            var unsafeVersion = checkpoint.UnsafeVersion;
             long originalSizeBytes = envelopeSize;
             long compressedSizeBytes = envelopeSize;
-            try
-            {
-                var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
-                if (metadataResult.IsSuccess)
-                {
-                    var metadata = metadataResult.GetValue();
-                    safeVersion = metadata.SafeVersion;
-                    unsafeVersion = metadata.UnsafeVersion;
-                    var safeLastId = metadata.SafeLastSortableUniqueId ?? string.Empty;
-                    if (safeLastId.Length >= 20) safeLastId = safeLastId.Substring(0, 20);
-                    var unsafeLastId = metadata.UnsafeLastSortableUniqueId ?? string.Empty;
-                    if (unsafeLastId.Length >= 20) unsafeLastId = unsafeLastId.Substring(0, 20);
-                    _logger.LogDebug(
-                        "[{ProjectorName}] Snapshot state - Safe: {SafeVersion} events @ {SafeLastId}, Unsafe: {UnsafeVersion} events @ {UnsafeLastId}",
-                        projectorName,
-                        metadata.SafeVersion,
-                        safeLastId.Length > 0 ? safeLastId : "empty",
-                        metadata.UnsafeVersion,
-                        unsafeLastId.Length > 0 ? unsafeLastId : "empty");
-                }
-            }
-            catch { }
-
-            var projectorVersion = _host.GetProjectorVersion();
-
-            // Get safe position from the host
-            var safePosition = await _host.GetSafeLastSortableUniqueIdAsync();
-
-            string? safeThresholdValue = null;
-            DateTime? safeThresholdTime = null;
-            try
-            {
-                safeThresholdValue = _host.PeekCurrentSafeWindowThreshold();
-                var safeThresholdId = new SortableUniqueId(safeThresholdValue);
-                safeThresholdTime = safeThresholdId.GetDateTime();
-            }
-            catch { }
+            var projectorVersion = checkpoint.ProjectorVersion;
+            var safePosition = checkpoint.SafePosition;
+            var safeThresholdTime = checkpoint.SafeThresholdTime;
 
             _logger.LogDebug(
                 "[{ProjectorName}] v10: Writing snapshot: {EnvelopeSize:N0} bytes, {EventsProcessed:N0} events, checkpoint: {Checkpoint}",
@@ -591,21 +749,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 unsafeVersion,
                 envelopeSize,
                 safeThresholdTime);
-
-            // Integrity guard: Block persist if safeVersion regressed (indicates data corruption)
-            var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
-            if (safeVersion.HasValue && lastGoodSafeVersion > 0 && safeVersion.Value < lastGoodSafeVersion)
-            {
-                _lastError = $"Integrity guard blocked persist: safeVersion {safeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
-                _logger.LogError(
-                    MultiProjectionLogEvents.IntegrityGuardBlockedPersist,
-                    "BLOCKED persist: {ProjectorName} - safeVersion regression detected. Current={CurrentSafeVersion}, LastGood={LastGoodSafeVersion}. State will NOT be saved.",
-                    projectorName,
-                    safeVersion.Value,
-                    lastGoodSafeVersion);
-                _stateRestoreSource = StateRestoreSource.Failed;
-                return ResultBox.FromValue(false);
-            }
 
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = true;
@@ -657,7 +800,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     OffloadProvider: null,
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
-                    SafeWindowThreshold: _host.PeekCurrentSafeWindowThreshold(),
+                    SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
                     CreatedAt: _state.State!.LastPersistTime == default
                         ? DateTime.UtcNow
                         : _state.State.LastPersistTime,
@@ -752,7 +895,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     Streaming persist path: writes snapshot to a temp file, then streams to external store.
     ///     Avoids holding the entire serialized snapshot in a byte[] simultaneously.
     /// </summary>
-    private async Task<ResultBox<bool>> PersistStateStreamingAsync(string projectorName)
+    private async Task<ResultBox<bool>> PersistStateStreamingAsync(string projectorName, PersistCheckpoint checkpoint)
     {
         var buildStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
         string? tempFilePath = null;
@@ -780,29 +923,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var buildElapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(buildStartMs).TotalMilliseconds;
 
                 // Step 2: Collect metadata
-                var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
-                int? safeVersion = null;
-                if (metadataResult.IsSuccess)
-                {
-                    var metadata = metadataResult.GetValue();
-                    safeVersion = metadata.SafeVersion;
-                }
-
-                var projectorVersion = _host.GetProjectorVersion();
-                var safePosition = await _host.GetSafeLastSortableUniqueIdAsync();
-
-                // Integrity guard
-                var lastGoodSafeVersion = _state.State?.LastGoodSafeVersion ?? 0;
-                if (safeVersion.HasValue && lastGoodSafeVersion > 0 && safeVersion.Value < lastGoodSafeVersion)
-                {
-                    _lastError = $"Integrity guard blocked persist: safeVersion {safeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
-                    _logger.LogError(
-                        MultiProjectionLogEvents.IntegrityGuardBlockedPersist,
-                        "BLOCKED persist: {ProjectorName} - safeVersion regression detected. Current={CurrentSafeVersion}, LastGood={LastGoodSafeVersion}.",
-                        projectorName, safeVersion.Value, lastGoodSafeVersion);
-                    _stateRestoreSource = StateRestoreSource.Failed;
-                    return ResultBox.FromValue(false);
-                }
+                var safeVersion = checkpoint.SafeVersion;
+                var projectorVersion = checkpoint.ProjectorVersion;
+                var safePosition = checkpoint.SafePosition;
 
                 // Step 3: Stream to external store
                 var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -854,7 +977,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         OffloadProvider: null,
                         OriginalSizeBytes: tempFileSize,
                         CompressedSizeBytes: tempFileSize,
-                        SafeWindowThreshold: _host.PeekCurrentSafeWindowThreshold(),
+                        SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
                         CreatedAt: _state.State!.LastPersistTime == default
                             ? DateTime.UtcNow
                             : _state.State.LastPersistTime,
@@ -1374,6 +1497,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _logger.LogDebug("Creating new projection host: {ProjectorName}", projectorName);
             // Merge injected options - snapshot offload is handled by IMultiProjectionStateStore
             var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+            var persistPolicySettings = ResolvePersistPolicySettings(projectorName);
             var mergedOptions = new GeneralMultiProjectionActorOptions
             {
                 SafeWindowMs = baseOptions.SafeWindowMs,
@@ -1383,6 +1507,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CatchUpDeactivationDelayMinutes = baseOptions.CatchUpDeactivationDelayMinutes,
                 CatchUpMaxConsecutiveFailures = baseOptions.CatchUpMaxConsecutiveFailures,
                 CatchUpMaxFailureDurationSeconds = baseOptions.CatchUpMaxFailureDurationSeconds,
+                PersistBatchSize = persistPolicySettings.PersistBatchSize,
+                PersistIntervalSeconds = persistPolicySettings.PersistInterval > TimeSpan.Zero
+                    ? (int)persistPolicySettings.PersistInterval.TotalSeconds
+                    : 0,
+                SkipPersistWhenSafeCheckpointUnchanged = persistPolicySettings.SkipPersistWhenSafeCheckpointUnchanged,
                 EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
                 MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
                 LagEmaAlpha = baseOptions.LagEmaAlpha,
@@ -1391,8 +1520,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 ProcessedEventIdCacheSize = baseOptions.ProcessedEventIdCacheSize,
                 ForceGcAfterLargeSnapshotPersist = baseOptions.ForceGcAfterLargeSnapshotPersist,
                 LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes,
-                UseStreamingSnapshotIO = baseOptions.UseStreamingSnapshotIO
+                UseStreamingSnapshotIO = baseOptions.UseStreamingSnapshotIO,
+                ProjectorPersistenceOverrides = baseOptions.ProjectorPersistenceOverrides
             };
+            _persistBatchSize = mergedOptions.PersistBatchSize;
+            _persistInterval = mergedOptions.PersistIntervalSeconds > 0
+                ? TimeSpan.FromSeconds(mergedOptions.PersistIntervalSeconds)
+                : TimeSpan.Zero;
+            _skipPersistWhenSafeCheckpointUnchanged = mergedOptions.SkipPersistWhenSafeCheckpointUnchanged;
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
             _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
             _catchUpDeactivationDelay = TimeSpan.FromMinutes(Math.Max(1, mergedOptions.CatchUpDeactivationDelayMinutes));
@@ -1761,15 +1896,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         _isInitialized = true;
 
+        ApplyPersistPolicySettings(GetProjectorName());
+
         // Set up periodic persistence timer
-        _persistTimer = this.RegisterGrainTimer(
-            async () => await PersistStateAsync(),
-            new GrainTimerCreationOptions
-            {
-                DueTime = _persistInterval,
-                Period = _persistInterval,
-                Interleave = true
-            });
+        if (_persistInterval > TimeSpan.Zero)
+        {
+            _persistTimer = this.RegisterGrainTimer(
+                async () => await PersistStateAsync(),
+                new GrainTimerCreationOptions
+                {
+                    DueTime = _persistInterval,
+                    Period = _persistInterval,
+                    Interleave = true
+                });
+        }
 
         // Set up fallback check timer
         _fallbackTimer = this.RegisterGrainTimer(
@@ -2904,7 +3044,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _eventsProcessed);
 
             // Persist state after processing a batch if it's large enough
-            if (newEvents.Count >= _persistBatchSize)
+            if (_persistBatchSize > 0 && newEvents.Count >= _persistBatchSize)
             {
                 await PersistStateAsync();
             }
