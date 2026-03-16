@@ -46,6 +46,24 @@ public class SimpleStorageTests
     }
 
     [Fact]
+    public async Task AzureBlobAccessor_Can_Write_Concurrently_When_Container_Does_Not_Exist()
+    {
+        var container = $"snapshots-unit-{Guid.NewGuid():N}";
+        var accessor = new AzureBlobStorageSnapshotAccessor(_fixture.ConnectionString, container);
+        var payloads = Enumerable.Range(0, 8)
+            .Select(i => Encoding.UTF8.GetBytes($"hello-{i}"))
+            .ToArray();
+
+        var keys = await Task.WhenAll(payloads.Select(async payload =>
+        {
+            await using var stream = new MemoryStream(payload);
+            return await accessor.WriteAsync(stream, "concurrent-projector");
+        }));
+
+        Assert.Equal(payloads.Length, keys.Distinct().Count());
+    }
+
+    [Fact]
     public async Task Actor_Snapshot_Is_Inline()
     {
         // Arrange domain

@@ -15,10 +15,12 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
 {
     private const string DefaultLocalCacheFolderName = "sekiban-snapshot-cache";
     private readonly BlobContainerClient _container;
+    private readonly SemaphoreSlim _containerEnsureLock = new(1, 1);
     private readonly string _prefix;
     private readonly ILogger<AzureBlobStorageSnapshotAccessor> _logger;
     private readonly string _localCacheDirectory;
     private readonly string _cacheNamespace;
+    private volatile bool _containerEnsured;
 
     public string ProviderName => "AzureBlobStorage";
 
@@ -71,7 +73,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
 
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
-        await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        await EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
         var key = data.CanSeek
             ? StreamOffloadHelper.ComputeDeterministicKey(
                 projectorName,
@@ -85,6 +87,42 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         await blob.UploadAsync(data, overwrite: true, cancellationToken);
         _logger.LogDebug("Blob stream write succeeded: {Key}", key);
         return key;
+    }
+
+    private async Task EnsureContainerExistsAsync(CancellationToken cancellationToken)
+    {
+        if (_containerEnsured)
+        {
+            return;
+        }
+
+        await _containerEnsureLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_containerEnsured)
+            {
+                return;
+            }
+
+            var exists = await _container.ExistsAsync(cancellationToken).ConfigureAwait(false);
+            if (!exists.Value)
+            {
+                try
+                {
+                    await _container.CreateAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                catch (RequestFailedException ex) when (ex.Status == 409)
+                {
+                    _logger.LogDebug(ex, "Blob container already created by another writer: {ContainerUri}", _container.Uri);
+                }
+            }
+
+            _containerEnsured = true;
+        }
+        finally
+        {
+            _containerEnsureLock.Release();
+        }
     }
 
     public async Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
