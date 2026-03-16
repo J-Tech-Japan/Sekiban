@@ -48,6 +48,31 @@ public class GeneralMultiProjectionActorOptions
     /// </summary>
     public int CatchUpMaxFailureDurationSeconds { get; set; } = 300;
 
+    /// <summary>
+    ///     Number of events in a live stream batch that triggers snapshot persistence.
+    ///     Set to 0 or negative to disable batch-triggered persistence.
+    /// </summary>
+    public int PersistBatchSize { get; set; } = 10_000;
+
+    /// <summary>
+    ///     Periodic persistence interval in seconds.
+    ///     Set to 0 or negative to disable the periodic persistence timer.
+    /// </summary>
+    public int PersistIntervalSeconds { get; set; } = 60 * 60;
+
+    /// <summary>
+    ///     When true (default), skips persistence when the safe checkpoint has not
+    ///     advanced since the last successful persist for the same projector version.
+    /// </summary>
+    public bool SkipPersistWhenSafeCheckpointUnchanged { get; set; } = true;
+
+    /// <summary>
+    ///     Optional projector-specific overrides for persistence policy.
+    ///     Keys are projector names (e.g. "KanyushaListProjection").
+    /// </summary>
+    public Dictionary<string, MultiProjectionPersistenceOverrideOptions> ProjectorPersistenceOverrides { get; set; } =
+        new(StringComparer.Ordinal);
+
     // Dynamic SafeWindow controls (optional; default OFF)
     public bool EnableDynamicSafeWindow { get; set; } = false;
 
@@ -94,4 +119,25 @@ public class GeneralMultiProjectionActorOptions
     ///     When false, uses the existing byte[] path for backward compatibility.
     /// </summary>
     public bool UseStreamingSnapshotIO { get; set; } = true;
+}
+
+public sealed class MultiProjectionPersistenceOverrideOptions
+{
+    /// <summary>
+    ///     Overrides GeneralMultiProjectionActorOptions.PersistBatchSize for a specific projector.
+    ///     Set to 0 or negative to disable batch-triggered persistence for that projector.
+    /// </summary>
+    public int? PersistBatchSize { get; set; }
+
+    /// <summary>
+    ///     Overrides GeneralMultiProjectionActorOptions.PersistIntervalSeconds for a specific projector.
+    ///     Set to 0 or negative to disable periodic persistence for that projector.
+    /// </summary>
+    public int? PersistIntervalSeconds { get; set; }
+
+    /// <summary>
+    ///     Overrides GeneralMultiProjectionActorOptions.SkipPersistWhenSafeCheckpointUnchanged
+    ///     for a specific projector.
+    /// </summary>
+    public bool? SkipPersistWhenSafeCheckpointUnchanged { get; set; }
 }
