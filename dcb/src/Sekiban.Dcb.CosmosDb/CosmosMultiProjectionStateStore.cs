@@ -257,10 +257,13 @@ public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
         ArgumentNullException.ThrowIfNull(request);
         try
         {
+            var effectiveThreshold = _context.Options
+                .GetEffectiveMultiProjectionStateOffloadThresholdBytes(offloadThresholdBytes);
+
             var offloadResult = await StreamOffloadHelper.ProcessAsync(
                 stream,
                 $"{request.ProjectorName}/{request.ProjectorVersion}",
-                offloadThresholdBytes,
+                effectiveThreshold,
                 _blobAccessor,
                 cancellationToken).ConfigureAwait(false);
 

@@ -7,6 +7,11 @@ namespace Sekiban.Dcb.CosmosDb;
 public class CosmosDbEventStoreOptions
 {
     /// <summary>
+    ///     Default upper bound for keeping multi projection snapshots inline in Cosmos DB.
+    /// </summary>
+    public const int DefaultMultiProjectionStateOffloadThresholdBytes = 1_000_000;
+
+    /// <summary>
     ///     Maximum number of concurrent event write operations.
     ///     Events are written in parallel with this concurrency limit.
     ///     Default: 10 (conservative for Serverless mode)
@@ -65,6 +70,13 @@ public class CosmosDbEventStoreOptions
     ///     Container name for multi projection states (v2).
     /// </summary>
     public string MultiProjectionStatesContainerName { get; set; } = "multiProjectionStates";
+
+    /// <summary>
+    ///     Storage-specific upper bound for keeping multi projection snapshots inline in Cosmos DB.
+    ///     Cosmos state documents carry the snapshot payload as Base64 text, so using the actor's 2MB
+    ///     snapshot size limit as-is can still exceed the final item size. Default is 1,000,000 bytes.
+    /// </summary>
+    public int MultiProjectionStateOffloadThresholdBytes { get; set; } = DefaultMultiProjectionStateOffloadThresholdBytes;
 
     // ========== Read Optimization Options ==========
 
@@ -132,6 +144,26 @@ public class CosmosDbEventStoreOptions
             options.MaxBufferedItemCount = MaxBufferedItemCount;
 
         return options;
+    }
+
+    /// <summary>
+    ///     Resolves the effective inline snapshot threshold for multi projection state persistence.
+    ///     The caller-provided threshold is treated as an upper bound, and Cosmos may lower it to keep
+    ///     the final document safely below item size limits.
+    /// </summary>
+    public int GetEffectiveMultiProjectionStateOffloadThresholdBytes(int requestedThresholdBytes)
+    {
+        var effectiveThreshold = requestedThresholdBytes > 0
+            ? requestedThresholdBytes
+            : DefaultMultiProjectionStateOffloadThresholdBytes;
+
+        if (MultiProjectionStateOffloadThresholdBytes > 0 &&
+            MultiProjectionStateOffloadThresholdBytes < effectiveThreshold)
+        {
+            effectiveThreshold = MultiProjectionStateOffloadThresholdBytes;
+        }
+
+        return effectiveThreshold;
     }
 
     /// <summary>
