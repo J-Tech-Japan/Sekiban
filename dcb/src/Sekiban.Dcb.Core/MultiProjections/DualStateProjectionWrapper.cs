@@ -190,8 +190,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
     void IDualStateAccessor.CompactSafeHistory()
     {
+        var hadSafeEvents = _allSafeEvents.Count > 0;
         _allSafeEvents.Clear();
-        _allSafeEvents.TrimExcess();
+        if (hadSafeEvents)
+        {
+            _allSafeEvents.TrimExcess();
+        }
         RebuildProcessedEventIdsFromBufferedEvents();
         _useIncrementalSafePromotion = true;
     }
@@ -250,7 +254,10 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
             _processedEventIds.Add(bufferedEventId);
         }
 
-        _processedEventIds.TrimExcess();
+        if (_processedEventIds.Count > 0)
+        {
+            _processedEventIds.TrimExcess();
+        }
     }
 
     private void RebuildSafeState(DcbDomainTypes domainTypes)

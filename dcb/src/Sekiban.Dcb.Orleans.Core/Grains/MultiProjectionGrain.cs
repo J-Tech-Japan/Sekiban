@@ -200,7 +200,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private PersistPolicySettings ResolvePersistPolicySettings(string projectorName)
     {
-        var options = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+        var options = _injectedActorOptions ?? DefaultActorOptions;
 
         var persistBatchSize = options.PersistBatchSize;
         var persistIntervalSeconds = options.PersistIntervalSeconds;
@@ -1509,7 +1509,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogDebug("Creating new projection host: {ProjectorName}", projectorName);
             // Merge injected options - snapshot offload is handled by IMultiProjectionStateStore
-            var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+            var baseOptions = _injectedActorOptions ?? DefaultActorOptions;
             var persistPolicySettings = ResolvePersistPolicySettings(projectorName);
             var mergedOptions = new GeneralMultiProjectionActorOptions
             {
