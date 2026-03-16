@@ -96,9 +96,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private IDisposable? _catchUpTimer;
     private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
     private const int DefaultCatchUpBatchSize = 500;
-    private const int DefaultPersistBatchSize = 10_000;
-    private const int DefaultPersistIntervalSeconds = 60 * 60;
     private const int MaxConsecutiveEmptyBatches = 5; // More batches before considering complete
+    private static readonly GeneralMultiProjectionActorOptions DefaultActorOptions = new();
     private readonly TimeSpan _catchUpInterval = TimeSpan.FromSeconds(1); // Standard interval after performance fix
     private TimeSpan _catchUpDeactivationDelay = TimeSpan.FromMinutes(10);
     private int _catchUpMaxConsecutiveFailures = 120;
@@ -109,8 +108,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private DateTime? _catchUpFailureWindowStartUtc;
 
     // Delegate these to configuration
-    private int _persistBatchSize = DefaultPersistBatchSize; // Persist less frequently to avoid blocking deliveries
-    private TimeSpan _persistInterval = TimeSpan.FromSeconds(DefaultPersistIntervalSeconds);
+    private int _persistBatchSize = DefaultActorOptions.PersistBatchSize; // Persist less frequently to avoid blocking deliveries
+    private TimeSpan _persistInterval = TimeSpan.FromSeconds(DefaultActorOptions.PersistIntervalSeconds);
     private bool _skipPersistWhenSafeCheckpointUnchanged = true;
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
     private int _maxPendingStreamEvents = 50000;
@@ -201,7 +200,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private PersistPolicySettings ResolvePersistPolicySettings(string projectorName)
     {
-        var options = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+        var options = _injectedActorOptions ?? DefaultActorOptions;
 
         var persistBatchSize = options.PersistBatchSize;
         var persistIntervalSeconds = options.PersistIntervalSeconds;
@@ -252,7 +251,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return EmptyLogValue;
         }
 
-        return value.Length >= 20 ? value.Substring(0, 20) : value;
+        return value.Length > 20 ? value[..20] : value;
     }
 
     private void ResetHybridCatchUpLogging()
@@ -1510,7 +1509,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogDebug("Creating new projection host: {ProjectorName}", projectorName);
             // Merge injected options - snapshot offload is handled by IMultiProjectionStateStore
-            var baseOptions = _injectedActorOptions ?? new GeneralMultiProjectionActorOptions();
+            var baseOptions = _injectedActorOptions ?? DefaultActorOptions;
             var persistPolicySettings = ResolvePersistPolicySettings(projectorName);
             var mergedOptions = new GeneralMultiProjectionActorOptions
             {
