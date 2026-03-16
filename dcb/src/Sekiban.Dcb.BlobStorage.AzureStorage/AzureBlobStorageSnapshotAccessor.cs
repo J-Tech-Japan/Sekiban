@@ -1,6 +1,7 @@
 using Azure;
 using Azure.Core;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sekiban.Dcb.Snapshots;
@@ -15,10 +16,12 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
 {
     private const string DefaultLocalCacheFolderName = "sekiban-snapshot-cache";
     private readonly BlobContainerClient _container;
+    private readonly SemaphoreSlim _containerEnsureLock = new(1, 1);
     private readonly string _prefix;
     private readonly ILogger<AzureBlobStorageSnapshotAccessor> _logger;
     private readonly string _localCacheDirectory;
     private readonly string _cacheNamespace;
+    private volatile bool _containerEnsured;
 
     public string ProviderName => "AzureBlobStorage";
 
@@ -71,7 +74,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
 
     public async Task<string> WriteAsync(Stream data, string projectorName, CancellationToken cancellationToken = default)
     {
-        await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        await EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
         var key = data.CanSeek
             ? StreamOffloadHelper.ComputeDeterministicKey(
                 projectorName,
@@ -82,9 +85,78 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         {
             data.Position = 0;
         }
-        await blob.UploadAsync(data, overwrite: true, cancellationToken);
+        await UploadWithContainerRecoveryAsync(blob, data, cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Blob stream write succeeded: {Key}", key);
         return key;
+    }
+
+    private async Task EnsureContainerExistsAsync(CancellationToken cancellationToken)
+    {
+        if (_containerEnsured)
+        {
+            return;
+        }
+
+        await _containerEnsureLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_containerEnsured)
+            {
+                return;
+            }
+
+            var exists = await _container.ExistsAsync(cancellationToken).ConfigureAwait(false);
+            if (!exists.Value)
+            {
+                try
+                {
+                    await _container.CreateAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                catch (RequestFailedException ex) when (IsContainerAlreadyExistsConflict(ex))
+                {
+                    _logger.LogDebug(ex, "Blob container already created by another writer: {ContainerUri}", _container.Uri);
+                }
+            }
+
+            _containerEnsured = true;
+        }
+        finally
+        {
+            _containerEnsureLock.Release();
+        }
+    }
+
+    private async Task UploadWithContainerRecoveryAsync(
+        BlobClient blob,
+        Stream data,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await blob.UploadAsync(data, overwrite: true, cancellationToken).ConfigureAwait(false);
+        }
+        catch (RequestFailedException ex) when (IsMissingContainerError(ex))
+        {
+            ResetContainerEnsureState();
+
+            if (!data.CanSeek)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Blob container disappeared during upload, but the stream cannot be retried: {ContainerUri}",
+                    _container.Uri);
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Blob container disappeared during upload. Recreating container and retrying once: {ContainerUri}",
+                _container.Uri);
+
+            data.Position = 0;
+            await EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
+            await blob.UploadAsync(data, overwrite: true, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
@@ -176,5 +248,23 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         {
             // Best effort cleanup.
         }
+    }
+
+    private void ResetContainerEnsureState()
+    {
+        _containerEnsured = false;
+    }
+
+    private static bool IsContainerAlreadyExistsConflict(RequestFailedException ex)
+    {
+        return ex.Status == 409 &&
+            string.Equals(ex.ErrorCode, BlobErrorCode.ContainerAlreadyExists.ToString(), StringComparison.Ordinal);
+    }
+
+    private static bool IsMissingContainerError(RequestFailedException ex)
+    {
+        return ex.Status == 404 &&
+            (string.IsNullOrWhiteSpace(ex.ErrorCode) ||
+                string.Equals(ex.ErrorCode, BlobErrorCode.ContainerNotFound.ToString(), StringComparison.Ordinal));
     }
 }
