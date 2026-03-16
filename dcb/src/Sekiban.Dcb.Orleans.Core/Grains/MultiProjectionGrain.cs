@@ -27,6 +27,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
     private const int StreamingCatchUpApplyChunkSize = 1024;
+    private const string EmptyLogValue = "empty";
     private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
@@ -140,6 +141,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string? SafeThresholdValue,
         DateTime? SafeThresholdTime);
 
+    private sealed record StreamingExternalStorePersistResult(
+        bool ExternalStoreSaved,
+        long UploadElapsedMs);
+
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         IProjectionActorHostFactory actorHostFactory,
@@ -238,6 +243,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _persistBatchSize = settings.PersistBatchSize;
         _persistInterval = settings.PersistInterval;
         _skipPersistWhenSafeCheckpointUnchanged = settings.SkipPersistWhenSafeCheckpointUnchanged;
+    }
+
+    private static string FormatLogValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return EmptyLogValue;
+        }
+
+        return value.Length >= 20 ? value.Substring(0, 20) : value;
     }
 
     private void ResetHybridCatchUpLogging()
@@ -438,9 +453,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     "[{ProjectorName}] Snapshot state - Safe: {SafeVersion} events @ {SafeLastId}, Unsafe: {UnsafeVersion} events @ {UnsafeLastId}",
                     projectorName,
                     metadata.SafeVersion,
-                    safeLastId.Length > 0 ? safeLastId : "empty",
+                    FormatLogValue(safeLastId),
                     metadata.UnsafeVersion,
-                    unsafeLastId.Length > 0 ? unsafeLastId : "empty");
+                    FormatLogValue(unsafeLastId));
             }
         }
         catch
@@ -529,8 +544,110 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             projectorName,
             checkpoint.ProjectorVersion,
             checkpoint.SafeVersion,
-            checkpoint.SafePosition ?? "empty");
+            FormatLogValue(checkpoint.SafePosition));
         return ResultBox.FromValue(true);
+    }
+
+    private async Task<bool> CanSaveToExternalStoreAsync(string projectorName, string projectorVersion)
+    {
+        if (_multiProjectionStateStore is null)
+        {
+            return false;
+        }
+
+        var latestResult = await _multiProjectionStateStore.GetLatestForVersionAsync(projectorName, projectorVersion);
+        if (!latestResult.IsSuccess)
+        {
+            _lastError = $"External store read failed: {latestResult.GetException().Message}";
+            _logger.LogWarning(
+                "Skip external store save: failed to read latest state for {ProjectorName} v{ProjectorVersion}.",
+                projectorName,
+                projectorVersion);
+            return false;
+        }
+
+        var latestOptional = latestResult.GetValue();
+        if (latestOptional.HasValue &&
+            latestOptional.Value is { } latestRecord &&
+            latestRecord.EventsProcessed > _eventsProcessed)
+        {
+            _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
+            _logger.LogWarning(
+                "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
+                latestRecord.EventsProcessed,
+                _eventsProcessed,
+                projectorName,
+                projectorVersion);
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<StreamingExternalStorePersistResult> SaveStreamingSnapshotToExternalStoreAsync(
+        string projectorName,
+        PersistCheckpoint checkpoint,
+        string filePath,
+        long tempFileSize)
+    {
+        if (_multiProjectionStateStore is null)
+        {
+            return new StreamingExternalStorePersistResult(true, 0);
+        }
+
+        var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion))
+        {
+            _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
+            return new StreamingExternalStorePersistResult(
+                ExternalStoreSaved: false,
+                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
+        }
+
+        var writeRequest = new MultiProjectionStateWriteRequest(
+            ProjectorName: projectorName,
+            ProjectorVersion: checkpoint.ProjectorVersion,
+            PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
+            LastSortableUniqueId: checkpoint.SafePosition ?? string.Empty,
+            EventsProcessed: _eventsProcessed,
+            IsOffloaded: false,
+            OffloadKey: null,
+            OffloadProvider: null,
+            OriginalSizeBytes: tempFileSize,
+            CompressedSizeBytes: tempFileSize,
+            SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold(),
+            CreatedAt: _state.State!.LastPersistTime == default
+                ? DateTime.UtcNow
+                : _state.State.LastPersistTime,
+            UpdatedAt: DateTime.UtcNow,
+            BuildSource: "GRAIN_STREAM",
+            BuildHost: Environment.MachineName);
+
+        using var uploadStream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+            writeRequest,
+            uploadStream,
+            _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
+            CancellationToken.None);
+        if (!saveResult.IsSuccess)
+        {
+            _lastError = $"External store save failed: {saveResult.GetException().Message}";
+            _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+            return new StreamingExternalStorePersistResult(
+                ExternalStoreSaved: false,
+                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
+        }
+
+        return new StreamingExternalStorePersistResult(
+            ExternalStoreSaved: true,
+            UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
     }
 
     public Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync()
@@ -740,7 +857,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName,
                 envelopeSize,
                 _eventsProcessed,
-                (safePosition?.Length >= 20 ? safePosition.Substring(0, 20) : safePosition) ?? "empty");
+                FormatLogValue(safePosition));
             _logger.LogInformation(
                 MultiProjectionLogEvents.PersistDetails,
                 "Persist: {ProjectorName}, Events={EventsProcessed}, SafeVer={SafeVersion}, UnsafeVer={UnsafeVersion}, EnvelopeSize={EnvelopeSize}, SafeThreshold={SafeThreshold}",
@@ -752,39 +869,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 safeThresholdTime);
 
             var externalStoreSaved = _multiProjectionStateStore == null;
-            var allowExternalStoreSave = true;
-
-            if (_multiProjectionStateStore != null)
-            {
-                var latestResult = await _multiProjectionStateStore
-                    .GetLatestForVersionAsync(projectorName, projectorVersion);
-                if (!latestResult.IsSuccess)
-                {
-                    allowExternalStoreSave = false;
-                    _lastError = $"External store read failed: {latestResult.GetException().Message}";
-                    _logger.LogWarning(
-                        "Skip external store save: failed to read latest state for {ProjectorName} v{ProjectorVersion}.",
-                        projectorName,
-                        projectorVersion);
-                }
-                else
-                {
-                    var latestOptional = latestResult.GetValue();
-                    if (latestOptional.HasValue &&
-                        latestOptional.Value is { } latestRecord &&
-                        latestRecord.EventsProcessed > _eventsProcessed)
-                    {
-                        allowExternalStoreSave = false;
-                        _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
-                        _logger.LogWarning(
-                            "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
-                            latestRecord.EventsProcessed,
-                            _eventsProcessed,
-                            projectorName,
-                            projectorVersion);
-                    }
-                }
-            }
+            var allowExternalStoreSave = _multiProjectionStateStore is not null &&
+                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion);
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null && allowExternalStoreSave)
@@ -826,7 +912,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _logger.LogDebug("[{ProjectorName}] External store save succeeded", projectorName);
                 }
             }
-            else if (_multiProjectionStateStore != null && !allowExternalStoreSave)
+
+            if (_multiProjectionStateStore != null && !allowExternalStoreSave)
             {
                 _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             }
@@ -929,87 +1016,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var safePosition = checkpoint.SafePosition;
 
                 // Step 3: Stream to external store
-                var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-                var externalStoreSaved = _multiProjectionStateStore == null;
-                var allowExternalStoreSave = true;
+                var externalStorePersistResult = await SaveStreamingSnapshotToExternalStoreAsync(
+                    projectorName,
+                    checkpoint,
+                    filePath,
+                    tempFileSize);
+                var externalStoreSaved = externalStorePersistResult.ExternalStoreSaved;
 
-                if (_multiProjectionStateStore is not null)
-                {
-                    var latestResult = await _multiProjectionStateStore
-                        .GetLatestForVersionAsync(projectorName, projectorVersion);
-                    if (!latestResult.IsSuccess)
-                    {
-                        allowExternalStoreSave = false;
-                        _lastError = $"External store read failed: {latestResult.GetException().Message}";
-                        _logger.LogWarning(
-                            "Skip external store save: failed to read latest state for {ProjectorName} v{ProjectorVersion}.",
-                            projectorName,
-                            projectorVersion);
-                    }
-                    else
-                    {
-                        var latestOptional = latestResult.GetValue();
-                        if (latestOptional.HasValue &&
-                            latestOptional.Value is { } latestRecord &&
-                            latestRecord.EventsProcessed > _eventsProcessed)
-                        {
-                            allowExternalStoreSave = false;
-                            _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
-                            _logger.LogWarning(
-                                "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
-                                latestRecord.EventsProcessed,
-                                _eventsProcessed,
-                                projectorName,
-                                projectorVersion);
-                        }
-                    }
-                }
-
-                if (_multiProjectionStateStore is not null && allowExternalStoreSave)
-                {
-                    var writeRequest = new MultiProjectionStateWriteRequest(
-                        ProjectorName: projectorName,
-                        ProjectorVersion: projectorVersion,
-                        PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
-                        LastSortableUniqueId: safePosition ?? string.Empty,
-                        EventsProcessed: _eventsProcessed,
-                        IsOffloaded: false,
-                        OffloadKey: null,
-                        OffloadProvider: null,
-                        OriginalSizeBytes: tempFileSize,
-                        CompressedSizeBytes: tempFileSize,
-                        SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
-                        CreatedAt: _state.State!.LastPersistTime == default
-                            ? DateTime.UtcNow
-                            : _state.State.LastPersistTime,
-                        UpdatedAt: DateTime.UtcNow,
-                        BuildSource: "GRAIN_STREAM",
-                        BuildHost: Environment.MachineName);
-
-                    using var uploadStream = new FileStream(
-                        filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                        bufferSize: 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-                    var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
-                        writeRequest, uploadStream, _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
-                        CancellationToken.None);
-
-                    if (!saveResult.IsSuccess)
-                    {
-                        _lastError = $"External store save failed: {saveResult.GetException().Message}";
-                        _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
-                    }
-                    else
-                    {
-                        externalStoreSaved = true;
-                    }
-                }
-                else if (_multiProjectionStateStore is not null && !allowExternalStoreSave)
-                {
-                    _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
-                }
-
-                var uploadElapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds;
                 var peakMemory = GC.GetTotalMemory(forceFullCollection: false);
 
                 // Step 4: Update Orleans state
@@ -1046,7 +1059,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 var metrics = new SnapshotPersistMetrics(
                     SnapshotBuildMs: (long)buildElapsedMs,
-                    SnapshotUploadMs: (long)uploadElapsedMs,
+                    SnapshotUploadMs: externalStorePersistResult.UploadElapsedMs,
                     TempFileSizeBytes: tempFileSize,
                     PeakManagedMemoryBytes: peakMemory);
                 _logger.LogInformation(
