@@ -35,8 +35,8 @@ public record
     public static SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericTagMultiProjector<TTagProjector, TTagGroup> payload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
-        Func<Event, IEnumerable<Guid>> getAffectedIds = _ => Enumerable.Empty<Guid>();
-        Func<Guid, TagState?, Event, TagState?> projectItem = (_, current, _) => current;
+        Func<Event, IEnumerable<Guid>> getAffectedIds = evt => GetAffectedTagIds(evt, domainTypes);
+        Func<Guid, TagState?, Event, TagState?> projectItem = ProjectTagState;
         var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedIds, projectItem);
         var items = new List<object>(safeDict.Count);
         foreach (var (id, ts) in safeDict)
@@ -130,13 +130,7 @@ public record
         // First check evt.Tags for runtime, but fallback to passed tags for tests
         Func<Event, IEnumerable<Guid>> getAffectedItemIds = evt =>
         {
-            var eventTagIds = evt.Tags
-                .Select(domainTypes.TagTypes.GetTag)
-                .OfType<TTagGroup>()
-                .Select(tag => GetTagId(tag))
-                .Where(id => id.HasValue)
-                .Select(id => id!.Value)
-                .ToList();
+            var eventTagIds = GetAffectedTagIds(evt, domainTypes).ToList();
 
             // If no tags in event, use the affected IDs from the passed tags
             return eventTagIds.Count > 0 ? eventTagIds : affectedIds;
@@ -146,9 +140,13 @@ public record
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
             ProjectTagState(tagId, current, evt);
 
+        var normalizedEvent = ev.Tags.Count > 0
+            ? ev
+            : ev with { Tags = tags.Select(tag => tag.GetTag()).ToList() };
+
         // safeWindowThreshold を文字列として State へ渡し safe/unsafe 判定を内部に委譲
         var updatedState = payload.State.ProcessEvent(
-            ev,
+            normalizedEvent,
             getAffectedItemIds,
             projectItem,
             safeWindowThreshold.Value);
@@ -202,6 +200,14 @@ public record
             ProjectorVersion = TTagProjector.ProjectorVersion
         };
     }
+
+    private static IEnumerable<Guid> GetAffectedTagIds(Event evt, DcbDomainTypes domainTypes) =>
+        evt.Tags
+            .Select(domainTypes.TagTypes.GetTag)
+            .OfType<TTagGroup>()
+            .Select(tag => GetTagId(tag))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value);
 
     /// <summary>
     ///     Get unique ID for a tag (only for TTagGroup tags)
@@ -298,14 +304,8 @@ public record
         DcbDomainTypes domainTypes)
     {
         // Build safe view to compute safe last position and version
-        Func<Event, IEnumerable<Guid>> getIds = evt => evt.Tags
-            .Select(domainTypes.TagTypes.GetTag)
-            .OfType<TTagGroup>()
-            .Select(tag => GetTagId(tag))
-            .Where(id => id.HasValue)
-            .Select(id => id!.Value);
-
-        Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) => ProjectTagState(tagId, current, evt);
+        Func<Event, IEnumerable<Guid>> getIds = evt => GetAffectedTagIds(evt, domainTypes);
+        Func<Guid, TagState?, Event, TagState?> projectItem = ProjectTagState;
 
         var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
         var safeLast = safeDict.Count > 0
