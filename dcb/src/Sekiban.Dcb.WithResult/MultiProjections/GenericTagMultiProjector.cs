@@ -141,9 +141,13 @@ public record
         Func<Guid, TagState?, Event, TagState?> projectItem = (tagId, current, evt) =>
             ProjectTagState(tagId, current, evt);
 
+        var normalizedEvent = ev.Tags.Count > 0
+            ? ev
+            : ev with { Tags = tags.Select(tag => tag.GetTag()).ToList() };
+
         // safeWindowThreshold を文字列として State へ渡し safe/unsafe 判定を内部に委譲
         var updatedState = payload.State.ProcessEvent(
-            ev,
+            normalizedEvent,
             getAffectedItemIds,
             projectItem,
             safeWindowThreshold.Value);

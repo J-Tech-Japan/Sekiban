@@ -49,7 +49,7 @@ public class GenericTagMultiProjectorSerializationTests
         var weatherEvent = CreateEvent(
             new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(eventTime), 20, "Sunny"),
             eventTime,
-            forecastId);
+            forecastId) with { Tags = new List<string>() };
 
         var projected = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
             GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload(),

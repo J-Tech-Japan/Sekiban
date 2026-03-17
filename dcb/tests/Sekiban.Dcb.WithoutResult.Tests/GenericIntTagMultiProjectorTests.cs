@@ -200,7 +200,8 @@ public class GenericIntTagMultiProjectorTests
         var eventTime = DateTime.UtcNow;
         var processThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(-20), Guid.Empty);
         var serializeThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(20), Guid.Empty);
-        var studentEvent = CreateEvent(new StudentCreated(Guid.NewGuid(), "Alice"), eventTime, new YearlyStudentsTag(year));
+        var studentEvent = CreateEvent(new StudentCreated(Guid.NewGuid(), "Alice"), eventTime, new YearlyStudentsTag(year))
+            with { Tags = new List<string>() };
 
         var projected = GenericIntTagMultiProjector<StudentProjector, YearlyStudentsTag>.Project(
             projector,
