@@ -303,6 +303,43 @@ public class GenericTagMultiProjectorUnsafeDataTests
         Assert.Equal(20, safeState.TemperatureC);
     }
 
+    [Fact]
+    public void GenericTagMultiProjector_SerializationRoundTrip_PreservesItemThatBecomesSafeAtSerializeTime()
+    {
+        var forecastId = Guid.NewGuid();
+        var eventTime = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var processThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(-20), Guid.Empty);
+        var serializeThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(20), Guid.Empty);
+        var weatherEvent = CreateEvent(
+            new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(eventTime), 20, "Sunny"),
+            eventTime,
+            forecastId);
+
+        var projected = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
+            GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload(),
+            weatherEvent,
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes,
+            processThreshold).GetValue();
+
+        Assert.True(projected.IsTagStateUnsafe(forecastId));
+
+        var serialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Serialize(
+            _domainTypes,
+            serializeThreshold,
+            projected);
+
+        var deserialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Deserialize(
+            _domainTypes,
+            serializeThreshold,
+            serialized.Data);
+
+        var deserializedStates = deserialized.GetCurrentTagStates();
+        Assert.Single(deserializedStates);
+        Assert.Contains(forecastId, deserializedStates.Keys);
+        Assert.Equal(20, Assert.IsType<WeatherForecastState>(deserializedStates[forecastId].Payload).TemperatureC);
+    }
+
     private Event CreateEvent(IEventPayload payload, DateTime timestamp, Guid forecastId)
     {
         var eventId = Guid.NewGuid();

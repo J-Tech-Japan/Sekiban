@@ -201,6 +201,41 @@ public class GenericStringTagMultiProjectorTests
     }
 
     [Fact]
+    public void StringKeyProjector_SerializationRoundTrip_PreservesItemThatBecomesSafeAtSerializeTime()
+    {
+        var projector = GenericStringTagMultiProjector<StudentProjector, StudentCodeTag>.GenerateInitialPayload();
+        var studentCode = "STU001";
+        var eventTime = DateTime.UtcNow;
+        var processThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(-20), Guid.Empty);
+        var serializeThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(20), Guid.Empty);
+        var studentEvent = CreateEvent(new StudentCreated(Guid.NewGuid(), "Alice"), eventTime, new StudentCodeTag(studentCode));
+
+        var projected = GenericStringTagMultiProjector<StudentProjector, StudentCodeTag>.Project(
+            projector,
+            studentEvent,
+            new List<ITag> { new StudentCodeTag(studentCode) },
+            _domainTypes,
+            processThreshold).GetValue();
+
+        Assert.True(projected.IsTagStateUnsafe(studentCode));
+
+        var serialized = GenericStringTagMultiProjector<StudentProjector, StudentCodeTag>.Serialize(
+            _domainTypes,
+            serializeThreshold,
+            projected);
+
+        var deserialized = GenericStringTagMultiProjector<StudentProjector, StudentCodeTag>.Deserialize(
+            _domainTypes,
+            serializeThreshold,
+            serialized.Data);
+
+        var deserializedStates = deserialized.GetCurrentTagStates();
+        Assert.Single(deserializedStates);
+        Assert.Contains(studentCode, deserializedStates.Keys);
+        Assert.Equal("Alice", Assert.IsType<StudentState>(deserializedStates[studentCode].Payload).Name);
+    }
+
+    [Fact]
     public void StringKeyProjector_GetTagId_ReturnsStringId()
     {
         // Arrange
@@ -229,13 +264,18 @@ public class GenericStringTagMultiProjectorTests
 
     private Event CreateEvent(IEventPayload payload)
     {
-        var sortableId = SortableUniqueId.Generate(DateTime.UtcNow, Guid.NewGuid());
+        return CreateEvent(payload, DateTime.UtcNow);
+    }
+
+    private Event CreateEvent(IEventPayload payload, DateTime timestamp, params ITag[] tags)
+    {
+        var sortableId = SortableUniqueId.Generate(timestamp, Guid.NewGuid());
         return new Event(
             payload,
             sortableId,
             payload.GetType().Name,
             Guid.NewGuid(),
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "TestUser"),
-            new List<string>());
+            tags.Select(tag => tag.GetTag()).ToList());
     }
 }

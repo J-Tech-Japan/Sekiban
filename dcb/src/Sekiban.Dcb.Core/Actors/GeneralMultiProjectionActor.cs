@@ -155,6 +155,7 @@ public class GeneralMultiProjectionActor
         if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
 
         var loadedPayload = deserializeResult.GetValue();
+        ValidateRestoredSnapshot(state, loadedPayload);
         _logger.LogDebug("[{ProjectorName}] Deserialize: via ICoreMultiProjectorTypes", _projectorName);
 
         if (loadedPayload is IDualStateAccessor)
@@ -184,6 +185,71 @@ public class GeneralMultiProjectionActor
         _unsafeLastSortableUniqueId = state.LastSortableUniqueId;
         _unsafeVersion = state.Version;
         _isCatchedUp = state.IsCatchedUp;
+    }
+
+    private static void ValidateRestoredSnapshot(
+        SerializableMultiProjectionState state,
+        IMultiProjectionPayload loadedPayload)
+    {
+        if (state.Version <= 0 || string.IsNullOrEmpty(state.LastSortableUniqueId))
+        {
+            return;
+        }
+
+        if (!TryGetCustomTagProjectorItemCount(loadedPayload, out var itemCount))
+        {
+            return;
+        }
+
+        if (itemCount > 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Snapshot restore integrity check failed for projector '{state.ProjectorName}'. "
+            + $"Checkpoint '{state.LastSortableUniqueId}' and snapshot version {state.Version} indicate persisted safe progress, "
+            + "but the restored tag snapshot contains 0 items.");
+    }
+
+    private static bool TryGetCustomTagProjectorItemCount(
+        IMultiProjectionPayload loadedPayload,
+        out int itemCount)
+    {
+        itemCount = 0;
+        var payloadType = loadedPayload.GetType();
+        var typeName = payloadType.IsGenericType
+            ? payloadType.GetGenericTypeDefinition().Name
+            : payloadType.Name;
+
+        if (typeName is not ("GenericTagMultiProjector`2" or
+            "GenericStringTagMultiProjector`2" or
+            "GenericIntTagMultiProjector`2"))
+        {
+            return false;
+        }
+
+        var getStatesMethod = payloadType.GetMethod("GetCurrentTagStates");
+        if (getStatesMethod == null)
+        {
+            return false;
+        }
+
+        var states = getStatesMethod.Invoke(loadedPayload, Array.Empty<object>());
+        if (states is System.Collections.ICollection collection)
+        {
+            itemCount = collection.Count;
+            return true;
+        }
+
+        var countProperty = states?.GetType().GetProperty("Count");
+        if (countProperty?.GetValue(states) is int count)
+        {
+            itemCount = count;
+            return true;
+        }
+
+        return false;
     }
 
     private async Task<ResultBox<SerializableMultiProjectionState>> BuildSerializableStateAsync(bool canGetUnsafeState)
