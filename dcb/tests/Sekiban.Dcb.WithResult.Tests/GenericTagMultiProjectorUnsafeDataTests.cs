@@ -340,6 +340,59 @@ public class GenericTagMultiProjectorUnsafeDataTests
         Assert.Equal(20, Assert.IsType<WeatherForecastState>(deserializedStates[forecastId].Payload).TemperatureC);
     }
 
+    [Fact]
+    public void GenericTagMultiProjector_SerializationRoundTrip_PreservesSafeProgress_WhenSafeStateIsEmpty()
+    {
+        var forecastId = Guid.NewGuid();
+        var createTime = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var deleteTime = createTime.AddMinutes(1);
+        var processThreshold = SortableUniqueId.Generate(createTime.AddSeconds(-20), Guid.Empty);
+        var serializeThreshold = SortableUniqueId.Generate(deleteTime.AddSeconds(20), Guid.Empty);
+
+        var created = CreateEvent(
+            new WeatherForecastCreated(forecastId, "Tokyo", DateOnly.FromDateTime(createTime), 20, "Sunny"),
+            createTime,
+            forecastId) with { Tags = new List<string>() };
+        var deleted = CreateEvent(new WeatherForecastDeleted(forecastId), deleteTime, forecastId)
+            with { Tags = new List<string>() };
+
+        var createdProjection = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
+            GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload(),
+            created,
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes,
+            processThreshold).GetValue();
+        var projected = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
+            createdProjection,
+            deleted,
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes,
+            processThreshold).GetValue();
+
+        var safeProjectionBefore = projected.GetSafeProjection(new SortableUniqueId(serializeThreshold), _domainTypes);
+        Assert.Empty(safeProjectionBefore.State.GetCurrentTagStates());
+        Assert.Equal(2, safeProjectionBefore.Version);
+        Assert.Equal(deleted.SortableUniqueIdValue, safeProjectionBefore.SafeLastSortableUniqueId);
+
+        var serialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Serialize(
+            _domainTypes,
+            serializeThreshold,
+            projected);
+        var deserialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Deserialize(
+            _domainTypes,
+            serializeThreshold,
+            serialized.Data);
+
+        var safeProjectionAfter = deserialized.GetSafeProjection(new SortableUniqueId(serializeThreshold), _domainTypes);
+        var unsafeProjectionAfter = deserialized.GetUnsafeProjection(_domainTypes);
+
+        Assert.Empty(safeProjectionAfter.State.GetCurrentTagStates());
+        Assert.Equal(2, safeProjectionAfter.Version);
+        Assert.Equal(deleted.SortableUniqueIdValue, safeProjectionAfter.SafeLastSortableUniqueId);
+        Assert.Equal(2, unsafeProjectionAfter.Version);
+        Assert.Equal(deleted.SortableUniqueIdValue, unsafeProjectionAfter.LastSortableUniqueId);
+    }
+
     private Event CreateEvent(IEventPayload payload, DateTime timestamp, Guid forecastId)
     {
         var eventId = Guid.NewGuid();
