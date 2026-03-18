@@ -52,11 +52,13 @@ internal class Program
         if (string.IsNullOrWhiteSpace(templateType))
         {
             Console.WriteLine("Select template type:");
-            Console.WriteLine("  1. decider       - Sekiban Dcb Decider Aspire Template (recommended)");
-            Console.WriteLine("  2. dcb           - Sekiban Dcb Orleans Aspire Template");
-            Console.WriteLine("  3. withoutresult - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
-            Console.WriteLine("  4. pure          - Sekiban Pure Orleans Aspire Template");
-            Console.Write("Enter choice (decider/dcb/withoutresult/pure) [default: decider]: ");
+            Console.WriteLine("  1. decider        - Sekiban Dcb Decider Aspire Template (recommended)");
+            Console.WriteLine("  2. dcb            - Sekiban Dcb Orleans Aspire Template");
+            Console.WriteLine("  3. withoutresult  - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
+            Console.WriteLine("  4. pure           - Sekiban Pure Orleans Aspire Template");
+            Console.WriteLine("  5. decider-aws    - Sekiban Dcb Decider AWS Template (DynamoDB)");
+            Console.WriteLine("  6. withoutresult-aws - Sekiban Dcb Orleans AWS Template (DynamoDB)");
+            Console.Write("Enter choice [default: decider]: ");
             var input = Console.ReadLine();
             templateType = string.IsNullOrWhiteSpace(input) ? "decider" : input.Trim();
         }
@@ -69,12 +71,15 @@ internal class Program
             "2" => "dcb",
             "3" => "withoutresult",
             "4" => "pure",
+            "5" => "decider-aws",
+            "6" => "withoutresult-aws",
             _ => templateType
         };
 
-        if (templateType != "decider" && templateType != "dcb" && templateType != "withoutresult" && templateType != "pure")
+        var validTypes = new[] { "decider", "dcb", "withoutresult", "pure", "decider-aws", "withoutresult-aws" };
+        if (!validTypes.Contains(templateType))
         {
-             Console.Error.WriteLine($"❌ Invalid template type: {templateType}. Allowed values are 'decider', 'dcb', 'withoutresult', or 'pure'.");
+             Console.Error.WriteLine($"❌ Invalid template type: {templateType}. Allowed values are: {string.Join(", ", validTypes.Select(t => $"'{t}'"))}.");
              return 1;
         }
 
@@ -95,10 +100,20 @@ internal class Program
              installCommand = "new install Sekiban.Dcb.Templates";
              createCommand = $"new sekiban-dcb-decider -n {projectName}";
         }
+        else if (templateType == "decider-aws")
+        {
+             installCommand = "new install Sekiban.Dcb.Templates";
+             createCommand = $"new sekiban-dcb-decider-aws -n {projectName}";
+        }
         else if (templateType == "withoutresult")
         {
              installCommand = "new install Sekiban.Dcb.Templates";
              createCommand = $"new sekiban-dcb-orleans-withoutresult -n {projectName}";
+        }
+        else if (templateType == "withoutresult-aws")
+        {
+             installCommand = "new install Sekiban.Dcb.Templates";
+             createCommand = $"new sekiban-dcb-orleans-aws -n {projectName}";
         }
         else // dcb
         {
@@ -147,10 +162,12 @@ internal class Program
         Console.WriteLine("Options:");
         Console.WriteLine("  -t, --type   The type of template to use. Default is 'decider'.");
         Console.WriteLine("               Available types:");
-        Console.WriteLine("                 decider       - Sekiban Dcb Decider Aspire Template (recommended)");
-        Console.WriteLine("                 dcb           - Sekiban Dcb Orleans Aspire Template");
-        Console.WriteLine("                 withoutresult - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
-        Console.WriteLine("                 pure          - Sekiban Pure Orleans Aspire Template");
+        Console.WriteLine("                 decider          - Sekiban Dcb Decider Aspire Template (recommended)");
+        Console.WriteLine("                 dcb              - Sekiban Dcb Orleans Aspire Template");
+        Console.WriteLine("                 withoutresult    - Sekiban Dcb Orleans Aspire Template (WithoutResult)");
+        Console.WriteLine("                 pure             - Sekiban Pure Orleans Aspire Template");
+        Console.WriteLine("                 decider-aws      - Sekiban Dcb Decider AWS Template (DynamoDB)");
+        Console.WriteLine("                 withoutresult-aws - Sekiban Dcb Orleans AWS Template (DynamoDB)");
         Console.WriteLine("  -h, --help   Show this help message.");
         Console.WriteLine();
         Console.WriteLine("Examples:");
@@ -159,6 +176,8 @@ internal class Program
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t dcb");
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t withoutresult");
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t pure");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t decider-aws");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t withoutresult-aws");
     }
 
     /// <summary>

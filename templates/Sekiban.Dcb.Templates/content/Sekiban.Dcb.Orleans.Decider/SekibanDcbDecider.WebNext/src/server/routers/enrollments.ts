@@ -70,7 +70,7 @@ export const enrollmentsRouter = router({
   enroll: publicProcedure
     .input(enrollStudentSchema)
     .mutation(async ({ input }) => {
-      const res = await fetch(`${process.env.API_BASE_URL}/api/enrollments`, {
+      const res = await fetch(`${process.env.API_BASE_URL}/api/enrollments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

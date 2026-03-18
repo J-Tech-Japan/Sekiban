@@ -231,15 +231,15 @@ void ConfigureClusteringAndStorage(ISiloBuilder siloBuilder, IConfiguration conf
 
     if (!string.IsNullOrWhiteSpace(cosmosConnection))
     {
-        ConfigureCosmosOrleans(siloBuilder, cosmosConnection);
+        ConfigureCosmosOrleans(siloBuilder, cosmosConnection, configuration);
         return;
     }
 
     // Development or Azure Storage mode
-    ConfigureLocalOrleans(siloBuilder, environment);
+    ConfigureLocalOrleans(siloBuilder, environment, configuration);
 }
 
-void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection)
+void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, IConfiguration configuration)
 {
     Console.WriteLine("[Orleans] Using Cosmos clustering");
     var endpointPart = cosmosConnection.Split(';').FirstOrDefault(p => p.StartsWith("AccountEndpoint"));
@@ -282,13 +282,21 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection)
         options.IsResourceCreationEnabled = true;
     });
 
-    foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", "PubSubStore" })
+    foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider" })
     {
         AddCosmosStore(store);
     }
+
+    // PubSubStore for Cosmos is registered conditionally based on stream type
+    // (in-memory streams use MemoryGrainStorage, others use Cosmos)
+    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (!useInMemoryStreams)
+    {
+        AddCosmosStore("PubSubStore");
+    }
 }
 
-void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment)
+void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment, IConfiguration configuration)
 {
     if (environment.IsDevelopment())
     {
@@ -344,7 +352,14 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
     AddBlobStore("dcb-orleans-queue");
     AddTableStore("DcbOrleansGrainTable");
     AddTableStore("EventStreamProvider");
-    AddTableStore("PubSubStore");
+
+    // PubSubStore is registered conditionally based on stream type
+    // (in-memory streams use MemoryGrainStorage, others use Azure Table)
+    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (!useInMemoryStreams)
+    {
+        AddTableStore("PubSubStore");
+    }
 }
 
 void ConfigureStreaming(ISiloBuilder siloBuilder, IConfiguration configuration, string queueType)
