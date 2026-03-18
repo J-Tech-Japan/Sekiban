@@ -231,15 +231,15 @@ void ConfigureClusteringAndStorage(ISiloBuilder siloBuilder, IConfiguration conf
 
     if (!string.IsNullOrWhiteSpace(cosmosConnection))
     {
-        ConfigureCosmosOrleans(siloBuilder, cosmosConnection);
+        ConfigureCosmosOrleans(siloBuilder, cosmosConnection, configuration);
         return;
     }
 
     // Development or Azure Storage mode
-    ConfigureLocalOrleans(siloBuilder, environment);
+    ConfigureLocalOrleans(siloBuilder, environment, configuration);
 }
 
-void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection)
+void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, IConfiguration configuration)
 {
     Console.WriteLine("[Orleans] Using Cosmos clustering");
     var endpointPart = cosmosConnection.Split(';').FirstOrDefault(p => p.StartsWith("AccountEndpoint"));
@@ -289,14 +289,14 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection)
 
     // PubSubStore for Cosmos is registered conditionally based on stream type
     // (in-memory streams use MemoryGrainStorage, others use Cosmos)
-    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
     if (!useInMemoryStreams)
     {
         AddCosmosStore("PubSubStore");
     }
 }
 
-void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment)
+void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment, IConfiguration configuration)
 {
     if (environment.IsDevelopment())
     {
@@ -355,7 +355,7 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
 
     // PubSubStore is registered conditionally based on stream type
     // (in-memory streams use MemoryGrainStorage, others use Azure Table)
-    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
     if (!useInMemoryStreams)
     {
         AddTableStore("PubSubStore");
