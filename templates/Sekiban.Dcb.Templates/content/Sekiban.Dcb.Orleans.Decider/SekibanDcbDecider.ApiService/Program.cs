@@ -282,9 +282,17 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection)
         options.IsResourceCreationEnabled = true;
     });
 
-    foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", "PubSubStore" })
+    foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider" })
     {
         AddCosmosStore(store);
+    }
+
+    // PubSubStore for Cosmos is registered conditionally based on stream type
+    // (in-memory streams use MemoryGrainStorage, others use Cosmos)
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (!useInMemoryStreams)
+    {
+        AddCosmosStore("PubSubStore");
     }
 }
 
@@ -344,7 +352,14 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
     AddBlobStore("dcb-orleans-queue");
     AddTableStore("DcbOrleansGrainTable");
     AddTableStore("EventStreamProvider");
-    AddTableStore("PubSubStore");
+
+    // PubSubStore is registered conditionally based on stream type
+    // (in-memory streams use MemoryGrainStorage, others use Azure Table)
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (!useInMemoryStreams)
+    {
+        AddTableStore("PubSubStore");
+    }
 }
 
 void ConfigureStreaming(ISiloBuilder siloBuilder, IConfiguration configuration, string queueType)
