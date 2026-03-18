@@ -95,6 +95,30 @@ public class GeneralMultiProjectionActorSafeWindowTests
     }
 
     [Fact]
+    public async Task SafeWindow_UnsafeOnlyEvent_DoesNotAdvanceSafeCheckpoint()
+    {
+        // Arrange
+        var actor = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
+        var recentEvent = CreateEvent(new TestEventCreated("Recent Item"), DateTime.UtcNow.AddSeconds(-2));
+
+        // Act
+        await actor.AddEventsAsync(new[] { recentEvent });
+        var safeState = await actor.GetStateAsync(canGetUnsafeState: false);
+        var snapshot = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+
+        // Assert
+        Assert.True(safeState.IsSuccess);
+        Assert.Equal(0, safeState.GetValue().Version);
+        Assert.Equal(string.Empty, safeState.GetValue().LastSortableUniqueId);
+
+        Assert.True(snapshot.IsSuccess);
+        var inlineState = snapshot.GetValue().InlineState;
+        Assert.NotNull(inlineState);
+        Assert.Equal(0, inlineState!.Version);
+        Assert.Equal(string.Empty, inlineState.LastSortableUniqueId);
+    }
+
+    [Fact]
     public async Task SafeWindow_OutOfOrderEvents_ProcessedCorrectly()
     {
         // Arrange

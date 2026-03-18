@@ -576,7 +576,7 @@ public class GeneralMultiProjectionActor
 
                 statePayload = (IMultiProjectionPayload)dualAccessor.GetSafeProjectorPayload();
                 var safeSortableId = dualAccessor.SafeLastSortableUniqueId;
-                lastSortableId = string.IsNullOrEmpty(safeSortableId) ? _unsafeLastSortableUniqueId : safeSortableId;
+                lastSortableId = safeSortableId ?? string.Empty;
                 lastEventId = Guid.Empty;
                 stateVersion = dualAccessor.SafeVersion;
                 isSafeState = true;
@@ -622,7 +622,7 @@ public class GeneralMultiProjectionActor
                 var projection = getSafeMethod?.Invoke(_singleStateAccessor, new object[] { safeWindowThreshold, _domain });
                 statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
                 var safeSortableId = projection?.GetType().GetProperty("SafeLastSortableUniqueId")?.GetValue(projection) as string;
-                lastSortableId = string.IsNullOrEmpty(safeSortableId) ? _unsafeLastSortableUniqueId : safeSortableId;
+                lastSortableId = safeSortableId ?? string.Empty;
                 lastEventId = Guid.Empty;
                 stateVersion = (int)(projection?.GetType().GetProperty("Version")?.GetValue(projection) ?? _unsafeVersion);
                 isSafeState = true;

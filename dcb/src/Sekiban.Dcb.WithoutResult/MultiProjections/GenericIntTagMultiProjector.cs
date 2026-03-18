@@ -58,11 +58,10 @@ public record
     public static SerializationResult Serialize(DcbDomainTypes domainTypes, string safeWindowThreshold, GenericIntTagMultiProjector<TTagProjector, TTagGroup> payload)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold)) throw new ArgumentException("safeWindowThreshold must be supplied", nameof(safeWindowThreshold));
-        Func<Event, IEnumerable<int>> getAffectedIds = evt => GetAffectedTagIds(evt, domainTypes);
-        Func<int, TagState?, Event, TagState?> projectItem = ProjectTagState;
-        var safeDict = payload.State.GetSafeState(safeWindowThreshold, getAffectedIds, projectItem);
-        var items = new List<object>(safeDict.Count);
-        foreach (var (id, ts) in safeDict)
+        var safeProjection = payload.GetSafeProjection(new SortableUniqueId(safeWindowThreshold), domainTypes);
+        var safeStates = safeProjection.State.State.GetCurrentState();
+        var items = new List<object>(safeStates.Count);
+        foreach (var (id, ts) in safeStates)
         {
             var payloadType = ts.Payload.GetType();
             var payloadName = payloadType.Name;
@@ -76,7 +75,13 @@ public record
                 last = ts.LastSortedUniqueId
             });
         }
-        var dto = new { v = 1, items };
+        var dto = new
+        {
+            v = 2,
+            last = safeProjection.SafeLastSortableUniqueId,
+            version = safeProjection.Version,
+            items
+        };
         var json = System.Text.Json.JsonSerializer.Serialize(dto, domainTypes.JsonSerializerOptions);
         var rawBytes = System.Text.Encoding.UTF8.GetBytes(json);
         var originalSize = rawBytes.LongLength;
@@ -100,8 +105,8 @@ public record
                     var id = item["id"]?.GetValue<int>() ?? 0;
                     var type = item["type"]?.GetValue<string>() ?? string.Empty;
                     var payloadJson = item["payload"]?.GetValue<string>() ?? "{}";
-                    var version = item["version"]?.GetValue<int>() ?? 0;
-                    var last = item["last"]?.GetValue<string>() ?? string.Empty;
+                    var itemVersion = item["version"]?.GetValue<int>() ?? 0;
+                    var itemLast = item["last"]?.GetValue<string>() ?? string.Empty;
                     var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
                     var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, payloadBytes);
                     if (!rb.IsSuccess) continue;
@@ -111,16 +116,29 @@ public record
                     var ts = TagState.GetEmpty(tagStateId) with
                     {
                         Payload = payload,
-                        Version = version,
-                        LastSortedUniqueId = last,
+                        Version = itemVersion,
+                        LastSortedUniqueId = itemLast,
                         ProjectorVersion = TTagProjector.ProjectorVersion
                     };
                     map[id] = ts;
                 }
             }
         }
+        var derivedLast = map.Count > 0
+            ? map.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
+            : string.Empty;
+        var derivedVersion = map.Values.Sum(ts => ts.Version);
+        var last = obj?["last"]?.GetValue<string>() ?? derivedLast;
+        var version = obj?["version"]?.GetValue<int>() ?? derivedVersion;
         var state = SafeUnsafeProjectionState<int, TagState>.FromCurrentData(map);
-        return new GenericIntTagMultiProjector<TTagProjector, TTagGroup> { State = state };
+        return new GenericIntTagMultiProjector<TTagProjector, TTagGroup>
+        {
+            State = state,
+            LastSortableUniqueId = last,
+            Version = version,
+            SafeLastSortableUniqueIdValue = last,
+            SafeVersionValue = version
+        };
     }
 
     /// <summary>
@@ -310,14 +328,9 @@ public record
     private Guid LastEventId { get; init; } = Guid.Empty;
     private string LastSortableUniqueId { get; init; } = string.Empty;
     private int Version { get; init; }
-    public int SafeVersion
-    {
-        get
-        {
-            var current = State.GetCurrentState();
-            return current.Values.Sum(ts => ts.Version);
-        }
-    }
+    private string SafeLastSortableUniqueIdValue { get; init; } = string.Empty;
+    private int SafeVersionValue { get; init; }
+    public int SafeVersion => SafeVersionValue;
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get safe state
@@ -326,31 +339,32 @@ public record
         SortableUniqueId safeWindowThreshold,
         DcbDomainTypes domainTypes)
     {
-        // Build safe view to compute safe last position and version
         Func<Event, IEnumerable<int>> getIds = evt => GetAffectedTagIds(evt, domainTypes);
         Func<int, TagState?, Event, TagState?> projectItem = ProjectTagState;
 
         var safeDict = State.GetSafeState(safeWindowThreshold.Value, getIds, projectItem);
-        var safeLast = safeDict.Count > 0
-            ? safeDict.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
-            : string.Empty;
-        var version = safeDict.Values.Sum(ts => ts.Version);
-        return new SafeProjection<GenericIntTagMultiProjector<TTagProjector, TTagGroup>>(this, safeLast, version);
+        var promotedUnsafeEvents = GetPromotedUnsafeEvents(safeWindowThreshold.Value);
+        var safeLast = GetMaxSortableUniqueId(
+            SafeLastSortableUniqueIdValue,
+            promotedUnsafeEvents.Count > 0 ? promotedUnsafeEvents.Max(evt => evt.SortableUniqueIdValue) ?? string.Empty : string.Empty);
+        var version = SafeVersionValue + promotedUnsafeEvents.Count;
+        var safePayload = this with
+        {
+            State = SafeUnsafeProjectionState<int, TagState>.FromCurrentData(safeDict),
+            LastEventId = Guid.Empty,
+            LastSortableUniqueId = safeLast,
+            Version = version,
+            SafeLastSortableUniqueIdValue = safeLast,
+            SafeVersionValue = version
+        };
+        return new SafeProjection<GenericIntTagMultiProjector<TTagProjector, TTagGroup>>(safePayload, safeLast, version);
     }
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Get unsafe state
     /// </summary>
     public UnsafeProjection<GenericIntTagMultiProjector<TTagProjector, TTagGroup>> GetUnsafeProjection(DcbDomainTypes domainTypes)
-    {
-        var current = State.GetCurrentState();
-        var last = current.Count > 0
-            ? current.Values.Max(ts => ts.LastSortedUniqueId) ?? string.Empty
-            : string.Empty;
-        // LastEventId is not tracked here; return Guid.Empty
-        var version = current.Values.Sum(ts => ts.Version);
-        return new UnsafeProjection<GenericIntTagMultiProjector<TTagProjector, TTagGroup>>(this, last, Guid.Empty, version);
-    }
+        => new(this, LastSortableUniqueId, LastEventId, Version);
 
     /// <summary>
     ///     ISafeAndUnsafeStateAccessor - Process event
@@ -368,12 +382,27 @@ public record
         // Actor から渡された safeWindowThreshold をそのまま State.ProcessEvent に渡すため
         // Project 内部での SafeWindow 再計算は行わない。
         var projected = Project(this, evt, tags, domainTypes, safeWindowThreshold);
+        var unsafeEventIdsAfter = projected.State.GetAllUnsafeEvents().Select(e => e.Id).ToHashSet();
+        var promotedToSafe = State.GetAllUnsafeEvents()
+            .Where(e => !unsafeEventIdsAfter.Contains(e.Id))
+            .ToList();
+        var safeVersion = SafeVersionValue + promotedToSafe.Count;
+        var safeLast = GetMaxSortableUniqueId(
+            SafeLastSortableUniqueIdValue,
+            promotedToSafe.Count > 0 ? promotedToSafe.Max(e => e.SortableUniqueIdValue) ?? string.Empty : string.Empty);
+        if (string.Compare(evt.SortableUniqueIdValue, safeWindowThreshold.Value, StringComparison.Ordinal) <= 0)
+        {
+            safeVersion++;
+            safeLast = GetMaxSortableUniqueId(safeLast, evt.SortableUniqueIdValue);
+        }
 
         return projected with
         {
             LastEventId = evt.Id,
             LastSortableUniqueId = evt.SortableUniqueIdValue,
-            Version = Version + 1
+            Version = Version + 1,
+            SafeLastSortableUniqueIdValue = safeLast,
+            SafeVersionValue = safeVersion
         };
     }
 
@@ -382,4 +411,25 @@ public record
     public int GetVersion() => Version;
 
     #endregion
+
+    private List<Event> GetPromotedUnsafeEvents(string safeWindowThreshold) =>
+        State.GetAllUnsafeEvents()
+            .Where(e => string.IsNullOrEmpty(safeWindowThreshold) ||
+                        string.Compare(e.SortableUniqueIdValue, safeWindowThreshold, StringComparison.Ordinal) <= 0)
+            .ToList();
+
+    private static string GetMaxSortableUniqueId(string left, string right)
+    {
+        if (string.IsNullOrEmpty(left))
+        {
+            return right;
+        }
+
+        if (string.IsNullOrEmpty(right))
+        {
+            return left;
+        }
+
+        return string.Compare(left, right, StringComparison.Ordinal) >= 0 ? left : right;
+    }
 }
