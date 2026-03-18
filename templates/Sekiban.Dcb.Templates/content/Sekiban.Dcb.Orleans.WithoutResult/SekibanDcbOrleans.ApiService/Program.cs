@@ -1,7 +1,5 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
-// NOTE: Azure.Storage.Queues is not used because Azure Queue Streams are disabled
-// due to Orleans 10 keyed service resolution issues.
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
@@ -78,8 +76,9 @@ if (cfgGrainDefault != "cosmos")
 // Always register blob storage for snapshot offloading
 builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
 
-// NOTE: Azure Queue Streams are currently disabled due to Orleans 10 keyed service resolution issues.
-// QueueServiceClient registration is skipped to avoid errors during silo startup.
+// Queue client for Orleans streaming - required even when using in-memory streams
+// because Orleans options logging will attempt to resolve QueueServiceClient
+builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 
 // Add Cosmos DB client for Orleans (if using Cosmos for clustering or grain storage)
 if (cfgClustering == "cosmos" || cfgGrainDefault == "cosmos")
@@ -111,13 +110,7 @@ builder.UseOrleans(config =>
         }
     }
 
-    // TEMPORARY: Always use in-memory streams until Orleans 10 keyed service issue is resolved
-    // Orleans 10.0.0 has a bug where it calls GetRequiredKeyedService<QueueServiceClient> during silo options logging,
-    // even when QueueServiceClient is registered as a keyed singleton. This prevents Azure Queue Streams from working.
-    // For now, we'll use in-memory streams which work correctly in all environments.
-    // TODO: Revisit when Orleans team fixes the keyed service resolution issue.
-
-    // Use in-memory streams with enhanced configuration
+    // Use in-memory streams (configured via Orleans:UseInMemoryStreams in appsettings)
     config.AddMemoryStreams("EventStreamProvider", configurator =>
     {
         // Increase partitions for better parallelism
