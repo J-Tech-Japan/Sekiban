@@ -18,6 +18,7 @@ var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 var postgres = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
+    .WithDbGate()
     // .WithDataVolume()
     .AddDatabase("DcbPostgres");
 

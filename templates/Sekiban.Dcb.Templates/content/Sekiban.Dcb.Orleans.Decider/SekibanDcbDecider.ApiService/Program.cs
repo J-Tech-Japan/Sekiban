@@ -19,6 +19,8 @@ using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.ServiceId;
 using SekibanDcbDecider.ApiService.Endpoints;
 using SekibanDcbDecider.ApiService.Auth;
 using SekibanDcbDecider.ApiService.Exceptions;
@@ -127,6 +129,11 @@ builder.Services.AddHealthChecks()
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
+
 builder.Services.AddSingleton<SseTopicHub>();
 builder.Services.AddHostedService<OrleansStreamEventRouter>();
 

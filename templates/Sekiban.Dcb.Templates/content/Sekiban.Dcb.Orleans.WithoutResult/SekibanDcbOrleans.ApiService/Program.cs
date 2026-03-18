@@ -28,6 +28,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.ServiceId;
 using SekibanDcbOrleans.ApiService.Health;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -349,6 +351,10 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
 
 // Configure database storage based on configuration
 string? configuredDatabasePath = null;

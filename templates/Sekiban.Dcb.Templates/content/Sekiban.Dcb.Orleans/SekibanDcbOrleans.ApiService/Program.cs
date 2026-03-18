@@ -17,12 +17,14 @@ using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Postgres;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
@@ -421,6 +423,9 @@ builder.UseOrleans(config =>
 });
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
 
 // Configure database storage based on configuration
 string? configuredDatabasePath = null;
