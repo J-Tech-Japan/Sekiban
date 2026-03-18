@@ -17,6 +17,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Tags;
 using DcbOrleans.WithoutResult.ApiService;
 
@@ -251,6 +252,10 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
 
 // Configure database storage based on configuration
 if (databaseType != "dynamodb")

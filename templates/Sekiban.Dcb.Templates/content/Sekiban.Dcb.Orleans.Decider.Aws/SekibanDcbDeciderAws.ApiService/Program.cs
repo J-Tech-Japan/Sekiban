@@ -13,6 +13,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.BlobStorage.S3;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Snapshots;
 using SekibanDcbDeciderAws.ApiService;
 using SekibanDcbDeciderAws.ApiService.Endpoints;
@@ -245,6 +246,11 @@ builder.UseOrleans(config =>
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);
+
+// Register native runtime abstraction interfaces
+builder.Services.AddSekibanDcbNativeRuntime();
+builder.Services.AddSekibanDcbColdEventDefaults();
+
 builder.Services.AddSingleton<SseTopicHub>();
 builder.Services.AddHostedService<OrleansStreamEventRouter>();
 

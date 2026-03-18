@@ -16,27 +16,27 @@
 
     <ItemGroup>
         <!-- Authentication / Identity -->
-        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.2" />
-        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.0" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.3" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.1.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
 
         <!-- Orleans Core -->
-        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
         <!-- AWS deployment packages (RDS/AdoNet for Orleans) -->
-        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
         <PackageReference Include="Npgsql" Version="10.0.1" />
 
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.17" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.0.5" />
-        <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="10.0.5" />
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="10.0.5" />
-        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.102" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.8" />
+        <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="10.1.8" />
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="10.1.8" />
+        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
     <ItemGroup>
