@@ -23,4 +23,8 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\SekibanDcbDeciderAws.ImmutableModels\SekibanDcbDeciderAws.ImmutableModels.csproj" />
+    </ItemGroup>
+
 </Project>

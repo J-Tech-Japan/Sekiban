@@ -15,6 +15,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.8" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbDeciderAws.EventSource\SekibanDcbDeciderAws.EventSource.csproj" />
   </ItemGroup>
 </Project>

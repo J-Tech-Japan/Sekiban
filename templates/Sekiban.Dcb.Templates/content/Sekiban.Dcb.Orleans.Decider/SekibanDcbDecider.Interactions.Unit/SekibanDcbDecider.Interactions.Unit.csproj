@@ -23,4 +23,12 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.8" />
+    </ItemGroup>
+
 </Project>

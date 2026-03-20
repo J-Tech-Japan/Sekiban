@@ -23,4 +23,12 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\SekibanDcbDeciderAws.Interactions\SekibanDcbDeciderAws.Interactions.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.8" />
+    </ItemGroup>
+
 </Project>
