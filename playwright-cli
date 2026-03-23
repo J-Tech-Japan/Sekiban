@@ -29,7 +29,11 @@ fi
 playwright_bin="$project_dir/node_modules/.bin/playwright"
 if [[ ! -x "$playwright_bin" ]]; then
   echo "Installing Playwright dependencies in $project_dir" >&2
-  npm ci --prefix "$project_dir" >&2
+  if [[ -f "$project_dir/package-lock.json" ]]; then
+    npm ci --prefix "$project_dir" >&2
+  else
+    npm install --prefix "$project_dir" >&2
+  fi
 fi
 
 exec "$playwright_bin" "$@"
