@@ -1,6 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-    <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0"/>
+<Project Sdk="Aspire.AppHost.Sdk/13.2.0">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -13,21 +11,20 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Hosting" Version="13.1.2" />
-        <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.2" />
-        <PackageReference Include="Aspire.Hosting.Azure.Functions" Version="13.1.2" />
-        <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.2" />
-        <PackageReference Include="Aspire.Hosting.Orleans" Version="13.1.2" />
-        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.2" />
+        <PackageReference Include="Aspire.Hosting" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.Azure.Functions" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.Orleans" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.0" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DcbOrleansDynamoDB.WithoutResult.ApiService\DcbOrleansDynamoDB.WithoutResult.ApiService.csproj"/>
-        <ProjectReference Include="..\DcbOrleans.Catchup.Functions\DcbOrleans.Catchup.Functions.csproj"/>
-        <ProjectReference Include="..\DcbOrleans.Web\DcbOrleans.Web.csproj"/>
-        <ProjectReference Include="..\DcbOrleans.Benchmark\DcbOrleans.Benchmark.csproj"/>
-        <ProjectReference Include="..\DcbOrleans.Cli\DcbOrleans.Cli.csproj"/>
+        <ProjectReference Include="..\DcbOrleansDynamoDB.WithoutResult.ApiService\DcbOrleansDynamoDB.WithoutResult.ApiService.csproj" />
+        <ProjectReference Include="..\DcbOrleans.Catchup.Functions\DcbOrleans.Catchup.Functions.csproj" />
+        <ProjectReference Include="..\DcbOrleans.Web\DcbOrleans.Web.csproj" />
+        <ProjectReference Include="..\DcbOrleans.Benchmark\DcbOrleans.Benchmark.csproj" />
+        <ProjectReference Include="..\DcbOrleans.Cli\DcbOrleans.Cli.csproj" />
     </ItemGroup>
 
 </Project>

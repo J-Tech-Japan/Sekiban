@@ -1,5 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
-    <Sdk Name="Aspire.AppHost.Sdk" Version="9.0.0"/>
+<Project Sdk="Aspire.AppHost.Sdk/13.2.0">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -10,18 +9,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.2" />
-        <PackageReference Include="Aspire.Hosting" Version="9.4.2" />
-        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="9.4.2" />
-        <PackageReference Include="Aspire.Hosting.Redis" Version="9.4.2" />
+        <PackageReference Include="Aspire.Hosting" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.0" />
+        <PackageReference Include="Aspire.Hosting.Redis" Version="13.2.0" />
         <PackageReference Include="CommunityToolkit.Aspire.Hosting.Dapr" Version="9.7.2" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DaprSample.Api\DaprSample.Api.csproj"/>
-        <ProjectReference Include="..\DaprSample.EventRelay\DaprSample.EventRelay.csproj"/>
-        <ProjectReference Include="..\DaprSample.Web\DaprSample.Web.csproj"/>
-        <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" IsAspireProjectResource="false"/>
+        <ProjectReference Include="..\DaprSample.Api\DaprSample.Api.csproj" />
+        <ProjectReference Include="..\DaprSample.EventRelay\DaprSample.EventRelay.csproj" />
+        <ProjectReference Include="..\DaprSample.Web\DaprSample.Web.csproj" />
+        <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" IsAspireProjectResource="false" />
     </ItemGroup>
 
 </Project>
