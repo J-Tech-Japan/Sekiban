@@ -7,18 +7,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj"/>
-        <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj"/>
-        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj"/>
-        <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj"/>
-        <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj"/>
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Dapr\Sekiban.Pure.Dapr.csproj" />
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.CosmosDb\Sekiban.Pure.CosmosDb.csproj" />
+        <ProjectReference Include="..\..\..\src\Sekiban.Pure.Postgres\Sekiban.Pure.Postgres.csproj" />
+        <ProjectReference Include="..\..\SharedDomain\SharedDomain.csproj" />
+        <ProjectReference Include="..\DaprSample.ServiceDefaults\DaprSample.ServiceDefaults.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Dapr.AspNetCore" Version="1.15.4"/>
-        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.2" />
-        <PackageReference Include="Aspire.Azure.Data.Tables" Version="9.4.2" />
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="9.4.2" />
+        <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="13.2.0" />
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.2.0" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.2.0" />
     </ItemGroup>
 
 </Project>

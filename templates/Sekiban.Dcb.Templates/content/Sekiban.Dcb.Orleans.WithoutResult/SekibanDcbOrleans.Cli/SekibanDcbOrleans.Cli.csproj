@@ -10,7 +10,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.3" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
         <PackageReference Include="System.CommandLine" Version="2.0.2" />

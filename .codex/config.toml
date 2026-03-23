@@ -1,0 +1,3 @@
+[mcp_servers.aspire]
+command = "aspire"
+args = ["agent", "mcp"]
