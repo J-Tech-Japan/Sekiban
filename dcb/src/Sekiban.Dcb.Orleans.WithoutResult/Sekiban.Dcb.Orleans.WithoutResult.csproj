@@ -30,9 +30,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="10.0.2-preview05" />
-        <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.0.2-preview05" />
-        <PackageReference Include="Sekiban.Dcb.WithoutResult.Model" Version="$(PackageVersion)" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

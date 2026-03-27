@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Tags;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -46,7 +47,7 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize to the specific type
-            var payload = JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
+            var payload = JsonSerializer.Deserialize(json, ResolveTypeInfo(payloadType));
 
             if (payload is ITagStatePayload tagStatePayload)
             {
@@ -73,7 +74,7 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             }
 
             // Serialize the payload to JSON
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), _jsonSerializerOptions);
+            var json = JsonSerializer.Serialize(payload, ResolveTypeInfo(payload.GetType()));
             var jsonBytes = Encoding.UTF8.GetBytes(json);
 
             return ResultBox.FromValue(jsonBytes);
@@ -100,4 +101,6 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
         }
         _payloadTypes[payloadName] = newType;
     }
+
+    private JsonTypeInfo ResolveTypeInfo(Type payloadType) => _jsonSerializerOptions.GetTypeInfo(payloadType);
 }

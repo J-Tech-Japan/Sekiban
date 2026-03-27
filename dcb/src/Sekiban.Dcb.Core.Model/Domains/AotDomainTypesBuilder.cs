@@ -11,7 +11,7 @@ public class AotDomainTypesBuilder
     /// <summary>
     ///     Gets the AOT-compatible event types registry.
     /// </summary>
-    public AotEventTypes EventTypes { get; } = new();
+    public AotEventTypes EventTypes { get; }
 
     /// <summary>
     ///     Gets the AOT-compatible tag types registry.
@@ -51,6 +51,7 @@ public class AotDomainTypesBuilder
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false
         };
+        EventTypes = new AotEventTypes(_jsonOptions);
     }
 
     /// <summary>
