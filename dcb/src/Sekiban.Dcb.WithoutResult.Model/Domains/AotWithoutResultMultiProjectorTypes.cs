@@ -19,7 +19,7 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
     private static bool _debugBypassProjectSwitch;
 
-    private record ProjectorRegistration(
+    private sealed record ProjectorRegistration(
         Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, IMultiProjectionPayload> Project,
         Func<IMultiProjectionPayload> GenerateInitial,
         string Version,
@@ -130,20 +130,6 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         JsonSerializerOptions jsonOptions) =>
         ResultBox.Error<IMultiProjectionPayload>(new NotSupportedException("Use Deserialize with DcbDomainTypes"));
 
-    public ResultBox<SerializationResult> Serialize(
-        string projectorName,
-        DcbDomainTypes domainTypes,
-        string safeWindowThreshold,
-        IMultiProjectionPayload payload)
-    {
-        if (_projectors.TryGetValue(projectorName, out ProjectorRegistration? reg))
-        {
-            return ResultBox.FromValue(reg.Serialize(domainTypes, safeWindowThreshold, payload));
-        }
-
-        return ResultBox.Error<SerializationResult>(new Exception($"Projector not found: {projectorName}"));
-    }
-
     public ResultBox<IMultiProjectionPayload> Deserialize(
         string projectorName,
         DcbDomainTypes domainTypes,
@@ -156,6 +142,20 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         }
 
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+    }
+
+    public ResultBox<SerializationResult> Serialize(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload)
+    {
+        if (_projectors.TryGetValue(projectorName, out ProjectorRegistration? reg))
+        {
+            return ResultBox.FromValue(reg.Serialize(domainTypes, safeWindowThreshold, payload));
+        }
+
+        return ResultBox.Error<SerializationResult>(new Exception($"Projector not found: {projectorName}"));
     }
 
     public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()

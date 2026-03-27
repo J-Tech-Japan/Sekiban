@@ -77,14 +77,11 @@ public class SimpleEventTypes : IEventTypes
                 nameof(eventType));
         }
 
-        if (_eventTypes.TryGetValue(eventTypeName, out var existingType))
+        if (_eventTypes.TryGetValue(eventTypeName, out var existingType) && existingType != eventType)
         {
-            if (existingType != eventType)
-            {
-                throw new InvalidOperationException(
-                    $"Event type name '{eventTypeName}' is already registered with type '{existingType.FullName}'. " +
-                    $"Cannot register it with different type '{eventType.FullName}'.");
-            }
+            throw new InvalidOperationException(
+                $"Event type name '{eventTypeName}' is already registered with type '{existingType.FullName}'. " +
+                $"Cannot register it with different type '{eventType.FullName}'.");
         }
 
         _eventTypes[eventTypeName] = eventType;
