@@ -35,9 +35,7 @@ public sealed class AotEventTypes : IEventTypes
     public void Register<T>(string eventTypeName, JsonTypeInfo<T> typeInfo)
         where T : IEventPayload
     {
-        _eventTypes[eventTypeName] = typeof(T);
-        _typeInfosByEventName[eventTypeName] = typeInfo;
-        _typeInfosByPayloadType[typeof(T)] = typeInfo;
+        EnsureEventRegistration(eventTypeName, typeof(T), typeInfo);
         _deserializers[eventTypeName] = json =>
             JsonSerializer.Deserialize(json, typeInfo);
 
@@ -61,9 +59,14 @@ public sealed class AotEventTypes : IEventTypes
                 nameof(eventPayloadType));
         }
 
-        _eventTypes[eventTypeName] = eventPayloadType;
-        _typeInfosByEventName[eventTypeName] = typeInfo;
-        _typeInfosByPayloadType[eventPayloadType] = typeInfo;
+        if (typeInfo.Type != eventPayloadType)
+        {
+            throw new ArgumentException(
+                $"JsonTypeInfo type '{typeInfo.Type.FullName}' does not match event payload type '{eventPayloadType.FullName}'.",
+                nameof(typeInfo));
+        }
+
+        EnsureEventRegistration(eventTypeName, eventPayloadType, typeInfo);
         _deserializers[eventTypeName] = json =>
             JsonSerializer.Deserialize(json, typeInfo) as IEventPayload;
 
@@ -112,4 +115,25 @@ public sealed class AotEventTypes : IEventTypes
     /// </summary>
     public Type? GetEventType(string eventTypeName) =>
         _eventTypes.TryGetValue(eventTypeName, out Type? eventType) ? eventType : null;
+
+    private void EnsureEventRegistration(string eventTypeName, Type eventPayloadType, JsonTypeInfo typeInfo)
+    {
+        if (_eventTypes.TryGetValue(eventTypeName, out Type? existingEventType) && existingEventType != eventPayloadType)
+        {
+            throw new InvalidOperationException(
+                $"Event type name '{eventTypeName}' is already registered with type '{existingEventType.FullName}'. " +
+                $"Cannot register it with different type '{eventPayloadType.FullName}'.");
+        }
+
+        if (_typeInfosByPayloadType.TryGetValue(eventPayloadType, out JsonTypeInfo? existingPayloadTypeInfo) &&
+            existingPayloadTypeInfo.Type != typeInfo.Type)
+        {
+            throw new InvalidOperationException(
+                $"Event payload type '{eventPayloadType.FullName}' is already registered with JsonTypeInfo type '{existingPayloadTypeInfo.Type.FullName}'.");
+        }
+
+        _eventTypes[eventTypeName] = eventPayloadType;
+        _typeInfosByEventName[eventTypeName] = typeInfo;
+        _typeInfosByPayloadType[eventPayloadType] = typeInfo;
+    }
 }

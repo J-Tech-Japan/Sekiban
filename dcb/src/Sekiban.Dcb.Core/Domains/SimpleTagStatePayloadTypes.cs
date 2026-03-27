@@ -47,7 +47,10 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize to the specific type
-            var payload = JsonSerializer.Deserialize(json, ResolveTypeInfo(payloadType));
+            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+            var payload = typeInfo is not null
+                ? JsonSerializer.Deserialize(json, typeInfo)
+                : JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
 
             if (payload is ITagStatePayload tagStatePayload)
             {
@@ -74,7 +77,11 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             }
 
             // Serialize the payload to JSON
-            var json = JsonSerializer.Serialize(payload, ResolveTypeInfo(payload.GetType()));
+            Type payloadType = payload.GetType();
+            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+            var json = typeInfo is not null
+                ? JsonSerializer.Serialize(payload, typeInfo)
+                : JsonSerializer.Serialize(payload, payloadType, _jsonSerializerOptions);
             var jsonBytes = Encoding.UTF8.GetBytes(json);
 
             return ResultBox.FromValue(jsonBytes);
@@ -102,5 +109,15 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
         _payloadTypes[payloadName] = newType;
     }
 
-    private JsonTypeInfo ResolveTypeInfo(Type payloadType) => _jsonSerializerOptions.GetTypeInfo(payloadType);
+    private JsonTypeInfo? TryResolveTypeInfo(Type payloadType)
+    {
+        try
+        {
+            return _jsonSerializerOptions.GetTypeInfo(payloadType);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
 }

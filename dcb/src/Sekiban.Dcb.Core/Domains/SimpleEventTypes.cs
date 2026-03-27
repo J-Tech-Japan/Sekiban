@@ -20,8 +20,14 @@ public class SimpleEventTypes : IEventTypes
             };
 
     /// <inheritdoc />
-    public string SerializeEventPayload(IEventPayload payload) =>
-        JsonSerializer.Serialize(payload, ResolveTypeInfo(payload.GetType()));
+    public string SerializeEventPayload(IEventPayload payload)
+    {
+        Type payloadType = payload.GetType();
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+        return typeInfo is not null
+            ? JsonSerializer.Serialize(payload, typeInfo)
+            : JsonSerializer.Serialize(payload, payloadType, _jsonOptions);
+    }
 
     /// <inheritdoc />
     public IEventPayload? DeserializeEventPayload(string eventTypeName, string json)
@@ -31,7 +37,10 @@ public class SimpleEventTypes : IEventTypes
             return null;
         }
 
-        return JsonSerializer.Deserialize(json, ResolveTypeInfo(eventType)) as IEventPayload;
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(eventType);
+        return typeInfo is not null
+            ? JsonSerializer.Deserialize(json, typeInfo) as IEventPayload
+            : JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEventPayload;
     }
 
     /// <inheritdoc />
@@ -98,5 +107,15 @@ public class SimpleEventTypes : IEventTypes
         RegisterEventType(eventType.Name, eventType);
     }
 
-    private JsonTypeInfo ResolveTypeInfo(Type eventType) => _jsonOptions.GetTypeInfo(eventType);
+    private JsonTypeInfo? TryResolveTypeInfo(Type eventType)
+    {
+        try
+        {
+            return _jsonOptions.GetTypeInfo(eventType);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
 }
