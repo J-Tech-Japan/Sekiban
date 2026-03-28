@@ -20,7 +20,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     private const string ReasonNoSafeEvents = "no_safe_events_in_window";
     private const string ReasonExported = "exported";
 
-    private readonly IEventStore _hotStore;
+    private readonly IHotEventStore _hotStore;
     private readonly IColdObjectStorage _storage;
     private readonly IColdSegmentFormatHandler _segmentFormatHandler;
     private readonly IColdLeaseManager _leaseManager;
@@ -28,7 +28,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     private readonly ILogger<ColdExporter> _logger;
 
     public ColdExporter(
-        IEventStore hotStore,
+        IHotEventStore hotStore,
         IColdObjectStorage storage,
         IColdSegmentFormatHandler segmentFormatHandler,
         IColdLeaseManager leaseManager,
@@ -103,7 +103,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 NewSegments: [],
                 UpdatedManifestVersion: InitialManifestVersion,
                 Reason: leaseHeld ? ReasonLeaseNotAcquired : ReasonLeaseAcquireFailed,
-                ReasonDetail: leaseException.Message));
+                ReasonDetail: leaseException.Message,
+                ShouldContinueWithinCycle: false));
         }
 
         var lease = leaseResult.GetValue();
@@ -275,7 +276,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 ExportedEventCount: 0,
                 NewSegments: [],
                 UpdatedManifestVersion: InitialManifestVersion,
-                Reason: reason),
+                Reason: reason,
+                ShouldContinueWithinCycle: false),
             [],
             null));
 
@@ -351,7 +353,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ExportedEventCount: stage.Segments.Sum(x => x.Info.EventCount),
             NewSegments: stage.Segments.Select(x => x.Info).ToList(),
             UpdatedManifestVersion: newVersion,
-            Reason: ReasonExported));
+            Reason: ReasonExported,
+            ShouldContinueWithinCycle: true));
     }
 
     private async IAsyncEnumerable<SerializableEvent> ReadExportCandidatesAsStreamAsync(

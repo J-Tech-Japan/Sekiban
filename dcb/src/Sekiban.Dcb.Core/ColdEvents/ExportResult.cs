@@ -5,4 +5,5 @@ public record ExportResult(
     IReadOnlyList<ColdSegmentInfo> NewSegments,
     string UpdatedManifestVersion,
     string? Reason = null,
-    string? ReasonDetail = null);
+    string? ReasonDetail = null,
+    bool ShouldContinueWithinCycle = false);

@@ -16,7 +16,7 @@ public interface ITagStateProjectionPrimitive
 ///     Stateful accumulator for TagState projection.
 ///     This allows callers to keep state in primitive-local memory while feeding state/events incrementally.
 /// </summary>
-public interface ITagStateProjectionAccumulator
+public interface ITagStateProjectionAccumulator : IDisposable
 {
     bool ApplyState(SerializableTagState? cachedState);
     bool ApplyEvents(

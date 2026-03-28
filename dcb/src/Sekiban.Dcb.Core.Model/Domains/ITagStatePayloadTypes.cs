@@ -9,6 +9,13 @@ namespace Sekiban.Dcb.Domains;
 public interface ITagStatePayloadTypes
 {
     /// <summary>
+    ///     Gets the registered payload name for the supplied tag state payload
+    /// </summary>
+    /// <param name="payload">The payload instance</param>
+    /// <returns>ResultBox containing the registered payload name or error</returns>
+    ResultBox<string> GetPayloadName(ITagStatePayload payload);
+
+    /// <summary>
     ///     Gets the Type for a tag state payload by name
     /// </summary>
     /// <param name="payloadName">The name of the payload type</param>

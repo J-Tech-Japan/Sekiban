@@ -188,6 +188,10 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 _projectorVersion);
         }
 
+        public void Dispose()
+        {
+        }
+
         private ResultBox<(byte[] Bytes, string PayloadName)> SerializePayload(ITagStatePayload payload)
         {
             if (payload is EmptyTagStatePayload)

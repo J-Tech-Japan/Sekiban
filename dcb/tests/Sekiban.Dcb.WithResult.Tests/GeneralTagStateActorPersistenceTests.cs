@@ -392,6 +392,8 @@ public class GeneralTagStateActorPersistenceTests
 
         public Type? GetPayloadType(string payloadName) => _inner.GetPayloadType(payloadName);
 
+        public ResultBox<string> GetPayloadName(ITagStatePayload payload) => _inner.GetPayloadName(payload);
+
         public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes)
         {
             DeserializePayloadCount++;

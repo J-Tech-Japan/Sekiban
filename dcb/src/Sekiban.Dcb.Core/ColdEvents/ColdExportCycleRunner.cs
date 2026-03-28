@@ -83,20 +83,53 @@ public sealed class ColdExportCycleRunner
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
         _logger.LogInformation("Starting cold event export cycle for {ServiceId}", serviceId);
 
-        var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
+        var iteration = 0;
+        long totalExported = 0L;
+        long totalSegments = 0L;
 
-        if (!result.IsSuccess)
+        while (!ct.IsCancellationRequested)
         {
-            _logger.LogError(result.GetException(), "Cold event export failed for {ServiceId}", serviceId);
-            return;
-        }
+            iteration++;
+            var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
 
-        var value = result.GetValue();
-        _logger.LogInformation(
-            "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} written/updated segments, reason={Reason}",
-            serviceId,
-            value.ExportedEventCount,
-            value.NewSegments.Count,
-            value.Reason);
+            if (!result.IsSuccess)
+            {
+                _logger.LogError(
+                    result.GetException(),
+                    "Cold event export failed for {ServiceId} on iteration {Iteration}",
+                    serviceId,
+                    iteration);
+                return;
+            }
+
+            var value = result.GetValue();
+            totalExported += value.ExportedEventCount;
+            totalSegments += value.NewSegments.Count;
+
+            _logger.LogInformation(
+                "Cold event export iteration completed for {ServiceId}: iteration={Iteration}, exported {Count} events, {SegmentCount} written/updated segments, reason={Reason}",
+                serviceId,
+                iteration,
+                value.ExportedEventCount,
+                value.NewSegments.Count,
+                value.Reason);
+
+            if (!ShouldContinueWithinCycle(value))
+            {
+                _logger.LogInformation(
+                    "Cold event export completed for {ServiceId}: iterations={Iterations}, exported {Count} events, {SegmentCount} written/updated segments, finalReason={Reason}",
+                    serviceId,
+                    iteration,
+                    totalExported,
+                    totalSegments,
+                    value.Reason);
+                return;
+            }
+        }
+    }
+
+    internal static bool ShouldContinueWithinCycle(ExportResult result)
+    {
+        return result.ShouldContinueWithinCycle && result.ExportedEventCount > 0;
     }
 }

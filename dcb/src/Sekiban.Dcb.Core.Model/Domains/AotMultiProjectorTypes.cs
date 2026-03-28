@@ -15,6 +15,7 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
 {
+    private static volatile bool _debugBypassProject;
     private readonly Dictionary<string, ProjectorRegistration> _projectors = new();
     private static readonly bool DebugBypassProject =
         Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
@@ -40,6 +41,10 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
         _projectors[name] = new ProjectorRegistration(
             Project: (payload, ev, tags, domainTypes, safeWindowThreshold) =>
             {
+                if (_debugBypassProject)
+                {
+                    return ResultBox.FromValue(payload);
+                }
                 if (payload is TProjector typed)
                 {
                     return TProjector.Project(typed, ev, tags, domainTypes, safeWindowThreshold)
@@ -131,6 +136,31 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
         if (_projectors.TryGetValue(projectorName, out var reg))
             return ResultBox.FromValue(reg.Deserialize(domainTypes, safeWindowThreshold, data));
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+    }
+
+    public ResultBox<IMultiProjectionPayload> DeserializeJson(
+        string projectorName,
+        string json,
+        DcbDomainTypes domainTypes)
+    {
+        if (!_projectors.TryGetValue(projectorName, out var reg))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+        }
+
+        try
+        {
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            IMultiProjectionPayload payload = reg.Deserialize(
+                domainTypes,
+                SortableUniqueId.MinValue.Value,
+                GzipCompression.Compress(jsonBytes));
+            return ResultBox.FromValue(payload);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
     }
 
     /// <summary>

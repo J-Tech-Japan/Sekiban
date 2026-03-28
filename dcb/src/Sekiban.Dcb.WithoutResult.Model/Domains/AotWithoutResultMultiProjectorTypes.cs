@@ -14,10 +14,10 @@ namespace Sekiban.Dcb.Domains;
 /// </summary>
 public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTypes
 {
-    private readonly Dictionary<string, ProjectorRegistration> _projectors = new();
     private static readonly bool DebugBypassProject =
         Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
     private static bool _debugBypassProjectSwitch;
+    private readonly Dictionary<string, ProjectorRegistration> _projectors = new();
 
     private sealed record ProjectorRegistration(
         Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, IMultiProjectionPayload> Project,
@@ -43,14 +43,13 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
             },
             GenerateInitial: () => TProjector.GenerateInitialPayload(),
             Version: TProjector.MultiProjectorVersion,
-            Serialize: (domainTypes, safeWindowThreshold, payload) =>
+            Serialize: (_, _, payload) =>
             {
-                string json = JsonSerializer.Serialize((TProjector)payload, typeInfo);
-                byte[] bytes = Encoding.UTF8.GetBytes(json);
-                byte[] compressed = GzipCompression.Compress(bytes);
-                return new SerializationResult(compressed, bytes.LongLength, compressed.LongLength);
+                var typed = (TProjector)payload;
+                var (compressed, uncompressedLength) = GzipCompression.CompressJson(typed, typeInfo);
+                return new SerializationResult(compressed, uncompressedLength, compressed.LongLength);
             },
-            Deserialize: (domainTypes, safeWindowThreshold, data) =>
+            Deserialize: (_, _, data) =>
             {
                 byte[] jsonBytes = GzipCompression.Decompress(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)
@@ -144,6 +143,29 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
     }
 
+    public ResultBox<IMultiProjectionPayload> DeserializeJson(
+        string projectorName,
+        string json,
+        DcbDomainTypes domainTypes)
+    {
+        if (!_projectors.TryGetValue(projectorName, out ProjectorRegistration? reg))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+        }
+
+        try
+        {
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            return ResultBox.FromValue(reg.Deserialize(
+                domainTypes,
+                SortableUniqueId.MinValue.Value,
+                GzipCompression.Compress(jsonBytes)));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
     public ResultBox<SerializationResult> Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
