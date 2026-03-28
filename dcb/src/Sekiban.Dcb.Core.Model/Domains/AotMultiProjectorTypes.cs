@@ -43,7 +43,7 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
             {
                 if (_debugBypassProject)
                 {
-                    return ResultBox.FromValue((IMultiProjectionPayload)(object)(TProjector)payload);
+                    return ResultBox.FromValue(payload);
                 }
                 if (payload is TProjector typed)
                 {

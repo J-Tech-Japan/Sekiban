@@ -10,6 +10,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Tags;
 using Xunit;
+using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -294,7 +295,7 @@ public class SerializedCommitTests
     public async Task SerializedCommit_Should_PublishEvents_To_EventPublisher()
     {
         // Given
-        var eventStore = new InMemoryEventStore();
+        var eventStore = new CoreInMemoryEventStore(_domainTypes.EventTypes);
         var actorAccessor = new InMemoryObjectAccessor(eventStore, _domainTypes);
         var publisher = new RecordingEventPublisher();
         var executor = new GeneralSekibanExecutor(eventStore, actorAccessor, _domainTypes, publisher);

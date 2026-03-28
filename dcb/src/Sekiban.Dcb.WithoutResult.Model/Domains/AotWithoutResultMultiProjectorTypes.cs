@@ -45,10 +45,9 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
             Version: TProjector.MultiProjectorVersion,
             Serialize: (_, _, payload) =>
             {
-                string json = JsonSerializer.Serialize((TProjector)payload, typeInfo);
-                byte[] bytes = Encoding.UTF8.GetBytes(json);
-                byte[] compressed = GzipCompression.Compress(bytes);
-                return new SerializationResult(compressed, bytes.LongLength, compressed.LongLength);
+                var typed = (TProjector)payload;
+                var (compressed, uncompressedLength) = GzipCompression.CompressJson(typed, typeInfo);
+                return new SerializationResult(compressed, uncompressedLength, compressed.LongLength);
             },
             Deserialize: (_, _, data) =>
             {

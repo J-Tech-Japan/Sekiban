@@ -211,8 +211,7 @@ public class CoreGeneralSekibanExecutor
                             Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
                         .ToList()
                         .AsReadOnly();
-                    // Enqueue publish requests for background processing (at-least-once). Non-blocking
-                    _ = _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
+                    await _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
                 }
 
                 // Return success result
@@ -498,8 +497,7 @@ public class CoreGeneralSekibanExecutor
                         publishEvents.Add((eventResult.GetValue(), eventTags.AsReadOnly()));
                     }
 
-                    // Enqueue publish requests for background processing (at-least-once). Non-blocking
-                    _ = _eventPublisher.PublishAsync(publishEvents.AsReadOnly(), CancellationToken.None);
+                    await _eventPublisher.PublishAsync(publishEvents.AsReadOnly(), CancellationToken.None);
                 }
 
                 return ResultBox.FromValue(

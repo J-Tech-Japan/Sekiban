@@ -6,12 +6,6 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class ColdExportCycleRunner
 {
-    private const string ReasonExported = "exported";
-    private const string ReasonLeaseNotAcquired = "lease_not_acquired";
-    private const string ReasonLeaseAcquireFailed = "lease_acquire_failed";
-    private const string ReasonNoEventsSinceCheckpoint = "no_events_since_checkpoint";
-    private const string ReasonNoSafeEvents = "no_safe_events_in_window";
-
     private readonly IColdEventExporter _exporter;
     private readonly ColdEventStoreOptions _options;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -90,8 +84,8 @@ public sealed class ColdExportCycleRunner
         _logger.LogInformation("Starting cold event export cycle for {ServiceId}", serviceId);
 
         var iteration = 0;
-        var totalExported = 0;
-        var totalSegments = 0;
+        long totalExported = 0L;
+        long totalSegments = 0L;
 
         while (!ct.IsCancellationRequested)
         {
@@ -136,20 +130,6 @@ public sealed class ColdExportCycleRunner
 
     internal static bool ShouldContinueWithinCycle(ExportResult result)
     {
-        if (result.ExportedEventCount <= 0)
-        {
-            return false;
-        }
-
-        return result.Reason switch
-        {
-            null => false,
-            ReasonExported => true,
-            ReasonNoEventsSinceCheckpoint => false,
-            ReasonNoSafeEvents => false,
-            ReasonLeaseNotAcquired => false,
-            ReasonLeaseAcquireFailed => false,
-            _ => false
-        };
+        return result.ShouldContinueWithinCycle && result.ExportedEventCount > 0;
     }
 }

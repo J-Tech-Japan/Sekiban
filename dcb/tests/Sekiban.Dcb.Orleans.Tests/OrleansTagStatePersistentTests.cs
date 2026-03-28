@@ -1,6 +1,7 @@
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Runtime;

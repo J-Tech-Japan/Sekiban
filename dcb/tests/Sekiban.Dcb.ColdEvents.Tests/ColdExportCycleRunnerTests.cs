@@ -13,9 +13,9 @@ public class ColdExportCycleRunnerTests
         // Given
         StubColdEventExporter exporter = new(
         [
-            ResultBox.FromValue(new ExportResult(100_000, [], "v1", "exported")),
-            ResultBox.FromValue(new ExportResult(100_000, [], "v2", "exported")),
-            ResultBox.FromValue(new ExportResult(50_000, [], "v3", "exported")),
+            ResultBox.FromValue(new ExportResult(100_000, [], "v1", "exported", ShouldContinueWithinCycle: true)),
+            ResultBox.FromValue(new ExportResult(100_000, [], "v2", "exported", ShouldContinueWithinCycle: true)),
+            ResultBox.FromValue(new ExportResult(50_000, [], "v3", "exported", ShouldContinueWithinCycle: true)),
             ResultBox.FromValue(new ExportResult(0, [], "v3", "no_events_since_checkpoint"))
         ]);
         ColdExportCycleRunner runner = new(
