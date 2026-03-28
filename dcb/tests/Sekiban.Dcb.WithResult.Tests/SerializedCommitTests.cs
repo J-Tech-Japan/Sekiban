@@ -294,7 +294,7 @@ public class SerializedCommitTests
     public async Task SerializedCommit_Should_PublishEvents_To_EventPublisher()
     {
         // Given
-        var eventStore = new InMemoryEventStore(_domainTypes.EventTypes);
+        var eventStore = new InMemoryEventStore();
         var actorAccessor = new InMemoryObjectAccessor(eventStore, _domainTypes);
         var publisher = new RecordingEventPublisher();
         var executor = new GeneralSekibanExecutor(eventStore, actorAccessor, _domainTypes, publisher);
@@ -312,7 +312,7 @@ public class SerializedCommitTests
         Assert.True(result.IsSuccess);
         Assert.Single(publisher.PublishedEvents);
         Assert.Equal(nameof(StudentCreated), publisher.PublishedEvents[0].Event.EventType);
-        Assert.Contains(publisher.PublishedEvents[0].Tags, static tag => tag.GetTag() == tagString);
+        Assert.Contains(publisher.PublishedEvents[0].Tags, tag => tag.GetTag() == tagString);
     }
 
     private sealed class RecordingEventPublisher : IEventPublisher
