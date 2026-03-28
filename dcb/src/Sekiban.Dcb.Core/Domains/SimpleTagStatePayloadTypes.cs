@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Tags;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -46,7 +47,10 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             var json = Encoding.UTF8.GetString(jsonBytes);
 
             // Deserialize to the specific type
-            var payload = JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
+            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+            var payload = typeInfo is not null
+                ? JsonSerializer.Deserialize(json, typeInfo)
+                : JsonSerializer.Deserialize(json, payloadType, _jsonSerializerOptions);
 
             if (payload is ITagStatePayload tagStatePayload)
             {
@@ -73,7 +77,11 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             }
 
             // Serialize the payload to JSON
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), _jsonSerializerOptions);
+            Type payloadType = payload.GetType();
+            JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+            var json = typeInfo is not null
+                ? JsonSerializer.Serialize(payload, typeInfo)
+                : JsonSerializer.Serialize(payload, payloadType, _jsonSerializerOptions);
             var jsonBytes = Encoding.UTF8.GetBytes(json);
 
             return ResultBox.FromValue(jsonBytes);
@@ -99,5 +107,17 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             }
         }
         _payloadTypes[payloadName] = newType;
+    }
+
+    private JsonTypeInfo? TryResolveTypeInfo(Type payloadType)
+    {
+        try
+        {
+            return _jsonSerializerOptions.GetTypeInfo(payloadType);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 }

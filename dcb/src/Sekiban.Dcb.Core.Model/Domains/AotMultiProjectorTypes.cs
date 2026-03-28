@@ -16,6 +16,9 @@ namespace Sekiban.Dcb.Domains;
 public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
 {
     private readonly Dictionary<string, ProjectorRegistration> _projectors = new();
+    private static readonly bool DebugBypassProject =
+        Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
+    private static bool _debugBypassProjectSwitch;
 
     private record ProjectorRegistration(
         Func<IMultiProjectionPayload, Event, List<ITag>, DcbDomainTypes, SortableUniqueId, ResultBox<IMultiProjectionPayload>> Project,
@@ -69,6 +72,11 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
         DcbDomainTypes domainTypes,
         SortableUniqueId safeWindowThreshold)
     {
+        if (DebugBypassProject || _debugBypassProjectSwitch)
+        {
+            return ResultBox.FromValue(payload);
+        }
+
         if (_projectors.TryGetValue(multiProjectorName, out var reg))
             return reg.Project(payload, ev, tags, domainTypes, safeWindowThreshold);
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {multiProjectorName}"));
@@ -143,4 +151,8 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
     public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
         where T : ICoreMultiProjectorWithCustomSerialization<T>, new() =>
         ResultBox.Error<bool>(new NotSupportedException("Use RegisterProjector with JsonTypeInfo"));
+
+    public static void SetDebugBypassProject(bool enabled) => _debugBypassProjectSwitch = enabled;
+
+    public static bool GetDebugBypassProject() => _debugBypassProjectSwitch;
 }
