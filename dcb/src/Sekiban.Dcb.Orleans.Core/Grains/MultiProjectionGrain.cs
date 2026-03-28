@@ -26,7 +26,7 @@ namespace Sekiban.Dcb.Orleans.Grains;
 /// </summary>
 public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecycleParticipant<IGrainLifecycle>
 {
-    private const int StreamingCatchUpApplyChunkSize = 1024;
+    private const int StreamingCatchUpApplyChunkSize = 4096;
     private const string EmptyLogValue = "empty";
     private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
