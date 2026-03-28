@@ -13,6 +13,7 @@ public sealed class AotTagStatePayloadTypes : ITagStatePayloadTypes
 {
     private readonly Dictionary<string, Func<byte[], ITagStatePayload?>> _deserializers = new();
     private readonly Dictionary<Type, Func<ITagStatePayload, byte[]>> _serializers = new();
+    private readonly Dictionary<Type, string> _payloadNames = new();
 
     /// <summary>
     ///     Register a tag state payload type with AOT-compatible JsonTypeInfo.
@@ -28,6 +29,19 @@ public sealed class AotTagStatePayloadTypes : ITagStatePayloadTypes
 
         _serializers[typeof(T)] = state =>
             JsonSerializer.SerializeToUtf8Bytes((T)state, typeInfo);
+        _payloadNames[typeof(T)] = payloadName;
+    }
+
+    /// <inheritdoc />
+    public ResultBox<string> GetPayloadName(ITagStatePayload payload)
+    {
+        if (_payloadNames.TryGetValue(payload.GetType(), out var payloadName))
+        {
+            return ResultBox.FromValue(payloadName);
+        }
+
+        return ResultBox.Error<string>(
+            new Exception($"Unknown payload type: {payload.GetType().Name}"));
     }
 
     /// <inheritdoc />

@@ -289,4 +289,42 @@ public class SerializedCommitTests
         Assert.IsAssignableFrom<ISerializedSekibanDcbExecutor>(executor);
         Assert.IsAssignableFrom<ISekibanExecutor>(executor);
     }
+
+    [Fact]
+    public async Task SerializedCommit_Should_PublishEvents_To_EventPublisher()
+    {
+        // Given
+        var eventStore = new InMemoryEventStore(_domainTypes.EventTypes);
+        var actorAccessor = new InMemoryObjectAccessor(eventStore, _domainTypes);
+        var publisher = new RecordingEventPublisher();
+        var executor = new GeneralSekibanExecutor(eventStore, actorAccessor, _domainTypes, publisher);
+        var studentId = Guid.NewGuid();
+        var tagString = $"Student:{studentId}";
+        var payload = SerializePayload(new StudentCreated(studentId, "Published", 5));
+        var request = new SerializedCommitRequest(
+            [new SerializableEventCandidate(payload, nameof(StudentCreated), [tagString])],
+            [new ConsistencyTagEntry(tagString, string.Empty)]);
+
+        // When
+        var result = await executor.CommitSerializableEventsAsync(request);
+
+        // Then
+        Assert.True(result.IsSuccess);
+        Assert.Single(publisher.PublishedEvents);
+        Assert.Equal(nameof(StudentCreated), publisher.PublishedEvents[0].Event.EventType);
+        Assert.Contains(publisher.PublishedEvents[0].Tags, static tag => tag.GetTag() == tagString);
+    }
+
+    private sealed class RecordingEventPublisher : IEventPublisher
+    {
+        public List<(Event Event, IReadOnlyCollection<ITag> Tags)> PublishedEvents { get; } = [];
+
+        public Task PublishAsync(
+            IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+            CancellationToken cancellationToken = default)
+        {
+            PublishedEvents.AddRange(events);
+            return Task.CompletedTask;
+        }
+    }
 }

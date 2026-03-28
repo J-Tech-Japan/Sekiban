@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Sekiban.Dcb.Primitives;
 
 /// <summary>
@@ -16,6 +18,18 @@ public interface IPrimitiveProjectionInstance : IDisposable
         string? sortableUniqueId);
 
     /// <summary>
+    ///     Applies multiple events to the runtime.
+    ///     Implementations may override this to use a more efficient batch ABI.
+    /// </summary>
+    void ApplyEvents(IReadOnlyList<PrimitiveProjectionEventEnvelope> events)
+    {
+        foreach (var ev in events)
+        {
+            ApplyEvent(ev.EventType, ev.EventPayloadJson, ev.Tags, ev.SortableUniqueId);
+        }
+    }
+
+    /// <summary>
     ///     Executes a single-result query.
     /// </summary>
     string ExecuteQuery(string queryType, string queryParamsJson);
@@ -32,7 +46,19 @@ public interface IPrimitiveProjectionInstance : IDisposable
     string SerializeState();
 
     /// <summary>
+    ///     Serializes the internal state as UTF-8 bytes.
+    ///     Implementations can override this to avoid materializing a UTF-16 string.
+    /// </summary>
+    byte[] SerializeStateUtf8() => Encoding.UTF8.GetBytes(SerializeState());
+
+    /// <summary>
     ///     Restores internal state from a serialized representation.
     /// </summary>
     void RestoreState(string stateJson);
+
+    /// <summary>
+    ///     Restores the internal state from UTF-8 bytes.
+    ///     Implementations can override this to avoid materializing a UTF-16 string.
+    /// </summary>
+    void RestoreStateUtf8(byte[] stateJsonUtf8) => RestoreState(Encoding.UTF8.GetString(stateJsonUtf8));
 }

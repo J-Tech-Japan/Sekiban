@@ -6,6 +6,12 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class ColdExportCycleRunner
 {
+    private const string ReasonExported = "exported";
+    private const string ReasonLeaseNotAcquired = "lease_not_acquired";
+    private const string ReasonLeaseAcquireFailed = "lease_acquire_failed";
+    private const string ReasonNoEventsSinceCheckpoint = "no_events_since_checkpoint";
+    private const string ReasonNoSafeEvents = "no_safe_events_in_window";
+
     private readonly IColdEventExporter _exporter;
     private readonly ColdEventStoreOptions _options;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -83,20 +89,67 @@ public sealed class ColdExportCycleRunner
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
         _logger.LogInformation("Starting cold event export cycle for {ServiceId}", serviceId);
 
-        var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
+        var iteration = 0;
+        var totalExported = 0;
+        var totalSegments = 0;
 
-        if (!result.IsSuccess)
+        while (!ct.IsCancellationRequested)
         {
-            _logger.LogError(result.GetException(), "Cold event export failed for {ServiceId}", serviceId);
-            return;
+            iteration++;
+            var result = await _exporter.ExportIncrementalAsync(serviceId, ct);
+
+            if (!result.IsSuccess)
+            {
+                _logger.LogError(
+                    result.GetException(),
+                    "Cold event export failed for {ServiceId} on iteration {Iteration}",
+                    serviceId,
+                    iteration);
+                return;
+            }
+
+            var value = result.GetValue();
+            totalExported += value.ExportedEventCount;
+            totalSegments += value.NewSegments.Count;
+
+            _logger.LogInformation(
+                "Cold event export iteration completed for {ServiceId}: iteration={Iteration}, exported {Count} events, {SegmentCount} written/updated segments, reason={Reason}",
+                serviceId,
+                iteration,
+                value.ExportedEventCount,
+                value.NewSegments.Count,
+                value.Reason);
+
+            if (!ShouldContinueWithinCycle(value))
+            {
+                _logger.LogInformation(
+                    "Cold event export completed for {ServiceId}: iterations={Iterations}, exported {Count} events, {SegmentCount} written/updated segments, finalReason={Reason}",
+                    serviceId,
+                    iteration,
+                    totalExported,
+                    totalSegments,
+                    value.Reason);
+                return;
+            }
+        }
+    }
+
+    internal static bool ShouldContinueWithinCycle(ExportResult result)
+    {
+        if (result.ExportedEventCount <= 0)
+        {
+            return false;
         }
 
-        var value = result.GetValue();
-        _logger.LogInformation(
-            "Cold event export completed for {ServiceId}: exported {Count} events, {SegmentCount} written/updated segments, reason={Reason}",
-            serviceId,
-            value.ExportedEventCount,
-            value.NewSegments.Count,
-            value.Reason);
+        return result.Reason switch
+        {
+            null => false,
+            ReasonExported => true,
+            ReasonNoEventsSinceCheckpoint => false,
+            ReasonNoSafeEvents => false,
+            ReasonLeaseNotAcquired => false,
+            ReasonLeaseAcquireFailed => false,
+            _ => false
+        };
     }
 }

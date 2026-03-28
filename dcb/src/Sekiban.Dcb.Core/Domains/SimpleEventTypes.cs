@@ -99,9 +99,10 @@ public class SimpleEventTypes : IEventTypes
     /// <summary>
     ///     Register an event type using the type's name without generic reflection.
     /// </summary>
-    public void RegisterEventType(Type eventType)
+    public void RegisterEventType(Type eventPayloadType)
     {
-        RegisterEventType(eventType.Name, eventType);
+        ArgumentNullException.ThrowIfNull(eventPayloadType);
+        RegisterEventType(eventPayloadType.Name, eventPayloadType);
     }
 
     private JsonTypeInfo? TryResolveTypeInfo(Type eventType)

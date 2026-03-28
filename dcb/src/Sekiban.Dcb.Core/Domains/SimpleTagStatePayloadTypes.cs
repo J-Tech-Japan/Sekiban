@@ -13,6 +13,7 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
 {
     private readonly JsonSerializerOptions _jsonSerializerOptions;
     private readonly Dictionary<string, Type> _payloadTypes = new();
+    private readonly Dictionary<Type, string> _payloadNames = new();
 
     public SimpleTagStatePayloadTypes(JsonSerializerOptions? jsonSerializerOptions = null) =>
         _jsonSerializerOptions = jsonSerializerOptions ??
@@ -24,6 +25,17 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
 
     public Type? GetPayloadType(string payloadName) =>
         _payloadTypes.TryGetValue(payloadName, out var type) ? type : null;
+
+    public ResultBox<string> GetPayloadName(ITagStatePayload payload)
+    {
+        if (_payloadNames.TryGetValue(payload.GetType(), out var payloadName))
+        {
+            return ResultBox.FromValue(payloadName);
+        }
+
+        return ResultBox.Error<string>(
+            new InvalidOperationException($"Payload type '{payload.GetType().Name}' is not registered"));
+    }
 
     public ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes)
     {
@@ -107,6 +119,7 @@ public class SimpleTagStatePayloadTypes : ITagStatePayloadTypes
             }
         }
         _payloadTypes[payloadName] = newType;
+        _payloadNames[newType] = payloadName;
     }
 
     private JsonTypeInfo? TryResolveTypeInfo(Type payloadType)

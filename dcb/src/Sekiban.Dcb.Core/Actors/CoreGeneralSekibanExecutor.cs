@@ -481,6 +481,27 @@ public class CoreGeneralSekibanExecutor
                 // Step 6.1: Notify non-consistency tags
                 await TagReservationHelper.NotifyNonConsistencyTagsAsync(_actorAccessor, allTags, reservations.Keys);
 
+                if (_eventPublisher != null && writtenEvents.Count > 0)
+                {
+                    var publishEvents = new List<(Event Event, IReadOnlyCollection<ITag> Tags)>(writtenEvents.Count);
+                    foreach (var writtenEvent in writtenEvents)
+                    {
+                        var eventResult = writtenEvent.ToEvent(_domainTypes.EventTypes);
+                        if (!eventResult.IsSuccess)
+                        {
+                            return ResultBox.Error<SerializedCommitResult>(eventResult.GetException());
+                        }
+
+                        List<ITag> eventTags = writtenEvent.Tags
+                            .Select(_domainTypes.TagTypes.GetTag)
+                            .ToList();
+                        publishEvents.Add((eventResult.GetValue(), eventTags.AsReadOnly()));
+                    }
+
+                    // Enqueue publish requests for background processing (at-least-once). Non-blocking
+                    _ = _eventPublisher.PublishAsync(publishEvents.AsReadOnly(), CancellationToken.None);
+                }
+
                 return ResultBox.FromValue(
                     new SerializedCommitResult(
                         writtenEvents,

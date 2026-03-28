@@ -108,6 +108,7 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     /// <summary>
     ///     Get catch-up progress/status for operational checks.
     /// </summary>
+    [AlwaysInterleave]
     Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync();
 
     /// <summary>
