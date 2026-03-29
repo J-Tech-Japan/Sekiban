@@ -84,7 +84,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
-            var tagJson = $"\"{tagString}\"";
+            var tagJson = JsonSerializer.Serialize(new[] { tagString });
             var query = context.Events.Where(e =>
                 e.ServiceId == serviceId &&
                 EF.Functions.JsonContains(e.Tags, tagJson));
@@ -497,7 +497,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
-            var tagJson = $"\"{tagString}\"";
+            var tagJson = JsonSerializer.Serialize(new[] { tagString });
             var query = context.Events.Where(e =>
                 e.ServiceId == serviceId &&
                 EF.Functions.JsonContains(e.Tags, tagJson));
