@@ -1,5 +1,6 @@
 using Sekiban.Dcb.Events;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
@@ -19,8 +20,14 @@ public class SimpleEventTypes : IEventTypes
             };
 
     /// <inheritdoc />
-    public string SerializeEventPayload(IEventPayload payload) =>
-        JsonSerializer.Serialize(payload, payload.GetType(), _jsonOptions);
+    public string SerializeEventPayload(IEventPayload payload)
+    {
+        Type payloadType = payload.GetType();
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(payloadType);
+        return typeInfo is not null
+            ? JsonSerializer.Serialize(payload, typeInfo)
+            : JsonSerializer.Serialize(payload, payloadType, _jsonOptions);
+    }
 
     /// <inheritdoc />
     public IEventPayload? DeserializeEventPayload(string eventTypeName, string json)
@@ -30,7 +37,10 @@ public class SimpleEventTypes : IEventTypes
             return null;
         }
 
-        return JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEventPayload;
+        JsonTypeInfo? typeInfo = TryResolveTypeInfo(eventType);
+        return typeInfo is not null
+            ? JsonSerializer.Deserialize(json, typeInfo) as IEventPayload
+            : JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEventPayload;
     }
 
     /// <inheritdoc />
@@ -56,11 +66,54 @@ public class SimpleEventTypes : IEventTypes
     }
 
     /// <summary>
+    ///     Register an event type with its name without using generic reflection.
+    /// </summary>
+    public void RegisterEventType(string eventTypeName, Type eventType)
+    {
+        if (!typeof(IEventPayload).IsAssignableFrom(eventType))
+        {
+            throw new ArgumentException(
+                $"Type '{eventType.FullName}' must implement {nameof(IEventPayload)}.",
+                nameof(eventType));
+        }
+
+        if (_eventTypes.TryGetValue(eventTypeName, out var existingType) && existingType != eventType)
+        {
+            throw new InvalidOperationException(
+                $"Event type name '{eventTypeName}' is already registered with type '{existingType.FullName}'. " +
+                $"Cannot register it with different type '{eventType.FullName}'.");
+        }
+
+        _eventTypes[eventTypeName] = eventType;
+    }
+
+    /// <summary>
     ///     Register an event type using the type's name
     /// </summary>
     public void RegisterEventType<T>() where T : IEventPayload
     {
         var type = typeof(T);
         RegisterEventType<T>(type.Name);
+    }
+
+    /// <summary>
+    ///     Register an event type using the type's name without generic reflection.
+    /// </summary>
+    public void RegisterEventType(Type eventPayloadType)
+    {
+        ArgumentNullException.ThrowIfNull(eventPayloadType);
+        RegisterEventType(eventPayloadType.Name, eventPayloadType);
+    }
+
+    private JsonTypeInfo? TryResolveTypeInfo(Type eventType)
+    {
+        try
+        {
+            return _jsonOptions.GetTypeInfo(eventType);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 }

@@ -35,8 +35,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.Core" Version="$(PackageVersion)" />
-        <PackageReference Include="Sekiban.Dcb.WithoutResult.Model" Version="$(PackageVersion)" />
         <PackageReference Include="ResultBoxes" Version="0.4.0" PrivateAssets="All" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>

@@ -39,7 +39,7 @@ public class ColdExporterTests
     }
 
     private ColdExporter CreateExporter(
-        IEventStore hotStore,
+        IHotEventStore hotStore,
         ColdEventStoreOptions? options = null,
         IColdObjectStorage? storage = null,
         IColdLeaseManager? leaseManager = null)
@@ -280,7 +280,7 @@ public class ColdExporterTests
         Assert.Equal("0", progress.ManifestVersion);
     }
 
-    private sealed class StubEventStore : IEventStore
+    private sealed class StubEventStore : IHotEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _events;
 
@@ -389,7 +389,7 @@ public class ColdExporterTests
             => _inner.DeleteAsync(path, ct);
     }
 
-    private sealed class StreamOnlyStubEventStore : IEventStore, ISerializableEventStreamReader
+    private sealed class StreamOnlyStubEventStore : IHotEventStore, ISerializableEventStreamReader
     {
         private readonly IReadOnlyList<SerializableEvent> _events;
 

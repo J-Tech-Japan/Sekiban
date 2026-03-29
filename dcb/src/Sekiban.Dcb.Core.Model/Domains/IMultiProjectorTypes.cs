@@ -70,6 +70,43 @@ public interface ICoreMultiProjectorTypes
         byte[] data);
 
     /// <summary>
+    ///     Deserializes raw JSON into a projector payload.
+    ///     Default implementation uses GetProjectorType + JsonSerializer and works for reflection-based registries.
+    ///     AOT registries should override this to use source-generated JsonTypeInfo instead.
+    /// </summary>
+    ResultBox<IMultiProjectionPayload> DeserializeJson(
+        string projectorName,
+        string json,
+        DcbDomainTypes domainTypes)
+    {
+        ResultBox<Type> projectorTypeResult = GetProjectorType(projectorName);
+        if (!projectorTypeResult.IsSuccess)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(projectorTypeResult.GetException());
+        }
+
+        try
+        {
+            object? deserialized = JsonSerializer.Deserialize(
+                json,
+                projectorTypeResult.GetValue(),
+                domainTypes.JsonSerializerOptions);
+            if (deserialized is IMultiProjectionPayload payload)
+            {
+                return ResultBox.FromValue(payload);
+            }
+
+            return ResultBox.Error<IMultiProjectionPayload>(
+                new InvalidOperationException(
+                    $"JSON for projector '{projectorName}' could not be deserialized to '{projectorTypeResult.GetValue().FullName}'."));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
+
+    /// <summary>
     ///     Registers a projector with custom serialization support.
     ///     The projector must implement IMultiProjectorWithCustomSerialization interface.
     ///     The projector name is obtained from T.MultiProjectorName.

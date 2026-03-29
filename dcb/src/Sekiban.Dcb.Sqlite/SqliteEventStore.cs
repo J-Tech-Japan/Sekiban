@@ -16,7 +16,7 @@ namespace Sekiban.Dcb.Sqlite;
 ///     SQLite implementation of IEventStore.
 ///     Can be used as a standalone event store or as a local cache for remote stores.
 /// </summary>
-public class SqliteEventStore : IEventStore
+public class SqliteEventStore : IHotEventStore
 {
     private const string SchemaVersion = "1.1";
     private const string SchemaVersionKey = "schemaVersion";

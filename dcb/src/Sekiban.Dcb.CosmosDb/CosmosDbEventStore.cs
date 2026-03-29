@@ -17,7 +17,7 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     CosmosDB-backed event store implementation.
 /// </summary>
-public partial class CosmosDbEventStore : IEventStore
+public partial class CosmosDbEventStore : IHotEventStore
 {
     private const string ParamSince = "@since";
     private const string ParamServiceId = "@serviceId";

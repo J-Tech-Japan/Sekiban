@@ -14,7 +14,7 @@ using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
-public class PostgresEventStore : IEventStore, ISerializableEventStreamReader
+public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 {
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;

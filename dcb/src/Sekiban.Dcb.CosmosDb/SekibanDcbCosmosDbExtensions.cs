@@ -61,7 +61,9 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        services.AddSingleton<CosmosDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -92,7 +94,9 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        services.AddSingleton<CosmosDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -156,7 +160,9 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        services.AddSingleton<CosmosDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         // Register hosted service to ensure containers are created
@@ -188,7 +194,9 @@ public static class SekibanDcbCosmosDbExtensions
 
         AddCosmosDbContext(services, options);
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddScoped<IEventStore, CosmosDbEventStore>();
+        services.AddScoped<CosmosDbEventStore>();
+        services.AddScoped<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddScoped<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddScoped<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -213,7 +221,9 @@ public static class SekibanDcbCosmosDbExtensions
 
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, CosmosDbEventStore>();
+        services.AddSingleton<CosmosDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -250,7 +260,9 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<IMultiProjectionStateStoreFactory, CosmosDbMultiProjectionStateStoreFactory>();
 
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddScoped<IEventStore, CosmosDbEventStore>();
+        services.AddScoped<CosmosDbEventStore>();
+        services.AddScoped<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
+        services.AddScoped<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddScoped<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;

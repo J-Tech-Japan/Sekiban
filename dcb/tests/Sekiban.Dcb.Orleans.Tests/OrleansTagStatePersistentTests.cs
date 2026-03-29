@@ -1,7 +1,14 @@
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
+using ResultBoxes;
 using Xunit;
 
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -171,6 +178,38 @@ public class OrleansTagStatePersistentTests
         Assert.Equal(serializable.Payload, loaded.Payload);
     }
 
+    [Fact]
+    public async Task GetStateAsync_Should_Dispose_TagStateAccumulator()
+    {
+        var domainTypes = new DcbDomainTypes(
+            eventTypes: new SimpleEventTypes(),
+            tagTypes: new SimpleTagTypes(),
+            tagProjectorTypes: new SimpleTagProjectorTypes(),
+            tagStatePayloadTypes: _tagStatePayloadTypes,
+            multiProjectorTypes: new SimpleMultiProjectorTypes(),
+            queryTypes: new SimpleQueryTypes(),
+            jsonSerializerOptions: new JsonSerializerOptions());
+        var primitive = new TrackingTagStateProjectionPrimitive();
+        var grain = new TagStateGrain(
+            new EmptyEventStore(),
+            domainTypes,
+            primitive,
+            new MissingActorAccessor(),
+            new TestPersistentState<TagStateCacheState>(new TagStateCacheState()));
+        var tagStateId = new TagStateId(new FallbackTag("TestGroup", "TestContent"), "MissingProjector");
+
+        typeof(TagStateGrain)
+            .GetField("_tagStateId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(grain, tagStateId);
+
+        var state = await grain.GetStateAsync();
+
+        Assert.Equal(1, primitive.DisposeCount);
+        Assert.Equal(nameof(EmptyTagStatePayload), state.TagPayloadName);
+        Assert.Equal("TestGroup", state.TagGroup);
+        Assert.Equal("TestContent", state.TagContent);
+    }
+
     // Test helper class
     private class TestPersistentState<T> : IPersistentState<T> where T : new()
     {
@@ -204,6 +243,88 @@ public class OrleansTagStatePersistentTests
         public Guid Id { get; init; }
         public string Name { get; init; } = string.Empty;
         public int Value { get; init; }
+    }
+
+    private sealed class TrackingTagStateProjectionPrimitive : ITagStateProjectionPrimitive
+    {
+        public int DisposeCount { get; private set; }
+
+        public ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId) =>
+            new TrackingAccumulator(tagStateId, () => DisposeCount++);
+    }
+
+    private sealed class TrackingAccumulator : ITagStateProjectionAccumulator
+    {
+        private readonly TagStateId _tagStateId;
+        private readonly Action _onDispose;
+
+        public TrackingAccumulator(TagStateId tagStateId, Action onDispose)
+        {
+            _tagStateId = tagStateId;
+            _onDispose = onDispose;
+        }
+
+        public bool ApplyState(SerializableTagState? cachedState) => true;
+
+        public bool ApplyEvents(
+            IReadOnlyList<SerializableEvent> events,
+            string? latestSortableUniqueId,
+            CancellationToken cancellationToken = default) => true;
+
+        public SerializableTagState GetSerializedState() =>
+            new(
+                Payload: Array.Empty<byte>(),
+                Version: 0,
+                LastSortedUniqueId: string.Empty,
+                TagGroup: _tagStateId.TagGroup,
+                TagContent: _tagStateId.TagContent,
+                TagProjector: _tagStateId.TagProjectorName,
+                TagPayloadName: nameof(EmptyTagStatePayload),
+                ProjectorVersion: string.Empty);
+
+        public void Dispose() => _onDispose();
+    }
+
+    private sealed class EmptyEventStore : IEventStore
+    {
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
+            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
+
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) =>
+            Task.FromResult(ResultBox.Error<TagState>(new NotImplementedException()));
+
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) =>
+            Task.FromResult(ResultBox.FromValue(false));
+
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(ResultBox.FromValue(0L));
+
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
+            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagInfo>()));
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
+            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+            Task.FromResult(ResultBox.Error<SerializableEvent>(new NotImplementedException()));
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+            Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
+            IEnumerable<SerializableEvent> events) =>
+            Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(new NotImplementedException()));
+    }
+
+    private sealed class MissingActorAccessor : IActorObjectAccessor
+    {
+        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
+            Task.FromResult(ResultBox.Error<T>(new KeyNotFoundException(actorId)));
+
+        public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(false);
     }
 
 }

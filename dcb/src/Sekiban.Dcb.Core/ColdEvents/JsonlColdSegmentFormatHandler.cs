@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.IO.Pipelines;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -22,43 +24,86 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
         Func<SerializableEvent, ValueTask> onEvent,
         CancellationToken ct)
     {
+        PipeReader? reader = null;
         try
         {
-            using var reader = new StreamReader(
+            reader = PipeReader.Create(
                 data,
-                Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: false,
-                leaveOpen: true);
+                new StreamPipeReaderOptions(
+                    bufferSize: 1024 * 64,
+                    leaveOpen: true));
             var eventsRead = 0;
             string? lastSortableUniqueId = null;
-            while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+            while (true)
             {
-                if (string.IsNullOrWhiteSpace(line))
+                ReadResult readResult = await reader.ReadAsync(ct).ConfigureAwait(false);
+                ReadOnlySequence<byte> buffer = readResult.Buffer;
+                while (TryReadLine(ref buffer, out ReadOnlySequence<byte> line))
                 {
-                    continue;
+                    ReadOnlySequence<byte> trimmedLine = TrimLine(line);
+                    if (IsBlankLine(trimmedLine))
+                    {
+                        continue;
+                    }
+
+                    SerializableEvent? evt = DeserializeLine(trimmedLine);
+                    if (evt is null)
+                    {
+                        return ResultBox.Error<ColdSegmentStreamResult>(
+                            new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                    }
+
+                    if (since is not null
+                        && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
+                    {
+                        continue;
+                    }
+
+                    await onEvent(evt);
+                    eventsRead++;
+                    lastSortableUniqueId = evt.SortableUniqueIdValue;
+                    if (maxCount.HasValue && eventsRead >= maxCount.Value)
+                    {
+                        reader.AdvanceTo(buffer.Start, buffer.End);
+                        await reader.CompleteAsync().ConfigureAwait(false);
+                        reader = null;
+                        return ResultBox.FromValue(
+                            new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: false));
+                    }
                 }
 
-                var evt = JsonSerializer.Deserialize<SerializableEvent>(line, ColdEventJsonOptions.Default);
-                if (evt is null)
+                if (readResult.IsCompleted)
                 {
-                    return ResultBox.Error<ColdSegmentStreamResult>(
-                        new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                    ReadOnlySequence<byte> trimmedRemainder = TrimLine(buffer);
+                    if (!IsBlankLine(trimmedRemainder))
+                    {
+                        SerializableEvent? evt = DeserializeLine(trimmedRemainder);
+                        if (evt is null)
+                        {
+                            return ResultBox.Error<ColdSegmentStreamResult>(
+                                new InvalidDataException("Cold JSONL segment line deserialized to null."));
+                        }
+
+                        if (since is null
+                            || string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0)
+                        {
+                            await onEvent(evt);
+                            eventsRead++;
+                            lastSortableUniqueId = evt.SortableUniqueIdValue;
+                        }
+                    }
+
+                    reader.AdvanceTo(buffer.End);
+                    break;
                 }
 
-                if (since is not null
-                    && string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
-                {
-                    continue;
-                }
+                reader.AdvanceTo(buffer.Start, buffer.End);
+            }
 
-                await onEvent(evt);
-                eventsRead++;
-                lastSortableUniqueId = evt.SortableUniqueIdValue;
-                if (maxCount.HasValue && eventsRead >= maxCount.Value)
-                {
-                    return ResultBox.FromValue(
-                        new ColdSegmentStreamResult(eventsRead, lastSortableUniqueId, ReachedEndOfSegment: false));
-                }
+            if (reader is not null)
+            {
+                await reader.CompleteAsync().ConfigureAwait(false);
+                reader = null;
             }
 
             return ResultBox.FromValue(
@@ -68,7 +113,85 @@ public sealed class JsonlColdSegmentFormatHandler : IColdSegmentFormatHandler
         {
             return ResultBox.Error<ColdSegmentStreamResult>(ex);
         }
+        finally
+        {
+            if (reader is not null)
+            {
+                await reader.CompleteAsync().ConfigureAwait(false);
+            }
+        }
     }
+
+    private static SerializableEvent? DeserializeLine(ReadOnlySequence<byte> line)
+    {
+        if (line.IsSingleSegment)
+        {
+            return JsonSerializer.Deserialize<SerializableEvent>(line.FirstSpan, ColdEventJsonOptions.Default);
+        }
+
+        byte[] buffer = line.ToArray();
+        return JsonSerializer.Deserialize<SerializableEvent>(buffer, ColdEventJsonOptions.Default);
+    }
+
+    private static bool TryReadLine(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> line)
+    {
+        SequencePosition? position = buffer.PositionOf((byte)'\n');
+        if (position is null)
+        {
+            line = default;
+            return false;
+        }
+
+        line = buffer.Slice(0, position.Value);
+        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+        return true;
+    }
+
+    private static ReadOnlySequence<byte> TrimLine(ReadOnlySequence<byte> line)
+    {
+        while (!line.IsEmpty)
+        {
+            byte trailing = line.Slice(line.Length - 1, 1).FirstSpan[0];
+            if (!IsAsciiWhitespace(trailing))
+            {
+                break;
+            }
+
+            line = line.Slice(0, line.Length - 1);
+        }
+
+        while (!line.IsEmpty)
+        {
+            byte leading = line.FirstSpan[0];
+            if (!IsAsciiWhitespace(leading))
+            {
+                break;
+            }
+
+            line = line.Slice(1);
+        }
+
+        return line;
+    }
+
+    private static bool IsBlankLine(ReadOnlySequence<byte> line)
+    {
+        foreach (ReadOnlyMemory<byte> segment in line)
+        {
+            foreach (byte value in segment.Span)
+            {
+                if (!IsAsciiWhitespace(value))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsAsciiWhitespace(byte value)
+        => value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
 
     private sealed class JsonlColdSegmentFileBuilder : IColdSegmentFileBuilder
     {
