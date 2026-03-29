@@ -19,7 +19,7 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
-public class DynamoDbEventStore : IEventStore
+public class DynamoDbEventStore : IHotEventStore
 {
     private static readonly Action<ILogger, string, Exception?> LogWriteFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(1, nameof(LogWriteFailed)),

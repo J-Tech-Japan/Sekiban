@@ -35,7 +35,9 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<DynamoDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -57,7 +59,9 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<DynamoDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -83,7 +87,9 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.AddSingleton<IEventStore, DynamoDbEventStore>();
+        services.AddSingleton<DynamoDbEventStore>();
+        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
