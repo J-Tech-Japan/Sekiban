@@ -10,6 +10,14 @@ namespace Sekiban.Dcb.Runtime;
 public interface ITagStateProjectionPrimitive
 {
     ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId);
+
+    /// <summary>
+    ///     Creates an accumulator, waiting asynchronously if the underlying WASM instance pool is at capacity.
+    ///     Use this in async contexts (e.g., Orleans grains) to avoid blocking scheduler threads.
+    ///     Default implementation delegates to the synchronous <see cref="CreateAccumulator"/>.
+    /// </summary>
+    ValueTask<ITagStateProjectionAccumulator> CreateAccumulatorAsync(TagStateId tagStateId, CancellationToken ct = default)
+        => ValueTask.FromResult(CreateAccumulator(tagStateId));
 }
 
 /// <summary>
