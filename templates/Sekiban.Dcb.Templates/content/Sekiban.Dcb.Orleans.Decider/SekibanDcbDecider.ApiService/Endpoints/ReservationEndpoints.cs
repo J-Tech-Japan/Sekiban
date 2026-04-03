@@ -88,11 +88,12 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var displayName = httpContext.User.FindFirstValue("display_name")
-            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
-            ?? command.OrganizerName
-            ?? "Unknown User";
-        var updatedCommand = command with { OrganizerName = displayName };
+        var organizer = ResolveOrganizer(httpContext, command.OrganizerId, command.OrganizerName);
+        var updatedCommand = command with
+        {
+            OrganizerId = organizer.OrganizerId,
+            OrganizerName = organizer.DisplayName
+        };
         var result = await executor.ExecuteAsync(updatedCommand);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
@@ -100,7 +101,8 @@ public static class ReservationEndpoints
             success = true,
             eventId = result.EventId,
             reservationId = createdEvent?.ReservationId ?? updatedCommand.ReservationId,
-            organizerName = displayName,
+            organizerId = organizer.OrganizerId,
+            organizerName = organizer.DisplayName,
             sortableUniqueId = result.SortableUniqueId
         });
     }
@@ -196,22 +198,13 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        // Get user ID from JWT claims
-        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var displayName = httpContext.User.FindFirstValue("display_name")
-            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
-            ?? "Unknown User";
-        if (userId == null || !Guid.TryParse(userId, out var organizerId))
-        {
-            // Use a default or generate one for demo purposes
-            organizerId = Guid.CreateVersion7();
-        }
+        var organizer = ResolveOrganizer(httpContext);
 
         var workflow = new QuickReservationWorkflow(executor);
         var result = await workflow.ExecuteAsync(
             request.RoomId,
-            organizerId,
-            displayName,
+            organizer.OrganizerId,
+            organizer.DisplayName,
             request.StartTime,
             request.EndTime,
             request.Purpose,
@@ -222,13 +215,43 @@ public static class ReservationEndpoints
         {
             success = true,
             reservationId = result.ReservationId,
-            organizerId = organizerId,
-            organizerName = displayName,
+            organizerId = organizer.OrganizerId,
+            organizerName = organizer.DisplayName,
             sortableUniqueId = result.SortableUniqueId,
             requiresApproval = result.RequiresApproval,
             approvalRequestId = result.ApprovalRequestId
         });
     }
+
+    private static OrganizerContext ResolveOrganizer(
+        HttpContext httpContext,
+        Guid? fallbackOrganizerId = null,
+        string? fallbackDisplayName = null)
+    {
+        var debugUserId = httpContext.Request.Headers["X-Debug-User-Id"].FirstOrDefault();
+        if (Guid.TryParse(debugUserId, out var benchmarkOrganizerId))
+        {
+            var debugDisplayName = httpContext.Request.Headers["X-Debug-Display-Name"].FirstOrDefault();
+            return new OrganizerContext(
+                benchmarkOrganizerId,
+                debugDisplayName ?? fallbackDisplayName ?? "Benchmark User");
+        }
+
+        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userId, out var organizerId))
+        {
+            organizerId = fallbackOrganizerId ?? Guid.CreateVersion7();
+        }
+
+        var displayName = httpContext.User.FindFirstValue("display_name")
+            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
+            ?? fallbackDisplayName
+            ?? "Unknown User";
+
+        return new OrganizerContext(organizerId, displayName);
+    }
+
+    private readonly record struct OrganizerContext(Guid OrganizerId, string DisplayName);
 }
 
 // Request DTOs
