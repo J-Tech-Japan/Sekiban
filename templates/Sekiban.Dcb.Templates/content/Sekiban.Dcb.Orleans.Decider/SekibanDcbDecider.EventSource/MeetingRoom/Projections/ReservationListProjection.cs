@@ -31,12 +31,10 @@ public record ReservationListProjection : IMultiProjector<ReservationListProject
         var reservationTags = tags.OfType<ReservationTag>().ToList();
         if (reservationTags.Count == 0) return payload;
 
-        var updatedReservations = new Dictionary<Guid, ReservationState>(payload.Reservations);
-
         foreach (var tag in reservationTags)
         {
             var reservationId = tag.ReservationId;
-            var currentState = updatedReservations.TryGetValue(reservationId, out var existing)
+            var currentState = payload.Reservations.TryGetValue(reservationId, out var existing)
                 ? existing
                 : ReservationState.Empty;
 
@@ -54,11 +52,11 @@ public record ReservationListProjection : IMultiProjector<ReservationListProject
 
             if (newState is not ReservationState.ReservationEmpty)
             {
-                updatedReservations[reservationId] = newState;
+                payload.Reservations[reservationId] = newState;
             }
         }
 
-        return payload with { Reservations = updatedReservations };
+        return payload;
     }
 
     /// <summary>

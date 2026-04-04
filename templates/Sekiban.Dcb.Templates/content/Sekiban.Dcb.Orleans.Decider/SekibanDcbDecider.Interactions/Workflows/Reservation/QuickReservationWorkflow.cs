@@ -1,10 +1,7 @@
-using Dcb.EventSource.MeetingRoom.ApprovalRequest;
 using Dcb.EventSource.MeetingRoom.Reservation;
-using Dcb.EventSource.MeetingRoom.Room;
-using Dcb.MeetingRoomModels.States.Room;
-using Dcb.MeetingRoomModels.Tags;
+using Dcb.MeetingRoomModels.Events.ApprovalRequest;
 using Sekiban.Dcb;
-using System.Linq;
+
 namespace Dcb.Interactions.Workflows.Reservation;
 
 /// <summary>
@@ -44,63 +41,32 @@ public class QuickReservationWorkflow(ISekibanExecutor executor)
         string? approvalRequestComment = null)
     {
         var reservationId = Guid.CreateVersion7();
+        var approvalRequestId = Guid.CreateVersion7();
 
-        var roomState = await executor.GetTagStateAsync<RoomProjector>(new RoomTag(roomId));
-        var roomPayload = roomState.Payload as RoomState ?? RoomState.Empty;
-
-        // 1. Create the draft
-        await executor.ExecuteAsync(new CreateReservationDraft
+        var executionResult = await executor.ExecuteAsync(new CreateQuickReservation
         {
             ReservationId = reservationId,
             RoomId = roomId,
+            ApprovalRequestId = approvalRequestId,
             OrganizerId = organizerId,
             OrganizerName = organizerName,
             StartTime = startTime,
             EndTime = endTime,
             Purpose = purpose,
-            SelectedEquipment = selectedEquipment?.ToList() ?? []
-        });
-
-        Guid? approvalRequestId = null;
-
-        if (roomPayload.RequiresApproval)
-        {
-            approvalRequestId = Guid.CreateVersion7();
-
-            await executor.ExecuteAsync(new StartApprovalFlow
-            {
-                ApprovalRequestId = approvalRequestId.Value,
-                ReservationId = reservationId,
-                RoomId = roomId,
-                RequesterId = organizerId,
-                ApproverIds = [],
-                RequestComment = approvalRequestComment
-            });
-        }
-
-        // 2. Commit to held state
-        var holdResult = await executor.ExecuteAsync(new CommitReservationHold
-        {
-            ReservationId = reservationId,
-            RoomId = roomId,
-            RequiresApproval = roomPayload.RequiresApproval,
-            ApprovalRequestId = approvalRequestId,
+            SelectedEquipment = selectedEquipment?.ToList() ?? [],
             ApprovalRequestComment = approvalRequestComment
         });
+        var sortableUniqueId = executionResult.SortableUniqueId ?? string.Empty;
+        var approvalStarted = executionResult.Events
+            .Select(static writtenEvent => writtenEvent.Payload)
+            .OfType<ApprovalFlowStarted>()
+            .FirstOrDefault();
+        bool requiresApproval = approvalStarted is not null;
 
-        var sortableUniqueId = holdResult.SortableUniqueId ?? string.Empty;
-
-        if (!roomPayload.RequiresApproval)
-        {
-            // 3. Confirm the reservation
-            var confirmResult = await executor.ExecuteAsync(new ConfirmReservation
-            {
-                ReservationId = reservationId,
-                RoomId = roomId
-            });
-            sortableUniqueId = confirmResult.SortableUniqueId ?? sortableUniqueId;
-        }
-
-        return new QuickReservationResult(reservationId, sortableUniqueId, roomPayload.RequiresApproval, approvalRequestId);
+        return new QuickReservationResult(
+            reservationId,
+            sortableUniqueId,
+            requiresApproval,
+            approvalStarted?.ApprovalRequestId);
     }
 }

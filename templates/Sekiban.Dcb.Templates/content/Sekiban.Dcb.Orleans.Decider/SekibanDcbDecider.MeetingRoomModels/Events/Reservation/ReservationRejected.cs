@@ -10,5 +10,5 @@ public record ReservationRejected(
     DateTime RejectedAt) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
-        new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);
+        new(this, [new ReservationTag(ReservationId), new RoomReservationTag(RoomId)]);
 }

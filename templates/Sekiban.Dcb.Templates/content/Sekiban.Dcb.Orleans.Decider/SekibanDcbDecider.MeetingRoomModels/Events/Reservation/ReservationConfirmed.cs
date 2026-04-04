@@ -18,7 +18,7 @@ public record ReservationConfirmed(
         var tags = new List<ITag>
         {
             new ReservationTag(ReservationId),
-            new RoomTag(RoomId)
+            new RoomReservationTag(RoomId)
         };
 
         // Add RoomDailyActivityTag for each day the reservation spans
