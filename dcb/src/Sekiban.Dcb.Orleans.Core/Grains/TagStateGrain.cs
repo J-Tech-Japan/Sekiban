@@ -97,7 +97,7 @@ public class TagStateGrain : Grain, ITagStateGrain
                 eventsResult.GetException());
         }
 
-        using var accumulator = _tagStateProjectionPrimitive.CreateAccumulator(_tagStateId);
+        using var accumulator = await _tagStateProjectionPrimitive.CreateAccumulatorAsync(_tagStateId);
         if (!accumulator.ApplyState(usableCachedState))
         {
             throw new InvalidOperationException(

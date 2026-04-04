@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Reservation;
 using Dcb.Interactions.Workflows.Reservation;
@@ -88,11 +87,20 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var displayName = httpContext.User.FindFirstValue("display_name")
-            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
-            ?? command.OrganizerName
-            ?? "Unknown User";
-        var updatedCommand = command with { OrganizerName = displayName };
+        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext, command.OrganizerId, command.OrganizerName);
+        if (!organizerResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: organizerResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var organizer = organizerResult.Organizer!.Value;
+        var updatedCommand = command with
+        {
+            OrganizerId = organizer.OrganizerId,
+            OrganizerName = organizer.DisplayName
+        };
         var result = await executor.ExecuteAsync(updatedCommand);
         var createdEvent = result.Events.FirstOrDefault(m => m.Payload is ReservationDraftCreated)?.Payload.As<ReservationDraftCreated>();
         return Results.Ok(new
@@ -100,7 +108,8 @@ public static class ReservationEndpoints
             success = true,
             eventId = result.EventId,
             reservationId = createdEvent?.ReservationId ?? updatedCommand.ReservationId,
-            organizerName = displayName,
+            organizerId = organizer.OrganizerId,
+            organizerName = organizer.DisplayName,
             sortableUniqueId = result.SortableUniqueId
         });
     }
@@ -196,22 +205,21 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        // Get user ID from JWT claims
-        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var displayName = httpContext.User.FindFirstValue("display_name")
-            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
-            ?? "Unknown User";
-        if (userId == null || !Guid.TryParse(userId, out var organizerId))
+        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!organizerResult.IsSuccess)
         {
-            // Use a default or generate one for demo purposes
-            organizerId = Guid.CreateVersion7();
+            return Results.Problem(
+                detail: organizerResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
         }
+
+        var organizer = organizerResult.Organizer!.Value;
 
         var workflow = new QuickReservationWorkflow(executor);
         var result = await workflow.ExecuteAsync(
             request.RoomId,
-            organizerId,
-            displayName,
+            organizer.OrganizerId,
+            organizer.DisplayName,
             request.StartTime,
             request.EndTime,
             request.Purpose,
@@ -222,8 +230,8 @@ public static class ReservationEndpoints
         {
             success = true,
             reservationId = result.ReservationId,
-            organizerId = organizerId,
-            organizerName = displayName,
+            organizerId = organizer.OrganizerId,
+            organizerName = organizer.DisplayName,
             sortableUniqueId = result.SortableUniqueId,
             requiresApproval = result.RequiresApproval,
             approvalRequestId = result.ApprovalRequestId

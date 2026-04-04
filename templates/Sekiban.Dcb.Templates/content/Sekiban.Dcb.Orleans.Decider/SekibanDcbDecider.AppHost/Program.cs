@@ -1,5 +1,8 @@
 using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
+var apiServicePort = ConfiguredPortResolver.Resolve(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
+var webPort = ConfiguredPortResolver.Resolve(5180, "E2E_WEB_PORT");
+var webNextPort = ConfiguredPortResolver.Resolve(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
@@ -45,19 +48,35 @@ var apiService = builder
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
     .WaitFor(postgres)
-    .WaitFor(identityPostgres);
+    .WaitFor(identityPostgres)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = apiServicePort;
+        endpoint.TargetPort = apiServicePort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + apiServicePort);
 
 // Add the Web frontend
 builder
     .AddProject<SekibanDcbDecider_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
-    .WaitFor(apiService);
+    .WaitFor(apiService)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = webPort;
+        endpoint.TargetPort = webPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
 
 // Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
 builder
     .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
-    .WithHttpEndpoint(port: 3000, env: "PORT")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
     .WithExternalHttpEndpoints()
     .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
     .WaitFor(apiService);
