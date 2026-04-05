@@ -22,11 +22,9 @@ public record RoomDailyActivityState : ITagStatePayload
     {
         foreach (var (reservationId, slot) in ConfirmedReservations)
         {
-            // Skip the reservation we're updating (if any)
             if (excludeReservationId.HasValue && reservationId == excludeReservationId.Value)
                 continue;
 
-            // Check for overlap: two ranges overlap if start1 < end2 AND start2 < end1
             if (startTime < slot.EndTime && slot.StartTime < endTime)
             {
                 return true;
@@ -39,7 +37,9 @@ public record RoomDailyActivityState : ITagStatePayload
     ///     Gets all conflicting reservations for a given time slot.
     /// </summary>
     public IReadOnlyList<(Guid ReservationId, ConfirmedTimeSlot Slot)> GetConflicts(
-        DateTime startTime, DateTime endTime, Guid? excludeReservationId = null)
+        DateTime startTime,
+        DateTime endTime,
+        Guid? excludeReservationId = null)
     {
         var conflicts = new List<(Guid, ConfirmedTimeSlot)>();
 
@@ -67,11 +67,8 @@ public record RoomDailyActivityState : ITagStatePayload
         string purpose,
         Guid organizerId)
     {
-        var newReservations = new Dictionary<Guid, ConfirmedTimeSlot>(ConfirmedReservations)
-        {
-            [reservationId] = new ConfirmedTimeSlot(startTime, endTime, purpose, organizerId)
-        };
-        return this with { ConfirmedReservations = newReservations };
+        ConfirmedReservations[reservationId] = new ConfirmedTimeSlot(startTime, endTime, purpose, organizerId);
+        return this;
     }
 
     /// <summary>
@@ -79,9 +76,8 @@ public record RoomDailyActivityState : ITagStatePayload
     /// </summary>
     public RoomDailyActivityState RemoveReservation(Guid reservationId)
     {
-        var newReservations = new Dictionary<Guid, ConfirmedTimeSlot>(ConfirmedReservations);
-        newReservations.Remove(reservationId);
-        return this with { ConfirmedReservations = newReservations };
+        ConfirmedReservations.Remove(reservationId);
+        return this;
     }
 }
 
@@ -94,6 +90,5 @@ public record ConfirmedTimeSlot(
     string Purpose,
     Guid OrganizerId)
 {
-    // Parameterless constructor for JSON deserialization
     public ConfirmedTimeSlot() : this(DateTime.MinValue, DateTime.MinValue, string.Empty, Guid.Empty) { }
 }

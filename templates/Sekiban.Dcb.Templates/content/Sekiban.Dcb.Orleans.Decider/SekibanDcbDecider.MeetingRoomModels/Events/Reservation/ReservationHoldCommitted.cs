@@ -16,5 +16,5 @@ public record ReservationHoldCommitted(
     List<string>? SelectedEquipment = null) : IEventPayload
 {
     public EventPayloadWithTags GetEventWithTags() =>
-        new(this, [new ReservationTag(ReservationId), new RoomTag(RoomId)]);
+        new(this, [new ReservationTag(ReservationId), new RoomReservationTag(RoomId)]);
 }

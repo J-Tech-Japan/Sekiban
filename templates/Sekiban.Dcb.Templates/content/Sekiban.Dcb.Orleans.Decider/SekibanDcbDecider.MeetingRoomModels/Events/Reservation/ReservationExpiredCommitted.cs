@@ -22,7 +22,7 @@ public record ReservationExpiredCommitted(
         var tags = new List<ITag>
         {
             new ReservationTag(ReservationId),
-            new RoomTag(RoomId)
+            new RoomReservationTag(RoomId)
         };
 
         if (ApprovalRequestId.HasValue)

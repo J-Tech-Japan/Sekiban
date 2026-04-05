@@ -49,7 +49,7 @@ public record RejectReservation : ICommandWithHandler<RejectReservation>
         var tags = new List<ITag>
         {
             new ReservationTag(command.ReservationId),
-            new RoomTag(command.RoomId),
+            new RoomReservationTag(command.RoomId),
             monthlyTag
         };
 
