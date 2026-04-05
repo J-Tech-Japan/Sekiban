@@ -11,7 +11,8 @@ public record ListQueryResultGeneral(
     int? PageSize,
     IEnumerable<object> Items,
     string RecordType,
-    IListQueryCommon Query) : IListQueryResult
+    IListQueryCommon Query,
+    bool IsCatchUpInProgress = false) : IListQueryResult
 {
     public static ListQueryResultGeneral Empty =>
         new(0, 0, 0, 0, Array.Empty<object>(), string.Empty, new EmptyListQueryCommon());
@@ -42,7 +43,7 @@ public record ListQueryResultGeneral(
         try
         {
             var typedItems = Items.Cast<T>().ToList();
-            var result = new ListQueryResult<T>(TotalCount, TotalPages, CurrentPage, PageSize, typedItems);
+            var result = new ListQueryResult<T>(TotalCount, TotalPages, CurrentPage, PageSize, typedItems, IsCatchUpInProgress);
             return ResultBox.FromValue(result);
         }
         catch (InvalidCastException ex)

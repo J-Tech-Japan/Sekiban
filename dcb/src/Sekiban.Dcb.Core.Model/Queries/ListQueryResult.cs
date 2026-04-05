@@ -9,7 +9,8 @@ public record ListQueryResult<T>(
     int? TotalPages,
     int? CurrentPage,
     int? PageSize,
-    IEnumerable<T> Items) where T : notnull
+    IEnumerable<T> Items,
+    bool IsCatchUpInProgress = false) where T : notnull
 {
     /// <summary>
     ///     Empty result

@@ -1250,7 +1250,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Do not auto-catch-up here; catch-up will be triggered by state/query access
     }
 
-    public async Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter)
+    public Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter) =>
+        ExecuteQueryInternalAsync(queryParameter, waitForCatchUp: false);
+
+    public Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter, bool waitForCatchUp) =>
+        ExecuteQueryInternalAsync(queryParameter, waitForCatchUp);
+
+    public Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter) =>
+        ExecuteListQueryInternalAsync(queryParameter, waitForCatchUp: false);
+
+    public Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter, bool waitForCatchUp) =>
+        ExecuteListQueryInternalAsync(queryParameter, waitForCatchUp);
+
+    private async Task<SerializableQueryResult> ExecuteQueryInternalAsync(
+        SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
@@ -1273,6 +1286,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             await StartSubscriptionAsync();
 
+            if (_orleansStreamHandle == null)
+            {
+                await CatchUpFromEventStoreAsync();
+            }
+
+            // Wait for catch-up if requested
+            if (waitForCatchUp && _catchUpProgress.IsActive)
+            {
+                await WaitForCatchUpWithTimeoutAsync(TimeSpan.FromSeconds(30));
+            }
+
             // Get safe/unsafe metadata for query context
             int? safeVersion = null;
             string? safeThreshold = null;
@@ -1299,11 +1323,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 unsafeVersion = unsafeStateResult.GetValue().Version;
             }
 
-            if (_orleansStreamHandle == null)
-            {
-                await CatchUpFromEventStoreAsync();
-            }
-
             var result = await _host.ExecuteQueryAsync(
                 queryParameter,
                 safeVersion,
@@ -1316,7 +1335,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw result.GetException();
             }
 
-            return result.GetValue();
+            var resultValue = result.GetValue();
+
+            // Enrich result with catch-up progress information
+            if (_catchUpProgress.IsActive)
+            {
+                resultValue = resultValue with { IsCatchUpInProgress = true };
+            }
+
+            return resultValue;
         }
         catch (Exception ex)
         {
@@ -1325,7 +1352,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    public async Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter)
+    private async Task<SerializableListQueryResult> ExecuteListQueryInternalAsync(
+        SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
@@ -1348,6 +1376,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             await StartSubscriptionAsync();
 
+            if (_orleansStreamHandle == null)
+            {
+                await CatchUpFromEventStoreAsync();
+            }
+
+            // Wait for catch-up if requested
+            if (waitForCatchUp && _catchUpProgress.IsActive)
+            {
+                await WaitForCatchUpWithTimeoutAsync(TimeSpan.FromSeconds(30));
+            }
+
             // Get safe/unsafe metadata for query context
             int? safeVersion = null;
             string? safeThreshold = null;
@@ -1374,11 +1413,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 unsafeVersion = unsafeStateResult.GetValue().Version;
             }
 
-            if (_orleansStreamHandle == null)
-            {
-                await CatchUpFromEventStoreAsync();
-            }
-
             var result = await _host.ExecuteListQueryAsync(
                 queryParameter,
                 safeVersion,
@@ -1391,7 +1425,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw result.GetException();
             }
 
-            return result.GetValue();
+            var resultValue = result.GetValue();
+
+            // Enrich result with catch-up progress information
+            if (_catchUpProgress.IsActive)
+            {
+                resultValue = resultValue with { IsCatchUpInProgress = true };
+            }
+
+            return resultValue;
         }
         catch (Exception ex)
         {
