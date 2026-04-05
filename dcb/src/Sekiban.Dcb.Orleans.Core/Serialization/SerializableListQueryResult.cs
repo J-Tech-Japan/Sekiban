@@ -40,6 +40,13 @@ public sealed record SerializableListQueryResult
     [Id(8)]
     public string ItemsAssemblyVersion { get; init; } = string.Empty;
 
+    /// <summary>
+    ///     Indicates whether the projection is still catching up from the event store.
+    ///     When true, the results may be incomplete or stale.
+    /// </summary>
+    [Id(9)]
+    public bool IsCatchUpInProgress { get; init; }
+
     public SerializableListQueryResult() { }
 
     private SerializableListQueryResult(
@@ -103,16 +110,19 @@ public sealed record SerializableListQueryResult
         var compressedItemsJson = await CompressAsync(itemsJson);
         var compressedQueryJson = await CompressAsync(queryJson);
 
-        return new SerializableListQueryResult(
-            result.TotalCount,
-            result.TotalPages,
-            result.CurrentPage,
-            result.PageSize,
-            recordTypeName,
-            queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
-            compressedItemsJson,
-            compressedQueryJson,
-            itemsAssemblyVersion);
+        return new SerializableListQueryResult
+        {
+            TotalCount = result.TotalCount,
+            TotalPages = result.TotalPages,
+            CurrentPage = result.CurrentPage,
+            PageSize = result.PageSize,
+            RecordTypeName = recordTypeName,
+            QueryTypeName = queryType.AssemblyQualifiedName ?? queryType.FullName ?? queryType.Name,
+            CompressedItemsJson = compressedItemsJson,
+            CompressedQueryJson = compressedQueryJson,
+            ItemsAssemblyVersion = itemsAssemblyVersion,
+            IsCatchUpInProgress = result.IsCatchUpInProgress
+        };
     }
 
     public static async Task<ResultBox<SerializableListQueryResult>> CreateFromResultBoxAsync(
@@ -146,7 +156,8 @@ public sealed record SerializableListQueryResult
             listQueryResult.PageSize,
             items,
             recordTypeName,
-            originalQuery);
+            originalQuery,
+            listQueryResult.IsCatchUpInProgress);
 
         var serializable = await CreateFromAsync(listResultGeneral, options);
 
@@ -222,7 +233,8 @@ public sealed record SerializableListQueryResult
                 PageSize,
                 items,
                 RecordTypeName,
-                query);
+                query,
+                IsCatchUpInProgress);
 
             return ResultBox<ListQueryResultGeneral>.FromValue(listQueryResult);
         }
