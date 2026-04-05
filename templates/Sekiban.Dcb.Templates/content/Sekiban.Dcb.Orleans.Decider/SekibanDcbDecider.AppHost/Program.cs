@@ -1,8 +1,8 @@
 using Projects;
 var builder = DistributedApplication.CreateBuilder(args);
-var apiServicePort = ResolveConfiguredPort(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
-var webPort = ResolveConfiguredPort(5180, "E2E_WEB_PORT");
-var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
+var apiServicePort = ConfiguredPortResolver.Resolve(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
+var webPort = ConfiguredPortResolver.Resolve(5180, "E2E_WEB_PORT");
+var webNextPort = ConfiguredPortResolver.Resolve(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
@@ -82,17 +82,3 @@ builder
     .WaitFor(apiService);
 
 builder.Build().Run();
-
-static int ResolveConfiguredPort(int defaultPort, params string[] envNames)
-{
-    foreach (string envName in envNames)
-    {
-        string? value = Environment.GetEnvironmentVariable(envName);
-        if (int.TryParse(value, out int port))
-        {
-            return port;
-        }
-    }
-
-    return defaultPort;
-}
