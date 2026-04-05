@@ -156,7 +156,8 @@ public sealed record SerializableListQueryResult
             listQueryResult.PageSize,
             items,
             recordTypeName,
-            originalQuery);
+            originalQuery,
+            listQueryResult.IsCatchUpInProgress);
 
         var serializable = await CreateFromAsync(listResultGeneral, options);
 

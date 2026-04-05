@@ -102,6 +102,9 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
             await Task.Delay(200);
         }
 
+        var finalStatus = await grain.GetCatchUpStatusAsync();
+        Assert.False(finalStatus.IsActive, "Catch-up should complete within the polling timeout");
+
         // Execute list query — should return all items with IsCatchUpInProgress=false
         var domainTypes = CreateDomainTypes();
         var query = new CountingListQuery();

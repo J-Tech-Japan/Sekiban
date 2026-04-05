@@ -19,4 +19,6 @@ public record struct ListQueryResultGeneralSurrogate(
     [property: Id(5)]
     string RecordType,
     [property: Id(6)]
-    IListQueryCommon Query);
+    IListQueryCommon Query,
+    [property: Id(7)]
+    bool IsCatchUpInProgress);
