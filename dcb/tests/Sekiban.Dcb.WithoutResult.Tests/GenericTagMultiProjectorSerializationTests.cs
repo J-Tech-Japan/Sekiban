@@ -131,7 +131,7 @@ public class GenericTagMultiProjectorSerializationTests
     }
 
     [Fact]
-    public void RestoredSnapshot_WrapperPreservesUnsafeState_ForGenericTagMultiProjector()
+    public void RestoredSnapshot_WrapperPreservesTagStates_ForGenericTagMultiProjector()
     {
         var forecastId = Guid.NewGuid();
         var eventTime = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -167,7 +167,8 @@ public class GenericTagMultiProjectorSerializationTests
             deserialized,
             GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.MultiProjectorName,
             (ICoreMultiProjectorTypes)_domainTypes.MultiProjectorTypes,
-            _domainTypes.JsonSerializerOptions,
+            _domainTypes,
+            safeThreshold,
             initialVersion: 1,
             initialLastEventId: weatherEvent.Id,
             initialLastSortableUniqueId: weatherEvent.SortableUniqueIdValue));
@@ -236,7 +237,8 @@ public class GenericTagMultiProjectorSerializationTests
             deserialized,
             GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.MultiProjectorName,
             (ICoreMultiProjectorTypes)_domainTypes.MultiProjectorTypes,
-            _domainTypes.JsonSerializerOptions,
+            _domainTypes,
+            safeThreshold,
             initialVersion: 3,
             initialLastEventId: lastEvent.Id,
             initialLastSortableUniqueId: lastEvent.SortableUniqueIdValue));

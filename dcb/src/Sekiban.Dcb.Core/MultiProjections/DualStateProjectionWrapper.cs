@@ -50,41 +50,40 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
-        : this(
-            initialProjector,
-            projectorName,
-            types,
-            jsonOptions,
-            initialVersion,
-            initialLastEventId,
-            initialLastSortableUniqueId,
-            false)
     {
+        _jsonOptions = jsonOptions;
+        _safeProjector = initialProjector;
+        _projectorName = projectorName;
+        _types = types;
+        _unsafeProjector = CloneProjector(initialProjector, jsonOptions);
+        _useIncrementalSafePromotion = false;
+
+        // Initialize version tracking
+        _safeVersion = initialVersion;
+        _unsafeVersion = initialVersion;
+        _safeLastEventId = initialLastEventId;
+        _unsafeLastEventId = initialLastEventId;
+        _safeLastSortableUniqueId = initialLastSortableUniqueId ?? string.Empty;
+        _unsafeLastSortableUniqueId = initialLastSortableUniqueId ?? string.Empty;
     }
 
     internal DualStateProjectionWrapper(
-        T initialProjector,
+        T safeProjector,
+        T unsafeProjector,
         string projectorName,
         ICoreMultiProjectorTypes types,
         JsonSerializerOptions jsonOptions,
         int initialVersion,
         Guid initialLastEventId,
-        string? initialLastSortableUniqueId,
-        bool isRestoredFromSnapshot)
+        string? initialLastSortableUniqueId)
     {
         _jsonOptions = jsonOptions;
-        _safeProjector = initialProjector;
-        // Snapshot restore already provides a fully materialized safe projection.
-        // Re-cloning through generic JSON serialization can silently drop state for
-        // custom-serialized projectors such as GenericTagMultiProjector.
-        _unsafeProjector = isRestoredFromSnapshot
-            ? initialProjector
-            : CloneProjector(initialProjector, jsonOptions);
+        _safeProjector = safeProjector;
+        _unsafeProjector = unsafeProjector;
         _projectorName = projectorName;
         _types = types;
-        _useIncrementalSafePromotion = isRestoredFromSnapshot;
+        _useIncrementalSafePromotion = true;
 
-        // Initialize version tracking
         _safeVersion = initialVersion;
         _unsafeVersion = initialVersion;
         _safeLastEventId = initialLastEventId;

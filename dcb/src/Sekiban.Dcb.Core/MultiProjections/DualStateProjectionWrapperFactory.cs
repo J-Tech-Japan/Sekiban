@@ -26,26 +26,43 @@ public static class DualStateProjectionWrapperFactory
             jsonOptions,
             initialVersion,
             initialLastEventId,
-            initialLastSortableUniqueId,
-            false);
+            initialLastSortableUniqueId);
 
     public static IMultiProjectionPayload? CreateFromRestoredSnapshot(
         IMultiProjectionPayload payload,
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
-        JsonSerializerOptions jsonOptions,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
-        => CreateCore(
+    {
+        var clonedPayload = CloneRestoredPayload(
             payload,
             projectorName,
             multiProjectorTypes,
-            jsonOptions,
-            initialVersion,
-            initialLastEventId,
-            initialLastSortableUniqueId,
-            true);
+            domainTypes,
+            safeWindowThreshold);
+
+        var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
+        return Activator.CreateInstance(
+            wrapperType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args:
+            [
+                payload,
+                clonedPayload,
+                projectorName,
+                multiProjectorTypes,
+                domainTypes.JsonSerializerOptions,
+                initialVersion,
+                initialLastEventId,
+                initialLastSortableUniqueId
+            ],
+            culture: null) as IMultiProjectionPayload;
+    }
 
     private static IMultiProjectionPayload? CreateCore(
         IMultiProjectionPayload payload,
@@ -54,30 +71,9 @@ public static class DualStateProjectionWrapperFactory
         JsonSerializerOptions jsonOptions,
         int initialVersion,
         Guid initialLastEventId,
-        string? initialLastSortableUniqueId,
-        bool isRestoredFromSnapshot)
+        string? initialLastSortableUniqueId)
     {
         var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
-
-        if (isRestoredFromSnapshot)
-        {
-            return Activator.CreateInstance(
-                wrapperType,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                binder: null,
-                args:
-                [
-                    payload,
-                    projectorName,
-                    multiProjectorTypes,
-                    jsonOptions,
-                    initialVersion,
-                    initialLastEventId,
-                    initialLastSortableUniqueId,
-                    true
-                ],
-                culture: null) as IMultiProjectionPayload;
-        }
 
         return Activator.CreateInstance(
             wrapperType,
@@ -88,5 +84,35 @@ public static class DualStateProjectionWrapperFactory
             initialVersion,
             initialLastEventId,
             initialLastSortableUniqueId) as IMultiProjectionPayload;
+    }
+
+    private static IMultiProjectionPayload CloneRestoredPayload(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold)
+    {
+        var serializeResult = multiProjectorTypes.Serialize(
+            projectorName,
+            domainTypes,
+            safeWindowThreshold,
+            payload);
+        if (!serializeResult.IsSuccess)
+        {
+            throw serializeResult.GetException();
+        }
+
+        var deserializeResult = multiProjectorTypes.Deserialize(
+            projectorName,
+            domainTypes,
+            safeWindowThreshold,
+            serializeResult.GetValue().Data);
+        if (!deserializeResult.IsSuccess)
+        {
+            throw deserializeResult.GetException();
+        }
+
+        return deserializeResult.GetValue();
     }
 }

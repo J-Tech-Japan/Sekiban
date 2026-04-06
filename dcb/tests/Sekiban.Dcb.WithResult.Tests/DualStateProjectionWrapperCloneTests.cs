@@ -104,7 +104,8 @@ public class DualStateProjectionWrapperCloneTests
             restoredProjector,
             CamelCaseProjector.MultiProjectorName,
             _multiProjectorTypes,
-            _camelCaseOptions,
+            _domainTypes,
+            "000000000000000000000000000000000000000000000000",
             initialVersion: 5,
             initialLastEventId: Guid.NewGuid(),
             initialLastSortableUniqueId: null));

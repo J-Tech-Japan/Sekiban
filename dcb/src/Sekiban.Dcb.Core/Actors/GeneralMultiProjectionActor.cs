@@ -167,7 +167,8 @@ public class GeneralMultiProjectionActor
                 loadedPayload,
                 _projectorName,
                 _types,
-                _jsonOptions,
+                _domain,
+                safeThreshold.Value,
                 initialVersion: state.Version,
                 initialLastEventId: state.LastEventId,
                 initialLastSortableUniqueId: state.LastSortableUniqueId);
