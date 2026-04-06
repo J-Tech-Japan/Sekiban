@@ -130,6 +130,56 @@ public class GenericTagMultiProjectorSerializationTests
         Assert.Equal(deleted.SortableUniqueIdValue, unsafeProjectionAfter.LastSortableUniqueId);
     }
 
+    [Fact]
+    public void RestoredSnapshot_WrapperPreservesUnsafeState_ForGenericTagMultiProjector()
+    {
+        var forecastId = Guid.NewGuid();
+        var eventTime = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var safeThreshold = SortableUniqueId.Generate(eventTime.AddSeconds(20), Guid.Empty);
+        var weatherEvent = CreateEvent(
+            new WeatherForecastCreated(
+                forecastId,
+                "Tokyo",
+                DateOnly.FromDateTime(eventTime),
+                20,
+                "Sunny"),
+            eventTime,
+            forecastId) with { Tags = new List<string>() };
+
+        var projected = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Project(
+            GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.GenerateInitialPayload(),
+            weatherEvent,
+            new List<ITag> { new WeatherForecastTag(forecastId) },
+            _domainTypes,
+            safeThreshold);
+
+        var serialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Serialize(
+            _domainTypes,
+            safeThreshold,
+            projected);
+        var deserialized = GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.Deserialize(
+            _domainTypes,
+            safeThreshold,
+            serialized.Data);
+
+        var wrapper = new DualStateProjectionWrapper<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>(
+            deserialized,
+            GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.MultiProjectorName,
+            (ICoreMultiProjectorTypes)_domainTypes.MultiProjectorTypes,
+            _domainTypes.JsonSerializerOptions,
+            initialVersion: 1,
+            initialLastEventId: weatherEvent.Id,
+            initialLastSortableUniqueId: weatherEvent.SortableUniqueIdValue,
+            isRestoredFromSnapshot: true);
+
+        var unsafeProjection = wrapper.GetUnsafeProjection(_domainTypes);
+        var restoredStates = unsafeProjection.State.GetCurrentTagStates();
+
+        Assert.Single(restoredStates);
+        Assert.Contains(forecastId, restoredStates.Keys);
+        Assert.Equal(20, Assert.IsType<WeatherForecastState>(restoredStates[forecastId].Payload).TemperatureC);
+    }
+
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp, Guid forecastId)
     {
         var eventId = Guid.NewGuid();

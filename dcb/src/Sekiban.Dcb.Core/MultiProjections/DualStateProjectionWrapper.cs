@@ -74,7 +74,12 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     {
         _jsonOptions = jsonOptions;
         _safeProjector = initialProjector;
-        _unsafeProjector = CloneProjector(initialProjector, jsonOptions);
+        // Snapshot restore already provides a fully materialized safe projection.
+        // Re-cloning through generic JSON serialization can silently drop state for
+        // custom-serialized projectors such as GenericTagMultiProjector.
+        _unsafeProjector = isRestoredFromSnapshot
+            ? initialProjector
+            : CloneProjector(initialProjector, jsonOptions);
         _projectorName = projectorName;
         _types = types;
         _useIncrementalSafePromotion = isRestoredFromSnapshot;
