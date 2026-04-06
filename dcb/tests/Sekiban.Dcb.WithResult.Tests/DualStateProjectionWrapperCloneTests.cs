@@ -90,7 +90,7 @@ public class DualStateProjectionWrapperCloneTests
     }
 
     [Fact]
-    public void Constructor_ShouldCloneWithSnapshotRestore_WhenRestoredFromSnapshot()
+    public void Factory_ShouldPreservePayload_WhenRestoredFromSnapshot()
     {
         // Given: a projector with nested data, simulating snapshot restore
         var restoredProjector = new CamelCaseProjector
@@ -98,16 +98,16 @@ public class DualStateProjectionWrapperCloneTests
             Detail = new NestedDetail("Restored", 999)
         };
 
-        // When: constructing the wrapper as if restored from snapshot
-        var wrapper = new DualStateProjectionWrapper<CamelCaseProjector>(
+        // When: wrapping the restored payload through the snapshot-specific factory
+        var wrapper = Assert.IsType<DualStateProjectionWrapper<CamelCaseProjector>>(
+            DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
             restoredProjector,
             CamelCaseProjector.MultiProjectorName,
             _multiProjectorTypes,
             _camelCaseOptions,
             initialVersion: 5,
             initialLastEventId: Guid.NewGuid(),
-            initialLastSortableUniqueId: null,
-            isRestoredFromSnapshot: true);
+            initialLastSortableUniqueId: null));
 
         // Then: construction succeeds and data is preserved
         var unsafeProjection = wrapper.GetUnsafeProjection(_domainTypes);

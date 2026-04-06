@@ -62,7 +62,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     {
     }
 
-    public DualStateProjectionWrapper(
+    internal DualStateProjectionWrapper(
         T initialProjector,
         string projectorName,
         ICoreMultiProjectorTypes types,

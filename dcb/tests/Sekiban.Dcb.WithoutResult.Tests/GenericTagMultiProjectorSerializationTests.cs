@@ -162,15 +162,15 @@ public class GenericTagMultiProjectorSerializationTests
             safeThreshold,
             serialized.Data);
 
-        var wrapper = new DualStateProjectionWrapper<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>(
+        var wrapper = Assert.IsType<DualStateProjectionWrapper<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>>(
+            DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
             deserialized,
             GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.MultiProjectorName,
             (ICoreMultiProjectorTypes)_domainTypes.MultiProjectorTypes,
             _domainTypes.JsonSerializerOptions,
             initialVersion: 1,
             initialLastEventId: weatherEvent.Id,
-            initialLastSortableUniqueId: weatherEvent.SortableUniqueIdValue,
-            isRestoredFromSnapshot: true);
+            initialLastSortableUniqueId: weatherEvent.SortableUniqueIdValue));
 
         var unsafeProjection = wrapper.GetUnsafeProjection(_domainTypes);
         var restoredStates = unsafeProjection.State.GetCurrentTagStates();
@@ -231,15 +231,15 @@ public class GenericTagMultiProjectorSerializationTests
             lastForecast.Time,
             lastForecast.Id);
 
-        var wrapper = new DualStateProjectionWrapper<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>(
+        var wrapper = Assert.IsType<DualStateProjectionWrapper<GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>>>(
+            DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
             deserialized,
             GenericTagMultiProjector<WeatherForecastProjector, WeatherForecastTag>.MultiProjectorName,
             (ICoreMultiProjectorTypes)_domainTypes.MultiProjectorTypes,
             _domainTypes.JsonSerializerOptions,
             initialVersion: 3,
             initialLastEventId: lastEvent.Id,
-            initialLastSortableUniqueId: lastEvent.SortableUniqueIdValue,
-            isRestoredFromSnapshot: true);
+            initialLastSortableUniqueId: lastEvent.SortableUniqueIdValue));
 
         // Verify ALL 3 items are preserved in the unsafe projection
         var unsafeProjection = wrapper.GetUnsafeProjection(_domainTypes);

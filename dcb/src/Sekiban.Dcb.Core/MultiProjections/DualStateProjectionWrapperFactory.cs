@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Domains;
+using System.Reflection;
 using System.Text.Json;
 
 namespace Sekiban.Dcb.MultiProjections;
@@ -15,10 +16,46 @@ public static class DualStateProjectionWrapperFactory
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions jsonOptions,
-        bool isRestoredFromSnapshot = false,
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
+        => CreateCore(
+            payload,
+            projectorName,
+            multiProjectorTypes,
+            jsonOptions,
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId,
+            false);
+
+    public static IMultiProjectionPayload? CreateFromRestoredSnapshot(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        JsonSerializerOptions jsonOptions,
+        int initialVersion = 0,
+        Guid initialLastEventId = default,
+        string? initialLastSortableUniqueId = null)
+        => CreateCore(
+            payload,
+            projectorName,
+            multiProjectorTypes,
+            jsonOptions,
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId,
+            true);
+
+    private static IMultiProjectionPayload? CreateCore(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        JsonSerializerOptions jsonOptions,
+        int initialVersion,
+        Guid initialLastEventId,
+        string? initialLastSortableUniqueId,
+        bool isRestoredFromSnapshot)
     {
         var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
 
@@ -26,14 +63,20 @@ public static class DualStateProjectionWrapperFactory
         {
             return Activator.CreateInstance(
                 wrapperType,
-                payload,
-                projectorName,
-                multiProjectorTypes,
-                jsonOptions,
-                initialVersion,
-                initialLastEventId,
-                initialLastSortableUniqueId,
-                true) as IMultiProjectionPayload;
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                args:
+                [
+                    payload,
+                    projectorName,
+                    multiProjectorTypes,
+                    jsonOptions,
+                    initialVersion,
+                    initialLastEventId,
+                    initialLastSortableUniqueId,
+                    true
+                ],
+                culture: null) as IMultiProjectionPayload;
         }
 
         return Activator.CreateInstance(
