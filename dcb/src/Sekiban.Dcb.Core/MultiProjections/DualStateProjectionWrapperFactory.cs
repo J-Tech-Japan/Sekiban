@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Domains;
+using System.Reflection;
 using System.Text.Json;
 
 namespace Sekiban.Dcb.MultiProjections;
@@ -15,26 +16,64 @@ public static class DualStateProjectionWrapperFactory
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions jsonOptions,
-        bool isRestoredFromSnapshot = false,
+        int initialVersion = 0,
+        Guid initialLastEventId = default,
+        string? initialLastSortableUniqueId = null)
+        => CreateCore(
+            payload,
+            projectorName,
+            multiProjectorTypes,
+            jsonOptions,
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId);
+
+    public static IMultiProjectionPayload? CreateFromRestoredSnapshot(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
     {
-        var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
+        var clonedPayload = CloneRestoredPayload(
+            payload,
+            projectorName,
+            multiProjectorTypes,
+            domainTypes,
+            safeWindowThreshold);
 
-        if (isRestoredFromSnapshot)
-        {
-            return Activator.CreateInstance(
-                wrapperType,
+        var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
+        return Activator.CreateInstance(
+            wrapperType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args:
+            [
                 payload,
+                clonedPayload,
                 projectorName,
                 multiProjectorTypes,
-                jsonOptions,
+                domainTypes.JsonSerializerOptions,
                 initialVersion,
                 initialLastEventId,
-                initialLastSortableUniqueId,
-                true) as IMultiProjectionPayload;
-        }
+                initialLastSortableUniqueId
+            ],
+            culture: null) as IMultiProjectionPayload;
+    }
+
+    private static IMultiProjectionPayload? CreateCore(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        JsonSerializerOptions jsonOptions,
+        int initialVersion,
+        Guid initialLastEventId,
+        string? initialLastSortableUniqueId)
+    {
+        var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
 
         return Activator.CreateInstance(
             wrapperType,
@@ -45,5 +84,35 @@ public static class DualStateProjectionWrapperFactory
             initialVersion,
             initialLastEventId,
             initialLastSortableUniqueId) as IMultiProjectionPayload;
+    }
+
+    private static IMultiProjectionPayload CloneRestoredPayload(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold)
+    {
+        var serializeResult = multiProjectorTypes.Serialize(
+            projectorName,
+            domainTypes,
+            safeWindowThreshold,
+            payload);
+        if (!serializeResult.IsSuccess)
+        {
+            throw serializeResult.GetException();
+        }
+
+        var deserializeResult = multiProjectorTypes.Deserialize(
+            projectorName,
+            domainTypes,
+            safeWindowThreshold,
+            serializeResult.GetValue().Data);
+        if (!deserializeResult.IsSuccess)
+        {
+            throw deserializeResult.GetException();
+        }
+
+        return deserializeResult.GetValue();
     }
 }
