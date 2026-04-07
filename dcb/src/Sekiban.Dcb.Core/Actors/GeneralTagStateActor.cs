@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
@@ -448,8 +449,15 @@ public class GeneralTagStateActor : ITagStateActorCommon
             version = cachedState.Version;
             lastSortedUniqueId = cachedState.LastSortedUniqueId;
 
-            // Read only new events (after cached state's last sortable unique ID)
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            // Read only new events after the cached state's last sortable unique ID.
+            // The event store supports a "since" parameter so the database returns only
+            // delta rows instead of loading the full event history for the tag.
+            // We wrap the raw string directly (not via TryParse) because
+            // LastSortedUniqueId always originates from an event's SortableUniqueId.
+            SortableUniqueId? since = !string.IsNullOrEmpty(cachedState.LastSortedUniqueId)
+                ? new SortableUniqueId(cachedState.LastSortedUniqueId)
+                : null;
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
             if (!eventsResult.IsSuccess)
             {
                 // Log the error and throw exception instead of silently returning cached state
@@ -466,11 +474,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
                     error);
             }
 
+            // The DB already filtered out events <= cachedState.LastSortedUniqueId.
+            // We still need the upper-bound filter to stay consistent with the
+            // latestSortableUniqueId snapshot taken from TagConsistentActor.
             var newEvents = eventsResult
                 .GetValue()
                 .Where(e =>
-                    string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) >
-                    0 &&
                     string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
                 .ToList();
 
