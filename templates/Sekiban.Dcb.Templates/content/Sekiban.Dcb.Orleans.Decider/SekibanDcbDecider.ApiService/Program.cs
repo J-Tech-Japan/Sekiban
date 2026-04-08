@@ -7,7 +7,9 @@ using Dcb.EventSource;
 using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
 using Orleans.Runtime;
+using Orleans.Runtime.Hosting;
 using Orleans.Storage;
+using Npgsql;
 using Scalar.AspNetCore;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -49,6 +51,8 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Add Authentication & Identity
 var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres")
     ?? throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
+await EnsurePostgresDatabaseExistsAsync(builder.Configuration.GetConnectionString("DcbPostgres"));
+await EnsurePostgresDatabaseExistsAsync(authConnectionString);
 builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
 builder.Services.AddHostedService<AuthDbInitializer>();
 
@@ -59,6 +63,8 @@ builder.Services.AddOpenApi();
 var orleansClusterType = builder.Configuration["ORLEANS_CLUSTERING_TYPE"]?.ToLower() ?? "azurestorage";
 var orleansGrainType = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 var orleansQueueType = builder.Configuration["ORLEANS_QUEUE_TYPE"]?.ToLower() ?? "azurestorage";
+var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+var useInMemoryGrainStorage = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
 
 // Add Azure Storage clients for Orleans only when NOT using Cosmos for clustering
 // (Aspire clients add health checks that require connection strings)
@@ -68,7 +74,7 @@ if (orleansClusterType != "cosmos")
 }
 
 // Table client for grain storage (used for checkpointer, PubSub, etc.)
-if (orleansGrainType != "cosmos")
+if (!useInMemoryGrainStorage && orleansGrainType != "cosmos")
 {
     builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
     builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
@@ -78,7 +84,7 @@ if (orleansGrainType != "cosmos")
 builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
 
 // Queue client only when using Azure Storage queues
-if (orleansQueueType != "eventhub")
+if (!useInMemoryStreams && orleansQueueType != "eventhub")
 {
     builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 }
@@ -87,41 +93,36 @@ if (orleansQueueType != "eventhub")
 
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
 
-Console.WriteLine($"[Orleans Config] ClusterType: {orleansClusterType}, GrainType: {orleansGrainType}, QueueType: {orleansQueueType}");
+Console.WriteLine($"[Orleans Config] ClusterType: {orleansClusterType}, GrainType: {orleansGrainType}, QueueType: {orleansQueueType}, InMemoryStreams: {useInMemoryStreams}, InMemoryGrainStorage: {useInMemoryGrainStorage}");
 
-// Configure Orleans
-builder.Host.UseOrleans((context, siloBuilder) =>
+if (useInMemoryGrainStorage)
 {
-    // Configure ClusterOptions from configuration (Orleans:ClusterId, Orleans:ServiceId)
-    var orleansSection = context.Configuration.GetSection("Orleans");
-    var clusterId = orleansSection["ClusterId"];
-    var serviceId = orleansSection["ServiceId"];
-
-    if (!string.IsNullOrEmpty(clusterId) || !string.IsNullOrEmpty(serviceId))
+    builder.UseOrleans(siloBuilder =>
     {
-        siloBuilder.Configure<ClusterOptions>(options =>
-        {
-            if (!string.IsNullOrEmpty(clusterId))
-            {
-                options.ClusterId = clusterId;
-                Console.WriteLine($"[Orleans] ClusterId: {clusterId}");
-            }
-            if (!string.IsNullOrEmpty(serviceId))
-            {
-                options.ServiceId = serviceId;
-                Console.WriteLine($"[Orleans] ServiceId: {serviceId}");
-            }
-        });
-    }
+        ConfigureClusterOptions(siloBuilder, builder.Configuration);
+        ConfigureEndpoints(siloBuilder, builder.Environment);
+        ConfigureClusteringAndStorage(siloBuilder, builder.Configuration, builder.Environment);
+        ConfigureStreaming(siloBuilder, builder.Configuration, orleansQueueType);
+        ConfigureGrainStorage(siloBuilder, builder.Configuration);
+        ConfigureOrleansServices(siloBuilder, builder.Environment, databaseType, builder.Configuration);
+    });
+}
+else
+{
+    // Configure Orleans
+    builder.Host.UseOrleans((context, siloBuilder) =>
+    {
+        ConfigureClusterOptions(siloBuilder, context.Configuration);
 
-    // Configure endpoints for Azure Container Apps (non-development environments)
-    ConfigureEndpoints(siloBuilder, context.HostingEnvironment);
+        // Configure endpoints for Azure Container Apps (non-development environments)
+        ConfigureEndpoints(siloBuilder, context.HostingEnvironment);
 
-    ConfigureClusteringAndStorage(siloBuilder, context.Configuration, context.HostingEnvironment);
-    ConfigureStreaming(siloBuilder, context.Configuration, orleansQueueType);
-    ConfigureGrainStorage(siloBuilder, context.Configuration);
-    ConfigureOrleansServices(siloBuilder, context.HostingEnvironment, databaseType, context.Configuration);
-});
+        ConfigureClusteringAndStorage(siloBuilder, context.Configuration, context.HostingEnvironment);
+        ConfigureStreaming(siloBuilder, context.Configuration, orleansQueueType);
+        ConfigureGrainStorage(siloBuilder, context.Configuration);
+        ConfigureOrleansServices(siloBuilder, context.HostingEnvironment, databaseType, context.Configuration);
+    });
+}
 
 // Orleans health check registration (Readiness: Silo has joined the cluster)
 builder.Services.AddHealthChecks()
@@ -239,6 +240,32 @@ void ConfigureClusteringAndStorage(ISiloBuilder siloBuilder, IConfiguration conf
     ConfigureLocalOrleans(siloBuilder, environment, configuration);
 }
 
+void ConfigureClusterOptions(ISiloBuilder siloBuilder, IConfiguration configuration)
+{
+    var orleansSection = configuration.GetSection("Orleans");
+    var clusterId = orleansSection["ClusterId"];
+    var serviceId = orleansSection["ServiceId"];
+
+    if (string.IsNullOrEmpty(clusterId) && string.IsNullOrEmpty(serviceId))
+    {
+        return;
+    }
+
+    siloBuilder.Configure<ClusterOptions>(options =>
+    {
+        if (!string.IsNullOrEmpty(clusterId))
+        {
+            options.ClusterId = clusterId;
+            Console.WriteLine($"[Orleans] ClusterId: {clusterId}");
+        }
+        if (!string.IsNullOrEmpty(serviceId))
+        {
+            options.ServiceId = serviceId;
+            Console.WriteLine($"[Orleans] ServiceId: {serviceId}");
+        }
+    });
+}
+
 void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, IConfiguration configuration)
 {
     Console.WriteLine("[Orleans] Using Cosmos clustering");
@@ -298,6 +325,8 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, I
 
 void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment, IConfiguration configuration)
 {
+    var useInMemoryGrainStorage = configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
+
     if (environment.IsDevelopment())
     {
         Console.WriteLine("[Orleans] Using LocalhostClustering (Development mode)");
@@ -313,6 +342,17 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
                 opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansClusteringTable");
             });
         });
+    }
+
+    if (useInMemoryGrainStorage)
+    {
+        Console.WriteLine("[Orleans] Using in-memory grain storage");
+        AddCompatibleMemoryGrainStorageAsDefault(siloBuilder);
+        foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", "PubSubStore" })
+        {
+            AddCompatibleMemoryGrainStorage(siloBuilder, store);
+        }
+        return;
     }
 
     // Configure Azure Storage grain storage
@@ -402,7 +442,7 @@ void ConfigureInMemoryStreams(ISiloBuilder siloBuilder)
 
     AddMemoryStream("EventStreamProvider");
     AddMemoryStream("DcbOrleansQueue");
-    siloBuilder.AddMemoryGrainStorage("PubSubStore");
+    AddCompatibleMemoryGrainStorage(siloBuilder, "PubSubStore");
 }
 
 void ConfigureEventHubStreams(ISiloBuilder siloBuilder, IConfiguration configuration)
@@ -470,6 +510,20 @@ void ConfigureGrainStorage(ISiloBuilder siloBuilder, IConfiguration configuratio
     // Grain storage is configured in ConfigureCosmosOrleans or ConfigureLocalOrleans
     // This function is kept for future extensibility
 }
+
+void AddCompatibleMemoryGrainStorage(ISiloBuilder siloBuilder, string providerName)
+{
+    siloBuilder.ConfigureServices(services =>
+    {
+        services.AddGrainStorage<CompatibleMemoryGrainStorage>(
+            providerName,
+            static (serviceProvider, name) => new CompatibleMemoryGrainStorage(
+                MemoryGrainStorageFactory.Create(serviceProvider, name)));
+    });
+}
+
+void AddCompatibleMemoryGrainStorageAsDefault(ISiloBuilder siloBuilder) =>
+    AddCompatibleMemoryGrainStorage(siloBuilder, "Default");
 
 void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environment, string? databaseType, IConfiguration configuration)
 {
@@ -544,4 +598,107 @@ static IPAddress GetPrivateIpAddress()
 
     // Last resort: return loopback
     return IPAddress.Loopback;
+}
+
+static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
+{
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        return;
+    }
+
+    var targetBuilder = new NpgsqlConnectionStringBuilder(connectionString);
+    if (string.IsNullOrWhiteSpace(targetBuilder.Database))
+    {
+        return;
+    }
+
+    var databaseName = targetBuilder.Database;
+    var adminBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+    {
+        Database = "postgres",
+        Pooling = false
+    };
+    var escapedDatabaseName = databaseName.Replace("\"", "\"\"");
+    Exception? lastException = null;
+
+    for (var attempt = 1; attempt <= 20; attempt++)
+    {
+        try
+        {
+            await using var connection = new NpgsqlConnection(adminBuilder.ConnectionString);
+            await connection.OpenAsync();
+
+            await using var existsCommand = new NpgsqlCommand(
+                "SELECT 1 FROM pg_database WHERE datname = @databaseName;",
+                connection);
+            existsCommand.Parameters.AddWithValue("databaseName", databaseName);
+            var exists = await existsCommand.ExecuteScalarAsync();
+            if (exists is not null)
+            {
+                return;
+            }
+
+            await using var createCommand = new NpgsqlCommand(
+                $"CREATE DATABASE \"{escapedDatabaseName}\";",
+                connection);
+            await createCommand.ExecuteNonQueryAsync();
+            return;
+        }
+        catch (PostgresException ex) when (ex.SqlState == "42P04")
+        {
+            return;
+        }
+        catch (NpgsqlException ex) when (attempt < 20)
+        {
+            lastException = ex;
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception ex) when (attempt < 20)
+        {
+            lastException = ex;
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+    }
+
+    throw new InvalidOperationException(
+        $"Failed to ensure PostgreSQL database '{databaseName}' exists.",
+        lastException);
+}
+
+sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>, IDisposable
+{
+    private readonly MemoryGrainStorage _inner;
+
+    public CompatibleMemoryGrainStorage(MemoryGrainStorage inner)
+    {
+        _inner = inner;
+    }
+
+    Task IGrainStorage.ReadStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.ReadStateAsync(stateName, grainId, grainState);
+
+    Task IGrainStorage.WriteStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.WriteStateAsync(stateName, grainId, grainState);
+
+    Task IGrainStorage.ClearStateAsync<T>(
+        string stateName,
+        GrainId grainId,
+        IGrainState<T> grainState) =>
+        _inner.ClearStateAsync(stateName, grainId, grainState);
+
+    public void Participate(ISiloLifecycle lifecycle)
+    {
+    }
+
+    public void Dispose()
+    {
+        _inner.Dispose();
+    }
 }

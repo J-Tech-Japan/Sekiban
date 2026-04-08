@@ -1,5 +1,12 @@
 using Projects;
-var builder = DistributedApplication.CreateBuilder(args);
+var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
+var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
+var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
+{
+    Args = args,
+    DisableDashboard = isStrictBenchmarkProfile,
+    EnableResourceLogging = isStrictBenchmarkProfile
+});
 var apiServicePort = ResolveConfiguredPort(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
 var webPort = ResolveConfiguredPort(5180, "E2E_WEB_PORT");
 var webNextPort = ResolveConfiguredPort(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
@@ -45,7 +52,6 @@ var apiService = builder
     .AddProject<SekibanDcbDecider_ApiService>("apiservice")
     .WithReference(postgres)
     .WithReference(identityPostgres)
-    .WithReference(orleans)
     .WithReference(multiProjectionOffload)
     .WaitFor(postgres)
     .WaitFor(identityPostgres)
@@ -57,6 +63,18 @@ var apiService = builder
         endpoint.IsProxied = false;
     })
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + apiServicePort);
+
+if (!isStrictBenchmarkProfile)
+{
+    apiService = apiService.WithReference(orleans);
+}
+
+if (isStrictBenchmarkProfile)
+{
+    apiService = apiService
+        .WithEnvironment("Orleans__UseInMemoryStreams", "true")
+        .WithEnvironment("Orleans__UseInMemoryGrainStorage", "true");
+}
 
 // Add the Web frontend
 builder
