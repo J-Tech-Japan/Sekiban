@@ -421,13 +421,6 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var versionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
-        // Check if we can do incremental update
-        var canIncrementalUpdate = cachedState != null &&
-            cachedState.ProjectorVersion == projectorVersion &&
-            !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
-            !string.IsNullOrEmpty(latestSortableUniqueId) &&
-            string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0;
-
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
 
@@ -442,21 +435,24 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var lastSortedUniqueId = "";
 
         // Try incremental update if possible
-        if (canIncrementalUpdate && cachedState != null)
+        if (cachedState is { } incrementalCachedState &&
+            incrementalCachedState.ProjectorVersion == projectorVersion &&
+            !string.IsNullOrEmpty(incrementalCachedState.LastSortedUniqueId) &&
+            !string.IsNullOrEmpty(latestSortableUniqueId) &&
+            string.Compare(latestSortableUniqueId, incrementalCachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0)
         {
             // Use cached state as starting point
-            currentState = cachedState.Payload;
-            version = cachedState.Version;
-            lastSortedUniqueId = cachedState.LastSortedUniqueId;
+            currentState = incrementalCachedState.Payload;
+            version = incrementalCachedState.Version;
+            lastSortedUniqueId = incrementalCachedState.LastSortedUniqueId;
 
             // Read only new events after the cached state's last sortable unique ID.
             // The event store supports a "since" parameter so the database returns only
             // delta rows instead of loading the full event history for the tag.
-            // We wrap the raw string directly (not via TryParse) because
-            // LastSortedUniqueId always originates from an event's SortableUniqueId.
-            SortableUniqueId? since = !string.IsNullOrEmpty(cachedState.LastSortedUniqueId)
-                ? new SortableUniqueId(cachedState.LastSortedUniqueId)
-                : null;
+            // We can wrap the raw string directly because LastSortedUniqueId always
+            // originates from an event's SortableUniqueId and the branch above
+            // guarantees it is not null or empty.
+            var since = new SortableUniqueId(incrementalCachedState.LastSortedUniqueId);
             var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
             if (!eventsResult.IsSuccess)
             {
