@@ -65,11 +65,29 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter query);
 
     /// <summary>
+    ///     Execute a single-result query against the projection
+    /// </summary>
+    /// <param name="query">The query to execute</param>
+    /// <param name="waitForCatchUp">Whether to wait for catch-up completion before executing the query.
+    /// If true, waits up to 30 seconds for catch-up to complete.</param>
+    /// <returns>The query result with IsCatchUpInProgress indicating whether catch-up is still active</returns>
+    Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter query, bool waitForCatchUp);
+
+    /// <summary>
     ///     Execute a list query against the projection
     /// </summary>
     /// <param name="query">The list query to execute</param>
     /// <returns>The paginated query result wrapped in ListQueryResultGeneral for serialization</returns>
     Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter query);
+
+    /// <summary>
+    ///     Execute a list query against the projection
+    /// </summary>
+    /// <param name="query">The list query to execute</param>
+    /// <param name="waitForCatchUp">Whether to wait for catch-up completion before executing the query.
+    /// If true, waits up to 30 seconds for catch-up to complete.</param>
+    /// <returns>The paginated query result with IsCatchUpInProgress indicating whether catch-up is still active</returns>
+    Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter query, bool waitForCatchUp);
 
     /// <summary>
     ///     Check if a specific sortable unique ID has been received and processed.

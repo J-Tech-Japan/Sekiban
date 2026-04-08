@@ -163,12 +163,12 @@ public class GeneralMultiProjectionActor
         }
         else
         {
-            _singleStateAccessor = DualStateProjectionWrapperFactory.Create(
+            _singleStateAccessor = DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
                 loadedPayload,
                 _projectorName,
                 _types,
-                _jsonOptions,
-                isRestoredFromSnapshot: true,
+                _domain,
+                safeThreshold.Value,
                 initialVersion: state.Version,
                 initialLastEventId: state.LastEventId,
                 initialLastSortableUniqueId: state.LastSortableUniqueId);

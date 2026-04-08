@@ -1250,7 +1250,27 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Do not auto-catch-up here; catch-up will be triggered by state/query access
     }
 
-    public async Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter)
+    public Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter) =>
+        ExecuteQueryInternalAsync(queryParameter, waitForCatchUp: false);
+
+    public Task<SerializableQueryResult> ExecuteQueryAsync(SerializableQueryParameter queryParameter, bool waitForCatchUp) =>
+        ExecuteQueryInternalAsync(queryParameter, waitForCatchUp);
+
+    public Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter) =>
+        ExecuteListQueryInternalAsync(queryParameter, waitForCatchUp: false);
+
+    public Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter, bool waitForCatchUp) =>
+        ExecuteListQueryInternalAsync(queryParameter, waitForCatchUp);
+
+    private sealed record QueryExecutionMetadata(
+        int? SafeVersion,
+        string? SafeThreshold,
+        DateTime? SafeThresholdTime,
+        int? UnsafeVersion,
+        bool IsCatchUpInProgress);
+
+    private async Task<SerializableQueryResult> ExecuteQueryInternalAsync(
+        SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
@@ -1271,52 +1291,28 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await StartSubscriptionAsync();
-
-            // Get safe/unsafe metadata for query context
-            int? safeVersion = null;
-            string? safeThreshold = null;
-            DateTime? safeThresholdTime = null;
-            int? unsafeVersion = null;
-
-            var safeStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
-            if (safeStateResult.IsSuccess)
-            {
-                safeVersion = safeStateResult.GetValue().Version;
-            }
-
-            safeThreshold = _host.PeekCurrentSafeWindowThreshold();
-            try
-            {
-                var safeThresholdId = new SortableUniqueId(safeThreshold);
-                safeThresholdTime = safeThresholdId.GetDateTime();
-            }
-            catch { }
-
-            var unsafeStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
-            if (unsafeStateResult.IsSuccess)
-            {
-                unsafeVersion = unsafeStateResult.GetValue().Version;
-            }
-
-            if (_orleansStreamHandle == null)
-            {
-                await CatchUpFromEventStoreAsync();
-            }
+            var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
             var result = await _host.ExecuteQueryAsync(
                 queryParameter,
-                safeVersion,
-                safeThreshold,
-                safeThresholdTime,
-                unsafeVersion);
+                queryMetadata.SafeVersion,
+                queryMetadata.SafeThreshold,
+                queryMetadata.SafeThresholdTime,
+                queryMetadata.UnsafeVersion);
 
             if (!result.IsSuccess)
             {
                 throw result.GetException();
             }
 
-            return result.GetValue();
+            var resultValue = result.GetValue();
+
+            if (queryMetadata.IsCatchUpInProgress)
+            {
+                resultValue = resultValue with { IsCatchUpInProgress = true };
+            }
+
+            return resultValue;
         }
         catch (Exception ex)
         {
@@ -1325,7 +1321,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    public async Task<SerializableListQueryResult> ExecuteListQueryAsync(SerializableQueryParameter queryParameter)
+    private async Task<SerializableListQueryResult> ExecuteListQueryInternalAsync(
+        SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
@@ -1346,58 +1343,90 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await StartSubscriptionAsync();
-
-            // Get safe/unsafe metadata for query context
-            int? safeVersion = null;
-            string? safeThreshold = null;
-            DateTime? safeThresholdTime = null;
-            int? unsafeVersion = null;
-
-            var safeStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
-            if (safeStateResult.IsSuccess)
-            {
-                safeVersion = safeStateResult.GetValue().Version;
-            }
-
-            safeThreshold = _host.PeekCurrentSafeWindowThreshold();
-            try
-            {
-                var safeThresholdId = new SortableUniqueId(safeThreshold);
-                safeThresholdTime = safeThresholdId.GetDateTime();
-            }
-            catch { }
-
-            var unsafeStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
-            if (unsafeStateResult.IsSuccess)
-            {
-                unsafeVersion = unsafeStateResult.GetValue().Version;
-            }
-
-            if (_orleansStreamHandle == null)
-            {
-                await CatchUpFromEventStoreAsync();
-            }
+            var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
             var result = await _host.ExecuteListQueryAsync(
                 queryParameter,
-                safeVersion,
-                safeThreshold,
-                safeThresholdTime,
-                unsafeVersion);
+                queryMetadata.SafeVersion,
+                queryMetadata.SafeThreshold,
+                queryMetadata.SafeThresholdTime,
+                queryMetadata.UnsafeVersion);
 
             if (!result.IsSuccess)
             {
                 throw result.GetException();
             }
 
-            return result.GetValue();
+            var resultValue = result.GetValue();
+
+            if (queryMetadata.IsCatchUpInProgress)
+            {
+                resultValue = resultValue with { IsCatchUpInProgress = true };
+            }
+
+            return resultValue;
         }
         catch (Exception ex)
         {
             _lastError = $"List query failed: {ex.Message}";
             throw;
         }
+    }
+
+    private async Task<QueryExecutionMetadata> GetQueryExecutionMetadataAsync(bool waitForCatchUp)
+    {
+        var isCatchUpInProgress = await PrepareForQueryExecutionAsync(waitForCatchUp);
+
+        int? safeVersion = null;
+        string? safeThreshold = null;
+        DateTime? safeThresholdTime = null;
+        int? unsafeVersion = null;
+
+        var safeStateResult = await _host!.GetStateAsync(canGetUnsafeState: false);
+        if (safeStateResult.IsSuccess)
+        {
+            safeVersion = safeStateResult.GetValue().Version;
+        }
+
+        safeThreshold = _host.PeekCurrentSafeWindowThreshold();
+        try
+        {
+            var safeThresholdId = new SortableUniqueId(safeThreshold);
+            safeThresholdTime = safeThresholdId.GetDateTime();
+        }
+        catch { }
+
+        var unsafeStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
+        if (unsafeStateResult.IsSuccess)
+        {
+            unsafeVersion = unsafeStateResult.GetValue().Version;
+        }
+
+        return new QueryExecutionMetadata(
+            safeVersion,
+            safeThreshold,
+            safeThresholdTime,
+            unsafeVersion,
+            isCatchUpInProgress);
+    }
+
+    private async Task<bool> PrepareForQueryExecutionAsync(bool waitForCatchUp)
+    {
+        await StartSubscriptionAsync();
+
+        if (_orleansStreamHandle == null || waitForCatchUp)
+        {
+            await CatchUpFromEventStoreAsync();
+        }
+
+        var isCatchUpInProgress = _catchUpProgress.IsActive;
+        if (waitForCatchUp && isCatchUpInProgress)
+        {
+            await WaitForCatchUpWithTimeoutAsync(TimeSpan.FromSeconds(30));
+            return _catchUpProgress.IsActive;
+        }
+
+        return isCatchUpInProgress;
     }
 
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
