@@ -9,6 +9,10 @@
         <RootNamespace>SekibanDcbOrleans.AppHost</RootNamespace>
     </PropertyGroup>
 
+    <PropertyGroup Condition="'$(BENCHMARK_PROFILE)' != ''">
+        <DefineConstants>$(DefineConstants);BENCHMARK_PROFILE_ACTIVE</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="Aspire.Hosting" Version="13.2.0" />
         <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.2.0" />
@@ -21,7 +25,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
-        <ProjectReference Include="..\SekibanDcbDecider.Web\SekibanDcbDecider.Web.csproj" />
+        <ProjectReference Include="..\SekibanDcbDecider.Web\SekibanDcbDecider.Web.csproj"
+                          Condition="'$(BENCHMARK_PROFILE)' == ''" />
     </ItemGroup>
 
 </Project>
