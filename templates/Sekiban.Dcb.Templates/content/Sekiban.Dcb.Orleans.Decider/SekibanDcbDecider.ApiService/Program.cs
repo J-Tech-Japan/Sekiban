@@ -29,6 +29,13 @@ using SekibanDcbDecider.ApiService.Exceptions;
 using SekibanDcbDecider.ApiService.Health;
 using SekibanDcbDecider.ApiService.Realtime;
 
+const string InMemoryStreamsConfigKey = "Orleans:UseInMemoryStreams";
+const string InMemoryGrainStorageConfigKey = "Orleans:UseInMemoryGrainStorage";
+const string PubSubStoreName = "PubSubStore";
+const string PostgresAdminDatabaseName = "postgres";
+const string DuplicateDatabaseSqlState = "42P04";
+const int MaxEnsureDatabaseAttempts = 20;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress Azure Storage warnings in development
@@ -63,12 +70,12 @@ builder.Services.AddOpenApi();
 var orleansClusterType = builder.Configuration["ORLEANS_CLUSTERING_TYPE"]?.ToLower() ?? "azurestorage";
 var orleansGrainType = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 var orleansQueueType = builder.Configuration["ORLEANS_QUEUE_TYPE"]?.ToLower() ?? "azurestorage";
-var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
-var useInMemoryGrainStorage = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
+var useInMemoryStreams = builder.Configuration.GetValue<bool>(InMemoryStreamsConfigKey);
+var useInMemoryGrainStorage = builder.Configuration.GetValue<bool>(InMemoryGrainStorageConfigKey);
 
 // Add Azure Storage clients for Orleans only when NOT using Cosmos for clustering
 // (Aspire clients add health checks that require connection strings)
-if (orleansClusterType != "cosmos")
+if (!builder.Environment.IsDevelopment() && orleansClusterType != "cosmos")
 {
     builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
 }
@@ -316,16 +323,16 @@ void ConfigureCosmosOrleans(ISiloBuilder siloBuilder, string cosmosConnection, I
 
     // PubSubStore for Cosmos is registered conditionally based on stream type
     // (in-memory streams use MemoryGrainStorage, others use Cosmos)
-    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    var useInMemoryStreams = configuration.GetValue<bool>(InMemoryStreamsConfigKey);
     if (!useInMemoryStreams)
     {
-        AddCosmosStore("PubSubStore");
+        AddCosmosStore(PubSubStoreName);
     }
 }
 
 void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environment, IConfiguration configuration)
 {
-    var useInMemoryGrainStorage = configuration.GetValue<bool>("Orleans:UseInMemoryGrainStorage");
+    var useInMemoryGrainStorage = configuration.GetValue<bool>(InMemoryGrainStorageConfigKey);
 
     if (environment.IsDevelopment())
     {
@@ -348,7 +355,7 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
     {
         Console.WriteLine("[Orleans] Using in-memory grain storage");
         AddCompatibleMemoryGrainStorageAsDefault(siloBuilder);
-        foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", "PubSubStore" })
+        foreach (var store in new[] { "OrleansStorage", "dcb-orleans-queue", "DcbOrleansGrainTable", "EventStreamProvider", PubSubStoreName })
         {
             AddCompatibleMemoryGrainStorage(siloBuilder, store);
         }
@@ -395,16 +402,16 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
 
     // PubSubStore is registered conditionally based on stream type
     // (in-memory streams use MemoryGrainStorage, others use Azure Table)
-    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    var useInMemoryStreams = configuration.GetValue<bool>(InMemoryStreamsConfigKey);
     if (!useInMemoryStreams)
     {
-        AddTableStore("PubSubStore");
+        AddTableStore(PubSubStoreName);
     }
 }
 
 void ConfigureStreaming(ISiloBuilder siloBuilder, IConfiguration configuration, string queueType)
 {
-    var useInMemoryStreams = configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    var useInMemoryStreams = configuration.GetValue<bool>(InMemoryStreamsConfigKey);
 
     if (useInMemoryStreams)
     {
@@ -442,7 +449,7 @@ void ConfigureInMemoryStreams(ISiloBuilder siloBuilder)
 
     AddMemoryStream("EventStreamProvider");
     AddMemoryStream("DcbOrleansQueue");
-    AddCompatibleMemoryGrainStorage(siloBuilder, "PubSubStore");
+    AddCompatibleMemoryGrainStorage(siloBuilder, PubSubStoreName);
 }
 
 void ConfigureEventHubStreams(ISiloBuilder siloBuilder, IConfiguration configuration)
@@ -545,7 +552,7 @@ void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environ
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
-            EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
+            EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>(InMemoryStreamsConfigKey),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
@@ -602,59 +609,24 @@ static IPAddress GetPrivateIpAddress()
 
 static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
 {
-    if (string.IsNullOrWhiteSpace(connectionString))
+    if (!TryCreatePostgresBootstrapSettings(connectionString, out var settings))
     {
         return;
     }
-
-    var targetBuilder = new NpgsqlConnectionStringBuilder(connectionString);
-    if (string.IsNullOrWhiteSpace(targetBuilder.Database))
-    {
-        return;
-    }
-
-    var databaseName = targetBuilder.Database;
-    var adminBuilder = new NpgsqlConnectionStringBuilder(connectionString)
-    {
-        Database = "postgres",
-        Pooling = false
-    };
-    var escapedDatabaseName = databaseName.Replace("\"", "\"\"");
     Exception? lastException = null;
 
-    for (var attempt = 1; attempt <= 20; attempt++)
+    for (var attempt = 1; attempt <= MaxEnsureDatabaseAttempts; attempt++)
     {
         try
         {
-            await using var connection = new NpgsqlConnection(adminBuilder.ConnectionString);
-            await connection.OpenAsync();
-
-            await using var existsCommand = new NpgsqlCommand(
-                "SELECT 1 FROM pg_database WHERE datname = @databaseName;",
-                connection);
-            existsCommand.Parameters.AddWithValue("databaseName", databaseName);
-            var exists = await existsCommand.ExecuteScalarAsync();
-            if (exists is not null)
-            {
-                return;
-            }
-
-            await using var createCommand = new NpgsqlCommand(
-                $"CREATE DATABASE \"{escapedDatabaseName}\";",
-                connection);
-            await createCommand.ExecuteNonQueryAsync();
+            await EnsurePostgresDatabaseExistsOnceAsync(settings);
             return;
         }
-        catch (PostgresException ex) when (ex.SqlState == "42P04")
+        catch (PostgresException ex) when (ex.SqlState == DuplicateDatabaseSqlState)
         {
             return;
         }
-        catch (NpgsqlException ex) when (attempt < 20)
-        {
-            lastException = ex;
-            await Task.Delay(TimeSpan.FromSeconds(2));
-        }
-        catch (Exception ex) when (attempt < 20)
+        catch (Exception ex) when (attempt < MaxEnsureDatabaseAttempts)
         {
             lastException = ex;
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -662,8 +634,56 @@ static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
     }
 
     throw new InvalidOperationException(
-        $"Failed to ensure PostgreSQL database '{databaseName}' exists.",
+        $"Failed to ensure PostgreSQL database '{settings.DatabaseName}' exists.",
         lastException);
+}
+
+static async Task EnsurePostgresDatabaseExistsOnceAsync(PostgresBootstrapSettings settings)
+{
+    await using var connection = new NpgsqlConnection(settings.AdminConnectionString);
+    await connection.OpenAsync();
+
+    await using var existsCommand = new NpgsqlCommand(
+        "SELECT 1 FROM pg_database WHERE datname = @databaseName;",
+        connection);
+    existsCommand.Parameters.AddWithValue("databaseName", settings.DatabaseName);
+    var exists = await existsCommand.ExecuteScalarAsync();
+    if (exists is not null)
+    {
+        return;
+    }
+
+    await using var createCommand = new NpgsqlCommand(
+        $"CREATE DATABASE \"{settings.EscapedDatabaseName}\";",
+        connection);
+    await createCommand.ExecuteNonQueryAsync();
+}
+
+static bool TryCreatePostgresBootstrapSettings(
+    string? connectionString,
+    out PostgresBootstrapSettings settings)
+{
+    settings = default;
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        return false;
+    }
+
+    var targetBuilder = new NpgsqlConnectionStringBuilder(connectionString);
+    if (string.IsNullOrWhiteSpace(targetBuilder.Database))
+    {
+        return false;
+    }
+
+    settings = new PostgresBootstrapSettings(
+        targetBuilder.Database,
+        targetBuilder.Database.Replace("\"", "\"\""),
+        new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Database = PostgresAdminDatabaseName,
+            Pooling = false
+        }.ConnectionString);
+    return true;
 }
 
 sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>, IDisposable
@@ -695,6 +715,8 @@ sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant
 
     public void Participate(ISiloLifecycle lifecycle)
     {
+        // MemoryGrainStorageFactory already registers the lifecycle behavior for the
+        // wrapped storage instance, so this adapter intentionally does nothing here.
     }
 
     public void Dispose()
@@ -702,3 +724,8 @@ sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant
         _inner.Dispose();
     }
 }
+
+readonly record struct PostgresBootstrapSettings(
+    string DatabaseName,
+    string EscapedDatabaseName,
+    string AdminConnectionString);
