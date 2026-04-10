@@ -558,7 +558,7 @@ void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environ
         var dynamicOptions = new GeneralMultiProjectionActorOptions
         {
             SafeWindowMs = databaseType == "sqlite" ? 5000 : 20000,
-            EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
+            EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>(InMemoryStreamsConfigKey),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
             LagDecayPerSecond = 0.98
