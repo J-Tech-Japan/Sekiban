@@ -25,6 +25,7 @@ using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.ServiceId;
 using SekibanDcbDecider.ApiService.Endpoints;
 using SekibanDcbDecider.ApiService.Auth;
+using SekibanDcbDecider.ApiService;
 using SekibanDcbDecider.ApiService.Exceptions;
 using SekibanDcbDecider.ApiService.Health;
 using SekibanDcbDecider.ApiService.Realtime;
@@ -685,47 +686,3 @@ static bool TryCreatePostgresBootstrapSettings(
         }.ConnectionString);
     return true;
 }
-
-sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant<ISiloLifecycle>, IDisposable
-{
-    private readonly MemoryGrainStorage _inner;
-
-    public CompatibleMemoryGrainStorage(MemoryGrainStorage inner)
-    {
-        _inner = inner;
-    }
-
-    Task IGrainStorage.ReadStateAsync<T>(
-        string stateName,
-        GrainId grainId,
-        IGrainState<T> grainState) =>
-        _inner.ReadStateAsync(stateName, grainId, grainState);
-
-    Task IGrainStorage.WriteStateAsync<T>(
-        string stateName,
-        GrainId grainId,
-        IGrainState<T> grainState) =>
-        _inner.WriteStateAsync(stateName, grainId, grainState);
-
-    Task IGrainStorage.ClearStateAsync<T>(
-        string stateName,
-        GrainId grainId,
-        IGrainState<T> grainState) =>
-        _inner.ClearStateAsync(stateName, grainId, grainState);
-
-    public void Participate(ISiloLifecycle lifecycle)
-    {
-        // MemoryGrainStorageFactory already registers the lifecycle behavior for the
-        // wrapped storage instance, so this adapter intentionally does nothing here.
-    }
-
-    public void Dispose()
-    {
-        _inner.Dispose();
-    }
-}
-
-readonly record struct PostgresBootstrapSettings(
-    string DatabaseName,
-    string EscapedDatabaseName,
-    string AdminConnectionString);
