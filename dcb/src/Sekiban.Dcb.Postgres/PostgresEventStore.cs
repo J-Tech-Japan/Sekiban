@@ -84,17 +84,25 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
-            var tagJson = JsonSerializer.Serialize(new[] { tagString });
-            var query = context.Events.Where(e =>
-                e.ServiceId == serviceId &&
-                EF.Functions.JsonContains(e.Tags, tagJson));
+
+            // Query via dcb_tags table (indexed) instead of dcb_events.Tags jsonb scan
+            var tagQuery = context.Tags.Where(t =>
+                t.ServiceId == serviceId && t.Tag == tagString);
 
             if (since != null)
             {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+                var sinceValue = since.Value;
+                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
             }
 
-            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+            var dbEvents = await tagQuery
+                .OrderBy(t => t.SortableUniqueId)
+                .Join(
+                    context.Events,
+                    t => new { t.ServiceId, EventId = t.EventId },
+                    e => new { e.ServiceId, EventId = e.Id },
+                    (t, e) => e)
+                .ToListAsync();
 
             var events = new List<Event>();
             foreach (var dbEvent in dbEvents)
@@ -497,17 +505,25 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             var serviceId = CurrentServiceId;
 
             var tagString = tag.GetTag();
-            var tagJson = JsonSerializer.Serialize(new[] { tagString });
-            var query = context.Events.Where(e =>
-                e.ServiceId == serviceId &&
-                EF.Functions.JsonContains(e.Tags, tagJson));
+
+            // Query via dcb_tags table (indexed) instead of dcb_events.Tags jsonb scan
+            var tagQuery = context.Tags.Where(t =>
+                t.ServiceId == serviceId && t.Tag == tagString);
 
             if (since != null)
             {
-                query = query.Where(e => string.Compare(e.SortableUniqueId, since.Value) > 0);
+                var sinceValue = since.Value;
+                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
             }
 
-            var dbEvents = await query.OrderBy(e => e.SortableUniqueId).ToListAsync();
+            var dbEvents = await tagQuery
+                .OrderBy(t => t.SortableUniqueId)
+                .Join(
+                    context.Events,
+                    t => new { t.ServiceId, EventId = t.EventId },
+                    e => new { e.ServiceId, EventId = e.Id },
+                    (t, e) => e)
+                .ToListAsync();
 
             var events = dbEvents.Select(dbEvent => new SerializableEvent(
                 Encoding.UTF8.GetBytes(dbEvent.Payload),

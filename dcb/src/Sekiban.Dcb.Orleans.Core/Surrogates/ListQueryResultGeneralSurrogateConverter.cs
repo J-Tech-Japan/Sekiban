@@ -16,7 +16,8 @@ public sealed class
             surrogate.PageSize,
             surrogate.Items,
             surrogate.RecordType,
-            surrogate.Query);
+            surrogate.Query,
+            surrogate.IsCatchUpInProgress);
 
     public ListQueryResultGeneralSurrogate ConvertToSurrogate(in ListQueryResultGeneral value) =>
         new(
@@ -26,5 +27,6 @@ public sealed class
             value.PageSize,
             value.Items,
             value.RecordType,
-            value.Query);
+            value.Query,
+            value.IsCatchUpInProgress);
 }

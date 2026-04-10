@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
@@ -420,13 +421,6 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var versionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : string.Empty;
 
-        // Check if we can do incremental update
-        var canIncrementalUpdate = cachedState != null &&
-            cachedState.ProjectorVersion == projectorVersion &&
-            !string.IsNullOrEmpty(cachedState.LastSortedUniqueId) &&
-            !string.IsNullOrEmpty(latestSortableUniqueId) &&
-            string.Compare(latestSortableUniqueId, cachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0;
-
         // Create the tag to query events
         var tag = CreateTag(_tagStateId.TagGroup, _tagStateId.TagContent);
 
@@ -441,15 +435,25 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var lastSortedUniqueId = "";
 
         // Try incremental update if possible
-        if (canIncrementalUpdate && cachedState != null)
+        if (cachedState is { } incrementalCachedState &&
+            incrementalCachedState.ProjectorVersion == projectorVersion &&
+            !string.IsNullOrEmpty(incrementalCachedState.LastSortedUniqueId) &&
+            !string.IsNullOrEmpty(latestSortableUniqueId) &&
+            string.Compare(latestSortableUniqueId, incrementalCachedState.LastSortedUniqueId, StringComparison.Ordinal) > 0)
         {
             // Use cached state as starting point
-            currentState = cachedState.Payload;
-            version = cachedState.Version;
-            lastSortedUniqueId = cachedState.LastSortedUniqueId;
+            currentState = incrementalCachedState.Payload;
+            version = incrementalCachedState.Version;
+            lastSortedUniqueId = incrementalCachedState.LastSortedUniqueId;
 
-            // Read only new events (after cached state's last sortable unique ID)
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            // Read only new events after the cached state's last sortable unique ID.
+            // The event store supports a "since" parameter so the database returns only
+            // delta rows instead of loading the full event history for the tag.
+            // We can wrap the raw string directly because LastSortedUniqueId always
+            // originates from an event's SortableUniqueId and the branch above
+            // guarantees it is not null or empty.
+            var since = new SortableUniqueId(incrementalCachedState.LastSortedUniqueId);
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
             if (!eventsResult.IsSuccess)
             {
                 // Log the error and throw exception instead of silently returning cached state
@@ -466,11 +470,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
                     error);
             }
 
+            // The DB already filtered out events <= cachedState.LastSortedUniqueId.
+            // We still need the upper-bound filter to stay consistent with the
+            // latestSortableUniqueId snapshot taken from TagConsistentActor.
             var newEvents = eventsResult
                 .GetValue()
                 .Where(e =>
-                    string.Compare(e.SortableUniqueIdValue, cachedState.LastSortedUniqueId, StringComparison.Ordinal) >
-                    0 &&
                     string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
                 .ToList();
 
