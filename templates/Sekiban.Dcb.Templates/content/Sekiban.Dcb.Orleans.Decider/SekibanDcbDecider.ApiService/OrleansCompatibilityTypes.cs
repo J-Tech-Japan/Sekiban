@@ -33,8 +33,10 @@ sealed class CompatibleMemoryGrainStorage : IGrainStorage, ILifecycleParticipant
 
     public void Participate(ISiloLifecycle lifecycle)
     {
-        // MemoryGrainStorageFactory already registers the lifecycle behavior for the
-        // wrapped storage instance, so this adapter intentionally does nothing here.
+        if (_inner is ILifecycleParticipant<ISiloLifecycle> participant)
+        {
+            participant.Participate(lifecycle);
+        }
     }
 
     public void Dispose()

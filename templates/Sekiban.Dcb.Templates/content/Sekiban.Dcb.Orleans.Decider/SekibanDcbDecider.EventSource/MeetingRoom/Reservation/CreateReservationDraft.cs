@@ -41,6 +41,10 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
         ICommandContext context)
     {
         var reservationId = command.ReservationId != Guid.Empty ? command.ReservationId : Guid.CreateVersion7();
+        var skipBenchmarkUserReservationRules = string.Equals(
+            Environment.GetEnvironmentVariable("SEKIBAN_BENCHMARK_SKIP_USER_RESERVATION_RULES"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 
         // Verify the room exists and get its equipment catalog
         var roomTag = new RoomTag(command.RoomId);
@@ -73,18 +77,21 @@ public record CreateReservationDraft : ICommandWithHandler<CreateReservationDraf
             throw new ApplicationException("Cannot create reservation in the past");
         }
 
-        var isAdmin = await IsAdminAsync(context, command.OrganizerId);
-        if (!isAdmin)
+        if (!skipBenchmarkUserReservationRules)
         {
-            ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
-
-            var monthlyLimit = await GetMonthlyReservationLimitAsync(context, command.OrganizerId);
-            var monthTag = UserMonthlyReservationTag.FromStartTime(command.OrganizerId, command.StartTime);
-            var monthlyStateTyped = await context.GetStateAsync<UserMonthlyReservationProjector>(monthTag);
-            var monthlyState = monthlyStateTyped.Payload as UserMonthlyReservationState ?? UserMonthlyReservationState.Empty;
-            if (monthlyState.ActiveRequestCount >= monthlyLimit)
+            var isAdmin = await IsAdminAsync(context, command.OrganizerId);
+            if (!isAdmin)
             {
-                throw new ApplicationException($"Monthly reservation limit exceeded ({monthlyLimit}).");
+                ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
+
+                var monthlyLimit = await GetMonthlyReservationLimitAsync(context, command.OrganizerId);
+                var monthTag = UserMonthlyReservationTag.FromStartTime(command.OrganizerId, command.StartTime);
+                var monthlyStateTyped = await context.GetStateAsync<UserMonthlyReservationProjector>(monthTag);
+                var monthlyState = monthlyStateTyped.Payload as UserMonthlyReservationState ?? UserMonthlyReservationState.Empty;
+                if (monthlyState.ActiveRequestCount >= monthlyLimit)
+                {
+                    throw new ApplicationException($"Monthly reservation limit exceeded ({monthlyLimit}).");
+                }
             }
         }
 

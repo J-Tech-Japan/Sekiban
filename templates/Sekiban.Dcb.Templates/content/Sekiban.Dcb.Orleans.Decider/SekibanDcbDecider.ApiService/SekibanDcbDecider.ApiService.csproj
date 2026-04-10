@@ -40,12 +40,14 @@
         <!-- via Microsoft.Orleans.Streaming.EventHubs. The Aspire package adds health checks that -->
         <!-- require extra configuration (EventHubName or EntityPath in ConnectionString). -->
         <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.1.8" />
-        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.1.8" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
+    <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.1.12" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.1.12" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.1.12" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.1.12" />
+        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.1.12" />
+    </ItemGroup>
 </Project>

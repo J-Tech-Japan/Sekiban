@@ -32,9 +32,11 @@ using SekibanDcbDecider.ApiService.Realtime;
 
 const string InMemoryStreamsConfigKey = "Orleans:UseInMemoryStreams";
 const string InMemoryGrainStorageConfigKey = "Orleans:UseInMemoryGrainStorage";
+const string EnsurePostgresDatabaseExistsConfigKey = "Postgres:EnsureDatabaseExists";
 const string PubSubStoreName = "PubSubStore";
 const string PostgresAdminDatabaseName = "postgres";
 const string DuplicateDatabaseSqlState = "42P04";
+const string InsufficientPrivilegeSqlState = "42501";
 const int MaxEnsureDatabaseAttempts = 20;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -59,8 +61,11 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Add Authentication & Identity
 var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres")
     ?? throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
-await EnsurePostgresDatabaseExistsAsync(builder.Configuration.GetConnectionString("DcbPostgres"));
-await EnsurePostgresDatabaseExistsAsync(authConnectionString);
+if (builder.Configuration.GetValue<bool>(EnsurePostgresDatabaseExistsConfigKey))
+{
+    await EnsurePostgresDatabaseExistsAsync(builder.Configuration.GetConnectionString("DcbPostgres"));
+    await EnsurePostgresDatabaseExistsAsync(authConnectionString);
+}
 builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
 builder.Services.AddHostedService<AuthDbInitializer>();
 
@@ -614,6 +619,7 @@ static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
     {
         return;
     }
+
     Exception? lastException = null;
 
     for (var attempt = 1; attempt <= MaxEnsureDatabaseAttempts; attempt++)
@@ -627,9 +633,14 @@ static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
         {
             return;
         }
-        catch (Exception ex) when (attempt < MaxEnsureDatabaseAttempts)
+        catch (PostgresException ex) when (ex.SqlState == InsufficientPrivilegeSqlState)
         {
-            lastException = ex;
+            throw new InvalidOperationException(
+                $"PostgreSQL user cannot create database '{settings.DatabaseName}'. Disable '{EnsurePostgresDatabaseExistsConfigKey}' or pre-create the database when using managed PostgreSQL credentials without CREATEDB.",
+                ex);
+        }
+        catch (Exception ex) when (TryCaptureRetryableBootstrapException(ex, attempt, out lastException))
+        {
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
     }
@@ -660,9 +671,16 @@ static async Task EnsurePostgresDatabaseExistsOnceAsync(PostgresBootstrapSetting
     await createCommand.ExecuteNonQueryAsync();
 }
 
-static bool TryCreatePostgresBootstrapSettings(
-    string? connectionString,
-    out PostgresBootstrapSettings settings)
+static bool TryCaptureRetryableBootstrapException(
+    Exception exception,
+    int attempt,
+    out Exception? lastException)
+{
+    lastException = attempt < MaxEnsureDatabaseAttempts ? exception : null;
+    return lastException is not null;
+}
+
+static bool TryCreatePostgresBootstrapSettings(string? connectionString, out PostgresBootstrapSettings settings)
 {
     settings = default;
     if (string.IsNullOrWhiteSpace(connectionString))
