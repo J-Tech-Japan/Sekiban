@@ -28,6 +28,13 @@ public sealed record SerializableQueryResult
     [Id(4)]
     public string ResultAssemblyVersion { get; init; } = string.Empty;
 
+    /// <summary>
+    ///     Indicates whether the projection is still catching up from the event store.
+    ///     When true, the result may be incomplete or stale.
+    /// </summary>
+    [Id(5)]
+    public bool IsCatchUpInProgress { get; init; }
+
     public SerializableQueryResult() { }
 
     private SerializableQueryResult(

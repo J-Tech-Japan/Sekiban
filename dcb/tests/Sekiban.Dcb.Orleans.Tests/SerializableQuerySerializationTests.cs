@@ -67,7 +67,8 @@ public class SerializableQuerySerializationTests
             10,
             items,
             typeof(TestRecord).AssemblyQualifiedName ?? typeof(TestRecord).FullName ?? nameof(TestRecord),
-            query);
+            query,
+            true);
 
         var serialized = await SerializableListQueryResult.CreateFromAsync(
             general,
@@ -78,6 +79,36 @@ public class SerializableQuerySerializationTests
         var typedBox = roundTripBox.GetValue().ToTypedResult<TestRecord>();
         Assert.True(typedBox.IsSuccess);
         Assert.Equal(items.Cast<TestRecord>(), typedBox.GetValue().Items);
+        Assert.True(typedBox.GetValue().IsCatchUpInProgress);
+    }
+
+    [Fact]
+    public async Task SerializableListQueryResult_CreateFromResultBox_PreservesCatchUpFlag()
+    {
+        var query = new TestListQuery(PageNumber: 1, PageSize: 10);
+        IListQueryResult result = new ListQueryResultGeneral(
+            2,
+            1,
+            1,
+            10,
+            [new TestRecord("alpha"), new TestRecord("beta")],
+            typeof(TestRecord).AssemblyQualifiedName ?? typeof(TestRecord).FullName ?? nameof(TestRecord),
+            query,
+            true);
+
+        var serializedBox = await SerializableListQueryResult.CreateFromResultBoxAsync(
+            ResultBox<IListQueryResult>.FromValue(result),
+            query,
+            _domainTypes.JsonSerializerOptions);
+
+        Assert.True(serializedBox.IsSuccess);
+
+        var roundTripBox = await serializedBox.GetValue().ToListQueryResultAsync(_domainTypes);
+        Assert.True(roundTripBox.IsSuccess);
+
+        var typedBox = roundTripBox.GetValue().ToTypedResult<TestRecord>();
+        Assert.True(typedBox.IsSuccess);
+        Assert.True(typedBox.GetValue().IsCatchUpInProgress);
     }
 
     private static DcbDomainTypes CreateDomainTypes() =>

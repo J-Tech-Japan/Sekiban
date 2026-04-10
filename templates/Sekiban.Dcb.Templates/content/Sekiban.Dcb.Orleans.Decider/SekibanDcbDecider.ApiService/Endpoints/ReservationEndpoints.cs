@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Dcb.EventSource.MeetingRoom.Queries;
 using Dcb.EventSource.MeetingRoom.Reservation;
 using Dcb.Interactions.Workflows.Reservation;
@@ -88,7 +87,15 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var organizer = ResolveOrganizer(httpContext, command.OrganizerId, command.OrganizerName);
+        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext, command.OrganizerId, command.OrganizerName);
+        if (!organizerResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: organizerResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var organizer = organizerResult.Organizer!.Value;
         var updatedCommand = command with
         {
             OrganizerId = organizer.OrganizerId,
@@ -198,7 +205,15 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var organizer = ResolveOrganizer(httpContext);
+        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext);
+        if (!organizerResult.IsSuccess)
+        {
+            return Results.Problem(
+                detail: organizerResult.Error,
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var organizer = organizerResult.Organizer!.Value;
 
         var workflow = new QuickReservationWorkflow(executor);
         var result = await workflow.ExecuteAsync(
@@ -222,36 +237,6 @@ public static class ReservationEndpoints
             approvalRequestId = result.ApprovalRequestId
         });
     }
-
-    private static OrganizerContext ResolveOrganizer(
-        HttpContext httpContext,
-        Guid? fallbackOrganizerId = null,
-        string? fallbackDisplayName = null)
-    {
-        var debugUserId = httpContext.Request.Headers["X-Debug-User-Id"].FirstOrDefault();
-        if (Guid.TryParse(debugUserId, out var benchmarkOrganizerId))
-        {
-            var debugDisplayName = httpContext.Request.Headers["X-Debug-Display-Name"].FirstOrDefault();
-            return new OrganizerContext(
-                benchmarkOrganizerId,
-                debugDisplayName ?? fallbackDisplayName ?? "Benchmark User");
-        }
-
-        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userId, out var organizerId))
-        {
-            organizerId = fallbackOrganizerId ?? Guid.CreateVersion7();
-        }
-
-        var displayName = httpContext.User.FindFirstValue("display_name")
-            ?? httpContext.User.FindFirstValue(ClaimTypes.Name)
-            ?? fallbackDisplayName
-            ?? "Unknown User";
-
-        return new OrganizerContext(organizerId, displayName);
-    }
-
-    private readonly record struct OrganizerContext(Guid OrganizerId, string DisplayName);
 }
 
 // Request DTOs
