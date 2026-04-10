@@ -639,14 +639,8 @@ static async Task EnsurePostgresDatabaseExistsAsync(string? connectionString)
                 $"PostgreSQL user cannot create database '{settings.DatabaseName}'. Disable '{EnsurePostgresDatabaseExistsConfigKey}' or pre-create the database when using managed PostgreSQL credentials without CREATEDB.",
                 ex);
         }
-        catch (NpgsqlException ex) when (attempt < MaxEnsureDatabaseAttempts)
+        catch (Exception ex) when (TryCaptureRetryableBootstrapException(ex, attempt, out lastException))
         {
-            lastException = ex;
-            await Task.Delay(TimeSpan.FromSeconds(2));
-        }
-        catch (Exception ex) when (attempt < MaxEnsureDatabaseAttempts)
-        {
-            lastException = ex;
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
     }
@@ -675,6 +669,15 @@ static async Task EnsurePostgresDatabaseExistsOnceAsync(PostgresBootstrapSetting
         $"CREATE DATABASE \"{settings.EscapedDatabaseName}\";",
         connection);
     await createCommand.ExecuteNonQueryAsync();
+}
+
+static bool TryCaptureRetryableBootstrapException(
+    Exception exception,
+    int attempt,
+    out Exception? lastException)
+{
+    lastException = attempt < MaxEnsureDatabaseAttempts ? exception : null;
+    return lastException is not null;
 }
 
 static bool TryCreatePostgresBootstrapSettings(string? connectionString, out PostgresBootstrapSettings settings)
