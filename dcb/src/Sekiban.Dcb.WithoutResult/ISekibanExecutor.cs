@@ -42,4 +42,20 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <exception cref="Exception">Thrown when query execution fails</exception>
     Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull;
+
+    /// <summary>
+    ///     Get the latest SortableUniqueId committed for any tag in the specified tag group.
+    ///     Queries the event store directly, so the result reflects the latest committed state.
+    /// </summary>
+    /// <param name="tagGroup">The tag group name to query</param>
+    /// <returns>The latest SortableUniqueId string, or empty string if no events exist for the tag group</returns>
+    /// <exception cref="Exception">Thrown when the event store query fails</exception>
+    Task<string> GetLatestSortableUniqueIdForTagGroupAsync(string tagGroup);
+
+    /// <summary>
+    ///     Type-safe overload that derives the tag group name from TTagGroup.
+    /// </summary>
+    Task<string> GetLatestSortableUniqueIdForTagGroupAsync<TTagGroup>()
+        where TTagGroup : ITagGroup<TTagGroup>
+        => GetLatestSortableUniqueIdForTagGroupAsync(TTagGroup.TagGroupName);
 }

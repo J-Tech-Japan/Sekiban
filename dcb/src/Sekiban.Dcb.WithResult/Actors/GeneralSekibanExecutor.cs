@@ -96,6 +96,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         where TResult : notnull =>
         _core.QueryAsync(queryCommon);
 
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdForTagGroupAsync(string tagGroup) =>
+        _core.GetLatestSortableUniqueIdForTagGroupAsync(tagGroup);
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _core.GetSerializableTagStateAsync(tagStateId);
 

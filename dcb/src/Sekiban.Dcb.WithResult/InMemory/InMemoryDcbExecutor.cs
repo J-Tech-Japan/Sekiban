@@ -66,6 +66,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         IListQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 
+    Task<ResultBox<string>> ISekibanExecutor.GetLatestSortableUniqueIdForTagGroupAsync(string tagGroup) =>
+        _inner.GetLatestSortableUniqueIdForTagGroupAsync(tagGroup);
+
     Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _inner.GetSerializableTagStateAsync(tagStateId);
 

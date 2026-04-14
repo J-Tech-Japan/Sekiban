@@ -746,6 +746,31 @@ public class CoreGeneralSekibanExecutor
         }
     }
 
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdForTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            var result = await _eventStore.GetAllTagsAsync(tagGroup);
+            if (!result.IsSuccess)
+            {
+                return ResultBox.Error<string>(result.GetException());
+            }
+
+            var tags = result.GetValue();
+            var latest = tags
+                .Select(t => t.LastSortableUniqueId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .OrderByDescending(id => id, StringComparer.Ordinal)
+                .FirstOrDefault() ?? string.Empty;
+
+            return ResultBox.FromValue(latest);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     /// <summary>
     ///     Parses a tag string into an ITag for serialized commit.
     ///     Consistency tags are wrapped in ConsistencyTag, others in FallbackTag.

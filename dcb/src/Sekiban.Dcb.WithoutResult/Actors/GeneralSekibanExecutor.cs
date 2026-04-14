@@ -132,6 +132,12 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         return result.UnwrapBox();
     }
 
+    public async Task<string> GetLatestSortableUniqueIdForTagGroupAsync(string tagGroup)
+    {
+        var result = await _core.GetLatestSortableUniqueIdForTagGroupAsync(tagGroup);
+        return result.UnwrapBox();
+    }
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _core.GetSerializableTagStateAsync(tagStateId);
 
