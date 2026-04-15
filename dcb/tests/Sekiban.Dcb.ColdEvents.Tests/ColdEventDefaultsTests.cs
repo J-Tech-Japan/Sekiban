@@ -62,5 +62,6 @@ public class ColdEventDefaultsTests
         public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => throw new NotSupportedException();
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup) => throw new NotSupportedException();
     }
 }

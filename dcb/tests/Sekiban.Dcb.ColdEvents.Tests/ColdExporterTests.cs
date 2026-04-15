@@ -345,6 +345,9 @@ public class ColdExporterTests
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
             => throw new NotSupportedException();
+
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+            => throw new NotSupportedException();
     }
 
     private sealed class FailingCheckpointStorage : IColdObjectStorage
@@ -465,6 +468,9 @@ public class ColdExporterTests
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
             => throw new NotSupportedException();
     }
 }
