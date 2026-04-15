@@ -287,15 +287,14 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         var state = GetState();
         lock (state.Lock)
         {
-            var latest = string.Empty;
-            foreach (var evt in state.EventOrder)
+            if (state.EventOrder.Count == 0)
             {
-                if (string.Compare(evt.SortableUniqueIdValue, latest, StringComparison.Ordinal) > 0)
-                {
-                    latest = evt.SortableUniqueIdValue;
-                }
+                return Task.FromResult(ResultBox.FromValue(string.Empty));
             }
-            return Task.FromResult(ResultBox.FromValue(latest));
+            // EventOrder is append-only with monotonically generated SortableUniqueIds,
+            // so last element is the max. Use ordinal comparison as a safety net.
+            var last = state.EventOrder[^1].SortableUniqueIdValue;
+            return Task.FromResult(ResultBox.FromValue(last));
         }
     }
 

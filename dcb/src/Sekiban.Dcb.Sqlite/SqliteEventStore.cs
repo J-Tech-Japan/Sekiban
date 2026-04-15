@@ -724,8 +724,8 @@ public class SqliteEventStore : IHotEventStore
             await connection.OpenAsync();
 
             await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT MAX(SortableUniqueId) FROM dcb_events WHERE ServiceId = @serviceId";
-            cmd.Parameters.AddWithValue("@serviceId", serviceId);
+            cmd.CommandText = $"SELECT MAX(SortableUniqueId) FROM dcb_events WHERE ServiceId = {ParamServiceId}";
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
 
             var result = await cmd.ExecuteScalarAsync();
             var latest = result as string ?? string.Empty;

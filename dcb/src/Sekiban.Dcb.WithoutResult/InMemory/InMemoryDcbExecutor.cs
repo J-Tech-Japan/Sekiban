@@ -91,6 +91,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         {
             public object Lock { get; } = new();
             public List<SerializedEventData> Events { get; } = new();
+            public string MaxSortableUniqueId { get; set; } = string.Empty;
         }
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
@@ -255,6 +256,13 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 }
 
                 state.Events.AddRange(serializedEvents);
+                foreach (var se in serializedEvents)
+                {
+                    if (string.Compare(se.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                    {
+                        state.MaxSortableUniqueId = se.SortableUniqueIdValue;
+                    }
+                }
                 var tagWrites = new List<TagWriteResult>();
                 var uniqueTags = list.SelectMany(e => e.Tags).Distinct();
                 foreach (var tagString in uniqueTags)
@@ -339,15 +347,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             var state = GetState();
             lock (state.Lock)
             {
-                var latest = string.Empty;
-                foreach (var evt in state.Events)
-                {
-                    if (string.Compare(evt.SortableUniqueIdValue, latest, StringComparison.Ordinal) > 0)
-                    {
-                        latest = evt.SortableUniqueIdValue;
-                    }
-                }
-                return Task.FromResult(ResultBox.FromValue(latest));
+                return Task.FromResult(ResultBox.FromValue(state.MaxSortableUniqueId));
             }
         }
 
@@ -452,6 +452,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     ev.EventMetadata,
                     ev.Tags);
                 _state.Events.Add(serializedEvent);
+                if (string.Compare(ev.SortableUniqueIdValue, _state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    _state.MaxSortableUniqueId = ev.SortableUniqueIdValue;
+                }
             }
 
             public int CountEventsWithTag(string tagString) =>
