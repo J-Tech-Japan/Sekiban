@@ -23,6 +23,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         public List<Event> EventOrder { get; } = new();
         public Dictionary<Guid, Event> Events { get; } = new();
         public Dictionary<string, List<TagStream>> TagStreams { get; } = new(StringComparer.Ordinal);
+        public string MaxSortableUniqueId { get; set; } = string.Empty;
     }
 
     private readonly ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
@@ -60,6 +61,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
             state.EventOrder.Clear();
             state.Events.Clear();
             state.TagStreams.Clear();
+            state.MaxSortableUniqueId = string.Empty;
         }
     }
 
@@ -160,22 +162,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
             // Write events
             foreach (var evt in eventList)
             {
-                state.Events[evt.Id] = evt;
-                state.EventOrder.Add(evt);
-                writtenEvents.Add(evt);
-
-                // Add tag streams for each tag in the event
-                foreach (var tagString in evt.Tags)
-                {
-                    var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
-
-                    if (!state.TagStreams.ContainsKey(tagString))
-                    {
-                        state.TagStreams[tagString] = new List<TagStream>();
-                    }
-
-                    state.TagStreams[tagString].Add(tagStream);
-                }
+                AppendEvent(state, evt, writtenEvents);
             }
 
             // Create tag write results
@@ -252,6 +239,35 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         }
     }
 
+    private static void AppendEvent(ServiceState state, Event evt, ICollection<Event> writtenEvents)
+    {
+        state.Events[evt.Id] = evt;
+        state.EventOrder.Add(evt);
+        writtenEvents.Add(evt);
+        UpdateMaxSortableUniqueId(state, evt.SortableUniqueIdValue);
+
+        foreach (var tagString in evt.Tags)
+        {
+            var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
+
+            if (!state.TagStreams.TryGetValue(tagString, out var streams))
+            {
+                streams = new List<TagStream>();
+                state.TagStreams[tagString] = streams;
+            }
+
+            streams.Add(tagStream);
+        }
+    }
+
+    private static void UpdateMaxSortableUniqueId(ServiceState state, string sortableUniqueIdValue)
+    {
+        if (string.Compare(sortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            state.MaxSortableUniqueId = sortableUniqueIdValue;
+        }
+    }
+
     public Task<ResultBox<bool>> TagExistsAsync(ITag tag)
     {
         var tagString = tag.GetTag();
@@ -279,6 +295,15 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
                 StringComparison.Ordinal) > 0);
 
             return Task.FromResult(ResultBox.FromValue((long)count));
+        }
+    }
+
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        var state = GetState();
+        lock (state.Lock)
+        {
+            return Task.FromResult(ResultBox.FromValue(state.MaxSortableUniqueId));
         }
     }
 
@@ -491,6 +516,10 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
                 state.Events[evt.Id] = evt;
                 state.EventOrder.Add(evt);
                 writtenEvents.Add(se);
+                if (string.Compare(evt.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    state.MaxSortableUniqueId = evt.SortableUniqueIdValue;
+                }
 
                 foreach (var tagString in se.Tags)
                 {

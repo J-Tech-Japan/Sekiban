@@ -364,6 +364,8 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
             => _inner.ReadAllSerializableEventsAsync(since);
 

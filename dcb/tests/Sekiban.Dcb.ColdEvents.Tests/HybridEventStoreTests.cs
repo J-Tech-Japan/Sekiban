@@ -458,6 +458,9 @@ public class HybridEventStoreTests
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+            => throw new NotSupportedException();
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         {
             IEnumerable<SerializableEvent> filtered = _ignoreSinceFilter || since is null
@@ -518,6 +521,9 @@ public class HybridEventStoreTests
             => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)

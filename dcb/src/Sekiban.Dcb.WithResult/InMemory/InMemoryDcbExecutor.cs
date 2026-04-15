@@ -66,6 +66,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         IListQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 
+    Task<ResultBox<string>> ISekibanExecutor.GetLatestSortableUniqueIdAsync() =>
+        _inner.GetLatestSortableUniqueIdAsync();
+
     Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _inner.GetSerializableTagStateAsync(tagStateId);
 
@@ -85,6 +88,7 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         {
             public object Lock { get; } = new();
             public List<SerializedEventData> Events { get; } = new();
+            public string MaxSortableUniqueId { get; set; } = string.Empty;
         }
 
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
@@ -249,6 +253,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 }
 
                 state.Events.AddRange(serializedEvents);
+                state.MaxSortableUniqueId = serializedEvents
+                    .Select(se => se.SortableUniqueIdValue)
+                    .Append(state.MaxSortableUniqueId)
+                    .Max(StringComparer.Ordinal) ?? string.Empty;
                 var tagWrites = new List<TagWriteResult>();
                 var uniqueTags = list.SelectMany(e => e.Tags).Distinct();
                 foreach (var tagString in uniqueTags)
@@ -325,6 +333,15 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     StringComparison.Ordinal) > 0);
 
                 return Task.FromResult(ResultBox.FromValue((long)count));
+            }
+        }
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                return Task.FromResult(ResultBox.FromValue(state.MaxSortableUniqueId));
             }
         }
 
@@ -435,6 +452,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     ev.EventMetadata,
                     ev.Tags);
                 _state.Events.Add(serializedEvent);
+                if (string.Compare(ev.SortableUniqueIdValue, _state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    _state.MaxSortableUniqueId = ev.SortableUniqueIdValue;
+                }
             }
 
             public int CountEventsWithTag(string tagString) =>

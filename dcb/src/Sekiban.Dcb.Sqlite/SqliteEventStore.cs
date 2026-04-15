@@ -715,6 +715,29 @@ public class SqliteEventStore : IHotEventStore
         }
     }
 
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"SELECT MAX(SortableUniqueId) FROM dcb_events WHERE ServiceId = {ParamServiceId}";
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+
+            var result = await cmd.ExecuteScalarAsync();
+            var latest = result as string ?? string.Empty;
+            return ResultBox.FromValue(latest);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error getting latest SortableUniqueId from SQLite");
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         try

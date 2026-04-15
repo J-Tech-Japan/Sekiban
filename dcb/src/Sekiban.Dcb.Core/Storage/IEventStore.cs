@@ -74,6 +74,13 @@ public interface IEventStore
     /// <returns>ResultBox containing the written serializable events and tag write results</returns>
     Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
         IEnumerable<SerializableEvent> events);
+
+    /// <summary>
+    ///     Gets the latest (maximum) SortableUniqueId across all events in the store.
+    ///     Returns empty string if no events exist.
+    ///     This is a global operation not scoped to any tag or tag group.
+    /// </summary>
+    Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
 }
 
 /// <summary>

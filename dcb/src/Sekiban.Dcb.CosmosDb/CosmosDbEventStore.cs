@@ -929,6 +929,38 @@ public partial class CosmosDbEventStore : IHotEventStore
     }
 
     /// <inheritdoc />
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveEventsContainer(serviceId);
+            var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
+
+            var queryDefinition = new QueryDefinition(
+                $"SELECT TOP 1 VALUE c.sortableUniqueId FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId DESC")
+                .WithParameter(ParamServiceId, serviceId);
+
+            using var iterator = container.GetItemQueryIterator<string>(queryDefinition);
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                var sortableUniqueId = response.FirstOrDefault();
+                if (sortableUniqueId != null)
+                {
+                    return ResultBox.FromValue(sortableUniqueId);
+                }
+            }
+
+            return ResultBox.FromValue(string.Empty);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         try
