@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Serialization;
+using Sekiban.Dcb.Snapshots;
 
 namespace Sekiban.Dcb.Runtime.Native;
 
@@ -41,7 +43,11 @@ public class NativeProjectionActorHost : IProjectionActorHost
         _actor = accumulator.GetActor();
 
         _queryExecutor = new NativeProjectionQueryExecutor(domainTypes, jsonOptions, serviceProvider, _actor);
-        _snapshotHandler = new NativeProjectionSnapshotHandler(jsonOptions, _actor, resolvedLogger);
+        _snapshotHandler = new NativeProjectionSnapshotHandler(
+            jsonOptions,
+            _actor,
+            serviceProvider.GetService<IBlobStorageSnapshotAccessor>(),
+            resolvedLogger);
     }
 
     public Task AddSerializableEventsAsync(
@@ -99,6 +105,19 @@ public class NativeProjectionActorHost : IProjectionActorHost
         CancellationToken cancellationToken)
     {
         return _snapshotHandler.WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
+    }
+
+    public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken)
+    {
+        return _snapshotHandler.WriteSnapshotForPersistenceToStreamAsync(
+            target,
+            canGetUnsafeState,
+            offloadThresholdBytes,
+            cancellationToken);
     }
 
     public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)

@@ -39,6 +39,16 @@ public interface IProjectionActorHost
         CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Write a persistence-oriented snapshot to the provided stream, allowing the
+    ///     heavy payload to be offloaded before the envelope JSON is written.
+    /// </summary>
+    Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Restore projection state from snapshot stream.
      /// </summary>
     Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken);

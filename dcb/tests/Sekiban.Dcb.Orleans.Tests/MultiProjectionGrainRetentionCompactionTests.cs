@@ -180,6 +180,13 @@ public class MultiProjectionGrainRetentionCompactionTests
         public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(Stream target, bool canGetUnsafeState, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+            Stream target,
+            bool canGetUnsafeState,
+            int offloadThresholdBytes,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

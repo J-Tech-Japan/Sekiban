@@ -17,15 +17,18 @@ internal class NativeProjectionSnapshotHandler
 {
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly GeneralMultiProjectionActor _actor;
+    private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly ILogger _logger;
 
     public NativeProjectionSnapshotHandler(
         JsonSerializerOptions jsonOptions,
         GeneralMultiProjectionActor actor,
+        IBlobStorageSnapshotAccessor? blobAccessor,
         ILogger logger)
     {
         _jsonOptions = jsonOptions;
         _actor = actor;
+        _blobAccessor = blobAccessor;
         _logger = logger;
     }
 
@@ -42,7 +45,12 @@ internal class NativeProjectionSnapshotHandler
                     new InvalidOperationException("Snapshot stream deserialized to null envelope."));
             }
 
-            await _actor.SetSnapshotAsync(envelope);
+            var resolvedEnvelope = await SnapshotEnvelopeResolver.ResolveInlineAsync(
+                envelope,
+                _blobAccessor,
+                cancellationToken);
+
+            await _actor.SetSnapshotAsync(resolvedEnvelope);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -66,6 +74,45 @@ internal class NativeProjectionSnapshotHandler
 
             var envelope = snapshotResult.GetValue();
             await JsonSerializer.SerializeAsync(target, envelope, _jsonOptions, cancellationToken);
+            return ResultBox.FromValue(true);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    public async Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        Stream target,
+        bool canGetUnsafeState,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!canGetUnsafeState)
+            {
+                try
+                {
+                    _actor.ForcePromoteBufferedEvents();
+                }
+                catch
+                {
+                    // Best effort to align persistence snapshots with the current safe checkpoint.
+                }
+            }
+
+            var snapshotResult = await _actor.BuildSnapshotEnvelopeAsync(
+                canGetUnsafeState,
+                _blobAccessor,
+                offloadThresholdBytes,
+                cancellationToken);
+            if (!snapshotResult.IsSuccess)
+            {
+                return ResultBox.Error<bool>(snapshotResult.GetException());
+            }
+
+            await JsonSerializer.SerializeAsync(target, snapshotResult.GetValue(), _jsonOptions, cancellationToken);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
@@ -140,7 +187,7 @@ internal class NativeProjectionSnapshotHandler
                     new SerializableMultiProjectionStateOffloaded(
                         o.OffloadKey, o.StorageProvider, o.MultiProjectionPayloadType, o.ProjectorName,
                         newVersion, o.LastSortableUniqueId, o.LastEventId, o.Version, o.IsCatchedUp, o.IsSafeState,
-                        o.PayloadLength));
+                        o.PayloadLength, o.OriginalSizeBytes, o.CompressedSizeBytes));
             }
             else
             {

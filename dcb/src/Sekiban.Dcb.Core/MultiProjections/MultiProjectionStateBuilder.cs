@@ -20,6 +20,7 @@ public class MultiProjectionStateBuilder
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private readonly IMultiProjectionStateStore _stateStore;
+    private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly ILogger<MultiProjectionStateBuilder> _logger;
 
     public MultiProjectionStateBuilder(
@@ -32,7 +33,7 @@ public class MultiProjectionStateBuilder
         _domainTypes = domainTypes;
         _eventStore = eventStore;
         _stateStore = stateStore;
-        _ = blobAccessor;
+        _blobAccessor = blobAccessor;
         _logger = logger ?? NullLogger<MultiProjectionStateBuilder>.Instance;
     }
 
@@ -132,7 +133,11 @@ public class MultiProjectionStateBuilder
                 actor, startPosition, options, ct);
 
             // Build snapshot
-            var snapshotResult = await actor.GetSnapshotAsync(canGetUnsafeState: false, ct);
+            var snapshotResult = await actor.BuildSnapshotEnvelopeAsync(
+                canGetUnsafeState: false,
+                blobAccessor: _blobAccessor,
+                offloadThresholdBytes: options.OffloadThresholdBytes,
+                cancellationToken: ct);
             if (!snapshotResult.IsSuccess)
             {
                 return new ProjectorBuildResult(
@@ -421,7 +426,7 @@ public class MultiProjectionStateBuilder
             throw new InvalidOperationException("Failed to deserialize Envelope JSON");
         }
 
-        return envelope;
+        return await SnapshotEnvelopeResolver.ResolveInlineAsync(envelope, _blobAccessor, ct);
     }
 
 }

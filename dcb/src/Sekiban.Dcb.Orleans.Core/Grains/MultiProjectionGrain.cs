@@ -830,9 +830,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Get snapshot as opaque bytes from the host
             await using var snapshotStream = new MemoryStream();
-            var snapshotWriteResult = await _host.WriteSnapshotToStreamAsync(
+            var snapshotWriteResult = await _host.WriteSnapshotForPersistenceToStreamAsync(
                 snapshotStream,
                 canGetUnsafeState: false,
+                offloadThresholdBytes: _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
                 CancellationToken.None);
             if (!snapshotWriteResult.IsSuccess)
             {
@@ -992,8 +993,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             try
             {
-                var writeResult = await _host!.WriteSnapshotToStreamAsync(
-                    tempStream, canGetUnsafeState: false, CancellationToken.None);
+                var writeResult = await _host!.WriteSnapshotForPersistenceToStreamAsync(
+                    tempStream,
+                    canGetUnsafeState: false,
+                    offloadThresholdBytes: _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
+                    CancellationToken.None);
                 if (!writeResult.IsSuccess)
                 {
                     _lastError = writeResult.GetException().Message;

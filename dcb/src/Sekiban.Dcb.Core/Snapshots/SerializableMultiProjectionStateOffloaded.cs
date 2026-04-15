@@ -14,4 +14,6 @@ public sealed record SerializableMultiProjectionStateOffloaded(
     int Version,
     bool IsCatchedUp,
     bool IsSafeState,
-    long PayloadLength);
+    long PayloadLength,
+    long OriginalSizeBytes = 0,
+    long CompressedSizeBytes = 0);
