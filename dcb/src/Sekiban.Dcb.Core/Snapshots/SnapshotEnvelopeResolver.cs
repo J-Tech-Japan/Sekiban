@@ -28,11 +28,11 @@ public static class SnapshotEnvelopeResolver
         var offloaded = envelope.OffloadedState;
         await using var stream = await blobAccessor.OpenReadAsync(offloaded.OffloadKey, cancellationToken)
             .ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        var payloadBytes = await ReadPayloadBytesAsync(stream, offloaded.PayloadLength, cancellationToken)
+            .ConfigureAwait(false);
 
-        var inlineState = SerializableMultiProjectionState.FromBytes(
-            buffer.ToArray(),
+        var inlineState = SerializableMultiProjectionState.FromRuntimeBytes(
+            payloadBytes,
             offloaded.MultiProjectionPayloadType,
             offloaded.ProjectorName,
             offloaded.ProjectorVersion,
@@ -48,5 +48,45 @@ public static class SnapshotEnvelopeResolver
             IsOffloaded: false,
             InlineState: inlineState,
             OffloadedState: null);
+    }
+
+    private static async Task<byte[]> ReadPayloadBytesAsync(
+        Stream stream,
+        long payloadLength,
+        CancellationToken cancellationToken)
+    {
+        if (payloadLength <= 0 || payloadLength > int.MaxValue)
+        {
+            return await StreamReadHelper.ReadAllBytesAsync(stream, cancellationToken).ConfigureAwait(false);
+        }
+
+        var buffer = new byte[(int)payloadLength];
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = await stream.ReadAsync(
+                buffer.AsMemory(offset, buffer.Length - offset),
+                cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            offset += read;
+        }
+
+        if (offset == buffer.Length)
+        {
+            return buffer;
+        }
+
+        if (offset == 0)
+        {
+            return [];
+        }
+
+        var trimmed = new byte[offset];
+        Buffer.BlockCopy(buffer, 0, trimmed, 0, offset);
+        return trimmed;
     }
 }

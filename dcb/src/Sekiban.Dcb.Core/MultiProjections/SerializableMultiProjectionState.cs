@@ -40,6 +40,13 @@ public record SerializableMultiProjectionState
     public long CompressedSizeBytes { get; init; }
 
     /// <summary>
+    ///     Runtime-only raw payload bytes used to avoid Base64 encode/decode churn
+    ///     when an offloaded snapshot is materialized back into an inline state.
+    /// </summary>
+    [JsonIgnore]
+    public byte[]? RuntimePayloadBytes { get; init; }
+
+    /// <summary>
     ///     JSON deserialization constructor - parameter names must match property names.
     /// </summary>
     [JsonConstructor]
@@ -108,11 +115,54 @@ public record SerializableMultiProjectionState
     }
 
     /// <summary>
+    ///     Creates a runtime-only inline state without Base64-encoding the payload.
+    ///     This is intended for transient restore flows and should not be serialized.
+    /// </summary>
+    public static SerializableMultiProjectionState FromRuntimeBytes(
+        byte[] payload,
+        string multiProjectionPayloadType,
+        string projectorName,
+        string projectorVersion,
+        string lastSortableUniqueId,
+        Guid lastEventId,
+        int version,
+        bool isCatchedUp = true,
+        bool isSafeState = true,
+        long originalSizeBytes = 0,
+        long compressedSizeBytes = 0)
+    {
+        if (originalSizeBytes == 0) originalSizeBytes = payload.LongLength;
+        if (compressedSizeBytes == 0) compressedSizeBytes = payload.LongLength;
+
+        return new SerializableMultiProjectionState(
+            payloadJson: null,
+            payloadBase64: null,
+            multiProjectionPayloadType,
+            projectorName,
+            projectorVersion,
+            lastSortableUniqueId,
+            lastEventId,
+            version,
+            isCatchedUp,
+            isSafeState,
+            originalSizeBytes,
+            compressedSizeBytes)
+        {
+            RuntimePayloadBytes = payload
+        };
+    }
+
+    /// <summary>
     ///     Gets the payload as bytes for deserialization.
     ///     Supports both v10 (Base64) and v9 (UTF-8 JSON) formats.
     /// </summary>
     public byte[] GetPayloadBytes()
     {
+        if (RuntimePayloadBytes is not null)
+        {
+            return RuntimePayloadBytes;
+        }
+
         // v10 format: Base64 encoded binary
         if (!string.IsNullOrEmpty(PayloadBase64))
         {

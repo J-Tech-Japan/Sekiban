@@ -338,7 +338,14 @@ public class GeneralMultiProjectionActor
         await using var jsonStream = new MemoryStream();
         await JsonSerializer.SerializeAsync(jsonStream, envelope, _jsonOptions, cancellationToken)
             .ConfigureAwait(false);
-        var size = (int)jsonStream.Length;
+        var size = jsonStream.Length;
+
+        if (size > int.MaxValue)
+        {
+            return ResultBox.Error<SnapshotPersistenceData>(
+                new InvalidOperationException(
+                    $"Snapshot size {size} exceeds supported string conversion limit {int.MaxValue}."));
+        }
 
         if (_options.MaxSnapshotSerializedSizeBytes > 0 && size > _options.MaxSnapshotSerializedSizeBytes)
         {
@@ -349,8 +356,8 @@ public class GeneralMultiProjectionActor
 
         // Safe position for hosts to persist
         var safePosition = await GetSafeLastSortableUniqueIdAsync();
-        var json = Encoding.UTF8.GetString(jsonStream.GetBuffer(), 0, size);
-        return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
+        var json = Encoding.UTF8.GetString(jsonStream.GetBuffer(), 0, (int)size);
+        return ResultBox.FromValue(new SnapshotPersistenceData(json, (int)size, safePosition));
     }
 
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
