@@ -466,8 +466,11 @@ public class DynamoDbEventStore : IHotEventStore
 
             var maxTag = allTagsResult.GetValue()
                 .Select(t => t.Tag)
-                .OrderByDescending(t => t, StringComparer.Ordinal)
-                .FirstOrDefault() ?? string.Empty;
+                .Aggregate(
+                    string.Empty,
+                    (current, candidate) => StringComparer.Ordinal.Compare(candidate, current) > 0
+                        ? candidate
+                        : current);
 
             return ResultBox.FromValue(maxTag);
         }

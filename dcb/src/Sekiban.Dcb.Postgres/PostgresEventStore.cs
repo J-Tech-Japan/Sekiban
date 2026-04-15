@@ -401,7 +401,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             var upperBound = tagGroup + ";";
 
             var latest = await context.Tags
-                .Where(t => t.ServiceId == serviceId && t.Tag.CompareTo(prefix) >= 0 && t.Tag.CompareTo(upperBound) < 0)
+                .Where(t => t.ServiceId == serviceId && string.Compare(t.Tag, prefix) >= 0 && string.Compare(t.Tag, upperBound) < 0)
                 .OrderByDescending(t => t.Tag)
                 .Select(t => t.Tag)
                 .FirstOrDefaultAsync();
