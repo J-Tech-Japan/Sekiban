@@ -241,7 +241,6 @@ public class InMemoryEventStore : IEventStore
             var maxTag = _events
                 .SelectMany(e => e.Tags)
                 .Where(t => t.StartsWith(prefix, StringComparison.Ordinal))
-                .Distinct()
                 .Aggregate(
                     string.Empty,
                     (current, candidate) => StringComparer.Ordinal.Compare(candidate, current) > 0
