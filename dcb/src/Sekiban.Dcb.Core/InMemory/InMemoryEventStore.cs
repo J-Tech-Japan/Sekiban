@@ -162,26 +162,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
             // Write events
             foreach (var evt in eventList)
             {
-                state.Events[evt.Id] = evt;
-                state.EventOrder.Add(evt);
-                writtenEvents.Add(evt);
-                if (string.Compare(evt.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
-                {
-                    state.MaxSortableUniqueId = evt.SortableUniqueIdValue;
-                }
-
-                // Add tag streams for each tag in the event
-                foreach (var tagString in evt.Tags)
-                {
-                    var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
-
-                    if (!state.TagStreams.ContainsKey(tagString))
-                    {
-                        state.TagStreams[tagString] = new List<TagStream>();
-                    }
-
-                    state.TagStreams[tagString].Add(tagStream);
-                }
+                AppendEvent(state, evt, writtenEvents);
             }
 
             // Create tag write results
@@ -255,6 +236,35 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
             }
 
             return Task.FromResult(ResultBox.Error<TagState>(new Exception($"Tag {tagString} not found")));
+        }
+    }
+
+    private static void AppendEvent(ServiceState state, Event evt, ICollection<Event> writtenEvents)
+    {
+        state.Events[evt.Id] = evt;
+        state.EventOrder.Add(evt);
+        writtenEvents.Add(evt);
+        UpdateMaxSortableUniqueId(state, evt.SortableUniqueIdValue);
+
+        foreach (var tagString in evt.Tags)
+        {
+            var tagStream = new TagStream(tagString, evt.Id, evt.SortableUniqueIdValue);
+
+            if (!state.TagStreams.TryGetValue(tagString, out var streams))
+            {
+                streams = new List<TagStream>();
+                state.TagStreams[tagString] = streams;
+            }
+
+            streams.Add(tagStream);
+        }
+    }
+
+    private static void UpdateMaxSortableUniqueId(ServiceState state, string sortableUniqueIdValue)
+    {
+        if (string.Compare(sortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            state.MaxSortableUniqueId = sortableUniqueIdValue;
         }
     }
 

@@ -256,13 +256,10 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 }
 
                 state.Events.AddRange(serializedEvents);
-                foreach (var se in serializedEvents)
-                {
-                    if (string.Compare(se.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
-                    {
-                        state.MaxSortableUniqueId = se.SortableUniqueIdValue;
-                    }
-                }
+                state.MaxSortableUniqueId = serializedEvents
+                    .Select(se => se.SortableUniqueIdValue)
+                    .Append(state.MaxSortableUniqueId)
+                    .Max(StringComparer.Ordinal) ?? string.Empty;
                 var tagWrites = new List<TagWriteResult>();
                 var uniqueTags = list.SelectMany(e => e.Tags).Distinct();
                 foreach (var tagString in uniqueTags)

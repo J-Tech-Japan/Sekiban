@@ -21,6 +21,9 @@ namespace Sekiban.Dcb.DynamoDB;
 /// </summary>
 public class DynamoDbEventStore : IHotEventStore
 {
+    private const string PartitionKeyConditionExpression = "gsi1pk = :pk";
+    private const string PartitionKeySinceConditionExpression = "gsi1pk = :pk AND sortableUniqueId > :since";
+
     private static readonly Action<ILogger, string, Exception?> LogWriteFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(1, nameof(LogWriteFailed)),
             "DynamoDB WriteEventsAsync failed: {Message}");
@@ -427,7 +430,7 @@ public class DynamoDbEventStore : IHotEventStore
                 {
                     TableName = _context.EventsTableName,
                     IndexName = DynamoDbContext.EventsGsiName,
-                    KeyConditionExpression = "gsi1pk = :pk",
+                    KeyConditionExpression = PartitionKeyConditionExpression,
                     ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                     {
                         [":pk"] = new AttributeValue { S = shardKey }
@@ -521,8 +524,8 @@ public class DynamoDbEventStore : IHotEventStore
                 TableName = _context.EventsTableName,
                 IndexName = DynamoDbContext.EventsGsiName,
                 KeyConditionExpression = since == null
-                    ? "gsi1pk = :pk"
-                    : "gsi1pk = :pk AND sortableUniqueId > :since",
+                    ? PartitionKeyConditionExpression
+                    : PartitionKeySinceConditionExpression,
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     [":pk"] = new AttributeValue { S = shardKey }
@@ -573,8 +576,8 @@ public class DynamoDbEventStore : IHotEventStore
                 TableName = _context.EventsTableName,
                 IndexName = DynamoDbContext.EventsGsiName,
                 KeyConditionExpression = since == null
-                    ? "gsi1pk = :pk"
-                    : "gsi1pk = :pk AND sortableUniqueId > :since",
+                    ? PartitionKeyConditionExpression
+                    : PartitionKeySinceConditionExpression,
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     [":pk"] = new AttributeValue { S = shardKey }
@@ -1226,8 +1229,8 @@ public class DynamoDbEventStore : IHotEventStore
                 TableName = _context.EventsTableName,
                 IndexName = DynamoDbContext.EventsGsiName,
                 KeyConditionExpression = since == null
-                    ? "gsi1pk = :pk"
-                    : "gsi1pk = :pk AND sortableUniqueId > :since",
+                    ? PartitionKeyConditionExpression
+                    : PartitionKeySinceConditionExpression,
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
                     [":pk"] = new AttributeValue { S = shardKey }
