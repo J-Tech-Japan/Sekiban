@@ -319,9 +319,13 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         {
             var prefix = tagGroup + ":";
             var maxTag = state.TagStreams.Keys
-                .Where(k => k.StartsWith(prefix))
-                .OrderByDescending(k => k, StringComparer.Ordinal)
-                .FirstOrDefault() ?? string.Empty;
+                .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
+                .Aggregate(
+                    string.Empty,
+                    (current, candidate) => string.IsNullOrEmpty(current) ||
+                                            StringComparer.Ordinal.Compare(candidate, current) > 0
+                        ? candidate
+                        : current);
             return Task.FromResult(ResultBox.FromValue(maxTag));
         }
     }

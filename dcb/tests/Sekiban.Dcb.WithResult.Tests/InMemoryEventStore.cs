@@ -240,10 +240,13 @@ public class InMemoryEventStore : IEventStore
             var prefix = tagGroup + ":";
             var maxTag = _events
                 .SelectMany(e => e.Tags)
-                .Where(t => t.StartsWith(prefix))
+                .Where(t => t.StartsWith(prefix, StringComparison.Ordinal))
                 .Distinct()
-                .OrderByDescending(t => t, StringComparer.Ordinal)
-                .FirstOrDefault() ?? string.Empty;
+                .Aggregate(
+                    string.Empty,
+                    (current, candidate) => StringComparer.Ordinal.Compare(candidate, current) > 0
+                        ? candidate
+                        : current);
             return Task.FromResult(ResultBox.FromValue(maxTag));
         }
     }

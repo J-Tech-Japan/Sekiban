@@ -3,6 +3,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Validation;
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
@@ -264,9 +265,17 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             return ResultBox.Error<string>(ex);
         }
     }
-    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
     {
-        return _eventStore.GetMaxTagInTagGroupAsync(tagGroup);
+        try
+        {
+            NameValidator.ValidateTagGroupNameAndThrow(tagGroup);
+            return await _eventStore.GetMaxTagInTagGroupAsync(tagGroup);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
     }
 
     public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags)
