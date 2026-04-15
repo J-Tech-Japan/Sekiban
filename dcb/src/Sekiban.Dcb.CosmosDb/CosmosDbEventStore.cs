@@ -938,8 +938,8 @@ public partial class CosmosDbEventStore : IHotEventStore
             var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
 
             var queryDefinition = new QueryDefinition(
-                $"SELECT VALUE TOP 1 c.sortableUniqueId FROM c WHERE c.serviceId = @serviceId ORDER BY c.sortableUniqueId DESC")
-                .WithParameter("@serviceId", serviceId);
+                $"SELECT VALUE TOP 1 c.sortableUniqueId FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId DESC")
+                .WithParameter(ParamServiceId, serviceId);
 
             using var iterator = container.GetItemQueryIterator<string>(queryDefinition);
             if (iterator.HasMoreResults)
@@ -954,7 +954,7 @@ public partial class CosmosDbEventStore : IHotEventStore
 
             return ResultBox.FromValue(string.Empty);
         }
-        catch (Exception ex)
+        catch (CosmosException ex)
         {
             return ResultBox.Error<string>(ex);
         }
