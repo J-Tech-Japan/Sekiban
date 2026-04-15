@@ -23,6 +23,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         public List<Event> EventOrder { get; } = new();
         public Dictionary<Guid, Event> Events { get; } = new();
         public Dictionary<string, List<TagStream>> TagStreams { get; } = new(StringComparer.Ordinal);
+        public string MaxSortableUniqueId { get; set; } = string.Empty;
     }
 
     private readonly ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
@@ -163,6 +164,10 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
                 state.Events[evt.Id] = evt;
                 state.EventOrder.Add(evt);
                 writtenEvents.Add(evt);
+                if (string.Compare(evt.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    state.MaxSortableUniqueId = evt.SortableUniqueIdValue;
+                }
 
                 // Add tag streams for each tag in the event
                 foreach (var tagString in evt.Tags)
@@ -287,14 +292,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         var state = GetState();
         lock (state.Lock)
         {
-            if (state.EventOrder.Count == 0)
-            {
-                return Task.FromResult(ResultBox.FromValue(string.Empty));
-            }
-            // EventOrder is append-only with monotonically generated SortableUniqueIds,
-            // so last element is the max. Use ordinal comparison as a safety net.
-            var last = state.EventOrder[^1].SortableUniqueIdValue;
-            return Task.FromResult(ResultBox.FromValue(last));
+            return Task.FromResult(ResultBox.FromValue(state.MaxSortableUniqueId));
         }
     }
 
@@ -507,6 +505,10 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
                 state.Events[evt.Id] = evt;
                 state.EventOrder.Add(evt);
                 writtenEvents.Add(se);
+                if (string.Compare(evt.SortableUniqueIdValue, state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
+                {
+                    state.MaxSortableUniqueId = evt.SortableUniqueIdValue;
+                }
 
                 foreach (var tagString in se.Tags)
                 {

@@ -456,7 +456,8 @@ public class DynamoDbEventStore : IHotEventStore
         }
         catch (Exception ex)
         {
-            LogReadFailed(_logger, ex.Message, ex);
+            if (_logger != null)
+                LogReadFailed(_logger, ex.Message, ex);
             return ResultBox.Error<string>(ex);
         }
     }
