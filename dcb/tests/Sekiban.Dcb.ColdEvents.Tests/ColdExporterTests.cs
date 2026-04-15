@@ -304,6 +304,9 @@ public class ColdExporterTests
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
             => throw new NotSupportedException();
 
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+            => throw new NotSupportedException();
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         {
             IEnumerable<SerializableEvent> result = since is null
@@ -440,6 +443,9 @@ public class ColdExporterTests
             => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
+            => throw new NotSupportedException();
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
             => throw new NotSupportedException();
 
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
