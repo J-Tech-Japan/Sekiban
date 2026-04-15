@@ -114,6 +114,15 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     }
 
     /// <summary>
+    ///     Gets the lexicographically maximum tag string within a tag group.
+    /// </summary>
+    public async Task<string> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        var result = await _core.GetMaxTagInTagGroupAsync(tagGroup);
+        return result.UnwrapBox();
+    }
+
+    /// <summary>
     ///     Execute a single-result query
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull

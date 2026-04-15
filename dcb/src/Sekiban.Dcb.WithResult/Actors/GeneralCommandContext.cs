@@ -1,6 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
 
@@ -15,11 +16,19 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly List<EventPayloadWithTags> _appendedEvents = new();
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventStore? _eventStore;
 
     public GeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
     {
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+    }
+
+    public GeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes, IEventStore eventStore)
+    {
+        _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
     }
 
     public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
@@ -260,6 +269,15 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
             return ResultBox.Error<string>(ex);
         }
     }
+    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        if (_eventStore == null)
+        {
+            return Task.FromResult(ResultBox.Error<string>(new NotSupportedException("IEventStore is not available in this context")));
+        }
+        return _eventStore.GetMaxTagInTagGroupAsync(tagGroup);
+    }
+
     public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
         if (ev is null)

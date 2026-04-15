@@ -61,6 +61,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     Task<TagState> ISekibanExecutor.GetTagStateAsync(TagStateId tagStateId) =>
         _inner.GetTagStateAsync(tagStateId);
 
+    Task<string> ISekibanExecutor.GetMaxTagInTagGroupAsync(string tagGroup) =>
+        _inner.GetMaxTagInTagGroupAsync(tagGroup);
+
     Task<TResult> ISekibanExecutor.QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 
@@ -361,6 +364,22 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 .ToList();
 
                 return Task.FromResult(ResultBox.FromValue(tagInfos.AsEnumerable()));
+            }
+        }
+
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var prefix = tagGroup + ":";
+                var maxTag = state.Events
+                    .SelectMany(e => e.Tags)
+                    .Where(t => t.StartsWith(prefix))
+                    .Distinct()
+                    .OrderByDescending(t => t, StringComparer.Ordinal)
+                    .FirstOrDefault() ?? string.Empty;
+                return Task.FromResult(ResultBox.FromValue(maxTag));
             }
         }
 

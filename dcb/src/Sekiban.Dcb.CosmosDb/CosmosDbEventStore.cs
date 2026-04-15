@@ -984,6 +984,51 @@ public partial class CosmosDbEventStore : IHotEventStore
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            var settings = _containerResolver.ResolveTagsContainer(serviceId);
+            var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
+
+            var prefix = tagGroup + ":";
+            var upperBound = tagGroup + ";";
+
+            var queryDef = new QueryDefinition(
+                "SELECT TOP 1 c.tag FROM c WHERE c.serviceId = @serviceId AND c.tag >= @prefix AND c.tag < @upperBound ORDER BY c.tag DESC")
+                .WithParameter("@serviceId", serviceId)
+                .WithParameter("@prefix", prefix)
+                .WithParameter("@upperBound", upperBound);
+
+            using var iterator = tagsContainer.GetItemQueryIterator<dynamic>(
+                queryDef,
+                requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
+
+            if (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync().ConfigureAwait(false);
+                var item = response.FirstOrDefault();
+                if (item != null)
+                {
+                    string tag = item.tag;
+                    return ResultBox.FromValue(tag);
+                }
+            }
+
+            return ResultBox.FromValue(string.Empty);
+        }
+        catch (CosmosException ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     /// <summary>
     ///     Reads all events as SerializableEvent (no payload deserialization).
     /// </summary>

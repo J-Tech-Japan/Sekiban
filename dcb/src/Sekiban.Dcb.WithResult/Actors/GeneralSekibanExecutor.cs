@@ -84,6 +84,12 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         _core.GetTagStateAsync(tagStateId);
 
     /// <summary>
+    ///     Gets the lexicographically maximum tag string within a tag group.
+    /// </summary>
+    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup) =>
+        _core.GetMaxTagInTagGroupAsync(tagGroup);
+
+    /// <summary>
     ///     Execute a single-result query
     /// </summary>
     public Task<ResultBox<TResult>> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull =>

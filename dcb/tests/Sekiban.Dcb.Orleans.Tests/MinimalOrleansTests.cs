@@ -468,6 +468,8 @@ public class MinimalOrleansTests : IAsyncLifetime
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup) => _inner.GetMaxTagInTagGroupAsync(tagGroup);
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);

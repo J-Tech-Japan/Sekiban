@@ -31,6 +31,9 @@ internal class CommandContextAdapter : ICommandContext
     public Task<ResultBox<string>> GetTagLatestSortableUniqueIdAsync(ITag tag) =>
         _core.GetTagLatestSortableUniqueIdAsync(tag);
 
+    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup) =>
+        _core.GetMaxTagInTagGroupAsync(tagGroup);
+
     public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags) =>
         _core.AppendEvent(ev, tags);
 

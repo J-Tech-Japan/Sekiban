@@ -1,6 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
 
@@ -16,11 +17,13 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly List<EventPayloadWithTags> _appendedEvents = new();
     private readonly DcbDomainTypes _domainTypes;
+    private readonly IEventStore _eventStore;
 
-    public CoreGeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
+    public CoreGeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes, IEventStore eventStore)
     {
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
     }
 
     public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
@@ -261,6 +264,11 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             return ResultBox.Error<string>(ex);
         }
     }
+    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        return _eventStore.GetMaxTagInTagGroupAsync(tagGroup);
+    }
+
     public Task<ResultBox<EventOrNone>> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
         if (ev is null)

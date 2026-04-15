@@ -391,6 +391,29 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         }
     }
 
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+            var prefix = tagGroup + ":";
+            var upperBound = tagGroup + ";";
+
+            var latest = await context.Tags
+                .Where(t => t.ServiceId == serviceId && t.Tag.CompareTo(prefix) >= 0 && t.Tag.CompareTo(upperBound) < 0)
+                .OrderByDescending(t => t.Tag)
+                .Select(t => t.Tag)
+                .FirstOrDefaultAsync();
+
+            return ResultBox.FromValue(latest ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 

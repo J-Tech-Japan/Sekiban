@@ -73,6 +73,12 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         _generalExecutor.GetTagStateAsync(tagStateId);
 
     /// <summary>
+    ///     Gets the lexicographically maximum tag string within a tag group.
+    /// </summary>
+    public Task<string> GetMaxTagInTagGroupAsync(string tagGroup) =>
+        _generalExecutor.GetMaxTagInTagGroupAsync(tagGroup);
+
+    /// <summary>
     ///     Execute a single-result query using Orleans grains
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull

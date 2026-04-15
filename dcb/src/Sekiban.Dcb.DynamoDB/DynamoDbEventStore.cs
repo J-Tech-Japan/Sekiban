@@ -452,6 +452,33 @@ public class DynamoDbEventStore : IHotEventStore
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            // Reuse GetAllTagsAsync to get all tags in this group, then find the max
+            var allTagsResult = await GetAllTagsAsync(tagGroup).ConfigureAwait(false);
+            if (!allTagsResult.IsSuccess)
+            {
+                return ResultBox.Error<string>(allTagsResult.GetException());
+            }
+
+            var maxTag = allTagsResult.GetValue()
+                .Select(t => t.Tag)
+                .OrderByDescending(t => t, StringComparer.Ordinal)
+                .FirstOrDefault() ?? string.Empty;
+
+            return ResultBox.FromValue(maxTag);
+        }
+        catch (Exception ex)
+        {
+            if (_logger != null)
+                LogReadFailed(_logger, ex.Message, ex);
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     private async Task<List<Event>> QueryEventsByShardAsync(string shardKey, SortableUniqueId? since)
     {
         var events = new List<Event>();

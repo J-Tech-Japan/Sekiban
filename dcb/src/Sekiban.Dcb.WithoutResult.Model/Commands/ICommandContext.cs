@@ -46,6 +46,14 @@ public interface ICommandContext
     Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag);
 
     /// <summary>
+    ///     Gets the lexicographically maximum tag string within a tag group.
+    /// </summary>
+    /// <param name="tagGroup">The tag group name (e.g. "Student")</param>
+    /// <returns>The full tag string (e.g. "Student:01HX999") or empty string if none exist</returns>
+    /// <exception cref="Exception">Thrown when retrieval fails</exception>
+    Task<string> GetMaxTagInTagGroupAsync(string tagGroup);
+
+    /// <summary>
     ///     Appends an event with tags to the context
     /// </summary>
     /// <param name="ev">The event with tags to append</param>

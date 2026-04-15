@@ -43,6 +43,12 @@ internal class CommandContextAdapter : ICommandContext
         return result.UnwrapBox();
     }
 
+    public async Task<string> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        var result = await _core.GetMaxTagInTagGroupAsync(tagGroup);
+        return result.UnwrapBox();
+    }
+
     public async Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
         var result = await _core.AppendEvent(ev, tags);

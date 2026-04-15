@@ -312,6 +312,20 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         }
     }
 
+    public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var prefix = tagGroup + ":";
+            var maxTag = state.TagStreams.Keys
+                .Where(k => k.StartsWith(prefix))
+                .OrderByDescending(k => k, StringComparer.Ordinal)
+                .FirstOrDefault() ?? string.Empty;
+            return Task.FromResult(ResultBox.FromValue(maxTag));
+        }
+    }
+
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
         => ReadAllSerializableEventsAsync(since, maxCount: null);
 

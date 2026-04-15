@@ -19,6 +19,13 @@ public interface ISekibanExecutor : ICommandExecutor
     Task<ResultBox<TagState>> GetTagStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector<TProjector> => GetTagStateAsync(TagStateId.FromProjector<TProjector>(tag));
 
     /// <summary>
+    ///     Gets the lexicographically maximum tag string within a tag group.
+    /// </summary>
+    /// <param name="tagGroup">The tag group name (e.g. "Student")</param>
+    /// <returns>ResultBox containing the full tag string (e.g. "Student:01HX999") or empty string if none exist</returns>
+    Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup);
+
+    /// <summary>
     ///     Execute a single-result query
     /// </summary>
     /// <typeparam name="TResult">The result type</typeparam>

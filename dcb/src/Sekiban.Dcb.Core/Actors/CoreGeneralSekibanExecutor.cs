@@ -54,7 +54,7 @@ public class CoreGeneralSekibanExecutor
             }
 
             // Step 1: Create command context
-            var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
+            var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes, _eventStore);
 
             // Step 2: Execute handler function with context
             var handlerResult = await handlerFunc(command, commandContext);
@@ -743,6 +743,19 @@ public class CoreGeneralSekibanExecutor
         catch (Exception ex)
         {
             return ResultBox.Error<ListQueryResult<TResult>>(ex);
+        }
+    }
+
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            NameValidator.ValidateTagGroupNameAndThrow(tagGroup);
+            return await _eventStore.GetMaxTagInTagGroupAsync(tagGroup);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
         }
     }
 

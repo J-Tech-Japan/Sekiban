@@ -360,6 +360,8 @@ public class GeneralTagStateActorPersistenceTests
 
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => _inner.GetAllTagsAsync(tagGroup);
 
+        public Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup) => _inner.GetMaxTagInTagGroupAsync(tagGroup);
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             _inner.ReadAllSerializableEventsAsync(since);
 

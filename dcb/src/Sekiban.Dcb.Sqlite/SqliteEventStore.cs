@@ -785,6 +785,38 @@ public class SqliteEventStore : IHotEventStore
         }
     }
 
+    public async Task<ResultBox<string>> GetMaxTagInTagGroupAsync(string tagGroup)
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            var prefix = tagGroup + ":";
+            var upperBound = tagGroup + ";";
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT MAX(Tag) FROM dcb_tags
+                WHERE ServiceId = {ParamServiceId} AND Tag >= @prefix AND Tag < @upperBound
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@prefix", prefix);
+            cmd.Parameters.AddWithValue("@upperBound", upperBound);
+
+            var result = await cmd.ExecuteScalarAsync();
+            var maxTag = result is DBNull || result == null ? string.Empty : (string)result;
+
+            return ResultBox.FromValue(maxTag);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error getting max tag in tag group from SQLite");
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     // Cache-specific methods
 
     /// <summary>
