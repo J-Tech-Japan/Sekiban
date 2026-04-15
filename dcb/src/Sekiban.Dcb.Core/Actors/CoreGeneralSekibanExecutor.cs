@@ -750,6 +750,8 @@ public class CoreGeneralSekibanExecutor
     {
         try
         {
+            NameValidator.ValidateTagGroupNameAndThrow(tagGroup);
+
             var result = await _eventStore.GetAllTagsAsync(tagGroup);
             if (!result.IsSuccess)
             {
@@ -757,11 +759,15 @@ public class CoreGeneralSekibanExecutor
             }
 
             var tags = result.GetValue();
-            var latest = tags
+            var nonEmptyIds = tags
                 .Select(t => t.LastSortableUniqueId)
                 .Where(id => !string.IsNullOrEmpty(id))
-                .OrderByDescending(id => id, StringComparer.Ordinal)
-                .FirstOrDefault() ?? string.Empty;
+                .Select(id => id!)
+                .ToList();
+
+            var latest = nonEmptyIds.Count > 0
+                ? nonEmptyIds.Max(StringComparer.Ordinal) ?? string.Empty
+                : string.Empty;
 
             return ResultBox.FromValue(latest);
         }
