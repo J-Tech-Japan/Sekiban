@@ -997,22 +997,21 @@ public partial class CosmosDbEventStore : IHotEventStore
             var upperBound = tagGroup + ";";
 
             var queryDef = new QueryDefinition(
-                "SELECT TOP 1 c.tag FROM c WHERE c.serviceId = @serviceId AND c.tag >= @prefix AND c.tag < @upperBound ORDER BY c.tag DESC")
-                .WithParameter("@serviceId", serviceId)
+                $"SELECT VALUE TOP 1 c.tag FROM c WHERE c.serviceId = {ParamServiceId} AND c.tag >= @prefix AND c.tag < @upperBound ORDER BY c.tag DESC")
+                .WithParameter(ParamServiceId, serviceId)
                 .WithParameter("@prefix", prefix)
                 .WithParameter("@upperBound", upperBound);
 
-            using var iterator = tagsContainer.GetItemQueryIterator<dynamic>(
+            using var iterator = tagsContainer.GetItemQueryIterator<string>(
                 queryDef,
                 requestOptions: new QueryRequestOptions { MaxItemCount = 1 });
 
-            if (iterator.HasMoreResults)
+            while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                var item = response.FirstOrDefault();
-                if (item != null)
+                var tag = response.FirstOrDefault();
+                if (tag != null)
                 {
-                    string tag = item.tag;
                     return ResultBox.FromValue(tag);
                 }
             }
