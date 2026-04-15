@@ -997,7 +997,7 @@ public partial class CosmosDbEventStore : IHotEventStore
             var upperBound = tagGroup + ";";
 
             var queryDef = new QueryDefinition(
-                $"SELECT VALUE TOP 1 c.tag FROM c WHERE c.serviceId = {ParamServiceId} AND c.tag >= @prefix AND c.tag < @upperBound ORDER BY c.tag DESC")
+                $"SELECT TOP 1 VALUE c.tag FROM c WHERE c.serviceId = {ParamServiceId} AND c.tag >= @prefix AND c.tag < @upperBound ORDER BY c.tag DESC")
                 .WithParameter(ParamServiceId, serviceId)
                 .WithParameter("@prefix", prefix)
                 .WithParameter("@upperBound", upperBound);
