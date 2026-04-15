@@ -28,6 +28,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 {
     private const int StreamingCatchUpApplyChunkSize = 4096;
     private const string EmptyLogValue = "empty";
+    private const int DefaultSnapshotEnvelopeSizeLimitBytes = 2 * 1024 * 1024;
+    private const int SnapshotEnvelopeBase64ExpansionNumerator = 3;
+    private const int SnapshotEnvelopeBase64ExpansionDenominator = 4;
+    private const int SnapshotEnvelopeReservedOverheadBytes = 16 * 1024;
     private readonly IProjectionActorHostFactory _actorHostFactory;
     private readonly IEventStore _eventStore;
     private readonly IPersistentState<MultiProjectionGrainState> _state;
@@ -830,9 +834,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Get snapshot as opaque bytes from the host
             await using var snapshotStream = new MemoryStream();
-            var snapshotWriteResult = await _host.WriteSnapshotToStreamAsync(
+            var snapshotWriteResult = await _host.WriteSnapshotForPersistenceToStreamAsync(
                 snapshotStream,
                 canGetUnsafeState: false,
+                offloadThresholdBytes: GetSnapshotPayloadOffloadThresholdBytes(),
                 CancellationToken.None);
             if (!snapshotWriteResult.IsSuccess)
             {
@@ -992,8 +997,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             try
             {
-                var writeResult = await _host!.WriteSnapshotToStreamAsync(
-                    tempStream, canGetUnsafeState: false, CancellationToken.None);
+                var writeResult = await _host!.WriteSnapshotForPersistenceToStreamAsync(
+                    tempStream,
+                    canGetUnsafeState: false,
+                    offloadThresholdBytes: GetSnapshotPayloadOffloadThresholdBytes(),
+                    CancellationToken.None);
                 if (!writeResult.IsSuccess)
                 {
                     _lastError = writeResult.GetException().Message;
@@ -1138,6 +1146,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 await Task.Delay(50 * (retry + 1));
             }
         }
+    }
+
+    private int GetSnapshotPayloadOffloadThresholdBytes()
+    {
+        var envelopeLimit = _injectedActorOptions?.MaxSnapshotSerializedSizeBytes
+            ?? DefaultSnapshotEnvelopeSizeLimitBytes;
+        if (envelopeLimit <= 0)
+        {
+            return DefaultSnapshotEnvelopeSizeLimitBytes;
+        }
+
+        var adjustedLimit = Math.Max(1L, envelopeLimit - SnapshotEnvelopeReservedOverheadBytes);
+        var derivedThreshold = adjustedLimit * SnapshotEnvelopeBase64ExpansionNumerator
+            / SnapshotEnvelopeBase64ExpansionDenominator;
+        return (int)Math.Clamp(derivedThreshold, 1L, int.MaxValue);
     }
 
     // Debug: force promotion of ALL buffered events regardless of window

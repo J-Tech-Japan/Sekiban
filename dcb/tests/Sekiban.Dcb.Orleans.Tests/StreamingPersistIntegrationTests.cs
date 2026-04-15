@@ -7,11 +7,13 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
 using System.Text;
 using Xunit;
 
@@ -29,6 +31,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        StreamingPersistSiloConfigurator.SharedBlobAccessor.Clear();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
@@ -154,6 +157,39 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         Assert.Equal(preName, postName);
     }
 
+    [Fact]
+    public async Task StreamingPersist_Should_Offload_Large_Payload_Before_Restore()
+    {
+        var grainId = LargePayloadProjector.MultiProjectorName;
+        var grain = _client.GetGrain<IMultiProjectionGrain>(grainId);
+        StreamingPersistSiloConfigurator.SharedBlobAccessor.Clear();
+
+        var events = Enumerable.Range(0, 6)
+            .Select(i => CreateEvent(new LargeStreamingTestEvt(GenerateRandomString(2048)), DateTime.UtcNow.AddSeconds(-30 + i)))
+            .ToList();
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
+        await grain.RefreshAsync();
+
+        var persistResult = await grain.PersistStateAsync();
+        Assert.True(persistResult.IsSuccess);
+        Assert.True(persistResult.GetValue());
+
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+
+        var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+        await Task.Delay(500);
+
+        var snapshotJson = await grain2.GetSnapshotJsonAsync(canGetUnsafeState: false);
+        Assert.True(snapshotJson.IsSuccess);
+
+        var env = JsonSerializer.Deserialize<SerializableMultiProjectionStateEnvelope>(snapshotJson.GetValue());
+        Assert.NotNull(env);
+        var version = env!.InlineState?.Version ?? env.OffloadedState?.Version ?? 0;
+        Assert.Equal(6, version);
+        Assert.True(StreamingPersistSiloConfigurator.SharedBlobAccessor.StoredObjectCount > 0);
+    }
+
     private static Event CreateEvent(IEventPayload payload, DateTime when)
     {
         var sortableId = SortableUniqueId.Generate(when, Guid.NewGuid());
@@ -178,12 +214,46 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
             .ToList();
 
     private record StreamingTestEvt(string Name) : IEventPayload;
+    private record LargeStreamingTestEvt(string Text) : IEventPayload;
+
+    private static string GenerateRandomString(int size)
+    {
+        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        var buffer = new char[size];
+        for (var i = 0; i < size; i++)
+        {
+            buffer[i] = chars[Random.Shared.Next(chars.Length)];
+        }
+        return new string(buffer);
+    }
+
+    private record LargePayloadProjector(List<string> Items) : IMultiProjector<LargePayloadProjector>
+    {
+        public LargePayloadProjector() : this(new List<string>()) { }
+        public static string MultiProjectorVersion => "1.0";
+        public static string MultiProjectorName => "large-streaming-payload";
+        public static LargePayloadProjector GenerateInitialPayload() => new(new List<string>());
+
+        public static ResultBox<LargePayloadProjector> Project(
+            LargePayloadProjector payload,
+            Event ev,
+            List<ITag> tags,
+            DcbDomainTypes domainTypes,
+            SortableUniqueId safeWindowThreshold) => ev.Payload switch
+            {
+                LargeStreamingTestEvt large => ResultBox.FromValue(
+                    payload with { Items = payload.Items.Concat([large.Text]).ToList() }),
+                _ => ResultBox.FromValue(payload)
+            };
+    }
 
     /// <summary>
     ///     Silo configurator that enables UseStreamingSnapshotIO = true.
     /// </summary>
     private class StreamingPersistSiloConfigurator : ISiloConfigurator
     {
+        internal static MockBlobStorageSnapshotAccessor SharedBlobAccessor { get; } = new();
+
         public void Configure(ISiloBuilder siloBuilder)
         {
             siloBuilder
@@ -193,6 +263,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                     {
                         var eventTypes = new SimpleEventTypes();
                         eventTypes.RegisterEventType<StreamingTestEvt>();
+                        eventTypes.RegisterEventType<LargeStreamingTestEvt>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -200,6 +271,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                         var queryTypes = new SimpleQueryTypes();
 
                         multiProjectorTypes.RegisterProjectorWithCustomSerialization<CounterProjector>();
+                        multiProjectorTypes.RegisterProjector<LargePayloadProjector>();
 
                         return new DcbDomainTypes(
                             eventTypes,
@@ -215,7 +287,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                     services.AddSingleton<IMultiProjectionStateStore, InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
-                    services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
+                    services.AddSingleton<IBlobStorageSnapshotAccessor>(SharedBlobAccessor);
                     services.AddTransient<Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics,
                         Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics>();
 
@@ -224,7 +296,8 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                         new GeneralMultiProjectionActorOptions
                         {
                             SafeWindowMs = 20000,
-                            UseStreamingSnapshotIO = true
+                            UseStreamingSnapshotIO = true,
+                            MaxSnapshotSerializedSizeBytes = 512
                         });
 
                     services.AddSekibanDcbNativeRuntime();

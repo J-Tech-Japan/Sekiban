@@ -77,6 +77,48 @@ public class ActorSnapshotOffloadTests
     }
 
     [Fact]
+    public async Task BuildSnapshotEnvelopeAsync_Should_Offload_Large_Payload_And_Remain_Restorable()
+    {
+        var actor = new GeneralMultiProjectionActor(
+            _domainTypes,
+            BigPayloadProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
+        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+
+        foreach (var i in Enumerable.Range(0, 6))
+        {
+            var created = new Created(GenerateRandomString(2048));
+            await actor.AddEventsAsync(new[] { Ev(created) });
+        }
+
+        var envelopeResult = await actor.BuildSnapshotEnvelopeAsync(
+            canGetUnsafeState: true,
+            blobAccessor: blobAccessor,
+            offloadThresholdBytes: 512);
+
+        Assert.True(envelopeResult.IsSuccess);
+        var envelope = envelopeResult.GetValue();
+        Assert.True(envelope.IsOffloaded);
+        Assert.Null(envelope.InlineState);
+        Assert.NotNull(envelope.OffloadedState);
+
+        var resolved = await SnapshotEnvelopeResolver.ResolveInlineAsync(envelope, blobAccessor);
+        Assert.False(resolved.IsOffloaded);
+        Assert.NotNull(resolved.InlineState);
+
+        var restoredActor = new GeneralMultiProjectionActor(
+            _domainTypes,
+            BigPayloadProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
+        await restoredActor.SetSnapshotAsync(resolved);
+
+        var stateResult = await restoredActor.GetStateAsync(canGetUnsafeState: true);
+        Assert.True(stateResult.IsSuccess);
+        var restoredPayload = Assert.IsType<BigPayloadProjector>(stateResult.GetValue().Payload);
+        Assert.Equal(6, restoredPayload.Items.Count);
+    }
+
+    [Fact]
     public async Task SetSnapshot_Throws_When_Offloaded()
     {
         var actor = new GeneralMultiProjectionActor(

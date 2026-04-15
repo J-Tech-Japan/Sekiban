@@ -186,16 +186,16 @@ public class GeneralMultiProjectionActor
         _isCatchedUp = state.IsCatchedUp;
     }
 
-    private async Task<ResultBox<SerializableMultiProjectionState>> BuildSerializableStateAsync(bool canGetUnsafeState)
+    public async Task<ResultBox<SerializedMultiProjectionStatePayload>> BuildSerializedStatePayloadAsync(bool canGetUnsafeState)
     {
         InitializeProjectorsIfNeeded();
         var stateResult = await GetStateAsync(canGetUnsafeState);
-        if (!stateResult.IsSuccess) return ResultBox.Error<SerializableMultiProjectionState>(stateResult.GetException());
+        if (!stateResult.IsSuccess) return ResultBox.Error<SerializedMultiProjectionStatePayload>(stateResult.GetException());
 
         var multiProjectionState = stateResult.GetValue();
         var payload = multiProjectionState.Payload;
         var versionResult = _types.GetProjectorVersion(_projectorName);
-        if (!versionResult.IsSuccess) return ResultBox.Error<SerializableMultiProjectionState>(versionResult.GetException());
+        if (!versionResult.IsSuccess) return ResultBox.Error<SerializedMultiProjectionStatePayload>(versionResult.GetException());
         var projectorVersion = versionResult.GetValue();
 
         try
@@ -204,7 +204,7 @@ public class GeneralMultiProjectionActor
             var serializeResult = _types.Serialize(_projectorName, _domain, safeThreshold.Value, payload);
             if (!serializeResult.IsSuccess)
             {
-                return ResultBox.Error<SerializableMultiProjectionState>(serializeResult.GetException());
+                return ResultBox.Error<SerializedMultiProjectionStatePayload>(serializeResult.GetException());
             }
 
             var result = serializeResult.GetValue();
@@ -215,7 +215,7 @@ public class GeneralMultiProjectionActor
                 result.OriginalSizeBytes,
                 result.CompressionRatio);
             var payloadType = payload.GetType();
-            var state = SerializableMultiProjectionState.FromBytes(
+            return ResultBox.FromValue(new SerializedMultiProjectionStatePayload(
                 result.Data,
                 payloadType.FullName ?? payloadType.Name,
                 _projectorName,
@@ -226,26 +226,66 @@ public class GeneralMultiProjectionActor
                 _isCatchedUp,
                 multiProjectionState.IsSafeState,
                 result.OriginalSizeBytes,
-                result.CompressedSizeBytes);
-            return ResultBox.FromValue(state);
+                result.CompressedSizeBytes));
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<SerializableMultiProjectionState>(ex);
+            return ResultBox.Error<SerializedMultiProjectionStatePayload>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Returns a snapshot envelope, optionally offloading the payload when an accessor and threshold are provided.
+    /// </summary>
+    public async Task<ResultBox<SerializableMultiProjectionStateEnvelope>> BuildSnapshotEnvelopeAsync(
+        bool canGetUnsafeState = true,
+        IBlobStorageSnapshotAccessor? blobAccessor = null,
+        int offloadThresholdBytes = int.MaxValue,
+        CancellationToken cancellationToken = default)
+    {
+        var payloadResult = await BuildSerializedStatePayloadAsync(canGetUnsafeState);
+        if (!payloadResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(payloadResult.GetException());
+        }
+
+        var payload = payloadResult.GetValue();
+        if (blobAccessor is not null &&
+            offloadThresholdBytes > 0 &&
+            payload.PayloadBytes.LongLength > offloadThresholdBytes)
+        {
+            await using var uploadStream = new MemoryStream(payload.PayloadBytes, writable: false);
+            var offloadKey = await blobAccessor.WriteAsync(uploadStream, payload.ProjectorName, cancellationToken)
+                .ConfigureAwait(false);
+            return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
+                IsOffloaded: true,
+                InlineState: null,
+                OffloadedState: payload.ToOffloadedState(offloadKey, blobAccessor.ProviderName)));
+        }
+
+        return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
+            IsOffloaded: false,
+            InlineState: payload.ToInlineState(),
+            OffloadedState: null));
     }
 
     /// <summary>
     ///     Returns a snapshot envelope containing an inline payload.
     /// </summary>
-    public async Task<ResultBox<SerializableMultiProjectionStateEnvelope>> GetSnapshotAsync(
+    public Task<ResultBox<SerializableMultiProjectionStateEnvelope>> GetSnapshotAsync(
         bool canGetUnsafeState = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        BuildSnapshotEnvelopeAsync(canGetUnsafeState, null, int.MaxValue, cancellationToken);
+
+    private async Task<ResultBox<SerializableMultiProjectionState>> BuildSerializableStateAsync(bool canGetUnsafeState)
     {
-        var inline = await BuildSerializableStateAsync(canGetUnsafeState);
-        if (!inline.IsSuccess)
-            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(inline.GetException());
-        return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(false, inline.GetValue(), null));
+        var payloadResult = await BuildSerializedStatePayloadAsync(canGetUnsafeState);
+        if (!payloadResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableMultiProjectionState>(payloadResult.GetException());
+        }
+
+        return ResultBox.FromValue(payloadResult.GetValue().ToInlineState());
     }
 
     /// <summary>
@@ -271,6 +311,8 @@ public class GeneralMultiProjectionActor
     /// </summary>
     public async Task<ResultBox<SnapshotPersistenceData>> BuildSnapshotForPersistenceAsync(
         bool canGetUnsafeState = false,
+        IBlobStorageSnapshotAccessor? blobAccessor = null,
+        int offloadThresholdBytes = int.MaxValue,
         CancellationToken cancellationToken = default)
     {
         // Promote buffered events before building a safe snapshot
@@ -282,15 +324,28 @@ public class GeneralMultiProjectionActor
         {
             // Ignore promotion errors to avoid blocking persistence
         }
-        var envelopeRb = await GetSnapshotAsync(canGetUnsafeState, cancellationToken);
+        var envelopeRb = await BuildSnapshotEnvelopeAsync(
+            canGetUnsafeState,
+            blobAccessor,
+            offloadThresholdBytes,
+            cancellationToken);
         if (!envelopeRb.IsSuccess)
         {
             return ResultBox.Error<SnapshotPersistenceData>(envelopeRb.GetException());
         }
 
         var envelope = envelopeRb.GetValue();
-        var json = JsonSerializer.Serialize(envelope, _jsonOptions);
-        var size = Encoding.UTF8.GetByteCount(json);
+        await using var jsonStream = new MemoryStream();
+        await JsonSerializer.SerializeAsync(jsonStream, envelope, _jsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        var size = jsonStream.Length;
+
+        if (size > int.MaxValue)
+        {
+            return ResultBox.Error<SnapshotPersistenceData>(
+                new InvalidOperationException(
+                    $"Snapshot size {size} exceeds supported string conversion limit {int.MaxValue}."));
+        }
 
         if (_options.MaxSnapshotSerializedSizeBytes > 0 && size > _options.MaxSnapshotSerializedSizeBytes)
         {
@@ -301,7 +356,8 @@ public class GeneralMultiProjectionActor
 
         // Safe position for hosts to persist
         var safePosition = await GetSafeLastSortableUniqueIdAsync();
-        return ResultBox.FromValue(new SnapshotPersistenceData(json, size, safePosition));
+        var json = Encoding.UTF8.GetString(jsonStream.GetBuffer(), 0, (int)size);
+        return ResultBox.FromValue(new SnapshotPersistenceData(json, (int)size, safePosition));
     }
 
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
