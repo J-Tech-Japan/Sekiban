@@ -205,9 +205,14 @@ public class InMemoryEventStore : IEventStore
     {
         lock (_lock)
         {
-            var latest = _events.Count > 0
-                ? _events[^1].SortableUniqueIdValue
-                : string.Empty;
+            var latest = string.Empty;
+            foreach (var evt in _events)
+            {
+                if (string.Compare(evt.SortableUniqueIdValue, latest, StringComparison.Ordinal) > 0)
+                {
+                    latest = evt.SortableUniqueIdValue;
+                }
+            }
             return Task.FromResult(ResultBox.FromValue(latest));
         }
     }

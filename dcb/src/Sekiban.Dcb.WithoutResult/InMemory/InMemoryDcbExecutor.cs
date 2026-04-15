@@ -339,9 +339,14 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             var state = GetState();
             lock (state.Lock)
             {
-                var latest = state.Events.Count > 0
-                    ? state.Events[^1].SortableUniqueIdValue
-                    : string.Empty;
+                var latest = string.Empty;
+                foreach (var evt in state.Events)
+                {
+                    if (string.Compare(evt.SortableUniqueIdValue, latest, StringComparison.Ordinal) > 0)
+                    {
+                        latest = evt.SortableUniqueIdValue;
+                    }
+                }
                 return Task.FromResult(ResultBox.FromValue(latest));
             }
         }

@@ -58,14 +58,15 @@ public class GetLatestSortableUniqueIdTests
         Assert.True(result2.IsSuccess);
         var id2 = result2.GetValue().SortableUniqueId!;
 
-        Assert.True(string.Compare(id2, id1, StringComparison.Ordinal) > 0);
+        var expectedMinimumLatestId =
+            string.Compare(id1, id2, StringComparison.Ordinal) >= 0 ? id1 : id2;
 
         var result = await executor.GetLatestSortableUniqueIdAsync();
 
         Assert.True(result.IsSuccess);
         var latestId = result.GetValue();
         Assert.True(
-            string.Compare(latestId, id2, StringComparison.Ordinal) >= 0,
-            $"Expected latestId >= id2, but got '{latestId}' < '{id2}'");
+            string.Compare(latestId, expectedMinimumLatestId, StringComparison.Ordinal) >= 0,
+            $"Expected latestId >= max(id1, id2), but got '{latestId}' < '{expectedMinimumLatestId}'");
     }
 }

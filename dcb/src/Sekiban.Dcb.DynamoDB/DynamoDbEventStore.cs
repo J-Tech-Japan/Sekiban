@@ -411,6 +411,8 @@ public class DynamoDbEventStore : IHotEventStore
     {
         try
         {
+            await _context.EnsureTablesAsync().ConfigureAwait(false);
+
             var serviceId = CurrentServiceId;
             var shardCount = Math.Max(1, _options.WriteShardCount);
             var shardKeys = shardCount == 1
@@ -419,8 +421,7 @@ public class DynamoDbEventStore : IHotEventStore
                     .Select(i => BuildEventsGsiPartitionKey(serviceId, i))
                     .ToArray();
 
-            var latest = string.Empty;
-            foreach (var shardKey in shardKeys)
+            var tasks = shardKeys.Select(async shardKey =>
             {
                 var request = new QueryRequest
                 {
@@ -440,13 +441,16 @@ public class DynamoDbEventStore : IHotEventStore
                 if (response.Items.Count > 0 &&
                     response.Items[0].TryGetValue("sortableUniqueId", out var attr))
                 {
-                    var id = attr.S;
-                    if (string.Compare(id, latest, StringComparison.Ordinal) > 0)
-                    {
-                        latest = id;
-                    }
+                    return attr.S;
                 }
-            }
+                return string.Empty;
+            });
+
+            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+            var latest = results
+                .Where(id => !string.IsNullOrEmpty(id))
+                .DefaultIfEmpty(string.Empty)
+                .Max(StringComparer.Ordinal) ?? string.Empty;
 
             return ResultBox.FromValue(latest);
         }

@@ -287,9 +287,14 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         var state = GetState();
         lock (state.Lock)
         {
-            var latest = state.EventOrder.Count > 0
-                ? state.EventOrder[^1].SortableUniqueIdValue
-                : string.Empty;
+            var latest = string.Empty;
+            foreach (var evt in state.EventOrder)
+            {
+                if (string.Compare(evt.SortableUniqueIdValue, latest, StringComparison.Ordinal) > 0)
+                {
+                    latest = evt.SortableUniqueIdValue;
+                }
+            }
             return Task.FromResult(ResultBox.FromValue(latest));
         }
     }
