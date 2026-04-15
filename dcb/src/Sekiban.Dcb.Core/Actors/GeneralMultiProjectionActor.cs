@@ -270,6 +270,188 @@ public class GeneralMultiProjectionActor
     }
 
     /// <summary>
+    ///     Stream-first variant of <see cref="BuildSnapshotEnvelopeAsync" />.
+    ///     Serializes the snapshot payload directly into a spillable buffer (supplied by
+    ///     <paramref name="payloadBufferProvider" />) so that a very large multi-projection
+    ///     snapshot never has to materialize a full compressed <see cref="byte" />[] in managed
+    ///     memory before the offload decision is made.
+    ///     When the buffered payload exceeds <paramref name="offloadThresholdBytes" /> and a
+    ///     <paramref name="blobAccessor" /> is provided, the buffer stream is uploaded directly
+    ///     to blob storage and an offloaded envelope (metadata only) is returned. Otherwise,
+    ///     the buffered bytes are materialized for the inline envelope — which is safe because
+    ///     inline payloads are, by definition, below the offload threshold.
+    ///     If no buffer provider is supplied the method falls back to <see cref="BuildSnapshotEnvelopeAsync" />.
+    /// </summary>
+    public async Task<ResultBox<SerializableMultiProjectionStateEnvelope>> BuildSnapshotEnvelopeStreamFirstAsync(
+        ISnapshotPayloadBufferProvider? payloadBufferProvider,
+        bool canGetUnsafeState = true,
+        IBlobStorageSnapshotAccessor? blobAccessor = null,
+        int offloadThresholdBytes = int.MaxValue,
+        CancellationToken cancellationToken = default)
+    {
+        // Without a spill buffer we cannot stream-first; fall back to the legacy path.
+        if (payloadBufferProvider is null)
+        {
+            return await BuildSnapshotEnvelopeAsync(
+                canGetUnsafeState,
+                blobAccessor,
+                offloadThresholdBytes,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        InitializeProjectorsIfNeeded();
+
+        var stateResult = await GetStateAsync(canGetUnsafeState);
+        if (!stateResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(stateResult.GetException());
+        }
+
+        var multiProjectionState = stateResult.GetValue();
+        var payload = multiProjectionState.Payload;
+        var payloadType = payload.GetType();
+        var payloadTypeName = payloadType.FullName ?? payloadType.Name;
+
+        var versionResult = _types.GetProjectorVersion(_projectorName);
+        if (!versionResult.IsSuccess)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(versionResult.GetException());
+        }
+        var projectorVersion = versionResult.GetValue();
+
+        var safeThreshold = GetSafeWindowThreshold();
+
+        await using var buffer = await payloadBufferProvider
+            .CreateBufferAsync(_projectorName, cancellationToken)
+            .ConfigureAwait(false);
+
+        var bufferStream = buffer.Stream;
+        if (!bufferStream.CanRead || !bufferStream.CanWrite || !bufferStream.CanSeek)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
+                new InvalidOperationException(
+                    "ISnapshotPayloadBufferProvider must return a readable, writable, seekable stream."));
+        }
+
+        // Reset in case the provider reused a stream.
+        if (bufferStream.Length > 0)
+        {
+            bufferStream.SetLength(0);
+        }
+        bufferStream.Position = 0;
+
+        SerializationSizeInfo sizeInfo;
+        try
+        {
+            var serializeResult = _types.SerializeToStream(
+                _projectorName,
+                _domain,
+                safeThreshold.Value,
+                payload,
+                bufferStream);
+            if (!serializeResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(serializeResult.GetException());
+            }
+
+            sizeInfo = serializeResult.GetValue();
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(ex);
+        }
+
+        await bufferStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        var compressedLength = bufferStream.Length;
+        // Reconcile compressed size reported by the serializer with the actual stream length
+        // (SerializeToStream may return originalSize when the destination is not seekable).
+        var originalSize = sizeInfo.OriginalSizeBytes;
+        var compressedSize = Math.Max(sizeInfo.CompressedSizeBytes, compressedLength);
+
+        _logger.LogDebug(
+            "[{ProjectorName}] StreamFirstSerialize: location={Location} original={OriginalBytes} compressed={CompressedBytes}",
+            _projectorName,
+            buffer.Location,
+            originalSize,
+            compressedSize);
+
+        var shouldOffload = blobAccessor is not null
+            && offloadThresholdBytes > 0
+            && compressedLength > offloadThresholdBytes;
+
+        if (shouldOffload)
+        {
+            bufferStream.Position = 0;
+            var offloadKey = await blobAccessor!
+                .WriteAsync(bufferStream, _projectorName, cancellationToken)
+                .ConfigureAwait(false);
+
+            var offloadedState = new SerializableMultiProjectionStateOffloaded(
+                OffloadKey: offloadKey,
+                StorageProvider: blobAccessor.ProviderName,
+                MultiProjectionPayloadType: payloadTypeName,
+                ProjectorName: _projectorName,
+                ProjectorVersion: projectorVersion,
+                LastSortableUniqueId: multiProjectionState.LastSortableUniqueId,
+                LastEventId: multiProjectionState.LastEventId,
+                Version: multiProjectionState.Version,
+                IsCatchedUp: _isCatchedUp,
+                IsSafeState: multiProjectionState.IsSafeState,
+                PayloadLength: compressedLength,
+                OriginalSizeBytes: originalSize,
+                CompressedSizeBytes: compressedSize);
+
+            return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
+                IsOffloaded: true,
+                InlineState: null,
+                OffloadedState: offloadedState));
+        }
+
+        // Inline path: rewind and rematerialize the (sub-threshold) payload bytes for the
+        // Base64 field in the envelope. Since inline payloads are below the offload threshold
+        // by construction, this does not cause the large-memory spike the stream-first path
+        // is designed to avoid.
+        if (compressedLength > int.MaxValue)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
+                new InvalidOperationException(
+                    $"Inline snapshot payload size {compressedLength} exceeds int.MaxValue; the payload must be offloaded via IBlobStorageSnapshotAccessor."));
+        }
+
+        bufferStream.Position = 0;
+        var payloadBytes = new byte[(int)compressedLength];
+        try
+        {
+            await bufferStream.ReadExactlyAsync(payloadBytes, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EndOfStreamException ex)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
+                new InvalidOperationException(
+                    $"Snapshot payload buffer returned fewer bytes than the declared length {compressedLength} for projector {_projectorName}.",
+                    ex));
+        }
+
+        var inlineState = SerializableMultiProjectionState.FromBytes(
+            payloadBytes,
+            payloadTypeName,
+            _projectorName,
+            projectorVersion,
+            multiProjectionState.LastSortableUniqueId,
+            multiProjectionState.LastEventId,
+            multiProjectionState.Version,
+            _isCatchedUp,
+            multiProjectionState.IsSafeState,
+            originalSize,
+            compressedSize);
+
+        return ResultBox.FromValue(new SerializableMultiProjectionStateEnvelope(
+            IsOffloaded: false,
+            InlineState: inlineState,
+            OffloadedState: null));
+    }
+
+    /// <summary>
     ///     Returns a snapshot envelope containing an inline payload.
     /// </summary>
     public Task<ResultBox<SerializableMultiProjectionStateEnvelope>> GetSnapshotAsync(

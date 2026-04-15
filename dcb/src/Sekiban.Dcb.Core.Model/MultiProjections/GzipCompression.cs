@@ -66,6 +66,68 @@ public static class GzipCompression
     }
 
     /// <summary>
+    ///     Serialize JSON directly into a GZip stream wrapping <paramref name="destination"/>.
+    ///     Returns the uncompressed byte count. The compressed bytes are written straight to the
+    ///     provided destination, avoiding a large intermediate byte[] for the final payload.
+    /// </summary>
+    public static long CompressJsonToStream(
+        Stream destination,
+        object value,
+        Type inputType,
+        JsonSerializerOptions options)
+    {
+        if (destination is null)
+        {
+            throw new ArgumentNullException(nameof(destination));
+        }
+
+        long originalSizeBytes;
+        using (var gzip = new GZipStream(destination, CompressionLevel.Fastest, leaveOpen: true))
+        using (var counting = new CountingWriteStream(gzip))
+        {
+            JsonSerializer.Serialize(counting, value, inputType, options);
+            counting.Flush();
+            gzip.Flush();
+            originalSizeBytes = counting.BytesWritten;
+        }
+
+        return originalSizeBytes;
+    }
+
+    /// <summary>
+    ///     Async overload of <see cref="CompressJsonToStream(Stream, object, Type, JsonSerializerOptions)"/>.
+    /// </summary>
+    public static async Task<long> CompressJsonToStreamAsync(
+        Stream destination,
+        object value,
+        Type inputType,
+        JsonSerializerOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (destination is null)
+        {
+            throw new ArgumentNullException(nameof(destination));
+        }
+
+        long originalSizeBytes;
+        var gzip = new GZipStream(destination, CompressionLevel.Fastest, leaveOpen: true);
+        await using (gzip.ConfigureAwait(false))
+        {
+            var counting = new CountingWriteStream(gzip);
+            await using (counting.ConfigureAwait(false))
+            {
+                await JsonSerializer.SerializeAsync(counting, value, inputType, options, cancellationToken)
+                    .ConfigureAwait(false);
+                await counting.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await gzip.FlushAsync(cancellationToken).ConfigureAwait(false);
+                originalSizeBytes = counting.BytesWritten;
+            }
+        }
+
+        return originalSizeBytes;
+    }
+
+    /// <summary>
     ///     AOT-friendly overload of CompressJson using JsonTypeInfo.
     /// </summary>
     public static (byte[] CompressedBytes, long OriginalSizeBytes) CompressJson<T>(
@@ -83,6 +145,31 @@ public static class GzipCompression
             originalSizeBytes = counting.BytesWritten;
         }
         return (output.ToArray(), originalSizeBytes);
+    }
+
+    /// <summary>
+    ///     AOT-friendly overload that writes the compressed JSON directly to a destination stream.
+    /// </summary>
+    public static long CompressJsonToStream<T>(
+        Stream destination,
+        T value,
+        JsonTypeInfo<T> typeInfo)
+    {
+        if (destination is null)
+        {
+            throw new ArgumentNullException(nameof(destination));
+        }
+
+        long originalSizeBytes;
+        using (var gzip = new GZipStream(destination, CompressionLevel.Fastest, leaveOpen: true))
+        using (var counting = new CountingWriteStream(gzip))
+        {
+            JsonSerializer.Serialize(counting, value, typeInfo);
+            counting.Flush();
+            gzip.Flush();
+            originalSizeBytes = counting.BytesWritten;
+        }
+        return originalSizeBytes;
     }
 
     /// <summary>

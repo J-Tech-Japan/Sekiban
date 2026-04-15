@@ -19,6 +19,85 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public class NativeProjectionSnapshotPersistenceTests
 {
     [Fact]
+    public async Task WriteSnapshotForPersistenceToStreamAsync_StreamFirst_Should_Offload_Large_Payload()
+    {
+        // Stream-first persist path: register ISnapshotPayloadBufferProvider so the
+        // NativeProjectionSnapshotHandler picks the spillable buffer path internally.
+        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"sekiban-native-streamfirst-{Guid.NewGuid():N}");
+        var bufferProvider = new SpillableSnapshotPayloadBufferProvider(
+            new SpillableSnapshotPayloadOptions
+            {
+                InMemoryThresholdBytes = 64,
+                TempDirectory = tempDir
+            });
+        var services = new ServiceCollection()
+            .AddSingleton<IBlobStorageSnapshotAccessor>(blobAccessor)
+            .AddSingleton<ISnapshotPayloadBufferProvider>(bufferProvider)
+            .BuildServiceProvider();
+        var domainTypes = BuildDomainTypes();
+        var primitive = new NativeMultiProjectionProjectionPrimitive(domainTypes);
+
+        var host = new NativeProjectionActorHost(
+            domainTypes,
+            services,
+            primitive,
+            LargePayloadProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 },
+            NullLogger.Instance);
+
+        try
+        {
+            var events = Enumerable.Range(0, 6)
+                .Select(i => CreateSerializableEvent(new LargePayloadCreated(GenerateRandomString(2048)), DateTime.UtcNow.AddSeconds(-30 + i)))
+                .ToList();
+            await host.AddSerializableEventsAsync(events, finishedCatchUp: true);
+            host.ForcePromoteAllBufferedEvents();
+
+            await using var snapshotStream = new MemoryStream();
+            var writeResult = await host.WriteSnapshotForPersistenceToStreamAsync(
+                snapshotStream,
+                canGetUnsafeState: false,
+                offloadThresholdBytes: 16,
+                CancellationToken.None);
+
+            Assert.True(writeResult.IsSuccess);
+            snapshotStream.Position = 0;
+            var envelope = await JsonSerializer.DeserializeAsync<SerializableMultiProjectionStateEnvelope>(
+                snapshotStream,
+                domainTypes.JsonSerializerOptions);
+            Assert.NotNull(envelope);
+            Assert.True(envelope!.IsOffloaded);
+            Assert.NotNull(envelope.OffloadedState);
+            Assert.True(envelope.OffloadedState!.PayloadLength > 0);
+
+            // Restore via the stream-first path and verify contents are intact.
+            snapshotStream.Position = 0;
+            var restoredHost = new NativeProjectionActorHost(
+                domainTypes,
+                services,
+                primitive,
+                LargePayloadProjector.MultiProjectorName,
+                new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 },
+                NullLogger.Instance);
+            var restoreResult = await restoredHost.RestoreSnapshotFromStreamAsync(snapshotStream, CancellationToken.None);
+            Assert.True(restoreResult.IsSuccess);
+
+            var stateResult = await restoredHost.GetStateAsync(canGetUnsafeState: true);
+            Assert.True(stateResult.IsSuccess);
+            var payload = Assert.IsType<LargePayloadProjector>(stateResult.GetValue().Payload);
+            Assert.Equal(6, payload.Items.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
     public async Task WriteSnapshotForPersistenceToStreamAsync_Should_Offload_Large_Payload_And_Restore()
     {
         var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();

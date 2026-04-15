@@ -198,11 +198,11 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
 
-            // Fallback: JSON serialize + Gzip compression
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
-            var rawBytes = Encoding.UTF8.GetBytes(json);
-            var originalSize = rawBytes.LongLength;
-            var compressed = GzipCompression.Compress(rawBytes);
+            // Fallback: stream JSON directly into GZip to avoid holding json string + raw bytes + gzip bytes at once.
+            var (compressed, originalSize) = GzipCompression.CompressJson(
+                payload,
+                payload.GetType(),
+                domainTypes.JsonSerializerOptions);
             var compressedSize = compressed.LongLength;
 
             return ResultBox.FromValue(new SerializationResult(
@@ -214,6 +214,40 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         {
             return ResultBox.Error<SerializationResult>(ex);
         }
+    }
+
+    /// <summary>
+    ///     Stream-oriented fallback. For the default JSON+Gzip serializer, the compressed
+    ///     bytes are piped straight into the destination stream, so a large multi-projection
+    ///     snapshot never needs the full compressed payload in managed memory. Custom
+    ///     serializers still fall back to materialized bytes — copied through the destination
+    ///     stream — because they typically emit compact binary forms already.
+    /// </summary>
+    public ResultBox<SerializationSizeInfo> SerializeToStream(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload,
+        Stream destination)
+    {
+        var validationError = MultiProjectorStreamSerializationHelper.ValidateCommonArguments(
+            safeWindowThreshold,
+            destination);
+        if (validationError is { } error)
+        {
+            return error;
+        }
+
+        if (_customSerializers.TryGetValue(projectorName, out var serializers))
+        {
+            var customResult = serializers.serialize(domainTypes, safeWindowThreshold, payload);
+            return MultiProjectorStreamSerializationHelper.CopyCustomResultToStream(destination, customResult);
+        }
+
+        return MultiProjectorStreamSerializationHelper.WriteGzipJsonToStream(
+            destination,
+            payload,
+            domainTypes.JsonSerializerOptions);
     }
 
     /// <summary>

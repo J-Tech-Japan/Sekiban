@@ -18,17 +18,20 @@ internal class NativeProjectionSnapshotHandler
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly GeneralMultiProjectionActor _actor;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
+    private readonly ISnapshotPayloadBufferProvider? _payloadBufferProvider;
     private readonly ILogger _logger;
 
     public NativeProjectionSnapshotHandler(
         JsonSerializerOptions jsonOptions,
         GeneralMultiProjectionActor actor,
         IBlobStorageSnapshotAccessor? blobAccessor,
-        ILogger logger)
+        ILogger logger,
+        ISnapshotPayloadBufferProvider? payloadBufferProvider = null)
     {
         _jsonOptions = jsonOptions;
         _actor = actor;
         _blobAccessor = blobAccessor;
+        _payloadBufferProvider = payloadBufferProvider;
         _logger = logger;
     }
 
@@ -102,11 +105,28 @@ internal class NativeProjectionSnapshotHandler
                 }
             }
 
-            var snapshotResult = await _actor.BuildSnapshotEnvelopeAsync(
-                canGetUnsafeState,
-                _blobAccessor,
-                offloadThresholdBytes,
-                cancellationToken);
+            // Prefer the stream-first persistence path only when offload is actually possible:
+            // both a blob accessor and a positive offload threshold must be configured, and a
+            // spillable payload buffer provider must be registered. For inline-only
+            // configurations (no blob accessor) the legacy byte[] path is still the fastest
+            // because it avoids the buffer allocation + rehydrate copy that stream-first does
+            // for sub-threshold payloads.
+            var canStreamFirst = _payloadBufferProvider is not null
+                && _blobAccessor is not null
+                && offloadThresholdBytes > 0;
+
+            var snapshotResult = canStreamFirst
+                ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
+                    _payloadBufferProvider,
+                    canGetUnsafeState,
+                    _blobAccessor,
+                    offloadThresholdBytes,
+                    cancellationToken)
+                : await _actor.BuildSnapshotEnvelopeAsync(
+                    canGetUnsafeState,
+                    _blobAccessor,
+                    offloadThresholdBytes,
+                    cancellationToken);
             if (!snapshotResult.IsSuccess)
             {
                 return ResultBox.Error<bool>(snapshotResult.GetException());

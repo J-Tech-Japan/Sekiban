@@ -26,6 +26,7 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
         Func<IMultiProjectionPayload> GenerateInitial,
         string Version,
         Func<DcbDomainTypes, string, IMultiProjectionPayload, SerializationResult> Serialize,
+        Func<Stream, DcbDomainTypes, string, IMultiProjectionPayload, SerializationSizeInfo> SerializeToStream,
         Func<DcbDomainTypes, string, byte[], IMultiProjectionPayload> Deserialize);
 
     /// <summary>
@@ -59,6 +60,18 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
             {
                 var (compressed, originalSize) = GzipCompression.CompressJson((TProjector)payload, typeInfo);
                 return new SerializationResult(compressed, originalSize, compressed.LongLength);
+            },
+            SerializeToStream: (destination, domainTypes, safeWindowThreshold, payload) =>
+            {
+                var result = MultiProjectorStreamSerializationHelper.WriteGzipJsonToStream(
+                    destination,
+                    (TProjector)payload,
+                    typeInfo);
+                if (!result.IsSuccess)
+                {
+                    throw result.GetException();
+                }
+                return result.GetValue();
             },
             Deserialize: (domainTypes, safeWindowThreshold, data) =>
             {
@@ -124,6 +137,33 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
         if (_projectors.TryGetValue(projectorName, out var reg))
             return ResultBox.FromValue(reg.Serialize(domainTypes, safeWindowThreshold, payload));
         return ResultBox.Error<SerializationResult>(new Exception($"Projector not found: {projectorName}"));
+    }
+
+    /// <inheritdoc />
+    public ResultBox<SerializationSizeInfo> SerializeToStream(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload,
+        Stream destination)
+    {
+        if (destination is null)
+        {
+            return ResultBox.Error<SerializationSizeInfo>(new ArgumentNullException(nameof(destination)));
+        }
+
+        if (_projectors.TryGetValue(projectorName, out var reg))
+        {
+            try
+            {
+                return ResultBox.FromValue(reg.SerializeToStream(destination, domainTypes, safeWindowThreshold, payload));
+            }
+            catch (Exception ex)
+            {
+                return ResultBox.Error<SerializationSizeInfo>(ex);
+            }
+        }
+        return ResultBox.Error<SerializationSizeInfo>(new Exception($"Projector not found: {projectorName}"));
     }
 
     /// <inheritdoc />

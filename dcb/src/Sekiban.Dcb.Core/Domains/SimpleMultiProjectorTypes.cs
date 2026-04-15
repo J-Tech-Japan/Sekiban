@@ -273,6 +273,40 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
     }
 
     /// <summary>
+    ///     Stream-oriented fallback. For the default JSON+Gzip serializer, the compressed
+    ///     bytes are piped straight into the destination stream, so a large multi-projection
+    ///     snapshot never needs the full compressed payload in managed memory. Custom
+    ///     serializers still fall back to materialized bytes — copied through the destination
+    ///     stream — because they typically emit compact binary forms already.
+    /// </summary>
+    public ResultBox<SerializationSizeInfo> SerializeToStream(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload,
+        Stream destination)
+    {
+        var validationError = MultiProjectorStreamSerializationHelper.ValidateCommonArguments(
+            safeWindowThreshold,
+            destination);
+        if (validationError is { } error)
+        {
+            return error;
+        }
+
+        if (_customSerializers.TryGetValue(projectorName, out var serializers))
+        {
+            var customResult = serializers.serialize(domainTypes, safeWindowThreshold, payload);
+            return MultiProjectorStreamSerializationHelper.CopyCustomResultToStream(destination, customResult);
+        }
+
+        return MultiProjectorStreamSerializationHelper.WriteGzipJsonToStream(
+            destination,
+            payload,
+            domainTypes.JsonSerializerOptions);
+    }
+
+    /// <summary>
     ///     Deserializes a JSON string to a multi-projection payload.
     ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
     /// </summary>

@@ -54,6 +54,48 @@ public interface ICoreMultiProjectorTypes
         IMultiProjectionPayload payload);
 
     /// <summary>
+    ///     Stream-oriented variant of <see cref="Serialize" />. Writes the serialized
+    ///     (and optionally compressed) payload bytes directly to <paramref name="destination" />
+    ///     without materializing a <see cref="byte" />[] in managed memory.
+    ///     The default implementation delegates to <see cref="Serialize" /> and copies the
+    ///     resulting bytes to the destination stream for backward compatibility; registries
+    ///     that own their serialization pipeline (such as
+    ///     <see cref="Sekiban.Dcb.MultiProjections.GzipCompression" />-based JSON serializers)
+    ///     should override this method with a fully streaming implementation.
+    /// </summary>
+    /// <param name="projectorName">Name of the projector</param>
+    /// <param name="domainTypes">Domain types containing serialization options</param>
+    /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string)</param>
+    /// <param name="payload">The payload to serialize</param>
+    /// <param name="destination">Writable stream that will receive the serialized payload</param>
+    /// <returns>
+    ///     <see cref="SerializationSizeInfo" /> describing the original and compressed byte
+    ///     counts written to <paramref name="destination" />.
+    /// </returns>
+    ResultBox<SerializationSizeInfo> SerializeToStream(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload,
+        Stream destination)
+    {
+        var result = Serialize(projectorName, domainTypes, safeWindowThreshold, payload);
+        if (!result.IsSuccess)
+        {
+            return ResultBox.Error<SerializationSizeInfo>(result.GetException());
+        }
+
+        var value = result.GetValue();
+        if (value.Data is { Length: > 0 })
+        {
+            destination.Write(value.Data, 0, value.Data.Length);
+        }
+
+        return ResultBox.FromValue(
+            new SerializationSizeInfo(value.OriginalSizeBytes, value.CompressedSizeBytes));
+    }
+
+    /// <summary>
     ///     Deserializes a JSON string to a multi-projection payload.
     ///     Uses custom deserialization if registered, otherwise falls back to standard JSON deserialization.
     ///     Caller MUST always supply safeWindowThreshold; passing empty or null is treated as error.
